@@ -24,10 +24,8 @@ public class LoginCommandHandler
         LoginCommand request,
         CancellationToken cancellationToken)
     {
-        var user = this.unitOfWork.UserRepository
-            .Query()
-            .FirstOrDefault(x =>
-                x.Email == request.Email);
+        var user = await this.unitOfWork.UserRepository
+            .GetByEmailAsync(request.Email, cancellationToken);
 
         if (user is null)
         {
@@ -35,9 +33,8 @@ public class LoginCommandHandler
                 "Invalid email or password.");
         }
 
-        // Add your status check here if your User entity has Status.
-
-        if (user.PasswordHash != request.Password)
+        // Plain-text comparison is used only for the seeded, in-memory demo account.
+        if (user.Status != UserStatus.Active || user.PasswordHash != request.Password)
         {
             throw new UnauthorizedAccessException(
                 "Invalid email or password.");
@@ -53,7 +50,14 @@ public class LoginCommandHandler
         return new UserSessionDto
         {
             AccessToken = accessToken,
-            RefreshToken = refreshToken
+            RefreshToken = refreshToken,
+            ExpiresIn = 300,
+            User = new UserInfoDto
+            {
+                UserId = user.Id!.Value,
+                FullName = user.FullName,
+                Email = user.Email ?? string.Empty
+            }
         };
     }
 }

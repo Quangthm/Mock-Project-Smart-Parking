@@ -1,0 +1,239 @@
+{
+  "info": {
+    "name": "SmartParking - Clean Architecture Login Demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "In-memory Login demo: API -> MediatR -> Validation -> Handler -> IUnitOfWork/IUserRepository -> Persistence. No database connection."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5035"
+    }
+  ],
+  "item": [
+    {
+      "name": "Login successful",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"driver@gmail.com\",\n  \"password\": \"Password@123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(true); });",
+              "pm.test(\"Session and seeded user\", function () {",
+              "  pm.expect(body.data.accessToken.split(\".\")).to.have.lengthOf(3);",
+              "  pm.expect(body.data.refreshToken).to.match(/^[a-f0-9]{32}$/);",
+              "  pm.expect(body.data.tokenType).to.eql(\"Bearer\");",
+              "  pm.expect(body.data.expiresIn).to.eql(300);",
+              "  pm.expect(body.data.user.userId).to.eql(\"11111111-1111-1111-1111-111111111111\");",
+              "  pm.expect(body.data.user.email).to.eql(\"driver@gmail.com\");",
+              "  pm.expect(body.data.user).not.to.have.property(\"passwordHash\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wrong password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"driver@gmail.com\",\n  \"password\": \"wrong\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+              "const body = pm.response.json();",
+              "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
+              "pm.test(\"Generic credential error\", function () { pm.expect(body.message).to.eql(\"Invalid email or password.\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unknown email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"unknown@gmail.com\",\n  \"password\": \"Password@123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+              "const body = pm.response.json();",
+              "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
+              "pm.test(\"Generic credential error\", function () { pm.expect(body.message).to.eql(\"Invalid email or password.\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missing email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"password\": \"Password@123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+              "const body = pm.response.json();",
+              "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
+              "pm.test(\"Validation errors\", function () { pm.expect(body.errors).to.be.an(\"array\").that.is.not.empty; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invalid email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"invalid\",\n  \"password\": \"Password@123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+              "const body = pm.response.json();",
+              "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
+              "pm.test(\"Validation errors\", function () { pm.expect(body.errors).to.be.an(\"array\").that.is.not.empty; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missing password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"driver@gmail.com\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+              "const body = pm.response.json();",
+              "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
+              "pm.test(\"Validation errors\", function () { pm.expect(body.errors).to.be.an(\"array\").that.is.not.empty; });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

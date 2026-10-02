@@ -39,11 +39,11 @@ namespace UserService.Application.Services
         /// <exception cref="System.ArgumentNullException"></exception>
         public string GenerateAccessToken(User user)
         {
-            var jwtOptions = this.configuration.Get<JwtOptions>();
+            var jwtOptions = this.configuration.GetSection("Jwt").Get<JwtOptions>();
 
             ArgumentNullException.ThrowIfNull(jwtOptions);
 
-            var secretKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("!B&8kG2p$3nZqQ6vLwXyTzS1dEr4Ui7h"));
+            var secretKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
             var signinCredentials = new SigningCredentials(secretKey, SecurityAlgorithms.HmacSha256);
 
             var claims = new List<Claim>()

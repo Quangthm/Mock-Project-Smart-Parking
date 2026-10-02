@@ -9,6 +9,7 @@ using UserService.Application.Common.Behaviors;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
+using UserService.Application.Usecase.ValidateAccessToken;
 
 namespace UserService.Application
 {
@@ -29,6 +30,8 @@ namespace UserService.Application
         {
             services.AddMediatR(cfg =>
             {
+                // The gRPC sample has no implementation yet; keep it out of this demo.
+                cfg.TypeEvaluator = type => type != typeof(ValidateAccessTokenCommandHandler);
                 cfg.RegisterServicesFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
             });
             services.AddValidatorsFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
