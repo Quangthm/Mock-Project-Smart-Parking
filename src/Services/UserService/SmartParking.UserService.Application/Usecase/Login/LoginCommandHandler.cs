@@ -7,7 +7,7 @@ using UserService.Application.DTOs;
 namespace UserService.Application.Usecase.Login;
 
 public class LoginCommandHandler
-    : IRequestHandler<LoginCommand, UserSessionDto>
+    : IRequestHandler<LoginCommand, LoginResult>
 {
     private readonly IUnitOfWork unitOfWork;
     private readonly IAccessTokenService accessTokenService;
@@ -20,7 +20,7 @@ public class LoginCommandHandler
         this.accessTokenService = accessTokenService;
     }
 
-    public async Task<UserSessionDto> Handle(
+    public async Task<LoginResult> Handle(
         LoginCommand request,
         CancellationToken cancellationToken)
     {
@@ -29,15 +29,13 @@ public class LoginCommandHandler
 
         if (user is null)
         {
-            throw new UnauthorizedAccessException(
-                "Invalid email or password.");
+            return new LoginResult(null);
         }
 
         // Plain-text comparison is used only for the seeded, in-memory demo account.
         if (user.Status != UserStatus.Active || user.PasswordHash != request.Password)
         {
-            throw new UnauthorizedAccessException(
-                "Invalid email or password.");
+            return new LoginResult(null);
         }
 
         var accessToken =
@@ -47,7 +45,7 @@ public class LoginCommandHandler
         var refreshToken =
             Guid.NewGuid().ToString("N");
 
-        return new UserSessionDto
+        return new LoginResult(new UserSessionDto
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
@@ -58,7 +56,7 @@ public class LoginCommandHandler
                 FullName = user.FullName,
                 Email = user.Email ?? string.Empty
             }
-        };
+        });
     }
 }
 

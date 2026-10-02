@@ -24,11 +24,20 @@ public class AuthController(
             loginCommand,
             cancellationToken);
 
+        if (!result.IsSuccess)
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid email or password."
+            });
+        }
+
         return Ok(new
         {
             success = true,
             message = "Login successful",
-            data = result
+            data = result.Session
         });
     }
 }

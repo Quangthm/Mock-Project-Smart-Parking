@@ -83,7 +83,7 @@ Postman
 
 Interface không có thân hàm để Step Into; debugger sẽ đi vào implementation do DI đăng ký. Handler chỉ phụ thuộc interface của Application; Controller không gọi trực tiếp repository. API tham chiếu Persistence để đăng ký DI tại composition root. Chiều phụ thuộc project: `Application -> Domain`, `Persistence -> Application + Domain`, `API -> Application + Persistence`.
 
-Thử **Wrong password** để quan sát repository vẫn chạy rồi handler từ chối; thử **Missing email** để quan sát validation dừng luồng trước handler. Mẫu gRPC `ValidateAccessTokenCommandHandler` chưa có implementation `IUnitOfGrpc`, nên được loại khỏi MediatR scanning để API demo khởi động; không tắt kiểm tra DI.
+Thử **Wrong password** để quan sát repository vẫn chạy rồi handler trả `LoginResult` thất bại; Controller chuyển kết quả này thành HTTP 401. Email không tồn tại và tài khoản không Active cũng trả kết quả thất bại, không ném exception, nên debugger không dừng do exception khi test các trường hợp này. Thử **Missing email** để quan sát validation dừng luồng trước handler; validation vẫn sử dụng `ValidationException`. Mẫu gRPC `ValidateAccessTokenCommandHandler` chưa có implementation `IUnitOfGrpc`, nên được loại khỏi MediatR scanning để API demo khởi động; không tắt kiểm tra DI.
 
 ## Kết quả kiểm tra ngày 02/10/2026
 
