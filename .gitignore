@@ -38,3 +38,50 @@ msbuild.wrn
 
 # Local tools used to run the Postman demo
 .cache/
+
+# =========================
+# Postman
+# =========================
+
+# Keep collections and example environments tracked.
+# Ignore real/local environments because they may contain secrets.
+
+.postman/
+
+docs/postman/environments/*local*.json
+docs/postman/environments/*secret*.json
+docs/postman/environments/*dev*.json
+docs/postman/environments/*.private.json
+
+# Newman test output
+docs/postman/reports/
+docs/postman/results/
+docs/postman/newman/
+
+# Temporary Postman files
+docs/postman/tmp/
+docs/postman/temp/
+
+# =========================
+# Frontend / Node.js
+# =========================
+
+# Dependencies
+node_modules/
+
+# Vite / frontend build output
+dist/
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Keep safe example environment templates
+!.env.example
+!.env.*.example
+
+# Vite cache
+.vite/
+

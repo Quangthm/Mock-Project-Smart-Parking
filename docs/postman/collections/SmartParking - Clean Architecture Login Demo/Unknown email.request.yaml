@@ -1,0 +1,21 @@
+$kind: http-request
+url: "{{baseUrl}}/api/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "unknown@gmail.com",
+      "password": "Password@123"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 401", function () { pm.response.to.have.status(401); });
+      const body = pm.response.json();
+      pm.test("Success flag", function () { pm.expect(body.success).to.eql(false); });
+      pm.test("Generic credential error", function () { pm.expect(body.message).to.eql("Invalid email or password."); });
+    language: text/javascript
+order: 3000
