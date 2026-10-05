@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.UserService.Domain.Entities;
 using System.IdentityModel.Tokens.Jwt;
@@ -7,88 +7,68 @@ using System.Text;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
 
-namespace UserService.Application.Services
+namespace UserService.Application.Services;
+
+public sealed class AccessTokenService(
+    IConfiguration configuration, IAuthSessionStore sessions, TimeProvider clock) : IAccessTokenService
 {
-    /// <summary>
-    /// Jwt Services.
-    /// </summary>
-    /// <seealso cref="UserService.Application.Common.Interfaces.Services.IAccessTokenService" />
-    public class AccessTokenService : IAccessTokenService
+    public const int LifetimeSeconds = 300; // Existing demo lifetime; see the decision report.
+
+    public static TokenValidationParameters ValidationParameters(JwtOptions options) => new()
     {
-        /// <summary>
-        /// The configuration
-        /// </summary>
-        private readonly IConfiguration configuration;
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        RequireSignedTokens = true,
+        RequireExpirationTime = true,
+        ValidIssuer = options.Issuer,
+        ValidAudience = options.Audience,
+        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)),
+        ClockSkew = TimeSpan.Zero,
+        NameClaimType = JwtRegisteredClaimNames.Sub,
+        RoleClaimType = "role"
+    };
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AccessTokenService" /> class.
-        /// </summary>
-        /// <param name="configuration">The configuration.</param>
-        public AccessTokenService(IConfiguration configuration)
+    public string GenerateAccessToken(User user)
+    {
+        var options = configuration.GetSection("Jwt").Get<JwtOptions>()
+            ?? throw new InvalidOperationException("JWT configuration is required.");
+        var sessionId = Guid.NewGuid().ToString("N");
+        var now = clock.GetUtcNow();
+        var expires = now.AddSeconds(LifetimeSeconds);
+        var role = user.UserRoles.FirstOrDefault(role => !role.IsDeleted)?.RoleCode.ToLowerInvariant()
+            ?? throw new InvalidOperationException("A login account must have an assigned role.");
+        var credentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)), SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(options.Issuer, options.Audience,
+            [new Claim(JwtRegisteredClaimNames.Sub, user.Id!.Value.ToString()),
+             new Claim(JwtRegisteredClaimNames.Jti, sessionId), new Claim("role", role)],
+            now.UtcDateTime, expires.UtcDateTime, credentials);
+        var encodedToken = new JwtSecurityTokenHandler().WriteToken(token);
+        sessions.Add(sessionId, user.Id.Value, expires);
+        return encodedToken;
+    }
+
+    public bool ValidateAccessToken(string accessToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken)) return false;
+        try
         {
-            this.configuration = configuration;
+            var options = configuration.GetSection("Jwt").Get<JwtOptions>();
+            if (options is null) return false;
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var principal = handler.ValidateToken(accessToken, ValidationParameters(options), out _);
+            return Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId)
+                && sessions.IsActive(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ?? "", userId);
         }
-
-        /// <summary>
-        /// Generates the access token.
-        /// </summary>
-        /// <param name="user">The user.</param>
-        /// <returns>
-        /// Access Token
-        /// </returns>
-        /// <exception cref="System.ArgumentNullException"></exception>
-        public string GenerateAccessToken(User user)
+        catch (Exception exception) when (exception is SecurityTokenException or ArgumentException)
         {
-            var jwtOptions = this.configuration.GetSection("Jwt").Get<JwtOptions>();
-
-            ArgumentNullException.ThrowIfNull(jwtOptions);
-
-            var secretKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
-            var signinCredentials = new SigningCredentials(secretKey, SecurityAlgorithms.HmacSha256);
-
-            var claims = new List<Claim>()
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, user?.Email ?? "Test"),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                // More information, More claims.
-            };
-
-            var tokenOptions = new JwtSecurityToken(issuer: jwtOptions.Issuer  ??string.Empty,
-                                                    audience: jwtOptions.Audience ?? string.Empty,
-                                                    claims: claims,
-                                                    expires: DateTime.Now.AddMinutes(5),
-                                                    signingCredentials: signinCredentials);
-
-            var tokenString = new JwtSecurityTokenHandler().WriteToken(tokenOptions);
-
-            return tokenString;
-        }
-
-        /// <summary>
-        /// Validates the access token.
-        /// </summary>
-        /// <param name="accessToken">The access token.</param>
-        /// <returns>
-        /// Access token is valid or not.
-        /// </returns>
-        public bool ValidateAccessToken(string accessToken)
-        {
-            return true;
-        }
-
-        /// <summary>
-        /// Refreshes the access token.
-        /// </summary>
-        /// <param name="accessToken">The access token.</param>
-        /// <param name="refreshToken">The refresh token.</param>
-        /// <returns>
-        /// New access token.
-        /// </returns>
-        public string RefreshAccessToken(string accessToken, string refreshToken)
-        {
-            var newAccessToken = string.Empty;
-
-            return newAccessToken;
+            return false;
         }
     }
+
+    public string RefreshAccessToken(string accessToken, string refreshToken) =>
+        throw new NotSupportedException("Refresh is not implemented in this demo. Sign in again.");
 }

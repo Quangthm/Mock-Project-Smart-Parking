@@ -30,7 +30,7 @@ Content-Type: application/json
 }
 ```
 
-Kết quả thành công: HTTP `200`, `success: true`, `data.accessToken`, `data.refreshToken`, `data.expiresIn: 300` và `data.user` có tên `Demo Driver`, ID `11111111-1111-1111-1111-111111111111`. Response không trả password/hash.
+Kết quả thành công: HTTP `200`, `success: true`, `data.accessToken`, `data.refreshToken: null`, `data.expiresIn: 300` và `data.user` có tên `Demo Driver`, ID `11111111-1111-1111-1111-111111111111`, role `driver`. Response không trả password/hash. Từ 05/10/2026 không phát refresh token giả; collection kiểm tra thêm `me`, `logout` và từ chối token đã thu hồi. Hướng dẫn frontend: [login/logout](../login-logout-frontend-guide.md).
 
 | Request | HTTP mong đợi | Đi đến Persistence? |
 | --- | --- | --- |
@@ -93,4 +93,4 @@ Thử **Wrong password** để quan sát repository vẫn chạy rồi handler t
 - Chưa thực hiện Step Into bằng debugger IDE trong phiên tự động; làm theo các breakpoint ở trên để trình bày trực tiếp.
 - Restore/build hiện có cảnh báo NU1903 từ dependency `Microsoft.OpenApi` 2.0.0 của scaffold sẵn có.
 
-Đây là bài demo gọi API đến Persistence: mật khẩu seed so sánh plaintext, JWT dùng key demo trong cấu hình Development, refresh token chỉ là chuỗi demo và không được lưu/đổi token. Không dùng luồng này làm xác thực production.
+Đây là bài demo gọi API đến Persistence: mật khẩu seed so sánh plaintext, JWT HS256 dùng key demo trong cấu hình Development, thời hạn 5 phút; refresh chưa triển khai và trả null. Login/logout đã được nối với frontend, JWT được kiểm tra và phiên bị thu hồi khi logout. Session store chỉ ở bộ nhớ một tiến trình; khởi động lại API làm mọi phiên cũ không còn hợp lệ. Không dùng luồng này làm xác thực production.

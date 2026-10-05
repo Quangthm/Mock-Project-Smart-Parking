@@ -10,6 +10,13 @@ builder.Services.AddOpenApi();
 builder.Services.AddControllers();
 builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddPersistenceServices();
+builder.Services.AddJWTAuthentication(builder.Configuration);
+builder.Services.AddAuthorization();
+// Only allow the local frontend during this demo. Production uses explicit configured origins.
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
+    .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
 
 var app = builder.Build();
 
@@ -47,5 +54,8 @@ app.Use(async (context, next) =>
     }
 });
 
+app.UseCors("Frontend");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.Run();

@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
 import type { User } from '../lib/types';
 import { store } from '../lib/store';
+import { authApi, authExpiredEvent } from '../lib/authApi';
 
 export type View =
   | 'landing' | 'pricing' | 'support' | 'faq'
@@ -16,12 +17,13 @@ interface AppCtx {
   dashboardMenuOpen: boolean;
   accentColor: string;
   authReady: boolean;
+  authError: string;
   setUser: (u: User | null) => void;
   setView: (v: View) => void;
   toggleTheme: () => void;
   setDashboardMenuOpen: (open: boolean) => void;
   setAccentColor: (color: string) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 const Ctx = createContext<AppCtx>({} as AppCtx);
@@ -34,6 +36,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
   const [accentColor, setAccentColorState] = useState('blue');
   const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const logoutPending = useRef(false);
 
   useEffect(() => {
     store.init();
@@ -43,17 +47,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const savedAccent = localStorage.getItem('sp_accent') || 'blue';
     setAccentColorState(savedAccent);
     delete document.documentElement.dataset.accent;
-
-    const uid = store.getCurrentUserId();
-    if (uid) {
-      const u = store.findUserById(uid);
-      if (u) {
-        setUserState(u);
-        setView(u.role as View);
+    // Remove the old local-only login marker. It must never authenticate a user.
+    store.setCurrentUserId(null);
+    let active = true;
+    const expire = () => {
+      authApi.clearSession();
+      setUserState(null);
+      store.setCurrentUserId(null);
+      setDashboardMenuOpen(false);
+      setView('sign-in');
+      setAuthError('Your session has expired. Please sign in again.');
+    };
+    window.addEventListener(authExpiredEvent, expire);
+    void authApi.currentUser().then(account => {
+      if (!active) return;
+      if (account) {
+        store.saveUser(account);
+        store.setCurrentUserId(account.id);
+        setUserState(account);
+        setView(account.role);
       }
-    }
-    setAuthReady(true);
+    }).catch(error => {
+      if (active) {
+        authApi.clearSession();
+        setAuthError(error instanceof Error ? error.message : 'Cannot restore your session.');
+      }
+    }).finally(() => { if (active) setAuthReady(true); });
+    return () => { active = false; window.removeEventListener(authExpiredEvent, expire); };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const remaining = authApi.expiresAt() - Date.now();
+    const timer = window.setTimeout(() => window.dispatchEvent(new Event(authExpiredEvent)), Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [user]);
 
   useEffect(() => {
     store.remindExpiringBookings();
@@ -63,6 +91,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setUser = (u: User | null) => {
     setUserState(u);
+    setAuthError('');
     store.setCurrentUserId(u?.id ?? null);
   };
 
@@ -79,15 +108,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('sp_accent', color);
   };
 
-  const signOut = () => {
-    setUser(null);
-    setView('landing');
-    setDashboardMenuOpen(false);
-    store.addAuditLog({ userId: user?.id ?? '', userName: user?.name ?? '', userRole: user?.role ?? 'driver', action: 'SIGN_OUT', details: 'User signed out' });
+  const signOut = async () => {
+    if (logoutPending.current) return;
+    logoutPending.current = true;
+    setAuthError('');
+    try {
+      await authApi.logout();
+      setUser(null);
+      setView('landing');
+      setDashboardMenuOpen(false);
+      store.addAuditLog({ userId: user?.id ?? '', userName: user?.name ?? '', userRole: user?.role ?? 'driver', action: 'SIGN_OUT', details: 'User signed out' });
+    } catch (error) {
+      // Keep the session visible so the user can retry; do not claim revocation succeeded.
+      setAuthError(error instanceof Error ? error.message : 'Sign out failed. Please try again.');
+    } finally {
+      logoutPending.current = false;
+    }
   };
 
   return (
-    <Ctx.Provider value={{ user, view, theme, accentColor, dashboardMenuOpen, authReady, setUser, setView, toggleTheme, setDashboardMenuOpen, setAccentColor, signOut }}>
+    <Ctx.Provider value={{ user, view, theme, accentColor, dashboardMenuOpen, authReady, authError, setUser, setView, toggleTheme, setDashboardMenuOpen, setAccentColor, signOut }}>
       {children}
     </Ctx.Provider>
   );
