@@ -41,12 +41,18 @@ Tài liệu này ghi nhận quá trình và các quyết định kỹ thuật kh
    *(Khi Backend khởi động, `DataSeeder` sẽ âm thầm kiểm tra, nếu DB trống nó sẽ tự nhồi tài khoản `driver@gmail.com` / `Password@123` vào).*
 
 ### 3.2. Xem dữ liệu bằng pgAdmin 4 / DBeaver
-Do cổng đã bị đổi để chống xung đột, team lưu ý kết nối bằng thông số sau:
-- **Host name/address:** `localhost`
-- **Port:** `5433` *(Lưu ý: Không dùng 5432)*
-- **Database:** `smartpark_db`
-- **Username:** `smartpark_user`
-- **Password:** `smartpark_password`
+Do cổng đã bị đổi để chống xung đột, team lưu ý kết nối bằng thông số sau. Hướng dẫn chi tiết trên **pgAdmin 4**:
+
+1. Nhìn sang thanh menu bên trái, **Click chuột phải** vào mục **Servers** 🐘.
+2. Chọn **Register** -> **Server...**
+3. Ở tab **General**: Ô *Name*, điền tên gợi nhớ (ví dụ: `Docker SmartParking`).
+4. Chuyển sang tab **Connection** và điền chính xác các thông số sau:
+   - **Host name/address:** `localhost` *(Bắt buộc điền đúng chữ localhost, không điền tên server vào đây)*
+   - **Port:** `5433` *(Lưu ý: Phải sửa lại thành 5433, không dùng 5432 mặc định)*
+   - **Maintenance database / Database:** `smartpark_db`
+   - **Username:** `smartpark_user`
+   - **Password:** `smartpark_password` (Nên bật *Save password*).
+5. Bấm **Save** là kết nối thành công. Mở cây thư mục `Databases` -> `smartpark_db` -> `Schemas` -> `public` -> `Tables` để xem dữ liệu.
 
 ## 4. Giới hạn và Quyết định kỹ thuật còn mở (Deferred Items)
 
