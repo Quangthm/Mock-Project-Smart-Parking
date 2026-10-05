@@ -5,6 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using UserService.Application.Usecase.Session;
 using UserService.Application.Common.Behaviors;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
@@ -68,15 +70,27 @@ namespace UserService.Application
                 opt.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
             }).AddJwtBearer(options =>
                  {
-                     options.TokenValidationParameters = new TokenValidationParameters
+                     options.MapInboundClaims = false;
+                     options.TokenValidationParameters = AccessTokenService.ValidationParameters(jwtOptions);
+                     options.Events = new JwtBearerEvents
                      {
-                         ValidateIssuer = true,
-                         ValidateAudience = true,
-                         ValidateLifetime = true,
-                         ValidateIssuerSigningKey = true,
-                         ValidIssuer = jwtOptions.Issuer,
-                         ValidAudience = jwtOptions.Audience,
-                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key))
+                         OnTokenValidated = async context =>
+                         {
+                             var principal = context.Principal;
+                             var sessionId = principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                             var sessions = context.HttpContext.RequestServices.GetRequiredService<IAuthSessionStore>();
+                             if (string.IsNullOrEmpty(sessionId)
+                                 || !Guid.TryParse(principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId)
+                                 || !sessions.IsActive(sessionId, userId))
+                             {
+                                 context.Fail("Session is invalid or revoked.");
+                                 return;
+                             }
+                             var mediator = context.HttpContext.RequestServices.GetRequiredService<IMediator>();
+                             var user = await mediator.Send(new GetCurrentUserQuery(userId), context.HttpContext.RequestAborted);
+                             if (user is null || user.Role != principal?.FindFirst("role")?.Value)
+                                 context.Fail("Account is inactive or permissions have changed.");
+                         }
                      };
                  });
 

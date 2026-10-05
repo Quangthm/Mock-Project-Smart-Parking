@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "SmartParking - Clean Architecture Login Demo",
+    "name": "SmartParking - Login Logout Frontend Demo",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "In-memory Login demo: API -> MediatR -> Validation -> Handler -> IUnitOfWork/IUserRepository -> Persistence. No database connection."
+    "description": "In-memory login/session/logout integration. No production credentials or database. Tokens are revoked server-side on logout; refresh token is not implemented."
   },
   "variable": [
     {
@@ -11,6 +11,25 @@
     }
   ],
   "item": [
+    {
+      "name": "Anonymous session is rejected",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401 without token\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
     {
       "name": "Login successful",
       "request": {
@@ -43,13 +62,15 @@
               "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(true); });",
               "pm.test(\"Session and seeded user\", function () {",
               "  pm.expect(body.data.accessToken.split(\".\")).to.have.lengthOf(3);",
-              "  pm.expect(body.data.refreshToken).to.match(/^[a-f0-9]{32}$/);",
+              "  pm.expect(body.data.refreshToken).to.eql(null);",
+              "  pm.expect(body.data.user.role).to.eql(\"driver\");",
               "  pm.expect(body.data.tokenType).to.eql(\"Bearer\");",
               "  pm.expect(body.data.expiresIn).to.eql(300);",
               "  pm.expect(body.data.user.userId).to.eql(\"11111111-1111-1111-1111-111111111111\");",
               "  pm.expect(body.data.user.email).to.eql(\"driver@gmail.com\");",
               "  pm.expect(body.data.user).not.to.have.property(\"passwordHash\");",
-              "});"
+              "});",
+              "pm.collectionVariables.set(\"accessToken\", body.data.accessToken);"
             ]
           }
         }
@@ -230,6 +251,80 @@
               "const body = pm.response.json();",
               "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
               "pm.test(\"Validation errors\", function () { pm.expect(body.errors).to.be.an(\"array\").that.is.not.empty; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Current authenticated user",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Server identity and role\", () => { const user = pm.response.json().data; pm.expect(user.userId).to.eql(\"11111111-1111-1111-1111-111111111111\"); pm.expect(user.role).to.eql(\"driver\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logout current session",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/logout"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Revoked token is rejected",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401 after logout\", () => pm.response.to.have.status(401));",
+              "pm.collectionVariables.unset(\"accessToken\");"
             ]
           }
         }

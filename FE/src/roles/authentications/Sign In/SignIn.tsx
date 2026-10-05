@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { getUserHomePath } from '../../operator/data/roleRoutes';
 import { BrandLogo } from '../../../components/brand/BrandLogo';
 import { PasswordVisibilityIcon } from '../../../components/forms/PasswordVisibilityIcon';
+import { authApi } from '../../../lib/authApi';
 
 
 export function SignIn() {
@@ -14,44 +15,28 @@ export function SignIn() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     setError('');
-
-    const user = store.findUserByEmail(email);
-    if (!user || user.password !== password) {
-      setError('Invalid email or password.');
-      return;
+    setSubmitting(true);
+    try {
+      const user = await authApi.login(email, password);
+      const signedInUser = { ...user, lastLoginAt: new Date().toISOString() };
+      store.saveUser(signedInUser);
+      store.addAuditLog({ userId: user.id, userName: user.name, userRole: user.role, action: 'SIGN_IN', details: `User signed in as ${user.role}` });
+      store.notifyUser(user.id, 'LOGIN_SUCCESS', 'Successful login', 'You have successfully logged in.');
+      setPassword('');
+      setUser(signedInUser);
+      setView(user.role);
+      navigate(getUserHomePath(user), { replace: true });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Sign in failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-
-    if (user.accountStatus === 'suspended') {
-      setError('This account is suspended. Please contact support.');
-      return;
-    }
-    if (user.accountStatus === 'locked') {
-      setError('This account is locked. Please contact an administrator.');
-      return;
-    }
-
-    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-      const remaining = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60000);
-      setError(`Account locked. Try again in ${remaining} minute(s).`);
-      return;
-    }
-
-    if (user.role === 'owner' && !user.policyAccepted) {
-      setError('Your business account is pending admin approval. You will receive an email once approved.');
-      return;
-    }
-
-    const signedInUser = { ...user, lastLoginAt: new Date().toISOString(), accountStatus: 'active' as const };
-    store.saveUser(signedInUser);
-    store.addAuditLog({ userId: user.id, userName: user.name, userRole: user.role, action: 'SIGN_IN', details: `User signed in as ${user.role}` });
-    store.notifyUser(user.id, 'LOGIN_SUCCESS', 'Successful login', 'You have successfully logged in.');
-    setUser(signedInUser);
-    setView(user.role as any);
-    if (user.role === 'operator') navigate(getUserHomePath(user), { replace: true });
   }
 
   return (
@@ -89,8 +74,8 @@ export function SignIn() {
             </div>
           )}
 
-          <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '0.75rem' }}>
-            Sign In
+          <button type="submit" disabled={submitting} className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '0.75rem' }}>
+            {submitting ? 'Signing in…' : 'Sign In'}
           </button>
 
           <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--muted)', margin: 0 }}>

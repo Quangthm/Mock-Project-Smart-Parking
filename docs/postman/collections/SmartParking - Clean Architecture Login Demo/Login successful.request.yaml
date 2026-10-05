@@ -18,7 +18,8 @@ scripts:
       pm.test("Success flag", function () { pm.expect(body.success).to.eql(true); });
       pm.test("Session and seeded user", function () {
         pm.expect(body.data.accessToken.split(".")).to.have.lengthOf(3);
-        pm.expect(body.data.refreshToken).to.match(/^[a-f0-9]{32}$/);
+        pm.expect(body.data.refreshToken).to.eql(null);
+        pm.expect(body.data.user.role).to.eql("driver");
         pm.expect(body.data.tokenType).to.eql("Bearer");
         pm.expect(body.data.expiresIn).to.eql(300);
         pm.expect(body.data.user.userId).to.eql("11111111-1111-1111-1111-111111111111");

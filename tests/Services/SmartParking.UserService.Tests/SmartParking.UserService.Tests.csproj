@@ -17,5 +17,9 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Persistence\SmartParking.UserService.Persistence.csproj" />
+  </ItemGroup>
 
 </Project>

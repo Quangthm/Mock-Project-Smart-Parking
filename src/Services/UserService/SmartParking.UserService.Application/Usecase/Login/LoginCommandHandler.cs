@@ -3,6 +3,7 @@ using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.DTOs;
+using UserService.Application.Services;
 
 namespace UserService.Application.Usecase.Login;
 
@@ -33,7 +34,8 @@ public class LoginCommandHandler
         }
 
         // Plain-text comparison is used only for the seeded, in-memory demo account.
-        if (user.Status != UserStatus.Active || user.PasswordHash != request.Password)
+        if (user.Status != UserStatus.Active || user.PasswordHash != request.Password
+            || !user.UserRoles.Any(role => !role.IsDeleted))
         {
             return new LoginResult(null);
         }
@@ -42,19 +44,18 @@ public class LoginCommandHandler
             this.accessTokenService
                 .GenerateAccessToken(user);
 
-        var refreshToken =
-            Guid.NewGuid().ToString("N");
-
         return new LoginResult(new UserSessionDto
         {
             AccessToken = accessToken,
-            RefreshToken = refreshToken,
-            ExpiresIn = 300,
+            // No fake refresh token: refresh persistence/rotation is outside this demo.
+            RefreshToken = null,
+            ExpiresIn = AccessTokenService.LifetimeSeconds,
             User = new UserInfoDto
             {
                 UserId = user.Id!.Value,
                 FullName = user.FullName,
-                Email = user.Email ?? string.Empty
+                Email = user.Email ?? string.Empty,
+                Role = user.UserRoles.First(role => !role.IsDeleted).RoleCode.ToLowerInvariant()
             }
         });
     }

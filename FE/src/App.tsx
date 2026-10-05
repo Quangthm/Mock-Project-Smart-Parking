@@ -26,7 +26,7 @@ import { PendingApproval } from './public pages/PendingApproval';
 import { getUserHomePath } from './roles/operator/data/roleRoutes';
 
 function AppContent() {
-  const { view, user, authReady, accentColor } = useApp();
+  const { view, user, authReady, authError, accentColor } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const isOperatorPath = ['/dashboard/finance', '/dashboard/operation', '/pos'].includes(location.pathname);
@@ -44,7 +44,9 @@ function AppContent() {
     <div className={isDashboard ? 'dashboard-theme' : undefined} data-accent={isDashboard ? accentColor : undefined} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)' }}>
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
       <main style={{ flex: 1 }}>
-        <div key={`${location.pathname}-${view}`} className="animate-in">
+        {authError && <div role="alert" className="p-4 text-center text-red-600">{authError}</div>}
+        {!authReady && <div className="p-8 text-center text-sm text-[var(--muted)]">Loading account…</div>}
+        {authReady && <div key={`${location.pathname}-${view}`} className="animate-in">
           <Routes>
             <Route path="/" element={<LegacyView view={view} />} />
             <Route path="/dashboard/finance" element={<RoleRoute allowedRoles={['financial', 'owner']}><OperatorDashboard accessRoleOverride="financial" /></RoleRoute>} />
@@ -52,7 +54,7 @@ function AppContent() {
             <Route path="/pos" element={<RoleRoute allowedRoles={['cashier']}><OperatorDashboard accessRoleOverride="cashier" /></RoleRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </div>
+        </div>}
       </main>
       {!isDashboard && <Footer />}
     </div>

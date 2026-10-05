@@ -21,7 +21,8 @@ public static class InMemoryDatabase
             // This is intentionally plain text for the first API demo.
             PasswordHash = "Password@123",
 
-            Status = UserStatus.Active
+            Status = UserStatus.Active,
+            UserRoles = [new UserRole { RoleCode = "Driver" }]
         }
     ];
 }
