@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
@@ -33,9 +33,10 @@ public class LoginCommandHandler
             return new LoginResult(null);
         }
 
-        // Plain-text comparison is used only for the seeded, in-memory demo account.
-        if (user.Status != UserStatus.Active || user.PasswordHash != request.Password
-            || !user.UserRoles.Any(role => !role.IsDeleted))
+        var firstAccount = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE");
+        var firstRole = firstAccount?.AccountRoles.FirstOrDefault()?.RoleCode ?? "driver";
+
+        if (user.Status != UserStatus.Active || user.PasswordHash != request.Password || firstAccount == null)
         {
             return new LoginResult(null);
         }
@@ -55,7 +56,7 @@ public class LoginCommandHandler
                 UserId = user.Id!.Value,
                 FullName = user.FullName,
                 Email = user.Email ?? string.Empty,
-                Role = user.UserRoles.First(role => !role.IsDeleted).RoleCode.ToLowerInvariant()
+                Role = firstRole.ToLowerInvariant()
             }
         });
     }

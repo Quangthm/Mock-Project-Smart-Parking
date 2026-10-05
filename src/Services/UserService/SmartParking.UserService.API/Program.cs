@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
 builder.Services.AddApplicationServices(builder.Configuration);
-builder.Services.AddPersistenceServices();
+builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddJWTAuthentication(builder.Configuration);
 builder.Services.AddAuthorization();
 // Only allow the local frontend during this demo. Production uses explicit configured origins.

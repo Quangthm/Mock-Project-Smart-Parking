@@ -1,11 +1,8 @@
-﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using UserService.Domain.Base;
 
 namespace SmartParking.UserService.Domain.Entities
 {
-    public class Role : BaseEntity
+    public class Role
     {
         public string Code { get; set; } = string.Empty;
 
@@ -13,6 +10,6 @@ namespace SmartParking.UserService.Domain.Entities
 
         public string? Description { get; set; }
 
-        public ICollection<UserRole> UserRoles { get; set; } = [];
+        public ICollection<AccountRole> AccountRoles { get; set; } = [];
     }
 }

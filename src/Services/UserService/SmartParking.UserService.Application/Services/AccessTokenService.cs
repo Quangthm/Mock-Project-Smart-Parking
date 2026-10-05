@@ -38,7 +38,7 @@ public sealed class AccessTokenService(
         var sessionId = Guid.NewGuid().ToString("N");
         var now = clock.GetUtcNow();
         var expires = now.AddSeconds(LifetimeSeconds);
-        var role = user.UserRoles.FirstOrDefault(role => !role.IsDeleted)?.RoleCode.ToLowerInvariant()
+        var role = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE")?.AccountRoles.FirstOrDefault()?.RoleCode.ToLowerInvariant()
             ?? throw new InvalidOperationException("A login account must have an assigned role.");
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)), SecurityAlgorithms.HmacSha256);

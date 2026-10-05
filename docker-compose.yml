@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: smartparking_db
+    environment:
+      POSTGRES_USER: smartpark_user
+      POSTGRES_PASSWORD: smartpark_password
+      POSTGRES_DB: smartpark_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./scripts/database/05.1-Database-Scripts.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -20,7 +20,7 @@ public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
             UserId = user.Id!.Value,
             FullName = user.FullName,
             Email = user.Email ?? string.Empty,
-            Role = user.UserRoles.FirstOrDefault(role => !role.IsDeleted)?.RoleCode.ToLowerInvariant() ?? string.Empty
+            Role = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE")?.AccountRoles.FirstOrDefault()?.RoleCode.ToLowerInvariant() ?? string.Empty
         });
     }
 }

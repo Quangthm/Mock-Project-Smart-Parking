@@ -1,53 +1,51 @@
-﻿using UserService.Application.Common.Interfaces.Persistence;
+using Microsoft.EntityFrameworkCore;
+using UserService.Application.Common.Interfaces.Persistence;
 
 namespace UserService.Persistence.Repositories.BaseRepository;
 
 public class GenericRepository<TEntity> : IRepository<TEntity>
     where TEntity : class
 {
-    protected readonly List<TEntity> entities;
+    protected readonly AppDbContext dbContext;
+    protected readonly DbSet<TEntity> dbSet;
 
-    public GenericRepository(List<TEntity> entities)
+    public GenericRepository(AppDbContext dbContext)
     {
-        this.entities = entities;
+        this.dbContext = dbContext;
+        this.dbSet = dbContext.Set<TEntity>();
     }
 
-    public Task AddAsync(
+    public async Task AddAsync(
         TEntity entity,
         CancellationToken cancellationToken)
     {
-        this.entities.Add(entity);
-
-        return Task.CompletedTask;
+        await this.dbSet.AddAsync(entity, cancellationToken);
     }
 
-    public Task AddRangeAsync(
+    public async Task AddRangeAsync(
         List<TEntity> entities,
         CancellationToken cancellationToken)
     {
-        this.entities.AddRange(entities);
-
-        return Task.CompletedTask;
+        await this.dbSet.AddRangeAsync(entities, cancellationToken);
     }
 
     public void Update(TEntity entity)
     {
-        // Demo implementation.
-        // Nothing is required for Login.
+        this.dbSet.Update(entity);
     }
 
     public void Remove(TEntity entity)
     {
-        this.entities.Remove(entity);
+        this.dbSet.Remove(entity);
     }
 
     public IQueryable<TEntity> Query()
     {
-        return this.entities.AsQueryable();
+        return this.dbSet.AsQueryable();
     }
 
     public IQueryable<TEntity> QueryIncludingDeleted()
     {
-        return this.entities.AsQueryable();
+        return this.dbSet.AsQueryable();
     }
 }
