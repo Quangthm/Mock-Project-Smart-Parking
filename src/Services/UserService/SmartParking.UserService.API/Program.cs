@@ -20,6 +20,12 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => poli
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<UserService.Persistence.DataSeeder>();
+    await seeder.SeedAsync();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

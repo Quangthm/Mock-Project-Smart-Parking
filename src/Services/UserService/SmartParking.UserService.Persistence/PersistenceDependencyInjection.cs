@@ -17,6 +17,7 @@ public static class PersistenceDependencyInjection
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddTransient<DataSeeder>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAuthSessionStore, InMemoryAuthSessionStore>();
 
