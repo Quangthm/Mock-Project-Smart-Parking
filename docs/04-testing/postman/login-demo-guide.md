@@ -30,7 +30,7 @@ Content-Type: application/json
 }
 ```
 
-Kết quả thành công: HTTP `200`, `success: true`, `data.accessToken`, `data.refreshToken: null`, `data.expiresIn: 300` và `data.user` có tên `Demo Driver`, ID `11111111-1111-1111-1111-111111111111`, role `driver`. Response không trả password/hash. Từ 05/10/2026 không phát refresh token giả; collection kiểm tra thêm `me`, `logout` và từ chối token đã thu hồi. Hướng dẫn frontend: [login/logout](../login-logout-frontend-guide.md).
+Kết quả thành công: HTTP `200`, `success: true`, `data.accessToken`, `data.refreshToken: null`, `data.expiresIn: 300` và `data.user` có tên `Demo Driver`, ID là một `UUID` hợp lệ, role `driver`. Response không trả password/hash. Từ 05/10/2026 không phát refresh token giả; collection kiểm tra thêm `me`, `logout` và từ chối token đã thu hồi. Hướng dẫn frontend: [login/logout](../login-logout-frontend-guide.md).
 
 | Request | HTTP mong đợi | Đi đến Persistence? |
 | --- | --- | --- |

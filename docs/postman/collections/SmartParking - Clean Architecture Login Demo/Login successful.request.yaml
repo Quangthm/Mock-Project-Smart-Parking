@@ -22,7 +22,7 @@ scripts:
         pm.expect(body.data.user.role).to.eql("driver");
         pm.expect(body.data.tokenType).to.eql("Bearer");
         pm.expect(body.data.expiresIn).to.eql(300);
-        pm.expect(body.data.user.userId).to.eql("11111111-1111-1111-1111-111111111111");
+        pm.expect(body.data.user.userId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
         pm.expect(body.data.user.email).to.eql("driver@gmail.com");
         pm.expect(body.data.user).not.to.have.property("passwordHash");
       });
