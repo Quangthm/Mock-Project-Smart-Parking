@@ -292,10 +292,6 @@ CREATE TABLE slot_allocations (
     allocation_status VARCHAR(50) NOT NULL DEFAULT 'RESERVED' CHECK (allocation_status IN ('RESERVED', 'OCCUPIED', 'RELEASED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (allocated_end_time > allocated_start_time),
-    CONSTRAINT no_overlapping_slot_allocations EXCLUDE USING gist (
-        slot_id WITH =,
-        TSTZRANGE(allocated_start_time, allocated_end_time) WITH &&
-    ),
     FOREIGN KEY (reservation_id, tenant_id, site_id) REFERENCES reservations(id, tenant_id, site_id) ON DELETE SET NULL,
     FOREIGN KEY (parking_session_id, tenant_id, site_id) REFERENCES parking_sessions(id, tenant_id, site_id) ON DELETE SET NULL
 );
