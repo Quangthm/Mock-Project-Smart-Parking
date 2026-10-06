@@ -60,6 +60,7 @@ namespace UserService.Domain.Base
         /// </summary>
         /// <value>
         /// The deleted on.
+        /// </value>
         public DateTimeOffset? DeletedOn { get ; set ; }
     }
 }

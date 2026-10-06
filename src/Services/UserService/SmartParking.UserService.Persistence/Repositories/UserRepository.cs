@@ -22,4 +22,13 @@ public class UserRepository
             .ThenInclude(ar => ar.Role)
             .FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
     }
+
+    public async Task<User?> GetByIdWithRolesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await this.dbSet
+            .Include(u => u.Accounts)
+            .ThenInclude(a => a.AccountRoles)
+            .ThenInclude(ar => ar.Role)
+            .FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
+    }
 }

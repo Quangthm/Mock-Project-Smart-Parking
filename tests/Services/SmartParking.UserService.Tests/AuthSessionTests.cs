@@ -24,6 +24,11 @@ public sealed class AuthSessionTests
             if (email == "driver@gmail.com") return Task.FromResult<User?>(Account());
             return Task.FromResult<User?>(null);
         }
+        public Task<User?> GetByIdWithRolesAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            if (userId == UserId) return Task.FromResult<User?>(Account());
+            return Task.FromResult<User?>(null);
+        }
         public Task AddAsync(User entity, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task AddRangeAsync(List<User> entities, CancellationToken cancellationToken) => Task.CompletedTask;
         public IQueryable<User> Query() => new List<User>().AsQueryable();

@@ -1,4 +1,4 @@
-﻿using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.Persistence;
 namespace UserService.Application.Common.Interfaces.Persistence
 {
     /// <summary>
@@ -10,6 +10,10 @@ namespace UserService.Application.Common.Interfaces.Persistence
     {
         Task<SmartParking.UserService.Domain.Entities.User?> GetByEmailAsync(
             string email,
+            CancellationToken cancellationToken);
+
+        Task<SmartParking.UserService.Domain.Entities.User?> GetByIdWithRolesAsync(
+            Guid userId,
             CancellationToken cancellationToken);
     }
 }

@@ -19,6 +19,6 @@
         /// <value>
         /// The deleted on.
         /// </value>
-        public DateTimeOffset DeletedOn { get; set; }
+        public DateTimeOffset? DeletedOn { get; set; }
     }
 }
