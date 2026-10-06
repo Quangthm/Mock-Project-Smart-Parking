@@ -139,3 +139,28 @@ CREATE INDEX idx_access_items_site_id ON access_items(site_id);
 CREATE INDEX idx_access_items_identifier_code ON access_items(identifier_code);
 CREATE INDEX idx_site_settings_site_id ON site_operational_settings(site_id);
 CREATE INDEX idx_tariffs_site_id ON tariffs(site_id);
+
+-- 9. BẢNG LUỒNG ĐI (PARKING ACCESS PATHS)
+CREATE TABLE parking_access_paths (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    path_code VARCHAR(50) NOT NULL,
+    from_unit_id UUID,
+    to_unit_id UUID,
+    map_data JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ,
+    UNIQUE(id, tenant_id, site_id),
+    FOREIGN KEY (site_id, tenant_id) REFERENCES parking_sites(id, tenant_id) ON DELETE RESTRICT,
+    FOREIGN KEY (from_unit_id, tenant_id, site_id) REFERENCES spatial_units(id, tenant_id, site_id) ON DELETE RESTRICT,
+    FOREIGN KEY (to_unit_id, tenant_id, site_id) REFERENCES spatial_units(id, tenant_id, site_id) ON DELETE RESTRICT,
+    CHECK (from_unit_id IS NULL OR to_unit_id IS NULL OR from_unit_id <> to_unit_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_access_path_code ON parking_access_paths(site_id, upper(path_code)) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_access_paths_site ON parking_access_paths(site_id);
+
+-- THÊM CÁC INDEX MỚI TỪ NHÁNH DEVELOP
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_site_code_ci ON parking_sites(tenant_id, upper(site_code)) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_slot_code_ci ON parking_slots(spatial_unit_id, upper(slot_code)) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_unit_name_ci ON spatial_units(site_id, parent_id, lower(name)) NULLS NOT DISTINCT WHERE deleted_at IS NULL;

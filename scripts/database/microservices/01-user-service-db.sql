@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. BẢNG ĐỊNH DANH CON NGƯỜI
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone VARCHAR(20) NOT NULL,
+    phone VARCHAR(20),
     email VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE users (
     deleted_at TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX uq_active_user_phone ON users (phone) WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX uq_active_user_email ON users (email) WHERE deleted_at IS NULL AND email IS NOT NULL;
+CREATE UNIQUE INDEX uq_active_user_email_normalized ON users (lower(email)) WHERE deleted_at IS NULL AND email IS NOT NULL;
 
 -- 2. BẢNG TÀI KHOẢN NGƯỜI DÙNG PHÂN THEO NGỮ CẢNH
 CREATE TABLE accounts (
@@ -80,6 +80,8 @@ CREATE TABLE user_refresh_tokens (
     device_info VARCHAR(255),
     ip_address VARCHAR(45),
     expires_at TIMESTAMPTZ NOT NULL,
+    access_token_id UUID NOT NULL UNIQUE,
+    access_expires_at TIMESTAMPTZ NOT NULL,
     is_revoked BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -87,3 +89,43 @@ CREATE TABLE user_refresh_tokens (
 );
 CREATE INDEX idx_user_refresh_tokens_user_id ON user_refresh_tokens (user_id);
 CREATE INDEX idx_user_refresh_tokens_expires_at ON user_refresh_tokens (expires_at);
+
+-- 7. BẢNG ĐĂNG KÝ TÀI XẾ (DRIVER REGISTRATION OTP)
+CREATE TABLE driver_registrations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    channel VARCHAR(10) NOT NULL CHECK (channel IN ('email', 'sms')),
+    code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    resend_available_at TIMESTAMPTZ NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts BETWEEN 0 AND 3),
+    locked_until TIMESTAMPTZ,
+    verified_at TIMESTAMPTZ
+);
+
+-- 8. BẢNG ĐƠN ĐĂNG KÝ CHỦ BÃI XE (OWNER APPLICATIONS)
+CREATE TABLE owner_applications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL UNIQUE REFERENCES users(id),
+    business_name VARCHAR(255) NOT NULL,
+    lot_type VARCHAR(30) NOT NULL CHECK (lot_type IN ('outdoor', 'basement', 'multi-storey')),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    submitted_at TIMESTAMPTZ NOT NULL,
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by UUID REFERENCES users(id),
+    review_note VARCHAR(2000),
+    CHECK ((status = 'pending' AND reviewed_at IS NULL AND reviewed_by IS NULL)
+        OR (status <> 'pending' AND reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL))
+);
+
+-- 9. BẢNG PHÂN QUYỀN VẬN HÀNH BÃI (OPERATOR GRANTS)
+CREATE TABLE operator_grants (
+    account_id UUID PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    permissions TEXT[] NOT NULL,
+    CHECK (cardinality(permissions) BETWEEN 1 AND 4),
+    CHECK (array_position(permissions, NULL) IS NULL),
+    CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW']::TEXT[])
+);
+CREATE INDEX idx_operator_grants_creator ON operator_grants(created_by);
