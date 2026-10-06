@@ -24,7 +24,7 @@ public class DataSeeder
             return; // Đã có data, bỏ qua không seed nữa
         }
 
-        var userId = Guid.NewGuid();
+        var userId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var accountId = Guid.NewGuid();
 
         var demoUser = new User
