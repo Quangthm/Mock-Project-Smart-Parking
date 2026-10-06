@@ -4,8 +4,8 @@
 SmartPark uses a **Database-per-Service** microservices architecture. There is no single monolithic database. Each microservice completely owns its persistence layer, enforcing strict service boundaries. Cross-service data references are handled logically via UUIDs rather than physical PostgreSQL foreign keys.
 
 The architecture consists of 6 distinct databases:
-1. **User Service DB** (`01-user-service-db.sql`): Manages authentication, identity, contextual accounts, roles, and registered vehicles.
-2. **Parking Service DB** (`02-parking-service-db.sql`): Manages the physical parking infrastructure, spatial units, capacity, hardware mapping, and pricing rules.
+1. **User Service DB** (`01-user-service-db.sql`): Manages authentication, identity, contextual accounts, roles, registered vehicles, and onboarding workflows (Driver OTP registrations, Owner applications, and Operator grants).
+2. **Parking Service DB** (`02-parking-service-db.sql`): Manages the physical parking infrastructure, spatial units, capacity, hardware mapping, pricing rules, and access routing paths.
 3. **Reservation & Session Service DB** (`03-reservation-session-service-db.sql`): The transactional core managing dynamic capacity allocations, reservations, and active parking sessions.
 4. **Payment Service DB** (`04-payment-service-db.sql`): Handles payment orders, transactions, billing invoices, and refund lifecycles.
 5. **Notification Service DB** (`05-notification-service-db.sql`): Manages notification templates and delivery logs (Email/SMS/Push).
