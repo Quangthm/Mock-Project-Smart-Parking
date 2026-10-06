@@ -20,6 +20,10 @@ public static class PersistenceDependencyInjection
         services.AddTransient<DataSeeder>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
+        services.AddScoped<IDriverRegistrationService, DriverRegistrationService>();
+        services.AddScoped<IOwnerRegistrationService, OwnerRegistrationService>();
+        services.AddScoped<IUserManagementService, UserManagementService>();
+        services.AddScoped<IOperatorProvisioningService, OperatorProvisioningService>();
 
         return services;
     }

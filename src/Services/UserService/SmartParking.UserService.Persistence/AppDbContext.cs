@@ -14,10 +14,60 @@ namespace UserService.Persistence
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<AccountRole> AccountRoles { get; set; } = null!;
         public DbSet<AuthSession> AuthSessions { get; set; } = null!;
+        public DbSet<DriverRegistration> DriverRegistrations { get; set; } = null!;
+        public DbSet<OwnerApplication> OwnerApplications { get; set; } = null!;
+        public DbSet<OperatorGrant> OperatorGrants { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<OperatorGrant>(entity =>
+            {
+                entity.ToTable("operator_grants");
+                entity.HasKey(e => e.AccountId);
+                entity.Property(e => e.AccountId).HasColumnName("account_id");
+                entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.Permissions).HasColumnName("permissions").HasColumnType("text[]");
+                entity.HasOne(e => e.Account).WithOne().HasForeignKey<OperatorGrant>(e => e.AccountId);
+                entity.HasOne<User>().WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<OwnerApplication>(entity =>
+            {
+                entity.ToTable("owner_applications");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.BusinessName).HasColumnName("business_name").HasMaxLength(255);
+                entity.Property(e => e.LotType).HasColumnName("lot_type").HasMaxLength(30);
+                entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20);
+                entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
+                entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+                entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
+                entity.Property(e => e.ReviewNote).HasColumnName("review_note").HasMaxLength(2000);
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
+                entity.HasOne<User>().WithMany().HasForeignKey(e => e.ReviewedBy);
+            });
+
+            modelBuilder.Entity<DriverRegistration>(entity =>
+            {
+                entity.ToTable("driver_registrations");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.Channel).HasColumnName("channel");
+                entity.Property(e => e.CodeHash).HasColumnName("code_hash");
+                entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+                entity.Property(e => e.ResendAvailableAt).HasColumnName("resend_available_at");
+                entity.Property(e => e.FailedAttempts).HasColumnName("failed_attempts");
+                entity.Property(e => e.LockedUntil).HasColumnName("locked_until");
+                entity.Property(e => e.VerifiedAt).HasColumnName("verified_at");
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId);
+            });
 
             modelBuilder.Entity<User>(entity =>
             {
@@ -30,7 +80,8 @@ namespace UserService.Persistence
                 entity.Property(e => e.FullName).HasColumnName("full_name");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(
                     value => value == SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification
-                        ? "PENDING_VERIFICATION" : value.ToString().ToUpperInvariant(),
+                        ? "PENDING_VERIFICATION" : value == SmartParking.UserService.Domain.Enum.UserStatus.PendingApproval
+                        ? "PENDING_APPROVAL" : value.ToString().ToUpperInvariant(),
                     value => Enum.Parse<SmartParking.UserService.Domain.Enum.UserStatus>(value.Replace("_", ""), true));
                 entity.Property(e => e.FailedLoginAttempts).HasColumnName("failed_login_attempts");
                 entity.Property(e => e.LockedUntil).HasColumnName("locked_until");

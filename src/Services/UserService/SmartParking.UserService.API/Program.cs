@@ -14,6 +14,15 @@ builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddJWTAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
+builder.Services.AddHttpClient("Otp", client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<IOtpSender, UserService.API.Services.OtpSender>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = 429;
+    options.AddPolicy("DriverOtp", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
+        { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 builder.Services.AddAuthorization();
 // Only allow the local frontend during this demo. Production uses explicit configured origins.
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
@@ -42,6 +51,7 @@ app.UseMiddleware<UserService.API.Middleware.AuthExceptionMiddleware>();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 app.Run();
 

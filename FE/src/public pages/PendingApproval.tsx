@@ -20,8 +20,8 @@ export function PendingApproval() {
           <h3 style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '0.95rem', color: 'var(--fg)', marginBottom: '1rem' }}>What happens next?</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             {[
-              { step: '01', label: 'Application Review', desc: 'Our team will review your submitted details within 2–3 business days.', color: '#2563eb', done: true },
-              { step: '02', label: 'Email Notification', desc: 'You will receive an approval or feedback email at your registered address.', color: '#f59e0b', done: false },
+              { step: '01', label: 'Application Review', desc: 'An Admin will review your company and contact details.', color: '#2563eb', done: true },
+              { step: '02', label: 'Admin Decision', desc: 'The Admin records an approval or rejection. Contact support for your application status.', color: '#f59e0b', done: false },
               { step: '03', label: 'Account Activation', desc: 'Once approved, sign in to access your Owner dashboard and set up your lot.', color: '#22c55e', done: false },
             ].map(s => (
               <div key={s.step} style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start' }}>
@@ -38,7 +38,7 @@ export function PendingApproval() {
         </div>
 
         <div style={{ background: 'var(--primary)10', border: '1px solid var(--primary)30', borderRadius: 'var(--radius)', padding: '0.875rem 1rem', marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--muted)', textAlign: 'left' }}>
-          <strong style={{ color: 'var(--primary)' }}>Note:</strong> Your account is created but <strong>inactive</strong> until admin approval. Attempting to sign in before approval will show a pending status message.
+          <strong style={{ color: 'var(--primary)' }}>Note:</strong> Your account is created but <strong>inactive</strong> until admin approval. You can sign in once your application has been approved.
         </div>
 
         <div style={{ display: 'flex', gap: '0.875rem', justifyContent: 'center' }}>

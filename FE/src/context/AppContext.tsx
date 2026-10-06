@@ -38,6 +38,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState('');
   const logoutPending = useRef(false);
+  const authRevision = useRef(0);
 
   useEffect(() => {
     store.init();
@@ -50,7 +51,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Remove the old local-only login marker. It must never authenticate a user.
     store.setCurrentUserId(null);
     let active = true;
+    const revision = authRevision.current;
     const expire = () => {
+      authRevision.current++;
       authApi.clearSession();
       setUserState(null);
       store.setCurrentUserId(null);
@@ -60,7 +63,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener(authExpiredEvent, expire);
     void authApi.currentUser().then(account => {
-      if (!active) return;
+      if (!active || revision !== authRevision.current) return;
       if (account) {
         store.saveUser(account);
         store.setCurrentUserId(account.id);
@@ -68,8 +71,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setView(account.role);
       }
     }).catch(error => {
-      if (active) {
-        authApi.clearSession();
+      if (active && revision === authRevision.current) {
+        // The API layer clears invalid tokens on 401; temporary failures keep them for retry.
         setAuthError(error instanceof Error ? error.message : 'Cannot restore your session.');
       }
     }).finally(() => { if (active) setAuthReady(true); });
@@ -90,6 +93,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setUser = (u: User | null) => {
+    authRevision.current++;
     setUserState(u);
     setAuthError('');
     store.setCurrentUserId(u?.id ?? null);
@@ -111,16 +115,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     if (logoutPending.current) return;
     logoutPending.current = true;
+    const revision = authRevision.current;
     setAuthError('');
     try {
       await authApi.logout();
+      // A completed request for an older session must not sign out a newer login.
+      if (revision !== authRevision.current) return;
       setUser(null);
       setView('landing');
       setDashboardMenuOpen(false);
       store.addAuditLog({ userId: user?.id ?? '', userName: user?.name ?? '', userRole: user?.role ?? 'driver', action: 'SIGN_OUT', details: 'User signed out' });
     } catch (error) {
       // Keep the session visible so the user can retry; do not claim revocation succeeded.
-      setAuthError(error instanceof Error ? error.message : 'Sign out failed. Please try again.');
+      if (revision === authRevision.current) {
+        setAuthError(error instanceof Error ? error.message : 'Sign out failed. Please try again.');
+      }
     } finally {
       logoutPending.current = false;
     }

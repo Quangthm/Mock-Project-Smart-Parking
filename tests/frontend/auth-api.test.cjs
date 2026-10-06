@@ -37,6 +37,70 @@ function fixture(respond) {
 const response = (status, payload = { success: false, code: 'INVALID_TOKEN', message: 'Invalid token.' }) =>
   ({ status, ok: status >= 200 && status < 300, json: async () => payload });
 
+const apiUser = { userId: 'driver-id', fullName: 'Driver', email: 'driver@example.com', role: 'driver' };
+test('login trims email, preserves password and stores the server session and identity', async () => {
+  const f = fixture(() => response(200, { success: true, data: {
+    accessToken: 'access-new', refreshToken: 'refresh-new', expiresIn: 3600, user: apiUser,
+  } }));
+  const started = Date.now();
+  const user = await f.api.login('  driver@example.com  ', ' Password@123 ');
+  assert.deepEqual(JSON.parse(f.calls[0].options.body), { email: 'driver@example.com', password: ' Password@123 ' });
+  assert.equal(user.id, 'driver-id');
+  assert.equal(user.role, 'driver');
+  assert.equal(user.password, '');
+  assert.equal(f.storage.get('sp_access_token'), 'access-new');
+  assert.equal(f.storage.get('sp_refresh_token'), 'refresh-new');
+  assert.ok(f.api.expiresAt() >= started + 3600000);
+  assert.ok(f.api.expiresAt() <= Date.now() + 3600000);
+});
+
+for (const [status, code] of [[400, 'VALIDATION_ERROR'], [401, 'AUTH_FAILED'], [403, 'ACCOUNT_LOCKED']]) {
+  test(`login HTTP ${status} reports the server error without creating a session`, async () => {
+    const f = fixture(() => response(status, { success: false, code, message: code }));
+    f.api.clearSession();
+    await assert.rejects(f.api.login('driver@example.com', 'wrong'), error => error.status === status && error.message === code);
+    assert.equal(f.storage.size, 0);
+    assert.deepEqual(f.events, []);
+  });
+}
+
+test('unsupported login role does not store tokens', async () => {
+  const f = fixture(() => response(200, { success: true, data: {
+    accessToken: 'access-new', refreshToken: 'refresh-new', expiresIn: 3600, user: { ...apiUser, role: 'unknown' },
+  } }));
+  f.api.clearSession();
+  await assert.rejects(f.api.login('driver@example.com', 'password'), /unsupported account role/);
+  assert.equal(f.storage.size, 0);
+});
+
+test('currentUser restores the backend identity using the bearer token', async () => {
+  const f = fixture(() => response(200, { success: true, data: apiUser }));
+  assert.equal((await f.api.currentUser()).id, 'driver-id');
+  assert.equal(f.calls[0].options.headers.Authorization, 'Bearer access-a');
+});
+
+for (const status of [401, 500]) {
+  test(`currentUser HTTP ${status} ${status === 401 ? 'expires' : 'preserves'} the session`, async () => {
+    const f = fixture(() => response(status));
+    await assert.rejects(f.api.currentUser(), error => error.status === status);
+    assert.equal(f.storage.size, status === 401 ? 0 : 3);
+    assert.deepEqual(f.events, status === 401 ? ['sp-auth-expired'] : []);
+  });
+}
+
+for (const status of [200, 401]) {
+  test(`late currentUser HTTP ${status} cannot restore or expire a replacement session`, async () => {
+    const f = fixture((url, options, storage) => {
+      storage.set('sp_access_token', 'access-b');
+      return response(status, { success: true, data: apiUser });
+    });
+    if (status === 200) assert.equal(await f.api.currentUser(), null);
+    else await assert.rejects(f.api.currentUser(), error => error.status === 401);
+    assert.equal(f.storage.get('sp_access_token'), 'access-b');
+    assert.deepEqual(f.events, []);
+  });
+}
+
 test('mismatched refresh token reports logout failure and preserves a valid session', async () => {
   const f = fixture(url => url.endsWith('/logout') ? response(401) : response(200, { success: true }));
   await assert.rejects(f.api.logout(), error => error.status === 401);

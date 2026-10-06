@@ -21,9 +21,19 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
         ClockSkew = TimeSpan.Zero, NameClaimType = JwtRegisteredClaimNames.Sub, RoleClaimType = "role"
     };
 
-    public static string? CurrentRole(User user) => user.Accounts
-        .FirstOrDefault(a => a.Status == "ACTIVE" && a.DeletedOn == null && a.AccountRoles.Any())?
-        .AccountRoles.First().RoleCode.ToLowerInvariant();
+    public static string? CurrentRole(User user)
+    {
+        var code = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE" && a.DeletedOn == null && a.AccountRoles.Any())?
+            .AccountRoles.First().RoleCode;
+        return code?.ToUpperInvariant() switch
+        {
+            "PLATFORM_ADMIN" or "ADMIN" => "admin",
+            "BUSINESS_OWNER" or "OWNER" => "owner",
+            "SITE_OPERATOR" or "OPERATOR" => "operator",
+            "DRIVER" => "driver",
+            _ => null
+        };
+    }
 
     public string GenerateAccessToken(User user, Guid accessTokenId, DateTimeOffset expiresAt)
     {

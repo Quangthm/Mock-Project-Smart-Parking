@@ -10,6 +10,7 @@ export const authExpiredEvent = 'sp-auth-expired';
 interface ApiUser { userId: string; fullName: string; email: string; role: Role }
 interface LoginSession { accessToken: string; refreshToken: string; expiresIn: number; user: ApiUser }
 interface ApiResponse<T> { success: boolean; message?: string; data: T; errors?: Array<{ message: string }> }
+export interface DriverRegistration { registrationId: string; channel: 'email' | 'sms'; expiresAt: string; resendAvailableAt: string }
 
 export class AuthApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -35,11 +36,11 @@ function clearSession() {
   sessionStorage.removeItem(expiryKey);
 }
 
-async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function request<T>(path: string, method = 'GET', body?: unknown, apiPrefix = '/api/auth'): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   let response: Response;
   try {
-    response = await fetch(baseUrl + '/api/auth' + path, {
+    response = await fetch(baseUrl + apiPrefix + path, {
       method, cache: 'no-store', signal: AbortSignal.timeout(10_000),
       headers: {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -68,6 +69,20 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
 }
 
 export const authApi = {
+  async registerDriver(body: { fullName: string; email?: string; phone?: string; password: string }): Promise<DriverRegistration> {
+    const response = await request<ApiResponse<DriverRegistration>>('/register/driver', 'POST', body);
+    if (!response.success || !response.data?.registrationId) throw new Error('Invalid registration response.');
+    return response.data;
+  },
+  async verifyDriver(registrationId: string, code: string): Promise<void> {
+    const response = await request<ApiResponse<never>>('/register/driver/verify', 'POST', { registrationId, code });
+    if (!response.success) throw new Error('Verification failed.');
+  },
+  async resendDriver(registrationId: string): Promise<DriverRegistration> {
+    const response = await request<ApiResponse<DriverRegistration>>('/register/driver/resend', 'POST', { registrationId });
+    if (!response.success || !response.data?.registrationId) throw new Error('Invalid registration response.');
+    return response.data;
+  },
   clearSession,
   expiresAt: () => Number(sessionStorage.getItem(expiryKey) ?? 0),
   async login(email: string, password: string): Promise<User> {

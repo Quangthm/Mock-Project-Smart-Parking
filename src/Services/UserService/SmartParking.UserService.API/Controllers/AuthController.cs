@@ -8,6 +8,7 @@ using UserService.API.Controllers.Base;
 using UserService.Application.DTOs;
 using UserService.Application.Usecase.Login;
 using UserService.Application.Usecase.Session;
+using UserService.Application.Common.Interfaces.Services;
 
 namespace UserService.API.Controllers;
 
@@ -15,6 +16,37 @@ namespace UserService.API.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerBase(mediator, mapper)
 {
+    [AllowAnonymous]
+    [HttpPost("register/owner")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> RegisterOwner([FromBody] OwnerRegistrationDto body,
+        [FromServices] IOwnerRegistrationService registrations, CancellationToken ct) =>
+        StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
+
+    [AllowAnonymous]
+    [HttpPost("register/driver")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> RegisterDriver([FromBody] DriverRegistrationDto body,
+        [FromServices] IDriverRegistrationService registrations, CancellationToken ct) =>
+        StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
+
+    [AllowAnonymous]
+    [HttpPost("register/driver/verify")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> VerifyDriver([FromBody] VerifyDriverOtpDto body,
+        [FromServices] IDriverRegistrationService registrations, CancellationToken ct)
+    {
+        await registrations.VerifyAsync(body, ct);
+        return Ok(new { success = true, message = "Account verified. You can now sign in." });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("register/driver/resend")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> ResendDriver([FromBody] ResendDriverOtpDto body,
+        [FromServices] IDriverRegistrationService registrations, CancellationToken ct) =>
+        Ok(new { success = true, data = await registrations.ResendAsync(body.RegistrationId, ct) });
+
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto, CancellationToken cancellationToken)

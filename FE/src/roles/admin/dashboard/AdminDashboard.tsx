@@ -5,7 +5,7 @@ import { Applications } from '../applications/Applications';
 import { AuditLogView } from '../audit-log/AuditLogView';
 import { SystemConfig } from '../system/SystemConfig';
 import { AdminSettings } from '../setting/AdminSettings';
-import { DriverAccounts } from '../drivers/DriverAccounts';
+import { Users } from '../users/Users';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 
 type Tab = 'overview' | 'applications' | 'drivers' | 'audit' | 'system' | 'settings';
@@ -23,7 +23,7 @@ export function AdminDashboard() {
   const NAV = [
     { id: 'overview' as Tab, label: 'Overview', icon: '📊' },
     { id: 'applications' as Tab, label: 'Applications', icon: '📝' },
-    { id: 'drivers' as Tab, label: 'Driver Accounts', icon: '🚘' },
+    { id: 'drivers' as Tab, label: 'User Management', icon: '🚘' },
     { id: 'audit' as Tab, label: 'Audit Log', icon: '🔍' },
     { id: 'system' as Tab, label: 'System Config', icon: '⚙️' },
     { id: 'settings' as Tab, label: 'Settings', icon: '🔧' },
@@ -34,7 +34,7 @@ export function AdminDashboard() {
       { items: [{ id: 'overview', label: 'Dashboard', icon: '⌂', active: tab === 'overview', onClick: () => setTab('overview') }] },
       { label: 'Accounts', items: [
         { id: 'applications', label: 'Applications', icon: '▤', active: tab === 'applications', onClick: () => setTab('applications') },
-        { id: 'drivers', label: 'Driver accounts', icon: '♙', active: tab === 'drivers', onClick: () => setTab('drivers') },
+        { id: 'drivers', label: 'User management', icon: '♙', active: tab === 'drivers', onClick: () => setTab('drivers') },
       ] },
       { label: 'System', items: [
         { id: 'audit', label: 'Audit log', icon: '◷', active: tab === 'audit', onClick: () => setTab('audit') },
@@ -45,7 +45,7 @@ export function AdminDashboard() {
         <div className="animate-in">
           {tab === 'overview' && <Overview />}
           {tab === 'applications' && <Applications />}
-          {tab === 'drivers' && <DriverAccounts />}
+          {tab === 'drivers' && <Users />}
           {tab === 'audit' && <AuditLogView />}
           {tab === 'system' && <SystemConfig />}
           {tab === 'settings' && <AdminSettings />}

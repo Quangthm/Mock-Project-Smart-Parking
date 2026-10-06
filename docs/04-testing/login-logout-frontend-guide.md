@@ -81,7 +81,7 @@ Import `docs/04-testing/postman/UserService.postman_collection.json`. Collection
 
 ```powershell
 dotnet test SmartParking.slnx -c Release
-node --test tests/frontend/auth-api.test.cjs
+node --test tests/frontend/auth-api.test.cjs tests/frontend/auth-context.test.cjs
 Set-Location FE
 npm.cmd run build
 ```
@@ -91,6 +91,8 @@ Review sau sửa ngày 06/10/2026: **54/54 test backend đạt, 0 skip** (51 ca 
 Chạy Release giúp tránh ghi đè DLL Debug đang được Visual Studio giữ. Để chạy đủ 54 test, đặt `SMARTPARK_AUTH_TEST_CONNECTION` theo hướng dẫn bên dưới; không có biến này thì hai test PostgreSQL sẽ skip. Microsoft.OpenApi đã dùng bản vá 2.7.5; endpoint `/openapi/v1.json` được kiểm tra trả 200. Luồng HTTP thật đạt login 200, `/me` 200, logout sai refresh 401 vẫn giữ phiên, logout đúng 200 và token đã thu hồi 401. Cảnh báo bundle frontend lớn vẫn còn.
 
 Còn ngoài phạm vi: OTP, MFA, provisioning/registration backend, phân quyền nghiệp vụ toàn hệ thống, tự động refresh frontend. SRS còn ghi session 24 giờ; tác vụ này ưu tiên access 3600 giây trong báo cáo/API design.
+
+Review SPARK-173 tiếp theo ngày 06/10/2026: backend **54/54 đạt, 0 skip**, frontend **28/28 đạt**, frontend build đạt. Đã sửa lỗi mất token khi khôi phục phiên gặp lỗi tạm thời và phản hồi restore/logout cũ ghi đè trạng thái auth mới. Chi tiết, nguồn contract và giới hạn kiểm chứng: [báo cáo SPARK-173](spark-173-login-logout-review-2026-10-06.md).
 
 ## Test PostgreSQL riêng
 

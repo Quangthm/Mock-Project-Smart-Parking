@@ -8,6 +8,8 @@ namespace SmartParking.UserService.Domain.Enum
     {
         Active,
         Locked,
-        PendingVerification
+        PendingVerification,
+        PendingApproval,
+        Rejected
     }
 }

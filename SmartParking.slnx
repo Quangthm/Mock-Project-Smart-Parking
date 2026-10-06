@@ -1,6 +1,11 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/ParkingService/">
+    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Domain/SmartParking.ParkingService.Domain.csproj" />
+    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Application/SmartParking.ParkingService.Application.csproj" />
+    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" />
+  </Folder>
   <Folder Name="/src/Services/UserService/">
     <Project Path="src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj" />
     <Project Path="src/Services/UserService/SmartParking.UserService.Application/SmartParking.UserService.Application.csproj" />
@@ -10,6 +15,7 @@
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/Services/">
+    <Project Path="tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
   </Folder>
 </Solution>

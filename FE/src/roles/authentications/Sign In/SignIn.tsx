@@ -54,8 +54,8 @@ export function SignIn() {
 
         <form onSubmit={submit} className="card auth-form-background" style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
           <div>
-            <label className="label" style={{ fontSize: '0.925rem' }}>Email Address</label>
-            <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required autoFocus style={{ fontSize: '1rem' }} />
+            <label className="label" style={{ fontSize: '0.925rem' }}>Email or Phone Number</label>
+            <input className="input" type="text" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com or phone number" required autoFocus style={{ fontSize: '1rem' }} />
           </div>
 
           <div>

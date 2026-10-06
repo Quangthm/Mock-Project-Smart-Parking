@@ -27,7 +27,7 @@ public class UserRepository
     {
         // The caller holds a transaction; row locking serializes failures across API instances.
         return await this.dbSet
-            .FromSqlInterpolated($"SELECT * FROM users WHERE email = {email} AND deleted_at IS NULL FOR UPDATE")
+            .FromSqlInterpolated($"SELECT * FROM users WHERE (lower(email) = lower({email}) OR phone = {email}) AND deleted_at IS NULL FOR UPDATE")
             .Include(u => u.Accounts).ThenInclude(a => a.AccountRoles)
             .FirstOrDefaultAsync(cancellationToken);
     }
