@@ -14,7 +14,7 @@ public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var user = unitOfWork.UserRepository.Query().FirstOrDefault(user =>
-            user.Id == request.UserId && !user.IsDeleted && user.Status == UserStatus.Active);
+            user.Id == request.UserId && user.DeletedOn == null && user.Status == UserStatus.Active);
         return Task.FromResult(user is null ? null : new UserInfoDto
         {
             UserId = user.Id!.Value,
