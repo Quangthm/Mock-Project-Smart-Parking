@@ -92,6 +92,8 @@ CREATE TABLE users (
     phone VARCHAR(20) NOT NULL,
     email VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
     full_name VARCHAR(255) NOT NULL,
     avatar_url TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE', 'LOCKED', 'PENDING_VERIFICATION'
@@ -156,6 +158,8 @@ CREATE INDEX idx_vehicles_account ON vehicles (account_id);
 CREATE TABLE user_refresh_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_token_id UUID NOT NULL UNIQUE,
+    access_expires_at TIMESTAMPTZ NOT NULL,
     token_hash VARCHAR(255) NOT NULL UNIQUE,
     device_info VARCHAR(255),
     ip_address VARCHAR(45),

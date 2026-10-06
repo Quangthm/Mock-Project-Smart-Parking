@@ -8,6 +8,9 @@ namespace UserService.Application.Common.Interfaces.Persistence
     /// <seealso cref="IRepository&lt;User&gt;" />
     public interface IUserRepository : IRepository<SmartParking.UserService.Domain.Entities.User>
     {
+        Task<SmartParking.UserService.Domain.Entities.User?> GetByEmailForLoginAsync(
+            string email, CancellationToken cancellationToken);
+
         Task<SmartParking.UserService.Domain.Entities.User?> GetByEmailAsync(
             string email,
             CancellationToken cancellationToken);

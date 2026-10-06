@@ -2,12 +2,13 @@
   "info": {
     "name": "SmartParking - Login Logout Frontend Demo",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "In-memory login/session/logout integration. No production credentials or database. Tokens are revoked server-side on logout; refresh token is not implemented."
+    "description": "# SmartParking - Kiểm thử API Login/Logout\n\nCollection dùng để kiểm tra luồng xác thực của User Service: đăng nhập, lấy thông tin người dùng hiện tại, đăng xuất và từ chối access token đã bị thu hồi. Toàn bộ request sử dụng đường dẫn `/api/auth`.\n\n## Chuẩn bị trước khi chạy\n\n1. Mở Docker Desktop và khởi động PostgreSQL của dự án bằng `docker compose up -d postgres-db` tại thư mục có `SmartParking.slnx`.\n2. API mặc định kết nối PostgreSQL tại cổng **5433**, database `smartpark_db`. Nếu dùng database cũ, chạy `scripts/database/05.2-Auth-Design-Alignment.sql` trước. Fixture demo plaintext cũ có script chuyển hash riêng `05.3-Demo-Password-Hash.sql`.\n3. Chạy API bằng `dotnet run --project src/Services/UserService/SmartParking.UserService.API --launch-profile http`. Trong Visual Studio có thể dùng **Ctrl + F5** để test liên tục mà debugger không dừng ở exception validation.\n4. Đặt collection variable `baseUrl` thành `http://localhost:5035` hoặc địa chỉ HTTP thực tế của User Service.\n5. Tài khoản seed cần đang hoạt động: **driver@gmail.com / Password@123**, role **driver**. Các tài khoản mock trong frontend không tự trở thành tài khoản backend.\n\n**Phân biệt cổng:** 5035 là cổng API để Postman gửi HTTP request; 5433 là cổng PostgreSQL của dự án; 65433 dành cho PostgreSQL test biệt lập trong hướng dẫn `dotnet test`. Biến `SMARTPARK_AUTH_TEST_CONNECTION` chỉ dùng cho test .NET, không cấu hình kết nối của collection Postman.\n\n## Cách chạy collection\n\nChọn **Run collection** và giữ thứ tự 11 request có sẵn:\n\n1. Anonymous session is rejected: gọi `/me` không có token, mong đợi 401.\n2. Login successful: đăng nhập đúng, mong đợi 200 và lưu cặp token.\n3. Wrong password: đăng nhập sai password một lần, mong đợi 401/AUTH_FAILED.\n4. Unknown email: email không tồn tại, mong đợi 401/AUTH_FAILED.\n5. Missing email: thiếu email, mong đợi 400 validation.\n6. Invalid email: email sai định dạng, mong đợi 400 validation.\n7. Missing password: thiếu password, mong đợi 400 validation.\n8. Current authenticated user: dùng access token từ bước 2 gọi `/me`, mong đợi 200.\n9. Logout requires refresh token: logout thiếu refresh token, mong đợi 400/MISSING_REFRESH_TOKEN; phiên chưa bị thu hồi.\n10. Logout current session: gửi đúng access/refresh token của cùng phiên, mong đợi 200.\n11. Revoked token is rejected: dùng lại access token đã logout, mong đợi 401; sau đó xóa biến token của collection.\n\nNếu gửi từng request bằng **Send**, phải chạy **Login successful** trước những request cần token; chạy **Logout current session** trước **Revoked token is rejected**. Xem tab **Test Results** của từng response hoặc kết quả Collection Runner để biết assertion nào Passed/Failed.\n\n## Dữ liệu và contract\n\n- `baseUrl`: địa chỉ HTTP của API, không có dấu `/` ở cuối.\n- `accessToken`: script của Login successful lấy từ `data.accessToken`; các request có header `Authorization: Bearer {{accessToken}}` dùng biến này.\n- `refreshToken`: script lấy từ `data.refreshToken`; Logout current session gửi trong JSON body. Hai token phải được lấy từ cùng một lần login.\n- Login thành công trả `{ success: true, message, data }`; `data` gồm accessToken, refreshToken, tokenType=`Bearer`, expiresIn=`3600`, user có userId/fullName/email/role.\n- Backend ký access token bằng RS256, hash password bằng bcrypt cost 12 và lưu hash refresh token trong PostgreSQL. Refresh token có hạn 7 ngày theo cấu hình mặc định.\n- Lỗi xác thực trả `{ success: false, code, message }`. Lỗi validation trả HTTP 400 với `success: false`, `message` và danh sách `errors` có field/message.\n- Logout chỉ thu hồi phiên tương ứng với cặp token đang gửi; không tự logout các phiên khác. HTTP 400 do thiếu refresh token không phải logout thành công.\n\n## Điều kiện có thể làm kết quả khác mong đợi\n\n- Sau 3 lần password sai liên tiếp, tài khoản bị khóa 15 phút theo cấu hình mặc định và trả **403/ACCOUNT_LOCKED**. Request Wrong password trong collection kiểm tra lần sai chưa chạm ngưỡng; gửi riêng request này nhiều lần có thể làm Login successful và các request sau thất bại. Đợi hết khóa rồi login đúng để reset counter.\n- Access token hết hạn sau 1 giờ. Nếu dùng RSA key tạm của Development, restart API cũng làm token đã cấp không xác thực được. Chạy Login successful lại để lấy cặp mới.\n- Request logout thành công đã thu hồi phiên; dùng lại cặp token cũ không thể khôi phục phiên đó.\n- `Connection refused`/lỗi kết nối khi khởi động API: kiểm tra PostgreSQL cổng 5433. Postman không kết nối được tới baseUrl: kiểm tra API đã chạy và đúng cổng HTTP.\n\n## Phạm vi kiểm tra\n\nCollection này tập trung vào login/logout, validation và access-token revocation. Nó chưa có request kiểm tra refresh rotation, account lockout đủ 3 lần, token sai chữ ký, logout sai cặp token, lỗi database hoặc nhiều request đồng thời. Các hành vi đó được kiểm tra trong bộ test .NET riêng. Collection cũng không kiểm tra OTP/MFA, đăng ký backend hay các nghiệp vụ parking/payment.\n"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:5035"
+      "value": "http://localhost:5035",
+      "description": "Địa chỉ HTTP của User Service, mặc định http://localhost:5035, không có dấu / ở cuối. Đây là cổng API, không phải cổng PostgreSQL 5433 hoặc 65433."
     }
   ],
   "item": [
@@ -16,7 +17,8 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/api/auth/me"
+        "url": "{{baseUrl}}/api/auth/me",
+        "description": "## Mục đích\nKiểm tra endpoint lấy thông tin user không cho phép truy cập khi chưa đăng nhập.\n\n## Request\n`GET {{baseUrl}}/api/auth/me`, không có body và không gửi header Authorization. Giữ collection ở trạng thái không có Authorization chung để request này thực sự là anonymous.\n\n## Kết quả mong đợi\nHTTP **401 Unauthorized**, JSON lỗi có `success: false`, `code: INVALID_TOKEN`. Không trả thông tin user.\n\n## Assertion hiện có\nScript kiểm tra HTTP 401. Request này không tạo phiên và không thay đổi biến token; có thể chạy độc lập trước login."
       },
       "event": [
         {
@@ -49,7 +51,8 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/login"
+        "url": "{{baseUrl}}/api/auth/login",
+        "description": "## Mục đích\nĐăng nhập bằng account demo đang Active và tạo một phiên mới để các request `/me` và logout sử dụng.\n\n## Request\n`POST {{baseUrl}}/api/auth/login`, `Content-Type: application/json`, không cần Bearer token.\n\n```json\n{ \"email\": \"driver@gmail.com\", \"password\": \"Password@123\" }\n```\n\n## Kết quả mong đợi\nHTTP **200 OK**, `success: true`, `message: Login successful`. `data` có accessToken dạng JWT, refreshToken không rỗng, tokenType=`Bearer`, expiresIn=`3600`; user có UUID, fullName, email=`driver@gmail.com`, role=`driver`. Không trả password/hash. Login đúng reset số lần password sai.\n\n## Assertion và biến\nScript kiểm tra status, success, JWT có ba phần, refresh token, token type/lifetime, user ID/email/role và không có passwordHash trong user. Script lưu `accessToken` và `refreshToken` vào collection variables; token mới sẽ thay giá trị của lần login trước. Kiểm tra fullName/chữ ký RS256 không nằm trong assertions của request này.\n\n## Điều kiện\nAccount đã được seed và chưa bị khóa. Nếu trả 403/ACCOUNT_LOCKED, đợi hết thời gian khóa rồi thử lại. Chạy request này trước các request có `{{accessToken}}`/`{{refreshToken}}`."
       },
       "event": [
         {
@@ -62,15 +65,16 @@
               "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(true); });",
               "pm.test(\"Session and seeded user\", function () {",
               "  pm.expect(body.data.accessToken.split(\".\")).to.have.lengthOf(3);",
-              "  pm.expect(body.data.refreshToken).to.eql(null);",
+              "  pm.expect(body.data.refreshToken).to.be.a(\"string\").and.not.empty;",
               "  pm.expect(body.data.user.role).to.eql(\"driver\");",
               "  pm.expect(body.data.tokenType).to.eql(\"Bearer\");",
-              "  pm.expect(body.data.expiresIn).to.eql(300);",
+              "  pm.expect(body.data.expiresIn).to.eql(3600);",
               "  pm.expect(body.data.user.userId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
               "  pm.expect(body.data.user.email).to.eql(\"driver@gmail.com\");",
               "  pm.expect(body.data.user).not.to.have.property(\"passwordHash\");",
               "});",
-              "pm.collectionVariables.set(\"accessToken\", body.data.accessToken);"
+              "pm.collectionVariables.set(\"accessToken\", body.data.accessToken);",
+              "pm.collectionVariables.set(\"refreshToken\", body.data.refreshToken);"
             ]
           }
         }
@@ -95,7 +99,8 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/login"
+        "url": "{{baseUrl}}/api/auth/login",
+        "description": "## Mục đích\nKiểm tra email có thật nhưng password sai bị từ chối và không phát token mới.\n\n## Request\n`POST {{baseUrl}}/api/auth/login`, JSON email=`driver@gmail.com`, password=`wrong`; không cần Authorization.\n\n## Kết quả mong đợi\nKhi account Active và chưa chạm ngưỡng khóa: HTTP **401 Unauthorized**, `success: false`, `code: AUTH_FAILED`, `message: Invalid email or password.`\n\n## Assertion và tác động\nScript kiểm tra status 401, success=false, message chung và AUTH_FAILED. Request làm tăng failed-login counter của account nhưng không ghi đè cặp token đã lưu từ Login successful.\n\n## Lưu ý khi chạy lặp\nLần sai thứ ba liên tiếp mặc định trả **403/ACCOUNT_LOCKED** và khóa 15 phút; khi đó assertion 401 của request này sẽ fail đúng vì đã chuyển sang ca lockout. Đăng nhập đúng sau khi hết khóa để reset counter. Collection chỉ gửi request này một lần mỗi lượt chạy."
       },
       "event": [
         {
@@ -106,7 +111,8 @@
               "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
               "const body = pm.response.json();",
               "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
-              "pm.test(\"Generic credential error\", function () { pm.expect(body.message).to.eql(\"Invalid email or password.\"); });"
+              "pm.test(\"Generic credential error\", function () { pm.expect(body.message).to.eql(\"Invalid email or password.\"); });",
+              "pm.test(\"AUTH_FAILED\", () => pm.expect(body.code).to.eql(\"AUTH_FAILED\"));"
             ]
           }
         }
@@ -131,7 +137,8 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/login"
+        "url": "{{baseUrl}}/api/auth/login",
+        "description": "## Mục đích\nKiểm tra email không tồn tại bị từ chối với cùng lỗi credential chung như password sai.\n\n## Request\n`POST {{baseUrl}}/api/auth/login`, JSON email=`unknown@gmail.com`, password=`Password@123`; không cần Authorization. Email này phải chưa có trong database đang test.\n\n## Kết quả mong đợi\nHTTP **401 Unauthorized**, `success: false`, `code: AUTH_FAILED`, `message: Invalid email or password.` Không tạo phiên hoặc trả token mới.\n\n## Assertion và tác động\nScript kiểm tra status, success, message và AUTH_FAILED. Không thay đổi collection variables và không tăng counter của account demo `driver@gmail.com`. Có thể chạy riêng nếu email test chưa được tạo."
       },
       "event": [
         {
@@ -142,7 +149,8 @@
               "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
               "const body = pm.response.json();",
               "pm.test(\"Success flag\", function () { pm.expect(body.success).to.eql(false); });",
-              "pm.test(\"Generic credential error\", function () { pm.expect(body.message).to.eql(\"Invalid email or password.\"); });"
+              "pm.test(\"Generic credential error\", function () { pm.expect(body.message).to.eql(\"Invalid email or password.\"); });",
+              "pm.test(\"AUTH_FAILED\", () => pm.expect(body.code).to.eql(\"AUTH_FAILED\"));"
             ]
           }
         }
@@ -167,7 +175,8 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/login"
+        "url": "{{baseUrl}}/api/auth/login",
+        "description": "## Mục đích\nKiểm tra field email bắt buộc trước khi xử lý đăng nhập.\n\n## Request\n`POST {{baseUrl}}/api/auth/login`, JSON chỉ chứa password, chủ động bỏ field email:\n\n```json\n{ \"password\": \"Password@123\" }\n```\n\n## Kết quả mong đợi\nHTTP **400 Bad Request**, `success: false`, message validation và `errors` không rỗng. Lỗi liên quan đến field Email; không phát token.\n\n## Assertion và tác động\nScript kiểm tra HTTP 400, success=false và errors là array không rỗng. Validation pipeline chặn request trước LoginCommandHandler nên không tăng failed-login counter hoặc thay đổi phiên/token đang có. Có thể chạy độc lập."
       },
       "event": [
         {
@@ -203,7 +212,8 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/login"
+        "url": "{{baseUrl}}/api/auth/login",
+        "description": "## Mục đích\nKiểm tra backend từ chối email sai định dạng trước bước kiểm tra tài khoản/password.\n\n## Request\n`POST {{baseUrl}}/api/auth/login`, JSON email=`invalid`, password=`Password@123`.\n\n## Kết quả mong đợi\nHTTP **400 Bad Request**, `success: false`, message validation và `errors` không rỗng cho field Email. Không phát token.\n\n## Assertion và tác động\nScript kiểm tra HTTP 400, success=false và errors là array không rỗng. Request bị chặn bởi validation pipeline; không tăng failed-login counter và không thay đổi collection variables. Có thể chạy độc lập."
       },
       "event": [
         {
@@ -239,7 +249,8 @@
             }
           }
         },
-        "url": "{{baseUrl}}/api/auth/login"
+        "url": "{{baseUrl}}/api/auth/login",
+        "description": "## Mục đích\nKiểm tra field password bắt buộc trước khi xử lý đăng nhập.\n\n## Request\n`POST {{baseUrl}}/api/auth/login`, JSON chỉ chứa email, chủ động bỏ field password:\n\n```json\n{ \"email\": \"driver@gmail.com\" }\n```\n\n## Kết quả mong đợi\nHTTP **400 Bad Request**, `success: false`, message validation và `errors` không rỗng cho field Password. Không phát token.\n\n## Assertion và tác động\nScript kiểm tra HTTP 400, success=false và errors là array không rỗng. Validation chặn trước LoginCommandHandler nên không tính như một lần password sai và không thay đổi phiên/token đang có. Có thể chạy độc lập."
       },
       "event": [
         {
@@ -266,7 +277,8 @@
             "value": "Bearer {{accessToken}}"
           }
         ],
-        "url": "{{baseUrl}}/api/auth/me"
+        "url": "{{baseUrl}}/api/auth/me",
+        "description": "## Mục đích\nXác minh access token còn hiệu lực và backend trả đúng danh tính/role của user hiện tại.\n\n## Request\n`GET {{baseUrl}}/api/auth/me`, không có body; header `Authorization: Bearer {{accessToken}}`.\n\n## Điều kiện\nChạy Login successful trước để lưu accessToken. Phiên chưa logout, account vẫn Active, role chưa đổi và token chưa hết hạn.\n\n## Kết quả mong đợi\nHTTP **200 OK**, `success: true`, `data` chứa userId/fullName/email/role. User ID là UUID hợp lệ, role=`driver`. Không tạo token/phiên mới.\n\n## Assertion hiện có\nScript kiểm tra HTTP 200, userId đúng dạng UUID và role driver. Nếu trả 401/INVALID_TOKEN, login lại và dùng token mới; kiểm tra thời hạn, trạng thái phiên, trạng thái account hoặc việc API đã restart với RSA key tạm."
       },
       "event": [
         {
@@ -282,16 +294,25 @@
       ]
     },
     {
-      "name": "Logout current session",
+      "name": "Logout requires refresh token",
       "request": {
         "method": "POST",
         "header": [
           {
             "key": "Authorization",
             "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ],
-        "url": "{{baseUrl}}/api/auth/logout"
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": "{{baseUrl}}/api/auth/logout",
+        "description": "## Mục đích\nKiểm tra logout bắt buộc refreshToken trong JSON body kể cả khi đã có access token hợp lệ.\n\n## Request\n`POST {{baseUrl}}/api/auth/logout`, headers `Authorization: Bearer {{accessToken}}` và `Content-Type: application/json`; body chủ động thiếu refreshToken:\n\n```json\n{}\n```\n\n## Điều kiện\nChạy Login successful trước; access token và phiên vẫn hợp lệ. Nếu không có Bearer hợp lệ, API sẽ trả 401 ở bước xác thực trước khi kiểm tra body.\n\n## Kết quả mong đợi\nHTTP **400 Bad Request**, `success: false`, `code: MISSING_REFRESH_TOKEN`, `message: Refresh token is required.` Phiên không bị thu hồi.\n\n## Assertion và thứ tự\nScript kiểm tra status 400 và mã MISSING_REFRESH_TOKEN. Giữ nguyên cặp token để request Logout current session chạy ngay sau đó. Request này kiểm tra body `{}`; các biến thể body rỗng/null được kiểm tra trong test .NET."
       },
       "event": [
         {
@@ -299,7 +320,47 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+              "pm.test(\"MISSING_REFRESH_TOKEN\", () => pm.expect(pm.response.json().code).to.eql(\"MISSING_REFRESH_TOKEN\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logout current session",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/logout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "## Mục đích\nĐăng xuất và thu hồi khả năng sử dụng access/refresh token của đúng phiên đang gửi.\n\n## Request\n`POST {{baseUrl}}/api/auth/logout`, headers `Authorization: Bearer {{accessToken}}` và `Content-Type: application/json`:\n\n```json\n{ \"refreshToken\": \"{{refreshToken}}\" }\n```\n\n## Điều kiện\nChạy Login successful trước; accessToken và refreshToken phải thuộc cùng một phiên, còn hợp lệ và chưa bị thu hồi. Nếu đã gọi refresh ngoài collection, cần cập nhật cả hai biến theo cặp mới trước khi logout.\n\n## Kết quả mong đợi\nHTTP **200 OK**, `success: true`, `message: Logout successful`. Backend đánh dấu phiên bị thu hồi trong PostgreSQL; các phiên khác không bị logout.\n\n## Assertion và tác động\nScript kiểm tra HTTP 200 và success=true. Collection giữ nguyên biến token sau request này để Revoked token is rejected có thể kiểm tra chính access token cũ; request cuối mới xóa biến.\n\n## Các lỗi liên quan\nThiếu refreshToken: 400/MISSING_REFRESH_TOKEN. Access token không hợp lệ hoặc refresh token không thuộc đúng phiên: 401/INVALID_TOKEN. Lỗi khi ghi thu hồi phiên: 500/REVOKE_SESSION_FAILED. Không coi response lỗi là logout thành công."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Logout success\", () => pm.expect(pm.response.json().success).to.eql(true));"
             ]
           }
         }
@@ -315,7 +376,8 @@
             "value": "Bearer {{accessToken}}"
           }
         ],
-        "url": "{{baseUrl}}/api/auth/me"
+        "url": "{{baseUrl}}/api/auth/me",
+        "description": "## Mục đích\nChứng minh logout có thu hồi phiên ở backend: access token cũ còn được giữ trong Postman cũng không tiếp tục truy cập `/me` được.\n\n## Request\n`GET {{baseUrl}}/api/auth/me`, header `Authorization: Bearer {{accessToken}}` dùng lại token vừa được Logout current session thu hồi.\n\n## Điều kiện và thứ tự\nChạy sau Login successful và Logout current session. Không login/refresh ở giữa hai request này vì token mới sẽ thuộc phiên/cặp khác. Nếu accessToken đã bị xóa hoặc đã hết hạn trước logout, HTTP 401 không đủ để phân biệt nguyên nhân thu hồi; chạy đúng thứ tự cả collection để kiểm tra đúng ca.\n\n## Kết quả mong đợi\nHTTP **401 Unauthorized**, JSON lỗi có `success: false`, `code: INVALID_TOKEN`; không trả thông tin user.\n\n## Assertion và dọn dữ liệu\nScript kiểm tra HTTP 401 rồi xóa collection variables `accessToken` và `refreshToken`. Collection không còn cặp token để tiếp tục các request authenticated; chạy Login successful lại nếu muốn bắt đầu lượt test mới."
       },
       "event": [
         {
@@ -324,7 +386,8 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"HTTP 401 after logout\", () => pm.response.to.have.status(401));",
-              "pm.collectionVariables.unset(\"accessToken\");"
+              "pm.collectionVariables.unset(\"accessToken\");",
+              "pm.collectionVariables.unset(\"refreshToken\");"
             ]
           }
         }

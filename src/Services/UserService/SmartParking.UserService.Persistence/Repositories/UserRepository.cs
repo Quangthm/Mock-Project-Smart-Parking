@@ -20,7 +20,16 @@ public class UserRepository
             .Include(u => u.Accounts)
             .ThenInclude(a => a.AccountRoles)
             .ThenInclude(ar => ar.Role)
-            .FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
+            .FirstOrDefaultAsync(user => user.Email == email && user.DeletedOn == null, cancellationToken);
+    }
+
+    public async Task<User?> GetByEmailForLoginAsync(string email, CancellationToken cancellationToken)
+    {
+        // The caller holds a transaction; row locking serializes failures across API instances.
+        return await this.dbSet
+            .FromSqlInterpolated($"SELECT * FROM users WHERE email = {email} AND deleted_at IS NULL FOR UPDATE")
+            .Include(u => u.Accounts).ThenInclude(a => a.AccountRoles)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<User?> GetByIdWithRolesAsync(Guid userId, CancellationToken cancellationToken)

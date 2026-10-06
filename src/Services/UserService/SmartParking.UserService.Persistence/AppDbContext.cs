@@ -13,6 +13,7 @@ namespace UserService.Persistence
         public DbSet<Account> Accounts { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<AccountRole> AccountRoles { get; set; } = null!;
+        public DbSet<AuthSession> AuthSessions { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -27,7 +28,12 @@ namespace UserService.Persistence
                 entity.Property(e => e.Email).HasColumnName("email");
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
                 entity.Property(e => e.FullName).HasColumnName("full_name");
-                entity.Property(e => e.Status).HasColumnName("status").HasConversion<string>();
+                entity.Property(e => e.Status).HasColumnName("status").HasConversion(
+                    value => value == SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification
+                        ? "PENDING_VERIFICATION" : value.ToString().ToUpperInvariant(),
+                    value => Enum.Parse<SmartParking.UserService.Domain.Enum.UserStatus>(value.Replace("_", ""), true));
+                entity.Property(e => e.FailedLoginAttempts).HasColumnName("failed_login_attempts");
+                entity.Property(e => e.LockedUntil).HasColumnName("locked_until");
                 
                 entity.Property(e => e.CreatedOn).HasColumnName("created_at");
                 entity.Property(e => e.ModifiedOn).HasColumnName("updated_at");
@@ -87,6 +93,23 @@ namespace UserService.Persistence
                 entity.HasOne(e => e.Role)
                     .WithMany(r => r.AccountRoles)
                     .HasForeignKey(e => e.RoleCode);
+            });
+
+            modelBuilder.Entity<AuthSession>(entity =>
+            {
+                entity.ToTable("user_refresh_tokens");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.AccessTokenId).HasColumnName("access_token_id");
+                entity.Property(e => e.TokenHash).HasColumnName("token_hash").HasMaxLength(255);
+                entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
+                entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+                entity.Property(e => e.IsRevoked).HasColumnName("is_revoked");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.HasIndex(e => e.TokenHash).IsUnique();
+                entity.HasIndex(e => e.AccessTokenId).IsUnique();
+                entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId);
             });
         }
     }

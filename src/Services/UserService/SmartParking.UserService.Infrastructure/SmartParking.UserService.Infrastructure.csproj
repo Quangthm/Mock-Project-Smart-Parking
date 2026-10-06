@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <ProjectReference Include="..\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
     <ProjectReference Include="..\SmartParking.UserService.Domain\SmartParking.UserService.Domain.csproj" />
   </ItemGroup>

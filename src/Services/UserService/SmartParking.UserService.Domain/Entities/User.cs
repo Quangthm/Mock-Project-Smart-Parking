@@ -16,5 +16,9 @@ public class User : BaseEntity
 
     public UserStatus Status { get; set; }
 
+    public int FailedLoginAttempts { get; set; }
+
+    public DateTimeOffset? LockedUntil { get; set; }
+
     public ICollection<Account> Accounts { get; set; } = [];
 }

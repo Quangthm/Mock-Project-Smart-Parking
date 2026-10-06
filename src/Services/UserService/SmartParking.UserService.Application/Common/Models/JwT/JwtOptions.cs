@@ -1,32 +1,8 @@
-﻿namespace UserService.Application.Common.Models.JwT
+namespace UserService.Application.Common.Models.JwT;
+
+public sealed class JwtOptions
 {
-    /// <summary>
-    /// Jwt Options
-    /// </summary>
-    public class JwtOptions
-    {
-        /// <summary>
-        /// Gets or sets the key.
-        /// </summary>
-        /// <value>
-        /// The key.
-        /// </value>
-        public string Key { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the issuer.
-        /// </summary>
-        /// <value>
-        /// The issuer.
-        /// </value>
-        public string Issuer { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the audience.
-        /// </summary>
-        /// <value>
-        /// The audience.
-        /// </value>
-        public string Audience { get; set; } = string.Empty;
-    }
+    public string PrivateKeyPem { get; set; } = string.Empty;
+    public string Issuer { get; set; } = string.Empty;
+    public string Audience { get; set; } = string.Empty;
 }

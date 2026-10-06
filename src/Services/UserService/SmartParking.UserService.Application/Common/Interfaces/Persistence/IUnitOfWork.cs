@@ -15,6 +15,8 @@ namespace UserService.Application.Common.Interfaces.Persistence
         /// </value>
         IUserRepository UserRepository { get; }
 
+        Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+
         /// <summary>
         /// Saves the changes asynchronous.
         /// </summary>

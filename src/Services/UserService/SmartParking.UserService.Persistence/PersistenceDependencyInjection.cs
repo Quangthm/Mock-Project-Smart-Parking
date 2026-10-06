@@ -19,7 +19,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddTransient<DataSeeder>();
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IAuthSessionStore, InMemoryAuthSessionStore>();
+        services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
 
         return services;
     }

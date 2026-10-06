@@ -8,10 +8,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
+    <ProjectReference Include="..\SmartParking.UserService.Infrastructure\SmartParking.UserService.Infrastructure.csproj" />
     <ProjectReference Include="..\SmartParking.UserService.Persistence\SmartParking.UserService.Persistence.csproj" />
   </ItemGroup>
 

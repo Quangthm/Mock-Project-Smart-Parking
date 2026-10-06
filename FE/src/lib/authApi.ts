@@ -3,11 +3,12 @@ import { store } from './store';
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5035').replace(/\/$/, '');
 const tokenKey = 'sp_access_token';
+const refreshKey = 'sp_refresh_token';
 const expiryKey = 'sp_access_expires_at';
 export const authExpiredEvent = 'sp-auth-expired';
 
 interface ApiUser { userId: string; fullName: string; email: string; role: Role }
-interface LoginSession { accessToken: string; expiresIn: number; user: ApiUser }
+interface LoginSession { accessToken: string; refreshToken: string; expiresIn: number; user: ApiUser }
 interface ApiResponse<T> { success: boolean; message?: string; data: T; errors?: Array<{ message: string }> }
 
 export class AuthApiError extends Error {
@@ -30,6 +31,7 @@ function toUser(account: ApiUser): User {
 
 function clearSession() {
   sessionStorage.removeItem(tokenKey);
+  sessionStorage.removeItem(refreshKey);
   sessionStorage.removeItem(expiryKey);
 }
 
@@ -50,7 +52,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   }
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
-    if (response.status === 401 && path !== '/login' && token === sessionStorage.getItem(tokenKey)) {
+    if (response.status === 401 && path !== '/login' && path !== '/logout' && token === sessionStorage.getItem(tokenKey)) {
       clearSession();
       window.dispatchEvent(new Event(authExpiredEvent));
     }
@@ -70,9 +72,10 @@ export const authApi = {
   expiresAt: () => Number(sessionStorage.getItem(expiryKey) ?? 0),
   async login(email: string, password: string): Promise<User> {
     const response = await request<ApiResponse<LoginSession>>('/login', 'POST', { email: email.trim(), password });
-    if (!response.success || !response.data?.accessToken) throw new Error('Invalid login response.');
+    if (!response.success || !response.data?.accessToken || !response.data.refreshToken) throw new Error('Invalid login response.');
     const user = toUser(response.data.user);
     sessionStorage.setItem(tokenKey, response.data.accessToken);
+    sessionStorage.setItem(refreshKey, response.data.refreshToken);
     sessionStorage.setItem(expiryKey, String(Date.now() + response.data.expiresIn * 1000));
     return user;
   },
@@ -85,11 +88,23 @@ export const authApi = {
     return toUser(response.data);
   },
   async logout(): Promise<void> {
-    try { await request<null>('/logout', 'POST'); }
-    catch (error) {
-      // Expired/revoked sessions are already unusable at the server.
-      if (!(error instanceof AuthApiError && error.status === 401)) throw error;
+    const token = sessionStorage.getItem(tokenKey);
+    try {
+      const response = await request<ApiResponse<never>>('/logout', 'POST', { refreshToken: sessionStorage.getItem(refreshKey) });
+      if (!response?.success) throw new Error('Sign out failed. Please try again.');
     }
-    clearSession();
+    catch (error) {
+      // A logout 401 may mean a mismatched refresh token while the bearer is still valid.
+      if (error instanceof AuthApiError && error.status === 401 && token && token === sessionStorage.getItem(tokenKey)) {
+        try {
+          // Only a failed bearer check may expire the local session; a valid one stays available for retry.
+          await request<ApiResponse<ApiUser>>('/me');
+        } catch {
+          // Preserve the original logout error. A /me 401 already dispatches authExpiredEvent.
+        }
+      }
+      throw error;
+    }
+    if (token === sessionStorage.getItem(tokenKey)) clearSession();
   },
 };
