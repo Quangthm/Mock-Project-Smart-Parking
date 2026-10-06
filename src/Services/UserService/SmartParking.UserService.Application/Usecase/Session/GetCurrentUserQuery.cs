@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MediatR;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
@@ -13,7 +14,10 @@ public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
     public Task<UserInfoDto?> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var user = unitOfWork.UserRepository.Query().FirstOrDefault(user =>
+        var user = unitOfWork.UserRepository.Query()
+            .Include(u => u.Accounts)
+            .ThenInclude(a => a.AccountRoles)
+            .FirstOrDefault(user =>
             user.Id == request.UserId && user.DeletedOn == null && user.Status == UserStatus.Active);
         return Task.FromResult(user is null ? null : new UserInfoDto
         {
