@@ -1,6 +1,6 @@
-﻿using UserService.Application.Common.Interfaces.Persistence;
+using Microsoft.EntityFrameworkCore;
+using UserService.Application.Common.Interfaces.Persistence;
 using SmartParking.UserService.Domain.Entities;
-using UserService.Persistence.FakeDatabase;
 using UserService.Persistence.Repositories.BaseRepository;
 
 namespace UserService.Persistence.Repositories;
@@ -9,19 +9,26 @@ public class UserRepository
     : GenericRepository<User>,
       IUserRepository
 {
-    public UserRepository()
-        : base(InMemoryDatabase.Users)
+    public UserRepository(AppDbContext dbContext)
+        : base(dbContext)
     {
     }
 
-    public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken)
+    public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        return await this.dbSet
+            .Include(u => u.Accounts)
+            .ThenInclude(a => a.AccountRoles)
+            .ThenInclude(ar => ar.Role)
+            .FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
+    }
 
-        // Persistence boundary for the demo: read only from memory, without a DB.
-        var user = this.entities.FirstOrDefault(user =>
-            !user.IsDeleted && string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase));
-
-        return Task.FromResult(user);
+    public async Task<User?> GetByIdWithRolesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await this.dbSet
+            .Include(u => u.Accounts)
+            .ThenInclude(a => a.AccountRoles)
+            .ThenInclude(ar => ar.Role)
+            .FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
     }
 }

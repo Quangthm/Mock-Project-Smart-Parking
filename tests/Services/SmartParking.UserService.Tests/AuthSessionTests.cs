@@ -9,11 +9,39 @@ using UserService.Application.Services;
 using UserService.Application.Usecase.Login;
 using UserService.Application.Usecase.Session;
 using UserService.Persistence.Repositories;
+using UserService.Application.Common.Interfaces.Persistence;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SmartParking.UserService.Tests;
 
 public sealed class AuthSessionTests
 {
+    private class FakeUserRepository : IUserRepository
+    {
+        public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken)
+        {
+            if (email == "driver@gmail.com") return Task.FromResult<User?>(Account());
+            return Task.FromResult<User?>(null);
+        }
+        public Task<User?> GetByIdWithRolesAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            if (userId == UserId) return Task.FromResult<User?>(Account());
+            return Task.FromResult<User?>(null);
+        }
+        public Task AddAsync(User entity, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task AddRangeAsync(List<User> entities, CancellationToken cancellationToken) => Task.CompletedTask;
+        public IQueryable<User> Query() => new List<User>().AsQueryable();
+        public IQueryable<User> QueryIncludingDeleted() => new List<User>().AsQueryable();
+        public void Remove(User entity) { }
+        public void Update(User entity) { }
+    }
+
+    private class FakeUnitOfWork : IUnitOfWork
+    {
+        public IUserRepository UserRepository { get; } = new FakeUserRepository();
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+    }
     private const string Key = "test-only-key-for-auth-session-tests-at-least-32-bytes";
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private readonly InMemoryAuthSessionStore sessions = new(TimeProvider.System);
@@ -27,13 +55,13 @@ public sealed class AuthSessionTests
     private static User Account() => new()
     {
         Id = UserId, Email = "driver@gmail.com", FullName = "Demo Driver",
-        Status = UserStatus.Active, UserRoles = [new UserRole { RoleCode = "Driver" }]
+        Status = UserStatus.Active, Accounts = [new Account { AccountRoles = [new AccountRole { RoleCode = "Driver" }] }]
     };
 
     [Fact]
     public async Task Login_UsesBackendIdentityAndRole_AndDoesNotIssueFakeRefreshToken()
     {
-        var result = await new LoginCommandHandler(new UnitOfWork(new UserRepository()), TokenService())
+        var result = await new LoginCommandHandler(new FakeUnitOfWork(), TokenService())
             .Handle(new LoginCommand { Email = "driver@gmail.com", Password = "Password@123" }, default);
         Assert.True(result.IsSuccess);
         Assert.Equal(UserId, result.Session!.User!.UserId);
@@ -48,7 +76,7 @@ public sealed class AuthSessionTests
     [InlineData("unknown@example.com", "Password@123")]
     public async Task InvalidCredentials_DoNotCreateSession(string email, string password)
     {
-        var result = await new LoginCommandHandler(new UnitOfWork(new UserRepository()), TokenService())
+        var result = await new LoginCommandHandler(new FakeUnitOfWork(), TokenService())
             .Handle(new LoginCommand { Email = email, Password = password }, default);
         Assert.False(result.IsSuccess);
         Assert.Null(result.Session);

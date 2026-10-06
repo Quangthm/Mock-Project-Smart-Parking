@@ -1,5 +1,6 @@
-﻿using SmartParking.UserService.Domain.Enum;
+using SmartParking.UserService.Domain.Enum;
 using UserService.Domain.Base;
+using System.Collections.Generic;
 
 namespace SmartParking.UserService.Domain.Entities;
 
@@ -15,5 +16,5 @@ public class User : BaseEntity
 
     public UserStatus Status { get; set; }
 
-    public ICollection<UserRole> UserRoles { get; set; } = [];
+    public ICollection<Account> Accounts { get; set; } = [];
 }

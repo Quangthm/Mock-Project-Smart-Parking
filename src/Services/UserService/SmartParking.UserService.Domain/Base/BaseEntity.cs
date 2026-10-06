@@ -1,4 +1,4 @@
-﻿namespace UserService.Domain.Base
+namespace UserService.Domain.Base
 {
     /// <summary>
     /// Base Entity.
@@ -61,6 +61,6 @@
         /// <value>
         /// The deleted on.
         /// </value>
-        public DateTimeOffset DeletedOn { get ; set ; }
+        public DateTimeOffset? DeletedOn { get ; set ; }
     }
 }

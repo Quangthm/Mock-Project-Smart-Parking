@@ -1,23 +1,22 @@
-﻿using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.Persistence;
 
 namespace UserService.Persistence.Repositories;
 
 public class UnitOfWork : IUnitOfWork
 {
+    private readonly AppDbContext dbContext;
     private readonly IUserRepository userRepository;
 
-    public UnitOfWork(IUserRepository userRepository)
+    public UnitOfWork(AppDbContext dbContext, IUserRepository userRepository)
     {
+        this.dbContext = dbContext;
         this.userRepository = userRepository;
     }
 
-    public IUserRepository UserRepository =>
-        this.userRepository;
+    public IUserRepository UserRepository => this.userRepository;
 
-    public Task<int> SaveChangesAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // No real database exists in this demo.
-        return Task.FromResult(0);
+        return await this.dbContext.SaveChangesAsync(cancellationToken);
     }
 }

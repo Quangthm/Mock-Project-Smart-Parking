@@ -10,17 +10,19 @@ public sealed record GetCurrentUserQuery(Guid UserId) : IRequest<UserInfoDto?>;
 public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
     : IRequestHandler<GetCurrentUserQuery, UserInfoDto?>
 {
-    public Task<UserInfoDto?> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
+    public async Task<UserInfoDto?> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var user = unitOfWork.UserRepository.Query().FirstOrDefault(user =>
-            user.Id == request.UserId && !user.IsDeleted && user.Status == UserStatus.Active);
-        return Task.FromResult(user is null ? null : new UserInfoDto
+        var user = await unitOfWork.UserRepository.GetByIdWithRolesAsync(request.UserId, cancellationToken);
+        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active)
+            return null;
+
+        return new UserInfoDto
         {
             UserId = user.Id!.Value,
             FullName = user.FullName,
             Email = user.Email ?? string.Empty,
-            Role = user.UserRoles.FirstOrDefault(role => !role.IsDeleted)?.RoleCode.ToLowerInvariant() ?? string.Empty
-        });
+            Role = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE")?.AccountRoles.FirstOrDefault()?.RoleCode.ToLowerInvariant() ?? string.Empty
+        };
     }
 }

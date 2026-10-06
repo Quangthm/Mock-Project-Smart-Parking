@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Persistence.Repositories;
 using UserService.Application.Common.Interfaces.Services;
@@ -8,11 +10,14 @@ namespace UserService.Persistence;
 public static class PersistenceDependencyInjection
 {
     public static IServiceCollection AddPersistenceServices(
-        this IServiceCollection services)
+        this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
 
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddTransient<DataSeeder>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAuthSessionStore, InMemoryAuthSessionStore>();
 
