@@ -1,18 +1,26 @@
-# Historical single-database sandbox. For the integrated application use
-# ../../compose.schema-integration.yml (three service-owned databases).
-# Startup: docs/02-architecture/database/schema-integration.md (repo root).
 services:
+  # 1. DATABASE POSTGRESQL SMARTPARK (Tự nạp SQL 05.1-Database-Scripts.sql)
   postgres:
     image: postgres:16-alpine
     container_name: smartpark-postgres
     restart: always
     environment:
       POSTGRES_USER: smartpark_user
-      POSTGRES_PASSWORD: park123
+      POSTGRES_PASSWORD: smartpark_password
       POSTGRES_DB: smartpark_db
     ports:
       - "5434:5432"
     volumes:
       - smartpark_pgdata:/var/lib/postgresql/data
+      - ./05.1-Database-Scripts.sql:/docker-entrypoint-initdb.d/05.1-Database-Scripts.sql
+  # 2. FRONTEND (FE)
+  smartpark-fe:
+    build:
+      context: ../../FE
+      dockerfile: Dockerfile
+    container_name: smartpark-fe
+    restart: always
+    ports:
+      - "3000:3000"
 volumes:
   smartpark_pgdata:
