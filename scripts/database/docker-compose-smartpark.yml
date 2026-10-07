@@ -1,5 +1,5 @@
 services:
-  # 1. DATABASE POSTGRESQL SMARTPARK (Tự nạp SQL 05.1-Database-Scripts.sql)
+  # 1. DATABASE POSTGRESQL SMARTPARK
   postgres:
     image: postgres:16-alpine
     container_name: smartpark-postgres
@@ -22,5 +22,38 @@ services:
     restart: always
     ports:
       - "3000:3000"
+  # 3. SONARQUBE DATABASE
+  sonarqube-db:
+    image: postgres:16-alpine
+    container_name: sonarqube-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+    volumes:
+      - sonarqube_db_data:/var/lib/postgresql/data
+  # 4. SONARQUBE SERVER (Optional)
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    restart: unless-stopped
+    depends_on:
+      - sonarqube-db
+    environment:
+      SONAR_JDBC_URL: "jdbc:postgresql://sonarqube-db:5432/sonar"
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
 volumes:
   smartpark_pgdata:
+  sonarqube_db_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
