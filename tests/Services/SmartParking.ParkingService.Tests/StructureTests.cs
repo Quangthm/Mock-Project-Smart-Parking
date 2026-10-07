@@ -11,12 +11,12 @@ public sealed class StructureTests
     public void OutdoorZoneNeedsNoFloorAndMotorcyclesHaveIndependentSlots()
     {
         var site = Site(); var zone = site.AddUnit(UnitType.ZONE, "Outdoor", maxCapacity: 2);
-        site.AddSlot(zone, " M01 ", VehicleType.MOTORBIKE);
-        site.AddSlot(zone, "C01", VehicleType.SEDAN);
+        site.AddSlot(zone, " M01 ", VehicleType.MOTORCYCLE);
+        site.AddSlot(zone, "C01", VehicleType.CAR);
         Assert.Equal(2, site.Site.TotalPhysicalCapacity);
         Assert.Equal("M01", site.Slots[0].Code);
-        Error("CAPACITY_EXCEEDED", () => site.AddSlot(zone, "C02", VehicleType.SEDAN));
-        Error("DUPLICATE_IDENTIFIER", () => site.AddSlot(zone, "m01", VehicleType.MOTORBIKE));
+        Error("CAPACITY_EXCEEDED", () => site.AddSlot(zone, "C02", VehicleType.CAR));
+        Error("DUPLICATE_IDENTIFIER", () => site.AddSlot(zone, "m01", VehicleType.MOTORCYCLE));
         Assert.Equal(2, site.Slots.Count);
     }
     [Fact]
@@ -24,8 +24,8 @@ public sealed class StructureTests
     {
         var site = Site(); var floor = site.AddUnit(UnitType.FLOOR, "B1", maxCapacity: 1);
         var zoneA = site.AddUnit(UnitType.ZONE, "A", floor); var zoneB = site.AddUnit(UnitType.ZONE, "B", floor);
-        site.AddSlot(zoneA, "01", VehicleType.SUV);
-        Error("CAPACITY_EXCEEDED", () => site.AddSlot(zoneB, "01", VehicleType.MOTORBIKE));
+        site.AddSlot(zoneA, "01", VehicleType.CAR);
+        Error("CAPACITY_EXCEEDED", () => site.AddSlot(zoneB, "02", VehicleType.MOTORCYCLE));
         Error("INVALID_STRUCTURE", () => site.AddUnit(UnitType.FLOOR, "B2", zoneA));
         Error("UNIT_NOT_FOUND", () => site.AddUnit(UnitType.ZONE, "foreign", Guid.NewGuid()));
         Assert.Equal(3, site.Units.Count);
@@ -40,7 +40,7 @@ public sealed class StructureTests
     public void ProtectedResourcesCannotBeMovedRemovedOrDeactivated(bool occupied, bool protectedSlot, bool commitments, OperationalStatus status)
     {
         var site = Site(); var zone = site.AddUnit(UnitType.ZONE, "A"); var other = site.AddUnit(UnitType.ZONE, "B");
-        var id = site.AddSlot(zone, "01", VehicleType.SEDAN);
+        var id = site.AddSlot(zone, "01", VehicleType.CAR);
         var guarded = new ParkingStructure(site.Site, site.Units, [site.Slots[0] with { IsPhysicallyOccupied = occupied, OperationalStatus = status }],
             protectedSlots: protectedSlot ? [id] : [], hasLiveCommitments: commitments);
         Error("STRUCTURE_IN_USE", () => guarded.RemoveSlot(id));
@@ -48,14 +48,14 @@ public sealed class StructureTests
         Error("STRUCTURE_IN_USE", () => guarded.SetActive(false));
         Assert.Equal(zone, guarded.Slots.Single().UnitId); Assert.True(guarded.Site.IsActive);
         // Adding physical capacity does not displace occupancy or cancel commitments.
-        guarded.AddSlot(other, "02", VehicleType.MOTORBIKE);
+        guarded.AddSlot(other, "02", VehicleType.MOTORCYCLE);
         Assert.Equal(2, guarded.Site.TotalPhysicalCapacity);
     }
     [Fact]
     public void EmptyUnitRemovalPreservesReferencesAndSlotMovePreservesIdentity()
     {
         var site = Site(); var a = site.AddUnit(UnitType.ZONE, "A"); var b = site.AddUnit(UnitType.ZONE, "B");
-        var slot = site.AddSlot(a, "01", VehicleType.SEDAN);
+        var slot = site.AddSlot(a, "01", VehicleType.CAR);
         var path = site.AddAccessPath("entry", null, a, "{\"points\":[[0,0],[1,1]]}");
         Error("UNIT_NOT_EMPTY", () => site.RemoveUnit(a));
         site.MoveSlot(slot, b, "02"); Assert.Equal(slot, site.Slots.Single().Id);
@@ -74,7 +74,7 @@ public sealed class StructureTests
     public void InvalidMapAndCapacityAreRejected()
     {
         var site = Site(); var a = site.AddUnit(UnitType.ZONE, "A", maxCapacity: 2);
-        site.AddSlot(a, "01", VehicleType.SEDAN); site.AddSlot(a, "02", VehicleType.SEDAN);
+        site.AddSlot(a, "01", VehicleType.CAR); site.AddSlot(a, "02", VehicleType.CAR);
         Error("INVALID_STRUCTURE", () => site.SetUnitCapacity(a, 1));
         Error("INVALID_STRUCTURE", () => site.AddAccessPath("X", null, a, "invalid"));
         Error("INVALID_STRUCTURE", () => site.AddSlot(a, "03", (VehicleType)999));

@@ -65,7 +65,7 @@ public sealed class DriverRegistrationTests
         {
             await using (var db = new AppDbContext(options))
             {
-                await db.Database.EnsureCreatedAsync();
+                await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
                 // Exercise upgrading the old phone-required schema, and repeated migration application.
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE users ALTER COLUMN phone SET NOT NULL");

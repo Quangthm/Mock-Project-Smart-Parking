@@ -8,15 +8,12 @@ namespace SmartParking.UserService.Domain.Entities
     {
         public Guid UserId { get; set; }
         
-        public string AccountType { get; set; } = string.Empty;
         
         public Guid? TenantId { get; set; }
         
         public Guid? SiteId { get; set; }
         
-        public string MembershipTier { get; set; } = "STANDARD";
         
-        public int LoyaltyPoints { get; set; }
         
         public string Status { get; set; } = "ACTIVE";
 

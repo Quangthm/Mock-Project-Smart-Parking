@@ -36,11 +36,11 @@ function clearSession() {
   sessionStorage.removeItem(expiryKey);
 }
 
-export async function request<T>(path: string, method = 'GET', body?: unknown, apiPrefix = '/api/auth'): Promise<T> {
+export async function request<T>(path: string, method = 'GET', body?: unknown, apiPrefix = '/api/auth', serverUrl = baseUrl): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   let response: Response;
   try {
-    response = await fetch(baseUrl + apiPrefix + path, {
+    response = await fetch(serverUrl + apiPrefix + path, {
       method, cache: 'no-store', signal: AbortSignal.timeout(10_000),
       headers: {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),

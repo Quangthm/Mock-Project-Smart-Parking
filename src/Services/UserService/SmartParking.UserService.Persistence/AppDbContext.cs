@@ -78,6 +78,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.Email).HasColumnName("email");
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
                 entity.Property(e => e.FullName).HasColumnName("full_name");
+                entity.Property(e => e.CompanyName).HasColumnName("company_name");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(
                     value => value == SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification
                         ? "PENDING_VERIFICATION" : value == SmartParking.UserService.Domain.Enum.UserStatus.PendingApproval
@@ -101,11 +102,8 @@ namespace UserService.Persistence
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.UserId).HasColumnName("user_id");
-                entity.Property(e => e.AccountType).HasColumnName("account_type");
                 entity.Property(e => e.TenantId).HasColumnName("tenant_id");
                 entity.Property(e => e.SiteId).HasColumnName("site_id");
-                entity.Property(e => e.MembershipTier).HasColumnName("membership_tier");
-                entity.Property(e => e.LoyaltyPoints).HasColumnName("loyalty_points");
                 entity.Property(e => e.Status).HasColumnName("status");
                 
                 entity.Property(e => e.CreatedOn).HasColumnName("created_at");

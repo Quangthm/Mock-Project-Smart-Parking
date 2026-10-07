@@ -37,7 +37,7 @@ public sealed class PostgresAuthTests
         {
             await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
                 .UseNpgsql(connection.ConnectionString).Options);
-            await db.Database.EnsureCreatedAsync();
+            await ServiceSchema.InitializeAsync(db);
             var passwords = new BcryptPasswordService();
             await new DataSeeder(db, passwords).SeedAsync();
             var oldUser = await db.Users.SingleAsync();
@@ -108,7 +108,7 @@ public sealed class PostgresAuthTests
         {
             await using (var db = new AppDbContext(options))
             {
-                await db.Database.EnsureCreatedAsync();
+                await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
                 // Exercise upgrade from the old schema with an existing refresh row.
                 await db.Database.ExecuteSqlRawAsync("INSERT INTO user_refresh_tokens(id,user_id,access_token_id,access_expires_at,token_hash,expires_at,is_revoked,created_at) VALUES(gen_random_uuid(), '11111111-1111-1111-1111-111111111111',gen_random_uuid(),NOW(),'legacy-hash',NOW()+INTERVAL '7 days',false,NOW()); ALTER TABLE users DROP COLUMN failed_login_attempts; ALTER TABLE users DROP COLUMN locked_until; ALTER TABLE user_refresh_tokens DROP COLUMN access_token_id; ALTER TABLE user_refresh_tokens DROP COLUMN access_expires_at;");

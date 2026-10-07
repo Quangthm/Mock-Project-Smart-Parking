@@ -13,7 +13,8 @@ public static class PersistenceDependencyInjection
         this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(configuration.GetConnectionString("User") ?? configuration.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException("Configure ConnectionStrings:User for the service-owned User database.")));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

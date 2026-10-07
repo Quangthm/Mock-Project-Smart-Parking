@@ -1,18 +1,18 @@
 namespace SmartParking.ParkingService.Domain;
 
-public enum UnitType { BUILDING, FLOOR, ZONE, ROW, SECTION }
-public enum VehicleType { MOTORBIKE, SEDAN, SUV, VAN, TRUCK }
-public enum SlotType { STANDARD, VIP, EV_CHARGING, HANDICAPPED }
+public enum UnitType { FLOOR, ZONE, BLOCK }
+public enum VehicleType { CAR, MOTORCYCLE, OVERSIZED }
+public enum SlotType { STANDARD, VIP, EV, DISABLED }
 public enum OperationalStatus { OPERATIONAL, MAINTENANCE, UNKNOWN, BLOCKED }
 public sealed class StructureException(string code, string message) : Exception(message)
 { public string Code { get; } = code; }
 
 public sealed record SiteProfile(Guid Id, Guid TenantId, string Code, string Name, string Address,
-    decimal? Latitude, decimal? Longitude, bool IsActive, int TotalPhysicalCapacity);
+    decimal? Latitude, decimal? Longitude, bool IsActive, int TotalPhysicalCapacity, string Status = "ACTIVE");
 public sealed record SpatialUnit(Guid Id, Guid? ParentId, string Path, UnitType Type, string Name, int MaxCapacity);
 public sealed record ParkingSlot(Guid Id, Guid UnitId, string Code, VehicleType VehicleType, SlotType Type,
     OperationalStatus OperationalStatus = OperationalStatus.OPERATIONAL, bool IsPhysicallyOccupied = false,
-    string? Coordinates3D = null, string? Features = null);
+    string? Coordinates3D = null, string? Features = null, string? ReservationState = null);
 public sealed record AccessPath(Guid Id, string Code, Guid? FromUnitId, Guid? ToUnitId, string? MapData);
 
 // Structure owns layout only. Occupancy, reservations and protection are separate inputs.
@@ -41,7 +41,7 @@ public sealed class ParkingStructure
     { if (!valid) throw new StructureException(code, message); }
     private static string Text(string value, int max)
     {
-        Require(!string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max, $"Text must contain 1–{max} characters.");
+        Require(!string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max, $"Text must contain 1â€“{max} characters.");
         return value.Trim();
     }
     private SpatialUnit Unit(Guid id) => units.SingleOrDefault(u => u.Id == id)
@@ -51,7 +51,7 @@ public sealed class ParkingStructure
     private void SafeChange(IEnumerable<ParkingSlot> affected)
     {
         Require(!hasLiveCommitments, "Resolve active/future reservations and capacity commitments before reducing or moving structure.", "STRUCTURE_IN_USE");
-        Require(!affected.Any(s => s.IsPhysicallyOccupied || s.OperationalStatus == OperationalStatus.UNKNOWN || protectedSlots.Contains(s.Id)),
+        Require(!affected.Any(s => s.IsPhysicallyOccupied || s.OperationalStatus == OperationalStatus.UNKNOWN || s.ReservationState != null || protectedSlots.Contains(s.Id)),
             "Occupied, unknown, allocated or protected slots cannot be removed or moved.", "STRUCTURE_IN_USE");
     }
     private void Recount() => Site = Site with { TotalPhysicalCapacity = slots.Count };
@@ -64,13 +64,13 @@ public sealed class ParkingStructure
         Site = Site with { Code = code, Name = name, Address = address, Latitude = latitude, Longitude = longitude };
     }
     public void SetActive(bool active)
-    { if (!active) SafeChange(slots); Site = Site with { IsActive = active }; }
+    { if (!active) SafeChange(slots); Site = Site with { IsActive = active, Status = active ? "ACTIVE" : "INACTIVE" }; }
 
     public Guid AddUnit(UnitType type, string name, Guid? parentId = null, int maxCapacity = 0)
     {
         Require(Enum.IsDefined(type) && maxCapacity >= 0, "Invalid unit type or capacity.");
         var parent = parentId is { } p ? Unit(p) : null;
-        Require(parent is null || (int)type > (int)parent.Type, "Parent must precede the child in BUILDING/FLOOR/ZONE/ROW/SECTION order.");
+        Require(parent is null || (int)type > (int)parent.Type, "Parent must precede the child in FLOOR/ZONE/BLOCK order.");
         name = Text(name, 100);
         Require(!units.Any(u => u.ParentId == parentId && u.Name.Equals(name, StringComparison.OrdinalIgnoreCase)), "Duplicate sibling unit name.", "DUPLICATE_IDENTIFIER");
         var id = Guid.NewGuid();
@@ -107,13 +107,13 @@ public sealed class ParkingStructure
     {
         var unit = Unit(unitId); code = Text(code, 50).ToUpperInvariant();
         Require(Enum.IsDefined(vehicleType) && Enum.IsDefined(type), "Unsupported vehicle or slot type.");
-        Require(!slots.Any(s => s.UnitId == unitId && s.Code.Equals(code, StringComparison.OrdinalIgnoreCase)), "Duplicate slot code in spatial unit.", "DUPLICATE_IDENTIFIER");
+        Require(!slots.Any(s => s.Code.Equals(code, StringComparison.OrdinalIgnoreCase)), "Duplicate slot code in site.", "DUPLICATE_IDENTIFIER");
         CheckRoom(unit); var id = Guid.NewGuid(); slots.Add(new(id, unitId, code, vehicleType, type)); Recount(); return id;
     }
     public void MoveSlot(Guid id, Guid targetUnitId, string code)
     {
         var slot = Slot(id); var unit = Unit(targetUnitId); code = Text(code, 50).ToUpperInvariant();
-        Require(!slots.Any(s => s.Id != id && s.UnitId == targetUnitId && s.Code.Equals(code, StringComparison.OrdinalIgnoreCase)), "Duplicate slot code in spatial unit.", "DUPLICATE_IDENTIFIER");
+        Require(!slots.Any(s => s.Id != id && s.Code.Equals(code, StringComparison.OrdinalIgnoreCase)), "Duplicate slot code in site.", "DUPLICATE_IDENTIFIER");
         SafeChange([slot]); CheckRoom(unit, id);
         slots[slots.IndexOf(slot)] = slot with { UnitId = targetUnitId, Code = code };
     }
