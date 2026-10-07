@@ -1,0 +1,54 @@
+name: smartpark-schema
+services:
+  user-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartpark_user
+      POSTGRES_USER: smartpark_user
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:5441:5432"]
+    volumes:
+      - user-schema-data:/var/lib/postgresql/data
+      - ./scripts/database/microservices/01-user-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/integration/01-user-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_user -d smartpark_user"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  parking-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartpark_parking
+      POSTGRES_USER: smartpark_parking
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:5442:5432"]
+    volumes:
+      - parking-schema-data:/var/lib/postgresql/data
+      - ./scripts/database/microservices/02-parking-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/integration/02-parking-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_parking -d smartpark_parking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  reservation-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartpark_reservation
+      POSTGRES_USER: smartpark_reservation
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:5443:5432"]
+    volumes:
+      - reservation-schema-data:/var/lib/postgresql/data
+      - ./scripts/database/microservices/03-reservation-session-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/integration/03-reservation-structure-safety.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_reservation -d smartpark_reservation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  user-schema-data:
+  parking-schema-data:
+  reservation-schema-data:

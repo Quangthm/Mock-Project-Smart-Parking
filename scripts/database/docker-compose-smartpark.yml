@@ -1,3 +1,6 @@
+# Historical single-database sandbox. For the integrated application use
+# ../../compose.schema-integration.yml (three service-owned databases).
+# Startup: docs/02-architecture/database/schema-integration.md (repo root).
 services:
   postgres:
     image: postgres:16-alpine
