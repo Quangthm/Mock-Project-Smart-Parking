@@ -4,8 +4,8 @@ public interface IOwnerAuthorizer
 {
     Task<bool> IsOwnerAsync(OwnerScope owner, CancellationToken ct);
 }
-public sealed record CommitmentSnapshot(Guid[] ProtectedSlots, bool HasLiveCommitments);
-public sealed record PoolCapacity(Guid? UnitId, string VehicleType, int Capacity);
+public sealed record CommitmentSnapshot(Guid[] ProtectedSlots, bool HasLiveCommitments, SmartParking.ParkingService.Domain.CapacityClaim[]? Capacities=null);
+public sealed record PoolCapacity(Guid? UnitId, string VehicleType, int Capacity, int Backup=0);
 public sealed record StructureOutcome(bool SiteActive, Guid[] RemovedSlots, Guid[] RemovedUnits, PoolCapacity[] Capacities);
 public interface IStructureLease : IAsyncDisposable
 {

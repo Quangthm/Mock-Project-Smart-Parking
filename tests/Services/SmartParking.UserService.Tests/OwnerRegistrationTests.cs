@@ -31,11 +31,22 @@ public sealed class OwnerRegistrationTests
         async Task<T> Run<T>(Func<OwnerRegistrationService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, passwords, clock, directory));
+            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock)));
         }
         OwnerRegistrationDto Body(string email, string phone) => new() { FullName = "New Owner", BusinessName = "Company",
             Email = email, Phone = phone, Password = "Password@123", LotType = "basement", AgreedToPolicy = true };
-        Task<OwnerApplicationDto> Register(string email, string phone) => Run(s => s.RegisterAsync(Body(email, phone), default));
+        async Task<OwnerApplicationDto> Register(string email, string phone)
+        {
+            var result=await Run(s => s.RegisterAsync(Body(email, phone), default));
+            await using var db=new AppDbContext(options);
+            foreach(var challenge in new[]{result.Verification!,result.PhoneVerification!})
+            {
+                var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.ChallengeId==challenge.ChallengeId);
+                var message=System.Text.Json.JsonSerializer.Deserialize<global::UserService.Application.Common.Interfaces.Services.WorkflowMessage>(new TestWorkflowProtector().Unprotect(delivery.ProtectedPayload))!;
+                await WorkflowTestSupport.Create(db,clock).VerifyOwnerAsync(challenge.ChallengeId,System.Text.RegularExpressions.Regex.Match(message.Body,@"\d{6}").Value,default);
+            }
+            return result;
+        }
         Task<OwnerApplicationDto> Review(Guid id, string status) => Run(s => s.ReviewAsync(adminId, id,
             new() { Status = status, ReviewNote = " Reviewed " }, default));
         async Task Expect(string code, Func<Task> action) => Assert.Equal(code, (await Assert.ThrowsAsync<AuthException>(action)).Code);

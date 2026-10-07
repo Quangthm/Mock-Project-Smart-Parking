@@ -33,7 +33,7 @@ public sealed class OperatorProvisioningTests
         async Task<T> Run<T>(Func<OperatorProvisioningService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, passwords, clock, directory));
+            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock)));
         }
         Task<OperatorDto> Create(CreateOperatorDto body, Guid? actor = null) => Run(s => s.CreateAsync(actor ?? ownerId, body, default));
         Task<bool> Allowed(Guid user, Guid site, string p) => Run(s => s.HasPermissionAsync(user, site, p, default));

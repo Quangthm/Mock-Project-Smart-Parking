@@ -29,6 +29,9 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
     public async Task<IActionResult> RegisterDriver([FromBody] DriverRegistrationDto body,
         [FromServices] IDriverRegistrationService registrations, CancellationToken ct) =>
         StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
+    [AllowAnonymous,HttpPost("register/driver/recover"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> RecoverDriver(OtpLoginDto body,[FromServices] IDriverRegistrationService registrations,CancellationToken ct)=>
+        Ok(new{success=true,data=await registrations.RecoverAsync(body.Contact,ct)});
 
     [AllowAnonymous]
     [HttpPost("register/driver/verify")]
@@ -56,7 +59,7 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
             return StatusCode(result.ErrorCode == "ACCOUNT_LOCKED" ? 403 : 401, new
             {
                 success = false, code = result.ErrorCode,
-                message = result.ErrorCode == "ACCOUNT_LOCKED" ? "Account is locked." : "Invalid email or password."
+                message = result.ErrorCode == "ACCOUNT_LOCKED" ? "Account is locked." : result.ErrorCode=="MFA_REQUIRED"?"Use OTP sign-in with your authenticator code.":"Invalid email or password."
             });
         return Ok(new { success = true, message = "Login successful", data = result.Session });
     }

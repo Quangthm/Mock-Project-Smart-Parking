@@ -38,6 +38,18 @@ const response = (status, payload = { success: false, code: 'INVALID_TOKEN', mes
   ({ status, ok: status >= 200 && status < 300, json: async () => payload });
 
 const apiUser = { userId: 'driver-id', fullName: 'Driver', email: 'driver@example.com', role: 'driver' };
+test('OTP login stores server identity and never stores the code or authenticator secret', async () => {
+  const f = fixture(() => response(200, { success: true, data: { accessToken: 'otp-access', refreshToken: 'otp-refresh', expiresIn: 86400, user: apiUser } }));
+  const user = await f.api.loginOtp('challenge', '123456', '654321');
+  assert.deepEqual(JSON.parse(f.calls[0].options.body), { challengeId: 'challenge', code: '123456', totp: '654321' });
+  assert.equal(user.password, ''); assert.equal(f.storage.get('sp_access_token'), 'otp-access');
+  assert.ok(!JSON.stringify([...f.storage.values()]).includes('123456'));
+});
+test('OTP authentication failure preserves an existing independent session', async () => {
+  const f = fixture(() => response(401, { success: false, message: 'MFA_REQUIRED' }));
+  await assert.rejects(f.api.loginOtp('challenge', '123456'), /MFA_REQUIRED/);
+  assert.equal(f.storage.get('sp_access_token'), 'access-a'); assert.deepEqual(f.events, []);
+});
 test('login trims email, preserves password and stores the server session and identity', async () => {
   const f = fixture(() => response(200, { success: true, data: {
     accessToken: 'access-new', refreshToken: 'refresh-new', expiresIn: 3600, user: apiUser,

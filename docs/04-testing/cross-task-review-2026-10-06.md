@@ -1,5 +1,7 @@
 # Review tổng hợp các task tài khoản và cấu trúc bãi — 06/10/2026
 
+> Historical report/guide. See [fix and review, 08/10/2026](cross-task-fix-review-2026-10-08.md) and its current contract links.
+
 ## Kết luận
 
 Chưa đủ điều kiện đánh dấu toàn bộ nhóm task là hoàn thành end to end. Backend từng phần đã có và bộ test hiện tại đạt, nhưng luồng Owner đăng ký → Admin duyệt → tạo bãi thật → tạo Operator trên giao diện vẫn bị ngắt. Review này không sửa source, không commit/push và không thay đổi trạng thái task.

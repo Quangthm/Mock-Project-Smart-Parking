@@ -3,6 +3,7 @@ using UserService.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Services;
 using UserService.Infrastructure.Services;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace UserService.API;
 
@@ -21,6 +22,12 @@ public static class UserHost
         builder.Services.AddOpenApi();
         builder.Services.AddControllers().AddApplicationPart(typeof(Controllers.AuthController).Assembly);
         builder.Services.AddApplicationServices(builder.Configuration);
+        var chatbot=builder.Configuration.GetSection("Chatbot").Get<UserService.Application.Chatbot.ChatbotOptions>()??new();
+        if(chatbot.TimeoutSeconds is <1 or >120 || chatbot.AllowedIntents.Any(i=>i is not ("FAQ" or "PARKING_SEARCH")))throw new InvalidOperationException("Invalid chatbot timeout or read intent allowlist.");
+        builder.Services.AddSingleton(chatbot);
+        builder.Services.AddScoped<UserService.Application.Chatbot.IChatModel,UnconfiguredChatModel>();
+        builder.Services.AddScoped<UserService.Application.Chatbot.IChatBackendGateway,UnconfiguredChatBackend>();
+        builder.Services.AddScoped<UserService.Application.Chatbot.ChatbotCoordinator>();
         builder.Services.AddPersistenceServices(builder.Configuration);
         builder.Services.AddJWTAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
@@ -31,7 +38,19 @@ public static class UserHost
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
         builder.Services.AddHttpClient("Otp", client => client.Timeout = TimeSpan.FromSeconds(10));
-        builder.Services.AddScoped<IOtpSender, UserService.API.Services.OtpSender>();
+        var protection=builder.Services.AddDataProtection().SetApplicationName("SmartPark.UserService");
+        var keyDirectory=builder.Configuration["Workflow:KeyDirectory"];
+        if(!string.IsNullOrWhiteSpace(keyDirectory))
+        {
+            protection.PersistKeysToFileSystem(new DirectoryInfo(keyDirectory));
+            if(OperatingSystem.IsWindows())protection.ProtectKeysWithDpapi();
+        }
+        else if(!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+            throw new InvalidOperationException("Configure durable Workflow:KeyDirectory for encrypted workflow state.");
+        builder.Services.AddSingleton<IWorkflowProtector, UserService.Infrastructure.Services.WorkflowProtector>();
+        builder.Services.AddScoped<IWorkflowTransport, UserService.Infrastructure.Services.WorkflowTransport>();
+        builder.Services.AddScoped<IOtpSender, UserService.API.Services.QueuedOtpSender>();
+        builder.Services.AddHostedService<UserService.API.Services.WorkflowDeliveryWorker>();
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = 429;

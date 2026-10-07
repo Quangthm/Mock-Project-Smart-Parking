@@ -30,6 +30,16 @@ internal static class ServiceSchema
             await cmd.ExecuteNonQueryAsync();
         }
         await db.Database.CloseConnectionAsync();
+        await ApplyFeaturesAsync(db);
+    }
+    public static async Task ApplyFeaturesAsync(AppDbContext db)
+    {
+        var dir=new DirectoryInfo(AppContext.BaseDirectory);
+        while(dir is not null && !File.Exists(Path.Combine(dir.FullName,"SmartParking.slnx")))dir=dir.Parent;
+        var sql=await File.ReadAllTextAsync(Path.Combine(dir!.FullName,"scripts/database/05.8-Account-Workflow-Vehicles.sql"));
+        await db.Database.OpenConnectionAsync();
+        await using var cmd=new NpgsqlCommand(sql,(NpgsqlConnection)db.Database.GetDbConnection());await cmd.ExecuteNonQueryAsync();
+        await db.Database.CloseConnectionAsync();
     }
 }
 internal sealed class TestParkingDirectory : IParkingDirectory

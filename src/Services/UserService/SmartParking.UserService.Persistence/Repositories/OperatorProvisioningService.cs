@@ -9,7 +9,7 @@ using UserService.Application.DTOs;
 
 namespace UserService.Persistence.Repositories;
 
-public sealed class OperatorProvisioningService(AppDbContext db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking)
+public sealed class OperatorProvisioningService(AppDbContext db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking, AccountWorkflowService workflows)
     : IOperatorProvisioningService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
@@ -28,6 +28,7 @@ public sealed class OperatorProvisioningService(AppDbContext db, IPasswordServic
 
     public async Task<IReadOnlyList<OperatorDto>> ListAsync(Guid ownerId, CancellationToken ct)
     {
+        await AccountWorkflowService.RequirePermissionAsync(db,ownerId,"OPERATOR_MANAGE",ct);
         var tenants = await db.Accounts.Where(a => a.UserId == ownerId && a.User.Status == UserStatus.Active &&
             a.User.DeletedOn == null && a.Status == "ACTIVE" && a.DeletedOn == null && a.SiteId == null && a.TenantId != null &&
             a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER")).Select(a => a.TenantId!.Value).ToArrayAsync(ct);
@@ -35,11 +36,13 @@ public sealed class OperatorProvisioningService(AppDbContext db, IPasswordServic
         var grants = await db.OperatorGrants.AsNoTracking().Include(g => g.Account).ThenInclude(a => a.User)
             .Where(g => g.CreatedBy == ownerId && g.Account.DeletedOn == null && g.Account.User.DeletedOn == null &&
                 g.Account.TenantId != null && tenants.Contains(g.Account.TenantId.Value)).ToListAsync(ct);
+        var deliveries=await db.WorkflowDeliveries.AsNoTracking().Where(d=>d.ActorId==ownerId && d.Kind=="OPERATOR_ONBOARDING").ToArrayAsync(ct);
         return grants.GroupBy(g => g.Account.UserId).Select(group =>
         {
             var user = group.First().Account.User;
+            var delivery=deliveries.SingleOrDefault(d=>d.UserId==user.Id);
             return new OperatorDto(user.Id!.Value, user.FullName, user.Email!, "operator", user.Status.ToString().ToLowerInvariant(),
-                ownerId, group.Select(g => g.Account.SiteId!.Value).ToArray(), group.SelectMany(g => g.Permissions).Distinct().ToArray());
+                ownerId, group.Select(g => g.Account.SiteId!.Value).ToArray(), group.SelectMany(g => g.Permissions).Distinct().ToArray(),delivery?.Id,delivery?.Status??"pending");
         }).OrderBy(o => o.FullName).ToArray();
     }
 
@@ -53,6 +56,7 @@ public sealed class OperatorProvisioningService(AppDbContext db, IPasswordServic
         var permissions = body.Permissions.Order(StringComparer.Ordinal).ToArray();
         var hash = passwords.Hash(body.Password);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await AccountWorkflowService.RequirePermissionAsync(db,ownerId,"OPERATOR_MANAGE",ct);
         // Lock only identity-owned rows. Site/tenant state is validated via ParkingService.
         var ownerTenants = await db.Database.SqlQuery<Guid>($"""
             SELECT a.tenant_id AS "Value" FROM accounts a
@@ -84,8 +88,9 @@ public sealed class OperatorProvisioningService(AppDbContext db, IPasswordServic
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: "23505" })
         { throw Error("EMAIL_EXISTS", "Email is already registered.", 409); }
+        var deliveryId=await workflows.QueueOnboardingAsync(user,ownerId,body.Password,ct);
         await tx.CommitAsync(ct);
-        return new(user.Id.Value, user.FullName, email, "operator", "active", ownerId, siteIds, permissions);
+        return new(user.Id.Value, user.FullName, email, "operator", "active", ownerId, siteIds, permissions,deliveryId);
     }
 
     // Operational endpoints must check current grants with this method; JWT role alone conveys no site authority.

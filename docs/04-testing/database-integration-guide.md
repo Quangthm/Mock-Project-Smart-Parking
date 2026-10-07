@@ -28,7 +28,10 @@ dotnet restore SmartParking.slnx
 ```
 
 Compose khởi tạo DB mới bằng baseline + overlay đúng service. Không apply các
-SQL monolith `05.*` trên develop hoặc seed Sprint 2 cũ vào topology này. Nếu
+SQL monolith `05.*` cũ trên develop hoặc seed Sprint 2 cũ vào topology này. Ba
+service-specific upgrades `05.8/05.9/05.10` của lượt sửa 08/10/2026 được apply
+riêng bằng [workflow migration runner](../02-architecture/api/workflows-2026-10-08.md),
+không phải baseline monolith. Nếu
 đã có dữ liệu/volumes thì không chạy lại baseline CREATE TABLE; cần migration
 riêng. Hướng dẫn chi tiết overlay, dữ liệu và SRS nằm trong
 `docs/02-architecture/database/schema-integration.md` ở checkout database.
@@ -59,8 +62,9 @@ chưa có server. Local CORS hiện cho phép port 5173.
 Admin Development `admin@smartpark.local` dùng SMARTPARK_ADMIN_PASSWORD (8–15
 ký tự, hoa/thường, số, ký tự đặc biệt). Bootstrap chỉ tạo mới, không thay password
 hay nâng quyền user thường. Tạo Owner → Admin duyệt → tạo site/unit/slot → tạo
-Operator bằng API/UI thật. OTP đăng ký Development log code; production cần
-delivery và RSA signing key cấu hình riêng.
+Operator bằng API/UI thật. OTP không còn ghi raw code vào Development log;
+cần SMTP/SMS QA để nhận code. Production cần delivery và RSA signing key
+cấu hình riêng. Xem contract hiện hành ngày 08/10/2026.
 
 ## Kiểm tra
 

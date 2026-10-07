@@ -53,7 +53,7 @@ export async function request<T>(path: string, method = 'GET', body?: unknown, a
   }
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
-    if (response.status === 401 && path !== '/login' && path !== '/logout' && token === sessionStorage.getItem(tokenKey)) {
+    if (response.status === 401 && !['/login','/logout','/otp/login','/otp/request'].includes(path) && token === sessionStorage.getItem(tokenKey)) {
       clearSession();
       window.dispatchEvent(new Event(authExpiredEvent));
     }
@@ -69,9 +69,24 @@ export async function request<T>(path: string, method = 'GET', body?: unknown, a
 }
 
 export const authApi = {
-  async registerDriver(body: { fullName: string; email?: string; phone?: string; password: string }): Promise<DriverRegistration> {
+  async requestOtp(contact: string) {
+    return (await request<ApiResponse<{challengeId:string;expiresAt:string;resendAt:string}>>('/otp/request','POST',{contact})).data;
+  },
+  async loginOtp(challengeId: string, code: string, totp?: string): Promise<User> {
+    const response=await request<ApiResponse<LoginSession>>('/otp/login','POST',{challengeId,code,...(totp?{totp}:{})});
+    if(!response.success || !response.data?.accessToken || !response.data.refreshToken)throw new Error('Invalid sign-in response.');
+    const user=toUser(response.data.user);
+    sessionStorage.setItem(tokenKey,response.data.accessToken);sessionStorage.setItem(refreshKey,response.data.refreshToken);
+    sessionStorage.setItem(expiryKey,String(Date.now()+response.data.expiresIn*1000));return user;
+  },
+  async registerDriver(body: { fullName: string; email?: string; phone?: string; password?: string }): Promise<DriverRegistration> {
     const response = await request<ApiResponse<DriverRegistration>>('/register/driver', 'POST', body);
     if (!response.success || !response.data?.registrationId) throw new Error('Invalid registration response.');
+    return response.data;
+  },
+  async recoverDriver(contact:string):Promise<DriverRegistration> {
+    const response=await request<ApiResponse<DriverRegistration>>('/register/driver/recover','POST',{contact});
+    if(!response.success || !response.data?.registrationId)throw new Error('Pending registration was not found.');
     return response.data;
   },
   async verifyDriver(registrationId: string, code: string): Promise<void> {

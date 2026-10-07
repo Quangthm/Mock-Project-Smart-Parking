@@ -16,6 +16,8 @@ namespace SmartParking.UserService.Domain.Entities
         
         
         public string Status { get; set; } = "ACTIVE";
+        // null uses the documented role matrix; an explicit empty set revokes all actions.
+        public string[]? Permissions { get; set; }
 
         public User User { get; set; } = null!;
         

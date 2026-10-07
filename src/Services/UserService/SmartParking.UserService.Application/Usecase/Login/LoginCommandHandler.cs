@@ -8,7 +8,7 @@ using UserService.Application.Services;
 namespace UserService.Application.Usecase.Login;
 
 public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService passwords,
-    AuthSessionService sessions, AuthenticationPolicy policy, TimeProvider clock)
+    AuthSessionService sessions, AuthenticationPolicy policy, TimeProvider clock, IMfaPolicy? mfa = null)
     : IRequestHandler<LoginCommand, LoginResult>
 {
     public async Task<LoginResult> Handle(LoginCommand request, CancellationToken cancellationToken)
@@ -29,6 +29,8 @@ public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService
         }
         if (user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
             return new(null, "AUTH_FAILED");
+        if (mfa is not null && await mfa.MfaEnabledAsync(user.Id!.Value,cancellationToken))
+            return new(null,"MFA_REQUIRED");
         if (!passwords.Verify(request.Password, user.PasswordHash))
         {
             user.FailedLoginAttempts++;

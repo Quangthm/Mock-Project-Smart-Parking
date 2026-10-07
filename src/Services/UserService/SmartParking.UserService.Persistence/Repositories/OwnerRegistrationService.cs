@@ -9,7 +9,7 @@ using UserService.Application.DTOs;
 
 namespace UserService.Persistence.Repositories;
 
-public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking)
+public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking, AccountWorkflowService workflows)
     : IOwnerRegistrationService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
@@ -27,14 +27,14 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
     {
         Validate(body);
         var email = body.Email.Trim().ToLowerInvariant();
-        var phone = body.Phone.Trim();
+        var phone = AccountWorkflowService.Contact(body.Phone);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         if (await db.Users.AnyAsync(u => u.DeletedOn == null &&
             ((u.Email != null && u.Email.ToLower() == email) || u.Phone == phone), ct))
             throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409);
         var now = clock.GetUtcNow();
         var user = new User { Id = Guid.NewGuid(), FullName = body.FullName.Trim(), CompanyName = body.BusinessName.Trim(), Email = email, Phone = phone,
-            PasswordHash = passwords.Hash(body.Password), Status = UserStatus.PendingApproval, CreatedOn = now, ModifiedOn = now };
+            PasswordHash = string.IsNullOrEmpty(body.Password) ? "" : passwords.Hash(body.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             Status = "PENDING_APPROVAL", CreatedOn = now };
         account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id.Value, RoleCode = "BUSINESS_OWNER" });
@@ -45,12 +45,15 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: "23505" })
         { throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409); }
+        var challenge = await workflows.IssueOwnerAsync(user, ct);
+        var phoneChallenge=await workflows.IssueOwnerPhoneAsync(user,ct);
         await tx.CommitAsync(ct);
-        return Result(application);
+        return Result(application) with { Verification = challenge,PhoneVerification=phoneChallenge, ContactVerified = false };
     }
 
     private async Task RequireAdmin(Guid id, CancellationToken ct)
     {
+        await AccountWorkflowService.RequirePermissionAsync(db, id, "ACCOUNT_ADMIN", ct);
         if (!await db.Users.AnyAsync(u => u.Id == id && u.DeletedOn == null && u.Status == UserStatus.Active &&
             u.Accounts.Any(a => a.DeletedOn == null && a.Status == "ACTIVE" &&
                 a.AccountRoles.Any(r => r.RoleCode == "PLATFORM_ADMIN" || r.RoleCode == "ADMIN")), ct))
@@ -62,7 +65,9 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         await RequireAdmin(adminId, ct);
         var applications = await db.OwnerApplications.AsNoTracking().Include(a => a.User)
             .Where(a => a.User.DeletedOn == null).OrderByDescending(a => a.SubmittedAt).ToListAsync(ct);
-        return applications.Select(Result).ToList();
+        var verified = await db.Users.Where(u=>u.EmailVerifiedAt!=null && u.PhoneVerifiedAt!=null).Select(u=>u.Id!.Value).ToArrayAsync(ct);
+        var deliveries=await db.WorkflowDeliveries.AsNoTracking().Where(d=>d.Kind=="OWNER_DECISION").ToArrayAsync(ct);
+        return applications.Select(a => {var delivery=deliveries.SingleOrDefault(d=>d.UserId==a.UserId);return Result(a) with { ContactVerified = verified.Contains(a.UserId),DeliveryId=delivery?.Id,DeliveryStatus=delivery?.Status };}).ToList();
     }
 
     public async Task<OwnerApplicationDto> ReviewAsync(Guid adminId, Guid id, ReviewOwnerDto body, CancellationToken ct)
@@ -76,9 +81,11 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         if (application is null) throw Error("APPLICATION_NOT_FOUND", "Owner application was not found.", 404);
         var user = await db.Users.FromSqlInterpolated(
             $"SELECT * FROM users WHERE id = {application.UserId} FOR UPDATE").SingleAsync(ct);
-        await db.Entry(user).Collection(u => u.Accounts).Query().Include(a => a.AccountRoles).LoadAsync(ct);
+        await db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={application.UserId} ORDER BY id FOR UPDATE").Include(a=>a.AccountRoles).LoadAsync(ct);
         if (application.Status != "pending" || user.DeletedOn != null || user.Status != UserStatus.PendingApproval)
             throw Error("APPLICATION_CLOSED", "Owner application is no longer pending.", 409);
+        if (user.EmailVerifiedAt is null || user.PhoneVerifiedAt is null)
+            throw Error("CONTACT_UNVERIFIED", "Verify required contact before approval.", 409);
         var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "PENDING_APPROVAL" &&
             a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"));
         if (account is null) throw Error("APPLICATION_CLOSED", "Owner account is no longer eligible for review.", 409);
@@ -99,7 +106,8 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         }
         else account.Status = "INACTIVE";
         await db.SaveChangesAsync(ct);
+        var deliveryId=await workflows.QueueAsync(user.Id!.Value,adminId,"OWNER_DECISION",new("email",user.Email!,"SmartPark application decision",$"Your application is {application.Status}."),ct);
         await tx.CommitAsync(ct);
-        return Result(application);
+        return Result(application) with { ContactVerified = true,DeliveryId=deliveryId,DeliveryStatus="pending" };
     }
 }

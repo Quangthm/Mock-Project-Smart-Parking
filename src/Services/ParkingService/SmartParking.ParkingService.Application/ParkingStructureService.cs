@@ -4,12 +4,19 @@ namespace SmartParking.ParkingService.Application;
 
 // The caller supplies the authenticated user ID, never an unverified request owner ID.
 public sealed record OwnerScope(Guid UserId, Guid TenantId);
+public interface ISlotOperatorAuthorizer
+{
+    Task<OwnerScope> ScopeAsync(Guid site,CancellationToken ct);
+    Task<bool> IsAuthorizedAsync(OwnerScope actor,Guid site,CancellationToken ct);
+}
 public interface IParkingStructureRepository
 {
     Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct);
     Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid siteId, CancellationToken ct);
     Task<SiteProfile> CreateAsync(OwnerScope owner, string code, string name, string address, decimal? latitude, decimal? longitude, CancellationToken ct);
-    Task<T> ChangeAsync<T>(OwnerScope owner, Guid siteId, Func<ParkingStructure, T> change, CancellationToken ct);
+    Task<T> ChangeAsync<T>(OwnerScope owner, Guid siteId, Func<ParkingStructure, T> change, CancellationToken ct, Guid? operationId = null);
+    Task<ParkingStructure> ReadOperationalAsync(OwnerScope actor,Guid site,CancellationToken ct);
+    Task MarkOperationalBackupAsync(OwnerScope actor,Guid site,Guid slot,string reason,CancellationToken ct);
 }
 
 public sealed class ParkingStructureService(IParkingStructureRepository repository)
@@ -24,6 +31,6 @@ public sealed class ParkingStructureService(IParkingStructureRepository reposito
         => repository.ChangeAsync(owner, siteId, s => s.AddSlot(unitId, code, vehicle, type), ct);
     public Task<Guid> AddAccessPathAsync(OwnerScope owner, Guid siteId, string code, Guid? from, Guid? to, string? mapData = null, CancellationToken ct = default)
         => repository.ChangeAsync(owner, siteId, s => s.AddAccessPath(code, from, to, mapData), ct);
-    public Task ChangeAsync(OwnerScope owner, Guid siteId, Action<ParkingStructure> change, CancellationToken ct = default)
-        => repository.ChangeAsync(owner, siteId, s => { change(s); return true; }, ct);
+    public Task ChangeAsync(OwnerScope owner, Guid siteId, Action<ParkingStructure> change, CancellationToken ct = default, Guid? operationId = null)
+        => repository.ChangeAsync(owner, siteId, s => { change(s); return true; }, ct, operationId);
 }

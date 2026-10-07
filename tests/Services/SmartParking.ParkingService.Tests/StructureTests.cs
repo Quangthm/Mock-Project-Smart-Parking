@@ -4,6 +4,19 @@ namespace SmartParking.ParkingService.Tests;
 
 public sealed class StructureTests
 {
+    [Fact]
+    public void BackupPhysicalOverlapAndEmptyUnitCannotCreateInvalidCapacity()
+    {
+        var site=Site();var zone=site.AddUnit(UnitType.ZONE,"Occupied");var empty=site.AddUnit(UnitType.ZONE,"Empty");
+        site.AddSlot(zone,"C1",VehicleType.CAR);
+        Error("CAPACITY_CONFLICT",()=>site.ConfigureBackup(empty,VehicleType.CAR,1));Assert.Empty(site.BackupPolicies);
+        foreach(var state in new[]{OperationalStatus.OPERATIONAL,OperationalStatus.MAINTENANCE})
+        {
+            var slot=site.Slots.Single() with{ReservationState="BACKUP",OperationalStatus=state,IsPhysicallyOccupied=state==OperationalStatus.OPERATIONAL};
+            var view=new ParkingStructure(site.Site,site.Units,[slot]).CapacityViews.Single(v=>v.UnitId==null && v.VehicleType==VehicleType.CAR);
+            Assert.Equal(0,view.Available);Assert.Equal(0,view.EffectiveBackup);Assert.Equal(1,view.MarkedBackup);
+        }
+    }
     private static ParkingStructure Site() => new(new(Guid.NewGuid(), Guid.NewGuid(), "SITE", "Site", "Address", null, null, true, 0));
     private static void Error(string code, Action action) => Assert.Equal(code, Assert.Throws<StructureException>(action).Code);
 
@@ -79,5 +92,27 @@ public sealed class StructureTests
         Error("INVALID_STRUCTURE", () => site.AddAccessPath("X", null, a, "invalid"));
         Error("INVALID_STRUCTURE", () => site.AddSlot(a, "03", (VehicleType)999));
         Assert.Empty(site.Paths);
+    }
+    [Fact]
+    public void BackupOverlapIsCountedOnceAndPhysicalStateCannotBeOverwritten()
+    {
+        var site=Site();var zone=site.AddUnit(UnitType.ZONE,"A");var a=site.AddSlot(zone,"A",VehicleType.CAR);site.AddSlot(zone,"B",VehicleType.CAR);
+        site.ConfigureBackup(null,VehicleType.CAR,1);site.MarkBackup(a,true);
+        var capacity=site.CapacityViews.Single(v=>v.UnitId==null && v.VehicleType==VehicleType.CAR);
+        Assert.Equal(1,capacity.ConfiguredBackup);Assert.Equal(1,capacity.MarkedBackup);Assert.Equal(1,capacity.EffectiveBackup);Assert.Equal(1,capacity.Available);
+        Error("INVALID_STRUCTURE",()=>site.ConfigureBackup(zone,VehicleType.CAR,1));
+        Error("CAPACITY_CONFLICT",()=>site.ConfigureBackup(null,VehicleType.CAR,3));Assert.Equal(1,site.BackupPolicies.Single().Count);
+        var occupied=new ParkingStructure(site.Site,site.Units,site.Slots.Select(s=>s.Id==a?s with{IsPhysicallyOccupied=true}:s));
+        Error("STRUCTURE_IN_USE",()=>occupied.MarkBackup(a,true));Assert.True(occupied.Slots.Single(s=>s.Id==a).IsPhysicallyOccupied);
+    }
+    [Fact]
+    public void CapacityDimensionsIncludePendingHoldsAndDetectInconsistentCounts()
+    {
+        var site=Site();var zone=site.AddUnit(UnitType.ZONE,"A");site.AddSlot(zone,"C1",VehicleType.CAR);site.AddSlot(zone,"C2",VehicleType.CAR);site.AddSlot(zone,"M1",VehicleType.MOTORCYCLE);
+        var pending=new ParkingStructure(site.Site,site.Units,site.Slots,claims:[new(null,"CAR",1,0)]);
+        Assert.Equal(1,pending.CapacityViews.Single(v=>v.UnitId==null && v.VehicleType==VehicleType.CAR).Available);
+        Assert.Equal(1,pending.CapacityViews.Single(v=>v.UnitId==null && v.VehicleType==VehicleType.MOTORCYCLE).Available);
+        var invalid=new ParkingStructure(site.Site,site.Units,site.Slots,claims:[new(null,"CAR",3,0)]);
+        Error("CAPACITY_CONFLICT",()=>invalid.ValidateCapacity());
     }
 }

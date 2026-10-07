@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 import { operatorsApi, parkingApi, type Operator, type Site, type Structure } from '../../../lib/parkingApi';
+import { BackupCapacityPanel } from './BackupCapacityPanel';
+import { request } from '../../../lib/authApi';
 
-const permissions = ['DEVICE_MANAGE', 'DEVICE_STATUS_VIEW', 'CASH_COLLECT', 'APPEAL_REVIEW'];
+const permissions = ['DEVICE_MANAGE', 'DEVICE_STATUS_VIEW', 'CASH_COLLECT', 'APPEAL_REVIEW', 'SLOT_OVERRIDE'];
 export function OwnerWorkspace() {
   const { user } = useApp();
   const [tab, setTab] = useState('sites');
@@ -97,6 +99,7 @@ export function OwnerWorkspace() {
         {layoutLoading && <p role="status">Loading structure…</p>}
         {layoutError && <p role="alert">{layoutError}</p>}
         {structure && <>
+          <BackupCapacityPanel structure={structure} onChanged={()=>setReload(n=>n+1)}/>
           <p>{structure.site.name} · {structure.site.status} · {structure.slots.length} physical slots</p>
           <button className="btn-outline" disabled={busy || layoutLoading} onClick={() => void mutate(() => parkingApi.edit(selected, { action: 'active', active: !structure.site.isActive }), 'Site status updated.')}>{structure.site.isActive ? 'Deactivate site' : 'Activate site'}</button>
           <form className="card" style={{ marginTop: '1rem' }} onSubmit={event => { event.preventDefault(); void mutate(() => parkingApi.unit(selected, { ...unitForm, parentId: unitForm.parentId || null }), 'Spatial unit added.'); }}>
@@ -121,8 +124,8 @@ export function OwnerWorkspace() {
       </>}
       {tab === 'operators' && <>
         <h2>Operators</h2>
-        {operators.map(operator => <div className="card" key={operator.id} style={{ marginBottom: '1rem' }}><strong>{operator.fullName}</strong><p>{operator.email} · {operator.status}</p><p>Sites: {operator.siteIds.map(id => sites.find(site => site.id === id)?.name ?? id).join(', ')}</p><p>{operator.permissions.join(', ')}</p></div>)}
-        <form className="card" onSubmit={event => { event.preventDefault(); void mutate(async () => { await operatorsApi.create(operatorForm); setOperatorForm({ fullName: '', email: '', password: '', siteIds: [], permissions: [] }); }, 'Operator created. The account can sign in with the initial password.'); }}>
+        {operators.map(operator => <div className="card" key={operator.id} style={{ marginBottom: '1rem' }}><strong>{operator.fullName}</strong><p>{operator.email} · {operator.status}</p><p>Sites: {operator.siteIds.map(id => sites.find(site => site.id === id)?.name ?? id).join(', ')}</p><p>{operator.permissions.join(', ')}</p><p>Onboarding email: {operator.deliveryStatus}</p>{operator.deliveryId && operator.deliveryStatus==='failed' && <button className="btn-outline" disabled={busy} onClick={()=>void mutate(()=>request(`/deliveries/${operator.deliveryId}/retry`,'POST'),'Email retry queued.')}>Retry email</button>}</div>)}
+        <form className="card" onSubmit={event => { event.preventDefault(); void mutate(async () => { await operatorsApi.create(operatorForm); setOperatorForm({ fullName: '', email: '', password: '', siteIds: [], permissions: [] }); }, 'Operator created. The account can sign in with the initial password. Onboarding email is queued separately.'); }}>
           <h3>Create operator</h3>
           {field('Full name', <input className="input" required maxLength={255} disabled={busy} value={operatorForm.fullName} onChange={e => setOperatorForm({ ...operatorForm, fullName: e.target.value })} />)}
           {field('Email', <input className="input" type="email" required maxLength={255} disabled={busy} value={operatorForm.email} onChange={e => setOperatorForm({ ...operatorForm, email: e.target.value })} />)}

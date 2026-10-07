@@ -1,5 +1,7 @@
 # Đối chiếu và phương án sửa Login/Logout
 
+> Historical contract/review (06/10/2026). See [current workflow contract and mapping, 08/10/2026](workflows-2026-10-08.md) for the implemented changes.
+
 Ngày: 06/10/2026. Nguồn: `API Design vs Code Comparison Report.pdf` (16 trang), code hiện tại, SRS v0.9 §3.1.1/§3.1.4/§4.3. Chưa có bản API Design gốc. Báo cáo kiểm tra commit 2816581; kết quả đó không được coi là kết quả test của code mới.
 
 ## So sánh trước khi sửa

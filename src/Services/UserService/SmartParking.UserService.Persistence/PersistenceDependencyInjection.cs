@@ -22,9 +22,15 @@ public static class PersistenceDependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
         services.AddScoped<IDriverRegistrationService, DriverRegistrationService>();
+        services.AddScoped<DriverRegistrationService>();
         services.AddScoped<IOwnerRegistrationService, OwnerRegistrationService>();
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<IOperatorProvisioningService, OperatorProvisioningService>();
+        services.AddScoped<AccountWorkflowService>();
+        services.AddScoped<IAccountWorkflows>(sp=>sp.GetRequiredService<AccountWorkflowService>());
+        services.AddScoped<IMfaPolicy>(sp=>sp.GetRequiredService<AccountWorkflowService>());
+        services.AddScoped<VehicleRegistrationService>();
+        services.AddScoped<IVehicleRegistration>(sp=>sp.GetRequiredService<VehicleRegistrationService>());
 
         return services;
     }

@@ -26,11 +26,12 @@ public static class ReservationHost
         });
         app.MapPut("/internal/structure/{siteId:guid}/{token:guid}", async (Guid siteId, Guid token, HoldRequest body, StructureSafetyStore store, CancellationToken ct) =>
             body.TenantId == Guid.Empty || siteId == Guid.Empty || token == Guid.Empty ? Results.BadRequest() : Results.Ok(await store.AcquireAsync(body.TenantId, siteId, token, ct)));
+        app.MapPost("/internal/structure/{siteId:guid}/impact",async(Guid siteId,HoldRequest body,StructureSafetyStore store,CancellationToken ct)=>body.TenantId==Guid.Empty || siteId==Guid.Empty?Results.BadRequest():Results.Ok(await store.ImpactAsync(body.TenantId,siteId,ct)));
         app.MapPost("/internal/structure/{siteId:guid}/{token:guid}/release", async (Guid siteId, Guid token, ReleaseRequest body, StructureSafetyStore store, CancellationToken ct) =>
         {
             if (body.TenantId == Guid.Empty || siteId == Guid.Empty || token == Guid.Empty ||
                 body.Outcome is { RemovedSlots: null } or { RemovedUnits: null } or { Capacities: null } ||
-                body.Outcome?.Capacities.Any(c => c.Capacity < 0 || c.VehicleType is not ("CAR" or "MOTORCYCLE")) == true) return Results.BadRequest();
+                body.Outcome?.Capacities.Any(c => c.Capacity < 0 || c.Backup<0 || c.Backup>c.Capacity || c.VehicleType is not ("CAR" or "MOTORCYCLE")) == true) return Results.BadRequest();
             await store.ReleaseAsync(body.TenantId, siteId, token, body.Outcome, ct); return Results.NoContent();
         });
         return app;

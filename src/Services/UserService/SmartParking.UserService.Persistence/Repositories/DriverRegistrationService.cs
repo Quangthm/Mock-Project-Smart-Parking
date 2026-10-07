@@ -26,7 +26,8 @@ public sealed class DriverRegistrationService(AppDbContext db, IPasswordService 
     public async Task<DriverRegistrationResult> RegisterAsync(DriverRegistrationDto request, CancellationToken ct)
     {
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
-        var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        AccountWorkflowService.Validate(request);
+        var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : AccountWorkflowService.Contact(request.Phone);
         if (email is null && phone is null || string.IsNullOrWhiteSpace(request.FullName))
             throw Error("VALIDATION_FAILED", "Full name and email or phone are required.");
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -35,7 +36,7 @@ public sealed class DriverRegistrationService(AppDbContext db, IPasswordService 
             throw Error("CONTACT_EXISTS", "Email or phone is already registered. Resume OTP verification if pending.", 409);
         var now = clock.GetUtcNow();
         var user = new User { Id = Guid.NewGuid(), FullName = request.FullName.Trim(), Email = email, Phone = phone,
-            PasswordHash = passwords.Hash(request.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
+            PasswordHash = string.IsNullOrEmpty(request.Password) ? "" : passwords.Hash(request.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             CreatedOn = now, Status = "ACTIVE" };
         account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id.Value, RoleCode = "DRIVER" });
@@ -51,6 +52,14 @@ public sealed class DriverRegistrationService(AppDbContext db, IPasswordService 
         await sender.SendAsync(registration.Channel, email ?? phone!, code, ct);
         await tx.CommitAsync(ct);
         return Result(registration);
+    }
+    public async Task<DriverRegistrationResult> RecoverAsync(string contact,CancellationToken ct)
+    {
+        contact=AccountWorkflowService.Contact(contact);
+        var user=await db.Users.SingleOrDefaultAsync(u=>u.DeletedOn==null && u.Status==UserStatus.PendingVerification && (u.Email==contact || u.Phone==contact),ct);
+        var challenge=user is null?null:await db.DriverRegistrations.SingleOrDefaultAsync(r=>r.UserId==user.Id && r.VerifiedAt==null,ct);
+        if(challenge is null)throw Error("REGISTRATION_NOT_FOUND","Pending registration was not found.",404);
+        return Result(challenge);
     }
 
     private async Task<(DriverRegistration Registration, User User)> LoadAsync(Guid id, CancellationToken ct)
@@ -85,6 +94,7 @@ public sealed class DriverRegistrationService(AppDbContext db, IPasswordService 
         r.CodeHash = "";
         r.FailedAttempts = 0;
         user.Status = UserStatus.Active;
+        if(r.Channel=="email")user.EmailVerifiedAt=clock.GetUtcNow();else user.PhoneVerifiedAt=clock.GetUtcNow();
         user.ModifiedOn = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
