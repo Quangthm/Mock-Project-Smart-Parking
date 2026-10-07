@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext"
 import { driverData as store } from "../data/data"
 import type { Booking, ParkingLot, ParkingSlot, PaymentMethod } from "../../../lib/types"
 import { PAYMENT_OPTIONS } from "../data/paymentOptions"
+import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 
 type Step = "slot" | "details" | "payment" | "qr"
 type VehicleForm = { type: "motorcycle" | "car"; plateType: "vn" | "foreign"; plate: string }
@@ -17,6 +18,7 @@ export function BookingFlow({ lot, onDone, resumeBooking }: { lot: ParkingLot; o
   const { user } = useApp()
   const [holdId] = useState(() => store.generateId())
   const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
+  const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
   const [lotSnapshot, setLotSnapshot] = useState(() => store.getLots().find((item) => item.id === lot.id) ?? lot)
   const [selectedSlot, setSelectedSlot] = useState<ParkingSlot | null>(() => resumeBooking ? lot.slots.find(slot => slot.id === resumeBooking.slotId) ?? null : null)
   const [vehicles, setVehicles] = useState(() => user ? store.getVehiclesByDriver(user.id) : [])
@@ -170,8 +172,11 @@ export function BookingFlow({ lot, onDone, resumeBooking }: { lot: ParkingLot; o
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.65rem" }}>
+    <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.65rem" }}>
+        <h2 style={{ margin: 0, fontSize: "1.25rem", fontFamily: "Outfit", fontWeight: 700, color: "var(--fg)" }}>
+          Đặt Chỗ Tại {lotSnapshot.name}
+        </h2>
         <button type="button" className="btn-outline" onClick={() => { if (!bookingId) cancelHold(); onDone() }} style={{ padding: "0.4rem 0.7rem", fontSize: "0.78rem" }}>Back to parking</button>
       </div>
       <div style={{ display: "flex", gap: "0.3rem", marginBottom: "1.5rem" }}>
@@ -185,31 +190,112 @@ export function BookingFlow({ lot, onDone, resumeBooking }: { lot: ParkingLot; o
       </div>
 
       {step === "slot" && <section className="card">
-        <div style={{ display: "flex", gap: "1rem", marginBottom: "0.8rem", flexWrap: "wrap", color: "var(--muted)", fontSize: "0.78rem" }}>
-          <span><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: '#22c55e' }} />Available</span><span><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: '#ef4444' }} />Occupied</span><span><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: '#f59e0b' }} />Reserved</span>
-        </div>
-        {Array.from({ length: Math.max(1, lotSnapshot.floors) }, (_, index) => index + 1).map((floor) => {
-          const floorSlots = lotSnapshot.slots.filter((slot) => lotSnapshot.floors === 1 || slot.floor === floor)
-          if (!floorSlots.length) return null
-          return <div key={floor} style={{ marginBottom: "0.85rem" }}>
-            {lotSnapshot.floors > 1 && <div style={{ marginBottom: "0.4rem", color: "var(--muted)", fontSize: "0.78rem", fontWeight: 600 }}>Floor {floor}</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(8, minmax(28px, 1fr))", gap: "0.35rem" }}>
-              {floorSlots.map((slot) => {
-                const available = isAvailable(slot)
-                const locked = slot.status === "reserved" && !available
-                const color = available ? "#22c55e" : slot.status === "occupied" ? "#ef4444" : "#f59e0b"
-                return <button key={slot.id} type="button" aria-label={`Slot ${slot.number}${locked ? ", reserved" : ""}`} aria-pressed={selectedSlot?.id === slot.id}
-                  onClick={() => chooseSlot(slot)}
-                  style={{ height: 36, borderRadius: 4, border: `1.5px solid ${selectedSlot?.id === slot.id ? "var(--primary)" : color}`, background: selectedSlot?.id === slot.id ? "var(--primary)" : `${color}18`, color: selectedSlot?.id === slot.id ? "white" : color, fontSize: "0.68rem", fontWeight: 600, cursor: "pointer", opacity: available ? 1 : 0.65 }}>
-                  {slot.number}
-                </button>
-              })}
-            </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "var(--fg)", fontFamily: "Outfit" }}>
+              Chọn Vị Trí Đỗ Xe (Parking Slot)
+            </h3>
+            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
+              {viewMode === "3d" ? "Click trực tiếp vào ô đỗ trong không gian 3D để chọn vị trí mong muốn" : "Bấm vào ô số bên dưới để chọn"}
+            </span>
           </div>
-        })}
-        {selectedSlot && <p style={{ margin: "0.5rem 0", color: "var(--muted)", fontSize: "0.82rem" }}>Selected slot: <strong>{selectedSlot.number}</strong></p>}
+
+          {/* View mode toggle */}
+          <div style={{ display: "flex", gap: "0.25rem", padding: "0.2rem", background: "var(--bg)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
+            <button
+              type="button"
+              onClick={() => setViewMode("3d")}
+              style={{
+                padding: "0.35rem 0.75rem",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                borderRadius: "calc(var(--radius) - 2px)",
+                border: "none",
+                cursor: "pointer",
+                background: viewMode === "3d" ? "var(--primary)" : "transparent",
+                color: viewMode === "3d" ? "white" : "var(--muted)",
+                transition: "all 0.2s",
+              }}
+            >
+              🎮 Mô Hình 3D Lớn
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              style={{
+                padding: "0.35rem 0.75rem",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                borderRadius: "calc(var(--radius) - 2px)",
+                border: "none",
+                cursor: "pointer",
+                background: viewMode === "grid" ? "var(--primary)" : "transparent",
+                color: viewMode === "grid" ? "white" : "var(--muted)",
+                transition: "all 0.2s",
+              }}
+            >
+              ▦ Sơ Đồ Lưới
+            </button>
+          </div>
+        </div>
+
+        {/* 3D Mode */}
+        {viewMode === "3d" && (
+          <div style={{ marginBottom: "1rem" }}>
+            <Parking3DViewer
+              lotType={lotSnapshot.type}
+              modelUrl={lotSnapshot.modelUrl}
+              slots={lotSnapshot.slots}
+              selectedSlotId={selectedSlot?.id}
+              onSelectSlot={chooseSlot}
+              height={550}
+              interactive={true}
+            />
+          </div>
+        )}
+
+        {/* 2D Grid Mode */}
+        {viewMode === "grid" && (
+          <div>
+            <div style={{ display: "flex", gap: "1rem", marginBottom: "0.8rem", flexWrap: "wrap", color: "var(--muted)", fontSize: "0.78rem" }}>
+              <span><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: '#22c55e' }} />Available</span>
+              <span><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: '#ef4444' }} />Occupied</span>
+              <span><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: '#f59e0b' }} />Reserved</span>
+            </div>
+            {Array.from({ length: Math.max(1, lotSnapshot.floors) }, (_, index) => index + 1).map((floor) => {
+              const floorSlots = lotSnapshot.slots.filter((slot) => lotSnapshot.floors === 1 || slot.floor === floor)
+              if (!floorSlots.length) return null
+              return <div key={floor} style={{ marginBottom: "0.85rem" }}>
+                {lotSnapshot.floors > 1 && <div style={{ marginBottom: "0.4rem", color: "var(--muted)", fontSize: "0.78rem", fontWeight: 600 }}>Floor {floor}</div>}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(8, minmax(28px, 1fr))", gap: "0.35rem" }}>
+                  {floorSlots.map((slot) => {
+                    const available = isAvailable(slot)
+                    const locked = slot.status === "reserved" && !available
+                    const color = available ? "#22c55e" : slot.status === "occupied" ? "#ef4444" : "#f59e0b"
+                    return <button key={slot.id} type="button" aria-label={`Slot ${slot.number}${locked ? ", reserved" : ""}`} aria-pressed={selectedSlot?.id === slot.id}
+                      onClick={() => chooseSlot(slot)}
+                      style={{ height: 36, borderRadius: 4, border: `1.5px solid ${selectedSlot?.id === slot.id ? "var(--primary)" : color}`, background: selectedSlot?.id === slot.id ? "var(--primary)" : `${color}18`, color: selectedSlot?.id === slot.id ? "white" : color, fontSize: "0.68rem", fontWeight: 600, cursor: "pointer", opacity: available ? 1 : 0.65 }}>
+                      {slot.number}
+                    </button>
+                  })}
+                </div>
+              </div>
+            })}
+          </div>
+        )}
+
+        {selectedSlot && (
+          <div style={{ margin: "0.6rem 0", padding: "0.6rem 0.85rem", background: "var(--primary)12", border: "1px solid var(--primary)30", borderRadius: "var(--radius)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "0.84rem", color: "var(--fg)" }}>
+              Vị trí đang chọn: <strong style={{ color: "var(--primary)", fontSize: "0.95rem" }}>Slot {selectedSlot.number}</strong> (Tầng {selectedSlot.floor})
+            </span>
+            <span style={{ fontSize: "0.75rem", color: "#22c55e", fontWeight: 600 }}>● Hợp lệ</span>
+          </div>
+        )}
         {message && <p role="alert" style={{ margin: "0.5rem 0", color: "#dc2626", fontSize: "0.82rem" }}>{message}</p>}
-        <button type="button" className="btn-primary" disabled={!selectedSlot} onClick={continueToDetails} style={{ justifyContent: "center", width: "100%", marginTop: "0.5rem" }}>Continue</button>
+        <button type="button" className="btn-primary" disabled={!selectedSlot} onClick={continueToDetails} style={{ justifyContent: "center", width: "100%", marginTop: "0.5rem" }}>
+          Continue with Slot {selectedSlot?.number || ""}
+        </button>
       </section>}
 
       {step === "details" && <section className="card">

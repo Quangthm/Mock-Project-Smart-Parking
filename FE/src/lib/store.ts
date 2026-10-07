@@ -31,11 +31,12 @@ function generateSlots(total: number, floors: number): ParkingSlot[] {
   const slots: ParkingSlot[] = [];
   const perFloor = Math.ceil(total / floors);
   for (let f = 1; f <= floors; f++) {
+    const section = String.fromCharCode(64 + Math.min(f, 26));
     for (let s = 1; s <= perFloor && slots.length < total; s++) {
       const statuses: ParkingSlot['status'][] = ['available', 'available', 'available', 'occupied', 'reserved'];
       slots.push({
         id: generateId(),
-        number: `${f}${String(s).padStart(2, '0')}`,
+        number: `${section}-${String(s).padStart(3, '0')}`,
         floor: f,
         status: statuses[Math.floor(Math.random() * statuses.length)],
       });
@@ -128,6 +129,8 @@ function seedInitialData() {
     status: 'active',
     lat: 10.838178,
     lng: 106.830064,
+    modelFileName: 'indoor_parking_lot.glb',
+    modelUrl: '/models/parking/indoor_parking_lot.glb',
     createdAt: new Date(Date.now() - 86400000 * 30).toISOString(),
   };
 
@@ -154,10 +157,41 @@ function seedInitialData() {
     status: 'active',
     lat: 10.771917,
     lng: 106.704894,
+    modelFileName: 'underground_parking_lot.glb',
+    modelUrl: '/models/parking/underground_parking_lot.glb',
     createdAt: new Date(Date.now() - 86400000 * 25).toISOString(),
   };
 
-  set(KEYS.lots, [lot1, lot2]);
+  const lot3: ParkingLot = {
+    id: 'lot-003',
+    ownerId: 'owner-sample',
+    name: 'Nguyen Hue Boulevard Outdoor Lot',
+    type: 'outdoor',
+    address: 'Nguyễn Huệ, Bến Nghé, Quận 1, TP.HCM',
+    totalSlots: 50,
+    floors: 1,
+    slots: generateSlots(50, 1),
+    devices: [
+      { type: 'camera', label: 'AI Camera', enabled: true },
+      { type: 'barrier', label: 'Barrier Gate', enabled: true },
+    ],
+    hourlyRate: 10000,
+    dailyRate: 80000,
+    nightRate: 40000,
+    gracePeriodMinutes: 15,
+    subscriptionMonthly: 300000,
+    subscriptionYearly: 3000000,
+    status: 'active',
+    lat: 10.7745,
+    lng: 106.7035,
+    modelFileName: 'outdoor_parking_lot.glb',
+    modelUrl: '/models/parking/outdoor_parking_lot.glb',
+    createdAt: new Date(Date.now() - 86400000 * 15).toISOString(),
+  };
+
+  set(KEYS.lots, [lot1, lot2, lot3]);
+
+  if (lot1.slots[0]) lot1.slots[0].status = 'occupied';
 
   const bookings: Booking[] = [
     {
@@ -165,8 +199,8 @@ function seedInitialData() {
       driverId: 'driver-sample',
       lotId: 'lot-001',
       lotName: 'Vinhomes Grand Park Parking',
-      slotId: 'slot-1',
-      slotNumber: '101',
+      slotId: lot1.slots[0]?.id || 'slot-1',
+      slotNumber: lot1.slots[0]?.number || 'A-001',
       licensePlate: '51A-12345',
       plateType: 'vn',
       startTime: new Date(Date.now() - 3600000 * 3).toISOString(),
@@ -339,6 +373,18 @@ export const store = {
     const order: PackageOrder = { ...data, id: generateId(), createdAt: new Date().toISOString(), paymentStatus: 'pending' };
     set(KEYS.packageOrders, [...get<PackageOrder>(KEYS.packageOrders), order]);
     return order;
+  },
+  createPass: (data: Omit<ParkingPass, 'id' | 'purchasedAt'>): ParkingPass => {
+    const pass: ParkingPass = { ...data, id: generateId(), purchasedAt: new Date().toISOString() };
+    set(KEYS.passes, [...get<ParkingPass>(KEYS.passes), pass]);
+    return pass;
+  },
+  updatePackageOrder: (order: PackageOrder) => {
+    const orders = get<PackageOrder>(KEYS.packageOrders);
+    const index = orders.findIndex(o => o.id === order.id);
+    if (index >= 0) orders[index] = order;
+    else orders.push(order);
+    set(KEYS.packageOrders, orders);
   },
   getWalletTransactions: (userId: string): WalletTransaction[] => get<WalletTransaction>(KEYS.walletTransactions).filter(item => item.userId === userId).sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
   addWalletTransaction: (data: Omit<WalletTransaction, 'id' | 'timestamp'>) => {

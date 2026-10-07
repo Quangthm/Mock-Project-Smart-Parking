@@ -7,9 +7,10 @@ import { LotManagement } from '../parking-lots/LotManagement';
 import { OperatorManagement } from '../operators/OperatorManagement';
 import { PolicySettings } from '../policies/PolicySettings';
 import { SiteManagement } from '../parking-lots/SiteManagement';
+import { RevenueDashboard } from '../revenue/RevenueDashboard';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 
-type Tab = 'dashboard' | 'sites' | 'lots' | 'operators' | 'policy';
+type Tab = 'dashboard' | 'sites' | 'lots' | 'operators' | 'finance' | 'policy';
 
 export function OwnerDashboard() {
   const { user } = useApp();
@@ -29,14 +30,6 @@ export function OwnerDashboard() {
     return <div style={{ minHeight: 'calc(100vh - 60px)', background: 'var(--bg)' }}><OnboardingWizard onComplete={() => setTab('dashboard')} /></div>;
   }
 
-  const nav: { id: Tab; label: string; icon: string }[] = [
-    { id: 'dashboard', label: 'Overview', icon: '◫' },
-    { id: 'sites', label: 'Sites', icon: '⌖' },
-    { id: 'lots', label: 'My Lots', icon: '▦' },
-    { id: 'operators', label: 'Operators', icon: '♙' },
-    { id: 'policy', label: 'Policy', icon: '☷' },
-  ];
-
   return (
     <DashboardSidebar groups={[
       { items: [{ id: 'dashboard', label: 'Dashboard', icon: '⌂', active: tab === 'dashboard', onClick: () => setTab('dashboard') }] },
@@ -46,11 +39,12 @@ export function OwnerDashboard() {
       ] },
       { label: 'Business', items: [
         { id: 'operators', label: 'Operators', icon: '♙', active: tab === 'operators', onClick: () => setTab('operators') },
+        { id: 'finance', label: 'Financial', icon: '₫', active: tab === 'finance', onClick: () => setTab('finance') },
         { id: 'policy', label: 'Policies', icon: '⚖', active: tab === 'policy', onClick: () => setTab('policy') },
       ] },
     ]}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
-        {tab === 'dashboard' && (
+        {(tab === 'dashboard' || tab === 'finance') && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
             <div><p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Multi-site</p><p className="mt-1 font-semibold text-[var(--fg)]">Filter Owner Dashboard</p></div>
             <label className="flex items-center gap-3 text-sm font-medium text-[var(--fg)]"><span>Site</span><select className="input min-w-[210px]" value={selectedSiteId} onChange={event => setSelectedSiteId(event.target.value)}><option value="all">All Sites</option>{sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}</select></label>
@@ -61,6 +55,7 @@ export function OwnerDashboard() {
           {tab === 'sites' && <SiteManagement sites={sites} operators={operators} onSiteCreated={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
           {tab === 'operators' && <OperatorManagement sites={sites} selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
+          {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}
         </div>
       </main>

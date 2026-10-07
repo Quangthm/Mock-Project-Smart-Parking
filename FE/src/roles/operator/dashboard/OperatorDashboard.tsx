@@ -23,9 +23,10 @@ export function OperatorDashboard({ accessRoleOverride }: { accessRoleOverride?:
   const assignedOwnerId = user?.role === 'owner' ? user.id : user?.ownerId;
   const ownerLots = store.getLots().filter(lot =>
     lot.ownerId === assignedOwnerId
-    && (user?.role === 'owner' || !user?.operatorSiteId || (accessRole === 'financial' && user.operatorSiteId === 'all') || lot.id === user?.operatorSiteId)
+    && (user?.role === 'owner' || !user?.operatorSiteId || user.operatorSiteId === 'all' || lot.id === user?.operatorSiteId)
   );
-  const selectedLot = ownerLots[0] ?? null;
+  const [activeSiteId, setActiveSiteId] = useState<string>('');
+  const selectedLot = (activeSiteId ? ownerLots.find(l => l.id === activeSiteId) : null) ?? ownerLots[0] ?? null;
 
   if (accessRole === 'cashier') {
     return <CashierPOS lotName={selectedLot?.name ?? 'Assigned parking lot'} />;
@@ -58,6 +59,18 @@ export function OperatorDashboard({ accessRoleOverride }: { accessRoleOverride?:
       ] },
     ]}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+        {user?.operatorSiteId === 'all' && ownerLots.length > 1 && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+            <span className="text-xs font-semibold text-[var(--muted)]">All Sites Operator — Currently Operating at:</span>
+            <select
+              className="input text-sm py-1 px-3"
+              value={selectedLot?.id ?? ''}
+              onChange={e => setActiveSiteId(e.target.value)}
+            >
+              {ownerLots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="animate-in">
           {accessRole === 'operation' && tab === 'checkin' && <CheckInOut lot={selectedLot} />}
           {accessRole === 'operation' && tab === 'status' && <LotStatus lot={selectedLot} />}

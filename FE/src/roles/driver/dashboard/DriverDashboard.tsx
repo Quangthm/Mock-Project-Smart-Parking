@@ -317,7 +317,10 @@ export function DriverDashboard() {
             {tab === "home" && (
               <div className="animate-in">
                 {homePanel === "find" ? (
-                  <FindParking onBook={(lot) => { setPaymentBooking(null); setBookingLot(lot) }} />
+                  <FindParking
+                    onBook={(lot) => { setPaymentBooking(null); setBookingLot(lot) }}
+                    onNavigateToBookings={() => setHomePanel("bookings")}
+                  />
                 ) : homePanel === "bookings" ? (
                   <section><h3 style={{ fontFamily: "Outfit", margin: "0 0 0.75rem", color: "var(--fg)" }}>Bookings</h3><ActiveBookings onPayNow={(booking) => { setPaymentBooking(booking); setBookingLot(store.getLots().find((lot) => lot.id === booking.lotId) ?? null) }} /></section>
                 ) : (
