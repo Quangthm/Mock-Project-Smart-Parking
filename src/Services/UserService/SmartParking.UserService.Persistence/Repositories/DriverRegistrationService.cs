@@ -37,7 +37,7 @@ public sealed class DriverRegistrationService(AppDbContext db, IPasswordService 
         var user = new User { Id = Guid.NewGuid(), FullName = request.FullName.Trim(), Email = email, Phone = phone,
             PasswordHash = passwords.Hash(request.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
-            AccountType = "DRIVER", CreatedOn = now, Status = "ACTIVE" };
+            CreatedOn = now, Status = "ACTIVE" };
         account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id.Value, RoleCode = "DRIVER" });
         user.Accounts.Add(account);
         var registration = new DriverRegistration { Id = Guid.NewGuid(), UserId = user.Id.Value, Channel = email != null ? "email" : "sms" };

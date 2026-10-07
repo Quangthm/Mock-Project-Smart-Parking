@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -7,6 +7,7 @@ namespace SmartParking.UserService.Domain.Enum
     public enum UserStatus
     {
         Active,
+        Inactive,
         Locked,
         PendingVerification,
         PendingApproval,

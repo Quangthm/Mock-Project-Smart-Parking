@@ -21,11 +21,11 @@ public sealed class AuthSessionTests
         Assert.Equal(f.User.Id, result.Session!.User!.UserId);
         Assert.Equal("driver", result.Session.User.Role);
         Assert.Equal("Bearer", result.Session.TokenType);
-        Assert.Equal(3600, result.Session.ExpiresIn);
+        Assert.Equal(86400, result.Session.ExpiresIn);
         Assert.NotEmpty(result.Session.RefreshToken!);
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Session.AccessToken);
         Assert.Equal("RS256", jwt.Header.Alg);
-        Assert.Equal(3600, (jwt.ValidTo - jwt.ValidFrom).TotalSeconds);
+        Assert.Equal(86400, (jwt.ValidTo - jwt.ValidFrom).TotalSeconds);
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(result.Session.AccessToken!));
         var stored = Assert.Single(f.Sessions.Snapshot);
         Assert.NotEqual(result.Session.RefreshToken, stored.TokenHash);
@@ -216,7 +216,7 @@ public sealed class AuthSessionTests
         var parts = first.AccessToken!.Split('.');
         parts[1] = Base64UrlEncoder.Encode("{\"sub\":\"admin\",\"role\":\"admin\"}");
         Assert.False(await f.Tokens.ValidateAccessTokenAsync(string.Join('.', parts)));
-        f.Clock.Now = f.Clock.Now.AddHours(1);
+        f.Clock.Now = f.Clock.Now.AddHours(24);
         Assert.False(await f.Tokens.ValidateAccessTokenAsync(first.AccessToken));
     }
 }

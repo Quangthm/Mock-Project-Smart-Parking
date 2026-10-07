@@ -13,6 +13,7 @@ public class User : BaseEntity
     public string PasswordHash { get; set; } = string.Empty;
 
     public string FullName { get; set; } = string.Empty;
+    public string? CompanyName { get; set; }
 
     public UserStatus Status { get; set; }
 

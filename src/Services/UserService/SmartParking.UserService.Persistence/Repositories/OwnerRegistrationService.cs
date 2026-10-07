@@ -9,7 +9,7 @@ using UserService.Application.DTOs;
 
 namespace UserService.Persistence.Repositories;
 
-public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService passwords, TimeProvider clock)
+public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking)
     : IOwnerRegistrationService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
@@ -33,10 +33,10 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
             ((u.Email != null && u.Email.ToLower() == email) || u.Phone == phone), ct))
             throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409);
         var now = clock.GetUtcNow();
-        var user = new User { Id = Guid.NewGuid(), FullName = body.FullName.Trim(), Email = email, Phone = phone,
+        var user = new User { Id = Guid.NewGuid(), FullName = body.FullName.Trim(), CompanyName = body.BusinessName.Trim(), Email = email, Phone = phone,
             PasswordHash = passwords.Hash(body.Password), Status = UserStatus.PendingApproval, CreatedOn = now, ModifiedOn = now };
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
-            AccountType = "BUSINESS_OPERATOR", Status = "SUSPENDED", CreatedOn = now };
+            Status = "PENDING_APPROVAL", CreatedOn = now };
         account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id.Value, RoleCode = "BUSINESS_OWNER" });
         user.Accounts.Add(account);
         var application = new OwnerApplication { Id = Guid.NewGuid(), UserId = user.Id.Value, User = user,
@@ -79,7 +79,7 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         await db.Entry(user).Collection(u => u.Accounts).Query().Include(a => a.AccountRoles).LoadAsync(ct);
         if (application.Status != "pending" || user.DeletedOn != null || user.Status != UserStatus.PendingApproval)
             throw Error("APPLICATION_CLOSED", "Owner application is no longer pending.", 409);
-        var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "SUSPENDED" &&
+        var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "PENDING_APPROVAL" &&
             a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"));
         if (account is null) throw Error("APPLICATION_CLOSED", "Owner account is no longer eligible for review.", 409);
         application.User = user;
@@ -89,7 +89,15 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         application.ReviewNote = body.ReviewNote?.Trim();
         user.Status = body.Status == "approved" ? UserStatus.Active : UserStatus.Rejected;
         user.ModifiedOn = clock.GetUtcNow();
-        if (body.Status == "approved") account.Status = "ACTIVE";
+        if (body.Status == "approved")
+        {
+            // Deterministic ID makes remote provisioning retryable if the local commit fails.
+            var tenantId = application.Id;
+            await parking.ProvisionTenantAsync(tenantId, application.BusinessName, user.Email!, user.Phone!, ct);
+            account.TenantId = tenantId;
+            account.Status = "ACTIVE";
+        }
+        else account.Status = "INACTIVE";
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return Result(application);

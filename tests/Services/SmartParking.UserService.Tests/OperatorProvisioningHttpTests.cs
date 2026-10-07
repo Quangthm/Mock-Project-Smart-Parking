@@ -29,6 +29,8 @@ public sealed class OperatorProvisioningHttpTests
                 "operator", "active", ownerId, body.SiteIds, body.Permissions));
         }
         public Task<bool> HasPermissionAsync(Guid operatorId, Guid siteId, string permission, CancellationToken ct) => Task.FromResult(false);
+        public Task<IReadOnlyList<OperatorDto>> ListAsync(Guid ownerId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorDto>>([]);
+        public Task<IReadOnlyList<OperatorAssignment>> AssignmentsAsync(Guid operatorId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorAssignment>>([]);
     }
 
     [Fact]
