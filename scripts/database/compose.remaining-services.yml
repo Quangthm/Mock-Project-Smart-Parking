@@ -1,0 +1,55 @@
+# Optional extension to arch/database-schema/compose.schema-integration.yml.
+# Load scripts/import-local-config.ps1 before using this file.
+services:
+  payment-db:
+    image: postgres:16-alpine
+    profiles: [remaining]
+    environment:
+      POSTGRES_DB: smartpark_payment
+      POSTGRES_USER: smartpark_payment
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:5444:5432"]
+    volumes:
+      - payment-schema-data:/var/lib/postgresql/data
+      - ${SMARTPARK_SCHEMA_ROOT:?Set SMARTPARK_SCHEMA_ROOT}/scripts/database/microservices/04-payment-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_payment -d smartpark_payment"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  notification-db:
+    image: postgres:16-alpine
+    profiles: [remaining]
+    environment:
+      POSTGRES_DB: smartpark_notification
+      POSTGRES_USER: smartpark_notification
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:5445:5432"]
+    volumes:
+      - notification-schema-data:/var/lib/postgresql/data
+      - ${SMARTPARK_SCHEMA_ROOT:?Set SMARTPARK_SCHEMA_ROOT}/scripts/database/microservices/05-notification-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_notification -d smartpark_notification"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  iot-db:
+    image: postgres:16-alpine
+    profiles: [remaining]
+    environment:
+      POSTGRES_DB: smartpark_iot
+      POSTGRES_USER: smartpark_iot
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:5446:5432"]
+    volumes:
+      - iot-schema-data:/var/lib/postgresql/data
+      - ${SMARTPARK_SCHEMA_ROOT:?Set SMARTPARK_SCHEMA_ROOT}/scripts/database/microservices/06-iot-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_iot -d smartpark_iot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  payment-schema-data:
+  notification-schema-data:
+  iot-schema-data:

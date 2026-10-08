@@ -1,6 +1,11 @@
-param([Parameter(Mandatory)][ValidateSet('User','Parking','Reservation')][string]$Service)
+param(
+    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation')][string]$Service,
+    [string]$ConfigPath
+)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
+if ($ConfigPath) { & (Join-Path $PSScriptRoot 'import-local-config.ps1') -ConfigPath $ConfigPath }
+else { & (Join-Path $PSScriptRoot 'import-local-config.ps1') }
 if (!$env:SMARTPARK_DEV_PASSWORD) { throw 'Set SMARTPARK_DEV_PASSWORD in this terminal.' }
 if (!$env:SMARTPARK_SERVICE_KEY -or $env:SMARTPARK_SERVICE_KEY.Length -lt 32) { throw 'Set SMARTPARK_SERVICE_KEY (at least 32 characters) in this terminal.' }
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
