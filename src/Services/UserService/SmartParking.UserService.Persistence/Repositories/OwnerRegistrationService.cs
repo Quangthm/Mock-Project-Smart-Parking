@@ -46,9 +46,8 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: "23505" })
         { throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409); }
         var challenge = await workflows.IssueOwnerAsync(user, ct);
-        var phoneChallenge=await workflows.IssueOwnerPhoneAsync(user,ct);
         await tx.CommitAsync(ct);
-        return Result(application) with { Verification = challenge,PhoneVerification=phoneChallenge, ContactVerified = false };
+        return Result(application) with { Verification = challenge, ContactVerified = false };
     }
 
     private async Task RequireAdmin(Guid id, CancellationToken ct)
@@ -65,7 +64,7 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         await RequireAdmin(adminId, ct);
         var applications = await db.OwnerApplications.AsNoTracking().Include(a => a.User)
             .Where(a => a.User.DeletedOn == null).OrderByDescending(a => a.SubmittedAt).ToListAsync(ct);
-        var verified = await db.Users.Where(u=>u.EmailVerifiedAt!=null && u.PhoneVerifiedAt!=null).Select(u=>u.Id!.Value).ToArrayAsync(ct);
+        var verified = await db.Users.Where(u=>u.EmailVerifiedAt!=null).Select(u=>u.Id!.Value).ToArrayAsync(ct);
         var deliveries=await db.WorkflowDeliveries.AsNoTracking().Where(d=>d.Kind=="OWNER_DECISION").ToArrayAsync(ct);
         return applications.Select(a => {var delivery=deliveries.SingleOrDefault(d=>d.UserId==a.UserId);return Result(a) with { ContactVerified = verified.Contains(a.UserId),DeliveryId=delivery?.Id,DeliveryStatus=delivery?.Status };}).ToList();
     }
@@ -84,7 +83,7 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         await db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={application.UserId} ORDER BY id FOR UPDATE").Include(a=>a.AccountRoles).LoadAsync(ct);
         if (application.Status != "pending" || user.DeletedOn != null || user.Status != UserStatus.PendingApproval)
             throw Error("APPLICATION_CLOSED", "Owner application is no longer pending.", 409);
-        if (user.EmailVerifiedAt is null || user.PhoneVerifiedAt is null)
+        if (user.EmailVerifiedAt is null)
             throw Error("CONTACT_UNVERIFIED", "Verify required contact before approval.", 409);
         var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "PENDING_APPROVAL" &&
             a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"));
