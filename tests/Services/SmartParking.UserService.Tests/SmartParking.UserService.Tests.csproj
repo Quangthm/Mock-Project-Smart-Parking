@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -20,6 +21,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Persistence\SmartParking.UserService.Persistence.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Infrastructure\SmartParking.UserService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.API\SmartParking.UserService.API.csproj" />
+    <ProjectReference Include="../../../src/Services/ParkingService/SmartParking.ParkingService.API/SmartParking.ParkingService.API.csproj" />
+    <ProjectReference Include="../../../src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
   </ItemGroup>
 
 </Project>

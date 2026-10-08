@@ -2,70 +2,54 @@ using MediatR;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
-using UserService.Application.DTOs;
+using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
 
 namespace UserService.Application.Usecase.Login;
 
-public class LoginCommandHandler
+public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService passwords,
+    AuthSessionService sessions, AuthenticationPolicy policy, TimeProvider clock, IMfaPolicy? mfa = null)
     : IRequestHandler<LoginCommand, LoginResult>
 {
-    private readonly IUnitOfWork unitOfWork;
-    private readonly IAccessTokenService accessTokenService;
-
-    public LoginCommandHandler(
-        IUnitOfWork unitOfWork,
-        IAccessTokenService accessTokenService)
+    public async Task<LoginResult> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
-        this.unitOfWork = unitOfWork;
-        this.accessTokenService = accessTokenService;
-    }
-
-    public async Task<LoginResult> Handle(
-        LoginCommand request,
-        CancellationToken cancellationToken)
-    {
-        var user = await this.unitOfWork.UserRepository
-            .GetByEmailAsync(request.Email, cancellationToken);
-
-        if (user is null)
+        await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
+        var user = await unitOfWork.UserRepository.GetByEmailForLoginAsync(request.Email.Trim(), cancellationToken);
+        if (user is null || user.DeletedOn != null)
+            return new(null, "AUTH_FAILED");
+        var now = clock.GetUtcNow();
+        if (user.Status == UserStatus.Locked)
         {
-            return new LoginResult(null);
+            // Null means an administrative lock; timed locks expire automatically.
+            if (user.LockedUntil is null || user.LockedUntil > now)
+                return new(null, "ACCOUNT_LOCKED");
+            user.Status = UserStatus.Active;
+            user.LockedUntil = null;
+            user.FailedLoginAttempts = 0;
         }
-
-        var firstAccount = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE");
-        var firstRole = firstAccount?.AccountRoles.FirstOrDefault()?.RoleCode ?? "driver";
-
-        if (user.Status != UserStatus.Active || user.PasswordHash != request.Password || firstAccount == null)
+        if (user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
+            return new(null, "AUTH_FAILED");
+        if (mfa is not null && await mfa.MfaEnabledAsync(user.Id!.Value,cancellationToken))
+            return new(null,"MFA_REQUIRED");
+        if (!passwords.Verify(request.Password, user.PasswordHash))
         {
-            return new LoginResult(null);
-        }
-
-        var accessToken =
-            this.accessTokenService
-                .GenerateAccessToken(user);
-
-        return new LoginResult(new UserSessionDto
-        {
-            AccessToken = accessToken,
-            // No fake refresh token: refresh persistence/rotation is outside this demo.
-            RefreshToken = null,
-            ExpiresIn = AccessTokenService.LifetimeSeconds,
-            User = new UserInfoDto
+            user.FailedLoginAttempts++;
+            if (user.FailedLoginAttempts >= policy.MaxFailedLoginAttempts)
             {
-                UserId = user.Id!.Value,
-                FullName = user.FullName,
-                Email = user.Email ?? string.Empty,
-                Role = firstRole.ToLowerInvariant()
+                user.Status = UserStatus.Locked;
+                user.LockedUntil = now.AddMinutes(policy.LockoutMinutes);
             }
-        });
-    }
-}
-
-public class AccountLockedException : Exception
-{
-    public AccountLockedException(string message)
-        : base(message)
-    {
+            user.ModifiedOn = now;
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new(null, user.Status == UserStatus.Locked ? "ACCOUNT_LOCKED" : "AUTH_FAILED");
+        }
+        user.FailedLoginAttempts = 0;
+        user.LockedUntil = null;
+        user.ModifiedOn = now;
+        var session = await sessions.CreateAsync(user, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new(session);
     }
 }

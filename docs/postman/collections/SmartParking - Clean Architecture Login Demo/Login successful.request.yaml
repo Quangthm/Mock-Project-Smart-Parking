@@ -18,10 +18,10 @@ scripts:
       pm.test("Success flag", function () { pm.expect(body.success).to.eql(true); });
       pm.test("Session and seeded user", function () {
         pm.expect(body.data.accessToken.split(".")).to.have.lengthOf(3);
-        pm.expect(body.data.refreshToken).to.eql(null);
+        pm.expect(body.data.refreshToken).to.be.a("string").and.not.empty;
         pm.expect(body.data.user.role).to.eql("driver");
         pm.expect(body.data.tokenType).to.eql("Bearer");
-        pm.expect(body.data.expiresIn).to.eql(300);
+        pm.expect(body.data.expiresIn).to.eql(3600);
         pm.expect(body.data.user.userId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
         pm.expect(body.data.user.email).to.eql("driver@gmail.com");
         pm.expect(body.data.user).not.to.have.property("passwordHash");

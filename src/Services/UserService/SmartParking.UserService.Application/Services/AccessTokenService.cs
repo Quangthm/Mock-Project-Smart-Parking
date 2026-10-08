@@ -1,74 +1,65 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.UserService.Domain.Entities;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
 
 namespace UserService.Application.Services;
 
-public sealed class AccessTokenService(
-    IConfiguration configuration, IAuthSessionStore sessions, TimeProvider clock) : IAccessTokenService
+public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
+    IAuthSessionStore sessions, TimeProvider clock) : IAccessTokenService
 {
-    public const int LifetimeSeconds = 300; // Existing demo lifetime; see the decision report.
+    public const int LifetimeSeconds = 24 * 60 * 60;
 
-    public static TokenValidationParameters ValidationParameters(JwtOptions options) => new()
+    public static TokenValidationParameters ValidationParameters(JwtOptions options, JwtKeyProvider keys) => new()
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        RequireSignedTokens = true,
-        RequireExpirationTime = true,
-        ValidIssuer = options.Issuer,
-        ValidAudience = options.Audience,
-        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)),
-        ClockSkew = TimeSpan.Zero,
-        NameClaimType = JwtRegisteredClaimNames.Sub,
-        RoleClaimType = "role"
+        ValidateIssuer = true, ValidateAudience = true, ValidateLifetime = true,
+        ValidateIssuerSigningKey = true, RequireSignedTokens = true, RequireExpirationTime = true,
+        ValidIssuer = options.Issuer, ValidAudience = options.Audience,
+        ValidAlgorithms = [SecurityAlgorithms.RsaSha256], IssuerSigningKey = keys.ValidationKey,
+        ClockSkew = TimeSpan.Zero, NameClaimType = JwtRegisteredClaimNames.Sub, RoleClaimType = "role"
     };
 
-    public string GenerateAccessToken(User user)
+    public static string? CurrentRole(User user)
     {
-        var options = configuration.GetSection("Jwt").Get<JwtOptions>()
-            ?? throw new InvalidOperationException("JWT configuration is required.");
-        var sessionId = Guid.NewGuid().ToString("N");
-        var now = clock.GetUtcNow();
-        var expires = now.AddSeconds(LifetimeSeconds);
-        var role = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE")?.AccountRoles.FirstOrDefault()?.RoleCode.ToLowerInvariant()
-            ?? throw new InvalidOperationException("A login account must have an assigned role.");
-        var credentials = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)), SecurityAlgorithms.HmacSha256);
-        var token = new JwtSecurityToken(options.Issuer, options.Audience,
-            [new Claim(JwtRegisteredClaimNames.Sub, user.Id!.Value.ToString()),
-             new Claim(JwtRegisteredClaimNames.Jti, sessionId), new Claim("role", role)],
-            now.UtcDateTime, expires.UtcDateTime, credentials);
-        var encodedToken = new JwtSecurityTokenHandler().WriteToken(token);
-        sessions.Add(sessionId, user.Id.Value, expires);
-        return encodedToken;
+        var code = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE" && a.DeletedOn == null && a.AccountRoles.Any())?
+            .AccountRoles.First().RoleCode;
+        return code?.ToUpperInvariant() switch
+        {
+            "PLATFORM_ADMIN" or "ADMIN" => "admin",
+            "BUSINESS_OWNER" or "OWNER" => "owner",
+            "SITE_OPERATOR" or "OPERATOR" => "operator",
+            "DRIVER" => "driver",
+            _ => null
+        };
     }
 
-    public bool ValidateAccessToken(string accessToken)
+    public string GenerateAccessToken(User user, Guid accessTokenId, DateTimeOffset expiresAt)
+    {
+        var role = CurrentRole(user) ?? throw new InvalidOperationException("A login account must have an assigned role.");
+        var token = new JwtSecurityToken(options.Issuer, options.Audience,
+            [new Claim(JwtRegisteredClaimNames.Sub, user.Id!.Value.ToString()),
+             new Claim(JwtRegisteredClaimNames.Jti, accessTokenId.ToString("N")), new Claim("role", role)],
+            clock.GetUtcNow().UtcDateTime, expiresAt.UtcDateTime,
+            new SigningCredentials(keys.SigningKey, SecurityAlgorithms.RsaSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public async Task<bool> ValidateAccessTokenAsync(string accessToken, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(accessToken)) return false;
         try
         {
-            var options = configuration.GetSection("Jwt").Get<JwtOptions>();
-            if (options is null) return false;
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
-            var principal = handler.ValidateToken(accessToken, ValidationParameters(options), out _);
+            var principal = handler.ValidateToken(accessToken, ValidationParameters(options, keys), out _);
             return Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId)
-                && sessions.IsActive(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ?? "", userId);
+                && Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value, out var tokenId)
+                && await sessions.IsActiveAsync(tokenId, userId, cancellationToken);
         }
         catch (Exception exception) when (exception is SecurityTokenException or ArgumentException)
         {
             return false;
         }
     }
-
-    public string RefreshAccessToken(string accessToken, string refreshToken) =>
-        throw new NotSupportedException("Refresh is not implemented in this demo. Sign in again.");
 }

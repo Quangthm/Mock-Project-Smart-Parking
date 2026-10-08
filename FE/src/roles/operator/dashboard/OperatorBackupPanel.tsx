@@ -1,0 +1,13 @@
+import { useEffect, useState } from 'react';
+import { request } from '../../../lib/authApi';
+import { operatorsApi, type OperatorAssignment, type Structure } from '../../../lib/parkingApi';
+const server=(import.meta.env.VITE_PARKING_API_BASE_URL??'http://localhost:5045').replace(/\/$/,'');
+export function OperatorBackupPanel(){
+  const [sites,setSites]=useState<OperatorAssignment[]>([]);const [site,setSite]=useState('');const [layout,setLayout]=useState<Structure|null>(null);
+  const [reason,setReason]=useState('');const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [reload,setReload]=useState(0);
+  useEffect(()=>{let active=true;operatorsApi.assignments().then(values=>{if(active)setSites(values.filter(v=>v.permissions.includes('SLOT_OVERRIDE')));}).catch(e=>{if(active)setMessage(e instanceof Error?e.message:'Cannot load assigned lots.');});return()=>{active=false;};},[]);
+  useEffect(()=>{let active=true;setLayout(null);if(site)request<{data:Structure}>(`/${site}/operational-layout`,'GET',undefined,'/api/parking-lots',server).then(r=>{if(active)setLayout(r.data);}).catch(e=>{if(active)setMessage(e instanceof Error?e.message:'Cannot load slots.');});return()=>{active=false;};},[site,reload]);
+  async function mark(id:string){if(busy)return;setBusy(true);setMessage('');try{await request(`/${site}/slots/${id}/backup`,'POST',{reason},'/api/parking-lots',server);setReload(n=>n+1);setMessage('Slot marked as backup.');}catch(e){setMessage(e instanceof Error?e.message:'Cannot mark backup.');}finally{setBusy(false);}}
+  if(!sites.length)return message?<p role="alert">{message}</p>:null;
+  return <section className="card"><h3>Operational backup slots</h3><label className="label">Assigned lot<select className="input" disabled={busy} value={site} onChange={e=>{setSite(e.target.value);setMessage('');}}><option value="">Select a lot</option>{sites.map(s=><option key={s.siteId} value={s.siteId}>{s.siteId}</option>)}</select></label><label className="label">Reason<input className="input" maxLength={2000} value={reason} onChange={e=>setReason(e.target.value)} disabled={busy}/></label>{layout?.slots.map(slot=><p key={slot.id}><strong>{slot.code}</strong> · {slot.vehicleType} · {slot.reservationState??'Not reserved'} <button className="btn-outline" disabled={busy || !reason.trim() || slot.isPhysicallyOccupied || slot.operationalStatus!=='OPERATIONAL' || slot.reservationState!==null} onClick={()=>void mark(slot.id)}>Mark backup</button></p>)}<p>Backup remains designated until the applicable release policy is fulfilled.</p><p role="status">{message}</p></section>;
+}

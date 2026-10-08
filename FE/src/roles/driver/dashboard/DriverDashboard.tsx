@@ -12,6 +12,9 @@ import { DriverSupport } from "../support/DriverSupport"
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
+import { VehicleManager } from "./VehicleManager"
+import { AccountSecurityPanel } from "../../../components/forms/AccountSecurityPanel"
+
 type Tab = "home" | "subscriptions" | "support"
 type HomePanel = "find" | "bookings" | "history"
 type ProfileSection = "account" | "security" | "vehicles"
@@ -24,11 +27,7 @@ export function DriverDashboard() {
   const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null)
   const [profileSection, setProfileSection] = useState<ProfileSection | null>(null)
   const [accountForm, setAccountForm] = useState({ name: "", phone: "" })
-  const [securityForm, setSecurityForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" })
   const [profileMessage, setProfileMessage] = useState("")
-  const [vehicles, setVehicles] = useState(() => user ? store.getVehiclesByDriver(user.id) : [])
-  const [vehicleForm, setVehicleForm] = useState({ type: "motorcycle" as "motorcycle" | "car", plateType: "vn" as "vn" | "foreign", plate: "", plateImageUrl: "" })
-  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -47,64 +46,11 @@ export function DriverDashboard() {
     !["completed", "cancelled"].includes(b.status),
   )
 
-  function addVehicle(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!user) return
-    const plate = vehicleForm.plate.trim().toUpperCase().replace(/\s+/g, "")
-    const valid = vehicleForm.plateType === "foreign"
-      ? /^(?=.*[A-Z])(?=.*\d)[A-Z0-9-]{4,12}$/.test(plate)
-      : vehicleForm.type === "car"
-        ? /^\d{2}[A-Z]{1,2}-?\d{4,5}$/.test(plate)
-        : /^(\d{2}-?[A-Z]\d?-?\d{4,5}|\d{2}V[A-Z]-?\d{5})$/.test(plate)
-    if (!valid) {
-      setProfileMessage("Please enter a valid license plate for the selected vehicle and region.")
-      return
-    }
-    if (editingVehicleId) {
-      const existing = vehicles.find(vehicle => vehicle.id === editingVehicleId)
-      if (!existing || !store.updateVehicle({ ...existing, type: vehicleForm.type, plateType: vehicleForm.plateType, licensePlate: plate, plateImageUrl: vehicleForm.plateImageUrl || undefined })) {
-        setProfileMessage("This license plate is already saved.")
-        return
-      }
-      setVehicles(store.getVehiclesByDriver(user.id))
-      setEditingVehicleId(null)
-      setVehicleForm(form => ({ ...form, plate: "", plateImageUrl: "" }))
-      setProfileMessage("Vehicle updated.")
-      return
-    }
-    const created = store.createVehicle({ driverId: user.id, type: vehicleForm.type, plateType: vehicleForm.plateType, licensePlate: plate, plateImageUrl: vehicleForm.plateImageUrl || undefined })
-    if (!created) {
-      setProfileMessage(vehicles.length >= 3 ? "You can save up to 3 vehicles." : "This license plate is already saved.")
-      return
-    }
-    setVehicles((current) => [...current, created])
-    setVehicleForm((form) => ({ ...form, plate: "", plateImageUrl: "" }))
-    setProfileMessage("Vehicle saved. You can select it when booking.")
-  }
-
-  function removeVehicle(id: string) {
-    if (!user) return
-    store.deleteVehicle(id, user.id)
-    setVehicles(store.getVehiclesByDriver(user.id))
-    setProfileMessage("Vehicle removed.")
-  }
-
-  function editVehicle(id: string) {
-    const vehicle = vehicles.find(item => item.id === id)
-    if (!vehicle) return
-    setEditingVehicleId(id)
-    setVehicleForm({ type: vehicle.type, plateType: vehicle.plateType, plate: vehicle.licensePlate, plateImageUrl: vehicle.plateImageUrl ?? "" })
-    setProfileMessage("")
-  }
-
   function openProfileSection(section: ProfileSection) {
     setProfileSection(section)
     setProfileMessage("")
     if (section === "account") {
       setAccountForm({ name: user?.name ?? "", phone: user?.phone ?? "" })
-    }
-    if (section === "security") {
-      setSecurityForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
     }
   }
 
@@ -120,28 +66,6 @@ export function DriverDashboard() {
     store.saveUser(updatedUser)
     setUser(updatedUser)
     setProfileMessage("Your account settings have been saved.")
-  }
-
-  function saveSecurity(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!user) return
-    if (securityForm.currentPassword !== user.password) {
-      setProfileMessage("Your current password is incorrect.")
-      return
-    }
-    if (securityForm.newPassword.length < 8) {
-      setProfileMessage("Your new password must be at least 8 characters.")
-      return
-    }
-    if (securityForm.newPassword !== securityForm.confirmPassword) {
-      setProfileMessage("The new passwords do not match.")
-      return
-    }
-    const updatedUser = { ...user, password: securityForm.newPassword }
-    store.saveUser(updatedUser)
-    setUser(updatedUser)
-    setSecurityForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
-    setProfileMessage("Your password has been updated.")
   }
 
   const navGroups = [
@@ -224,80 +148,9 @@ export function DriverDashboard() {
                 </form>
               )}
 
-              {profileSection === "security" && (
-                <form onSubmit={saveSecurity} style={{ display: "grid", gap: "1rem", padding: "0 1.5rem 1.5rem" }}>
-                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.5 }}>Choose a strong password to help protect your SmartParking account.</p>
-                  <label style={{ display: "grid", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 600 }}>
-                    Current password
-                    <input className="input" type="password" value={securityForm.currentPassword} onChange={(e) => setSecurityForm((form) => ({ ...form, currentPassword: e.target.value }))} autoComplete="current-password" />
-                  </label>
-                  <label style={{ display: "grid", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 600 }}>
-                    New password
-                    <input className="input" type="password" value={securityForm.newPassword} onChange={(e) => setSecurityForm((form) => ({ ...form, newPassword: e.target.value }))} autoComplete="new-password" />
-                  </label>
-                  <label style={{ display: "grid", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 600 }}>
-                    Confirm new password
-                    <input className="input" type="password" value={securityForm.confirmPassword} onChange={(e) => setSecurityForm((form) => ({ ...form, confirmPassword: e.target.value }))} autoComplete="new-password" />
-                  </label>
-                  {profileMessage && <p role="status" style={{ margin: 0, color: profileMessage.includes("updated") ? "var(--primary)" : "#dc2626", fontSize: "0.82rem" }}>{profileMessage}</p>}
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.625rem", marginTop: "0.25rem" }}>
-                    <button className="btn-outline" type="button" onClick={() => setProfileSection(null)}>Cancel</button>
-                    <button className="btn-primary" type="submit">Update Password</button>
-                  </div>
-                </form>
-              )}
+              {profileSection === "security" && <AccountSecurityPanel key={user?.id}/>}
 
-              {profileSection === "vehicles" && (
-                <div style={{ display: "grid", gap: "1rem", padding: "0 1.5rem 1.5rem" }}>
-                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.5 }}>Save up to 3 vehicles. Choose a saved vehicle during booking so you do not need to enter its plate again.</p>
-                  {!vehicles.length && <p style={{ margin: 0, padding: "0.75rem 0", color: "var(--muted)", fontSize: "0.82rem" }}>No vehicles saved yet.</p>}
-                  {vehicles.map((vehicle) => (
-                    <div key={vehicle.id} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.85rem", border: "1px solid var(--border)", borderRadius: "0.875rem", background: "var(--card)" }}>
-                      {vehicle.plateImageUrl && <img src={vehicle.plateImageUrl} alt={`License plate ${vehicle.licensePlate}`} style={{ width: 72, height: 48, objectFit: "cover", borderRadius: "0.4rem", border: "1px solid var(--border)" }} />}
-                      <span aria-hidden="true" style={{ color: 'var(--primary)', display: 'inline-flex' }}><UntitledIcon name={vehicle.type === "car" ? "car" : "motorcycle"} size={20} /></span>
-                      <span style={{ minWidth: 0, flex: 1 }}>
-                        <span style={{ display: "block", fontWeight: 700, letterSpacing: "0.04em" }}>{vehicle.licensePlate}</span>
-                        <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>{vehicle.type === "car" ? "Car" : "Motorcycle"} · {vehicle.plateType === "foreign" ? "International" : "Vietnam"}</span>
-                      </span>
-                      <button className="btn-outline" type="button" onClick={() => editVehicle(vehicle.id)} style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem" }}>Edit</button>
-                      <button className="btn-outline" type="button" onClick={() => removeVehicle(vehicle.id)} style={{ padding: "0.35rem 0.6rem", fontSize: "0.75rem" }}>Delete</button>
-                    </div>
-                  ))}
-                  {vehicles.length < 3 || editingVehicleId ? (
-                    <form onSubmit={addVehicle} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", padding: "1rem", border: "1px solid var(--border)", borderRadius: "0.875rem" }}>
-                      <label style={{ display: "grid", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600 }}>Vehicle type
-                        <select className="input" value={vehicleForm.type} onChange={(event) => setVehicleForm((form) => ({ ...form, type: event.target.value as "motorcycle" | "car" }))}>
-                          <option value="motorcycle">Motorcycle</option><option value="car">Car</option>
-                        </select>
-                      </label>
-                      <label style={{ display: "grid", gap: "0.35rem", fontSize: "0.78rem", fontWeight: 600 }}>Plate region
-                        <select className="input" value={vehicleForm.plateType} onChange={(event) => setVehicleForm((form) => ({ ...form, plateType: event.target.value as "vn" | "foreign" }))}>
-                          <option value="vn">Vietnam</option><option value="foreign">International</option>
-                        </select>
-                      </label>
-                      <label style={{ display: "grid", gap: "0.35rem", gridColumn: "1 / -1", fontSize: "0.78rem", fontWeight: 600 }}>License plate
-                        <input className="input" value={vehicleForm.plate} onChange={(event) => { setVehicleForm((form) => ({ ...form, plate: event.target.value })); setProfileMessage("") }} placeholder={vehicleForm.plateType === "vn" ? "e.g. 51A-12345" : "e.g. ABC-1234"} />
-                      </label>
-                      <label style={{ display: "grid", gap: "0.35rem", gridColumn: "1 / -1", fontSize: "0.78rem", fontWeight: 600 }}>License plate image (optional)
-                        <input className="input" type="file" accept="image/*" onChange={(event) => {
-                          const file = event.target.files?.[0]
-                          if (!file) return
-                          if (file.size > 1_500_000) { setProfileMessage("Choose an image smaller than 1.5 MB."); return }
-                          const reader = new FileReader()
-                          reader.onload = () => setVehicleForm((form) => ({ ...form, plateImageUrl: String(reader.result ?? "") }))
-                          reader.readAsDataURL(file)
-                        }} />
-                        {vehicleForm.plateImageUrl && <img src={vehicleForm.plateImageUrl} alt="License plate preview" style={{ width: 160, height: 80, objectFit: "cover", borderRadius: "0.5rem", border: "1px solid var(--border)" }} />}
-                      </label>
-                      {profileMessage && <p role="status" style={{ gridColumn: "1 / -1", margin: 0, color: profileMessage.includes("saved") || profileMessage.includes("removed") ? "var(--primary)" : "#dc2626", fontSize: "0.78rem" }}>{profileMessage}</p>}
-                      <button className="btn-primary" type="submit" style={{ gridColumn: "1 / -1", justifyContent: "center" }}>{editingVehicleId ? "Save Vehicle" : "Add Vehicle"}</button>
-                    </form>
-                  ) : <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.8rem" }}>Vehicle limit reached (3/3).</p>}
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn-outline" type="button" onClick={() => setProfileSection(null)}>Done</button>
-                  </div>
-                </div>
-              )}
+              {profileSection === "vehicles" && <VehicleManager/>}
             </section>
           </div>
         )}

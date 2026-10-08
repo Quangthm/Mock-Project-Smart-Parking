@@ -9,9 +9,10 @@ public class LoginCommandValidator
     {
         RuleFor(x => x.Email)
             .NotEmpty()
-            .EmailAddress()
+            .Must(value => value != null && (System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), @"^\+?[0-9]{9,15}$")
+                || new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(value.Trim())))
             .WithErrorCode("EmailIsRequired")
-            .WithMessage("Email is required.");
+            .WithMessage("A valid email or phone number is required.");
 
         RuleFor(x => x.Password)
             .NotEmpty()

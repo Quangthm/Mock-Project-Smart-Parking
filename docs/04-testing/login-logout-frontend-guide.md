@@ -1,75 +1,124 @@
-# Chạy và kiểm tra login/logout đã nối frontend
+# Chạy và kiểm tra login/logout theo API design
 
-Ngày cập nhật: **05/10/2026**. Repository: `Mock-Project-Smart-Parking`, branch `demo`.
+> Historical report/guide. See [fix and review, 08/10/2026](cross-task-fix-review-2026-10-08.md) and its current contract links.
 
-## Chạy local
+Cập nhật 06/10/2026. Bảng đối chiếu và quyết định: [auth design alignment](../02-architecture/api/auth-design-alignment-2026-10-06.md).
 
-Tại thư mục gốc demo, mở hai terminal:
+## Chuẩn bị PostgreSQL
+
+Dự án dùng PostgreSQL tại `localhost:5433` theo `ConnectionStrings:DefaultConnection`. Với database mới:
 
 ```powershell
+docker compose up -d postgres-db
+```
+
+Với volume/database đã tồn tại, chạy `scripts/database/05.2-Auth-Design-Alignment.sql` trước khi chạy API. Script initialization không tự chạy lại khi volume đã có dữ liệu. Không xóa volume để migration.
+
+Ví dụ cho container của compose hiện tại:
+
+```powershell
+Get-Content -Raw scripts/database/05.2-Auth-Design-Alignment.sql | docker exec -i smartparking_db psql -U smartpark_user -d smartpark_db -v ON_ERROR_STOP=1
+```
+
+Seed mới dùng bcrypt cost 12: `driver@gmail.com / Password@123`. Nếu seed cũ vẫn plaintext, có script riêng `05.3-Demo-Password-Hash.sql` chỉ đổi đúng fixture có ID/email/password demo đã biết. Những user plaintext khác cần quy trình reset/chuyển đổi có kiểm soát. API không chấp nhận plaintext fallback.
+
+## Khóa ký RS256
+
+Production cần `Jwt:PrivateKeyPem` từ cấu hình ngoài repository (biến môi trường `Jwt__PrivateKeyPem` hoặc secret store). Issuer/audience phải thống nhất giữa các instance. Không commit private key.
+
+```powershell
+$env:Jwt__PrivateKeyPem = Get-Content -Raw -LiteralPath 'D:\Secrets\smartpark-jwt-private.pem'
+```
+
+Development có thể chạy không cấu hình key: API tự tạo RSA 2048-bit cho tiến trình đó. Khi dùng key tạm, restart sẽ làm token cũ không xác thực được. Muốn kiểm tra phiên qua restart/nhiều instance, cấu hình cùng RSA private key. Phiên/refresh token vẫn được lưu PostgreSQL.
+
+## Chạy API và frontend
+
+```powershell
+dotnet restore SmartParking.slnx
 dotnet run --project src/Services/UserService/SmartParking.UserService.API --launch-profile http
 ```
 
-```powershell
-Set-Location FE
-npm.cmd run dev -- --host 127.0.0.1
-```
+Chạy frontend bằng workflow Vite hiện tại. API mặc định `http://localhost:5035`; frontend hỗ trợ `VITE_API_BASE_URL`. CORS cho localhost/127.0.0.1 cổng 5173.
 
-Mở [frontend](http://127.0.0.1:5173/). API mặc định tại `http://localhost:5035`; `FE/src/lib/authApi.ts` hỗ trợ `VITE_API_BASE_URL` khi cần đổi API. CORS demo chỉ cho localhost/127.0.0.1 port 5173; nếu Vite tự chọn port khác, giải phóng port hoặc bổ sung origin có chủ đích.
-
-Account fixture: **driver@gmail.com / Password@123**. Đây là thông tin seed công khai phục vụ demo, không phải credential vận hành. Các account trong localStorage/frontend Sign Up chưa đồng bộ backend và không đăng nhập qua API được.
-
-## Kịch bản trình diễn
-
-1. Sign In, nhập account fixture với password sai: thấy `Invalid email or password.`.
-2. Nhập password đúng: dashboard hiển thị **Demo Driver**.
-3. F5: account được khôi phục bằng `GET /api/auth/me`.
-4. Mở menu account → Sign Out: quay về trang public.
-5. F5: không trở lại dashboard.
-6. Chạy collection Postman: token sau logout phải bị 401.
-7. Login rồi tắt API và Sign Out: giao diện hiện lỗi kết nối; khởi động API lại và thử Sign Out lần nữa. Phiên cũ đã mất khi API restart.
-8. Phiên demo hết sau 5 phút; frontend quay về Sign In, backend từ chối expired token.
-
-Không lưu hoặc chụp token/password thật để làm report. Dữ liệu parking/wallet/booking vẫn là mock; map thiếu API key không ảnh hưởng login.
-
-## Hợp đồng API hiện tại
+## Contract
 
 | Endpoint | Request | Thành công | Lỗi |
 | --- | --- | --- | --- |
-| POST /api/auth/login | JSON email/password | 200: success, data.accessToken, expiresIn=300, tokenType=Bearer, refreshToken=null, user (userId/fullName/email/role) | 400 validation; 401 credential/account không hợp lệ |
-| GET /api/auth/me | Authorization: Bearer token | 200: success, data=user | 401 thiếu/giả/hết hạn/thu hồi token hoặc account không Active |
-| POST /api/auth/logout | Authorization: Bearer token | 204, không có JSON body | 401 phiên không hợp lệ; frontend coi phiên 401 đã không dùng được và xóa local state |
+| POST /api/auth/login | JSON email/password | 200; accessToken, refreshToken, expiresIn=3600, tokenType=Bearer, user | 400 validation; 401 AUTH_FAILED; 403 ACCOUNT_LOCKED |
+| GET /api/auth/me | Bearer access token | 200; dữ liệu user hiện tại | 401 INVALID_TOKEN |
+| POST /api/auth/logout | Bearer access token + JSON refreshToken | 200; success=true, message | 400 MISSING_REFRESH_TOKEN; 401 INVALID_TOKEN; 500 REVOKE_SESSION_FAILED |
+| POST /api/auth/refresh | JSON refreshToken | 200; cặp token mới và user | 400 MISSING_REFRESH_TOKEN; 401 INVALID_TOKEN |
 
-Logout thu hồi **phiên hiện tại**. Nó không phải logout mọi thiết bị. Session store chỉ in-memory; reset/restart API làm các phiên cũ mất hiệu lực.
+Logout mẫu:
 
-Frontend dùng sessionStorage của tab để giữ access token qua F5, không lưu password từ login. User/role localStorage không được dùng để khôi phục xác thực. Không có refresh endpoint; sau hết hạn phải login lại.
+```json
+{ "refreshToken": "<refreshToken từ login>" }
+```
 
-## Kiểm tra có thể chạy lại
+Lỗi có dạng `{ "success": false, "code": "AUTH_FAILED", "message": "Invalid email or password." }`. Refresh endpoint/envelope là lựa chọn triển khai cần so lại khi có API design gốc.
+
+Refresh có hạn tuyệt đối 7 ngày. Rotation đổi cả refresh hash và access jti; cặp cũ không dùng lại được. Logout chỉ thu hồi đúng phiên có cặp token tương ứng, không thu hồi phiên thiết bị khác. Token của phiên khác không được dùng để logout. Database lưu hash, không lưu refresh token gốc.
+
+Frontend giữ access/refresh trong sessionStorage và gửi refreshToken khi Sign Out. Khi hết access token, frontend hiện yêu cầu đăng nhập lại; chưa tự gọi refresh. F5 xác minh user bằng `/me`. Sign Up và dữ liệu nghiệp vụ frontend vẫn là mock.
+
+Nếu logout trả 401, frontend kiểm tra lại `/me`: bearer còn hợp lệ thì giữ token và báo lỗi logout; `/me` trả 401 thì xóa phiên cục bộ và chuyển sang đăng nhập. Lỗi logout không được coi là thu hồi phiên thành công. Nếu kiểm tra `/me` lỗi mạng/server, token được giữ để thử lại.
+
+## Kịch bản kiểm tra
+
+1. Sai password trả 401/AUTH_FAILED; lần sai thứ ba trả 403/ACCOUNT_LOCKED. Password đúng vẫn bị chặn trong thời gian khóa.
+2. Sau khóa 15 phút, login đúng reset counter; khóa admin không có locked_until không tự mở.
+3. Login trả access 1 giờ, refresh thực, role từ backend và không trả password hash.
+4. Bearer đúng nhưng logout thiếu body/refresh trả 400/MISSING_REFRESH_TOKEN và phiên vẫn dùng được.
+5. Logout đúng trả 200; `/me` và refresh với token cũ bị 401/INVALID_TOKEN.
+6. Refresh tạo cặp mới; access cũ và refresh replay đều bị 401. Hai request refresh cùng snapshot chỉ một request thành công.
+7. Tài khoản bị khóa/xóa/đổi role không tiếp tục truy cập qua JWT cũ.
+8. Khi database lỗi lúc thu hồi, API trả REVOKE_SESSION_FAILED và frontend giữ trạng thái để thử lại.
+9. User cũ đã soft delete không cản user mới đăng nhập bằng cùng email; chỉ user chưa xóa được chọn.
+10. Logout sai cặp refresh trả 401 nhưng bearer vẫn dùng được; frontend báo lỗi và giữ phiên, không báo logout thành công.
+
+Import `docs/04-testing/postman/UserService.postman_collection.json`. Collection kiểm tra contract mới và giữ token trong biến runtime. Mỗi lần chạy collection có một login sai trên fixture; login đúng lần sau reset counter. Không chạy lặp request sai tới ngưỡng rồi kỳ vọng login thành công ngay.
+
+## Kiểm chứng
 
 ```powershell
-dotnet test SmartParking.slnx
-dotnet build src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj
+dotnet test SmartParking.slnx -c Release
+node --test tests/frontend/auth-api.test.cjs tests/frontend/auth-context.test.cjs
 Set-Location FE
 npm.cmd run build
-.\node_modules\.bin\tsc.cmd --noEmit
 ```
 
-Khi API đang chạy, import `docs/04-testing/postman/UserService.postman_collection.json` rồi chạy Collection Runner theo thứ tự. Collection giữ token trong biến tạm ở runtime và xóa biến sau kiểm tra revoked token.
+Review sau sửa ngày 06/10/2026: **54/54 test backend đạt, 0 skip** (51 ca auth/unit/HTTP, 1 scaffold có sẵn, 2 test PostgreSQL thật); **9/9 test hồi quy frontend đạt**, frontend build đạt. Test HTTP dùng TestHost và adapter lưu phiên riêng; hai test PostgreSQL dùng Docker PostgreSQL 16 để kiểm tra migration/concurrency/rotation/revocation qua DbContext mới và login khi email được dùng lại sau soft delete. Mỗi test tự tạo/xóa database riêng, tách khỏi dữ liệu dự án. Các test frontend dùng Node có sẵn và TypeScript trong `FE/node_modules`, cần cài dependency frontend trước khi chạy.
 
-Nếu đã có Newman trong cache dự án:
+Chạy Release giúp tránh ghi đè DLL Debug đang được Visual Studio giữ. Để chạy đủ 54 test, đặt `SMARTPARK_AUTH_TEST_CONNECTION` theo hướng dẫn bên dưới; không có biến này thì hai test PostgreSQL sẽ skip. Microsoft.OpenApi đã dùng bản vá 2.7.5; endpoint `/openapi/v1.json` được kiểm tra trả 200. Luồng HTTP thật đạt login 200, `/me` 200, logout sai refresh 401 vẫn giữ phiên, logout đúng 200 và token đã thu hồi 401. Cảnh báo bundle frontend lớn vẫn còn.
+
+Còn ngoài phạm vi: OTP, MFA, provisioning/registration backend, phân quyền nghiệp vụ toàn hệ thống, tự động refresh frontend. SRS còn ghi session 24 giờ; tác vụ này ưu tiên access 3600 giây trong báo cáo/API design.
+
+Review SPARK-173 tiếp theo ngày 06/10/2026: backend **54/54 đạt, 0 skip**, frontend **28/28 đạt**, frontend build đạt. Đã sửa lỗi mất token khi khôi phục phiên gặp lỗi tạm thời và phản hồi restore/logout cũ ghi đè trạng thái auth mới. Chi tiết, nguồn contract và giới hạn kiểm chứng: [báo cáo SPARK-173](spark-173-login-logout-review-2026-10-06.md).
+
+## Test PostgreSQL riêng
+
+Docker không bắt buộc: có thể dùng PostgreSQL cài trực tiếp hoặc server test khác. Trong lần kiểm tra 06/10/2026 đã dùng container Docker riêng. Khởi tạo PostgreSQL test ở cổng 65433 (không dùng volume dự án):
 
 ```powershell
-node .cache/npm/_npx/75b90f33e80c3d7c/node_modules/newman/bin/newman.js run docs/04-testing/postman/UserService.postman_collection.json
+docker run --detach --rm --name smartpark-auth-test --publish 127.0.0.1:65433:5432 --env POSTGRES_USER=auth_test --env POSTGRES_PASSWORD=auth_test --env POSTGRES_DB=postgres postgres:16-alpine
+docker exec smartpark-auth-test pg_isready -U auth_test -d postgres
 ```
 
-Không dựa vào đường dẫn cache này trên máy khác; có thể dùng Postman Runner thay thế.
+Khi `pg_isready` báo accepting connections, đặt connection string tới server cho phép tạo database tạm:
 
-Kết quả 05/10/2026: backend 16/16 test đạt (15 ca auth mới, 1 scaffold có sẵn), API build thành công; frontend build và TypeScript đạt; browser đã kiểm tra login sai/đúng, F5, logout và lỗi mạng. Newman: **10/10 request, 23/23 assertion đạt**, gồm me, logout và dùng lại token đã thu hồi.
+```powershell
+$env:SMARTPARK_AUTH_TEST_CONNECTION = 'Host=127.0.0.1;Port=65433;Database=postgres;Username=auth_test;Password=auth_test'
+dotnet test SmartParking.slnx --filter FullyQualifiedName~PostgresAuthTests
+```
 
-Ảnh minh chứng account trả từ backend và menu Sign Out:
+Mỗi test tự tạo database `smartpark_auth_test_<random>` và chỉ xóa database đó sau khi chạy. Bộ test kiểm tra migration chạy hai lần, chuyển seed plaintext đã biết, ba request sai đồng thời, rotation đồng thời, revoke, đọc phiên từ DbContext mới và email được dùng lại sau soft delete. Khi không đặt biến môi trường, các test này được đánh dấu skip có lý do, không tính là pass.
 
-![Demo Driver sau login API](evidence/auth-demo-login-2026-10-05.png)
+Sau khi chạy, dọn container test:
 
-## Giới hạn nghiệm thu
+```powershell
+docker stop smartpark-auth-test
+Remove-Item Env:SMARTPARK_AUTH_TEST_CONNECTION -ErrorAction SilentlyContinue
+```
 
-Đây là **tích hợp login/logout của demo hiện tại**, chưa phải bản auth đạt toàn bộ SRS. Còn thiếu OTP/lockout/MFA, bcrypt, RS256, session 24 giờ + refresh 7 ngày/rotation, đăng ký backend, store dùng chung và phân quyền nghiệp vụ. Xem [report quyết định](../05-project-management/decision-log/auth-demo-vs-van-report-2026-10-05.md).
+`--rm` dọn container/volume tạm khi stop. Không chạy các lệnh dọn này với container `smartparking_db` hoặc volume dự án.

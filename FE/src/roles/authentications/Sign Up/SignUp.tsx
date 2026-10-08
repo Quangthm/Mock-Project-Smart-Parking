@@ -1,10 +1,14 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../../../context/AppContext';
-import { authData as store } from '../data/data';
+import { ownerApi, type OwnerApplicationRecord } from '../../../lib/ownerApi';
 import type { LotType } from '../../../lib/types';
 import { BrandLogo } from '../../../components/brand/BrandLogo';
 import { PasswordVisibilityIcon } from '../../../components/forms/PasswordVisibilityIcon';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
+import { authApi, request, type DriverRegistration } from '../../../lib/authApi';
+import { DriverOtpForm, pendingDriverKey, restoreDriverRegistration } from './DriverOtpForm';
+
+import { OwnerVerification } from './OwnerVerification';
 
 type Tab = 'driver' | 'business';
 
@@ -145,6 +149,14 @@ export function SignUp() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showTnC, setShowTnC] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registration, setRegistration] = useState<DriverRegistration | null>(restoreDriverRegistration);
+  const [ownerRegistration,setOwnerRegistration]=useState<Pick<OwnerApplicationRecord,'email'|'verification'|'phoneVerification'>|null>(()=>{try{const value=JSON.parse(localStorage.getItem('sp_pending_owner_registration')??'null');return typeof value?.email==='string' && value?.verification && value?.phoneVerification?value:null;}catch{return null;}});
+  function saveRegistration(value: DriverRegistration) {
+    setRegistration(value);
+    // Store only the opaque challenge and timing; never store the password or OTP.
+    try { localStorage.setItem(pendingDriverKey, JSON.stringify(value)); } catch { /* Current tab can still verify. */ }
+  }
 
   const [driverForm, setDriverForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
   const [ownerForm, setOwnerForm] = useState({
@@ -152,44 +164,49 @@ export function SignUp() {
     lotType: 'outdoor' as LotType, agreedToPolicy: false,
   });
 
-  function submitDriver(e: React.FormEvent) {
+  async function submitDriver(e: React.FormEvent) {
     e.preventDefault();
+    if (registering) return;
     setError('');
-    const pwErrors = validatePassword(driverForm.password);
+    const pwErrors = driverForm.password?validatePassword(driverForm.password):[];
     if (pwErrors.length) { setError(`Password issue: ${pwErrors[0]}`); return; }
     if (driverForm.password !== driverForm.confirmPassword) { setError('Passwords do not match.'); return; }
-    if (store.findUserByEmail(driverForm.email)) { setError('This email is already registered.'); return; }
-    const user = store.createUser({
-      name: driverForm.name, email: driverForm.email, phone: driverForm.phone,
-      password: driverForm.password, role: 'driver', onboardingComplete: true, policyAccepted: true, wallet: 0,
-    });
-    store.addAuditLog({ userId: user.id, userName: user.name, userRole: 'driver', action: 'REGISTER', details: 'Driver registered' });
-    store.notifyRole('admin', 'NEW_DRIVER', 'New Driver account', 'A new Driver account has been created.', user.id);
-    setView('sign-in');
+    if (!driverForm.email.trim() && !driverForm.phone.trim()) { setError('Enter an email or phone number.'); return; }
+    setRegistering(true);
+    try {
+      saveRegistration(await authApi.registerDriver({ fullName: driverForm.name.trim(),
+        email: driverForm.email.trim() || undefined, phone: driverForm.phone.trim() || undefined, password: driverForm.password || undefined }));
+      setDriverForm(f => ({ ...f, password: '', confirmPassword: '' }));
+    } catch (e) {
+      try{saveRegistration(await authApi.recoverDriver(driverForm.email.trim()||driverForm.phone.trim()));setDriverForm(f=>({...f,password:'',confirmPassword:''}));}
+      catch{setError(e instanceof Error ? e.message : 'Registration failed.');}
+    }
+    finally { setRegistering(false); }
   }
 
-  function submitOwner(e: React.FormEvent) {
+  async function submitOwner(e: React.FormEvent) {
     e.preventDefault();
+    if (registering) return;
     setError('');
     if (!ownerForm.agreedToPolicy) { setError('You must read and agree to the Partner Agreement.'); return; }
-    const pwErrors = validatePassword(ownerForm.password);
+    const pwErrors = ownerForm.password?validatePassword(ownerForm.password):[];
     if (pwErrors.length) { setError(`Password issue: ${pwErrors[0]}`); return; }
     if (ownerForm.password !== ownerForm.confirmPassword) { setError('Passwords do not match.'); return; }
-    if (store.findUserByEmail(ownerForm.email)) { setError('This email is already registered.'); return; }
-
-    const user = store.createUser({
-      name: ownerForm.name, email: ownerForm.email, phone: ownerForm.phone,
-      password: ownerForm.password, role: 'owner',
-      onboardingComplete: false, policyAccepted: false, // requires admin approval
-    });
-    store.createApplication({
-      ownerId: user.id, ownerName: ownerForm.name, businessName: ownerForm.businessName,
-      lotType: ownerForm.lotType, applicationData: { lotType: ownerForm.lotType },
-      status: 'pending',
-    });
-    store.notifyRole('admin', 'NEW_APPLICATION', 'New partnership application', 'A new application has been submitted and is waiting for your review.', user.id);
-    store.addAuditLog({ userId: user.id, userName: user.name, userRole: 'owner', action: 'REGISTER', details: 'Owner registered, application pending admin approval' });
-    setView('pending-approval');
+    setRegistering(true);
+    try {
+      const application=await ownerApi.register({ fullName: ownerForm.name.trim(), businessName: ownerForm.businessName.trim(),
+        email: ownerForm.email.trim(), phone: ownerForm.phone.trim(), password: ownerForm.password || undefined,
+        lotType: ownerForm.lotType, agreedToPolicy: ownerForm.agreedToPolicy });
+      setOwnerForm(f => ({ ...f, password: '', confirmPassword: '' }));
+      setOwnerRegistration(application);try{localStorage.setItem('sp_pending_owner_registration',JSON.stringify(application));}catch{ /* This tab retains its challenges. */ }
+    } catch (e) {
+      try{
+        const recovered=await request<{data:Pick<OwnerApplicationRecord,'verification'|'phoneVerification'>}>('/register/owner/recover','POST',{contact:ownerForm.email.trim()});
+        const pending={email:ownerForm.email.trim(),...recovered.data};setOwnerRegistration(pending);setOwnerForm(f=>({...f,password:'',confirmPassword:''}));
+        try{localStorage.setItem('sp_pending_owner_registration',JSON.stringify(pending));}catch{/* Current tab retains its challenges. */}
+      }catch{setError(e instanceof Error ? e.message : 'Registration failed.');}
+    }
+    finally { setRegistering(false); }
   }
 
   const tabStyle = (t: Tab) => ({
@@ -214,26 +231,28 @@ export function SignUp() {
           <p style={{ color: 'var(--muted)', fontSize: '0.925rem' }}>Join SmartParking today</p>
         </div>
 
-        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '1.5rem' }}>
+        {!registration && !ownerRegistration && <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '1.5rem' }}>
           <button style={tabStyle('driver')} onClick={() => setTab('driver')}><UntitledIcon name="car" size={16} /> Driver</button>
           <button style={tabStyle('business')} onClick={() => setTab('business')}><UntitledIcon name="building" size={16} /> Business</button>
-        </div>
+        </div>}
 
-        {tab === 'driver' ? (
+        {ownerRegistration ? <OwnerVerification application={ownerRegistration} onVerified={()=>{try{localStorage.removeItem('sp_pending_owner_registration');localStorage.removeItem('sp_owner_verification_step');}catch{/* This tab can continue. */}setOwnerRegistration(null);setView('pending-approval');}}/> : registration ? <DriverOtpForm registration={registration} onUpdate={saveRegistration} onBack={() => setView('sign-in')}
+          onDifferentContact={() => { try { localStorage.removeItem(pendingDriverKey); } catch { /* No persistent storage. */ } setRegistration(null); }}
+          onVerified={() => { try { localStorage.removeItem(pendingDriverKey); } catch { /* No persistent storage. */ } setRegistration(null); setView('sign-in'); }} /> : tab === 'driver' ? (
           <form onSubmit={submitDriver} className="card auth-form-background" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <Field label="Full Name"><input className="input" value={driverForm.name} onChange={e => setDriverForm(f => ({ ...f, name: e.target.value }))} placeholder="Your full name" required style={{ fontSize: '1rem' }} /></Field>
-            <Field label="Email"><input className="input" type="email" value={driverForm.email} onChange={e => setDriverForm(f => ({ ...f, email: e.target.value }))} placeholder="you@example.com" required style={{ fontSize: '1rem' }} /></Field>
+            <Field label="Email"><input className="input" type="email" value={driverForm.email} onChange={e => setDriverForm(f => ({ ...f, email: e.target.value }))} placeholder="you@example.com" style={{ fontSize: '1rem' }} /></Field>
             <Field label="Phone Number"><input className="input" value={driverForm.phone} onChange={e => setDriverForm(f => ({ ...f, phone: e.target.value }))} placeholder="09xx-xxx-xxx" style={{ fontSize: '1rem' }} /></Field>
-            <Field label="Password">
+            <Field label="Password (optional; leave blank to use OTP sign-in)">
               <div style={{ position: 'relative' }}>
-                <input className="input" type={showPassword ? 'text' : 'password'} value={driverForm.password} onChange={e => setDriverForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8, max 15 characters" required style={{ paddingRight: '2.5rem', fontSize: '1rem' }} />
+                <input className="input" type={showPassword ? 'text' : 'password'} value={driverForm.password} onChange={e => setDriverForm(f => ({ ...f, password: e.target.value }))} placeholder="Optional, 8–15 characters" style={{ paddingRight: '2.5rem', fontSize: '1rem' }} />
                 <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} title={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><PasswordVisibilityIcon visible={showPassword} /></button>
               </div>
               <PasswordStrength pw={driverForm.password} />
             </Field>
-            <Field label="Confirm Password"><input className="input" type="password" value={driverForm.confirmPassword} onChange={e => setDriverForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Repeat your password" required style={{ fontSize: '1rem' }} /></Field>
+            <Field label="Confirm Password"><input className="input" type="password" value={driverForm.confirmPassword} onChange={e => setDriverForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Repeat your password" required={!!driverForm.password} style={{ fontSize: '1rem' }} /></Field>
             {error && <Err>{error}</Err>}
-            <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '0.75rem' }}>Create Driver Account</button>
+            <button type="submit" className="btn-primary" disabled={registering} style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '0.75rem' }}>{registering ? 'Creating Account…' : 'Create Driver Account'}</button>
             <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--muted)', margin: 0 }}>
               Already have an account?{' '}
               <button type="button" onClick={() => setView('sign-in')} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600, padding: 0, fontSize: '0.9rem' }}>Sign In</button>
@@ -256,14 +275,14 @@ export function SignUp() {
                 <option value="multi-storey">Multi-Storey Parking</option>
               </select>
             </Field>
-            <Field label="Password">
+            <Field label="Password (optional; leave blank to use OTP sign-in)">
               <div style={{ position: 'relative' }}>
-                <input className="input" type={showPassword ? 'text' : 'password'} value={ownerForm.password} onChange={e => setOwnerForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8, max 15 characters" required style={{ paddingRight: '2.5rem', fontSize: '1rem' }} />
+                <input className="input" type={showPassword ? 'text' : 'password'} value={ownerForm.password} onChange={e => setOwnerForm(f => ({ ...f, password: e.target.value }))} placeholder="Optional, 8–15 characters" style={{ paddingRight: '2.5rem', fontSize: '1rem' }} />
                 <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} title={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><PasswordVisibilityIcon visible={showPassword} /></button>
               </div>
               <PasswordStrength pw={ownerForm.password} />
             </Field>
-            <Field label="Confirm Password"><input className="input" type="password" value={ownerForm.confirmPassword} onChange={e => setOwnerForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Repeat password" required style={{ fontSize: '1rem' }} /></Field>
+            <Field label="Confirm Password"><input className="input" type="password" value={ownerForm.confirmPassword} onChange={e => setOwnerForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Repeat password" required={!!ownerForm.password} style={{ fontSize: '1rem' }} /></Field>
 
             {/* T&C — must click to read, shows modal, can't check until read */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
@@ -278,8 +297,8 @@ export function SignUp() {
             </div>
 
             {error && <Err>{error}</Err>}
-            <button type="submit" className="btn-accent" style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '0.75rem' }}>
-              Submit Partnership Application
+            <button type="submit" disabled={registering} className="btn-accent" style={{ width: '100%', justifyContent: 'center', fontSize: '1rem', padding: '0.75rem' }}>
+              {registering ? 'Submitting...' : 'Submit Partnership Application'}
             </button>
             <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--muted)', margin: 0 }}>
               Already have an account?{' '}
