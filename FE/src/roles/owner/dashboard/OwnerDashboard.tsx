@@ -8,9 +8,10 @@ import { OperatorManagement } from '../operators/OperatorManagement';
 import { PolicySettings } from '../policies/PolicySettings';
 import { SiteManagement } from '../parking-lots/SiteManagement';
 import { RevenueDashboard } from '../revenue/RevenueDashboard';
+import { ParkingStructure } from '../structure/ParkingStructure';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 
-type Tab = 'dashboard' | 'sites' | 'lots' | 'operators' | 'finance' | 'policy';
+type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy';
 
 export function OwnerDashboard() {
   const { user } = useApp();
@@ -36,6 +37,7 @@ export function OwnerDashboard() {
       { label: 'Parking management', items: [
         { id: 'sites', label: 'Sites', icon: '⌖', active: tab === 'sites', onClick: () => setTab('sites') },
         { id: 'lots', label: 'My parking lots', icon: '▦', active: tab === 'lots', onClick: () => setTab('lots') },
+        { id: 'structure', label: 'Parking Structure', icon: '🏢', active: tab === 'structure', onClick: () => setTab('structure') },
       ] },
       { label: 'Business', items: [
         { id: 'operators', label: 'Operators', icon: '♙', active: tab === 'operators', onClick: () => setTab('operators') },
@@ -54,6 +56,7 @@ export function OwnerDashboard() {
           {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'sites' && <SiteManagement sites={sites} operators={operators} onSiteCreated={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
+          {tab === 'structure' && <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} />}
           {tab === 'operators' && <OperatorManagement sites={sites} selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}

@@ -8,6 +8,7 @@ import { SlotManagement } from '../parking-slots/SlotManagement';
 import { TicketManagement } from '../tickets/TicketManagement';
 import type { OperatorAccessRole } from '../../../lib/types';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
+import { PaymentMethodLogo } from '../../../components/payment/PaymentMethodLogo';
 
 type Tab = 'checkin' | 'status' | 'emergency' | 'slots' | 'tickets' | 'finance';
 
@@ -93,7 +94,7 @@ export function OperatorDashboard({ accessRoleOverride }: { accessRoleOverride?:
                 <table className="w-full min-w-[600px] text-left text-sm">
                   <thead className="border-b border-[var(--border)] text-[var(--muted)]"><tr><th className="px-4 py-3">Booking</th><th className="px-4 py-3">Vehicle</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {completedBookings.map(booking => <tr key={booking.id}><td className="px-4 py-3 text-[var(--fg)]">{booking.id}</td><td className="px-4 py-3 text-[var(--fg)]">{booking.licensePlate}</td><td className="px-4 py-3 capitalize text-[var(--muted)]">{booking.paymentMethod ?? 'Pending reconciliation'}</td><td className="px-4 py-3 text-right font-medium text-[var(--fg)]">{booking.amount.toLocaleString('vi-VN')} ₫</td></tr>)}
+                    {completedBookings.map(booking => <tr key={booking.id}><td className="px-4 py-3 text-[var(--fg)]">{booking.id}</td><td className="px-4 py-3 text-[var(--fg)]">{booking.licensePlate}</td><td className="px-4 py-3 text-[var(--muted)]">{booking.paymentMethod ? <PaymentMethodLogo method={booking.paymentMethod} size="xs" showName /> : 'Pending reconciliation'}</td><td className="px-4 py-3 text-right font-medium text-[var(--fg)]">{booking.amount.toLocaleString('vi-VN')} ₫</td></tr>)}
                     {!completedBookings.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">No completed bookings to report.</td></tr>}
                   </tbody>
                 </table>

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react"
 import { useApp } from "../context/AppContext"
 import { UntitledIcon } from "../components/icon/UntitledIcon"
-import visaLogo from "../assets/payment-visa.jpg"
-import applePayLogo from "../assets/payment-applepay.jpg"
-import momoLogo from "../assets/payment-momo.png"
+import visaLogo from "../assets/payment-visa.webp"
+import applePayLogo from "../assets/Apple Pay.png"
+import momoLogo from "../assets/Momo.jpg"
 import vnpayLogo from "../assets/payment-vnpay.png"
 import zalopayLogo from "../assets/payment-zalopay.jpg"
 import qrLogo from "../assets/payment-qr.png"
@@ -490,9 +490,9 @@ export function Landing() {
                 />
                 <span
                   style={{
-                    fontSize: "0.78rem",
-                    color: "var(--muted)",
-                    fontWeight: 500,
+                    fontSize: "0.82rem",
+                    color: "var(--fg)",
+                    fontWeight: 600,
                   }}
                 >
                   {pm.name}

@@ -38,6 +38,7 @@ export const ALLOWED_PARKING_MODELS: Record<LotType, Parking3DModelDef> = {
 
 export const ALLOWED_MODEL_FILE_NAMES = [
   'outdoor_parking_lot.glb',
+  'outdoor_parking_lot_.glb',
   'indoor_parking_lot.glb',
   'underground_parking_lot.glb',
 ] as const;
@@ -50,6 +51,9 @@ export function isAllowedModelFileName(fileName: string): fileName is AllowedMod
 
 export function getModelDefByFileName(fileName: string): Parking3DModelDef | undefined {
   const normalized = fileName.trim().toLowerCase();
+  if (normalized === 'outdoor_parking_lot_.glb') {
+    return ALLOWED_PARKING_MODELS.outdoor;
+  }
   return Object.values(ALLOWED_PARKING_MODELS).find(m => m.fileName.toLowerCase() === normalized);
 }
 

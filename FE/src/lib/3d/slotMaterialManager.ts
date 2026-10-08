@@ -50,6 +50,7 @@ export class SlotMaterialManager {
         opacity,
         emissive: targetColor,
         emissiveIntensity,
+        side: THREE.DoubleSide,
       });
       this.activeMaterials.set(mesh.id, mat);
       mesh.material = mat;

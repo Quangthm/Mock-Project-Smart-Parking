@@ -333,10 +333,31 @@ export function BookingFlow({ lot, onDone, resumeBooking }: { lot: ParkingLot; o
         <h3 style={{ margin: "0 0 0.9rem", fontFamily: "Outfit", color: "var(--fg)" }}>Choose a payment method</h3>
         <p style={{ margin: "0 0 0.9rem", color: "var(--muted)", fontSize: "0.82rem" }}>Booking {bookingId || "pending"} is saved with Payment Pending. Choose a card, QR code, or another payment provider. You can return to Booking to continue later.</p>
         <p style={{ margin: "0 0 0.9rem", color: "var(--muted)", fontSize: "0.82rem" }}>Total due: <strong style={{ color: "var(--fg)" }}>{(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")}₫</strong></p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.6rem", marginBottom: "1rem" }}>
-          {PAYMENT_OPTIONS.map((option) => <button key={option.id} type="button" onClick={() => { setPaymentMethod(option.id); setMessage("") }} aria-pressed={paymentMethod === option.id} style={{ display: "grid", justifyItems: "center", gap: "0.4rem", padding: "0.75rem 0.4rem", borderRadius: "var(--radius)", border: `2px solid ${paymentMethod === option.id ? "var(--primary)" : "var(--border)"}`, background: "var(--card)", cursor: "pointer" }}>
-            <img src={option.logo} alt="" style={{ maxWidth: 64, height: 26, objectFit: "contain" }} /><span style={{ fontSize: "0.72rem", color: "var(--fg)" }}>{option.name}</span>
-          </button>)}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
+          {PAYMENT_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => { setPaymentMethod(option.id); setMessage("") }}
+              aria-pressed={paymentMethod === option.id}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.45rem",
+                padding: "0.85rem 0.5rem",
+                borderRadius: "var(--radius)",
+                border: `2px solid ${paymentMethod === option.id ? "var(--primary)" : "var(--border)"}`,
+                background: paymentMethod === option.id ? "color-mix(in srgb, var(--primary) 10%, var(--card))" : "var(--card)",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <img src={option.logo} alt={option.name} style={{ height: 28, maxWidth: 64, objectFit: "contain" }} />
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--fg)", textAlign: "center" }}>{option.name}</span>
+            </button>
+          ))}
         </div>
         {message && <p role="alert" style={{ color: "#b45309", fontSize: "0.82rem" }}>{message}</p>}
         <div style={{ display: "flex", gap: "0.6rem" }}>

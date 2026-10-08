@@ -120,10 +120,15 @@ export function Parking3DViewer({
     });
   }, [selectedSlotId, focusSlotId]);
 
+  const lastFocusedKeyRef = useRef<string | null>(null);
+
   // Focus camera on slot
   const focusOnSlotKey = useCallback((targetSlotKey: string) => {
     const inst = threeRef.current;
     if (!inst || !inst.slotMapping) return;
+
+    if (lastFocusedKeyRef.current === targetSlotKey) return;
+    lastFocusedKeyRef.current = targetSlotKey;
 
     const mesh = findSlotMesh(inst.slotMapping.meshBySlotKey, targetSlotKey);
     if (mesh) {
@@ -135,6 +140,7 @@ export function Parking3DViewer({
   const handleResetCamera = () => {
     const inst = threeRef.current;
     if (!inst || !inst.currentSceneContent) return;
+    lastFocusedKeyRef.current = null;
     inst.cameraController.resetToOverview(inst.currentSceneContent, inst.camera, inst.controls);
   };
 
@@ -249,10 +255,27 @@ export function Parking3DViewer({
     };
   }, []);
 
+  // Keep refs for dynamic props to prevent model re-loads on slot selection
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+
+  const onModelLoadedRef = useRef(onModelLoaded);
+  onModelLoadedRef.current = onModelLoaded;
+
+  const loadedModelUrlRef = useRef<string | null>(null);
+
+  const refreshSlotVisualsRef = useRef(refreshSlotVisuals);
+  refreshSlotVisualsRef.current = refreshSlotVisuals;
+
   // Load Model (.glb file or procedural twin)
   useEffect(() => {
     const inst = threeRef.current;
     if (!inst) return;
+
+    // Do not reload if this model URL is already loaded and present in the scene
+    if (loadedModelUrlRef.current === targetUrl && inst.currentSceneContent) {
+      return;
+    }
 
     setLoading(true);
     setLoadingError(null);
@@ -270,16 +293,17 @@ export function Parking3DViewer({
     ) => {
       inst.scene.add(loadedObject);
       inst.currentSceneContent = loadedObject;
+      loadedModelUrlRef.current = targetUrl || '';
 
-      // Map slots
-      const mapping = mapModelSlots(loadedObject, slots);
+      // Map slots using latest slots
+      const mapping = mapModelSlots(loadedObject, slotsRef.current);
       inst.slotMapping = mapping;
       setDetectedCount(mapping.detectedSlotKeys.length);
 
       // Visuals
-      refreshSlotVisuals();
+      refreshSlotVisualsRef.current();
 
-      // Frame camera
+      // Frame camera overview only on initial model load
       inst.cameraController.resetToOverview(loadedObject, inst.camera, inst.controls);
 
       setModelSourceInfo({
@@ -287,8 +311,8 @@ export function Parking3DViewer({
         fileName: resolvedName,
       });
 
-      if (onModelLoaded) {
-        onModelLoaded({
+      if (onModelLoadedRef.current) {
+        onModelLoadedRef.current({
           detectedSlotKeys: mapping.detectedSlotKeys,
           isCustomGlb: isGlb,
           modelName: resolvedName,
@@ -328,15 +352,26 @@ export function Parking3DViewer({
           console.info(
             `[3D Viewer] Model file "${cleanUrl}" not yet found on disk. Initializing high-fidelity procedural 3D model with matching naming convention (${expectedFileName}).`
           );
-          const proceduralLot = generateProceduralParkingLot(lotType, slots, 1);
+          const proceduralLot = generateProceduralParkingLot(lotType, slotsRef.current, 1);
           applySceneContent(proceduralLot, false, expectedFileName);
         }
       );
     } else {
-      const proceduralLot = generateProceduralParkingLot(lotType, slots, 1);
+      const proceduralLot = generateProceduralParkingLot(lotType, slotsRef.current, 1);
       applySceneContent(proceduralLot, false, expectedFileName);
     }
-  }, [targetUrl, lotType, slots, expectedFileName, refreshSlotVisuals]);
+  }, [targetUrl, lotType, expectedFileName]);
+
+  // Sync slot data when slots array updates without reloading the 3D model
+  useEffect(() => {
+    const inst = threeRef.current;
+    if (!inst || !inst.currentSceneContent) return;
+
+    const mapping = mapModelSlots(inst.currentSceneContent, slots);
+    inst.slotMapping = mapping;
+    setDetectedCount(mapping.detectedSlotKeys.length);
+    refreshSlotVisuals();
+  }, [slots, refreshSlotVisuals]);
 
   // Update visuals whenever selectedSlotId changes
   useEffect(() => {
@@ -367,23 +402,18 @@ export function Parking3DViewer({
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(x, y), inst.camera);
 
-    const slotMeshes: THREE.Object3D[] = [];
-    inst.slotMapping.meshBySlotKey.forEach((mesh) => {
-      if (mesh instanceof THREE.Mesh) slotMeshes.push(mesh);
-    });
-
+    const slotMeshes: THREE.Object3D[] = inst.slotMapping.allSlotMeshes || [];
     const intersects = raycaster.intersectObjects(slotMeshes, true);
     if (intersects.length > 0) {
-      // Find top slot object
       let targetMesh: THREE.Object3D | null = intersects[0].object;
-      while (targetMesh && !targetMesh.userData.isSlot && targetMesh.parent !== inst.scene) {
+      while (targetMesh && !targetMesh.userData.isSlot && targetMesh.parent && targetMesh.parent !== inst.scene) {
         targetMesh = targetMesh.parent;
       }
 
       if (targetMesh && targetMesh.userData.isSlot) {
         const slotData = (targetMesh.userData.slotData as ParkingSlot) || {
           id: targetMesh.userData.slotId || targetMesh.name,
-          number: targetMesh.name,
+          number: targetMesh.userData.slotNumber || targetMesh.name,
           floor: 1,
           status: 'available',
         };
@@ -391,6 +421,7 @@ export function Parking3DViewer({
         if (onSelectSlot) {
           onSelectSlot(slotData);
         }
+        lastFocusedKeyRef.current = slotData.id || slotData.number;
         inst.cameraController.focusOnObject(targetMesh, inst.camera, inst.controls);
       }
     }
@@ -410,21 +441,17 @@ export function Parking3DViewer({
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(x, y), inst.camera);
 
-    const slotMeshes: THREE.Object3D[] = [];
-    inst.slotMapping.meshBySlotKey.forEach((mesh) => {
-      if (mesh instanceof THREE.Mesh) slotMeshes.push(mesh);
-    });
-
+    const slotMeshes: THREE.Object3D[] = inst.slotMapping.allSlotMeshes || [];
     const intersects = raycaster.intersectObjects(slotMeshes, true);
     if (intersects.length > 0) {
       let targetMesh: THREE.Object3D | null = intersects[0].object;
-      while (targetMesh && !targetMesh.userData.isSlot && targetMesh.parent !== inst.scene) {
+      while (targetMesh && !targetMesh.userData.isSlot && targetMesh.parent && targetMesh.parent !== inst.scene) {
         targetMesh = targetMesh.parent;
       }
       if (targetMesh && targetMesh.userData.isSlot) {
         const slotData = (targetMesh.userData.slotData as ParkingSlot) || {
           id: targetMesh.userData.slotId || targetMesh.name,
-          number: targetMesh.name,
+          number: targetMesh.userData.slotNumber || targetMesh.name,
           floor: 1,
           status: 'available',
         };

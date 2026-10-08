@@ -4,6 +4,7 @@ import { ownerData as store } from '../data/data';
 import type { Booking, ParkingLot } from '../../../lib/types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
+import { PaymentMethodLogo } from '../../../components/payment/PaymentMethodLogo';
 
 function buildRevenueData(bookings: Booking[]) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -196,10 +197,8 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites = [] }: { selec
                     <td style={{ padding: '0.65rem 0.85rem' }}>
                       <strong>{booking.licensePlate}</strong>
                     </td>
-                    <td style={{ padding: '0.65rem 0.85rem', textTransform: 'uppercase' }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.45rem', borderRadius: '4px', background: 'var(--primary)15', color: 'var(--primary)' }}>
-                        {booking.paymentMethod ?? 'Standard Gateway'}
-                      </span>
+                    <td style={{ padding: '0.65rem 0.85rem' }}>
+                      <PaymentMethodLogo method={booking.paymentMethod ?? 'qr'} size="xs" showName />
                     </td>
                     <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 600 }}>
                       {booking.amount.toLocaleString('vi-VN')} ₫

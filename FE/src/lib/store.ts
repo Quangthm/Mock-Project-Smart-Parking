@@ -49,10 +49,52 @@ function seedInitialData() {
   const users = get<User>(KEYS.users);
   if (users.find(u => u.email === 'admin@smartparking.vn')) {
     const lots = get<ParkingLot>(KEYS.lots);
-    const updatedLots = lots.map(lot => lot.id === 'lot-001'
-      ? { ...lot, address: 'RRQJ+72 Long Bình, Ho Chi Minh, Vietnam', lat: 10.838178, lng: 106.830064 }
-      : lot);
+    const updatedLots = lots.map(lot => {
+      if (lot.id === 'lot-001') {
+        return { ...lot, address: 'RRQJ+72 Long Bình, Ho Chi Minh, Vietnam', lat: 10.838178, lng: 106.830064 };
+      }
+      if (lot.id === 'lot-002') {
+        if (
+          lot.type !== 'outdoor' ||
+          lot.modelFileName !== 'outdoor_parking_lot.glb' ||
+          lot.modelUrl !== '/models/parking/outdoor_parking_lot.glb' ||
+          lot.totalSlots !== 48 ||
+          lot.slots?.length !== 48
+        ) {
+          const slots = generateSlots(48, 1);
+          return {
+            ...lot,
+            name: 'Bitexco Financial Tower Outdoor Lot',
+            type: 'outdoor' as const,
+            floors: 1,
+            totalSlots: 48,
+            slots,
+            devices: [
+              { type: 'camera', label: 'AI Camera', enabled: true },
+              { type: 'barrier', label: 'Barrier Gate', enabled: true },
+              { type: 'sensor', label: 'Slot Sensor', enabled: true },
+            ],
+            modelFileName: 'outdoor_parking_lot.glb',
+            modelUrl: '/models/parking/outdoor_parking_lot.glb',
+          };
+        }
+      }
+      return lot;
+    });
     if (updatedLots.some((lot, index) => lot !== lots[index])) set(KEYS.lots, updatedLots);
+
+    const bookings = get<Booking>(KEYS.bookings);
+    const updatedBookings = bookings.map(b => {
+      if (b.lotId === 'lot-002' && (b.lotName.includes('B2') || b.slotNumber === '201')) {
+        return {
+          ...b,
+          lotName: 'Bitexco Financial Tower Outdoor Lot',
+          slotNumber: b.slotNumber === '201' ? 'A-002' : b.slotNumber,
+        };
+      }
+      return b;
+    });
+    if (updatedBookings.some((b, i) => b !== bookings[i])) set(KEYS.bookings, updatedBookings);
     return;
   }
 
@@ -137,16 +179,16 @@ function seedInitialData() {
   const lot2: ParkingLot = {
     id: 'lot-002',
     ownerId: 'owner-sample',
-    name: 'Bitexco Financial Tower B2',
-    type: 'basement',
-    address: '2 Hải Triều, Quận 1, TP.HCM',
-    totalSlots: 80,
-    floors: 2,
-    slots: generateSlots(80, 2),
+    name: 'Bitexco Financial Tower Outdoor Lot',
+    type: 'outdoor',
+    address: '2 Hải Triều, Bến Nghé, Quận 1, TP.HCM',
+    totalSlots: 48,
+    floors: 1,
+    slots: generateSlots(48, 1),
     devices: [
       { type: 'camera', label: 'AI Camera', enabled: true },
-      { type: 'rfid', label: 'RFID Card', enabled: true },
-      { type: 'ev-charger', label: 'EV Charger', enabled: false },
+      { type: 'barrier', label: 'Barrier Gate', enabled: true },
+      { type: 'sensor', label: 'Slot Sensor', enabled: true },
     ],
     hourlyRate: 20000,
     dailyRate: 150000,
@@ -157,8 +199,8 @@ function seedInitialData() {
     status: 'active',
     lat: 10.771917,
     lng: 106.704894,
-    modelFileName: 'underground_parking_lot.glb',
-    modelUrl: '/models/parking/underground_parking_lot.glb',
+    modelFileName: 'outdoor_parking_lot.glb',
+    modelUrl: '/models/parking/outdoor_parking_lot.glb',
     createdAt: new Date(Date.now() - 86400000 * 25).toISOString(),
   };
 
@@ -192,6 +234,7 @@ function seedInitialData() {
   set(KEYS.lots, [lot1, lot2, lot3]);
 
   if (lot1.slots[0]) lot1.slots[0].status = 'occupied';
+  if (lot2.slots[1]) lot2.slots[1].status = 'occupied';
 
   const bookings: Booking[] = [
     {
@@ -216,9 +259,9 @@ function seedInitialData() {
       id: 'bk-002',
       driverId: 'driver-sample',
       lotId: 'lot-002',
-      lotName: 'Bitexco Financial Tower B2',
-      slotId: 'slot-2',
-      slotNumber: '201',
+      lotName: 'Bitexco Financial Tower Outdoor Lot',
+      slotId: lot2.slots[1]?.id || 'slot-2',
+      slotNumber: lot2.slots[1]?.number || 'A-002',
       licensePlate: '51AB-67890',
       plateType: 'vn',
       startTime: new Date(Date.now() - 86400000 * 2).toISOString(),

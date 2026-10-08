@@ -5,6 +5,7 @@ import type { ParkingLot, PackageOrder, PaymentMethod, User } from "../../../lib
 import { driverData as store } from "../data/data"
 import { PAYMENT_OPTIONS } from "../data/paymentOptions"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
 
 function getLotEnterprise(lot: ParkingLot, users: User[]): string {
   const owner = users.find(u => u.id === lot.ownerId)
@@ -139,8 +140,8 @@ export function Subscriptions() {
         }}
       >
         <div style={{ position: "relative", zIndex: 2, maxWidth: "780px" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(59, 130, 246, 0.25)", border: "1px solid rgba(96, 165, 250, 0.4)", padding: "0.2rem 0.65rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#93c5fd", marginBottom: "0.75rem" }}>
-            <span>🏪</span> SMART PARKING PASS STORE
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", background: "rgba(59, 130, 246, 0.25)", border: "1px solid rgba(96, 165, 250, 0.4)", padding: "0.2rem 0.65rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#93c5fd", marginBottom: "0.75rem" }}>
+            <UntitledIcon name="shopping-bag" size={14} /> SMART PARKING PASS STORE
           </div>
           <h2 style={{ fontFamily: "Outfit", fontWeight: 800, fontSize: "1.75rem", margin: "0 0 0.5rem", color: "#ffffff", letterSpacing: "-0.02em" }}>
             Unlimited Commuter Passes & Memberships
@@ -151,17 +152,17 @@ export function Subscriptions() {
 
           {/* STORE VALUE PROPOSITION PILLS */}
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
-              ⚡ 24/7 Unlimited Access
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
+              <UntitledIcon name="zap" size={14} style={{ color: "#38bdf8" }} /> 24/7 Unlimited Access
             </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
-              🏷️ Save Up To 40%
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
+              <UntitledIcon name="tag" size={14} style={{ color: "#38bdf8" }} /> Save Up To 40%
             </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
-              🚗 Automated Gate Camera Scan
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
+              <UntitledIcon name="car" size={14} style={{ color: "#38bdf8" }} /> Automated Gate Camera Scan
             </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
-              🛡️ Guaranteed Reserved Slot
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.18)", borderRadius: "999px", padding: "0.3rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
+              <UntitledIcon name="shield" size={14} style={{ color: "#38bdf8" }} /> Guaranteed Reserved Slot
             </span>
           </div>
         </div>
@@ -174,25 +175,28 @@ export function Subscriptions() {
             type="button"
             className={tabMode === "store" ? "btn-primary" : "btn-outline"}
             onClick={() => setTabMode("store")}
-            style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: 600 }}
+            style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.45rem" }}
           >
-            🏪 Pass Marketplace
+            <UntitledIcon name="shopping-bag" size={15} />
+            <span>Pass Marketplace</span>
           </button>
           <button
             type="button"
             className={tabMode === "my-passes" ? "btn-primary" : "btn-outline"}
             onClick={() => setTabMode("my-passes")}
-            style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: 600 }}
+            style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.45rem" }}
           >
-            🎟️ My Passes ({passes.length})
+            <UntitledIcon name="ticket" size={15} />
+            <span>My Passes ({passes.length})</span>
           </button>
           <button
             type="button"
             className={tabMode === "orders" ? "btn-primary" : "btn-outline"}
             onClick={() => setTabMode("orders")}
-            style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: 600 }}
+            style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.45rem" }}
           >
-            📋 Order History ({orders.length})
+            <UntitledIcon name="clipboard" size={15} />
+            <span>Order History ({orders.length})</span>
           </button>
         </div>
       </div>
@@ -218,9 +222,9 @@ export function Subscriptions() {
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "0.9rem" }}
+                    style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--muted)", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                   >
-                    ✕
+                    <UntitledIcon name="x" size={14} />
                   </button>
                 )}
               </div>
@@ -240,9 +244,13 @@ export function Subscriptions() {
                       background: filterTag === "recommended" ? "var(--primary)" : "var(--bg)",
                       color: filterTag === "recommended" ? "#ffffff" : "var(--fg)",
                       border: "1px solid var(--border)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
                     }}
                   >
-                    🔥 Recommended (Hot & Near)
+                    <UntitledIcon name="sparkles" size={13} />
+                    <span>Recommended (Hot &amp; Near)</span>
                   </button>
                   <button
                     type="button"
@@ -256,9 +264,13 @@ export function Subscriptions() {
                       background: filterTag === "hot" ? "var(--primary)" : "var(--bg)",
                       color: filterTag === "hot" ? "#ffffff" : "var(--fg)",
                       border: "1px solid var(--border)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
                     }}
                   >
-                    🔥 Hot Hubs
+                    <UntitledIcon name="flame" size={13} />
+                    <span>Hot Hubs</span>
                   </button>
                   <button
                     type="button"
@@ -272,9 +284,13 @@ export function Subscriptions() {
                       background: filterTag === "near" ? "var(--primary)" : "var(--bg)",
                       color: filterTag === "near" ? "#ffffff" : "var(--fg)",
                       border: "1px solid var(--border)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
                     }}
                   >
-                    📍 Near You (&lt; 2km)
+                    <UntitledIcon name="map-pin" size={13} />
+                    <span>Near You (&lt; 2km)</span>
                   </button>
                   <button
                     type="button"
@@ -288,9 +304,13 @@ export function Subscriptions() {
                       background: filterTag === "all" ? "var(--primary)" : "var(--bg)",
                       color: filterTag === "all" ? "#ffffff" : "var(--fg)",
                       border: "1px solid var(--border)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
                     }}
                   >
-                    All Hubs
+                    <UntitledIcon name="grid" size={13} />
+                    <span>All Hubs</span>
                   </button>
                 </div>
               )}
@@ -365,7 +385,7 @@ export function Subscriptions() {
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "0.3rem",
+                          gap: "0.35rem",
                           fontSize: "0.72rem",
                           fontWeight: 700,
                           textTransform: "uppercase",
@@ -377,7 +397,8 @@ export function Subscriptions() {
                           marginBottom: "0.35rem",
                         }}
                       >
-                        🏢 {enterprise}
+                        <UntitledIcon name="building" size={12} />
+                        <span>{enterprise}</span>
                       </span>
                       <h3 style={{ fontFamily: "Outfit", fontWeight: 700, fontSize: "1.08rem", margin: 0, color: "var(--fg)" }}>
                         {lot.name}
@@ -386,13 +407,13 @@ export function Subscriptions() {
 
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.3rem", flexShrink: 0 }}>
                       {isHot && (
-                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#ea580c", background: "rgba(234, 88, 12, 0.12)", border: "1px solid rgba(234, 88, 12, 0.35)", padding: "0.15rem 0.45rem", borderRadius: "999px" }}>
-                          🔥 HOT
+                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#ea580c", background: "rgba(234, 88, 12, 0.12)", border: "1px solid rgba(234, 88, 12, 0.35)", padding: "0.15rem 0.45rem", borderRadius: "999px", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                          <UntitledIcon name="flame" size={11} /> HOT
                         </span>
                       )}
                       {isNear && (
-                        <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#2563eb", background: "rgba(37, 99, 235, 0.1)", border: "1px solid rgba(37, 99, 235, 0.25)", padding: "0.15rem 0.45rem", borderRadius: "999px" }}>
-                          📍 {distance} km
+                        <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#2563eb", background: "rgba(37, 99, 235, 0.1)", border: "1px solid rgba(37, 99, 235, 0.25)", padding: "0.15rem 0.45rem", borderRadius: "999px", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                          <UntitledIcon name="map-pin" size={11} /> {distance} km
                         </span>
                       )}
                     </div>
@@ -408,13 +429,13 @@ export function Subscriptions() {
                     {/* PERKS LIST */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", fontSize: "0.78rem", color: "var(--muted)", background: "var(--bg)", padding: "0.65rem 0.85rem", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--fg)" }}>
-                        <span style={{ color: "#22c55e", fontWeight: 700 }}>✓</span> 24/7 Unlimited in &amp; out privileges
+                        <UntitledIcon name="check" size={13} style={{ color: "#22c55e", strokeWidth: 2.2 }} /> 24/7 Unlimited in &amp; out privileges
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--fg)" }}>
-                        <span style={{ color: "#22c55e", fontWeight: 700 }}>✓</span> License plate contactless barrier lift
+                        <UntitledIcon name="check" size={13} style={{ color: "#22c55e", strokeWidth: 2.2 }} /> License plate contactless barrier lift
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--fg)" }}>
-                        <span style={{ color: "#22c55e", fontWeight: 700 }}>✓</span> {availableSlots} available / {lot.totalSlots} total slots
+                        <UntitledIcon name="check" size={13} style={{ color: "#22c55e", strokeWidth: 2.2 }} /> {availableSlots} available / {lot.totalSlots} total slots
                       </div>
                     </div>
 
@@ -435,7 +456,8 @@ export function Subscriptions() {
                         className="btn-primary"
                         style={{ padding: "0.45rem 0.85rem", fontSize: "0.8rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
                       >
-                        View Packages ➔
+                        <span>View Packages</span>
+                        <UntitledIcon name="arrow-right" size={13} />
                       </button>
                     </div>
                   </div>
@@ -446,7 +468,9 @@ export function Subscriptions() {
 
           {displayLots.length === 0 && (
             <div className="card" style={{ padding: "3rem 1.5rem", textAlign: "center", color: "var(--muted)" }}>
-              <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>🔍</div>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary)15", color: "var(--primary)", display: "inline-flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.75rem" }}>
+                <UntitledIcon name="search" size={26} />
+              </div>
               <h3 style={{ fontFamily: "Outfit", fontWeight: 700, fontSize: "1.2rem", color: "var(--fg)", margin: "0 0 0.5rem" }}>
                 No parking hubs matched your search
               </h3>
@@ -500,7 +524,9 @@ export function Subscriptions() {
             </div>
           ) : (
             <div className="card" style={{ padding: "3rem 1.5rem", textAlign: "center", color: "var(--muted)" }}>
-              <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>🎟️</div>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary)15", color: "var(--primary)", display: "inline-flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.75rem" }}>
+                <UntitledIcon name="ticket" size={26} />
+              </div>
               <h3 style={{ fontFamily: "Outfit", fontWeight: 700, fontSize: "1.2rem", color: "var(--fg)", margin: "0 0 0.5rem" }}>
                 You have no active parking passes
               </h3>
@@ -529,8 +555,9 @@ export function Subscriptions() {
                     <strong style={{ fontSize: "0.95rem", color: "var(--fg)", fontFamily: "Outfit" }}>
                       {order.plan === "monthly" ? "Monthly Pass" : "Annual Pass"} — {order.lotName}
                     </strong>
-                    <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.2rem" }}>
-                      Payment via: <span style={{ textTransform: "uppercase", fontWeight: 600, color: "var(--fg)" }}>{order.paymentMethod}</span>
+                    <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <span>Payment via:</span>
+                      <PaymentMethodLogo method={order.paymentMethod} size="xs" showName />
                     </div>
                   </div>
 
@@ -547,7 +574,9 @@ export function Subscriptions() {
             </div>
           ) : (
             <div className="card" style={{ padding: "3rem 1.5rem", textAlign: "center", color: "var(--muted)" }}>
-              <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>📋</div>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--primary)15", color: "var(--primary)", display: "inline-flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.75rem" }}>
+                <UntitledIcon name="clipboard" size={26} />
+              </div>
               <h3 style={{ fontFamily: "Outfit", fontWeight: 700, fontSize: "1.2rem", color: "var(--fg)", margin: "0 0 0.5rem" }}>
                 No pass purchase orders yet
               </h3>
@@ -592,8 +621,9 @@ export function Subscriptions() {
             {/* MODAL HEADER */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.25rem", gap: "1rem" }}>
               <div>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", color: "var(--primary)", background: "var(--primary)15", padding: "0.15rem 0.55rem", borderRadius: "999px" }}>
-                  🏢 {getLotEnterprise(selectedLotForDetail, users)}
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", color: "var(--primary)", background: "var(--primary)15", padding: "0.15rem 0.55rem", borderRadius: "999px", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                  <UntitledIcon name="building" size={12} />
+                  <span>{getLotEnterprise(selectedLotForDetail, users)}</span>
                 </span>
                 <h3 style={{ margin: "0.4rem 0 0.2rem", fontFamily: "Outfit", fontWeight: 800, fontSize: "1.4rem", color: "var(--fg)" }}>
                   {selectedLotForDetail.name} — Pass Packages
@@ -607,16 +637,19 @@ export function Subscriptions() {
                 type="button"
                 className="btn-outline"
                 onClick={() => setSelectedLotForDetail(null)}
-                style={{ padding: "0.35rem 0.75rem", fontSize: "0.85rem" }}
+                style={{ padding: "0.35rem 0.75rem", fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
               >
-                ✕ Close
+                <UntitledIcon name="x" size={14} />
+                <span>Close</span>
               </button>
             </div>
 
             {/* IF CHECKOUT SUCCESS */}
             {checkoutSuccess ? (
               <div style={{ padding: "2rem", textAlign: "center", background: "rgba(34, 197, 94, 0.08)", border: "1.5px solid rgba(34, 197, 94, 0.35)", borderRadius: "0.75rem", margin: "1rem 0" }}>
-                <div style={{ fontSize: "2.8rem", marginBottom: "0.75rem" }}>🎉</div>
+                <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", display: "inline-flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.75rem" }}>
+                  <UntitledIcon name="award" size={30} />
+                </div>
                 <h4 style={{ fontFamily: "Outfit", fontWeight: 700, fontSize: "1.3rem", color: "#22c55e", margin: "0 0 0.5rem" }}>
                   Pass Activated Successfully!
                 </h4>
@@ -631,8 +664,10 @@ export function Subscriptions() {
                       setSelectedLotForDetail(null)
                       setTabMode("my-passes")
                     }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
                   >
-                    View in My Passes ➔
+                    <span>View in My Passes</span>
+                    <UntitledIcon name="arrow-right" size={14} />
                   </button>
                   <button
                     type="button"
@@ -693,8 +728,9 @@ export function Subscriptions() {
                       position: "relative",
                     }}
                   >
-                    <span style={{ position: "absolute", top: "-10px", right: "12px", background: "#22c55e", color: "#ffffff", fontSize: "0.68rem", fontWeight: 800, padding: "0.15rem 0.5rem", borderRadius: "999px" }}>
-                      🔥 SAVE 2 MONTHS
+                    <span style={{ position: "absolute", top: "-10px", right: "12px", background: "#22c55e", color: "#ffffff", fontSize: "0.68rem", fontWeight: 800, padding: "0.15rem 0.5rem", borderRadius: "999px", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                      <UntitledIcon name="tag" size={11} />
+                      <span>SAVE 2 MONTHS</span>
                     </span>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
                       <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#22c55e", textTransform: "uppercase" }}>
@@ -764,16 +800,17 @@ export function Subscriptions() {
                             display: "flex",
                             flexDirection: "column",
                             alignItems: "center",
-                            gap: "0.35rem",
-                            padding: "0.6rem 0.4rem",
+                            gap: "0.45rem",
+                            padding: "0.75rem 0.4rem",
                             borderRadius: "0.6rem",
                             border: selectedMethod === opt.id ? "2px solid var(--primary)" : "1px solid var(--border)",
-                            background: selectedMethod === opt.id ? "var(--primary)12" : "var(--card)",
+                            background: selectedMethod === opt.id ? "color-mix(in srgb, var(--primary) 10%, var(--card))" : "var(--card)",
                             cursor: "pointer",
+                            transition: "all 0.15s ease",
                           }}
                         >
-                          <img src={opt.logo} alt="" style={{ height: 24, objectFit: "contain" }} />
-                          <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--fg)" }}>{opt.name}</span>
+                          <PaymentMethodLogo method={opt.id} size="md" />
+                          <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--fg)", textAlign: "center" }}>{opt.name}</span>
                         </button>
                       ))}
                     </div>
@@ -802,9 +839,10 @@ export function Subscriptions() {
                         type="button"
                         className="btn-primary"
                         onClick={handlePurchasePass}
-                        style={{ padding: "0.55rem 1.25rem", fontSize: "0.85rem", fontWeight: 700 }}
+                        style={{ padding: "0.55rem 1.25rem", fontSize: "0.85rem", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
                       >
-                        Complete &amp; Activate Pass ➔
+                        <span>Complete &amp; Activate Pass</span>
+                        <UntitledIcon name="arrow-right" size={14} />
                       </button>
                     </div>
                   </div>

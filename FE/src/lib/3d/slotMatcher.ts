@@ -17,8 +17,8 @@ export function normalizeSlotIdentifier(raw: string): string {
   // Strip Blender duplicate suffixes like ".001" or ".002"
   str = str.replace(/\.\d{3}$/, '');
 
-  // Strip common prefixes: "slot_", "slot-", "slot ", "parking_", "bay_"
-  str = str.replace(/^(?:slot|parking|bay|mesh|object)[_\s-]?/i, '');
+  // Strip common prefixes: "slot_", "slot-", "carparkingspace_", "car_parking_space_", "carparking_", "parking_", "bay_"
+  str = str.replace(/^(?:carparkingspace|car_parking_space|carparking|car|parking|slot|bay|mesh|object)[_\s-]?/i, '');
 
   // Replace underscores between letter and numbers with hyphen (e.g., A_001 -> A-001)
   str = str.replace(/^([a-zA-Z]+)_+(\d+)/, '$1-$2');
@@ -30,16 +30,16 @@ export function normalizeSlotIdentifier(raw: string): string {
  * Checks whether an object name resembles a parking slot.
  * Matches patterns such as:
  * - A-001, B-023, M-005
- * - 101, 202
- * - Slot_A-001, slot-B-012
+ * - 001, 101, 202
+ * - Slot_A-001, slot-B-012, CarParkingSpace_001
  */
 export function isParkingSlotObjectName(name: string): boolean {
   if (!name) return false;
   const normalized = normalizeSlotIdentifier(name);
 
   // Pattern: Letter(s) followed by optional hyphen and numbers (e.g., A-001, A001, M-12)
-  // or pure digits (e.g., 101, 102)
-  const slotPattern = /^([A-Z]{1,3}-\d{1,4}|\d{2,4}|[A-Z]{1,2}\d{2,4})$/;
+  // or pure digits (e.g., 001, 101, 102)
+  const slotPattern = /^([A-Z]{1,3}-\d{1,4}|\d{1,4}|[A-Z]{1,2}\d{1,4})$/;
   return slotPattern.test(normalized);
 }
 
@@ -48,8 +48,35 @@ export interface SlotMatchResult {
   meshBySlotKey: Map<string, THREE.Object3D>;
   /** Map from Object3D id to ParkingSlot */
   slotByObjectId: Map<number, ParkingSlot>;
+  /** All unique candidate slot meshes in the 3D model */
+  allSlotMeshes: THREE.Mesh[];
   /** All slot keys found in the 3D model */
   detectedSlotKeys: string[];
+}
+
+/**
+ * Checks whether an object is an actual parking bay / slot mesh candidate.
+ */
+function isSlotCandidateMesh(child: THREE.Object3D): boolean {
+  if (child.userData.isSlot === true) return true;
+  if (!(child instanceof THREE.Mesh)) return false;
+
+  const name = child.name || '';
+  // Exclude signs, posts, text, arrows, poles, barriers, chargers, etc.
+  if (/sign|post|text|arrow|pole|camera|sensor|barrier|line|screen|logo|body|bay_\d|plinth|led|light/i.test(name)) {
+    return false;
+  }
+
+  if (/carparkingspace/i.test(name)) return true;
+  if (/parking_ev_car/i.test(name)) return true;
+  if (/parking_ev/i.test(name)) return true;
+  if (/parkingspace/i.test(name)) return true;
+  if (/\b(?:slot|bay)\b/i.test(name)) return true;
+  if (/car_[g|l\d]_\d+/i.test(name)) return true;
+  if (/b\d+_car_\d+/i.test(name)) return true;
+  if (/b\d+_ev_car_\d+/i.test(name)) return true;
+
+  return isParkingSlotObjectName(name);
 }
 
 /**
@@ -63,56 +90,89 @@ export function mapModelSlots(
   const meshBySlotKey = new Map<string, THREE.Object3D>();
   const slotByObjectId = new Map<number, ParkingSlot>();
   const detectedKeysSet = new Set<string>();
+  const allSlotMeshes: THREE.Mesh[] = [];
+  const seenMeshes = new Set<THREE.Mesh>();
 
-  // Build lookup index for provided ParkingSlot data
-  const slotIndex = new Map<string, ParkingSlot>();
+  // 1. Discover all candidate slot meshes with their world positions
+  const candidateList: Array<{ mesh: THREE.Mesh; worldPos: THREE.Vector3 }> = [];
+
+  scene.traverse((child) => {
+    if (child instanceof THREE.Mesh && !seenMeshes.has(child) && isSlotCandidateMesh(child)) {
+      seenMeshes.add(child);
+      const worldPos = new THREE.Vector3();
+      child.getWorldPosition(worldPos);
+      candidateList.push({ mesh: child, worldPos });
+    }
+  });
+
+  // 2. Sort candidate meshes spatially:
+  // - Floor elevation first (Y)
+  // - Row second (Z)
+  // - Column third (X: left to right)
+  candidateList.sort((a, b) => {
+    if (Math.abs(a.worldPos.y - b.worldPos.y) > 1.5) {
+      return a.worldPos.y - b.worldPos.y;
+    }
+    if (Math.abs(a.worldPos.z - b.worldPos.z) > 40.0) {
+      return a.worldPos.z - b.worldPos.z;
+    }
+    return a.worldPos.x - b.worldPos.x;
+  });
+
+  // 3. Build lookup index for provided ParkingSlot data
+  const slotByIndex = new Map<string, ParkingSlot>();
   for (const s of slots) {
     const keyNum = normalizeSlotIdentifier(s.number);
     const keyId = normalizeSlotIdentifier(s.id);
-    if (keyNum) slotIndex.set(keyNum, s);
-    if (keyId) slotIndex.set(keyId, s);
-    // Also index standard variation without hyphen (e.g., A001)
+    if (keyNum) slotByIndex.set(keyNum, s);
+    if (keyId) slotByIndex.set(keyId, s);
     const noHyphen = keyNum.replace(/-/g, '');
-    if (noHyphen) slotIndex.set(noHyphen, s);
+    if (noHyphen) slotByIndex.set(noHyphen, s);
   }
 
-  scene.traverse((child) => {
-    // We check either Meshes or Group objects specifically designated as slots
-    const isSlotCandidate =
-      (child instanceof THREE.Mesh || child.userData.isSlot === true) &&
-      (child.userData.isSlot === true || isParkingSlotObjectName(child.name));
+  // 4. Map each candidate mesh to its slot:
+  // Spatial ordering guarantees every physical spot gets a distinct slot!
+  candidateList.forEach((item, index) => {
+    const mesh = item.mesh;
+    allSlotMeshes.push(mesh);
 
-    if (isSlotCandidate) {
-      const explicitKey = child.userData.slotNumber || child.userData.slotId;
-      const slotKey = normalizeSlotIdentifier(explicitKey || child.name);
-
-      if (slotKey) {
-        detectedKeysSet.add(slotKey);
-        meshBySlotKey.set(slotKey, child);
-        // Also map without hyphen
-        const cleanKey = slotKey.replace(/-/g, '');
-        meshBySlotKey.set(cleanKey, child);
-
-        // Find matching ParkingSlot
-        const matchedSlot =
-          slotIndex.get(slotKey) ||
-          slotIndex.get(cleanKey) ||
-          slots.find((s) => normalizeSlotIdentifier(s.number) === slotKey || normalizeSlotIdentifier(s.id) === slotKey);
-
-        if (matchedSlot) {
-          slotByObjectId.set(child.id, matchedSlot);
-          child.userData.slotData = matchedSlot;
-        }
-
-        child.userData.isSlot = true;
-        child.userData.slotKey = slotKey;
-      }
+    // Prefer spatial index match with slots array, fallback to auto-generated slot
+    let targetSlot = slots[index];
+    if (!targetSlot) {
+      targetSlot = {
+        id: `slot-auto-${index + 1}`,
+        number: `A-${String(index + 1).padStart(3, '0')}`,
+        floor: 1,
+        status: 'available',
+      };
     }
+
+    mesh.userData.isSlot = true;
+    mesh.userData.slotData = targetSlot;
+    mesh.userData.slotNumber = targetSlot.number;
+    mesh.userData.slotId = targetSlot.id;
+    mesh.userData.slotKey = targetSlot.number;
+
+    detectedKeysSet.add(targetSlot.number);
+    slotByObjectId.set(mesh.id, targetSlot);
+
+    // Register all access keys
+    meshBySlotKey.set(targetSlot.number, mesh);
+    meshBySlotKey.set(targetSlot.id, mesh);
+    meshBySlotKey.set(targetSlot.number.replace(/-/g, ''), mesh);
+    const digitsOnly = targetSlot.number.replace(/\D/g, '');
+    if (digitsOnly) {
+      meshBySlotKey.set(digitsOnly, mesh);
+      meshBySlotKey.set(String(parseInt(digitsOnly, 10)), mesh);
+    }
+    meshBySlotKey.set(mesh.name, mesh);
+    meshBySlotKey.set(String(mesh.id), mesh);
   });
 
   return {
     meshBySlotKey,
     slotByObjectId,
+    allSlotMeshes,
     detectedSlotKeys: Array.from(detectedKeysSet).sort(),
   };
 }
@@ -129,6 +189,15 @@ export function findSlotMesh(
   const target = typeof slot === 'string' ? slot : (slot.number || slot.id);
   const normalized = normalizeSlotIdentifier(target);
   const noHyphen = normalized.replace(/-/g, '');
+  const digitsOnly = normalized.replace(/\D/g, '');
+  const trimmedDigits = digitsOnly ? String(parseInt(digitsOnly, 10)) : '';
 
-  return meshBySlotKey.get(normalized) || meshBySlotKey.get(noHyphen) || null;
+  return (
+    meshBySlotKey.get(target) ||
+    meshBySlotKey.get(normalized) ||
+    meshBySlotKey.get(noHyphen) ||
+    (digitsOnly ? meshBySlotKey.get(digitsOnly) : null) ||
+    (trimmedDigits ? meshBySlotKey.get(trimmedDigits) : null) ||
+    null
+  );
 }
