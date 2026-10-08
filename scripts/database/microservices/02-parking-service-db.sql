@@ -60,7 +60,6 @@ CREATE TABLE parking_slots (
     site_id UUID NOT NULL,
     spatial_unit_id UUID NOT NULL,
     slot_code VARCHAR(50) NOT NULL,
-    supported_vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (supported_vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
     slot_type VARCHAR(50) NOT NULL DEFAULT 'STANDARD' CHECK (slot_type IN ('STANDARD', 'EV', 'DISABLED', 'VIP')),
     features JSONB,
     physical_state VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE' CHECK (physical_state IN ('AVAILABLE', 'OCCUPIED', 'UNKNOWN', 'MAINTENANCE', 'UNAVAILABLE')), -- 'AVAILABLE', 'OCCUPIED', 'UNKNOWN', 'MAINTENANCE', 'UNAVAILABLE'
@@ -72,6 +71,18 @@ CREATE TABLE parking_slots (
     UNIQUE (tenant_id, site_id, slot_code),
     FOREIGN KEY (site_id, tenant_id) REFERENCES parking_sites(id, tenant_id) ON DELETE CASCADE,
     FOREIGN KEY (spatial_unit_id, tenant_id, site_id) REFERENCES spatial_units(id, tenant_id, site_id) ON DELETE CASCADE
+);
+
+-- 4B. BẢNG MAPPING LOẠI XE CHO CHỖ ĐỖ (SLOT COMPATIBILITIES)
+CREATE TABLE slot_compatibilities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    slot_id UUID NOT NULL,
+    vehicle_type VARCHAR(50) NOT NULL CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tenant_id, site_id, slot_id, vehicle_type),
+    FOREIGN KEY (slot_id, tenant_id, site_id) REFERENCES parking_slots(id, tenant_id, site_id) ON DELETE CASCADE
 );
 
 -- 5. BẢNG VẬT PHẨM ĐỊNH DANH RA VÀO (Thẻ, QR)
@@ -118,7 +129,7 @@ CREATE TABLE tariffs (
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     site_id UUID NOT NULL,
     name VARCHAR(100) NOT NULL,
-    vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
+    vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE')),
     version INT NOT NULL DEFAULT 1,
     tariff_rules JSONB NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -164,3 +175,42 @@ CREATE INDEX IF NOT EXISTS idx_access_paths_site ON parking_access_paths(site_id
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_site_code_ci ON parking_sites(tenant_id, upper(site_code)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_slot_code_ci ON parking_slots(spatial_unit_id, upper(slot_code)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_unit_name_ci ON spatial_units(site_id, parent_id, lower(name)) NULLS NOT DISTINCT WHERE deleted_at IS NULL;
+
+-- ======================================================================================
+-- 10. BẢNG SỰ CỐ VẬN HÀNH (OPERATIONAL INCIDENTS)
+-- [Merged từ 08-incident-service-db.sql]
+-- Bounded Context: Sự cố gắn liền với trạng thái vật lý của bãi (slot, thiết bị).
+-- Incident workflow (OPEN→IN_PROGRESS→RESOLVED) là trách nhiệm của operator bãi đỗ.
+-- Cross-service links dùng Logical ID, không dùng FK vật lý.
+-- ======================================================================================
+CREATE TABLE incidents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Cross-domain References (Logical IDs)
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+
+    incident_type VARCHAR(50) NOT NULL CHECK (incident_type IN ('LOST_TICKET', 'UNKNOWN_SLOT_STATE', 'CHECKOUT_MISMATCH', 'OTHER')),
+    reference_id UUID,   -- Logical ID của slot, session, hoặc thiết bị liên quan
+
+    description TEXT,
+    evidence_url VARCHAR(500),
+
+    reported_by UUID,    -- Logical ID: user hoặc system actor (từ User Service)
+    assigned_to UUID,    -- Logical ID: operator / owner (từ User Service)
+
+    status VARCHAR(50) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED')),
+    resolved_at TIMESTAMPTZ,
+    resolution_notes TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (id, tenant_id, site_id),
+    CONSTRAINT chk_incident_resolved_state CHECK (
+        (status IN ('OPEN', 'IN_PROGRESS') AND resolved_at IS NULL) OR
+        (status IN ('RESOLVED', 'CLOSED') AND resolved_at IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_incidents_tenant_site ON incidents(tenant_id, site_id);
+CREATE INDEX idx_incidents_status ON incidents(status);
