@@ -42,23 +42,34 @@ public sealed class WorkflowFeatureTests
     private static User Identity(string role,string email)=>new(){Id=Guid.NewGuid(),FullName=role,Email=email,Status=UserStatus.Active,
         Accounts=[new(){Id=Guid.NewGuid(),AccountRoles=[new(){RoleCode=role}]}]};
     [PostgresFact]
-    public async Task OwnerRequiresBothContactsActionPermissionAndIndependentRetryableDelivery()=>await Database(async options=>
+    public async Task OwnerEmailVerificationActionPermissionAndIndependentRetryableDelivery()=>await Database(async options=>
     {
         var clock=new TestClock();var hash=new BcryptPasswordService();var directory=new TestParkingDirectory();var admin=Identity("PLATFORM_ADMIN","admin@test.example");
-        Guid applicationId,ownerId;ChallengeResult email,phone;
+        Guid applicationId,ownerId;ChallengeResult email;
         await using(var db=new AppDbContext(options))
         {
             db.Users.Add(admin);await db.SaveChangesAsync();var workflows=Workflow(db,clock);var owners=new OwnerRegistrationService(db,hash,clock,directory,workflows);
             var app=await owners.RegisterAsync(new(){FullName="Owner",BusinessName="Company",Email="owner@gmail.com",Phone="+84912345678",LotType="outdoor",AgreedToPolicy=true},default);
-            applicationId=app.Id;ownerId=app.OwnerId;email=app.Verification!;phone=app.PhoneVerification!;
+            applicationId=app.Id;ownerId=app.OwnerId;email=app.Verification!;
+            Assert.Single(await db.AuthChallenges.ToArrayAsync());
+            Assert.Equal("email",(await db.AuthChallenges.SingleAsync()).Channel);
+            Assert.DoesNotContain(await db.WorkflowDeliveries.ToArrayAsync(),d=>d.Kind=="OWNER_PHONE");
             Assert.False(app.ContactVerified);Assert.Equal("0912345678",app.Phone);
             Assert.NotEqual("",(await db.WorkflowDeliveries.FirstAsync()).ProtectedPayload);
             await Assert.ThrowsAsync<AuthException>(()=>owners.ReviewAsync(admin.Id!.Value,app.Id,new(){Status="approved"},default));
         }
         async Task Verify(ChallengeResult c){await using var db=new AppDbContext(options);await Workflow(db,clock).VerifyOwnerAsync(c.ChallengeId,await Code(db,c.ChallengeId),default);}
         await Verify(email);
-        await using(var db=new AppDbContext(options))Assert.Equal(UserStatus.PendingVerification,(await db.Users.FindAsync(ownerId))!.Status);
-        await Verify(phone);
+        await using(var db=new AppDbContext(options))
+        {
+            var user=(await db.Users.FindAsync(ownerId))!;
+            Assert.Equal(UserStatus.PendingApproval,user.Status);
+            Assert.NotNull(user.EmailVerifiedAt);Assert.Null(user.PhoneVerifiedAt);
+            var owners=new OwnerRegistrationService(db,hash,clock,directory,Workflow(db,clock));
+            Assert.True((await owners.ListAsync(admin.Id!.Value,default)).Single().ContactVerified);
+            Assert.Equal("CHALLENGE_CLOSED",(await Assert.ThrowsAsync<AuthException>(()=>Workflow(db,clock).VerifyOwnerAsync(email.ChallengeId,"000000",default))).Code);
+            Assert.Equal("AUTH_FAILED",(await Assert.ThrowsAsync<AuthException>(()=>Workflow(db,clock).RequestLoginAsync(user.Phone!,default))).Code);
+        }
         await using(var db=new AppDbContext(options))
         {
             var account=await db.Accounts.SingleAsync(a=>a.UserId==admin.Id);account.Permissions=[];await db.SaveChangesAsync();
@@ -74,8 +85,65 @@ public sealed class WorkflowFeatureTests
             for(var i=0;i<3;i++)await workflow.DeliverOneAsync(transport,default);
             var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.Kind=="OWNER_DECISION");Assert.Equal("failed",delivery.Status);
             Assert.Equal(UserStatus.Active,(await db.Users.FindAsync(ownerId))!.Status);Assert.Single(await db.OwnerApplications.ToArrayAsync());
+            Assert.Equal("CONTACT_UNVERIFIED",(await Assert.ThrowsAsync<AuthException>(()=>workflow.RequestLoginAsync("0912345678",default))).Code);
             await workflow.DeliveryAsync(admin.Id!.Value,delivery.Id,true,default);transport.Fail=false;await workflow.DeliverOneAsync(transport,default);
             Assert.Equal("sent",delivery.Status);Assert.Equal("",delivery.ProtectedPayload);Assert.Single(transport.Sent);
+        }
+    });
+    [PostgresFact]
+    public async Task OwnerPhoneOnlyCannotApproveAndRecoveryStillRequiresEmail()=>await Database(async options=>
+    {
+        var clock=new TestClock();var hash=new BcryptPasswordService();var admin=Identity("PLATFORM_ADMIN","admin@test.example");
+        await using var db=new AppDbContext(options);db.Users.Add(admin);await db.SaveChangesAsync();
+        var workflow=Workflow(db,clock);var owners=new OwnerRegistrationService(db,hash,clock,new TestParkingDirectory(),workflow);
+        var app=await owners.RegisterAsync(new(){FullName="Owner",BusinessName="Company",Email="unverified@gmail.com",Phone="0914444555",LotType="outdoor",AgreedToPolicy=true},default);
+        var user=(await db.Users.FindAsync(app.OwnerId))!;user.PhoneVerifiedAt=clock.Now;await db.SaveChangesAsync();
+        var recovered=JsonSerializer.SerializeToElement(await workflow.RecoverOwnerAsync(user.Email!,default));
+        Assert.False(recovered.GetProperty("emailVerified").GetBoolean());
+        Assert.Equal(UserStatus.PendingVerification,user.Status);
+        Assert.False((await owners.ListAsync(admin.Id!.Value,default)).Single().ContactVerified);
+        user.Status=UserStatus.PendingApproval;await db.SaveChangesAsync();
+        Assert.Equal("CONTACT_UNVERIFIED",(await Assert.ThrowsAsync<AuthException>(()=>owners.ReviewAsync(admin.Id!.Value,app.Id,new(){Status="approved"},default))).Code);
+        user.Status=UserStatus.PendingVerification;await db.SaveChangesAsync();
+        await workflow.VerifyOwnerAsync(app.Verification!.ChallengeId,await Code(db,app.Verification.ChallengeId),default);
+        Assert.Equal(UserStatus.PendingApproval,user.Status);
+        Assert.Empty(await db.AuthSessions.ToArrayAsync());
+    });
+    [PostgresFact]
+    public async Task RecoverLegacyEmailVerifiedOwnerCancelsSmsWithoutVerifyingPhone()=>await Database(async options=>
+    {
+        var clock=new TestClock();var hash=new BcryptPasswordService();Guid ownerId,phoneId;
+        await using(var db=new AppDbContext(options))
+        {
+            var workflows=Workflow(db,clock);
+            var app=await new OwnerRegistrationService(db,hash,clock,new TestParkingDirectory(),workflows).RegisterAsync(
+                new(){FullName="Legacy",BusinessName="Legacy Company",Email="legacy@gmail.com",Phone="0913333444",LotType="outdoor",AgreedToPolicy=true},default);
+            ownerId=app.OwnerId;
+            var user=(await db.Users.FindAsync(ownerId))!;
+            user.EmailVerifiedAt=clock.Now;
+            var email=(await db.AuthChallenges.FindAsync(app.Verification!.ChallengeId))!;email.ConsumedAt=clock.Now;email.CodeHash="";
+            phoneId=Guid.NewGuid();
+            db.AuthChallenges.Add(new(){Id=phoneId,UserId=ownerId,Purpose="OWNER_PHONE",Channel="sms",Destination=user.Phone!,CodeHash=hash.Hash("123456"),ExpiresAt=clock.Now.AddMinutes(5),ResendAt=clock.Now});
+            await db.SaveChangesAsync();
+            await workflows.QueueAsync(ownerId,ownerId,"OWNER_PHONE",new("sms",user.Phone!,"Legacy OTP","123456"),default,phoneId);
+        }
+        await using(var db=new AppDbContext(options))
+        {
+            var workflow=Workflow(db,clock);
+            var result=JsonSerializer.SerializeToElement(await workflow.RecoverOwnerAsync("LEGACY@GMAIL.COM",default));
+            Assert.True(result.GetProperty("emailVerified").GetBoolean());
+            Assert.False(result.GetProperty("phoneVerified").GetBoolean());
+            Assert.False(result.TryGetProperty("phoneVerification",out _));
+            Assert.Equal(UserStatus.PendingApproval,(await db.Users.FindAsync(ownerId))!.Status);
+            Assert.NotNull((await db.AuthChallenges.FindAsync(phoneId))!.ConsumedAt);
+            Assert.Equal("",(await db.AuthChallenges.FindAsync(phoneId))!.CodeHash);
+            var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.Kind=="OWNER_PHONE");
+            Assert.Equal("cancelled",delivery.Status);Assert.Equal("",delivery.ProtectedPayload);
+            await workflow.RecoverOwnerAsync("0913333444",default);
+            Assert.Equal("CHALLENGE_CLOSED",(await Assert.ThrowsAsync<AuthException>(()=>workflow.VerifyOwnerAsync(phoneId,"123456",default))).Code);
+            Assert.Equal("CHALLENGE_CLOSED",(await Assert.ThrowsAsync<AuthException>(()=>workflow.ResendOwnerAsync(phoneId,default))).Code);
+            Assert.Null((await db.Users.FindAsync(ownerId))!.PhoneVerifiedAt);
+            Assert.Empty(await db.AuthSessions.ToArrayAsync());
         }
     });
     [PostgresFact]
