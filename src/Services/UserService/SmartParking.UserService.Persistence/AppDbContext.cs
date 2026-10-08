@@ -17,10 +17,31 @@ namespace UserService.Persistence
         public DbSet<DriverRegistration> DriverRegistrations { get; set; } = null!;
         public DbSet<OwnerApplication> OwnerApplications { get; set; } = null!;
         public DbSet<OperatorGrant> OperatorGrants { get; set; } = null!;
+        public DbSet<AuthChallenge> AuthChallenges { get; set; } = null!;
+        public DbSet<WorkflowDelivery> WorkflowDeliveries { get; set; } = null!;
+        public DbSet<MfaCredential> MfaCredentials { get; set; } = null!;
+        public DbSet<RegisteredVehicle> RegisteredVehicles { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            MapWorkflow<AuthChallenge>(modelBuilder, "auth_challenges", "Id");
+            MapWorkflow<WorkflowDelivery>(modelBuilder, "workflow_deliveries", "Id");
+            MapWorkflow<MfaCredential>(modelBuilder, "mfa_credentials", "UserId");
+            modelBuilder.Entity<RegisteredVehicle>(entity=>
+            {
+                entity.ToTable("vehicles");entity.HasKey(v=>v.Id);
+                entity.Property(v=>v.Id).HasColumnName("id");
+                entity.Property(v=>v.AccountId).HasColumnName("account_id");
+                entity.Property(v=>v.RawPlate).HasColumnName("original_plate").HasMaxLength(30);
+                entity.Property(v=>v.CanonicalPlate).HasColumnName("normalized_plate").HasMaxLength(20);
+                entity.Property(v=>v.VehicleType).HasColumnName("vehicle_type");
+                entity.Property(v=>v.ImageReference).HasColumnName("image_url");
+                entity.Property(v=>v.CreatedAt).HasColumnName("created_at");
+                entity.Property(v=>v.UpdatedAt).HasColumnName("updated_at");
+                entity.Property(v=>v.DeletedAt).HasColumnName("deleted_at");
+                entity.HasOne<Account>().WithMany().HasForeignKey(v=>v.AccountId).OnDelete(DeleteBehavior.SetNull);
+            });
 
             modelBuilder.Entity<OperatorGrant>(entity =>
             {
@@ -78,6 +99,9 @@ namespace UserService.Persistence
                 entity.Property(e => e.Email).HasColumnName("email");
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
                 entity.Property(e => e.FullName).HasColumnName("full_name");
+                entity.Property(e => e.CompanyName).HasColumnName("company_name");
+                entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
+                entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(
                     value => value == SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification
                         ? "PENDING_VERIFICATION" : value == SmartParking.UserService.Domain.Enum.UserStatus.PendingApproval
@@ -101,12 +125,10 @@ namespace UserService.Persistence
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.UserId).HasColumnName("user_id");
-                entity.Property(e => e.AccountType).HasColumnName("account_type");
                 entity.Property(e => e.TenantId).HasColumnName("tenant_id");
                 entity.Property(e => e.SiteId).HasColumnName("site_id");
-                entity.Property(e => e.MembershipTier).HasColumnName("membership_tier");
-                entity.Property(e => e.LoyaltyPoints).HasColumnName("loyalty_points");
                 entity.Property(e => e.Status).HasColumnName("status");
+                entity.Property(e => e.Permissions).HasColumnName("permissions").HasColumnType("text[]");
                 
                 entity.Property(e => e.CreatedOn).HasColumnName("created_at");
                 entity.Property(e => e.DeletedOn).HasColumnName("deleted_at");
@@ -162,6 +184,14 @@ namespace UserService.Persistence
                 entity.HasIndex(e => e.AccessTokenId).IsUnique();
                 entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId);
             });
+        }
+        private static void MapWorkflow<T>(ModelBuilder builder, string table, string key) where T : class
+        {
+            var entity = builder.Entity<T>();
+            entity.ToTable(table); entity.HasKey(key);
+            foreach (var property in typeof(T).GetProperties())
+                entity.Property(property.Name).HasColumnName(System.Text.RegularExpressions.Regex.Replace(property.Name, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant());
+            entity.HasOne<User>().WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

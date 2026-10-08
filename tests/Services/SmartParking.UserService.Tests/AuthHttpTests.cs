@@ -77,7 +77,7 @@ public sealed class AuthHttpTests
     {
         await using var api = await Api.Start();
         var session = await api.Login();
-        Assert.Equal(3600, session.GetProperty("expiresIn").GetInt32());
+        Assert.Equal(86400, session.GetProperty("expiresIn").GetInt32());
         Assert.Equal("Bearer", session.GetProperty("tokenType").GetString());
         Assert.False(string.IsNullOrEmpty(session.GetProperty("refreshToken").GetString()));
         Assert.Equal("driver", session.GetProperty("user").GetProperty("role").GetString());
@@ -195,7 +195,7 @@ public sealed class AuthHttpTests
         var session = await api.Login(); api.Bearer(session);
         if (change == "locked") api.Fixture.User.Status = SmartParking.UserService.Domain.Enum.UserStatus.Locked;
         if (change == "role") api.Fixture.User.Accounts.First().AccountRoles.First().RoleCode = "ADMIN";
-        if (change == "expired") api.Fixture.Clock.Now = api.Fixture.Clock.Now.AddHours(1);
+        if (change == "expired") api.Fixture.Clock.Now = api.Fixture.Clock.Now.AddHours(24);
         await Code(await api.Client.GetAsync("/api/auth/me"), HttpStatusCode.Unauthorized, "INVALID_TOKEN");
     }
 }

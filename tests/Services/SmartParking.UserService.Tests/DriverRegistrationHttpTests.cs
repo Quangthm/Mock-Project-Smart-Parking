@@ -26,6 +26,7 @@ public sealed class DriverRegistrationHttpTests
         public Task VerifyAsync(VerifyDriverOtpDto body, CancellationToken ct) { Calls++; return Task.CompletedTask; }
         public Task<DriverRegistrationResult> ResendAsync(Guid id, CancellationToken ct) =>
             Task.FromResult(new DriverRegistrationResult(id, "email", DateTimeOffset.UtcNow.AddMinutes(5), DateTimeOffset.UtcNow.AddMinutes(1)));
+        public Task<DriverRegistrationResult> RecoverAsync(string contact,CancellationToken ct)=>ResendAsync(Guid.NewGuid(),ct);
     }
 
     [Fact]

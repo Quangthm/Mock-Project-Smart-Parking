@@ -1,0 +1,2276 @@
+{
+  "info": {
+    "name": "SmartPark - assigned task API handoff 2026-10-08",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Manual QA collection. Scope and boundaries: docs/04-testing/tester-api-handoff-2026-10-08.md. Edit test inboxes. OTP/TOTP/link are manual; do not run whole collection or export populated secrets. HTTP assertions alone do not replace state/effect assertions."
+  },
+  "variable": [
+    {
+      "key": "userUrl",
+      "value": "http://localhost:5035",
+      "type": "string"
+    },
+    {
+      "key": "parkingUrl",
+      "value": "http://localhost:5045",
+      "type": "string"
+    },
+    {
+      "key": "driverEmail",
+      "value": "qa.driver@example.test",
+      "type": "string"
+    },
+    {
+      "key": "ownerEmail",
+      "value": "qa.owner@example.test",
+      "type": "string"
+    },
+    {
+      "key": "operatorEmail",
+      "value": "qa.operator@example.test",
+      "type": "string"
+    },
+    {
+      "key": "ownerPhone",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "Test@1234",
+      "type": "string"
+    },
+    {
+      "key": "driverToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operatorToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "driverRefresh",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "registrationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerApplicationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerEmailChallenge",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerPhoneChallenge",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "challengeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otp",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "totp",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "siteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "unitId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slotId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "vehicleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deliveryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bootstrapChallenge",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bootstrapToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operationKey",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Driver",
+      "item": [
+        {
+          "name": "Register Driver",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/driver",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"QA Driver\",\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.registrationId !== undefined && d.registrationId !== null) pm.collectionVariables.set(\"registrationId\", d.registrationId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recover pending registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/driver/recover",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"{{driverEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend after cooldown",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/driver/resend",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{registrationId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify delivered registration OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/driver/verify",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{registrationId}}\",\n  \"code\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Driver session",
+      "item": [
+        {
+          "name": "Request driver login OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/request",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"{{driverEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.challengeId !== undefined && d.challengeId !== null) pm.collectionVariables.set(\"challengeId\", d.challengeId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete driver OTP login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{challengeId}}\",\n  \"code\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"driverToken\", d.accessToken);",
+                  "  if (d.refreshToken !== undefined && d.refreshToken !== null) pm.collectionVariables.set(\"driverRefresh\", d.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password login driver",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"driverToken\", d.accessToken);",
+                  "  if (d.refreshToken !== undefined && d.refreshToken !== null) pm.collectionVariables.set(\"driverRefresh\", d.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/auth/me",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh and save rotated pair",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/refresh",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{driverRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"driverToken\", d.accessToken);",
+                  "  if (d.refreshToken !== undefined && d.refreshToken !== null) pm.collectionVariables.set(\"driverRefresh\", d.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Owner registration",
+      "item": [
+        {
+          "name": "Register Owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/owner",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"QA Owner\",\n  \"businessName\": \"QA Parking\",\n  \"email\": \"{{ownerEmail}}\",\n  \"phone\": \"{{ownerPhone}}\",\n  \"lotType\": \"outdoor\",\n  \"agreedToPolicy\": true,\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.id !== undefined && d.id !== null) pm.collectionVariables.set(\"ownerApplicationId\", d.id);",
+                  "  if (d.verification.challengeId !== undefined && d.verification.challengeId !== null) pm.collectionVariables.set(\"ownerEmailChallenge\", d.verification.challengeId);",
+                  "  if (d.phoneVerification.challengeId !== undefined && d.phoneVerification.challengeId !== null) pm.collectionVariables.set(\"ownerPhoneChallenge\", d.phoneVerification.challengeId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recover Owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/owner/recover",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"{{ownerEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/owner/verify",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{ownerEmailChallenge}}\",\n  \"code\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Email after cooldown",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/owner/resend",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{ownerEmailChallenge}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Phone OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/owner/verify",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{ownerPhoneChallenge}}\",\n  \"code\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Phone after cooldown",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/register/owner/resend",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{ownerPhoneChallenge}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Admin approval",
+      "item": [
+        {
+          "name": "Admin password login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"adminToken\", d.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/owner-applications",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Application detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/owner-applications/{{ownerApplicationId}}",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve after BOTH verifications",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/owner-applications/{{ownerApplicationId}}/review",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"reviewNote\": \"QA confirmed both contacts\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.deliveryId !== undefined && d.deliveryId !== null) pm.collectionVariables.set(\"deliveryId\", d.deliveryId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Owner session",
+      "item": [
+        {
+          "name": "Request owner login OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/request",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"{{ownerEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.challengeId !== undefined && d.challengeId !== null) pm.collectionVariables.set(\"challengeId\", d.challengeId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete owner OTP login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{challengeId}}\",\n  \"code\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"ownerToken\", d.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password login owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"ownerToken\", d.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Parking Owner",
+      "item": [
+        {
+          "name": "List own lots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingUrl}}/api/parking-lots",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create lot (unique code per run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"QA-LOT-01\",\n  \"name\": \"QA Lot\",\n  \"address\": \"QA address\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.id !== undefined && d.id !== null) pm.collectionVariables.set(\"siteId\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read structure and capacity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/structure",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create outdoor zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/units",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ZONE\",\n  \"name\": \"Zone A\",\n  \"capacity\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d !== undefined && d !== null) pm.collectionVariables.set(\"unitId\", d);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create CAR slot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/slots",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{unitId}}\",\n  \"code\": \"A-01\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d !== undefined && d !== null) pm.collectionVariables.set(\"slotId\", d);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create path",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/paths",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"ENTRY-A\",\n  \"to\": \"{{unitId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename unit",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/structure",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"renameUnit\",\n  \"resourceId\": \"{{unitId}}\",\n  \"name\": \"Zone B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Configure category backup",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/structure",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"backup\",\n  \"unitId\": \"{{unitId}}\",\n  \"vehicleType\": \"CAR\",\n  \"capacity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Operator provisioning",
+      "item": [
+        {
+          "name": "Owner creates Operator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/users",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"QA Operator\",\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{password}}\",\n  \"siteIds\": [\n    \"{{siteId}}\"\n  ],\n  \"permissions\": [\n    \"SLOT_OVERRIDE\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.deliveryId !== undefined && d.deliveryId !== null) pm.collectionVariables.set(\"deliveryId\", d.deliveryId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner delivery status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/auth/deliveries/{{deliveryId}}",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry failed delivery",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{userUrl}}/api/auth/deliveries/{{deliveryId}}/retry",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Optional change from emailed link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/bootstrap-password",
+            "description": "Set link values manually. After success change collection password to New@12345 before Operator password login. Reuse/expired link must fail.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{bootstrapChallenge}}\",\n  \"token\": \"{{bootstrapToken}}\",\n  \"password\": \"New@12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Operator session",
+      "item": [
+        {
+          "name": "Request operator login OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/request",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"{{operatorEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.challengeId !== undefined && d.challengeId !== null) pm.collectionVariables.set(\"challengeId\", d.challengeId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete operator OTP login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{challengeId}}\",\n  \"code\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"operatorToken\", d.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password login operator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"operatorToken\", d.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/operators/me",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current slot scope",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/operators/slot-scope?siteId={{siteId}}",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assigned operational layout",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark eligible slot BACKUP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/slots/{{slotId}}/backup",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"QA operational backup\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 Vehicles",
+      "item": [
+        {
+          "name": "Own list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/vehicles",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create vehicle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/vehicles",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"51a-123.45\",\n  \"vehicleType\": \"CAR\",\n  \"imageReference\": \"https://qa-image-store.example.test/vehicle.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.id !== undefined && d.id !== null) pm.collectionVariables.set(\"vehicleId\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update vehicle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/vehicles/{{vehicleId}}",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"51A 12345\",\n  \"vehicleType\": \"CAR\",\n  \"imageReference\": \"https://qa-image-store.example.test/updated.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 Optional MFA",
+      "item": [
+        {
+          "name": "Setup Driver MFA",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{userUrl}}/api/auth/mfa/setup",
+            "description": "Read secret/URI manually into authenticator. Never export secret or put it into bug report.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enable Driver MFA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/mfa/enable",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{totp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request MFA login OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/request",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"{{driverEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.challengeId !== undefined && d.challengeId !== null) pm.collectionVariables.set(\"challengeId\", d.challengeId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OTP login with fresh TOTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/otp/login",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{challengeId}}\",\n  \"code\": \"{{otp}}\",\n  \"totp\": \"{{totp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.accessToken !== undefined && d.accessToken !== null) pm.collectionVariables.set(\"driverToken\", d.accessToken);",
+                  "  if (d.refreshToken !== undefined && d.refreshToken !== null) pm.collectionVariables.set(\"driverRefresh\", d.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 Destructive operation - isolated fixture",
+      "item": [
+        {
+          "name": "Remove fixture slot idempotently",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/operations",
+            "description": "Use a NEW disposable unmarked slot, not the Operator BACKUP slot. Set operationKey once to a UUID, retain it for identical retries. Status alternatives need fixture-specific interpretation, not automatic acceptance.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotencyKey\": \"{{operationKey}}\",\n  \"edit\": {\n    \"action\": \"removeSlot\",\n    \"resourceId\": \"{{slotId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200, 202, 409]));",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const d = pm.response.json().data;",
+                  "  if (d.id !== undefined && d.id !== null) pm.collectionVariables.set(\"operationId\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read authoritative operation status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingUrl}}/api/parking-lots/{{siteId}}/operations/{{operationId}}",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12 Logout last",
+      "item": [
+        {
+          "name": "Logout current Driver session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/logout",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{driverRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Old access token denied",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userUrl}}/api/auth/me",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([401]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Old refresh denied",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userUrl}}/api/auth/refresh",
+            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{driverRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([401]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

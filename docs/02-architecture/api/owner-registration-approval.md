@@ -1,5 +1,7 @@
 # SPARK-179 / SPARK-196 — Owner registration and Admin review
 
+> Historical contract/review (06/10/2026). See [current workflow contract and mapping, 08/10/2026](workflows-2026-10-08.md) for the implemented changes.
+
 Implements UC-AUTH-02: company name, email and phone are required; Admin review gates Owner operations. Contract uses the existing FE partnership form. Rejection criteria remain a manual Admin decision; no automatic eligibility rules or notification promise is introduced.
 
 ## Register

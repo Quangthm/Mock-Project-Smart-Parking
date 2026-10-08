@@ -3,8 +3,14 @@
   <Folder Name="/src/Services/" />
   <Folder Name="/src/Services/ParkingService/">
     <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Domain/SmartParking.ParkingService.Domain.csproj" />
+    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.API/SmartParking.ParkingService.API.csproj" />
     <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Application/SmartParking.ParkingService.Application.csproj" />
+    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Infrastructure/SmartParking.ParkingService.Infrastructure.csproj" />
     <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/ReservationService/">
+    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
+    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Persistence/SmartParking.ReservationService.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Services/UserService/">
     <Project Path="src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj" />

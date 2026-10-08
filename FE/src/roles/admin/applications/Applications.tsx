@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ownerApi, type OwnerApplicationRecord } from '../../../lib/ownerApi';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
+import { request } from '../../../lib/authApi';
 
 export function Applications() {
   const [apps, setApps] = useState<OwnerApplicationRecord[]>([]);
@@ -53,7 +54,7 @@ export function Applications() {
                     <div style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '0.95rem', color: 'var(--fg)' }}>{app.businessName}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{app.ownerName} · {new Date(app.submittedAt).toLocaleDateString('en-GB')}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{app.email} - {app.phone}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Type: {app.lotType.replace('-', ' ')}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Type: {app.lotType.replace('-', ' ')} · Contacts: {app.contactVerified?'Verified':'Awaiting verification'}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -61,7 +62,7 @@ export function Applications() {
                     <label className="label">Review Note (optional)</label>
                     <input className="input" value={notes[app.id] ?? ''} maxLength={2000} onChange={e => setNotes(current => ({ ...current, [app.id]: e.target.value }))} placeholder="Add a note..." />
                   </div>
-                  <button disabled={!!busy || loading} onClick={() => review(app, 'approved')} style={{ padding: '0.5rem 1rem', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
+                  <button disabled={!!busy || loading || !app.contactVerified} onClick={() => review(app, 'approved')} style={{ padding: '0.5rem 1rem', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
                     <><UntitledIcon name="check" size={16} /> Approve</>
                   </button>
                   <button disabled={!!busy || loading} onClick={() => review(app, 'rejected')} style={{ padding: '0.5rem 1rem', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
@@ -81,6 +82,8 @@ export function Applications() {
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--fg)' }}>{app.businessName}</div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{app.ownerName} · {app.lotType}</div>
+                {app.deliveryStatus && <p>Notification: {app.deliveryStatus}</p>}
+                {app.deliveryStatus==='failed' && app.deliveryId && <button className="btn-outline" disabled={!!busy} onClick={async()=>{setBusy(app.id);try{await request(`/deliveries/${app.deliveryId}/retry`,'POST');setReload(n=>n+1);}catch(e){setError(e instanceof Error?e.message:'Retry failed.');}finally{setBusy(null);}}}>Retry notification</button>}
                 {app.reviewNote && <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{app.reviewNote}</div>}
               </div>
               <span style={{ padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700, background: app.status === 'approved' ? '#22c55e20' : '#ef444420', color: app.status === 'approved' ? '#22c55e' : '#ef4444' }}>

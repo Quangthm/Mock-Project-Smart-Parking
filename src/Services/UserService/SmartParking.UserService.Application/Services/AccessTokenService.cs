@@ -10,7 +10,7 @@ namespace UserService.Application.Services;
 public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
     IAuthSessionStore sessions, TimeProvider clock) : IAccessTokenService
 {
-    public const int LifetimeSeconds = 3600;
+    public const int LifetimeSeconds = 24 * 60 * 60;
 
     public static TokenValidationParameters ValidationParameters(JwtOptions options, JwtKeyProvider keys) => new()
     {

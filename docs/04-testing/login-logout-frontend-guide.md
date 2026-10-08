@@ -1,5 +1,7 @@
 # Chạy và kiểm tra login/logout theo API design
 
+> Historical report/guide. See [fix and review, 08/10/2026](cross-task-fix-review-2026-10-08.md) and its current contract links.
+
 Cập nhật 06/10/2026. Bảng đối chiếu và quyết định: [auth design alignment](../02-architecture/api/auth-design-alignment-2026-10-06.md).
 
 ## Chuẩn bị PostgreSQL

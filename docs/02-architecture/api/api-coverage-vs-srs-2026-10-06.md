@@ -1,5 +1,7 @@
 # Những chức năng còn thiếu sau khi sửa Login/Logout
 
+> Historical contract/review (06/10/2026). See [current workflow contract and mapping, 08/10/2026](workflows-2026-10-08.md) for the implemented changes.
+
 Ngày xem xét: 06/10/2026. Đối chiếu code hiện tại với báo cáo PDF và SRS v0.9.
 
 ## 1. Hiện tại đã làm được gì?

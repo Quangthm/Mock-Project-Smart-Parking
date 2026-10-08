@@ -9,10 +9,17 @@ import { TicketManagement } from '../tickets/TicketManagement';
 import type { OperatorAccessRole } from '../../../lib/types';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 import { PaymentMethodLogo } from '../../../components/payment/PaymentMethodLogo';
+import { OperatorAssignments } from './OperatorAssignments';
 
 type Tab = 'checkin' | 'status' | 'emergency' | 'slots' | 'tickets' | 'finance';
 
 export function OperatorDashboard({ accessRoleOverride }: { accessRoleOverride?: OperatorAccessRole } = {}) {
+  const { user } = useApp();
+  if (user?.role === 'operator') return <OperatorAssignments />;
+  return <LegacyOperatorDashboard accessRoleOverride={accessRoleOverride} />;
+}
+
+function LegacyOperatorDashboard({ accessRoleOverride }: { accessRoleOverride?: OperatorAccessRole } = {}) {
   const { user } = useApp();
   const [tab, setTab] = useState<Tab>('checkin');
   useEffect(() => {

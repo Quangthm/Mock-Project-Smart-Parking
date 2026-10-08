@@ -26,38 +26,26 @@ public sealed class OperatorProvisioningTests
             new NpgsqlConnectionStringBuilder(input) { Database = database }.ConnectionString).Options;
         var clock = new TestClock(); var passwords = new BcryptPasswordService();
         var ownerId = Guid.NewGuid(); var tenant = Guid.NewGuid(); var otherTenant = Guid.NewGuid();
+        var directory = new TestParkingDirectory();
         var site1 = Guid.NewGuid(); var site2 = Guid.NewGuid(); var foreignSite = Guid.NewGuid(); var inactiveSite = Guid.NewGuid();
         CreateOperatorDto Body(string email = " STAFF@PERSONAL.EXAMPLE ") => new() { FullName = " Staff Name ", Email = email,
             Password = "Password@123", SiteIds = [site1, site2], Permissions = ["DEVICE_MANAGE", "CASH_COLLECT"] };
         async Task<T> Run<T>(Func<OperatorProvisioningService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, passwords, clock));
+            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock)));
         }
         Task<OperatorDto> Create(CreateOperatorDto body, Guid? actor = null) => Run(s => s.CreateAsync(actor ?? ownerId, body, default));
         Task<bool> Allowed(Guid user, Guid site, string p) => Run(s => s.HasPermissionAsync(user, site, p, default));
         async Task Expect(string code, Func<Task> action) => Assert.Equal(code, (await Assert.ThrowsAsync<AuthException>(action)).Code);
         try
         {
-            var root = new DirectoryInfo(AppContext.BaseDirectory);
-            while (root != null && !File.Exists(Path.Combine(root.FullName, "SmartParking.slnx"))) root = root.Parent;
+            directory.Sites.Add(site1,tenant); directory.Sites.Add(site2,tenant); directory.Sites.Add(foreignSite,otherTenant); directory.Sites.Add(inactiveSite,tenant); directory.InactiveSites.Add(inactiveSite);
             await using (var db = new AppDbContext(options))
             {
-                await db.Database.OpenConnectionAsync();
-                foreach (var file in new[] { "05.1-Database-Scripts.sql", "05.4-Driver-Registration-OTP.sql", "05.7-Operator-Provisioning.sql", "05.7-Operator-Provisioning.sql" })
-                {
-                    await using var command = new NpgsqlCommand(await File.ReadAllTextAsync(Path.Combine(root!.FullName, "scripts/database", file)),
-                        (NpgsqlConnection)db.Database.GetDbConnection());
-                    await command.ExecuteNonQueryAsync();
-                }
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO tenants(id,code,name) VALUES ({tenant},'owned','Owned'),({otherTenant},'foreign','Foreign')");
-                await db.Database.ExecuteSqlInterpolatedAsync($"""
-                    INSERT INTO parking_sites(id,tenant_id,site_code,name,address,is_active) VALUES
-                    ({site1},{tenant},'S1','First','Address',true),({site2},{tenant},'S2','Second','Address',true),
-                    ({foreignSite},{otherTenant},'S3','Foreign','Address',true),({inactiveSite},{tenant},'S4','Inactive','Address',false)
-                    """);
+                await ServiceSchema.InitializeAsync(db);
                 db.Users.Add(new User { Id = ownerId, FullName = "Owner", Email = "owner@example.com", PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
-                    Accounts = [new Account { Id = Guid.NewGuid(), AccountType = "BUSINESS_OPERATOR", TenantId = tenant,
+                    Accounts = [new Account { Id = Guid.NewGuid(), TenantId = tenant,
                         AccountRoles = [new AccountRole { RoleCode = "BUSINESS_OWNER" }] }] });
                 await db.SaveChangesAsync();
             }
@@ -105,25 +93,22 @@ public sealed class OperatorProvisioningTests
             await using (var db = new AppDbContext(options))
             {
                 await db.Users.Where(u => u.Id == op.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UserStatus.Active));
-                await db.Accounts.Where(a => a.UserId == op.Id && a.SiteId == site1).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, "SUSPENDED"));
+                await db.Accounts.Where(a => a.UserId == op.Id && a.SiteId == site1).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, "INACTIVE"));
             }
             Assert.False(await Allowed(op.Id, site1, "DEVICE_MANAGE")); Assert.True(await Allowed(op.Id, site2, "DEVICE_MANAGE"));
-            await using (var db = new AppDbContext(options))
-                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE parking_sites SET is_active=false WHERE id={site2}");
+            directory.InactiveSites.Add(site2);
             Assert.False(await Allowed(op.Id, site2, "DEVICE_MANAGE"));
             await using (var db = new AppDbContext(options))
             {
-                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE parking_sites SET is_active=true WHERE id={site2}");
+                directory.InactiveSites.Remove(site2);
                 await db.OperatorGrants.Where(g => g.Account.UserId == op.Id && g.Account.SiteId == site2)
                     .ExecuteUpdateAsync(s => s.SetProperty(g => g.Permissions, new[] { "CASH_COLLECT" }));
             }
             Assert.False(await Allowed(op.Id, site2, "DEVICE_MANAGE")); Assert.True(await Allowed(op.Id, site2, "CASH_COLLECT"));
-            await using (var db = new AppDbContext(options))
-                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE tenants SET status='SUSPENDED' WHERE id={tenant}");
+            directory.InactiveTenants.Add(tenant);
             Assert.False(await Allowed(op.Id, site2, "CASH_COLLECT"));
-            await Expect("FORBIDDEN", () => Create(Body("suspended@example.com")));
-            await using (var db = new AppDbContext(options))
-                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE tenants SET status='ACTIVE' WHERE id={tenant}");
+            await Expect("SITE_ACCESS_DENIED", () => Create(Body("suspended@example.com")));
+            directory.InactiveTenants.Remove(tenant);
             await using (var db = new AppDbContext(options))
                 await db.Users.Where(u => u.Id == ownerId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UserStatus.PendingApproval));
             await Expect("FORBIDDEN", () => Create(Body("pending@example.com")));

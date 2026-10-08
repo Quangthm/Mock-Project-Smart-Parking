@@ -6,12 +6,16 @@ export interface OwnerApplicationRecord {
   email: string; phone: string; lotType: LotType;
   status: 'pending' | 'approved' | 'rejected'; submittedAt: string;
   reviewedAt?: string; reviewedBy?: string; reviewNote?: string;
+  contactVerified: boolean;
+  verification?: { challengeId: string; expiresAt: string; resendAt: string };
+  phoneVerification?: { challengeId: string; expiresAt: string; resendAt: string };
+  deliveryId?: string; deliveryStatus?: string;
 }
 interface Response<T> { success: boolean; data: T }
 
 export const ownerApi = {
   async register(body: { fullName: string; businessName: string; email: string; phone: string;
-    password: string; lotType: LotType; agreedToPolicy: boolean }): Promise<OwnerApplicationRecord> {
+    password?: string; lotType: LotType; agreedToPolicy: boolean }): Promise<OwnerApplicationRecord> {
     const r = await request<Response<OwnerApplicationRecord>>('/register/owner', 'POST', body);
     if (!r.success || !r.data?.id) throw new Error('Invalid registration response.');
     return r.data;

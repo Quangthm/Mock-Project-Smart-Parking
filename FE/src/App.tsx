@@ -11,6 +11,9 @@ import { Support } from './public pages/Support';
 import { FAQ } from './public pages/FAQ';
 import { SignIn } from './roles/authentications/Sign In/SignIn';
 import { SignUp } from './roles/authentications/Sign Up/SignUp';
+import { AccountSecurityPanel } from './components/forms/AccountSecurityPanel';
+import { OperatorBackupPanel } from './roles/operator/dashboard/OperatorBackupPanel';
+import { BootstrapPassword } from './roles/authentications/BootstrapPassword';
 import { DriverDashboard } from './roles/driver/dashboard/DriverDashboard';
 import { OwnerDashboard } from './roles/owner/dashboard/OwnerDashboard';
 import { OperatorDashboard } from './roles/operator/dashboard/OperatorDashboard';
@@ -38,12 +41,15 @@ function AppContent() {
   }, [authReady, location.pathname, navigate, user, view]);
 
   const isDashboard = (user && ['driver', 'owner', 'operator', 'admin'].includes(view)) || isOperatorPath;
+  if(location.pathname==='/change-password')return <BootstrapPassword/>;
   const usesDashboardNavbar = ['driver', 'owner', 'operator', 'admin'].includes(view) || isOperatorPath;
 
   return (
     <div className={isDashboard ? 'dashboard-theme' : undefined} data-accent={isDashboard ? accentColor : undefined} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg)' }}>
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
       <main style={{ flex: 1 }}>
+        {user && <details className="card" style={{margin:"1rem"}}><summary>Account security</summary><AccountSecurityPanel key={user.id}/></details>}
+        {user?.role==='operator' && <OperatorBackupPanel key={user.id}/>}
         {authError && <div role="alert" className="p-4 text-center text-red-600">{authError}</div>}
         {!authReady && <div className="p-8 text-center text-sm text-[var(--muted)]">Loading account…</div>}
         {authReady && <div key={`${location.pathname}-${view}`} className="animate-in">

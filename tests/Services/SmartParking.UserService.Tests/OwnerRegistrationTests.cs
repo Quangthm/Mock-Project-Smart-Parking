@@ -27,14 +27,26 @@ public sealed class OwnerRegistrationTests
         clock.Now = new DateTimeOffset(clock.Now.Ticks - clock.Now.Ticks % 10, TimeSpan.Zero);
         var passwords = new BcryptPasswordService();
         var adminId = Guid.NewGuid();
+        var directory = new TestParkingDirectory();
         async Task<T> Run<T>(Func<OwnerRegistrationService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, passwords, clock));
+            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock)));
         }
         OwnerRegistrationDto Body(string email, string phone) => new() { FullName = "New Owner", BusinessName = "Company",
             Email = email, Phone = phone, Password = "Password@123", LotType = "basement", AgreedToPolicy = true };
-        Task<OwnerApplicationDto> Register(string email, string phone) => Run(s => s.RegisterAsync(Body(email, phone), default));
+        async Task<OwnerApplicationDto> Register(string email, string phone)
+        {
+            var result=await Run(s => s.RegisterAsync(Body(email, phone), default));
+            await using var db=new AppDbContext(options);
+            foreach(var challenge in new[]{result.Verification!,result.PhoneVerification!})
+            {
+                var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.ChallengeId==challenge.ChallengeId);
+                var message=System.Text.Json.JsonSerializer.Deserialize<global::UserService.Application.Common.Interfaces.Services.WorkflowMessage>(new TestWorkflowProtector().Unprotect(delivery.ProtectedPayload))!;
+                await WorkflowTestSupport.Create(db,clock).VerifyOwnerAsync(challenge.ChallengeId,System.Text.RegularExpressions.Regex.Match(message.Body,@"\d{6}").Value,default);
+            }
+            return result;
+        }
         Task<OwnerApplicationDto> Review(Guid id, string status) => Run(s => s.ReviewAsync(adminId, id,
             new() { Status = status, ReviewNote = " Reviewed " }, default));
         async Task Expect(string code, Func<Task> action) => Assert.Equal(code, (await Assert.ThrowsAsync<AuthException>(action)).Code);
@@ -42,13 +54,12 @@ public sealed class OwnerRegistrationTests
         {
             await using (var db = new AppDbContext(options))
             {
-                await db.Database.EnsureCreatedAsync();
+                await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
                 db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.Add(new User { Id = adminId, FullName = "Admin", Phone = "0900000000", Email = "admin@example.com",
                     PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
-                    Accounts = [new Account { Id = Guid.NewGuid(), AccountType = "PLATFORM_STAFF",
-                        AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] });
+                    Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] });
                 await db.SaveChangesAsync();
                 var root = new DirectoryInfo(AppContext.BaseDirectory);
                 while (root != null && !File.Exists(Path.Combine(root.FullName, "SmartParking.slnx"))) root = root.Parent;
@@ -81,6 +92,10 @@ public sealed class OwnerRegistrationTests
             await Expect("FORBIDDEN", () => Run(s => s.ListAsync(pending.OwnerId, default)));
             await Expect("FORBIDDEN", () => Run(s => s.ReviewAsync(pending.OwnerId, pending.Id, new() { Status = "approved" }, default)));
             await Expect("APPLICATION_NOT_FOUND", () => Review(Guid.NewGuid(), "approved"));
+            directory.Unavailable = true;
+            await Expect("PARKING_UNAVAILABLE", () => Review(pending.Id, "approved"));
+            directory.Unavailable = false;
+            Assert.Equal("pending", (await Run(s => s.ListAsync(adminId, default))).Single().Status);
             var decisions = await Task.WhenAll(new[] { "approved", "rejected" }.Select(async status =>
             {
                 try { return (await Review(pending.Id, status)).Status; }
@@ -107,6 +122,7 @@ public sealed class OwnerRegistrationTests
                 var user = await new UserRepository(db).GetByIdWithRolesAsync(r.OwnerId, default);
                 Assert.Equal(status == "approved" ? UserStatus.Active : UserStatus.Rejected, user!.Status);
                 Assert.Equal(status == "approved" ? "owner" : null, AccessTokenService.CurrentRole(user));
+                if (status == "approved") { Assert.Equal(r.Id, user.Accounts.Single().TenantId); Assert.Contains(r.Id, directory.Provisioned); }
                 var jwt = new global::UserService.Application.Common.Models.JwT.JwtOptions { Issuer = "owner-test", Audience = "owner-test" };
                 using var keys = new JwtKeyProvider(jwt, true);
                 var sessions = new PostgresAuthSessionStore(db, clock);

@@ -33,13 +33,13 @@ export function DriverOtpForm({ registration, onUpdate, onVerified, onBack, onDi
   async function resend() {
     if (busy || resendSeconds) return;
     setBusy(true); setError(''); setMessage('');
-    try { onUpdate(await authApi.resendDriver(registration.registrationId)); setCode(''); setMessage('A new code has been sent.'); }
+    try { onUpdate(await authApi.resendDriver(registration.registrationId)); setCode(''); setMessage('A new code is queued for delivery.'); }
     catch (e) { setError(e instanceof Error ? e.message : 'Cannot resend code.'); }
     finally { setBusy(false); }
   }
   return <form className="card auth-form-background" onSubmit={verify} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
     <h2 style={{ margin: 0 }}>Verify your account</h2>
-    <p style={{ margin: 0 }}>Enter the 6-digit code sent by {registration.channel === 'email' ? 'email' : 'SMS'}. The code is valid for 5 minutes.</p>
+    <p style={{ margin: 0 }}>Enter the 6-digit code delivered by {registration.channel === 'email' ? 'email' : 'SMS'}. Delivery may take a moment. The code is valid for 5 minutes.</p>
     <label className="label" htmlFor="driver-otp">Verification code</label>
     <input id="driver-otp" className="input" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
       inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required disabled={busy} />

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" /><ProjectReference Include="../SmartParking.ParkingService.Infrastructure/SmartParking.ParkingService.Infrastructure.csproj" /></ItemGroup>
+</Project>
