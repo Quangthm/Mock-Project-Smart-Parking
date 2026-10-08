@@ -81,11 +81,6 @@
       "type": "string"
     },
     {
-      "key": "ownerPhoneChallenge",
-      "value": "",
-      "type": "string"
-    },
-    {
       "key": "challengeId",
       "value": "",
       "type": "string"
@@ -555,7 +550,6 @@
                   "  const d = pm.response.json().data;",
                   "  if (d.id !== undefined && d.id !== null) pm.collectionVariables.set(\"ownerApplicationId\", d.id);",
                   "  if (d.verification.challengeId !== undefined && d.verification.challengeId !== null) pm.collectionVariables.set(\"ownerEmailChallenge\", d.verification.challengeId);",
-                  "  if (d.phoneVerification.challengeId !== undefined && d.phoneVerification.challengeId !== null) pm.collectionVariables.set(\"ownerPhoneChallenge\", d.phoneVerification.challengeId);",
                   "}"
                 ]
               }
@@ -654,80 +648,6 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"registrationId\": \"{{ownerEmailChallenge}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Verify Phone OTP",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{userUrl}}/api/auth/register/owner/verify",
-            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
-            "auth": {
-              "type": "noauth"
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"challengeId\": \"{{ownerPhoneChallenge}}\",\n  \"code\": \"{{otp}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Expected HTTP status\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Resend Phone after cooldown",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{userUrl}}/api/auth/register/owner/resend",
-            "description": "Run manually in handoff order. Set QA contacts and delivered OTP/link first. See tester-api-handoff-2026-10-08.md.",
-            "auth": {
-              "type": "noauth"
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"registrationId\": \"{{ownerPhoneChallenge}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -854,7 +774,7 @@
           ]
         },
         {
-          "name": "Approve after BOTH verifications",
+          "name": "Approve after email verification",
           "request": {
             "method": "PATCH",
             "header": [

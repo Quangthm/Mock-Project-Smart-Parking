@@ -7,13 +7,13 @@ Ngày 08/10/2026. Đây là contract của code trong working tree, đối chi�
 | Phần | Contract thực thi |
 | --- | --- |
 | Driver registration | Email hoặc phone; nếu gửi cả hai thì OTP đăng ký gửi email. Chỉ contact đã xác minh được dùng cho login OTP. Password tùy chọn; nếu cung cấp thì theo policy password sẵn có. |
-| Owner registration | Company name, email, phone bắt buộc. Xác minh riêng cả email và phone → pending approval → Admin duyệt. Không có yêu cầu corporate domain, CCCD hoặc GPLX. |
+| Owner registration | Company name, email, phone bắt buộc. Xác minh email OTP → pending approval → Admin duyệt. Không có yêu cầu corporate domain, CCCD hoặc GPLX. |
 | Contact | Email trim/lowercase; phone trim, `+84` và dạng `84` 11 chữ số chuyển thành `0`. Active contacts có uniqueness theo User DB; trùng sau chuẩn hóa khiến migration rollback, không gộp account. |
 | OTP | 6 chữ số, hết hạn tại đúng mốc 5 phút, resend sau 60 giây; 3 lần sai → lock 15 phút. Resend không xóa số lần sai hoặc bypass lock; code cũ bị thay thế. OTP không tạo session khi mới issue/verify đăng ký. |
 | Session | Access token 24 giờ, refresh 7 ngày; refresh rotation và logout current-session giữ contract đã có. Session khác độc lập. Current status, permissions và resource scope được kiểm tra lại trên protected requests. |
 | MFA | TOTP 6 chữ số, 30 giây, chấp nhận cửa sổ ±1 step, chống replay; 3 lần sai → lock 15 phút. Login password bị từ chối khi MFA bật; dùng OTP login kèm TOTP. |
 | Operator | Owner hiện có `OPERATOR_MANAGE`; chọn owned active lots và các quyền delegable. Mật khẩu do Owner cung cấp theo contract hiện có. Onboarding email chứa credential và link đổi password tùy chọn, token riêng SHA-256, single-use, hết hạn 24 giờ. Không bắt buộc đổi ở lần login đầu. |
-| Admin approve | Current `ACCOUNT_ADMIN`; cả hai contact đã verified, user pending approval và account pending approval. Audit actor/time/decision được lưu. Duyệt không unlock hoặc enable account bị block độc lập. |
+| Admin approve | Current `ACCOUNT_ADMIN`; email đã verified, user pending approval và account pending approval. Audit actor/time/decision được lưu. Duyệt không unlock hoặc enable account bị block độc lập. |
 | Delivery | Encrypted durable outbox trong User DB, `pending/failed/sent/cancelled`, retry độc lập. Không rollback account/approval đã thành công chỉ vì provider gửi thất bại. Payload được xóa khi sent/cancelled. SMTP là at-least-once: crash sau provider acceptance có thể gửi lại cùng thư; account/grants không được tạo lại. SMS nhận Idempotency-Key là delivery ID. |
 | Vehicle | Dùng bảng `vehicles` canonical, FK `account_id`; map `rawPlate → original_plate`, `canonicalPlate → normalized_plate`, `imageReference → image_url`. Chỉ active Driver accounts của actor được đọc/sửa. API create/update yêu cầu image reference HTTPS; không fetch URL tại server. Historical IDs, account FK và soft delete được giữ. |
 | VEH-OPEN | Gỡ global unique plate index của baseline vì nó áp đặt binding trong FR-VEH-02 còn OPEN; thay bằng non-unique lookup index. Trùng canonical plate không cấp quyền đọc/sửa record khác. Không thêm claim, evidence, transfer hoặc legal-ownership semantics. |
@@ -38,9 +38,9 @@ Responses có `success`, thêm `data` khi có kết quả. Mutations không tr�
 | POST `/api/auth/register/driver/verify` | registrationId, code | 200, account verified; chưa có session |
 | POST `/api/auth/register/driver/resend` | registrationId | 200 deadlines; 429 cooldown, 423 lock |
 | POST `/api/auth/register/driver/recover` | contact | 200 pending challenge metadata; không credential |
-| POST `/api/auth/register/owner` | fullName, businessName, email, phone, lotType, agreedToPolicy, optional password | 201 application + verification + phoneVerification |
-| POST `/api/auth/register/owner/verify` | challengeId, code | 200; sau cả hai contact mới pending approval |
-| POST `/api/auth/register/owner/resend` | registrationId = selected contact challengeId | 200 updated deadlines |
+| POST `/api/auth/register/owner` | fullName, businessName, email, phone, lotType, agreedToPolicy, optional password | 201 application + verification (email) |
+| POST `/api/auth/register/owner/verify` | challengeId, code | 200; sau email OTP hợp lệ chuyển pending approval |
+| POST `/api/auth/register/owner/resend` | registrationId = email challengeId | 200 updated deadlines |
 | POST `/api/auth/register/owner/recover` | contact | metadata và emailVerified/phoneVerified; FE resume sau duplicate/timeout |
 | POST `/api/auth/otp/request` | contact đã verified hoặc provisioned Operator/Admin | 200 challengeId, expiresAt, resendAt, deliveryStatus |
 | POST `/api/auth/otp/login` | challengeId, code, optional totp | 200 accessToken/refreshToken/expiresIn/user; 401 MFA_REQUIRED, 409 consumed, 423 locked |
@@ -96,3 +96,7 @@ Parking dùng `Services:Reservation`, `Services:Key`; optional HTTPS `Services:S
 Recovery: `scripts/recover-structure-hold.ps1 -SiteId <id> -ParkingStopped -SchemaRoot <checkout>` inspect trước; `-Apply` chỉ sau khi mọi Parking instance đã dừng. Script kiểm tra không còn DB connections, publish physical/capacity/backup snapshot, release fence rồi finalize operations có physical marker. Không release mù với outcome null.
 
 AI scaffold: xem [chatbot-scaffold](../../03-design/ai/chatbot-scaffold.md). Disabled mặc định, model/backend ports và read allowlist; không thêm chatbot business rules hoặc live writes.
+
+## Owner email OTP correction (08/10/2026)
+
+SRS §3.1.4 uses SMS or email; UC-AUTH-02 requires company/email/phone and Admin approval, not two OTPs. Owner onboarding currently uses email only; SMS fallback is not implemented in this flow. Phone remains required but unverified. OTP expiry remains 5 minutes per SRS/business rules. Recovery promotes legacy email-verified pending registrations and cancels their obsolete phone challenge/outbox; phone-only verification never qualifies for approval. Existing endpoints/DTO input fields remain unchanged; the unrelated remote design endpoint/field/expiry differences still require contract reconciliation.
