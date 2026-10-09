@@ -1,4 +1,5 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>  <UserSecretsId>2de7cce2-c97b-42ad-9070-d3b0337f15eb</UserSecretsId>
+  </PropertyGroup>
   <ItemGroup><PackageReference Include="Npgsql" Version="10.0.3" /></ItemGroup>
 </Project>
