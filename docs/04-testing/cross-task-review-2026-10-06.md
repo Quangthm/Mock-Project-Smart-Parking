@@ -12,7 +12,7 @@ Phạm vi lấy từ chat “Chọn task chưa cần API design”: SPARK-173, S
 
 ### 1. [P1] Owner được duyệt chưa có membership để dùng Parking Structure hoặc Create Operator
 
-`OwnerRegistrationService.cs:38–40` tạo account BUSINESS_OWNER mà không gán TenantId. `ReviewAsync`, dòng 89–92, chỉ đổi trạng thái user/account. Migration 05.5 cũng không provision tenant. Trong khi đó, `PostgresParkingStructureRepository.Authorize` yêu cầu account thuộc tenant ACTIVE; `OperatorProvisioningService.cs:28–38` JOIN tenants và yêu cầu tenant membership BUSINESS_OWNER.
+`OwnerRegistrationService.cs:38–40` tạo account OWNER mà không gán TenantId. `ReviewAsync`, dòng 89–92, chỉ đổi trạng thái user/account. Migration 05.5 cũng không provision tenant. Trong khi đó, `PostgresParkingStructureRepository.Authorize` yêu cầu account thuộc tenant ACTIVE; `OperatorProvisioningService.cs:28–38` JOIN tenants và yêu cầu tenant membership OWNER.
 
 Do đó Owner mới đăng ký rồi được Admin duyệt có thể đăng nhập, nhưng vẫn nhận FORBIDDEN khi gọi Create Operator với các site hợp lệ; Parking Structure core cũng không chấp nhận scope của tài khoản này. Luồng chỉ hoạt động nếu membership được cấp riêng bằng cách khác. Repo chưa có luồng ứng dụng nối bước đó với onboarding.
 
