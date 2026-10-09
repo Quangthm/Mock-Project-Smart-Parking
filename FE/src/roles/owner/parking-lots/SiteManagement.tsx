@@ -3,6 +3,7 @@ import { useApp } from '../../../context/AppContext';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
 import { ownerData as store } from '../data/data';
 import type { LotType, ParkingLot, ParkingSlot, User } from '../../../lib/types';
+import { ALLOWED_PARKING_MODELS } from '../../../lib/3d/parking3DConfig';
 
 interface SiteFormState {
   name: string;
@@ -79,10 +80,22 @@ export function SiteManagement({ sites, operators, onSiteCreated }: { sites: Par
     }
 
     if (editingSite) {
-      const updatedSite = { ...editingSite, name: form.name.trim(), address: form.address.trim(), type: form.type, totalSlots, floors, slots };
+      const modelDef = ALLOWED_PARKING_MODELS[form.type];
+      const updatedSite = {
+        ...editingSite,
+        name: form.name.trim(),
+        address: form.address.trim(),
+        type: form.type,
+        totalSlots,
+        floors,
+        slots,
+        modelFileName: editingSite.modelFileName || modelDef.fileName,
+        modelUrl: editingSite.modelUrl || modelDef.path,
+      };
       console.log('Mock update site payload', updatedSite);
       store.saveLot(updatedSite);
     } else {
+      const modelDef = ALLOWED_PARKING_MODELS[form.type];
       const newSite = {
         ownerId: user.id,
         name: form.name.trim(),
@@ -98,6 +111,8 @@ export function SiteManagement({ sites, operators, onSiteCreated }: { sites: Par
         gracePeriodMinutes: 15,
         subscriptionMonthly: 800000,
         subscriptionYearly: 8000000,
+        modelFileName: modelDef.fileName,
+        modelUrl: modelDef.path,
         status: 'active' as const,
         lat: 10.77 + Math.random() * 0.1,
         lng: 106.69 + Math.random() * 0.1,
@@ -122,7 +137,7 @@ export function SiteManagement({ sites, operators, onSiteCreated }: { sites: Par
           <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide text-[var(--muted)]"><tr><th className="px-4 py-3">Site</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Capacity</th><th className="px-4 py-3 text-right">Employees</th><th className="px-4 py-3">Actions</th></tr></thead>
           <tbody className="divide-y divide-[var(--border)]">
             {sites.map(site => {
-              const employeeCount = operators.filter(operator => operator.operatorSiteId === site.id || (operator.operatorRole === 'financial' && operator.operatorSiteId === 'all')).length;
+              const employeeCount = operators.filter(operator => operator.operatorSiteId === site.id || operator.operatorSiteId === 'all').length;
               return <tr key={site.id}><td className="px-4 py-4 font-semibold text-[var(--fg)]">{site.name}</td><td className="px-4 py-4 text-[var(--muted)]">{site.address}</td><td className="px-4 py-4 text-[var(--fg)]">{site.totalSlots} slots · {site.floors} {site.floors === 1 ? 'level' : 'levels'}</td><td className="px-4 py-4 text-right font-medium text-[var(--fg)]">{employeeCount}</td><td className="px-4 py-4"><button type="button" className="btn-outline" style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }} onClick={() => openEditModal(site)}>Edit</button></td></tr>;
             })}
             {!sites.length && <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--muted)]">No sites found. Add your first parking site.</td></tr>}

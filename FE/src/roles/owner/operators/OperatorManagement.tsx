@@ -17,7 +17,7 @@ export function OperatorManagement({ sites, selectedSiteId, onOperatorsChanged }
   function getVisibleOperators() {
     return store.getUsers().filter(operator => {
       if (operator.role !== 'operator' || operator.ownerId !== user?.id) return false;
-      return selectedSiteId === 'all' || operator.operatorSiteId === selectedSiteId || (operator.operatorRole === 'financial' && operator.operatorSiteId === 'all');
+      return selectedSiteId === 'all' || operator.operatorSiteId === selectedSiteId || operator.operatorSiteId === 'all';
     });
   }
   function refreshOperators() {
@@ -79,22 +79,24 @@ export function OperatorManagement({ sites, selectedSiteId, onOperatorsChanged }
                 onChange={event => updateOperatorSite(op, event.target.value)}
                 style={{ width: 'auto', minWidth: '140px', maxWidth: '180px', padding: '0.35rem 0.5rem', fontSize: '0.78rem' }}
               >
-                {op.operatorRole === 'financial' && <option value="all">All Sites</option>}
+                <option value="all">All Sites</option>
                 {!op.operatorSiteId && <option value="">Unassigned</option>}
                 {sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>
-              <label className="sr-only" htmlFor={`operator-role-${op.id}`}>Role for {op.name}</label>
-              <select
-                id={`operator-role-${op.id}`}
-                className="input"
-                value={op.operatorRole ?? 'operation'}
-                onChange={event => updateOperatorRole(op, event.target.value as OperatorAccessRole)}
-                style={{ width: 'auto', minWidth: '125px', padding: '0.35rem 0.5rem', fontSize: '0.78rem' }}
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '999px',
+                  background: 'rgba(37, 99, 235, 0.12)',
+                  color: 'var(--primary)',
+                  border: '1px solid rgba(37, 99, 235, 0.25)',
+                  whiteSpace: 'nowrap',
+                }}
               >
-                <option value="financial">Financial</option>
-                <option value="operation">Operation</option>
-                <option value="cashier">Cashier</option>
-              </select>
+                Operation
+              </span>
               {op.lockedUntil && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', color: '#ef4444', fontWeight: 600 }}><UntitledIcon name="lock" size={13} /> LOCKED</span>}
               <button style={{ fontSize: '0.78rem', padding: '0.3rem 0.625rem', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--muted)' }} onClick={() => toggleLock(op)}>
                 {op.lockedUntil ? 'Unlock' : 'Lock'}

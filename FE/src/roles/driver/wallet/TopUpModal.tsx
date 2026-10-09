@@ -2,6 +2,7 @@ import { useState } from "react"
 import type { PaymentMethod } from "../../../lib/types"
 import { PAYMENT_OPTIONS } from "../data/paymentOptions"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
 
 // Top-up modal
 export function TopUpModal({
@@ -165,30 +166,23 @@ export function TopUpModal({
                 key={pm.id}
                 onClick={() => setPayMethod(pm.id)}
                 style={{
-                  padding: "0.5rem",
+                  padding: "0.5rem 0.35rem",
                   borderRadius: "var(--radius)",
                   border: `1.5px solid ${
                     payMethod === pm.id ? "var(--primary)" : "var(--border)"
                   }`,
                   background:
-                    payMethod === pm.id ? "var(--primary)10" : "var(--card)",
+                    payMethod === pm.id ? "color-mix(in srgb, var(--primary) 10%, var(--card))" : "var(--card)",
                   cursor: "pointer",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  gap: "0.25rem",
+                  gap: "0.35rem",
+                  transition: "all 0.15s ease",
                 }}
               >
-                <img
-                  src={pm.logo}
-                  alt={pm.name}
-                  style={{
-                    height: "18px",
-                    objectFit: "contain",
-                    maxWidth: "44px",
-                  }}
-                />
-                <span style={{ fontSize: "0.6rem", color: "var(--muted)" }}>
+                <PaymentMethodLogo method={pm.id} size="sm" />
+                <span style={{ fontSize: "0.68rem", fontWeight: 600, color: "var(--fg)", textAlign: "center" }}>
                   {pm.name.split(" ")[0]}
                 </span>
               </button>

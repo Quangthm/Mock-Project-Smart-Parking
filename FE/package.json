@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@maptiler/sdk": "^4.1.0",
+    "@types/three": "^0.186.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.18.4",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

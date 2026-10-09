@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { ownerData as store } from '../data/data';
 import type { ParkingLot, LotType } from '../../../lib/types';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
+import { Parking3DViewer } from '../../../components/3d/Parking3DViewer';
+import {
+  ALLOWED_PARKING_MODELS,
+  validateModelUpload,
+  ALLOWED_MODEL_FILE_NAMES,
+} from '../../../lib/3d/parking3DConfig';
 
 type OnboardStep = 1 | 2 | 3 | 4 | 5;
 
@@ -42,6 +48,48 @@ export function OnboardingWizard({ onComplete }: { onComplete: (lot: ParkingLot)
   const [completionError, setCompletionError] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
 
+  // 3D Model integration state
+  const [customModelUrl, setCustomModelUrl] = useState<string | null>(null);
+  const [customModelFileName, setCustomModelFileName] = useState<string | null>(null);
+  const [modelUploadError, setModelUploadError] = useState<string | null>(null);
+  const [detected3DSlotsCount, setDetected3DSlotsCount] = useState<number>(0);
+  const [previewSlotId, setPreviewSlotId] = useState<string | null>(null);
+
+  const activeModelDef = ALLOWED_PARKING_MODELS[lotType];
+  const activeModelUrl = customModelUrl || activeModelDef.path;
+  const activeModelFileName = customModelFileName || activeModelDef.fileName;
+
+  function handleLotTypeSelect(type: LotType) {
+    setLotType(type);
+    setCustomModelUrl(null);
+    setCustomModelFileName(null);
+    setModelUploadError(null);
+    setPreviewSlotId(null);
+  }
+
+  function handleModelFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateModelUpload(file.name, lotType);
+    if (!validation.isValid) {
+      setModelUploadError(
+        validation.message ||
+          `Tên file "${file.name}" không hợp lệ! Hệ thống chỉ chấp nhận đúng 3 file mô hình chuẩn: outdoor_parking_lot.glb, indoor_parking_lot.glb hoặc underground_parking_lot.glb.`
+      );
+      e.target.value = '';
+      return;
+    }
+
+    setModelUploadError(null);
+    if (validation.modelDef && validation.modelDef.lotType !== lotType) {
+      setLotType(validation.modelDef.lotType);
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setCustomModelUrl(objectUrl);
+    setCustomModelFileName(file.name);
+  }
+
   function handleComplete() {
     if (!user) {
       setCompletionError('Please sign in to an Owner account before activating a parking lot.');
@@ -51,12 +99,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: (lot: ParkingLot)
     setCompletionError('');
     setIsCompleting(true);
     try {
-      const totalSlots = parseInt(String(lotConfig.totalSlots)) || 1;
+      const totalSlots = parseInt(String(lotConfig.totalSlots)) || (detected3DSlotsCount > 0 ? detected3DSlotsCount : 1);
       const floors = LOT_TYPE_INFO[lotType].hasFloors ? (parseInt(String(lotConfig.floors)) || 1) : 1;
       const lot = store.createLot({
         ownerId: user.id, name: lotConfig.name, type: lotType,
         address: lotConfig.address, totalSlots,
         floors,
+        modelUrl: activeModelUrl,
+        modelFileName: activeModelFileName,
         slots: store.generateSlots(totalSlots, floors),
         devices: Object.entries(devices).filter(([, v]) => v).map(([k]) => ({ type: k as any, label: DEVICE_OPTIONS.find(d => d.type === k)?.label ?? k, enabled: true })),
         ...pricing, status: 'active',
@@ -112,11 +162,11 @@ export function OnboardingWizard({ onComplete }: { onComplete: (lot: ParkingLot)
         {step === 1 && (
           <div>
             <h3 style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '1.1rem', marginBottom: '1.25rem', color: 'var(--fg)' }}>
-              Choose Lot Type
+              Choose Lot Type & 3D Model
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
               {(Object.entries(LOT_TYPE_INFO) as [LotType, typeof LOT_TYPE_INFO[LotType]][]).map(([type, info]) => (
-                <div key={type} onClick={() => setLotType(type)} style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius)', border: `2px solid ${lotType === type ? 'var(--primary)' : 'var(--border)'}`, cursor: 'pointer', background: lotType === type ? 'var(--primary)08' : 'var(--bg)', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s' }}>
+                <div key={type} onClick={() => handleLotTypeSelect(type)} style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius)', border: `2px solid ${lotType === type ? 'var(--primary)' : 'var(--border)'}`, cursor: 'pointer', background: lotType === type ? 'var(--primary)08' : 'var(--bg)', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s' }}>
                   <span style={{ color: 'var(--primary)', display: 'inline-flex' }}><UntitledIcon name={info.icon} size={28} /></span>
                   <div>
                     <div style={{ fontWeight: 600, color: 'var(--fg)', fontSize: '0.95rem' }}>{info.label}</div>
@@ -128,6 +178,72 @@ export function OnboardingWizard({ onComplete }: { onComplete: (lot: ParkingLot)
                 </div>
               ))}
             </div>
+
+            {/* 3D Model Integration Section */}
+            <div style={{ marginTop: '1.25rem', marginBottom: '1.5rem', padding: '1.1rem', background: 'var(--bg)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>🎮 Tích Hợp Mô Hình 3D Bãi Đỗ Xe</span>
+                    <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.45rem', borderRadius: '999px', background: 'var(--primary)15', color: 'var(--primary)', fontWeight: 600 }}>Tự động nhận diện</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                    Mô hình liên kết: <strong style={{ color: 'var(--primary)' }}>{activeModelFileName}</strong>
+                  </div>
+                </div>
+
+                <label style={{ cursor: 'pointer' }}>
+                  <span className="btn-outline" style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <UntitledIcon name="file" size={14} /> Tải file .glb tùy chỉnh
+                  </span>
+                  <input type="file" accept=".glb" style={{ display: 'none' }} onChange={handleModelFileUpload} />
+                </label>
+              </div>
+
+              {/* Strict file rule notification */}
+              <div style={{ padding: '0.55rem 0.75rem', background: 'var(--primary)08', border: '1px solid var(--primary)20', borderRadius: 'var(--radius)', fontSize: '0.76rem', color: 'var(--fg)', marginBottom: '0.85rem', lineHeight: 1.5 }}>
+                <strong style={{ color: 'var(--primary)' }}>Quy định 3D:</strong> Chỉ chấp nhận đúng 3 file mô hình:
+                <span style={{ fontWeight: 600, color: lotType === 'outdoor' ? 'var(--primary)' : 'var(--muted)', marginLeft: 4 }}>outdoor_parking_lot.glb</span>,
+                <span style={{ fontWeight: 600, color: lotType === 'multi-storey' ? 'var(--primary)' : 'var(--muted)', marginLeft: 4 }}>indoor_parking_lot.glb</span>,
+                <span style={{ fontWeight: 600, color: lotType === 'basement' ? 'var(--primary)' : 'var(--muted)', marginLeft: 4 }}>underground_parking_lot.glb</span>.
+              </div>
+
+              {modelUploadError && (
+                <div role="alert" style={{ padding: '0.65rem 0.85rem', background: '#fef2f2', border: '1.5px solid #f87171', borderRadius: 'var(--radius)', color: '#dc2626', fontSize: '0.8rem', marginBottom: '0.85rem', lineHeight: 1.45, fontWeight: 500 }}>
+                  {modelUploadError}
+                </div>
+              )}
+
+              {/* 3D Viewer Preview */}
+              <div style={{ borderRadius: 'calc(var(--radius) - 2px)', overflow: 'hidden', border: '1px solid var(--border)', background: '#090d16' }}>
+                <Parking3DViewer
+                  lotType={lotType}
+                  modelUrl={activeModelUrl}
+                  height={250}
+                  interactive={true}
+                  selectedSlotId={previewSlotId}
+                  onSelectSlot={(slot) => setPreviewSlotId(slot.id || slot.number)}
+                  onModelLoaded={({ detectedSlotKeys }) => {
+                    setDetected3DSlotsCount(detectedSlotKeys.length);
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--muted)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <span>Trạng thái 3D: <strong style={{ color: '#22c55e' }}>Đã kết nối</strong> · Nhận diện: <strong style={{ color: 'var(--fg)' }}>{detected3DSlotsCount || 'Mặc định'} vị trí đỗ</strong></span>
+                {detected3DSlotsCount > 0 && (
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ fontSize: '0.74rem', padding: '0.25rem 0.55rem' }}
+                    onClick={() => setLotConfig(c => ({ ...c, totalSlots: String(detected3DSlotsCount) }))}
+                  >
+                    Dùng {detected3DSlotsCount} slots cho bước sau
+                  </button>
+                )}
+              </div>
+            </div>
+
             <button className="btn-primary" onClick={() => setStep(2)}>Continue</button>
           </div>
         )}
@@ -266,6 +382,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: (lot: ParkingLot)
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginBottom: '1.5rem' }}>
               <Row label="Lot Type" value={LOT_TYPE_INFO[lotType].label} />
+              <Row label="3D Digital Twin" value={`${activeModelFileName} (Tích hợp)`} />
               <Row label="Name" value={lotConfig.name} />
               <Row label="Address" value={lotConfig.address} />
               <Row label="Total Slots" value={String(parseInt(String(lotConfig.totalSlots)) || 0)} />
