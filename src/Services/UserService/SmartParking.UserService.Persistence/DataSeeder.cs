@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Validation;
 
 namespace UserService.Persistence;
 
@@ -71,7 +72,7 @@ public class DataSeeder
 
     public async Task SeedAdminAsync(string email, string password)
     {
-        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email) ||
+        if (!SignInContact.IsValidEmail(email) ||
             password.Length is < 8 or > 15 || !System.Text.RegularExpressions.Regex.IsMatch(password,
                 @"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$"))
             throw new InvalidOperationException("DevelopmentAdmin needs a valid email and an 8-15 character password with upper/lowercase, digit and special character.");

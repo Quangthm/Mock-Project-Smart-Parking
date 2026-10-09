@@ -1,11 +1,16 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using UserService.Application.Common.Validation;
 namespace UserService.Application.DTOs;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed class OtpLoginDto
+public sealed class OtpLoginDto : IValidatableObject
 {
     [Required, StringLength(255)] public string Contact { get; set; } = "";
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (!SignInContact.IsValid(Contact)) yield return new(SignInContact.Message, [nameof(Contact)]);
+    }
 }
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CompleteOtpLoginDto

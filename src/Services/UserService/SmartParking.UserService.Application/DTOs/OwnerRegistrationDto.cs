@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using UserService.Application.Common.Validation;
 
 namespace UserService.Application.DTOs;
 
@@ -7,7 +8,7 @@ public sealed class OwnerRegistrationDto
 {
     [Required, StringLength(255)] public string FullName { get; set; } = "";
     [Required, StringLength(255)] public string BusinessName { get; set; } = "";
-    [Required, EmailAddress, StringLength(255)] public string Email { get; set; } = "";
+    [Required, AccountEmail, StringLength(255)] public string Email { get; set; } = "";
     [Required, RegularExpression(@"^\+?[0-9]{9,15}$")] public string Phone { get; set; } = "";
     [StringLength(15, MinimumLength = 8)]
     [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$")]

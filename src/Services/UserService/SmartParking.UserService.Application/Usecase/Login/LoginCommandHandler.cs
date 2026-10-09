@@ -1,4 +1,5 @@
 using MediatR;
+using UserService.Application.Common.Models.Exceptions;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
@@ -28,7 +29,11 @@ public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService
             user.FailedLoginAttempts = 0;
         }
         if (user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
-            return new(null, "AUTH_FAILED");
+        {
+            // Only valid credentials may disclose why account access is blocked.
+            if (!passwords.Verify(request.Password, user.PasswordHash)) return new(null, "AUTH_FAILED");
+            return new(null, SignInErrors.ForStatus(user.Status).Code);
+        }
         if (mfa is not null && await mfa.MfaEnabledAsync(user.Id!.Value,cancellationToken))
             return new(null,"MFA_REQUIRED");
         if (!passwords.Verify(request.Password, user.PasswordHash))

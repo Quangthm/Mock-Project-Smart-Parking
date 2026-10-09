@@ -6,6 +6,7 @@ import { getUserHomePath } from '../../operator/data/roleRoutes';
 import { BrandLogo } from '../../../components/brand/BrandLogo';
 import { PasswordVisibilityIcon } from '../../../components/forms/PasswordVisibilityIcon';
 import { authApi } from '../../../lib/authApi';
+import { isValidSignInContact, signInContactMessage } from '../../../lib/signInContact';
 
 
 export function SignIn() {
@@ -24,6 +25,7 @@ export function SignIn() {
     e.preventDefault();
     if (submitting) return;
     setError('');
+    if (!isValidSignInContact(email)) { setError(signInContactMessage); return; }
     setSubmitting(true);
     try {
       if(mode==='otp' && !challenge){setChallenge(await authApi.requestOtp(email));return;}
@@ -60,7 +62,7 @@ export function SignIn() {
           <label className="label">Sign-in method<select className="input" value={mode} disabled={submitting} onChange={e=>{setMode(e.target.value as 'otp'|'password');setChallenge(null);setCode('');setTotp('');setError('');}}><option value="otp">Email / SMS code</option><option value="password">Password</option></select></label>
           <div>
             <label className="label" style={{ fontSize: '0.925rem' }}>Email or Phone Number</label>
-            <input className="input" type="text" autoComplete="username" value={email} disabled={submitting || !!challenge} onChange={e => setEmail(e.target.value)} placeholder="you@example.com or phone number" required autoFocus style={{ fontSize: '1rem' }} />
+            <input className="input" type="text" maxLength={255} autoComplete="username" value={email} disabled={submitting || !!challenge} onChange={e => setEmail(e.target.value)} placeholder="you@example.com or phone number" required autoFocus style={{ fontSize: '1rem' }} />
           </div>
 
           {mode==='password' && <div>
@@ -75,7 +77,7 @@ export function SignIn() {
 
           {mode==='otp' && challenge && <><p>Your code is queued for delivery. It expires in five minutes.</p><label className="label">Verification code<input className="input" required pattern="[0-9]{6}" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value)} /></label><label className="label">Authenticator code (if MFA enabled)<input className="input" inputMode="numeric" maxLength={6} value={totp} onChange={e=>setTotp(e.target.value)}/></label><button className="btn-outline" type="button" disabled={submitting} onClick={()=>{setChallenge(null);setCode('');}}>Request another code</button></>}
           {error && (
-            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 'var(--radius)', padding: '0.625rem 0.875rem', color: '#dc2626', fontSize: '0.875rem' }}>
+            <div role="alert" style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 'var(--radius)', padding: '0.625rem 0.875rem', color: '#dc2626', fontSize: '0.875rem' }}>
               {error}
             </div>
           )}
