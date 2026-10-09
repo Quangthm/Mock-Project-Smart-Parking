@@ -13,7 +13,7 @@ public sealed class AuthExceptionMiddleware(RequestDelegate next, ILogger<AuthEx
             context.Response.StatusCode = 400;
             await context.Response.WriteAsJsonAsync(new
             {
-                success = false, message = "Validation failed.",
+                success = false, code = "VALIDATION_FAILED", message = "Validation failed.",
                 errors = exception.Errors.Select(error => new { field = error.PropertyName, message = error.ErrorMessage })
             });
         }

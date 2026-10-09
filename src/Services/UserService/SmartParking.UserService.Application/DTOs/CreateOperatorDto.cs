@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using UserService.Application.Common.Validation;
 
 namespace UserService.Application.DTOs;
 
@@ -6,7 +7,7 @@ namespace UserService.Application.DTOs;
 public sealed class CreateOperatorDto : IValidatableObject
 {
     [Required, StringLength(255)] public string FullName { get; set; } = "";
-    [Required, EmailAddress, StringLength(255)] public string Email { get; set; } = "";
+    [Required, AccountEmail, StringLength(255)] public string Email { get; set; } = "";
     // BCrypt considers at most 72 UTF-8 bytes. Match existing login's 8-15 character policy.
     [Required, StringLength(15, MinimumLength = 8)]
     [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$")]

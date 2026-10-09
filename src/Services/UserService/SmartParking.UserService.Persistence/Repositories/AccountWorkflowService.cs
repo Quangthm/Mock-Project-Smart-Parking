@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using UserService.Application.Common.Validation;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -22,6 +23,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     }
     public static string Contact(string value)
     {
+        if (!SignInContact.IsValid(value)) throw Error("VALIDATION_FAILED",SignInContact.Message);
         value=value.Trim();
         if(value.Contains('@')) return value.ToLowerInvariant();
         if(value.StartsWith("+84")) return "0"+value[3..];
@@ -90,7 +92,8 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND (lower(email)={contact} OR phone={contact}) FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleOrDefaultAsync(ct);
         if(user?.Status==UserStatus.Locked && user.LockedUntil is {} until && until<=clock.GetUtcNow())
         {user.Status=UserStatus.Active;user.LockedUntil=null;user.FailedLoginAttempts=0;}
-        if(user is null || user.Status!=UserStatus.Active || AccessTokenService.CurrentRole(user) is null) throw Error("AUTH_FAILED","Account is not eligible for sign in.",401);
+        if(user is null) throw Error("AUTH_FAILED","Account is not eligible for sign in.",401);
+        if(user.Status!=UserStatus.Active || AccessTokenService.CurrentRole(user) is null) throw SignInErrors.ForStatus(user.Status);
         var role=AccessTokenService.CurrentRole(user);
         if(role is "driver" or "owner" && (contact.Contains('@')?user.EmailVerifiedAt is null:user.PhoneVerifiedAt is null))
             throw Error("CONTACT_UNVERIFIED","Use a verified contact for OTP sign in.",401);
@@ -162,7 +165,8 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     {
         Validate(body);await using var tx=await db.Database.BeginTransactionAsync(ct);var c=await LoadAsync(body.ChallengeId,"LOGIN",ct);
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleAsync(ct);
-        if(user.Status!=UserStatus.Active || user.DeletedOn!=null || AccessTokenService.CurrentRole(user) is null)throw Error("AUTH_FAILED","Account access is blocked.",401);
+        if(user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
+        if(user.Status!=UserStatus.Active || AccessTokenService.CurrentRole(user) is null)throw SignInErrors.ForStatus(user.Status);
         if(!await CheckAsync(c,body.Code,ct)) {await tx.CommitAsync(ct);throw Error(c.LockedUntil!=null?"OTP_LOCKED":"OTP_INVALID","Invalid code.",c.LockedUntil!=null?423:400);}
         var mfa=await db.MfaCredentials.FromSqlInterpolated($"SELECT * FROM mfa_credentials WHERE user_id={c.UserId} FOR UPDATE").SingleOrDefaultAsync(ct);
         if(mfa?.Enabled==true && !CheckTotp(mfa,body.Totp)) {await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);throw Error("MFA_REQUIRED","Valid authenticator code is required.",401);}

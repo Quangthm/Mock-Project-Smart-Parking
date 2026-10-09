@@ -12,6 +12,14 @@ interface CreateOperatorFormProps {
   onCancel: () => void
 }
 
+const permissionOptions = [
+  ['DEVICE_STATUS_VIEW', 'View device status'],
+  ['DEVICE_MANAGE', 'Manage devices'],
+  ['CASH_COLLECT', 'Collect cash'],
+  ['APPEAL_REVIEW', 'Review appeals'],
+  ['SLOT_OVERRIDE', 'Override slots'],
+] as const;
+
 // Password validation rules matching SignUp.tsx exactly
 function validatePassword(pw: string) {
   const errors: string[] = []

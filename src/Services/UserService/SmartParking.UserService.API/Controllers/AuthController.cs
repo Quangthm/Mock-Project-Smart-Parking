@@ -9,6 +9,7 @@ using UserService.Application.DTOs;
 using UserService.Application.Usecase.Login;
 using UserService.Application.Usecase.Session;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Models.Exceptions;
 
 namespace UserService.API.Controllers;
 
@@ -56,11 +57,10 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
     {
         var result = await Mediator.Send(Mapper.Map<LoginCommand>(loginDto), cancellationToken);
         if (!result.IsSuccess)
-            return StatusCode(result.ErrorCode == "ACCOUNT_LOCKED" ? 403 : 401, new
-            {
-                success = false, code = result.ErrorCode,
-                message = result.ErrorCode == "ACCOUNT_LOCKED" ? "Account is locked." : result.ErrorCode=="MFA_REQUIRED"?"Use OTP sign-in with your authenticator code.":"Invalid email or password."
-            });
+        {
+            var failure = SignInErrors.ForCode(result.ErrorCode);
+            return StatusCode(failure.StatusCode, new { success = false, code = failure.Code, message = failure.Message });
+        }
         return Ok(new { success = true, message = "Login successful", data = result.Session });
     }
 
