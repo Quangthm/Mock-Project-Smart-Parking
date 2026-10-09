@@ -45,6 +45,7 @@ CREATE TABLE reservations (
     
     expected_start_time TIMESTAMPTZ NOT NULL,
     expected_end_time TIMESTAMPTZ NOT NULL,
+    confirmed_at TIMESTAMPTZ,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING_PAYMENT' CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'UNFULFILLABLE')),
     hold_expires_at TIMESTAMPTZ,
     cancelled_at TIMESTAMPTZ,
@@ -180,3 +181,41 @@ CREATE TABLE monthly_passes (
 
 CREATE INDEX idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
 CREATE INDEX idx_monthly_passes_account ON monthly_passes(account_id);
+
+CREATE OR REPLACE FUNCTION record_reservation_confirmation() RETURNS trigger LANGUAGE plpgsql AS 
+BEGIN
+ IF NEW.status IN ('CONFIRMED','ALLOCATED','PARKING') AND NEW.confirmed_at IS NULL THEN
+  IF TG_OP='INSERT' THEN NEW.confirmed_at=clock_timestamp();
+  ELSIF OLD.status NOT IN ('CONFIRMED','ALLOCATED','PARKING') THEN NEW.confirmed_at=clock_timestamp();
+  END IF;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.confirmed_at IS NOT NULL THEN NEW.confirmed_at=OLD.confirmed_at; END IF;
+ RETURN NEW;
+END ;
+DROP TRIGGER IF EXISTS reservation_confirmation_time ON reservations;
+CREATE TRIGGER reservation_confirmation_time BEFORE INSERT OR UPDATE ON reservations
+ FOR EACH ROW EXECUTE FUNCTION record_reservation_confirmation();
+
+-- ======================================================================================
+-- 6. BẢN SAO TRẠNG THÁI VẬT LÝ (LOCAL CACHE / CQRS READ-MODEL)
+-- ======================================================================================
+-- Lưu ý: Không dùng Trigger DB để khóa chéo. Dữ liệu được đồng bộ qua Message Broker.
+
+CREATE TABLE IF NOT EXISTS structure_edit_holds (
+    site_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    token UUID NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS structure_site_state (
+    site_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    active BOOLEAN NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS structure_removed_resources (
+    id UUID PRIMARY KEY,
+    site_id UUID NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('slot','unit'))
+);

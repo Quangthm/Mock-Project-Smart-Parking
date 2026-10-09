@@ -60,8 +60,9 @@ CREATE TABLE parking_slots (
     site_id UUID NOT NULL,
     spatial_unit_id UUID NOT NULL,
     slot_code VARCHAR(50) NOT NULL,
-    slot_type VARCHAR(50) NOT NULL DEFAULT 'STANDARD' CHECK (slot_type IN ('STANDARD', 'EV', 'DISABLED', 'VIP')),
+    slot_type VARCHAR(50) NOT NULL DEFAULT 'STANDARD' CHECK (slot_type IN ('STANDARD', 'EV')),
     features JSONB,
+    coordinates_3d JSONB NULL,
     physical_state VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE' CHECK (physical_state IN ('AVAILABLE', 'OCCUPIED', 'UNKNOWN', 'MAINTENANCE', 'UNAVAILABLE')), -- 'AVAILABLE', 'OCCUPIED', 'UNKNOWN', 'MAINTENANCE', 'UNAVAILABLE'
     reservation_state VARCHAR(50) NULL CHECK (reservation_state IN ('RESERVED', 'PROTECTED', 'BACKUP')), -- 'RESERVED', 'PROTECTED', 'BACKUP'
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +71,8 @@ CREATE TABLE parking_slots (
     UNIQUE (id, tenant_id, site_id),
     UNIQUE (tenant_id, site_id, slot_code),
     FOREIGN KEY (site_id, tenant_id) REFERENCES parking_sites(id, tenant_id) ON DELETE CASCADE,
-    FOREIGN KEY (spatial_unit_id, tenant_id, site_id) REFERENCES spatial_units(id, tenant_id, site_id) ON DELETE CASCADE
+    FOREIGN KEY (spatial_unit_id, tenant_id, site_id) REFERENCES spatial_units(id, tenant_id, site_id) ON DELETE CASCADE,
+    CONSTRAINT ck_deleted_slot_not_occupied CHECK (deleted_at IS NULL OR (physical_state NOT IN ('OCCUPIED', 'UNKNOWN')))
 );
 
 -- 4B. BẢNG MAPPING LOẠI XE CHO CHỖ ĐỖ (SLOT COMPATIBILITIES)
@@ -214,3 +216,58 @@ CREATE TABLE incidents (
 
 CREATE INDEX idx_incidents_tenant_site ON incidents(tenant_id, site_id);
 CREATE INDEX idx_incidents_status ON incidents(status);
+
+-- ======================================================================================
+
+
+
+
+-- 11. BẢNG DỰ PHÒNG & KIỂM TOÁN CẤU TRÚC
+-- ======================================================================================
+
+CREATE TABLE IF NOT EXISTS structure_backup_policies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id UUID NOT NULL REFERENCES parking_sites(id) ON DELETE CASCADE,
+    unit_id UUID REFERENCES spatial_units(id) ON DELETE CASCADE,
+    vehicle_type TEXT NOT NULL CHECK(vehicle_type IN ('CAR','MOTORCYCLE')),
+    count INT NOT NULL CHECK(count>=0)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_backup_site ON structure_backup_policies(site_id,vehicle_type) WHERE unit_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_backup_unit ON structure_backup_policies(site_id,unit_id,vehicle_type) WHERE unit_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS structure_operations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id UUID NOT NULL REFERENCES parking_sites(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL,
+    actor_id UUID NOT NULL,
+    idempotency_key UUID NOT NULL,
+    request JSONB NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending','failed','completed')),
+    physical_committed BOOLEAN NOT NULL DEFAULT FALSE,
+    impact JSONB,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(site_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS structure_slot_audit (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id UUID NOT NULL REFERENCES parking_sites(id) ON DELETE CASCADE,
+    slot_id UUID NOT NULL REFERENCES parking_slots(id) ON DELETE CASCADE,
+    actor_id UUID NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS structure_change_audit (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id UUID NOT NULL REFERENCES parking_sites(id) ON DELETE CASCADE,
+    actor_id UUID NOT NULL,
+    operation_id UUID REFERENCES structure_operations(id) ON DELETE SET NULL,
+    before_state JSONB,
+    after_state JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_structure_change_history ON structure_change_audit(site_id,created_at);
