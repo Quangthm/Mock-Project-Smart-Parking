@@ -1,7 +1,83 @@
-import { useState } from 'react';
-import { request } from '../../lib/authApi';
-export function AccountSecurityPanel(){const [setup,setSetup]=useState<{secret:string;uri:string}|null>(null);const [code,setCode]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);
- async function start(){setBusy(true);setMessage('');try{setSetup((await request<{data:{secret:string;uri:string}}>('/mfa/setup','POST')).data);}catch(e){setMessage(e instanceof Error?e.message:'Setup failed.');}finally{setBusy(false);}}
- async function enable(e:React.FormEvent){e.preventDefault();setBusy(true);try{await request('/mfa/enable','POST',{code});setSetup(null);setCode('');setMessage('Authenticator enabled. Use OTP sign-in with your authenticator code.');}catch(e){setMessage(e instanceof Error?e.message:'Activation failed.');}finally{setBusy(false);}}
- return <section className="card"><h3>Authenticator security</h3><button className="btn-outline" disabled={busy} onClick={()=>void start()}>Set up authenticator</button>{setup && <form onSubmit={enable}><p>Add this key to your authenticator app. Keep it private.</p><code>{setup.secret}</code><label className="label">Authenticator code<input className="input" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" value={code} onChange={e=>setCode(e.target.value)}/></label><button className="btn-primary" disabled={busy}>Enable authenticator</button></form>}<p role="status">{message}</p></section>;
+import { useState } from "react"
+
+import { request } from "../../lib/authApi"
+
+export function AccountSecurityPanel() {
+  const [setup, setSetup] = useState<{ secret: string uri: string } | null>(
+    null,
+  )
+  const [code, setCode] = useState("")
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  async function start() {
+    setBusy(true)
+    setMessage("")
+    try {
+      setSetup(
+        (
+          await request<{ data: { secret: string uri: string } }>(
+            "/mfa/setup",
+            "POST",
+          )
+        ).data,
+      )
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Setup failed.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function enable(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await request("/mfa/enable", "POST", { code })
+      setSetup(null)
+      setCode("")
+      setMessage(
+        "Authenticator enabled. Use OTP sign-in with your authenticator code.",
+      )
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Activation failed.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="card">
+      <h3>Authenticator security</h3>
+      <button
+        className="btn-outline"
+        disabled={busy}
+        onClick={() => void start()}
+      >
+        Set up authenticator
+      </button>
+      {setup && (
+        <form onSubmit={enable}>
+          <p>Add this key to your authenticator app. Keep it private.</p>
+          <code>{setup.secret}</code>
+          <label className="label">
+            Authenticator code
+            <input
+              className="input"
+              required
+              pattern="[0-9]{6}"
+              maxLength={6}
+              inputMode="numeric"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </label>
+          <button className="btn-primary" disabled={busy}>
+            Enable authenticator
+          </button>
+        </form>
+      )}
+      <p role="status">{message}</p>
+    </section>
+  )
 }

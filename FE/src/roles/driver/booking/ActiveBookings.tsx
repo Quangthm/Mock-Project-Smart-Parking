@@ -1,14 +1,26 @@
 import { useApp } from "../../../context/AppContext"
+
 import { driverData as store } from "../data/data"
+
 import { BookingCard } from "./BookingCard"
+
 import type { Booking } from "../../../lib/types"
+
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 // Bookings tab
-export function ActiveBookings({ onPayNow }: { onPayNow: (booking: Booking) => void }) {
+
+export function ActiveBookings({
+  onPayNow,
+}: {
+  onPayNow: (booking: Booking) => void
+}) {
   const { user } = useApp()
+
   const bookings = store
+
     .getBookingsByDriver(user?.id ?? "")
+
     .filter((b) => !["completed", "cancelled"].includes(b.status))
 
   if (!bookings.length)
@@ -16,7 +28,9 @@ export function ActiveBookings({ onPayNow }: { onPayNow: (booking: Booking) => v
       <div
         style={{ textAlign: "center", padding: "3rem", color: "var(--muted)" }}
       >
-        <div style={{ color: 'var(--primary)', marginBottom: "0.75rem" }}><UntitledIcon name="parking" size={32} /></div>
+        <div style={{ color: "var(--primary)", marginBottom: "0.75rem" }}>
+          <UntitledIcon name="parking" size={32} />
+        </div>
         <p>No active bookings. Find a lot and book now!</p>
       </div>
     )

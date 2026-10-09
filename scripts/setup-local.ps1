@@ -1,6 +1,7 @@
 param(
     [string]$ConfigPath,
-    [switch]$SkipDatabase
+    [switch]$SkipDatabase,
+    [switch]$ResetAdminPassword
 )
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
@@ -25,10 +26,23 @@ if (!(Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
     } | ConvertTo-Json | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
     Write-Output 'Created local configuration in the Git-ignored config file.'
 }
-& (Join-Path $PSScriptRoot 'import-local-config.ps1') -ConfigPath $ConfigPath
+$localSettings = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+# Setup uses the edited file, even if this terminal still has old settings.
+foreach ($property in $localSettings.PSObject.Properties) {
+    if ($property.Name -notmatch '^[A-Za-z][A-Za-z0-9_:]*$' -or $property.Value -isnot [string]) {
+        throw 'Local config must contain flat string settings.'
+    }
+    [Environment]::SetEnvironmentVariable($property.Name.Replace(':', '__'), $property.Value, 'Process')
+}
 if (!$env:SMARTPARK_DEV_PASSWORD) { throw 'Configure SMARTPARK_DEV_PASSWORD in the local config file.' }
 if (!$env:SMARTPARK_SERVICE_KEY -or $env:SMARTPARK_SERVICE_KEY.Length -lt 32) {
     throw 'Configure SMARTPARK_SERVICE_KEY (at least 32 characters) in the local config file.'
+}
+$adminPassword = [string]$localSettings.SMARTPARK_ADMIN_PASSWORD
+if (($ResetAdminPassword -or $adminPassword) -and
+    ($adminPassword.Length -lt 8 -or $adminPassword.Length -gt 15 -or
+     $adminPassword -cnotmatch '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$')) {
+    throw 'SMARTPARK_ADMIN_PASSWORD must have 8-15 characters, uppercase, lowercase, a digit and a special character.'
 }
 $schemaRoot = if ($env:SMARTPARK_SCHEMA_ROOT) { $env:SMARTPARK_SCHEMA_ROOT } else { $taskRoot }
 $composeFile = Join-Path $schemaRoot 'compose.schema-integration.yml'
@@ -42,7 +56,54 @@ if (!$SkipDatabase) {
     }
 }
 
-$localSettings = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+if ($ResetAdminPassword) {
+    $dockerEndpoint = & docker context inspect --format '{{.Endpoints.docker.Host}}'
+    if ($LASTEXITCODE -ne 0 -or ($dockerEndpoint -join '').Trim() -notmatch '^(npipe:|unix:)') {
+        throw 'Admin reset requires a local Docker Desktop context.'
+    }
+    # PostgreSQL creates the bcrypt hash, so no PowerShell DLL or helper project is needed.
+    # SQL is sent through stdin; the password is never a process argument or console output.
+    $adminSql = @'
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TEMP TABLE local_admin_reset_target ON COMMIT DROP AS
+SELECT u.id FROM users u
+WHERE lower(u.email) = 'admin@smartpark.local' AND u.deleted_at IS NULL
+  AND u.status IN ('ACTIVE', 'LOCKED')
+  AND EXISTS (
+    SELECT 1 FROM accounts a JOIN account_roles r ON r.account_id = a.id
+    WHERE a.user_id = u.id AND a.status = 'ACTIVE' AND a.deleted_at IS NULL
+      AND r.role_code = 'ADMIN'
+  );
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM local_admin_reset_target) <> 1 THEN
+    RAISE EXCEPTION 'Expected one local Admin. Start UserService once to create it before resetting.';
+  END IF;
+END $$;
+SELECT id FROM users WHERE id IN (SELECT id FROM local_admin_reset_target) FOR UPDATE;
+UPDATE users SET password_hash = crypt('__ADMIN_PASSWORD__', gen_salt('bf', 12)),
+  status = 'ACTIVE', failed_login_attempts = 0, locked_until = NULL
+WHERE id IN (SELECT id FROM local_admin_reset_target);
+UPDATE user_refresh_tokens SET is_revoked = true
+WHERE user_id IN (SELECT id FROM local_admin_reset_target);
+UPDATE auth_challenges SET consumed_at = NOW(), code_hash = ''
+WHERE user_id IN (SELECT id FROM local_admin_reset_target)
+  AND purpose = 'LOGIN' AND consumed_at IS NULL;
+COMMIT;
+'@
+    $adminSql = $adminSql.Replace('__ADMIN_PASSWORD__', $adminPassword.Replace("'", "''"))
+    $previousOutputEncoding = $OutputEncoding
+    try {
+        $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        $adminResult = $adminSql | & docker compose -f $composeFile exec -T user-db psql -U smartpark_user -d smartpark_user -v ON_ERROR_STOP=1 -q
+        if ($LASTEXITCODE -ne 0) { throw 'Admin reset failed; its transaction was rolled back.' }
+    } finally {
+        $OutputEncoding = $previousOutputEncoding
+    }
+    Write-Output 'Local Admin unlocked; password updated from SMARTPARK_ADMIN_PASSWORD. Old sessions were revoked.'
+}
+
 foreach ($service in @('User', 'Parking', 'Reservation')) {
     $projectDir = Join-Path $taskRoot "src/Services/${service}Service/SmartParking.${service}Service.API"
     $database = 'smartpark_' + $service.ToLowerInvariant()
@@ -68,8 +129,14 @@ foreach ($service in @('User', 'Parking', 'Reservation')) {
         }
     }
     # Piped JSON keeps secrets out of command-line arguments and console output.
-    $settings | ConvertTo-Json | & dotnet user-secrets set --project $projectDir
-    if ($LASTEXITCODE -ne 0) { throw "Could not configure User Secrets for $service." }
+    $previousOutputEncoding = $OutputEncoding
+    try {
+        $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        $settings | ConvertTo-Json | & dotnet user-secrets set --project $projectDir
+        if ($LASTEXITCODE -ne 0) { throw "Could not configure User Secrets for $service." }
+    } finally {
+        $OutputEncoding = $previousOutputEncoding
+    }
     Write-Output "$service local configuration ready."
 }
 & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet

@@ -1,38 +1,61 @@
 import { useState } from "react"
+
 import { operatorData as store } from "../data/data"
+
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 export function EmergencyPanel() {
   type IncidentStatus = "open" | "resolved"
+
   const [incidents, setIncidents] = useState<{
     id: number
+
     type: string
+
     plate: string
+
     slot: string
+
     time: string
+
     status: IncidentStatus
   }[]>([
     {
       id: 1,
+
       type: "wrong-spot",
+
       plate: "51A-99999",
+
       slot: "105",
+
       time: "14:23",
+
       status: "open",
     },
+
     {
       id: 2,
+
       type: "overtime",
+
       plate: "51AB-12345",
+
       slot: "208",
+
       time: "13:45",
+
       status: "open",
     },
   ])
+
   const [form, setForm] = useState({
     plate: "",
+
     slot: "",
+
     type: "wrong-spot",
+
     notes: "",
   })
 
@@ -40,31 +63,45 @@ export function EmergencyPanel() {
     setIncidents((inc) =>
       inc.map((i) => (i.id === id ? { ...i, status: "resolved" as const } : i)),
     )
+
     store.addAuditLog({
       userId: "op",
+
       userName: "Operator",
+
       userRole: "operator",
+
       action: "INCIDENT_RESOLVED",
+
       details: `Incident #${id} resolved`,
     })
   }
 
   function reportIncident(e: React.FormEvent) {
     e.preventDefault()
+
     setIncidents((inc) => [
       ...inc,
+
       {
         id: Date.now(),
+
         type: form.type,
+
         plate: form.plate,
+
         slot: form.slot,
+
         time: new Date().toLocaleTimeString("en-GB", {
           hour: "2-digit",
+
           minute: "2-digit",
         }),
+
         status: "open",
       },
     ])
+
     setForm({ plate: "", slot: "", type: "wrong-spot", notes: "" })
   }
 
@@ -78,9 +115,13 @@ export function EmergencyPanel() {
         <h2
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1.2rem",
+
             marginBottom: "1.25rem",
+
             color: "var(--fg)",
           }}
         >
@@ -102,18 +143,36 @@ export function EmergencyPanel() {
               <div
                 style={{
                   display: "flex",
+
                   justifyContent: "space-between",
+
                   marginBottom: "0.375rem",
                 }}
               >
                 <span
                   style={{
                     fontWeight: 600,
+
                     color: inc.type === "wrong-spot" ? "#ef4444" : "#f59e0b",
+
                     fontSize: "0.85rem",
                   }}
                 >
-                  <><i aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, marginRight: 5, borderRadius: '50%', background: inc.type === "wrong-spot" ? "#ef4444" : "#f59e0b" }} />{inc.type === "wrong-spot" ? "Wrong Spot" : "Overtime"}</>
+                  <>
+                    <i
+                      aria-hidden="true"
+                      style={{
+                        display: "inline-block",
+                        width: 8,
+                        height: 8,
+                        marginRight: 5,
+                        borderRadius: "50%",
+                        background:
+                          inc.type === "wrong-spot" ? "#ef4444" : "#f59e0b",
+                      }}
+                    />
+                    {inc.type === "wrong-spot" ? "Wrong Spot" : "Overtime"}
+                  </>
                 </span>
                 <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
                   {inc.time}
@@ -122,7 +181,9 @@ export function EmergencyPanel() {
               <div
                 style={{
                   fontSize: "0.85rem",
+
                   color: "var(--fg)",
+
                   marginBottom: "0.625rem",
                 }}
               >
@@ -133,11 +194,17 @@ export function EmergencyPanel() {
                 onClick={() => resolve(inc.id)}
                 style={{
                   fontSize: "0.78rem",
+
                   padding: "0.3rem 0.75rem",
+
                   background: "#f0fdf4",
+
                   border: "1px solid #86efac",
+
                   color: "#166534",
+
                   borderRadius: "var(--radius)",
+
                   cursor: "pointer",
                 }}
               >
@@ -149,12 +216,18 @@ export function EmergencyPanel() {
             <div
               style={{
                 color: "var(--muted)",
+
                 fontSize: "0.875rem",
+
                 textAlign: "center",
+
                 padding: "2rem",
               }}
             >
-              <><UntitledIcon name="check-circle" size={16} /> No active incidents</>
+              <>
+                <UntitledIcon name="check-circle" size={16} /> No active
+                incidents
+              </>
             </div>
           )}
         </div>
@@ -163,9 +236,13 @@ export function EmergencyPanel() {
         <h2
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1.2rem",
+
             marginBottom: "1.25rem",
+
             color: "var(--fg)",
           }}
         >
@@ -229,7 +306,9 @@ export function EmergencyPanel() {
             className="btn-primary"
             style={{ fontSize: "0.875rem" }}
           >
-            <><UntitledIcon name="alert" size={16} /> Report Incident</>
+            <>
+              <UntitledIcon name="alert" size={16} /> Report Incident
+            </>
           </button>
         </form>
       </div>

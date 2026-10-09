@@ -1,9 +1,135 @@
-import { useEffect,useState } from 'react';
-import { request } from '../../../lib/authApi';
-interface Vehicle{id:string;rawPlate:string;canonicalPlate:string;vehicleType:string;imageReference?:string}
-export function VehicleManager(){
- const [vehicles,setVehicles]=useState<Vehicle[]>([]);const [reload,setReload]=useState(0);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [id,setId]=useState<string|null>(null);const [form,setForm]=useState({plate:'',vehicleType:'CAR',imageReference:''});
- useEffect(()=>{let active=true;setBusy(true);request<{data:Vehicle[]}>('','GET',undefined,'/api/vehicles').then(r=>{if(active)setVehicles(r.data);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;};},[reload]);
- async function save(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');try{await request(id?`/${id}`:'',id?'PATCH':'POST',{...form,imageReference:form.imageReference||null},'/api/vehicles');setId(null);setForm({plate:'',vehicleType:'CAR',imageReference:''});setReload(n=>n+1);}catch(e){setError(e instanceof Error?e.message:'Cannot save vehicle.');}finally{setBusy(false);}}
- return <section className="card"><h3>Registered vehicles</h3><p>Vietnamese plated cars and motorcycles are supported. Non-plated parking uses an Operator ticket.</p>{vehicles.map(v=><div className="card" key={v.id}><strong>{v.rawPlate}</strong><p>{v.vehicleType} · {v.canonicalPlate}</p><button className="btn-outline" disabled={busy} onClick={()=>{setId(v.id);setForm({plate:v.rawPlate,vehicleType:v.vehicleType,imageReference:v.imageReference??''});}}>Edit</button></div>)}<form onSubmit={save}><label className="label">Plate<input className="input" required maxLength={30} value={form.plate} onChange={e=>setForm({...form,plate:e.target.value})}/></label><label className="label">Vehicle type<select className="input" value={form.vehicleType} onChange={e=>setForm({...form,vehicleType:e.target.value})}><option>CAR</option><option>MOTORCYCLE</option></select></label><label className="label">Vehicle image (HTTPS URL)<input className="input" type="url" required maxLength={2048} value={form.imageReference} onChange={e=>setForm({...form,imageReference:e.target.value})}/></label><button className="btn-primary" disabled={busy}>{id?'Save vehicle':'Register vehicle'}</button></form><p role="alert">{error}</p></section>;
+import { useEffect, useState } from "react"
+
+import { request } from "../../../lib/authApi"
+
+interface Vehicle {
+  id: string
+  rawPlate: string
+  canonicalPlate: string
+  vehicleType: string
+  imageReference?: string
+}
+
+export function VehicleManager() {
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [reload, setReload] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const [id, setId] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    plate: "",
+    vehicleType: "CAR",
+    imageReference: "",
+  })
+
+  useEffect(() => {
+    let active = true
+    setBusy(true)
+    request<{ data: Vehicle[] }>("", "GET", undefined, "/api/vehicles")
+      .then((r) => {
+        if (active) setVehicles(r.data)
+      })
+      .catch((e) => {
+        if (active) setError(e.message)
+      })
+      .finally(() => {
+        if (active) setBusy(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [reload])
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError("")
+    try {
+      await request(
+        id ? `/${id}` : "",
+        id ? "PATCH" : "POST",
+        { ...form, imageReference: form.imageReference || null },
+        "/api/vehicles",
+      )
+      setId(null)
+      setForm({ plate: "", vehicleType: "CAR", imageReference: "" })
+      setReload((n) => n + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cannot save vehicle.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="card">
+      <h3>Registered vehicles</h3>
+      <p>
+        Vietnamese plated cars and motorcycles are supported. Non-plated parking
+        uses an Operator ticket.
+      </p>
+      {vehicles.map((v) => (
+        <div className="card" key={v.id}>
+          <strong>{v.rawPlate}</strong>
+          <p>
+            {v.vehicleType} · {v.canonicalPlate}
+          </p>
+          <button
+            className="btn-outline"
+            disabled={busy}
+            onClick={() => {
+              setId(v.id)
+              setForm({
+                plate: v.rawPlate,
+                vehicleType: v.vehicleType,
+                imageReference: v.imageReference ?? "",
+              })
+            }}
+          >
+            Edit
+          </button>
+        </div>
+      ))}
+      <form onSubmit={save}>
+        <label className="label">
+          Plate
+          <input
+            className="input"
+            required
+            maxLength={30}
+            value={form.plate}
+            onChange={(e) => setForm({ ...form, plate: e.target.value })}
+          />
+        </label>
+        <label className="label">
+          Vehicle type
+          <select
+            className="input"
+            value={form.vehicleType}
+            onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}
+          >
+            <option>CAR</option>
+            <option>MOTORCYCLE</option>
+          </select>
+        </label>
+        <label className="label">
+          Vehicle image (HTTPS URL)
+          <input
+            className="input"
+            type="url"
+            required
+            maxLength={2048}
+            value={form.imageReference}
+            onChange={(e) =>
+              setForm({ ...form, imageReference: e.target.value })
+            }
+          />
+        </label>
+        <button className="btn-primary" disabled={busy}>
+          {id ? "Save vehicle" : "Register vehicle"}
+        </button>
+      </form>
+      <p role="alert">{error}</p>
+    </section>
+  )
 }

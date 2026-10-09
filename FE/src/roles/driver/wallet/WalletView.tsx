@@ -1,26 +1,45 @@
 import { useState } from "react"
+
 import { useApp } from "../../../context/AppContext"
+
 import { driverData as store } from "../data/data"
+
 import { TopUpModal } from "./TopUpModal"
 
 export function WalletView() {
   const { user, setUser } = useApp()
+
   const balance = user?.wallet ?? 0
+
   const [showTopUp, setShowTopUp] = useState(false)
 
   function handleTopUp(amount: number) {
     if (!user) return
+
     const updated = { ...user, wallet: balance + amount }
+
     store.saveUser(updated)
-    store.addWalletTransaction({ userId: user.id, description: "Wallet top-up", amount })
+
+    store.addWalletTransaction({
+      userId: user.id,
+      description: "Wallet top-up",
+      amount,
+    })
+
     setUser(updated)
+
     store.addAuditLog({
       userId: user.id,
+
       userName: user.name,
+
       userRole: "driver",
+
       action: "WALLET_TOPUP",
+
       details: `Added ${amount.toLocaleString("vi-VN")}₫ to wallet`,
     })
+
     setShowTopUp(false)
   }
 
@@ -38,9 +57,13 @@ export function WalletView() {
       <div
         style={{
           background: "linear-gradient(135deg, #1d4ed8, #7c3aed)",
+
           borderRadius: "var(--radius)",
+
           padding: "1.75rem",
+
           marginBottom: "1.5rem",
+
           color: "#fff",
         }}
       >
@@ -52,8 +75,11 @@ export function WalletView() {
         <div
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 800,
+
             fontSize: "2rem",
+
             marginBottom: "0.25rem",
           }}
         >
@@ -64,13 +90,21 @@ export function WalletView() {
           onClick={() => setShowTopUp(true)}
           style={{
             marginTop: "1.25rem",
+
             background: "rgba(255,255,255,0.2)",
+
             border: "1px solid rgba(255,255,255,0.3)",
+
             borderRadius: "var(--radius)",
+
             padding: "0.5rem 1.25rem",
+
             color: "#fff",
+
             fontWeight: 600,
+
             fontSize: "0.875rem",
+
             cursor: "pointer",
           }}
         >
@@ -81,9 +115,13 @@ export function WalletView() {
         <h3
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1rem",
+
             marginBottom: "1rem",
+
             color: "var(--fg)",
           }}
         >
@@ -97,9 +135,13 @@ export function WalletView() {
               key={t.id}
               style={{
                 display: "flex",
+
                 justifyContent: "space-between",
+
                 alignItems: "center",
+
                 padding: "0.625rem 0",
+
                 borderBottom: "1px solid var(--border)",
               }}
             >
@@ -107,7 +149,9 @@ export function WalletView() {
                 <div
                   style={{
                     fontWeight: 500,
+
                     fontSize: "0.875rem",
+
                     color: "var(--fg)",
                   }}
                 >
@@ -120,8 +164,11 @@ export function WalletView() {
               <div
                 style={{
                   fontFamily: "Outfit",
+
                   fontWeight: 700,
+
                   fontSize: "0.9rem",
+
                   color: t.amount > 0 ? "#22c55e" : "#ef4444",
                 }}
               >
