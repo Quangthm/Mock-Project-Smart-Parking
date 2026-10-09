@@ -110,6 +110,7 @@ Quản lý **vòng đời đặt chỗ trước** của người dùng. Hỗ tr�
 | `vehicle_type` | `VARCHAR(50) NOT NULL DEFAULT 'CAR'` | Loại xe | Từ profile xe | FR-RES-01 |
 | `expected_start_time` | `TIMESTAMPTZ NOT NULL` | Giờ dự kiến bắt đầu đỗ. Quyết định khi nào trigger Protection Window và Allocation | Driver chọn | §3.4.4; §3.4.6 |
 | `expected_end_time` | `TIMESTAMPTZ NOT NULL` | Giờ dự kiến rời đi | Driver chọn | §3.4.6 |
+| `confirmed_at` | `TIMESTAMPTZ NULL` | Thời điểm reservation được xác nhận thanh toán/phân bổ | Trigger cập nhật | §3.4.3 |
 | `status` | `VARCHAR(50) NOT NULL DEFAULT 'PENDING_PAYMENT'` | Trạng thái business theo §3.4.2 (PENDING_PAYMENT, CONFIRMED, ALLOCATED, PARKING, COMPLETED, EXPIRED, NO_SHOW, CANCELLED, UNFULFILLABLE) | Lifecycle logic | §3.4.2; FR-RES-12 |
 | `hold_expires_at` | `TIMESTAMPTZ NULL` | Hạn chót thanh toán (default ~5p). Quá hạn → status = `EXPIRED` | `NOW() + hold_duration` | §3.4.3 |
 | `cancelled_at` | `TIMESTAMPTZ NULL` | Thời điểm hủy | Gán khi cancel | §3.4.10 |
@@ -125,7 +126,8 @@ Quản lý **vòng đời đặt chỗ trước** của người dùng. Hỗ tr�
 | `chk_status` | `CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'UNFULFILLABLE'))` | Lifecycle state hợp lệ |
 | `chk_valid_times` | `CHECK (expected_end_time > expected_start_time)` | Giờ kết thúc phải sau giờ bắt đầu |
 | `chk_exclusive_mode` | `CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL))` | Chống việc một booking vừa chọn đích danh Slot lại vừa chọn Zone |
-| `no_overlapping_reservations_per_vehicle` | `EXCLUDE USING gist (tenant_id WITH =, site_id WITH =, normalized_plate WITH =, tstzrange(expected_start_time, expected_end_time) WITH &&) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))` | **Chống Double-Booking cứng**: Không cho phép 1 xe đặt 2 lịch đè lên nhau tại cùng 1 bãi nếu booking đang active |
+| `no_overlapping_reservations_per_vehicle` | `EXCLUDE USING gist (...)` | **Chống Double-Booking cứng**: Không cho phép 1 xe đặt 2 lịch đè lên nhau tại cùng 1 bãi nếu booking đang active |
+| `reservation_confirmation_time` | `TRIGGER BEFORE INSERT OR UPDATE` | Tự động ghi nhận thời điểm reservation được `CONFIRMED` |
 | `idx_reservations_tenant_site` | `(tenant_id, site_id)` | Lọc booking theo bãi |
 | `idx_reservations_account` | `(account_id)` | Lọc theo driver |
 | `idx_reservations_status_times` | `(status, expected_start_time, expected_end_time)` | Tối ưu hóa background job (tìm các chuyến sắp tới Allocation Lead Time, Protection Window) |
@@ -287,7 +289,55 @@ Quản lý vé tháng trả trước (rolling prepaid anchored periods - M-01~09
 
 ---
 
-## 7. Tóm tắt quan hệ giữa các bảng
+## 7. Bản sao trạng thái cấu trúc (Local Cache / Read-Model)
+
+### 6.1 Mục đích nghiệp vụ
+
+Đây là các bảng Local Cache (Replication) được cập nhật thông qua Event-Driven Architecture (Kafka/RabbitMQ) từ Parking Service. 
+Chúng giúp Reservation Service nhanh chóng kiểm tra trạng thái vật lý của bãi đỗ (ví dụ: bãi có đang active không, có đang bị khóa để sửa chữa không, chỗ đỗ có bị gỡ bỏ không) mà không cần gọi API đồng bộ sang Parking Service, đảm bảo tính Decoupling và Performance cho hệ thống Microservices. Tuyệt đối không dùng DB Trigger để can thiệp.
+
+### 6.2 Traceability Mapping
+
+| Mã yêu cầu | Loại | Nội dung liên quan |
+|---|---|---|
+| **System Design** | N/A | Local Cache / Read-model phục vụ Event-Driven Architecture |
+
+### 6.3 Bảng thuộc tính chi tiết
+
+**Bảng structure_edit_holds** (Lưu cờ tạm dừng đặt chỗ khi bãi đang bảo trì)
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ |
+|---|---|---|
+| site_id | UUID PK | ID bãi đỗ |
+| 	enant_id | UUID NOT NULL | Logical ID doanh nghiệp |
+| 	oken | UUID NOT NULL UNIQUE | Token khóa |
+| created_at | TIMESTAMPTZ NOT NULL DEFAULT now() | Thời điểm khóa |
+
+**Bảng structure_site_state** (Lưu trạng thái hoạt động của bãi đỗ)
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ |
+|---|---|---|
+| site_id | UUID PK | ID bãi đỗ |
+| 	enant_id | UUID NOT NULL | Logical ID doanh nghiệp |
+| ctive | BOOLEAN NOT NULL | Trạng thái cho phép hoạt động |
+
+**Bảng structure_removed_resources** (Lưu danh sách chỗ đỗ/khu vực đã bị xóa vật lý)
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ |
+|---|---|---|
+| id | UUID PK | ID của resource bị xóa |
+| site_id | UUID NOT NULL | ID bãi đỗ |
+| kind | TEXT NOT NULL | Phân loại resource (slot hoặc unit) |
+
+### 6.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| chk_kind | CHECK(kind IN ('slot','unit')) | Loại resource bị xóa hợp lệ |
+
+
+
+## 8. Tóm tắt quan hệ giữa các bảng
 
 ```text
 reservations (1) ──── (0..1) parking_sessions     [reservation_id]
@@ -301,7 +351,7 @@ monthly_passes (N) ──── (1) site_capacity_pools   [logic implicit: guara
 
 ---
 
-## 8. Tóm tắt Cross-service References
+## 9. Tóm tắt Cross-service References
 
 | Cột | Bảng hiện tại | Trỏ đến Service (Bảng tham chiếu) | Cơ chế đồng bộ |
 |---|---|---|---|
@@ -314,7 +364,7 @@ monthly_passes (N) ──── (1) site_capacity_pools   [logic implicit: guara
 
 ---
 
-## 9. Extensions PostgreSQL sử dụng
+## 10. Extensions PostgreSQL sử dụng
 
 | Extension | Lý do sử dụng |
 |---|---|

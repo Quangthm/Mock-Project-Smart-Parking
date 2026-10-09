@@ -74,17 +74,20 @@ Lưu trữ **thông tin định danh vật lý của một con người** trong 
 | `avatar_url` | `TEXT NULL` | URL ảnh đại diện của người dùng; được phép sửa qua profile-edit flow thông thường | URL do frontend upload lên storage (S3/CDN), sau đó lưu URL vào đây | FR-AUTH-03 |
 | `failed_login_attempts` | `INT NOT NULL DEFAULT 0` | Đếm số lần nhập sai thông tin đăng nhập **liên tiếp**. Khi đạt ngưỡng 3, tài khoản bị khóa tạm thời. Reset về 0 sau mỗi lần đăng nhập thành công | Tăng 1 mỗi khi authentication thất bại; reset khi thành công | FR-AUTH-02; §3.1.1; §4.3 (lockout 3 lần) |
 | `locked_until` | `TIMESTAMPTZ NULL` | Thời điểm kết thúc khóa tạm thời do brute-force. `NULL` khi tài khoản không bị khóa tạm. Sau thời điểm này, tài khoản tự động cho phép đăng nhập lại mà không cần Admin can thiệp | Gán = `NOW() + INTERVAL '15 minutes'` tại lớp Application khi `failed_login_attempts` đạt ngưỡng (§4.3) | FR-AUTH-02; §3.1.1; §4.3 |
-| `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` CHECK IN (`'ACTIVE'`, `'INACTIVE'`, `'LOCKED'`, `'PENDING_APPROVAL'`) | Trạng thái vòng đời của tài khoản người dùng. `ACTIVE`: hoạt động bình thường. `INACTIVE`: bị vô hiệu hóa thủ công. `LOCKED`: bị khóa vĩnh viễn bởi Admin. `PENDING_APPROVAL`: Owner mới đăng ký chờ Admin duyệt | Mặc định `ACTIVE` khi tạo (trừ Owner registration → `PENDING_APPROVAL`). Chỉ Admin được thay đổi `status`, không phải customer | FR-AUTH-02; FR-AUTH-05; FR-AUTH-06 |
+| `email_verified_at` | `TIMESTAMPTZ NULL` | Thời điểm email được xác thực thành công qua mã OTP | Application gán = `NOW()` khi xác thực thành công | FR-AUTH-03 |
+| `phone_verified_at` | `TIMESTAMPTZ NULL` | Thời điểm số điện thoại được xác thực thành công qua mã OTP | Application gán = `NOW()` khi xác thực thành công | FR-AUTH-03 |
+| `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` | Trạng thái vòng đời của tài khoản người dùng. `PENDING_VERIFICATION`: Chờ xác thực OTP. `REJECTED`: Bị từ chối duyệt | Mặc định `ACTIVE` khi tạo. Chỉ Admin được thay đổi `status`, không phải customer | FR-AUTH-02; FR-AUTH-05; FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo bản ghi. Dùng cho audit và báo cáo | Tự sinh bởi database tại thời điểm INSERT | §4.3 (Audit); FR-AUTH-05 |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật bản ghi lần cuối. Cần được cập nhật thủ công bởi Application mỗi khi có UPDATE | Application cập nhật = `NOW()` tại mỗi UPDATE | — |
 | `deleted_at` | `TIMESTAMPTZ NULL` | **Soft-delete**: thời điểm xóa logic. `NULL` = chưa xóa; có giá trị = đã xóa. Cho phép giữ lại lịch sử và toàn vẹn dữ liệu tham chiếu | Application gán = `NOW()` thay vì DELETE vật lý | FR-AUTH-03; §5.1 (Data retention) |
 
-### 2.4 Indexes
+### 2.4 Constraints & Indexes
 
-| Index | Cột | Loại | Mục đích |
-|---|---|---|---|
-| `uq_active_user_phone` | `phone WHERE deleted_at IS NULL` | UNIQUE (Partial) | Đảm bảo mỗi số điện thoại chỉ thuộc về một user chưa bị xóa; cho phép tái sử dụng số điện thoại sau soft-delete |
-| `uq_active_user_email_normalized` | `lower(email) WHERE deleted_at IS NULL AND email IS NOT NULL` | UNIQUE (Partial, Functional) | Case-insensitive uniqueness cho email; `lower()` tránh trường hợp `User@email.com` và `user@email.com` bị coi là khác nhau |
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `chk_users_status` | `CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL', 'PENDING_VERIFICATION', 'REJECTED'))` | Giới hạn trạng thái tài khoản hợp lệ |
+| `uq_active_user_phone` | `UNIQUE(phone) WHERE deleted_at IS NULL` | Đảm bảo mỗi số điện thoại chỉ thuộc về một user chưa bị xóa; cho phép tái sử dụng số điện thoại sau soft-delete |
+| `uq_active_user_email_normalized` | `UNIQUE(lower(email)) WHERE deleted_at IS NULL AND email IS NOT NULL` | Case-insensitive uniqueness cho email; `lower()` tránh trường hợp `User@email.com` và `user@email.com` bị coi là khác nhau |
 
 ---
 
@@ -110,18 +113,21 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh account; đây là ID được dùng trong `account_roles`, `operator_grants`, `vehicles`, và là `account_id` được lưu dưới dạng Logical ID ở Reservation/Payment Service | Tự sinh bởi `uuid_generate_v4()` | FR-AUTH-02; FR-AUTH-06 |
-| `user_id` | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | FK vật lý đến `users.id`; liên kết account với con người sở hữu nó. `CASCADE`: xóa user thì xóa luôn toàn bộ account của user đó | Gán bằng `users.id` của user đang đăng nhập/được tạo tài khoản | FR-AUTH-02 |
+| `user_id` | `UUID NOT NULL` | FK vật lý đến `users.id`; liên kết account với con người sở hữu nó | Gán bằng `users.id` của user đang đăng nhập/được tạo tài khoản | FR-AUTH-02 |
 | `tenant_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `tenants.id` trong Parking Service DB. `NULL` với Driver account (không thuộc tenant nào). Khác `NULL` với Owner/Operator account | Được gán khi Owner đăng ký bãi hoặc Owner tạo Operator account; truyền qua API, không validate bằng FK vật lý | §2.3.1; FR-AUTH-04 |
 | `site_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `parking_sites.id` trong Parking Service DB. Dùng để giới hạn scope của Operator vào một site cụ thể. `NULL` với Owner account (scope toàn tenant) | Được gán khi Owner assign Operator vào site cụ thể | §2.3.1 (OPERATOR_MANAGE scope) |
-| `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` CHECK IN (`'ACTIVE'`, `'INACTIVE'`, `'LOCKED'`, `'PENDING_APPROVAL'`) | Trạng thái vòng đời của account trong ngữ cảnh này. Hoạt động độc lập với `users.status` — một user ACTIVE có thể có account LOCKED tại một tenant cụ thể. FR-AUTH-06 yêu cầu kiểm tra **cả hai** | Mặc định `ACTIVE`; Owner/Admin có thể thay đổi | FR-AUTH-02; FR-AUTH-06 |
+| `permissions` | `TEXT[] NULL` | Danh sách quyền hạn bổ sung hoặc bị ghi đè của tài khoản | Cập nhật bởi Admin/Owner khi gán quyền | FR-AUTH-06 |
+| `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` | Trạng thái vòng đời của account trong ngữ cảnh này. Hoạt động độc lập với `users.status` — một user ACTIVE có thể có account LOCKED tại một tenant cụ thể. FR-AUTH-06 yêu cầu kiểm tra **cả hai** | Mặc định `ACTIVE`; Owner/Admin có thể thay đổi | FR-AUTH-02; FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo account | Tự sinh bởi database | — |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật lần cuối | Application cập nhật tại mỗi UPDATE | — |
 | `deleted_at` | `TIMESTAMPTZ NULL` | Soft-delete: cho phép xóa logic account mà không mất dữ liệu lịch sử | Application gán = `NOW()` thay vì DELETE vật lý | §5.1 |
 
-### 3.4 Indexes
+### 3.4 Constraints & Indexes
 
-| Index | Cột | Mục đích |
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
+| `FK_accounts_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa luôn toàn bộ account của user đó |
+| `chk_accounts_status` | `CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL'))` | Giới hạn trạng thái account hợp lệ |
 | `idx_accounts_user_id` | `user_id` | Tra cứu nhanh toàn bộ account của một user |
 | `idx_accounts_tenant_id` | `tenant_id` | Liệt kê toàn bộ account thuộc một tenant (dùng khi Owner/Admin quản lý) |
 | `idx_accounts_site_id` | `site_id` | Liệt kê account Operator được gắn vào một site cụ thể |
@@ -180,16 +186,18 @@ Bảng junction thực hiện quan hệ nhiều-nhiều giữa `accounts` và `r
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
-| `account_id` | `UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE` | FK đến account được gán role. `CASCADE`: xóa account thì xóa luôn toàn bộ role assignment của account đó | Gán bằng `accounts.id` tương ứng | FR-AUTH-06 |
-| `role_code` | `VARCHAR(50) NOT NULL REFERENCES roles(code) ON DELETE RESTRICT` | FK đến mã vai trò. `RESTRICT`: không cho xóa role nếu vẫn còn assignment; bảo vệ tính toàn vẹn của cấu hình phân quyền | Gán bằng `roles.code` tương ứng | FR-AUTH-06 |
+| `account_id` | `UUID NOT NULL` | FK đến account được gán role | Gán bằng `accounts.id` tương ứng | FR-AUTH-06 |
+| `role_code` | `VARCHAR(50) NOT NULL` | FK đến mã vai trò | Gán bằng `roles.code` tương ứng | FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm gán role cho account; phục vụ audit trail theo yêu cầu "role changes remain audited" | Tự sinh bởi database tại INSERT | §2.3.1; §4.3 (Audit log 7 năm) |
 
 **Primary Key**: `(account_id, role_code)` — một account không thể có cùng một role hai lần.
 
-### 5.4 Indexes
+### 5.4 Constraints & Indexes
 
-| Index | Cột | Mục đích |
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
+| `FK_account_roles_accounts` | `REFERENCES accounts(id) ON DELETE CASCADE` | Xóa account thì xóa luôn toàn bộ role assignment của account đó |
+| `FK_account_roles_roles` | `REFERENCES roles(code) ON DELETE RESTRICT` | Không cho xóa role nếu vẫn còn assignment; bảo vệ tính toàn vẹn của cấu hình phân quyền |
 | `idx_account_roles_role_code` | `role_code` | Tra cứu ngược: tìm toàn bộ account đang giữ một role cụ thể (dùng khi Admin quản lý) |
 
 ---
@@ -223,21 +231,23 @@ Lưu ý: Phương tiện không có biển số (xe không biển) **không** t�
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh duy nhất của phương tiện. Được dùng làm Logical ID khi Reservation/IoT Service cần tham chiếu đến phương tiện cụ thể | Tự sinh bởi `uuid_generate_v4()` | FR-VEH-01 |
-| `account_id` | `UUID NULL REFERENCES accounts(id) ON DELETE SET NULL` | FK đến account của Driver sở hữu xe. `NULL`: cho phép giữ lại bản ghi phương tiện ngay cả khi account bị xóa — bảo toàn lịch sử parking session. `SET NULL` thay vì CASCADE là quyết định quan trọng để duy trì audit trail | Gán bằng `accounts.id` của Driver khi đăng ký xe | FR-VEH-01; §3.1.3 |
-| `original_plate` | `VARCHAR(20) NOT NULL` | Biển số xe **đúng như người dùng nhập**, bao gồm dấu cách, ký tự hoa/thường. Lưu trữ cho mục đích hiển thị và audit. Không dùng để matching | Do Driver nhập, được validate format theo Thông tư 79/2024/TT-BCA trước khi lưu | FR-VEH-01; §3.1.3; §5.1 |
+| `account_id` | `UUID NULL` | FK đến account của Driver sở hữu xe. `NULL`: cho phép giữ lại bản ghi phương tiện ngay cả khi account bị xóa — bảo toàn lịch sử parking session | Gán bằng `accounts.id` của Driver khi đăng ký xe | FR-VEH-01; §3.1.3 |
+| `original_plate` | `VARCHAR(30) NOT NULL` | Biển số xe **đúng như người dùng nhập**, bao gồm dấu cách, ký tự hoa/thường. Lưu trữ cho mục đích hiển thị và audit. Không dùng để matching | Do Driver nhập, được validate format theo Thông tư 79/2024/TT-BCA trước khi lưu | FR-VEH-01; §3.1.3; §5.1 |
 | `normalized_plate` | `VARCHAR(20) NOT NULL` | Biển số xe **đã chuẩn hóa** (canonical form): loại bỏ dấu cách, chuyển hoa, chuẩn hóa format. Đây là giá trị dùng để **khớp với LPR** và kiểm tra trùng lặp (`EXCLUDE` constraint tại `reservations`, `monthly_passes`) | Sinh từ `original_plate` bởi lớp Application (normalization logic theo Thông tư 79/2024/TT-BCA) trước khi INSERT | FR-VEH-01; §3.1.3; BR-VEH-01 |
-| `vehicle_type` | `VARCHAR(50) NOT NULL DEFAULT 'CAR'` CHECK IN (`'CAR'`, `'MOTORCYCLE'`) | Loại phương tiện; quyết định tính tương thích với slot khi đặt chỗ. Motorcycle được hỗ trợ trong MVP. EV charging không phải function của hệ thống | Do Driver chọn khi đăng ký xe | FR-VEH-04; §3.1.3; FR-VEH-03 |
+| `vehicle_type` | `VARCHAR(50) NOT NULL DEFAULT 'CAR'` | Loại phương tiện; quyết định tính tương thích với slot khi đặt chỗ. Motorcycle được hỗ trợ trong MVP. EV charging không phải function của hệ thống | Do Driver chọn khi đăng ký xe | FR-VEH-04; §3.1.3; FR-VEH-03 |
 | `image_url` | `TEXT NULL` | URL ảnh phương tiện (mặt trước, thấy rõ biển số). Dùng cho mục đích nhận diện thủ công và LPR (§6.2) | URL do frontend upload lên storage (S3/CDN); `NULL` nếu chưa có ảnh | §3.1.3; §6.2 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm đăng ký phương tiện | Tự sinh bởi database | FR-VEH-01 |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật lần cuối | Application cập nhật tại mỗi UPDATE | — |
 | `deleted_at` | `TIMESTAMPTZ NULL` | Soft-delete phương tiện. Driver có thể "xóa" xe khỏi danh sách nhưng dữ liệu phải được giữ để tham chiếu từ lịch sử parking session | Application gán = `NOW()` thay vì DELETE vật lý | §5.1; FR-VEH-01 |
 
-### 6.4 Indexes
+### 6.4 Constraints & Indexes
 
-| Index | Cột | Loại | Mục đích |
-|---|---|---|---|
-| `uq_active_vehicle_plate` | `normalized_plate WHERE deleted_at IS NULL` | UNIQUE (Partial) | Mỗi biển số chuẩn hóa chỉ được đăng ký bởi một chủ xe tại một thời điểm; cho phép tái sử dụng biển số sau soft-delete |
-| `idx_vehicles_account_id` | `account_id` | INDEX | Tra cứu nhanh danh sách xe của một Driver |
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `FK_vehicles_accounts` | `REFERENCES accounts(id) ON DELETE SET NULL` | `SET NULL` thay vì CASCADE là quyết định quan trọng để duy trì audit trail |
+| `chk_vehicles_type` | `CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE'))` | Ràng buộc loại phương tiện hợp lệ |
+| `ix_active_vehicle_plate` | `normalized_plate WHERE deleted_at IS NULL` | Cho phép tái sử dụng biển số (nhiều người có thể đăng ký cùng biển số chuẩn hóa) |
+| `idx_vehicles_account_id` | `account_id` | Tra cứu nhanh danh sách xe của một Driver |
 
 ### 6.5 Ghi chú Cross-service
 
@@ -272,23 +282,25 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh duy nhất của bản ghi token | Tự sinh bởi `uuid_generate_v4()` | — |
-| `user_id` | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | FK đến user sở hữu token. `CASCADE`: xóa user thì xóa toàn bộ token — tránh orphan token | Gán bằng `users.id` của user đang đăng nhập | FR-AUTH-02 |
-| `token_hash` | `VARCHAR(255) NOT NULL UNIQUE` | Giá trị băm của Refresh Token (plain-text Refresh Token **không** được lưu). Khi client gửi refresh request, server băm token nhận được và so sánh với cột này | Sinh bởi Application: `SHA-256(raw_refresh_token)`; UNIQUE enforce một token chỉ tồn tại một lần | §4.3 (Security) |
-| `device_info` | `VARCHAR(255) NULL` | Thông tin thiết bị (user-agent string, tên thiết bị). Dùng để hiển thị danh sách session cho người dùng và phát hiện đăng nhập bất thường | Trích xuất từ HTTP `User-Agent` header tại thời điểm login | §4.3 (Security monitoring) |
-| `ip_address` | `VARCHAR(45) NULL` | IP của client tại thời điểm đăng nhập. `VARCHAR(45)` đủ để lưu cả IPv4 và IPv6 | Trích xuất từ request tại API Gateway / Application | §4.3 |
-| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Refresh Token hết hạn. Theo §3.1.4 = `created_at + 7 days` | Tính bởi Application = `NOW() + INTERVAL '7 days'` | §3.1.4; §4.3 |
-| `access_token_id` | `UUID NOT NULL UNIQUE` | Định danh duy nhất của Access Token tương ứng (JWT claim `jti`). Dùng để revoke Access Token cụ thể mà không revoke toàn bộ session | Sinh bởi Application khi tạo JWT; gán vào JWT claim `jti` | FR-AUTH-02; §3.1.4 |
-| `access_expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Access Token hết hạn. Theo §3.1.4 = `created_at + 24 hours` | Tính bởi Application = `NOW() + INTERVAL '24 hours'` | §3.1.4; §4.3 |
-| `is_revoked` | `BOOLEAN NOT NULL DEFAULT false` | Cờ revocation: `true` khi token bị vô hiệu hóa trước hạn (logout, đổi mật khẩu, Admin lock). Server kiểm tra cờ này trước khi accept refresh request | Application set = `true` tại logout hoặc force-revoke | FR-AUTH-02; FR-AUTH-06 |
+| `user_id` | `UUID NOT NULL` | FK đến user sở hữu token. User đăng xuất/bị xóa → xóa token | Gán bằng `users.id` của user đang đăng nhập | FR-AUTH-02 |
+| `token_hash` | `VARCHAR(255) NOT NULL` | Giá trị băm của Refresh Token (plain-text Refresh Token **không** được lưu) | Sinh bởi Application: `SHA-256(raw_refresh_token)` | §4.3 (Security) |
+| `device_info` | `VARCHAR(255) NULL` | Thông tin thiết bị (user-agent string, tên thiết bị). Dùng để hiển thị danh sách session | Trích xuất từ HTTP `User-Agent` header | §4.3 (Security monitoring) |
+| `ip_address` | `VARCHAR(45) NULL` | IP của client tại thời điểm đăng nhập | Trích xuất từ request tại API Gateway / Application | §4.3 |
+| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Refresh Token hết hạn | Tính bởi Application = `NOW() + INTERVAL '7 days'` | §3.1.4; §4.3 |
+| `access_token_id` | `UUID NOT NULL` | Định danh duy nhất của Access Token tương ứng (JWT claim `jti`) | Sinh bởi Application khi tạo JWT; gán vào JWT claim `jti` | FR-AUTH-02; §3.1.4 |
+| `access_expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Access Token hết hạn | Tính bởi Application = `NOW() + INTERVAL '24 hours'` | §3.1.4; §4.3 |
+| `is_revoked` | `BOOLEAN NOT NULL DEFAULT false` | Cờ revocation: `true` khi token bị vô hiệu hóa trước hạn | Application set = `true` tại logout hoặc force-revoke | FR-AUTH-02; FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cấp token (login time) | Tự sinh bởi database | — |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật (thường là khi revoke) | Application cập nhật khi `is_revoked` thay đổi | — |
 
-**Constraint**: `CONSTRAINT chk_expires_at_valid CHECK (expires_at > created_at)` — đảm bảo token không bao giờ được tạo với `expires_at` trong quá khứ.
+### 7.4 Constraints & Indexes
 
-### 7.4 Indexes
-
-| Index | Cột | Mục đích |
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
+| `FK_user_refresh_tokens_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa toàn bộ token |
+| `uq_user_refresh_tokens_hash` | `UNIQUE(token_hash)` | Unique token hash |
+| `uq_user_refresh_tokens_access` | `UNIQUE(access_token_id)` | Unique access token ID |
+| `chk_expires_at_valid` | `CHECK (expires_at > created_at)` | Đảm bảo token không bao giờ được tạo với `expires_at` trong quá khứ |
 | `idx_user_refresh_tokens_user_id` | `user_id` | Tra cứu toàn bộ token của một user (dùng khi logout tất cả thiết bị) |
 | `idx_user_refresh_tokens_expires_at` | `expires_at` | Hỗ trợ cleanup job: xóa hàng loạt token đã hết hạn |
 
@@ -314,14 +326,23 @@ Quản lý luồng xác minh OTP trong quá trình đăng ký tài khoản Drive
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh bản ghi đăng ký | Tự sinh bởi `uuid_generate_v4()` | — |
-| `user_id` | `UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE` | FK đến user đang trong quá trình đăng ký. `UNIQUE`: một user chỉ có thể có một luồng OTP đang hoạt động. `CASCADE`: xóa user thì xóa bản ghi đăng ký | Gán bằng `users.id` khi tạo user mới | FR-AUTH-01 |
-| `channel` | `VARCHAR(10) NOT NULL` CHECK IN (`'email'`, `'sms'`) | Kênh gửi OTP: `'email'` hoặc `'sms'`. Xác định cách Notification Service gửi OTP và cách user xác minh | Do user chọn (hoặc hệ thống tự chọn dựa trên thông tin đăng ký: có email dùng email, có phone dùng sms) | FR-AUTH-01; §3.1.1 |
-| `code_hash` | `TEXT NOT NULL` | Giá trị băm của OTP (plain-text OTP **không** được lưu). Khi user nhập OTP, server băm và so sánh | Sinh bởi Application: tạo OTP ngẫu nhiên (6 chữ số) → băm bằng bcrypt/SHA-256 → lưu hash; OTP gốc gửi qua Notification Service | FR-AUTH-01; §4.3 |
-| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm OTP hết hạn. Theo §3.1.1 và §4.3 = `created_at + 5 minutes` | Tính bởi Application = `NOW() + INTERVAL '5 minutes'` | §3.1.1; §4.3 |
-| `resend_available_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm user được phép yêu cầu gửi lại OTP. Tránh spam resend request | Tính bởi Application = `NOW() + INTERVAL '1-2 minutes'` (configurable); phải nhỏ hơn `expires_at` | §3.1.1 |
-| `failed_attempts` | `INTEGER NOT NULL DEFAULT 0` CHECK (`failed_attempts BETWEEN 0 AND 3`) | Số lần nhập OTP sai liên tiếp. Giới hạn tối đa 3 lần (theo §3.1.1 và §4.3). Constraint DB đảm bảo không vượt quá 3 | Tăng 1 mỗi lần user nhập OTP sai | §3.1.1; §4.3 |
-| `locked_until` | `TIMESTAMPTZ NULL` | Thời điểm kết thúc khóa OTP sau khi đạt 3 lần thất bại. `NULL` = chưa bị khóa | Gán = `NOW() + INTERVAL '15 minutes'` khi `failed_attempts` đạt 3 (§4.3) | §3.1.1; §4.3 |
-| `verified_at` | `TIMESTAMPTZ NULL` | Thời điểm OTP được xác minh thành công. `NULL` = chưa xác minh. Khi có giá trị → user đã hoàn tất đăng ký | Gán = `NOW()` khi OTP khớp và còn hạn | FR-AUTH-01 |
+| `user_id` | `UUID NOT NULL` | FK đến user đang trong quá trình đăng ký | Gán bằng `users.id` khi tạo user mới | FR-AUTH-01 |
+| `channel` | `VARCHAR(10) NOT NULL` | Kênh gửi OTP: `'email'` hoặc `'sms'` | Do user chọn | FR-AUTH-01; §3.1.1 |
+| `code_hash` | `TEXT NOT NULL` | Giá trị băm của OTP | Sinh bởi Application | FR-AUTH-01; §4.3 |
+| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm OTP hết hạn | Tính bởi Application = `NOW() + INTERVAL '5 minutes'` | §3.1.1; §4.3 |
+| `resend_available_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm user được phép yêu cầu gửi lại OTP | Tính bởi Application = `NOW() + INTERVAL '1-2 minutes'` | §3.1.1 |
+| `failed_attempts` | `INTEGER NOT NULL DEFAULT 0` | Số lần nhập OTP sai liên tiếp | Tăng 1 mỗi lần user nhập OTP sai | §3.1.1; §4.3 |
+| `locked_until` | `TIMESTAMPTZ NULL` | Thời điểm kết thúc khóa OTP sau khi đạt 3 lần thất bại | Gán = `NOW() + INTERVAL '15 minutes'` khi `failed_attempts` đạt 3 | §3.1.1; §4.3 |
+| `verified_at` | `TIMESTAMPTZ NULL` | Thời điểm OTP được xác minh thành công | Gán = `NOW()` khi OTP khớp và còn hạn | FR-AUTH-01 |
+
+### 8.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `FK_driver_registrations_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa bản ghi đăng ký |
+| `uq_driver_registrations_user` | `UNIQUE(user_id)` | Một user chỉ có thể có một luồng OTP đang hoạt động |
+| `chk_driver_channel` | `CHECK (channel IN ('email', 'sms'))` | Giới hạn kênh gửi OTP |
+| `chk_driver_failed_attempts` | `CHECK (failed_attempts BETWEEN 0 AND 3)` | Giới hạn số lần nhập sai tối đa 3 lần |
 
 ---
 
@@ -345,16 +366,24 @@ Quản lý quy trình duyệt đơn đăng ký làm Owner. Theo §3.1.1 và FR-A
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh đơn đăng ký | Tự sinh bởi `uuid_generate_v4()` | — |
-| `user_id` | `UUID NOT NULL UNIQUE REFERENCES users(id)` | FK đến user nộp đơn. `UNIQUE`: mỗi user chỉ có thể có một đơn đăng ký (không cho nộp lại khi đã có đơn pending/rejected) | Gán bằng `users.id` của người nộp đơn | FR-AUTH-05 |
+| `user_id` | `UUID NOT NULL` | FK đến user nộp đơn | Gán bằng `users.id` của người nộp đơn | FR-AUTH-05 |
 | `business_name` | `VARCHAR(255) NOT NULL` | Tên doanh nghiệp/công ty sở hữu bãi đỗ xe. Đây là thông tin Admin kiểm tra khi duyệt (§3.1.1 yêu cầu company name) | Do user nhập khi nộp đơn; phải trùng hoặc liên kết với `users.company_name` | FR-AUTH-05; §3.1.1 |
-| `lot_type` | `VARCHAR(30) NOT NULL` CHECK IN (`'outdoor'`, `'basement'`, `'multi-storey'`) | Loại bãi đỗ xe dự định vận hành. Dùng để Admin đánh giá quy mô và yêu cầu kỹ thuật trước khi duyệt | Do user chọn khi nộp đơn | FR-AUTH-05 |
-| `status` | `VARCHAR(20) NOT NULL DEFAULT 'pending'` CHECK IN (`'pending'`, `'approved'`, `'rejected'`) | Trạng thái xử lý đơn. `pending`: chờ Admin xem xét. `approved`: được chấp thuận → system kích hoạt role OWNER cho account. `rejected`: bị từ chối | `'pending'` khi tạo; Admin cập nhật thành `'approved'` hoặc `'rejected'` | FR-AUTH-05 |
+| `status` | `VARCHAR(20) NOT NULL DEFAULT 'pending'` | Trạng thái xử lý đơn. `pending`: chờ Admin xem xét. `approved`: được chấp thuận → system kích hoạt role OWNER cho account. `rejected`: bị từ chối | `'pending'` khi tạo; Admin cập nhật thành `'approved'` hoặc `'rejected'` | FR-AUTH-05 |
 | `submitted_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm nộp đơn chính thức. Có thể khác `created_at` nếu hệ thống cho phép lưu nháp | Do Application gán = `NOW()` khi user submit | FR-AUTH-05 |
 | `reviewed_at` | `TIMESTAMPTZ NULL` | Thời điểm Admin xem xét và ra quyết định. `NULL` khi `status = 'pending'` | Do Application gán = `NOW()` khi Admin cập nhật `status` | FR-AUTH-05 |
-| `reviewed_by` | `UUID NULL REFERENCES users(id)` | FK đến `users.id` của Admin đã xem xét đơn. `NULL` khi `status = 'pending'`. Phục vụ audit trail ("role changes remain audited") | Gán bằng `users.id` của Admin đang thực hiện review | FR-AUTH-05; §2.3.1 |
+| `reviewed_by` | `UUID NULL` | FK đến `users.id` của Admin đã xem xét đơn. `NULL` khi `status = 'pending'` | Gán bằng `users.id` của Admin đang thực hiện review | FR-AUTH-05; §2.3.1 |
 | `review_note` | `VARCHAR(2000) NULL` | Ghi chú của Admin khi duyệt hoặc từ chối. Bắt buộc điền khi `status = 'rejected'` để thông báo lý do cho Owner | Do Admin nhập khi review | FR-AUTH-05 |
 
-**Constraint**: `CHECK ((status = 'pending' AND reviewed_at IS NULL AND reviewed_by IS NULL) OR (status <> 'pending' AND reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL))` — bảo đảm tính nhất quán: đơn đang xử lý thì chưa có người duyệt, đơn đã xử lý thì phải có người duyệt.
+### 9.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `FK_owner_applications_users` | `REFERENCES users(id)` | Khóa ngoại tới user nộp đơn |
+| `uq_owner_applications_user` | `UNIQUE(user_id)` | Mỗi user chỉ có thể có một đơn đăng ký (không cho nộp lại khi đã có đơn pending/rejected) |
+| `FK_owner_applications_reviewer` | `REFERENCES users(id)` | Khóa ngoại tới Admin duyệt đơn |
+| `chk_owner_lot_type` | `CHECK (lot_type IN ('outdoor', 'basement', 'multi-storey'))` | Giới hạn loại bãi |
+| `chk_owner_status` | `CHECK (status IN ('pending', 'approved', 'rejected'))` | Giới hạn trạng thái xử lý đơn |
+| `chk_owner_review_consistency` | `CHECK ((status = 'pending' AND reviewed_at IS NULL AND reviewed_by IS NULL) OR (status <> 'pending' AND reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL))` | Bảo đảm tính nhất quán: đơn đang xử lý thì chưa có người duyệt, đơn đã xử lý thì phải có người duyệt |
 
 ---
 
@@ -378,18 +407,10 @@ Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Oper
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
-| `account_id` | `UUID PK REFERENCES accounts(id) ON DELETE CASCADE` | FK đến account Operator được cấp quyền. Dùng làm Primary Key vì mỗi account chỉ có một bộ `operator_grants` (1-1 relationship). `CASCADE`: xóa account thì xóa grants | Gán bằng `accounts.id` của Operator account | FR-AUTH-04; §2.3.1 |
-| `created_by` | `UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT` | FK đến `users.id` của Owner đã tạo grant. `RESTRICT`: không cho xóa user nếu vẫn còn grant do user đó tạo — bảo đảm audit trail không mất thông tin người cấp phép | Gán bằng `users.id` của Owner đang thực hiện cấp quyền | FR-AUTH-04; §2.3.1 (audit) |
+| `account_id` | `UUID PK` | FK đến account Operator được cấp quyền. Dùng làm Primary Key vì mỗi account chỉ có một bộ `operator_grants` (1-1 relationship) | Gán bằng `accounts.id` của Operator account | FR-AUTH-04; §2.3.1 |
+| `created_by` | `UUID NOT NULL` | FK đến `users.id` của Owner đã tạo grant | Gán bằng `users.id` của Owner đang thực hiện cấp quyền | FR-AUTH-04; §2.3.1 (audit) |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cấp quyền; phục vụ audit trail | Tự sinh bởi database | §2.3.1; §4.3 |
-| `permissions` | `TEXT[] NOT NULL` với 3 constraints | Mảng các quyền vận hành được cấp cho Operator tại site. Danh sách quyền hợp lệ bị giới hạn cứng bởi database constraint. Xem chi tiết bên dưới | Owner chọn từ danh sách quyền hợp lệ khi tạo/cập nhật grant | FR-AUTH-04; FR-AUTH-06; §2.3.1 |
-
-**Các constraints trên `permissions`:**
-
-| Constraint | SQL | Ý nghĩa |
-|---|---|---|
-| Số lượng phần tử | `CHECK (cardinality(permissions) BETWEEN 1 AND 4)` | Phải cấp ít nhất 1 quyền, tối đa 4 quyền (bằng tổng số quyền hợp lệ) |
-| Không có NULL trong mảng | `CHECK (array_position(permissions, NULL) IS NULL)` | Không cho phép giá trị NULL trong mảng permissions |
-| Giá trị hợp lệ | `CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW']::TEXT[])` | Chỉ chấp nhận 4 quyền này; đây là tập con của toàn bộ "Explicit lot grant" trong §2.3.1 |
+| `permissions` | `TEXT[] NOT NULL` | Mảng các quyền vận hành được cấp cho Operator tại site | Owner chọn từ danh sách quyền hợp lệ khi tạo/cập nhật grant | FR-AUTH-04; FR-AUTH-06; §2.3.1 |
 
 **Danh sách quyền và ý nghĩa:**
 
@@ -399,24 +420,143 @@ Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Oper
 | `DEVICE_STATUS_VIEW` | Operator được phép xem trạng thái thiết bị tại lot được phân công | §2.3.1 |
 | `CASH_COLLECT` | Operator được phép ghi nhận thu tiền mặt qua CASH_COLLECT interface | §2.3.1 |
 | `APPEAL_REVIEW` | Operator được phép xem xét và phê duyệt khiếu nại của Driver | §2.3.1 |
+| `SLOT_OVERRIDE` | Operator được phép can thiệp thủ công (override) trạng thái slot | §2.3.1 |
 
-> **Lưu ý**: SLOT_OVERRIDE, VIOLATION_REVIEW và EMERGENCY_GATE_RELEASE cũng là "Explicit lot grant" trong §2.3.1 nhưng **chưa có trong `permissions` array**. Đây có thể là phạm vi MVP v0.9 — các quyền này có thể được bổ sung trong phiên bản sau.
+> **Lưu ý**: VIOLATION_REVIEW và EMERGENCY_GATE_RELEASE cũng là "Explicit lot grant" trong §2.3.1 nhưng **chưa có trong `permissions` array**. Đây có thể là phạm vi MVP v0.9 — các quyền này có thể được bổ sung trong phiên bản sau.
 
-### 10.4 Indexes
+### 10.4 Constraints & Indexes
 
-| Index | Cột | Mục đích |
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
-| `idx_operator_grants_creator` | `created_by` | Tra cứu tất cả grants do một Owner cụ thể tạo ra; dùng cho audit và khi Owner bị xóa |
+| `FK_operator_grants_accounts` | `REFERENCES accounts(id) ON DELETE CASCADE` | Xóa account thì xóa grants |
+| `FK_operator_grants_creator` | `REFERENCES users(id) ON DELETE RESTRICT` | Không cho xóa user nếu vẫn còn grant do user đó tạo |
+| `chk_operator_permissions_count` | `CHECK (cardinality(permissions) BETWEEN 1 AND 7)` | Phải cấp ít nhất 1 quyền, tối đa 5 quyền (bằng tổng số quyền hợp lệ) |
+| `chk_operator_permissions_no_null` | `CHECK (array_position(permissions, NULL) IS NULL)` | Không cho phép giá trị NULL trong mảng permissions |
+| `chk_operator_permissions_valid` | `CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW','SLOT_OVERRIDE']::TEXT[])` | Chỉ chấp nhận 5 quyền hợp lệ |
+| `idx_operator_grants_creator` | `created_by` | Tra cứu tất cả grants do một Owner cụ thể tạo ra |
 
 ---
 
-## 11. Tóm tắt quan hệ giữa các bảng
+## 11. Bảng `auth_challenges` — Lưu mã xác thực (OTP/Link)
 
-```
+### 11.1 Mục đích nghiệp vụ
+
+Lưu trữ các mã xác thực (như OTP qua SMS/Email) được hệ thống gửi cho người dùng để xác nhận danh tính hoặc thiết lập MFA. Bảng này quản lý vòng đời của một mã OTP, bao gồm thời hạn, số lần thử sai để chống brute-force.
+
+### 11.2 Traceability Mapping
+
+| Mã yêu cầu | Loại | Nội dung liên quan |
+|---|---|---|
+| **FR-AUTH-01** | C | Xác thực đa yếu tố và OTP |
+| **§3.1.1** | — | OTP valid 5 phút, khóa sau 3 lần sai |
+
+### 11.3 Bảng thuộc tính chi tiết
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
+|---|---|---|---|---|
+| `id` | `UUID PK` | Định danh phiên xác thực | Tự sinh bởi Application | — |
+| `user_id` | `UUID NOT NULL` | FK đến users(id) | Application truyền xuống | FR-AUTH-01 |
+| `purpose` | `TEXT NOT NULL` | Mục đích OTP (ví dụ: login, verify_email) | Application truyền xuống | — |
+| `channel` | `TEXT NOT NULL` | Kênh gửi (sms, email) | Do người dùng chọn hoặc system quyết định | — |
+| `destination` | `TEXT NOT NULL` | Địa chỉ gửi (số điện thoại, email) | Lấy từ profile người dùng | — |
+| `code_hash` | `TEXT NOT NULL` | Mã OTP đã băm | System sinh random, băm trước khi lưu | §4.3 |
+| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời gian hết hạn | `NOW() + 5 phút` | §3.1.1 |
+| `resend_at` | `TIMESTAMPTZ NOT NULL` | Thời gian cho phép gửi lại | `NOW() + 1 phút` | — |
+| `attempts` | `INT NOT NULL DEFAULT 0` | Số lần nhập sai | Tăng 1 mỗi lần sai | §3.1.1 |
+| `locked_until` | `TIMESTAMPTZ NULL` | Thời gian khóa tạm thời | Set khi attempts = 3 | §3.1.1 |
+| `consumed_at` | `TIMESTAMPTZ NULL` | Thời gian nhập thành công | Set khi OTP khớp | — |
+
+### 11.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `FK_auth_challenges_users` | `REFERENCES users(id)` | Liên kết OTP với người dùng |
+| `ix_auth_challenge_user` | `user_id, purpose` | Tìm phiên OTP của user nhanh chóng |
+
+---
+
+## 12. Bảng `workflow_deliveries` — Lịch sử gửi thông báo
+
+### 12.1 Mục đích nghiệp vụ
+
+Lưu vết (audit log) các tác vụ gửi tin nhắn, email chứa OTP. Đóng vai trò như một Outbox Pattern để theo dõi trạng thái gửi thành công/thất bại, hỗ trợ retry gửi lại khi có lỗi mạng từ Notification Provider.
+
+### 12.2 Traceability Mapping
+
+| Mã yêu cầu | Loại | Nội dung liên quan |
+|---|---|---|
+| **§2.10.4** | — | Hỗ trợ Transactional Outbox pattern và Reliable messaging |
+
+### 12.3 Bảng thuộc tính chi tiết
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
+|---|---|---|---|---|
+| `id` | `UUID PK` | Định danh giao dịch gửi tin | Tự sinh | — |
+| `user_id` | `UUID NOT NULL` | Người nhận tin | FK đến users(id) | — |
+| `actor_id` | `UUID NOT NULL` | Người thực hiện hành động | FK đến users(id) | — |
+| `kind` | `TEXT NOT NULL` | Loại thông báo (otp_email, otp_sms) | Application truyền xuống | — |
+| `protected_payload` | `TEXT NOT NULL` | Nội dung gửi (đã mã hóa bảo mật) | Application sinh ra | — |
+| `status` | `TEXT NOT NULL DEFAULT 'pending'` | Trạng thái | Workflow engine cập nhật | — |
+| `attempts` | `INT NOT NULL DEFAULT 0` | Số lần thử gửi | Workflow engine cập nhật | — |
+| `created_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm tạo lệnh gửi | Tự sinh | — |
+| `sent_at` | `TIMESTAMPTZ NULL` | Thời điểm gửi thành công | Cập nhật khi status = sent | — |
+| `retry_at` | `TIMESTAMPTZ NULL` | Lịch hẹn gửi lại nếu failed | Tính toán bởi backoff logic | — |
+| `expires_at` | `TIMESTAMPTZ NULL` | Thời điểm lệnh gửi bị hủy | — | — |
+| `challenge_id` | `UUID NULL` | FK đến auth_challenges(id) | Liên kết lệnh gửi này phục vụ phiên OTP nào | — |
+
+### 12.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `FK_workflow_deliveries_users` | `REFERENCES users(id)` | Liên kết lịch sử với người dùng |
+| `FK_workflow_deliveries_actor` | `REFERENCES users(id)` | Liên kết lịch sử với người thực hiện |
+| `FK_workflow_deliveries_challenge` | `REFERENCES auth_challenges(id)` | Khóa ngoại tới auth_challenges |
+| `chk_status_valid` | `CHECK(status IN ('pending','failed','sent','cancelled'))` | Giới hạn trạng thái hợp lệ |
+| `ix_workflow_delivery_due` | `status, retry_at` | Truy vấn nhanh các lệnh cần gửi lại |
+
+---
+
+## 13. Bảng `mfa_credentials` — Cấu hình bảo mật 2 lớp
+
+### 13.1 Mục đích nghiệp vụ
+
+Lưu trữ cấu hình MFA (Multi-Factor Authentication) của người dùng, đặc biệt là mã khóa bí mật TOTP (Time-based One-Time Password) để sinh mã qua ứng dụng Authenticator.
+
+### 13.2 Traceability Mapping
+
+| Mã yêu cầu | Loại | Nội dung liên quan |
+|---|---|---|
+| **FR-AUTH-01** | C | Xác thực đa yếu tố |
+| **§3.1.4** | — | Multi-factor authentication (MFA) dùng TOTP |
+
+### 13.3 Bảng thuộc tính chi tiết
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
+|---|---|---|---|---|
+| `user_id` | `UUID PK` | Người dùng sở hữu cấu hình MFA | Khóa chính đồng thời là FK tới users | FR-AUTH-01 |
+| `protected_secret` | `TEXT NOT NULL` | Khóa bí mật TOTP, đã được mã hóa | Sinh random tại Application và mã hóa | §3.1.4 |
+| `enabled` | `BOOL NOT NULL DEFAULT FALSE` | MFA có đang bật không | Cập nhật khi user verify thành công code đầu tiên | — |
+| `last_step` | `BIGINT NOT NULL DEFAULT -1` | Timestamp của mã TOTP cuối cùng đã dùng (ngừa replay) | Application cập nhật | — |
+| `attempts` | `INT NOT NULL DEFAULT 0` | Số lần nhập sai mã TOTP | Tăng 1 khi sai | — |
+| `locked_until` | `TIMESTAMPTZ NULL` | Khóa tạm thời nếu nhập sai nhiều lần | Tính toán bởi Application | — |
+
+### 13.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `FK_mfa_credentials_users` | `REFERENCES users(id)` | Ràng buộc 1-1 với user |
+
+---
+
+## 14. Tóm tắt quan hệ giữa các bảng
+
+```text
 users (1) ──── (N) accounts
 users (1) ──── (0..1) driver_registrations
 users (1) ──── (0..1) owner_applications
 users (1) ──── (N) user_refresh_tokens
+users (1) ──── (N) auth_challenges
+users (1) ──── (0..1) mfa_credentials
 
 accounts (1) ──── (N) account_roles
 accounts (N) ──── (N) roles  [qua account_roles]
@@ -429,7 +569,7 @@ owner_applications.reviewed_by ──── users.id [audit FK]
 
 ---
 
-## 12. Tóm tắt Cross-service References
+## 15. Tóm tắt Cross-service References
 
 | Cột | Bảng | Trỏ đến Service | Cơ chế đồng bộ |
 |---|---|---|---|
@@ -440,7 +580,7 @@ owner_applications.reviewed_by ──── users.id [audit FK]
 
 ---
 
-## 13. Extensions PostgreSQL sử dụng
+## 16. Extensions PostgreSQL sử dụng
 
 | Extension | Lý do sử dụng |
 |---|---|
