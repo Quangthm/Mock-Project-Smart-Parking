@@ -8,8 +8,8 @@
 INSERT INTO roles (code, name) VALUES 
 ('ADMIN', 'System Administrator'),
 ('DRIVER', 'Driver'),
-('BUSINESS_OWNER', 'Parking Business Owner'),
-('SITE_OPERATOR', 'Site Operator / Attendant')
+('OWNER', 'Owner'),
+('OPERATOR', 'Site Operator / Attendant')
 ON CONFLICT DO NOTHING;
 
 -- 2. Users (Password is 'P@ssword123' bcrypt hash)
@@ -18,7 +18,7 @@ INSERT INTO users (id, phone, email, password_hash, full_name, status, failed_lo
 ('11111111-1111-1111-1111-111111111111', '0911111111', 'owner.a@test.com', '$2a$12$K.F4m5L0dE/...', 'Owner A (Approved)', 'ACTIVE', 0, NULL),
 ('22222222-2222-2222-2222-222222222222', '0922222222', 'owner.b@test.com', '$2a$12$K.F4m5L0dE/...', 'Owner B (Pending)', 'PENDING_APPROVAL', 0, NULL),
 ('33333333-3333-3333-3333-333333333333', '0933333333', 'driver@test.com', '$2a$12$K.F4m5L0dE/...', 'Active Driver', 'ACTIVE', 0, NULL),
-('44444444-4444-4444-4444-444444444444', '0944444444', 'operator@test.com', '$2a$12$K.F4m5L0dE/...', 'Site Operator', 'ACTIVE', 0, NULL),
+('44444444-4444-4444-4444-444444444444', '0944444444', 'operator@test.com', '$2a$12$K.F4m5L0dE/...', 'Operator', 'ACTIVE', 0, NULL),
 ('55555555-5555-5555-5555-555555555555', '0955555555', 'blocked@test.com', '$2a$12$K.F4m5L0dE/...', 'Blocked Driver', 'LOCKED', 3, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
 ON CONFLICT DO NOTHING;
 

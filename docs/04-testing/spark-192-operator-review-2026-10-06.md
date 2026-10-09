@@ -35,7 +35,7 @@ One intermediate test invocation collided with a still-running regression test's
 ## Remaining integration requirements
 
 - Apply migration 05.7 before calling the endpoint in the project database; 05.4 is a prerequisite for email-only Operator identities and normalized uniqueness.
-- Owner approval currently does not create a tenant membership. An approved Owner still needs an active `BUSINESS_OWNER` account in the actual site's tenant to provision staff, consistent with SPARK-188.
+- Owner approval currently does not create a tenant membership. An approved Owner still needs an active `OWNER` account in the actual site's tenant to provision staff, consistent with SPARK-188.
 - Frontend Create Operator still uses local fixtures. It needs persisted site IDs and explicit permission inputs before wiring this contract. No end-to-end browser acceptance is claimed.
 - Owner staff listing/editing/locking/removal, activity views, invitations/password change and notifications are outside Create Operator. Operational APIs must integrate the current permission check; this task does not claim enforcement in endpoints that do not yet exist.
 - Provisioning fields/initial-password policy and the explicit permission contract are implementation choices documented for team confirmation; the existing endpoint path is retained.

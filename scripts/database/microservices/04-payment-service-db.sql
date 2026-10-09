@@ -97,7 +97,7 @@ CREATE TABLE provider_webhooks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     provider VARCHAR(50) NOT NULL,
     provider_event_id VARCHAR(255) NOT NULL,
-    processing_state VARCHAR(50) NOT NULL DEFAULT 'PENDING' CHECK (processing_state IN ('PENDING', 'PROCESSED', 'FAILED')),
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSED', 'FAILED')),
     payload JSONB,
     received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     

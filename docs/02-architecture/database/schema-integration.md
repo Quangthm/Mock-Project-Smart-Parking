@@ -16,7 +16,7 @@ Dùng `compose.schema-integration.yml` trong checkout `arch/database-schema` đ�
 | Owner đăng ký và Admin duyệt | User → Parking API | Pending approval không được login; approve tạo tenant với ID cố định bằng application ID, rồi kích hoạt Owner account; retry không tạo tenant trùng |
 | Admin quản lý users | User | Tìm kiếm, khóa/mở khóa; session đã revoke không hồi sinh khi mở khóa |
 | Owner quản lý bãi/cấu trúc | Parking → User API + Reservation API | Xác thực Owner hiện tại, tenant và resource scope; CRUD layout, enum và trạng thái theo schema |
-| Owner tạo Operator | User → Parking API | Mỗi site có account SITE_OPERATOR và grant riêng; chỉ site active thuộc tenant được cấp; permission check đọc grant hiện tại |
+| Owner tạo Operator | User → Parking API | Mỗi site có account OPERATOR và grant riêng; chỉ site active thuộc tenant được cấp; permission check đọc grant hiện tại |
 | Operator đăng nhập | User | `/api/operators/me` trả từng site và permissions còn hiệu lực; FE hiển thị assignment thật |
 
 Production service không tham chiếu persistence/domain của service khác, không join DB khác. Các project references xuyên service trong integration tests chỉ phục vụ chạy các host thật cùng test process.
