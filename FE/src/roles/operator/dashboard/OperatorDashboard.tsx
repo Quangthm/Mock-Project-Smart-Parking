@@ -8,6 +8,7 @@ import { SlotManagement } from '../parking-slots/SlotManagement';
 import { TicketManagement } from '../tickets/TicketManagement';
 import type { OperatorAccessRole } from '../../../lib/types';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
+import { PaymentMethodLogo } from '../../../components/payment/PaymentMethodLogo';
 import { OperatorAssignments } from './OperatorAssignments';
 
 type Tab = 'checkin' | 'status' | 'emergency' | 'slots' | 'tickets' | 'finance';
@@ -30,9 +31,10 @@ function LegacyOperatorDashboard({ accessRoleOverride }: { accessRoleOverride?: 
   const assignedOwnerId = user?.role === 'owner' ? user.id : user?.ownerId;
   const ownerLots = store.getLots().filter(lot =>
     lot.ownerId === assignedOwnerId
-    && (user?.role === 'owner' || !user?.operatorSiteId || (accessRole === 'financial' && user.operatorSiteId === 'all') || lot.id === user?.operatorSiteId)
+    && (user?.role === 'owner' || !user?.operatorSiteId || user.operatorSiteId === 'all' || lot.id === user?.operatorSiteId)
   );
-  const selectedLot = ownerLots[0] ?? null;
+  const [activeSiteId, setActiveSiteId] = useState<string>('');
+  const selectedLot = (activeSiteId ? ownerLots.find(l => l.id === activeSiteId) : null) ?? ownerLots[0] ?? null;
 
   if (accessRole === 'cashier') {
     return <CashierPOS lotName={selectedLot?.name ?? 'Assigned parking lot'} />;
@@ -65,6 +67,18 @@ function LegacyOperatorDashboard({ accessRoleOverride }: { accessRoleOverride?: 
       ] },
     ]}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+        {user?.operatorSiteId === 'all' && ownerLots.length > 1 && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+            <span className="text-xs font-semibold text-[var(--muted)]">All Sites Operator — Currently Operating at:</span>
+            <select
+              className="input text-sm py-1 px-3"
+              value={selectedLot?.id ?? ''}
+              onChange={e => setActiveSiteId(e.target.value)}
+            >
+              {ownerLots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="animate-in">
           {accessRole === 'operation' && tab === 'checkin' && <CheckInOut lot={selectedLot} />}
           {accessRole === 'operation' && tab === 'status' && <LotStatus lot={selectedLot} />}
@@ -87,7 +101,7 @@ function LegacyOperatorDashboard({ accessRoleOverride }: { accessRoleOverride?: 
                 <table className="w-full min-w-[600px] text-left text-sm">
                   <thead className="border-b border-[var(--border)] text-[var(--muted)]"><tr><th className="px-4 py-3">Booking</th><th className="px-4 py-3">Vehicle</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {completedBookings.map(booking => <tr key={booking.id}><td className="px-4 py-3 text-[var(--fg)]">{booking.id}</td><td className="px-4 py-3 text-[var(--fg)]">{booking.licensePlate}</td><td className="px-4 py-3 capitalize text-[var(--muted)]">{booking.paymentMethod ?? 'Pending reconciliation'}</td><td className="px-4 py-3 text-right font-medium text-[var(--fg)]">{booking.amount.toLocaleString('vi-VN')} ₫</td></tr>)}
+                    {completedBookings.map(booking => <tr key={booking.id}><td className="px-4 py-3 text-[var(--fg)]">{booking.id}</td><td className="px-4 py-3 text-[var(--fg)]">{booking.licensePlate}</td><td className="px-4 py-3 text-[var(--muted)]">{booking.paymentMethod ? <PaymentMethodLogo method={booking.paymentMethod} size="xs" showName /> : 'Pending reconciliation'}</td><td className="px-4 py-3 text-right font-medium text-[var(--fg)]">{booking.amount.toLocaleString('vi-VN')} ₫</td></tr>)}
                     {!completedBookings.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">No completed bookings to report.</td></tr>}
                   </tbody>
                 </table>

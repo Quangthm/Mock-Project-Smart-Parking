@@ -1,0 +1,11 @@
+{
+  "SMARTPARK_DEV_PASSWORD": "<local-database-password>",
+  "SMARTPARK_SERVICE_KEY": "<same-random-key-at-least-32-characters-for-all-services>",
+  "SMARTPARK_SCHEMA_ROOT": "<absolute-path-to-arch-database-schema-checkout>",
+  "Workflow:KeyDirectory": "<absolute-path-to-local-durable-key-directory>",
+  "Otp:Smtp:Host": "smtp.gmail.com",
+  "Otp:Smtp:Port": "587",
+  "Otp:Smtp:Username": "<gmail-address>",
+  "Otp:Smtp:Password": "<gmail-app-password>",
+  "Otp:Smtp:From": "<gmail-address>"
+}

@@ -1,12 +1,13 @@
 {
   "profiles": {
-    "SmartParking.ParkingService.API": {
-      "commandName": "Project",
-      "launchBrowser": true,
+    "http": {
+      "applicationUrl": "http://localhost:5045",
+      "launchBrowser": false,
+      "dotnetRunMessages": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:57869;http://localhost:57870"
+      "commandName": "Project"
     }
   }
 }

@@ -71,6 +71,8 @@ export interface ParkingLot {
   status: 'active' | 'inactive' | 'pending';
   lat: number;
   lng: number;
+  modelUrl?: string;
+  modelFileName?: string;
   createdAt: string;
 }
 

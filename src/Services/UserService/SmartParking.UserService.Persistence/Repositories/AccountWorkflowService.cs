@@ -64,14 +64,24 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     }
     public static ChallengeResult Result(AuthChallenge c)=>new(c.Id,c.ExpiresAt,c.ResendAt);
     public async Task<ChallengeResult> IssueOwnerAsync(User user,CancellationToken ct) => Result(await IssueAsync(user,"OWNER_CONTACT","email",user.Email!,ct));
-    public async Task<ChallengeResult> IssueOwnerPhoneAsync(User user,CancellationToken ct) => Result(await IssueAsync(user,"OWNER_PHONE","sms",user.Phone!,ct));
     public async Task<object> RecoverOwnerAsync(string contact,CancellationToken ct)
     {
         contact=Contact(contact);
-        var user=await db.Users.SingleOrDefaultAsync(u=>u.DeletedOn==null && (u.Status==UserStatus.PendingVerification || u.Status==UserStatus.PendingApproval) && (u.Email==contact || u.Phone==contact),ct)
+        await using var tx=await db.Database.BeginTransactionAsync(ct);
+        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND status IN ('PENDING_VERIFICATION','PENDING_APPROVAL') AND (email={contact} OR phone={contact}) FOR UPDATE").SingleOrDefaultAsync(ct)
             ??throw Error("REGISTRATION_NOT_FOUND","Pending registration was not found.",404);
-        var challenges=await db.AuthChallenges.Where(c=>c.UserId==user.Id && (c.Purpose=="OWNER_CONTACT" || c.Purpose=="OWNER_PHONE")).ToArrayAsync(ct);
-        return new {verification=Result(challenges.Single(c=>c.Purpose=="OWNER_CONTACT")),phoneVerification=Result(challenges.Single(c=>c.Purpose=="OWNER_PHONE")),emailVerified=user.EmailVerifiedAt!=null,phoneVerified=user.PhoneVerifiedAt!=null};
+        var challenge=await db.AuthChallenges.SingleOrDefaultAsync(c=>c.UserId==user.Id && c.Purpose=="OWNER_CONTACT" && c.Channel=="email",ct)
+            ??throw Error("REGISTRATION_NOT_FOUND","Pending Owner registration was not found.",404);
+        // Recover registrations created under the old two-contact gate.
+        if(user.EmailVerifiedAt is not null && user.Status==UserStatus.PendingVerification)
+        {
+            user.Status=UserStatus.PendingApproval;
+            user.ModifiedOn=clock.GetUtcNow();
+        }
+        await CancelOwnerPhoneAsync(user.Id!.Value,ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return new {verification=Result(challenge),emailVerified=user.EmailVerifiedAt!=null,phoneVerified=user.PhoneVerifiedAt!=null};
     }
     public async Task<ChallengeResult> RequestLoginAsync(string contact,CancellationToken ct)
     {
@@ -103,7 +113,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         if(userId is null)throw Error("CHALLENGE_CLOSED","Challenge is not available for this purpose.",409);
         await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={userId.Value} FOR UPDATE").SingleAsync(ct);
         var c=await db.AuthChallenges.FromSqlInterpolated($"SELECT * FROM auth_challenges WHERE id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
-        if(c is null || (c.Purpose!=purpose && !(purpose=="OWNER_CONTACT" && c.Purpose=="OWNER_PHONE")) || c.ConsumedAt!=null) throw Error("CHALLENGE_CLOSED","Challenge is not available for this purpose.",409);
+        if(c is null || c.Purpose!=purpose || c.ConsumedAt!=null) throw Error("CHALLENGE_CLOSED","Challenge is not available for this purpose.",409);
         if(c.LockedUntil>clock.GetUtcNow()) throw Error("OTP_LOCKED","Try again after 15 minutes.",423);
         if(c.LockedUntil!=null) {c.LockedUntil=null;c.Attempts=0;}
         return c;
@@ -123,9 +133,18 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         if(user.DeletedOn!=null || user.Status!=UserStatus.PendingVerification) throw Error("CHALLENGE_CLOSED","Account is no longer awaiting verification.",409);
         if(!await CheckAsync(c,code,ct)) {await tx.CommitAsync(ct);throw Error(c.LockedUntil!=null?"OTP_LOCKED":"OTP_INVALID","Invalid verification code.",c.LockedUntil!=null?423:400);}
         c.ConsumedAt=clock.GetUtcNow();c.CodeHash="";
-        if(c.Purpose=="OWNER_PHONE")user.PhoneVerifiedAt=clock.GetUtcNow();else user.EmailVerifiedAt=clock.GetUtcNow();
-        if(user.EmailVerifiedAt is not null && user.PhoneVerifiedAt is not null)user.Status=UserStatus.PendingApproval;
+        user.EmailVerifiedAt=clock.GetUtcNow();
+        user.Status=UserStatus.PendingApproval;
+        user.ModifiedOn=clock.GetUtcNow();
+        await CancelOwnerPhoneAsync(user.Id!.Value,ct);
         await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
+    }
+    private async Task CancelOwnerPhoneAsync(Guid userId,CancellationToken ct)
+    {
+        await db.AuthChallenges.Where(c=>c.UserId==userId && c.Purpose=="OWNER_PHONE" && c.ConsumedAt==null)
+            .ExecuteUpdateAsync(s=>s.SetProperty(c=>c.ConsumedAt,clock.GetUtcNow()).SetProperty(c=>c.CodeHash,""),ct);
+        await db.WorkflowDeliveries.Where(d=>d.UserId==userId && d.Kind=="OWNER_PHONE" && (d.Status=="pending" || d.Status=="failed"))
+            .ExecuteUpdateAsync(s=>s.SetProperty(d=>d.Status,"cancelled").SetProperty(d=>d.ProtectedPayload,""),ct);
     }
     public async Task<ChallengeResult> ResendOwnerAsync(Guid id,CancellationToken ct)
     {

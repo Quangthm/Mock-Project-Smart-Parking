@@ -1,6 +1,10 @@
 # API handoff cho tester — các task của tác giả
 
-Ngày 08/10/2026. Contract đối chiếu trực tiếp với controller/DTO trong working tree `develop` tại thời điểm bàn giao. Chưa có commit/PR cho lượt sửa này; khi phát hành, bổ sung code commit, schema commit và URL môi trường vào phiếu kết quả test.
+> Cập nhật môi trường local ngày 08/10/2026; xem [review sửa email OTP](owner-email-otp-fix-review-2026-10-08.md):
+> SMTP đã gửi thành công, Services:Key đã được cấu hình tại local. Owner onboarding đã sửa dùng email OTP; không cần SMS config cho luồng Owner.
+> đây chưa phải kết quả retest môi trường QA bên ngoài.
+
+Ngày 08/10/2026. Contract đối chiếu trực tiếp với controller/DTO trên `develop` tại thời điểm bàn giao. Khi phát hành, ghi code commit, schema commit và URL môi trường vào phiếu kết quả test.
 
 Phạm vi: Driver Register, Owner Register, Login/Logout, Vehicle Registration, Parking Structure (SPARK-188), Owner Create Operator (SPARK-192), Admin Approve Owner (SPARK-196), AI chatbot **project structure**. Reservation/Payment/IoT và các task của thành viên khác chỉ là dependency; không đưa toàn bộ acceptance của chúng vào nghiệm thu phần này.
 
@@ -13,12 +17,12 @@ Import [Postman collection](postman/assigned-workflows-2026-10-08.postman_collec
 | userUrl | `http://localhost:5035` hoặc UserService QA URL |
 | parkingUrl | `http://localhost:5045` hoặc ParkingService QA URL |
 | driverEmail, ownerEmail, operatorEmail | Ba inbox QA khác nhau, mỗi lần chạy dùng bộ contact mới |
-| ownerPhone | Số điện thoại QA nhận được SMS; bắt buộc khác dữ liệu hiện có |
+| ownerPhone | Số điện thoại hồ sơ Owner; bắt buộc khác dữ liệu hiện có, không cần nhận SMS trong luồng email-only |
 | password | Mật khẩu mẫu phục vụ test, 8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt |
 | driverToken, ownerToken, adminToken, operatorToken | `data.accessToken` của session tương ứng; không dùng chung role |
 | registrationId | `data.registrationId` của Driver register |
 | ownerApplicationId | `data.id` của Owner register |
-| ownerEmailChallenge, ownerPhoneChallenge | `data.verification.challengeId`, `data.phoneVerification.challengeId` |
+| ownerEmailChallenge | `data.verification.challengeId` |
 | challengeId, otp, totp | Challenge login hiện hành; code nhận từ inbox/SMS QA và authenticator |
 | siteId, unitId, slotId, vehicleId, operationId | ID thực tế trả về sau các request tạo; collection tự lưu các ID phổ biến |
 | tenantId | Có thể bỏ field khi Owner chỉ có một tenant; nếu nhiều tenant phải chọn tenant được cấp quyền |
@@ -70,7 +74,7 @@ Phục hồi đăng ký: `POST /api/auth/register/driver/recover` body `{"contac
 
 MFA optional: authenticated `POST /api/auth/mfa/setup` → secret + otpauth URI; thêm vào authenticator, `POST /api/auth/mfa/enable` body `{"code":"<totp>"}` → **200**. Sau đó OTP login phải gửi thêm `totp`; password login → **401 MFA_REQUIRED**. Không đính secret MFA vào bug report.
 
-## 4. Owner đăng ký → xác minh hai contact → Admin duyệt
+## 4. Owner đăng ký → xác minh email → Admin duyệt
 
 `POST /api/auth/register/owner` → **201**:
 
@@ -78,14 +82,14 @@ MFA optional: authenticated `POST /api/auth/mfa/setup` → secret + otpauth URI;
 {"fullName":"QA Owner","businessName":"QA Parking","email":"<owner-inbox>","phone":"<QA-phone>","lotType":"outdoor","agreedToPolicy":true,"password":"Test@1234"}
 ```
 
-`lotType`: `outdoor`, `basement`, `multi-storey`. Public-domain email hợp lệ được chấp nhận; không có field CCCD/GPLX. Lưu application ID và **hai** challenge IDs. Với từng challenge, gọi `POST /api/auth/register/owner/verify` body `{"challengeId":"<selected-contact-challenge>","code":"<corresponding-code>"}` → **200**.
+`lotType`: `outdoor`, `basement`, `multi-storey`. Public-domain email hợp lệ được chấp nhận; không có field CCCD/GPLX. Lưu application ID và email challenge ID (data.verification.challengeId). Với email challenge, gọi `POST /api/auth/register/owner/verify` body `{"challengeId":"<selected-contact-challenge>","code":"<corresponding-code>"}` → **200**.
 
-Chỉ verify email thì Owner chưa eligible approval. Sau cả hai contact, Owner pending approval vẫn chưa có Owner operational access. Recovery `POST /api/auth/register/owner/recover` body `{"contact":"<email-or-phone>"}` trả metadata và trạng thái contact. Resend `POST /api/auth/register/owner/resend` **field tên `registrationId` nhưng value là contact challenge ID**, không phải application ID.
+Email OTP hợp lệ là đủ điều kiện Admin approval; không có bước SMS OTP. Sau email verification, Owner pending approval vẫn chưa có Owner operational access. Recovery `POST /api/auth/register/owner/recover` body `{"contact":"<email-or-phone>"}` trả metadata và trạng thái contact. Resend `POST /api/auth/register/owner/resend` **field tên `registrationId` nhưng value là contact challenge ID**, không phải application ID.
 
 Admin token có current `ACCOUNT_ADMIN`:
 
 - `GET /api/owner-applications` và `GET /api/owner-applications/<applicationId>` → **200**, company/contact/verification đúng.
-- `PATCH /api/owner-applications/<applicationId>/review` body `{"status":"approved","reviewNote":"QA confirmed both contacts"}` → **200**, audit reviewer/time/note, approval được lưu; delivery có trạng thái riêng.
+- `PATCH /api/owner-applications/<applicationId>/review` body `{"status":"approved","reviewNote":"QA confirmed email"}` → **200**, audit reviewer/time/note, approval được lưu; delivery có trạng thái riêng.
 - Owner login lại bằng OTP/password, dùng Owner token kiểm tra Owner operations. Approval không unlock/enable account bị block độc lập.
 
 Endpoint cũ nhận `rejected` để tương thích; evidence/rejection/resubmission policy chưa được chốt, không tự thêm thành acceptance bắt buộc của task này.
@@ -199,3 +203,5 @@ Evidence lượt sửa: [review report](cross-task-fix-review-2026-10-08.md), [9
 Phiếu mỗi case: `caseId | code SHA | schema SHA | environment | role/fixture IDs | method/path | redacted request | HTTP + redacted response | GET/DB outcome | expected | actual | Pass/Fail/Blocked | bug/dependency link`. Dùng **Blocked/dependency** khi chưa có inbox/SMS, Admin fixture, commitment fixture hoặc reallocation/refund adapter; vẫn test failure/pending semantics thuộc scope này. Không đánh Done task của thành viên khác.
 
 Tester sign-off chỉ sau API Design chốt phần plate-format đang giới hạn và các applicable cases của task tác giả pass; các dependency chưa sẵn sàng phải ghi rõ case/evidence, không thay đổi spec để che thiếu implementation.
+
+Owner legacy recovery: registrations stuck after email verification can recover using email/phone; backend moves them to pending approval and cancels obsolete SMS challenges/deliveries. Phone verification remains unset. Registration without email verification must still complete email OTP. QA does not require SMS config for this Owner flow.

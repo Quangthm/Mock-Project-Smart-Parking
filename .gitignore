@@ -1,90 +1,53 @@
-*.swp
-*.*~
-project.lock.json
-.DS_Store
-*.pyc
-nupkg/
+# ======================================================================================
+# SMARTPARK PLATFORM - GITIGNORE CONFIGURATION
+# ======================================================================================
 
-# Visual Studio Code
-.vscode
+# 1. SECURITY & ENVIRONMENT SECRETS
+.env
+.env.production
+.env.local
+*.env.local
 
-# Rider
-.idea
+# Ignore local setup script to prevent pushing machine-specific configs & secrets
+setup.ps1
+*.ps1
 
-# User-specific files
-*.suo
+# Ignore dotnet user-secrets local storage folder
+secrets.json
+
+# 2. .NET / C# BUILD & DEPLOYMENT OUTPUTS
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
 *.user
 *.userosscache
 *.sln.docstates
+*.userprefs
+*.suo
 
-# Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-build/
-bld/
-[Bb]in/
-[Oo]bj/
-[Oo]ut/
-msbuild.log
-msbuild.err
-msbuild.wrn
-
-# Visual Studio 2015
-.vs/
-
-# Local tools used to run the Postman demo
-.cache/
-
-# =========================
-# Postman
-# =========================
-
-# Keep collections and example environments tracked.
-# Ignore real/local environments because they may contain secrets.
-
-.postman/
-
-docs/postman/environments/*local*.json
-docs/postman/environments/*secret*.json
-docs/postman/environments/*dev*.json
-docs/postman/environments/*.private.json
-
-# Newman test output
-docs/postman/reports/
-docs/postman/results/
-docs/postman/newman/
-
-# Temporary Postman files
-docs/postman/tmp/
-docs/postman/temp/
-
-# =========================
-# Frontend / Node.js
-# =========================
-
-# Dependencies
+# 3. NODE.JS / FRONTEND (FE) DEPENDENCIES & BUILD OUTPUTS
 node_modules/
-
-# Vite / frontend build output
 dist/
-coverage/
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Keep safe example environment templates
-!.env.example
-!.env.*.example
-
-# Vite cache
+build/
+.npm
 .vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
+# 4. IDE & EDITOR SPECIFIC FILES
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.swp
+*.~*
+.idea/
 
-# Antigravity/Gemini Config
-GEMINI.md
+# 5. DOCKER & LOCAL STORAGE VOLUMES
+*.log
+docker-volumes/
+postgres-data/

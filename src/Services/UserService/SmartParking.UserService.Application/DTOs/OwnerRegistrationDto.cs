@@ -26,4 +26,4 @@ public sealed class ReviewOwnerDto
 
 public sealed record OwnerApplicationDto(Guid Id, Guid OwnerId, string OwnerName, string BusinessName,
     string Email, string Phone, string LotType, string Status, DateTimeOffset SubmittedAt,
-    DateTimeOffset? ReviewedAt, Guid? ReviewedBy, string? ReviewNote, bool ContactVerified=false, ChallengeResult? Verification=null, Guid? DeliveryId=null,string? DeliveryStatus=null,ChallengeResult? PhoneVerification=null);
+    DateTimeOffset? ReviewedAt, Guid? ReviewedBy, string? ReviewNote, bool ContactVerified=false, ChallengeResult? Verification=null, Guid? DeliveryId=null,string? DeliveryStatus=null);

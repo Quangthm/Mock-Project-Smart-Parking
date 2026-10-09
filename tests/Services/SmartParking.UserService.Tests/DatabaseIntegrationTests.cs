@@ -83,7 +83,7 @@ public sealed class DatabaseIntegrationTests
             await using(var scope=users.Services.CreateAsyncScope())
             {
                 var db=scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                foreach(var name in new[]{"verification","phoneVerification"})
+                foreach(var name in new[]{"verification"})
                 {
                     var challenge=registration.GetProperty(name).GetProperty("challengeId").GetGuid();
                     var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.ChallengeId==challenge);

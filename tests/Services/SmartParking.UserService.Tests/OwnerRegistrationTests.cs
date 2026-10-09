@@ -39,7 +39,7 @@ public sealed class OwnerRegistrationTests
         {
             var result=await Run(s => s.RegisterAsync(Body(email, phone), default));
             await using var db=new AppDbContext(options);
-            foreach(var challenge in new[]{result.Verification!,result.PhoneVerification!})
+            foreach(var challenge in new[]{result.Verification!})
             {
                 var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.ChallengeId==challenge.ChallengeId);
                 var message=System.Text.Json.JsonSerializer.Deserialize<global::UserService.Application.Common.Interfaces.Services.WorkflowMessage>(new TestWorkflowProtector().Unprotect(delivery.ProtectedPayload))!;

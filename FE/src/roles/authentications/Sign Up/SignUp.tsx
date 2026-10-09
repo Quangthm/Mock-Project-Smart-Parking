@@ -151,7 +151,7 @@ export function SignUp() {
   const [showTnC, setShowTnC] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [registration, setRegistration] = useState<DriverRegistration | null>(restoreDriverRegistration);
-  const [ownerRegistration,setOwnerRegistration]=useState<Pick<OwnerApplicationRecord,'email'|'verification'|'phoneVerification'>|null>(()=>{try{const value=JSON.parse(localStorage.getItem('sp_pending_owner_registration')??'null');return typeof value?.email==='string' && value?.verification && value?.phoneVerification?value:null;}catch{return null;}});
+  const [ownerRegistration,setOwnerRegistration]=useState<Pick<OwnerApplicationRecord,'email'|'verification'>|null>(()=>{try{const value=JSON.parse(localStorage.getItem('sp_pending_owner_registration')??'null');return typeof value?.email==='string' && value?.verification?value:null;}catch{return null;}});
   function saveRegistration(value: DriverRegistration) {
     setRegistration(value);
     // Store only the opaque challenge and timing; never store the password or OTP.
@@ -201,7 +201,7 @@ export function SignUp() {
       setOwnerRegistration(application);try{localStorage.setItem('sp_pending_owner_registration',JSON.stringify(application));}catch{ /* This tab retains its challenges. */ }
     } catch (e) {
       try{
-        const recovered=await request<{data:Pick<OwnerApplicationRecord,'verification'|'phoneVerification'>}>('/register/owner/recover','POST',{contact:ownerForm.email.trim()});
+        const recovered=await request<{data:Pick<OwnerApplicationRecord,'verification'>}>('/register/owner/recover','POST',{contact:ownerForm.email.trim()});
         const pending={email:ownerForm.email.trim(),...recovered.data};setOwnerRegistration(pending);setOwnerForm(f=>({...f,password:'',confirmPassword:''}));
         try{localStorage.setItem('sp_pending_owner_registration',JSON.stringify(pending));}catch{/* Current tab retains its challenges. */}
       }catch{setError(e instanceof Error ? e.message : 'Registration failed.');}

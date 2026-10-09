@@ -9,13 +9,13 @@ import { ActiveBookings } from "../booking/ActiveBookings"
 import { Subscriptions } from "../subcriptions/Subscriptions"
 import { BookingHistory } from "../history/BookingHistory"
 import { DriverSupport } from "../support/DriverSupport"
+import { PaymentHistory } from "../payments/PaymentHistory"
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
+type Tab = "home" | "subscriptions" | "support" | "payments"
 import { VehicleManager } from "./VehicleManager"
 import { AccountSecurityPanel } from "../../../components/forms/AccountSecurityPanel"
-
-type Tab = "home" | "subscriptions" | "support"
 type HomePanel = "find" | "bookings" | "history"
 type ProfileSection = "account" | "security" | "vehicles"
 
@@ -33,7 +33,7 @@ export function DriverDashboard() {
     const onNavigate = (event: Event) => {
       const id = (event as CustomEvent<string>).detail
       if (id === 'find' || id === 'bookings' || id === 'history') { setTab('home'); setHomePanel(id); setBookingLot(null) }
-      if (id === 'subscriptions' || id === 'support') { setTab(id); setBookingLot(null) }
+      if (id === 'subscriptions' || id === 'support' || id === 'payments') { setTab(id); setBookingLot(null) }
     }
     const onProfile = (event: Event) => openProfileSection((event as CustomEvent<ProfileSection>).detail)
     window.addEventListener('sp:dashboard-nav', onNavigate)
@@ -73,6 +73,7 @@ export function DriverDashboard() {
     { label: "Booking", items: [
       { id: "bookings", label: "Current booking", icon: "▤", active: tab === "home" && homePanel === "bookings", onClick: () => { setTab("home"); setHomePanel("bookings"); setBookingLot(null) } },
       { id: "history", label: "Booking history", icon: "◷", active: tab === "home" && homePanel === "history", onClick: () => { setTab("home"); setHomePanel("history"); setBookingLot(null) } },
+      { id: "payments", label: "Payment history", icon: "₫", active: tab === "payments", onClick: () => { setTab("payments"); setBookingLot(null) } },
       { id: "subscriptions", label: "Passes", icon: "▣", active: tab === "subscriptions", onClick: () => { setTab("subscriptions"); setBookingLot(null) } },
     ] },
     { label: "Help", items: [{ id: "support", label: "Support", icon: "?", active: tab === "support", onClick: () => { setTab("support"); setBookingLot(null) } }] },
@@ -170,12 +171,20 @@ export function DriverDashboard() {
             {tab === "home" && (
               <div className="animate-in">
                 {homePanel === "find" ? (
-                  <FindParking onBook={(lot) => { setPaymentBooking(null); setBookingLot(lot) }} />
+                  <FindParking
+                    onBook={(lot) => { setPaymentBooking(null); setBookingLot(lot) }}
+                    onNavigateToBookings={() => setHomePanel("bookings")}
+                  />
                 ) : homePanel === "bookings" ? (
                   <section><h3 style={{ fontFamily: "Outfit", margin: "0 0 0.75rem", color: "var(--fg)" }}>Bookings</h3><ActiveBookings onPayNow={(booking) => { setPaymentBooking(booking); setBookingLot(store.getLots().find((lot) => lot.id === booking.lotId) ?? null) }} /></section>
                 ) : (
                   <section><h3 style={{ fontFamily: "Outfit", margin: "0 0 0.75rem", color: "var(--fg)" }}>Booking History</h3><BookingHistory /></section>
                 )}
+              </div>
+            )}
+            {tab === "payments" && (
+              <div className="animate-in">
+                <PaymentHistory />
               </div>
             )}
             {tab === "subscriptions" && (

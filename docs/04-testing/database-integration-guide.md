@@ -1,5 +1,10 @@
 # Code develop sử dụng database của arch/database-schema
 
+> Cập nhật 08/10/2026: đã kiểm chứng 93 backend tests. Runner có thể nạp
+> cấu hình local từ `.cache/qa-local.json`; sao chép các trường trong
+> [config mẫu](../../scripts/qa-local.example.json) và điền secret tại máy mình.
+> Compose extension `scripts/database/compose.remaining-services.yml` tùy chọn hỗ trợ đủ sáu DB.
+
 `develop` giữ code API/FE, service adapters, tests và scripts vận hành.
 `arch/database-schema` giữ SQL baseline của thành viên, ba overlay tích hợp,
 compose database và tài liệu database. Bản database tương thích ban đầu là

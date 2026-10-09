@@ -8,7 +8,6 @@ export interface OwnerApplicationRecord {
   reviewedAt?: string; reviewedBy?: string; reviewNote?: string;
   contactVerified: boolean;
   verification?: { challengeId: string; expiresAt: string; resendAt: string };
-  phoneVerification?: { challengeId: string; expiresAt: string; resendAt: string };
   deliveryId?: string; deliveryStatus?: string;
 }
 interface Response<T> { success: boolean; data: T }
