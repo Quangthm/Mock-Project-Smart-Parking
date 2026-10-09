@@ -24,13 +24,13 @@ function buildRevenueData(bookings: Booking[]) {
   return result;
 }
 
-export function RevenueDashboard({ selectedSiteId = 'all', sites = [] }: { selectedSiteId?: string; sites?: ParkingLot[] }) {
+export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSiteId?: string; sites?: Array<Pick<ParkingLot, 'id' | 'name'>> }) {
   const { user } = useApp();
   const [search, setSearch] = useState('');
   const [filterMethod, setFilterMethod] = useState('all');
 
   const lots = useMemo(() => {
-    const all = sites.length > 0 ? sites : store.getLotsByOwner(user?.id ?? '');
+    const all = sites ?? store.getLotsByOwner(user?.id ?? '');
     return selectedSiteId === 'all' ? all : all.filter(l => l.id === selectedSiteId);
   }, [sites, selectedSiteId, user?.id]);
 

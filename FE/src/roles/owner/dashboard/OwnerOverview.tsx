@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { useApp } from '../../../context/AppContext';
 import { ownerData as store } from '../data/data';
-import type { Booking, ParkingLot, User } from '../../../lib/types';
+import type { Booking } from '../../../lib/types';
+import type { Site, Operator } from '../../../lib/parkingApi';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 function buildRevenueTrend(bookings: Booking[]) {
@@ -23,8 +23,7 @@ function buildRevenueTrend(bookings: Booking[]) {
   });
 }
 
-export function OwnerOverview({ selectedSiteId, sites }: { selectedSiteId: string; sites: ParkingLot[] }) {
-  const { user } = useApp();
+export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSiteId: string; sites: Site[]; operators: Operator[] }) {
 
   // Build the view data from the owner's sites, then apply the global site selection before aggregating stats.
   const overview = useMemo(() => {
@@ -33,18 +32,14 @@ export function OwnerOverview({ selectedSiteId, sites }: { selectedSiteId: strin
     const bookings: Booking[] = visibleSites.flatMap(site => store.getBookingsByLot(site.id));
     const completedBookings = bookings.filter(booking => booking.status === 'completed');
     const revenue = completedBookings.reduce((sum, booking) => sum + booking.amount, 0);
-    const occupied = visibleSites.reduce((sum, site) => sum + site.slots.filter(slot => slot.status === 'occupied').length, 0);
-    const operators: User[] = store.getUsers().filter(operator =>
-      operator.role === 'operator'
-      && operator.ownerId === user?.id
-      && (selectedSiteId === 'all' || operator.operatorSiteId === selectedSiteId || (operator.operatorRole === 'financial' && operator.operatorSiteId === 'all'))
-    );
-    return { revenue, occupied, employeeCount: operators.length, siteCount: siteIds.size, revenueTrend: buildRevenueTrend(bookings) };
-  }, [selectedSiteId, sites, user?.id]);
+    const capacity = visibleSites.reduce((sum, site) => sum + site.totalPhysicalCapacity, 0);
+    const visibleOperators = operators.filter(operator => selectedSiteId === 'all' || operator.siteIds.includes(selectedSiteId));
+    return { revenue, capacity, employeeCount: visibleOperators.length, siteCount: siteIds.size, revenueTrend: buildRevenueTrend(bookings) };
+  }, [selectedSiteId, sites, operators]);
 
   const stats = [
     { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} ₫`, accent: 'text-green-600' },
-    { label: 'Vehicles Parked', value: overview.occupied.toLocaleString('vi-VN'), accent: 'text-blue-600' },
+    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('vi-VN'), accent: 'text-blue-600' },
     { label: 'Total Employees', value: overview.employeeCount.toLocaleString('vi-VN'), accent: 'text-violet-600' },
   ];
 
@@ -74,7 +69,7 @@ export function OwnerOverview({ selectedSiteId, sites }: { selectedSiteId: strin
           </AreaChart>
         </ResponsiveContainer>
       </section>
-      <p className="text-xs text-[var(--muted)]">Revenue uses completed bookings. Vehicles Parked counts slots currently marked occupied.</p>
+      <p className="text-xs text-[var(--muted)]">Revenue uses completed bookings. Parking Capacity comes from the saved physical layout.</p>
     </section>
   );
 }

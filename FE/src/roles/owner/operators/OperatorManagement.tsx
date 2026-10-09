@@ -1,117 +1,79 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../../../context/AppContext';
-import { ownerData as store } from '../data/data';
+import { operatorsApi, parkingApi, type Operator, type Site } from '../../../lib/parkingApi';
 import { CreateOperatorForm } from './CreateOperatorForm';
-import type { OperatorAccessRole, User } from '../../../lib/types';
-import type { ParkingLot } from '../../../lib/types';
+import { SiteForm } from '../parking-lots/SiteForm';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
 
-// Operator management
-export function OperatorManagement({ sites, selectedSiteId, onOperatorsChanged }: { sites: ParkingLot[]; selectedSiteId: string; onOperatorsChanged: () => void }) {
+export function OperatorManagement({ selectedSiteId, onOperatorsChanged }: { selectedSiteId: string; onOperatorsChanged: () => void }) {
   const { user } = useApp();
-  const [operators, setOperators] = useState<User[]>(() =>
-    getVisibleOperators()
-  );
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  useEffect(() => setOperators(getVisibleOperators()), [selectedSiteId, user?.id, sites]);
-  function getVisibleOperators() {
-    return store.getUsers().filter(operator => {
-      if (operator.role !== 'operator' || operator.ownerId !== user?.id) return false;
-      return selectedSiteId === 'all' || operator.operatorSiteId === selectedSiteId || operator.operatorSiteId === 'all';
-    });
-  }
-  function refreshOperators() {
-    setOperators(getVisibleOperators());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let current = true;
+    setLoading(true); setError(''); setOperators([]); setSites([]); setShowCreate(false); setMessage('');
+    Promise.all([operatorsApi.list(), parkingApi.list()])
+      .then(([accounts, parkingSites]) => {
+        if (!current) return;
+        setOperators(accounts);
+        setSites(parkingSites.filter(site => site.isActive && site.status === 'ACTIVE'));
+      })
+      .catch(err => { if (current) setError(err instanceof Error ? err.message : 'Cannot load operators and sites.'); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [user?.id, reload]);
+
+  function onCreated(operator: Operator) {
+    setOperators(current => [...current, operator].sort((a, b) => a.fullName.localeCompare(b.fullName)));
     setShowCreate(false);
+    setMessage(`Account created for ${operator.email}. The operator can sign in with the password you entered. Email delivery is processed separately.`);
     onOperatorsChanged();
   }
 
-  function toggleLock(op: User) {
-    const updated = { ...op, lockedUntil: op.lockedUntil ? undefined : new Date(Date.now() + 99999 * 60000).toISOString() };
-    store.saveUser(updated);
-    setOperators(getVisibleOperators());
-    onOperatorsChanged();
-  }
-
-  function updateOperatorRole(op: User, operatorRole: OperatorAccessRole) {
-    store.saveUser({ ...op, operatorRole, operatorSiteId: op.operatorSiteId === 'all' && operatorRole !== 'financial' ? sites[0]?.id : op.operatorSiteId });
-    setOperators(getVisibleOperators());
-    onOperatorsChanged();
-  }
-
-  function updateOperatorSite(op: User, operatorSiteId: string) {
-    store.saveUser({ ...op, operatorSiteId });
-    setOperators(getVisibleOperators());
-    onOperatorsChanged();
-  }
-
-  function deleteOperator(op: User) {
-    store.deleteUser(op.id);
-    setOperators(getVisibleOperators());
-    onOperatorsChanged();
-  }
-
+  const filterSiteId = sites.some(site => site.id === selectedSiteId) ? selectedSiteId : 'all';
+  const visibleOperators = operators.filter(operator => filterSiteId === 'all' || operator.siteIds.includes(filterSiteId));
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', gap: '0.5rem' }}>
         <h3 style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '1.05rem', color: 'var(--fg)', margin: 0 }}>Operator Accounts</h3>
-        <button className="btn-primary" style={{ fontSize: '0.85rem' }} onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? <><UntitledIcon name="x" size={16} /> Cancel</> : <><UntitledIcon name="plus" size={16} /> New Operator</>}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn-outline" disabled={loading || showCreate} onClick={() => setReload(value => value + 1)}>Refresh</button>
+          <button className="btn-primary" disabled={loading || !!error || showCreate} onClick={() => setShowCreate(true)}>
+            <UntitledIcon name="plus" size={16} /> New Operator
+          </button>
+        </div>
       </div>
-      {showCreate && <CreateOperatorForm sites={sites} onCreated={refreshOperators} onCancel={() => setShowCreate(false)} />}
+      {loading && <p role="status">Loading operators and sites…</p>}
+      {error && <p role="alert" style={{ color: '#dc2626' }}>{error}</p>}
+      {message && <p role="status">{message}</p>}
+      {!loading && !error && !sites.length && <p>Create your first parking site using New Operator, then add your operator account.</p>}
+      {showCreate && (sites.length ? <CreateOperatorForm sites={sites} onCreated={onCreated} onCancel={() => setShowCreate(false)} /> : <SiteForm onSaved={site => { setSites(current => [...current, site]); onOperatorsChanged(); }} onCancel={() => setShowCreate(false)} />)}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-        {operators.map(op => (
-          <div key={op.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '0.875rem 1rem' }}>
+        {visibleOperators.map(op => (
+          <div key={op.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', padding: '0.875rem 1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ width: 32, height: 32, background: '#a855f720', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#a855f7', fontSize: '0.9rem' }}>{op.name.charAt(0)}</div>
+              <div style={{ width: 32, height: 32, background: '#a855f720', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#a855f7' }}>{op.fullName.charAt(0)}</div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--fg)' }}>{op.name}</div>
-                <div style={{ fontSize: '0.77rem', color: 'var(--muted)' }}>{op.email} · {(op.operatorRole ?? 'operation').replace(/^./, role => role.toUpperCase())}</div>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{op.fullName}</div>
+                <div style={{ fontSize: '0.77rem', color: 'var(--muted)' }}>{op.email} · Operation · {op.status}</div>
+                <div style={{ fontSize: '0.77rem', color: 'var(--muted)' }}>{op.siteIds.map(id => sites.find(site => site.id === id)?.name ?? id).join(', ')}</div>
+                <div style={{ fontSize: '0.77rem', color: 'var(--muted)' }}>Permissions: {op.permissions.join(', ')}</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <label className="sr-only" htmlFor={`operator-site-${op.id}`}>Site for {op.name}</label>
-              <select
-                id={`operator-site-${op.id}`}
-                className="input"
-                value={op.operatorSiteId ?? ''}
-                onChange={event => updateOperatorSite(op, event.target.value)}
-                style={{ width: 'auto', minWidth: '140px', maxWidth: '180px', padding: '0.35rem 0.5rem', fontSize: '0.78rem' }}
-              >
-                <option value="all">All Sites</option>
-                {!op.operatorSiteId && <option value="">Unassigned</option>}
-                {sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
-              </select>
-              <span
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  padding: '0.25rem 0.65rem',
-                  borderRadius: '999px',
-                  background: 'rgba(37, 99, 235, 0.12)',
-                  color: 'var(--primary)',
-                  border: '1px solid rgba(37, 99, 235, 0.25)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Operation
-              </span>
-              {op.lockedUntil && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', color: '#ef4444', fontWeight: 600 }}><UntitledIcon name="lock" size={13} /> LOCKED</span>}
-              <button style={{ fontSize: '0.78rem', padding: '0.3rem 0.625rem', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--muted)' }} onClick={() => toggleLock(op)}>
-                {op.lockedUntil ? 'Unlock' : 'Lock'}
-              </button>
-              <button style={{ fontSize: '0.78rem', padding: '0.3rem 0.625rem', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 'var(--radius)', cursor: 'pointer', color: '#dc2626' }} onClick={() => { if (confirm(`Remove operator ${op.name}?`)) deleteOperator(op); }}>
-                Remove
-              </button>
+              <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>Operation</span>
+              <button className="btn-outline" disabled title="Operator locking is not available yet.">Lock</button>
+              <button className="btn-outline" disabled title="Operator removal is not available yet.">Remove</button>
             </div>
           </div>
         ))}
-        {!operators.length && (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: '0.875rem' }}>
-            No operators yet. Create an account for your staff.
-          </div>
-        )}
+        {!loading && !error && !visibleOperators.length && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)' }}>No operators yet. Create an account for your staff.</div>}
       </div>
     </div>
   );
