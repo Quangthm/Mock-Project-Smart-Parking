@@ -11,7 +11,7 @@ from flask_cors import CORS
 from ultralytics import YOLO
 
 # Import các hàm AI core từ util.py của bạn
-from util import get_car, read_license_plate, USING_PADDLE, reader, preprocess_license_plate
+from util import get_car, read_license_plate, USING_PADDLE, reader, preprocess_license_plate, crop_lower_vehicle
 
 # ══════════════════════════════════════════════════════════════════════════
 # 1. Cấu hình tham số hệ thống từ Terminal
@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=5001, help='Port chạy Flask AI Service')
 default_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 parser.add_argument('--device', type=str, default=default_device, help='Thiết bị chạy mô hình: cpu hoặc cuda')
-parser.add_argument('--vehicle_weight', type=str, default='./models/yolov8n.pt', help='Mô hình nhận diện xe')
+parser.add_argument('--vehicle_weight', type=str, default='./models/yolov8s.pt', help='Mô hình nhận diện xe')
 parser.add_argument('--plate_weight', type=str, default='./models/license_plate_detector.pt', help='Mô hình nhận diện biển số')
 args = parser.parse_args()
 
@@ -112,10 +112,24 @@ def read_license_plate_segments(crop):
         except Exception:
             pass
             
-    # EasyOCR / Fallback
+    # ── Thử đọc TRỰC TIẾP trên ảnh đã qua optimize_lp_image (1 lớp xử lý, còn giữ chi tiết) ──
+    # Ưu tiên cách này trước vì threshold nhị phân 2 lớp chồng (ở bước preprocess_license_plate
+    # bên dưới) dễ làm vỡ nét chữ với những ảnh vốn đã đủ rõ, khiến OCR đọc sai/không ra chữ.
+    best_raw_ocr, best_confs, best_avg_score = [], [], 0.0
+    if not USING_PADDLE:
+        try:
+            direct_detections = reader.readtext(crop)
+            if direct_detections:
+                raw_ocr = [d[1] for d in direct_detections]
+                confs = [d[2] for d in direct_detections]
+                avg_score = sum(confs) / len(confs) if confs else 0.0
+                if avg_score > best_avg_score:
+                    best_raw_ocr, best_confs, best_avg_score = raw_ocr, confs, avg_score
+        except Exception:
+            pass
+
+    # ── EasyOCR / Fallback trên các biến thể xử lý nặng (Otsu, Adaptive, Sharpen...) ──
     variants = preprocess_license_plate(crop)
-    best_raw_ocr, best_confs = [], []
-    best_avg_score = 0.0
     
     for img in variants:
         try:
@@ -153,6 +167,36 @@ def is_box_inside(plate_box, vehicle_box):
     vx1, vy1, vx2, vy2 = vehicle_box
     # Cho phép sai số lệch nhẹ rìa biên khoảng 10 pixel
     return (px1 >= vx1 - 10) and (py1 >= vy1 - 10) and (px2 <= vx2 + 10) and (py2 <= vy2 + 10)
+
+def point_in_polygon(x, y, polygon):
+    """
+    Thuật toán Ray Casting kiểm tra điểm (x, y) có nằm trong đa giác của 1 ô đỗ hay không.
+    polygon: list các điểm [[x1,y1], [x2,y2], ...] (toạ độ pixel trên khung hình camera giám sát).
+    """
+    n = len(polygon)
+    inside = False
+    px, py = polygon[n - 1]
+    for i in range(n):
+        cx, cy = polygon[i]
+        if ((cy > y) != (py > y)) and (x < (px - cx) * (y - cy) / ((py - cy) or 1e-9) + cx):
+            inside = not inside
+        px, py = cx, cy
+    return inside
+
+
+def match_slot(vehicle_box, slots):
+    """
+    Gán xe vào ô đỗ dựa trên điểm đáy-giữa (bottom-center) của bounding box xe —
+    điểm này bám sát mặt đất/ô đỗ hơn là tâm hình học của cả chiếc xe.
+    slots: [{"slot_id": "A1", "polygon": [[x,y], ...]}, ...]
+    """
+    x1, y1, x2, y2 = vehicle_box
+    cx, cy = (x1 + x2) / 2, y2
+    for slot in slots:
+        if point_in_polygon(cx, cy, slot.get('polygon', [])):
+            return slot.get('slot_id')
+    return None
+
 
 TO_DIGIT = {
     'O': ['0'], 'Q': ['0'], 'D': ['0'],
@@ -608,6 +652,117 @@ def recognize_uploaded_image():
     except Exception as e:
         print(f"[AI CRITICAL ERROR] Lỗi xử lý: {str(e)}")
         return jsonify({"success": False, "message": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
+
+@app.route('/api/v1/stream/recognize_multi', methods=['POST'])
+def recognize_multi():
+    """
+    Endpoint cho camera giám sát: nhận 1 khung hình rộng (nhiều xe, có thể ở xa),
+    trả về danh sách TẤT CẢ xe phát hiện được kèm biển số + ô đỗ tương ứng (nếu có truyền 'slots').
+
+    Body JSON:
+      - image: base64 của khung hình camera giám sát
+      - slots (tuỳ chọn): [{"slot_id": "A1", "polygon": [[x1,y1],[x2,y2],...]}, ...]
+        toạ độ polygon tính theo pixel của khung hình gốc (camera cố định góc nên vẽ 1 lần rồi dùng lại)
+
+    Mấu chốt kỹ thuật: model plate detector được chạy trên TỪNG ẢNH CROP XE (đã phóng to
+    tương đối vùng xe đó), KHÔNG chạy trên toàn khung hình như endpoint cũ — đây là cách rẻ
+    nhất để cải thiện detect biển ở xa / nhiều biển mà không cần đổi hay train model mới.
+    """
+    data = request.get_json()
+    if not data or 'image' not in data:
+        return jsonify({"success": False, "message": "Không nhận được chuỗi hình ảnh từ client."}), 400
+
+    try:
+        image_data = data['image']
+        if "," in image_data:
+            image_data = image_data.split(",")[1]
+        img_bytes = base64.b64decode(image_data)
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({"success": False, "message": "Dữ liệu ảnh bị lỗi hoặc không giải mã được."}), 400
+
+        slots = data.get('slots', [])
+        debug = data.get('debug', False)
+        frame_h, frame_w = frame.shape[:2]
+
+        if debug:
+            os.makedirs('./debug_output', exist_ok=True)
+
+        # ── Bước 1: Phát hiện TẤT CẢ xe trong khung hình (không chỉ lấy 1 xe tốt nhất) ──
+        detected_vehicles = []
+        for det in coco_model(frame, verbose=False)[0].boxes.data.tolist():
+            x1, y1, x2, y2, score, class_id = det
+            if int(class_id) in VEHICLE_CLASSES:
+                v_name = VEHICLE_CLASS_NAMES.get(int(class_id), 'Vehicle')
+                detected_vehicles.append((x1, y1, x2, y2, score, v_name))
+
+        results = []
+        PAD = 12  # nới biên crop 1 chút để không cắt mất góc biển số sát viền xe
+
+        for (x1, y1, x2, y2, v_score, v_name) in detected_vehicles:
+            vx1 = max(0, int(x1) - PAD)
+            vy1 = max(0, int(y1) - PAD)
+            vx2 = min(frame_w, int(x2) + PAD)
+            vy2 = min(frame_h, int(y2) + PAD)
+            vehicle_crop = frame[vy1:vy2, vx1:vx2]
+            if vehicle_crop.size == 0:
+                continue
+
+            slot_id = match_slot((x1, y1, x2, y2), slots) if slots else None
+
+            # ── Bước 2: Detect biển số NGAY TRONG crop của xe này (two-stage) ──
+            lp_crop = None
+            lp_score = 0.0
+            if lp_model_available:
+                lp_res = lp_detector(vehicle_crop, verbose=False)[0].boxes.data.tolist()
+                lp_res.sort(key=lambda x: x[4], reverse=True)
+                if lp_res:
+                    lx1, ly1, lx2, ly2, lscore, _ = lp_res[0]
+                    lp_crop = vehicle_crop[int(ly1):int(ly2), int(lx1):int(lx2)]
+                    lp_score = lscore
+
+            if lp_crop is None or lp_crop.size == 0:
+                lp_crop = crop_lower_vehicle(vehicle_crop, (0, 0, vehicle_crop.shape[1], vehicle_crop.shape[0]))
+
+            # ── DEBUG: lưu ảnh crop ra file để kiểm tra bằng mắt OCR đang "nhìn" gì ──
+            if debug:
+                cv2.imwrite(f'./debug_output/vehicle_{len(results)}_full_crop.jpg', vehicle_crop)
+                if lp_crop is not None and lp_crop.size > 0:
+                    cv2.imwrite(f'./debug_output/vehicle_{len(results)}_plate_raw.jpg', lp_crop)
+
+            # ── Bước 3: OCR như endpoint cũ ──
+            plate_text, ocr_score = None, 0.0
+            processed = optimize_lp_image(lp_crop)
+            if debug and processed is not None and processed.size > 0:
+                cv2.imwrite(f'./debug_output/vehicle_{len(results)}_plate_processed.jpg', processed)
+            if processed is not None and processed.size > 0:
+                raw_ocr, confs = read_license_plate_segments(processed)
+                post_res = post_process_vietnamese_plate(raw_ocr, confs)
+                if post_res["status"] == "success":
+                    plate_text = post_res["formatted_plate"]
+                    ocr_score = post_res["avg_conf"]
+
+            results.append({
+                "vehicle_bbox": [x1, y1, x2, y2],
+                "vehicle_type": v_name,
+                "vehicle_detect_score": float(v_score),
+                "slot_id": slot_id,
+                "plate": plate_text,
+                "plate_detect_score": float(lp_score),
+                "ocr_confidence": float(ocr_score)
+            })
+
+        return jsonify({
+            "success": True,
+            "vehicle_count": len(results),
+            "vehicles": results
+        }), 200
+
+    except Exception as e:
+        print(f"[AI CRITICAL ERROR] Lỗi xử lý recognize_multi: {str(e)}")
+        return jsonify({"success": False, "message": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     print(f'[INFO] Starting Optimized AI Parking API Server tại port {FLASK_PORT}...')
