@@ -22,14 +22,14 @@ Implements UC-AUTH-02: company name, email and phone are required; Admin review 
 
 All fields are required. Name/company/email maximum 255 characters; phone optional leading `+` followed by 9–15 digits; lot type `outdoor`, `basement`, or `multi-storey`. Password follows existing registration policy: 8–15 characters, upper/lowercase, digit and special character. Terms acceptance must be true. Email is trimmed and lowercased. Password is stored as a bcrypt hash.
 
-`201 { "success": true, "data": <application> }`. No session is issued. User is `PENDING_APPROVAL`; its `BUSINESS_OPERATOR` account is `SUSPENDED` with role `OWNER`. Pending/rejected users cannot log in, refresh or make protected requests. Contacts remain reserved after rejection; resubmission/account deletion is a separate workflow.
+`201 { "success": true, "data": <application> }`. No session is issued. User is `PENDING_APPROVAL`; its `BUSINESS_OPERATOR` account is `SUSPENDED` with role `BUSINESS_OWNER`. Pending/rejected users cannot log in, refresh or make protected requests. Contacts remain reserved after rejection; resubmission/account deletion is a separate workflow.
 
 ## Admin list and review
 
 - `GET /api/owner-applications` → `200 { "success": true, "data": [<application>] }`, newest first. Currently returns the full list; pagination is a future extension.
 - `PATCH /api/owner-applications/{id}/review` with `{ "status": "approved", "reviewNote": "Checked company details" }` → `200 { "success": true, "data": <application> }`.
 
-Both endpoints require an active Admin session. Identity comes from the validated bearer token, never the request body. Current database role is checked during authentication and again in the service. Canonical roles `PLATFORM_ADMIN`, `OWNER`, `OPERATOR` map to FE/JWT `admin`, `owner`, `operator`; short auth role aliases remain supported.
+Both endpoints require an active Admin session. Identity comes from the validated bearer token, never the request body. Current database role is checked during authentication and again in the service. Canonical roles `PLATFORM_ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR` map to FE/JWT `admin`, `owner`, `operator`; short auth role aliases remain supported.
 
 Review status must be `approved` or `rejected`. Note is optional, maximum 2000 characters. Only pending applications/users can be reviewed. Approval atomically activates the user and Owner account; rejection records `REJECTED` and keeps the account suspended. Row locks serialize competing decisions; repeated/finalized reviews return 409. Reviewer ID, timestamp and note persist with the application as review evidence.
 

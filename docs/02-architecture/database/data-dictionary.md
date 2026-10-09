@@ -35,18 +35,3 @@ This dictionary details the microservice-owned data structures for Sprint 2, foc
 | `site_capacity_pools`| `current_reserved_count`| INT | `CHECK (current_reserved_count <= max_reservation_quota)` |
 | `site_capacity_pools`| `backup_count` | INT | Tracks backup/emergency quotas per BR-CAP-01-05 |
 | `reservations` | `expected_end_time` | TIMESTAMPTZ | `CHECK (expected_end_time > expected_start_time)` |
-
-
-## 5. Subscription Service DB
-| Table | Column | Type | Constraints / Rules |
-|-------|--------|------|----------------------|
-| `monthly_passes` | `id, tenant_id, site_id` | UUID | Composite UNIQUE constraint. |
-| `monthly_passes` | `entitlement_type` | VARCHAR | CHECK: `WHEN_SPACE_AVAILABLE`, `GUARANTEED_CAPACITY_SLOT` |
-| `monthly_passes` | `status` | VARCHAR | CHECK: `PENDING_PAYMENT`, `ACTIVE`, `EXPIRED`, `CANCELLED` |
-
-## 6. Incident Service DB
-| Table | Column | Type | Constraints / Rules |
-|-------|--------|------|----------------------|
-| `incidents` | `id, tenant_id, site_id` | UUID | Composite UNIQUE constraint. |
-| `incidents` | `incident_type` | VARCHAR | CHECK: `LOST_TICKET`, `UNKNOWN_SLOT_STATE`, `CHECKOUT_MISMATCH`, `OTHER` |
-| `incidents` | `status` | VARCHAR | CHECK: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` |

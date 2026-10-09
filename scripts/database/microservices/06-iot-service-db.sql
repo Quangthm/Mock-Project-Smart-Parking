@@ -39,7 +39,7 @@ CREATE TABLE lpr_events (
     image_url VARCHAR(500), -- Link ảnh chụp biển số
     
     direction VARCHAR(50) NOT NULL CHECK (direction IN ('INBOUND', 'OUTBOUND')), -- 'INBOUND', 'OUTBOUND'
-    status VARCHAR(50) NOT NULL DEFAULT 'UNPROCESSED' CHECK (status IN ('UNPROCESSED', 'SYNCED_TO_PARKING')), -- 'UNPROCESSED', 'SYNCED_TO_PARKING'
+    processed_status VARCHAR(50) NOT NULL DEFAULT 'UNPROCESSED' CHECK (processed_status IN ('UNPROCESSED', 'SYNCED_TO_PARKING')), -- 'UNPROCESSED', 'SYNCED_TO_PARKING'
     captured_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (device_id, tenant_id, site_id) REFERENCES devices(id, tenant_id, site_id) ON DELETE CASCADE

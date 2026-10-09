@@ -21,7 +21,7 @@ Bearer authentication with current role `owner` is required. No corporate email 
 - `fullName`: required, trimmed, maximum 255 characters.
 - `email`: required valid email, maximum 255 characters, trimmed/lowercased; unique among non-deleted users. Existing identities are rejected; this is account creation, not account linking or password replacement.
 - `password`: 8–15 characters, uppercase, lowercase, number and special character; uses the existing registration/login policy and BCrypt implementation. Owner supplies an initial password and communicates it privately. Invitation, delivery, forced first-login password change and reset are separate work.
-- `siteIds`: 1–100 distinct non-empty UUIDs. Every site must exist, be active/non-deleted and belong to an active tenant in which the caller has a current active `OWNER` tenant account (`site_id IS NULL`). A pending/locked/deleted Owner, suspended membership or suspended/deleted tenant cannot provision staff.
+- `siteIds`: 1–100 distinct non-empty UUIDs. Every site must exist, be active/non-deleted and belong to an active tenant in which the caller has a current active `BUSINESS_OWNER` tenant account (`site_id IS NULL`). A pending/locked/deleted Owner, suspended membership or suspended/deleted tenant cannot provision staff.
 - `permissions`: 1–4 distinct, case-sensitive entries from `DEVICE_MANAGE`, `DEVICE_STATUS_VIEW`, `CASH_COLLECT`, `APPEAL_REVIEW`. The same explicit permission set is stored for each selected site. Arbitrary role/admin/owner/financial powers cannot be delegated.
 
 `ownerId`, `tenantId`, `role`, user status and account IDs are not request fields; authoritative scope comes from the authenticated identity and database. There is no `all` wildcard. An explicit list captures the selected sites at creation time; new sites are not automatically granted. Per-site differences can be implemented later through a separately agreed grant-management contract.
@@ -64,13 +64,13 @@ Business exceptions use the existing `{ success: false, code, message }` middlew
 
 Apply `scripts/database/05.7-Operator-Provisioning.sql` after the base schema and `05.4` (nullable phone and normalized email index). It is re-runnable and does not create demo users, tenants or sites. No automatic startup migration is performed.
 
-Creation is one transaction: identity + one `BUSINESS_OPERATOR` account per site + `OPERATOR` role + `operator_grants` metadata. Each grant persists creator/time and an explicit permission set. Shared row locks on the Owner, membership, role, tenant and sites serialize creation with scope/status changes. Duplicate email races are enforced by the database unique index; failed creation rolls back all rows.
+Creation is one transaction: identity + one `BUSINESS_OPERATOR` account per site + `SITE_OPERATOR` role + `operator_grants` metadata. Each grant persists creator/time and an explicit permission set. Shared row locks on the Owner, membership, role, tenant and sites serialize creation with scope/status changes. Duplicate email races are enforced by the database unique index; failed creation rolls back all rows.
 
 `IOperatorProvisioningService.HasPermissionAsync(operatorId, siteId, permission, ct)` checks current user/account/role/grant/site/tenant state. Future operational endpoints must call it using the authenticated user ID and authoritative target site before acting. JWT `role=operator` alone grants no site access. The permission check is current-state read authorization; operational mutations must additionally follow their own transaction/revocation contract.
 
 ## Integration boundaries and acceptance
 
-Owner approval currently does not create tenant membership. A real `OWNER` membership in the site's tenant must already exist, consistent with SPARK-188. Provisioning must not infer ownership from frontend fixtures or automatically create a tenant.
+Owner approval currently does not create tenant membership. A real `BUSINESS_OWNER` membership in the site's tenant must already exist, consistent with SPARK-188. Provisioning must not infer ownership from frontend fixtures or automatically create a tenant.
 
 The existing frontend `CreateOperatorForm`/`OperatorManagement` remain local-only. They use `name`, `operatorRole`, `operatorSiteId` (including `all`) and fixture site IDs. Before connecting them, load persisted site UUIDs, map `name` to `fullName`, and let users select explicit permissions and sites. Financial presets are not an agreed delegable permission set; do not silently grant Owner financial authority. This backend task does not implement Owner staff list/edit/lock/delete APIs or staff activity workflows.
 
