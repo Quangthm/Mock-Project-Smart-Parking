@@ -1,9 +1,12 @@
 # Code develop sử dụng database của arch/database-schema
 
-> Cập nhật 08/10/2026: đã kiểm chứng 93 backend tests. Runner có thể nạp
-> cấu hình local từ `.cache/qa-local.json`; sao chép các trường trong
-> [config mẫu](../../scripts/qa-local.example.json) và điền secret tại máy mình.
-> Compose extension `scripts/database/compose.remaining-services.yml` tùy chọn hỗ trợ đủ sáu DB.
+> Cập nhật 08/10/2026: đã kiểm chứng 93 backend tests. Từ bản chuẩn hóa
+> onboarding, `scripts/run-schema-service.ps1` đọc cấu hình local từ **root
+> `.env`** (không còn `.cache/qa-local.json`); xem [`QUICK_START.md`](../../QUICK_START.md)
+> và `setup.ps1`. Phần mô tả `arch/database-schema` / `SMARTPARK_SCHEMA_ROOT`
+> bên dưới là luồng lịch sử. Compose extension
+> `scripts/database/compose.remaining-services.yml` đã được merge vào
+> `compose.schema-integration.yml` (đủ sáu DB) và file cũ đã bị xóa.
 
 `develop` giữ code API/FE, service adapters, tests và scripts vận hành.
 `arch/database-schema` giữ SQL baseline của thành viên, ba overlay tích hợp,

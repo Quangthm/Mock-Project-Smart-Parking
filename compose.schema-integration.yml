@@ -6,7 +6,7 @@ services:
       POSTGRES_DB: smartpark_user
       POSTGRES_USER: smartpark_user
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
-    ports: ["127.0.0.1:5441:5432"]
+    ports: ["127.0.0.1:${SMARTPARK_DB_USER_PORT:-5441}:5432"]
     volumes:
       - user-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/01-user-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
@@ -22,7 +22,7 @@ services:
       POSTGRES_DB: smartpark_parking
       POSTGRES_USER: smartpark_parking
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
-    ports: ["127.0.0.1:5442:5432"]
+    ports: ["127.0.0.1:${SMARTPARK_DB_PARKING_PORT:-5442}:5432"]
     volumes:
       - parking-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/02-parking-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
@@ -38,7 +38,7 @@ services:
       POSTGRES_DB: smartpark_reservation
       POSTGRES_USER: smartpark_reservation
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
-    ports: ["127.0.0.1:5443:5432"]
+    ports: ["127.0.0.1:${SMARTPARK_DB_RESERVATION_PORT:-5443}:5432"]
     volumes:
       - reservation-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/03-reservation-session-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
@@ -48,7 +48,55 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  payment-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartpark_payment
+      POSTGRES_USER: smartpark_payment
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:${SMARTPARK_DB_PAYMENT_PORT:-5444}:5432"]
+    volumes:
+      - payment-schema-data:/var/lib/postgresql/data
+      - ./scripts/database/microservices/04-payment-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_payment -d smartpark_payment"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  notification-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartpark_notification
+      POSTGRES_USER: smartpark_notification
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:${SMARTPARK_DB_NOTIFICATION_PORT:-5445}:5432"]
+    volumes:
+      - notification-schema-data:/var/lib/postgresql/data
+      - ./scripts/database/microservices/05-notification-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_notification -d smartpark_notification"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  iot-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartpark_iot
+      POSTGRES_USER: smartpark_iot
+      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    ports: ["127.0.0.1:${SMARTPARK_DB_IOT_PORT:-5446}:5432"]
+    volumes:
+      - iot-schema-data:/var/lib/postgresql/data
+      - ./scripts/database/microservices/06-iot-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartpark_iot -d smartpark_iot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 volumes:
   user-schema-data:
   parking-schema-data:
   reservation-schema-data:
+  payment-schema-data:
+  notification-schema-data:
+  iot-schema-data:
