@@ -4,7 +4,7 @@ const server = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
 ).replace(/\/$/, "")
 
-type Response<T> = { success: boolean data: T }
+type Response<T> = { success: boolean; data: T }
 
 export interface Site {
   id: string
@@ -57,7 +57,7 @@ export interface Structure {
   site: Site
   units: Unit[]
   slots: Slot[]
-  paths: Array<{ id: string code: string }>
+  paths: Array<{ id: string; code: string }>
   capacityViews: CapacityView[]
 }
 
@@ -82,7 +82,7 @@ async function call<T>(
 export const parkingApi = {
   list: () => call<Site[]>(""),
 
-  create: (body: { code: string name: string address: string }) =>
+  create: (body: { code: string; name: string; address: string }) =>
     call<Site>("", "POST", body),
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),
@@ -99,7 +99,7 @@ export const parkingApi = {
 
   slot: (
     id: string,
-    body: { unitId: string code: string vehicleType: string type: string },
+    body: { unitId: string; code: string; vehicleType: string; type: string },
   ) => call<string>(`/${id}/slots`, "POST", body),
 
   async edit(id: string, body: Record<string, unknown>) {

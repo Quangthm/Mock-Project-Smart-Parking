@@ -490,6 +490,11 @@ export const structureStore = {
     saveAllStructures(all)
   },
 
+  getCapacityStats(lotId: string): CapacityAccountingStats {
+    const data = structureStore.getStructure(lotId)
+    return structureStore.calculateStats(data)
+  },
+
   // Authoritative SRS Capacity Accounting Invariant:
   // Available Capacity = Total Capacity − Occupied − Protected − Pending Payment − Backup
   // Distinct units are counted without double-subtraction for overlapping dimensions (e.g. Occupied + Protected)

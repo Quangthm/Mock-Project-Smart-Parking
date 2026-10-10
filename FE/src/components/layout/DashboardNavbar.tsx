@@ -10,7 +10,7 @@ import { ThemeIcon } from "../icon/ThemeIcon"
 
 import { UntitledIcon } from "../icon/UntitledIcon"
 
-const rolePages: Record<string, { id: string label: string }[]> = {
+const rolePages: Record<string, { id: string; label: string }[]> = {
   driver: [
     { id: "find", label: "Find parking" },
     { id: "bookings", label: "Current bookings" },
@@ -36,11 +36,13 @@ const rolePages: Record<string, { id: string label: string }[]> = {
   ],
 
   operator: [
+    { id: "overview", label: "Dashboard overview" },
     { id: "checkin", label: "Check-in and check-out" },
-    { id: "status", label: "Lot status" },
-    { id: "slots", label: "Manage slots" },
+    { id: "status", label: "Lot status & structure" },
+    { id: "slots", label: "Backup & slot operations" },
     { id: "tickets", label: "Driver tickets" },
-    { id: "emergency", label: "Emergency" },
+    { id: "emergency", label: "Emergency & incidents" },
+    { id: "assignments", label: "My assignments" },
     { id: "finance", label: "Financial reports" },
   ],
 }
@@ -165,7 +167,7 @@ export function DashboardNavbar() {
               user?.role === "driver"
                 ? "find"
                 : user?.role === "operator"
-                  ? "checkin"
+                  ? "overview"
                   : user?.role === "owner"
                     ? "dashboard"
                     : "overview",

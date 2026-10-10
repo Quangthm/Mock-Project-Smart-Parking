@@ -237,7 +237,7 @@ export function Footer() {
   )
 }
 
-function FooterLinks({ links }: { links: { label: string view: string }[] }) {
+function FooterLinks({ links }: { links: { label: string; view: string }[] }) {
   const { setView } = useApp()
 
   return (

@@ -12,7 +12,7 @@ export type DashboardNavItem = {
   onClick: () => void
 }
 
-export type DashboardNavGroup = { label?: string items: DashboardNavItem[] }
+export type DashboardNavGroup = { label?: string; items: DashboardNavItem[] }
 
 export function DashboardSidebar({
   groups,

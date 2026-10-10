@@ -193,7 +193,12 @@ export function OwnerDashboard() {
           {tab === "finance" && (
             <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />
           )}
-          {tab === "policy" && <PolicySettings />}
+          {tab === "policy" && (
+            <PolicySettings
+              selectedSiteId={selectedSiteId}
+              onSelectSite={setSelectedSiteId}
+            />
+          )}
         </div>
       </main>
     </DashboardSidebar>

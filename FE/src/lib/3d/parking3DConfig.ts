@@ -155,10 +155,14 @@ export const SLOT_STATUS_COLORS: Record<SlotStatus | "selected" | "default", num
 
     selected: 0x3b82f6, // Blue
 
+    maintenance: 0x64748b, // Slate Gray
+
+    disabled: 0x475569, // Dark Slate
+
     default: 0x64748b, // Slate Gray
   }
 
-export const SLOT_STATUS_HEX = {
+export const SLOT_STATUS_HEX: Record<SlotStatus | "selected" | "default", string> = {
   available: "#22c55e",
 
   occupied: "#ef4444",
@@ -166,6 +170,10 @@ export const SLOT_STATUS_HEX = {
   reserved: "#f59e0b",
 
   selected: "#3b82f6",
+
+  maintenance: "#64748b",
+
+  disabled: "#475569",
 
   default: "#64748b",
 }

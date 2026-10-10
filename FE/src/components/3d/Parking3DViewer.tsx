@@ -846,7 +846,11 @@ export function Parking3DViewer({
                 ? "Còn trống (Available)"
                 : hoveredSlot.slot.status === "occupied"
                   ? "Đã có xe (Occupied)"
-                  : "Đã đặt trước (Reserved)"}
+                  : hoveredSlot.slot.status === "maintenance"
+                    ? "Đang bảo trì (Maintenance)"
+                    : hoveredSlot.slot.status === "disabled"
+                      ? "Vô hiệu hóa (Disabled)"
+                      : "Đã đặt trước (Reserved)"}
           </div>
           {interactive && (
             <div className="text-[9px] text-sky-400 mt-0.5">

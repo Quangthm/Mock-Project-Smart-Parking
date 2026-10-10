@@ -461,7 +461,7 @@ export function UntitledIcon({
   size = 20,
   style,
   ...props
-}: { name: string size?: number } & SVGProps<SVGSVGElement>) {
+}: { name: string; size?: number } & SVGProps<SVGSVGElement>) {
   const iconName = (
     name in paths ? name : aliases[name]
   ) as IconName | undefined

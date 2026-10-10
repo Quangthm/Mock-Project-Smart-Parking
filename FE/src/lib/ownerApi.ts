@@ -21,7 +21,7 @@ export interface OwnerApplicationRecord {
 
   contactVerified: boolean
 
-  verification?: { challengeId: string expiresAt: string resendAt: string }
+  verification?: { challengeId: string; expiresAt: string; resendAt: string }
 
   deliveryId?: string
   deliveryStatus?: string

@@ -3,7 +3,7 @@ import { useState } from "react"
 import { request } from "../../lib/authApi"
 
 export function AccountSecurityPanel() {
-  const [setup, setSetup] = useState<{ secret: string uri: string } | null>(
+  const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(
     null,
   )
   const [code, setCode] = useState("")
@@ -16,7 +16,7 @@ export function AccountSecurityPanel() {
     try {
       setSetup(
         (
-          await request<{ data: { secret: string uri: string } }>(
+          await request<{ data: { secret: string; uri: string } }>(
             "/mfa/setup",
             "POST",
           )

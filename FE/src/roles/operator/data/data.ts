@@ -18,4 +18,5 @@ export const operatorData = {
   saveLot: store.saveLot,
 
   saveTicket: store.saveTicket,
+  getNotifications: store.getNotifications,
 }

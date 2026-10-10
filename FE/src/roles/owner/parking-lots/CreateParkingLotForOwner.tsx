@@ -60,7 +60,7 @@ const DEVICE_OPTIONS = [
   },
 ]
 
-function Row({ label, value }: { label: string value: string }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div
       style={{

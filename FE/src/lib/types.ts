@@ -4,7 +4,7 @@ export type OperatorAccessRole = "financial" | "operation" | "cashier"
 
 export type LotType = "outdoor" | "basement" | "multi-storey"
 
-export type SlotStatus = "available" | "occupied" | "reserved"
+export type SlotStatus = "available" | "occupied" | "reserved" | "maintenance" | "disabled"
 
 export type BookingStatus = "pending" | "confirmed" | "checked-in" | "completed" | "cancelled"
 
@@ -228,7 +228,21 @@ export interface SupportTicket {
   createdAt: string
 }
 
-export type NotificationType = "PAYMENT_SUCCESS" | "PAYMENT_FAILED" | "PARKING_EXPIRING" | "LOGIN_SUCCESS" | "PACKAGE_PURCHASE_SUCCESS" | "TICKET_SUBMITTED" | "TICKET_RESOLVED" | "NEW_APPLICATION" | "NEW_DRIVER" | "DRIVER_PARKED" | "EMPLOYEE_CREATED" | "POLICY_UPDATED"
+export type NotificationType =
+  | "PAYMENT_SUCCESS"
+  | "PAYMENT_FAILED"
+  | "PARKING_EXPIRING"
+  | "LOGIN_SUCCESS"
+  | "PACKAGE_PURCHASE_SUCCESS"
+  | "TICKET_SUBMITTED"
+  | "TICKET_RESOLVED"
+  | "NEW_APPLICATION"
+  | "NEW_DRIVER"
+  | "DRIVER_PARKED"
+  | "EMPLOYEE_CREATED"
+  | "POLICY_UPDATED"
+  | "PASSWORD_RESET"
+  | "SITE_REASSIGNED"
 
 export interface AppNotification {
   id: string

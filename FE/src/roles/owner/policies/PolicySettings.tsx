@@ -51,7 +51,15 @@ const initialPolicy: PolicyState = {
 const inputClass =
   "w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-blue-500/20"
 
-export function PolicySettings() {
+interface PolicySettingsProps {
+  selectedSiteId?: string
+  onSelectSite?: (siteId: string) => void
+}
+
+export function PolicySettings({
+  selectedSiteId: externalSiteId,
+  onSelectSite,
+}: PolicySettingsProps = {}) {
   const { user } = useApp()
 
   const [policy, setPolicy] = useState<PolicyState>(() =>
@@ -75,22 +83,45 @@ export function PolicySettings() {
     () => (user ? store.getLotsByOwner(user.id) : []),
     [user],
   )
-  const [selectedLotId, setSelectedLotId] = useState<string>("all")
+  const [selectedLotId, setSelectedLotId] = useState<string>(
+    externalSiteId || "all",
+  )
   const [currentPdf, setCurrentPdf] = useState<LotPolicyPdf | null>(null)
   const [previewLot, setPreviewLot] = useState<ParkingLot | null>(null)
   const [pdfNotice, setPdfNotice] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Sync current PDF when selected lot changes
+  useEffect(() => {
+    if (externalSiteId !== undefined) {
+      setSelectedLotId(externalSiteId)
+    }
+  }, [externalSiteId])
+
+  const handleLotChange = (newLotId: string) => {
+    setSelectedLotId(newLotId)
+    onSelectSite?.(newLotId)
+  }
+
+  // Sync current PDF when selected lot changes, inheriting all-sites policy if site has none
   useEffect(() => {
     if (selectedLotId === "all") {
       const ownerPdf = user ? store.getOwnerPolicyPdf(user.id) : null
       setCurrentPdf(ownerPdf)
     } else {
-      const lotPdf = store.getLotPolicyPdf(selectedLotId)
-      setCurrentPdf(lotPdf)
+      const lotPdf = store.getLotPolicyPdf(selectedLotId, user?.id)
+      const ownerPdf = user ? store.getOwnerPolicyPdf(user.id) : null
+      if ((!lotPdf || !lotPdf.fileData) && ownerPdf?.fileData) {
+        const lot = ownerLots.find((l) => l.id === selectedLotId)
+        setCurrentPdf({
+          ...ownerPdf,
+          lotId: selectedLotId,
+          title: `Chính sách & Quy định Bãi đỗ: ${lot?.name || "SmartPark"}`,
+        })
+      } else {
+        setCurrentPdf(lotPdf)
+      }
     }
-  }, [selectedLotId, user])
+  }, [selectedLotId, user, ownerLots])
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -165,10 +196,22 @@ export function PolicySettings() {
     ) {
       if (selectedLotId === "all") {
         localStorage.removeItem(`sp_owner_policy_pdf_${user.id}`)
+        setCurrentPdf(null)
       } else {
         store.deleteLotPolicyPdf(selectedLotId)
+        const ownerPdf = store.getOwnerPolicyPdf(user.id)
+        if (ownerPdf?.fileData) {
+          const lot = ownerLots.find((l) => l.id === selectedLotId)
+          setCurrentPdf({
+            ...ownerPdf,
+            lotId: selectedLotId,
+            title: `Chính sách & Quy định Bãi đỗ: ${lot?.name || "SmartPark"}`,
+          })
+        } else {
+          const fallback = store.getLotPolicyPdf(selectedLotId, user.id)
+          setCurrentPdf(fallback)
+        }
       }
-      setCurrentPdf(null)
       setPdfNotice(
         "Đã xóa file PDF tùy chỉnh. Hệ thống chuyển về chính sách mặc định.",
       )
@@ -327,7 +370,7 @@ export function PolicySettings() {
               id="policy-lot-scope"
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none"
               value={selectedLotId}
-              onChange={(e) => setSelectedLotId(e.target.value)}
+              onChange={(e) => handleLotChange(e.target.value)}
             >
               <option value="all">Tất cả cơ sở (Mặc định)</option>
               {ownerLots.map((lot) => (
@@ -643,6 +686,14 @@ export function PolicySettings() {
           </p>
         </div>
       </section>
+
+      {/* Policy document preview modal */}
+      {previewLot && (
+        <LotPolicyModal
+          lot={previewLot}
+          onClose={() => setPreviewLot(null)}
+        />
+      )}
     </section>
   )
 }

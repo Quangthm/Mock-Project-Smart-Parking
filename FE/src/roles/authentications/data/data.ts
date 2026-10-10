@@ -12,6 +12,6 @@ export const authData = {
   createApplication: store.createApplication,
 
   createUser: store.createUser,
-
   findUserByEmail: store.findUserByEmail,
+  getUsers: store.getUsers,
 }

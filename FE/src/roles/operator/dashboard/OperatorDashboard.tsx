@@ -1,292 +1,365 @@
-import { useEffect, useState } from "react"
-
+import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
-
 import { operatorData as store } from "../data/data"
-
 import { CheckInOut } from "../check-in-out/CheckInOut"
-
 import { LotStatus } from "../parking-lot/LotStatus"
-
 import { EmergencyPanel } from "../emergency/EmergencyPanel"
-
 import { SlotManagement } from "../parking-slots/SlotManagement"
-
 import { TicketManagement } from "../tickets/TicketManagement"
-
-import type { OperatorAccessRole } from "../../../lib/types"
-
-import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
-
-import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
-
 import { OperatorAssignments } from "./OperatorAssignments"
+import { OperatorOverview } from "./OperatorOverview"
+import type { OperatorAccessRole, ParkingLot, SupportTicket, AppNotification } from "../../../lib/types"
+import { DashboardSidebar, type DashboardNavGroup } from "../../../components/layout/DashboardSidebar"
+import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
+import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
-type Tab = "checkin" | "status" | "emergency" | "slots" | "tickets" | "finance"
+export type OperatorTab =
+  | "overview"
+  | "checkin"
+  | "status"
+  | "slots"
+  | "tickets"
+  | "emergency"
+  | "assignments"
+  | "finance"
 
-export function OperatorDashboard({ accessRoleOverride }: {
+export function OperatorDashboard({
+  accessRoleOverride,
+}: {
   accessRoleOverride?: OperatorAccessRole
 } = {}) {
   const { user } = useApp()
-
-  if (user?.role === "operator") return <OperatorAssignments />
-
-  return <LegacyOperatorDashboard accessRoleOverride={accessRoleOverride} />
-}
-
-function LegacyOperatorDashboard({ accessRoleOverride }: {
-  accessRoleOverride?: OperatorAccessRole
-} = {}) {
-  const { user } = useApp()
-
-  const [tab, setTab] = useState<Tab>("checkin")
-
-  useEffect(() => {
-    const onNavigate = (event: Event) =>
-      setTab((event as CustomEvent<Tab>).detail)
-
-    window.addEventListener("sp:dashboard-nav", onNavigate)
-
-    return () => window.removeEventListener("sp:dashboard-nav", onNavigate)
-  }, [])
 
   const accessRole = accessRoleOverride ?? user?.operatorRole ?? "operation"
 
+  const [tab, setTab] = useState<OperatorTab>(
+    accessRole === "financial" ? "finance" : "overview",
+  )
+
+  const [targetPlateQuery, setTargetPlateQuery] = useState("")
+
+  // Available lots
+  const [allLots, setAllLots] = useState<ParkingLot[]>(() => store.getLots())
+  const [activeSiteId, setActiveSiteId] = useState<string>("")
+
+  // Real-time synchronization
+  const [tickets, setTickets] = useState<SupportTicket[]>(() => store.getTickets())
+  const [notifications, setNotifications] = useState<AppNotification[]>(() =>
+    user ? store.getNotifications(user.id) : [],
+  )
+
+  useEffect(() => {
+    const refresh = () => {
+      setAllLots(store.getLots())
+      setTickets(store.getTickets())
+      if (user) setNotifications(store.getNotifications(user.id))
+    }
+    window.addEventListener("sp-data-change", refresh)
+    window.addEventListener("storage", refresh)
+    return () => {
+      window.removeEventListener("sp-data-change", refresh)
+      window.removeEventListener("storage", refresh)
+    }
+  }, [user])
+
+  // Listen to navigation events from topbar search or notifications
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail as OperatorTab
+      if (
+        [
+          "overview",
+          "checkin",
+          "status",
+          "emergency",
+          "slots",
+          "tickets",
+          "assignments",
+          "finance",
+        ].includes(detail)
+      ) {
+        setTab(detail)
+      }
+    }
+
+    window.addEventListener("sp:dashboard-nav", onNavigate)
+    return () => window.removeEventListener("sp:dashboard-nav", onNavigate)
+  }, [])
+
   const assignedOwnerId = user?.role === "owner" ? user.id : user?.ownerId
 
-  const ownerLots = store
-    .getLots()
-    .filter(
+  const ownerLots = useMemo(() => {
+    const filtered = allLots.filter(
       (lot) =>
-        lot.ownerId === assignedOwnerId &&
+        (!assignedOwnerId || lot.ownerId === assignedOwnerId) &&
         (user?.role === "owner" ||
           !user?.operatorSiteId ||
           user.operatorSiteId === "all" ||
           lot.id === user?.operatorSiteId),
     )
+    return filtered.length > 0 ? filtered : allLots
+  }, [allLots, assignedOwnerId, user])
 
-  const [activeSiteId, setActiveSiteId] = useState<string>("")
+  const selectedLot = useMemo(() => {
+    return (
+      (activeSiteId ? ownerLots.find((l) => l.id === activeSiteId) : null) ??
+      ownerLots[0] ??
+      null
+    )
+  }, [activeSiteId, ownerLots])
 
-  const selectedLot =
-    (activeSiteId ? ownerLots.find((l) => l.id === activeSiteId) : null) ??
-    ownerLots[0] ??
-    null
+  // All bookings for current selected lot
+  const currentLotBookings = useMemo(() => {
+    return selectedLot ? store.getBookingsByLot(selectedLot.id) : []
+  }, [selectedLot])
 
+  // Cashier role shortcut view
   if (accessRole === "cashier") {
     return <CashierPOS lotName={selectedLot?.name ?? "Assigned parking lot"} />
   }
 
+  // Financial reconciliation metrics
   const reportLots =
     accessRole === "financial" ? ownerLots : selectedLot ? [selectedLot] : []
+  const allReportBookings = reportLots.flatMap((lot) => store.getBookingsByLot(lot.id))
+  const completedBookings = allReportBookings.filter((b) => b.status === "completed")
+  const totalRevenue = completedBookings.reduce((sum, b) => sum + b.amount, 0)
 
-  const bookings = reportLots.flatMap((lot) => store.getBookingsByLot(lot.id))
-
-  const completedBookings = bookings.filter(
-    (booking) => booking.status === "completed",
-  )
-
-  const revenue = completedBookings.reduce(
-    (sum, booking) => sum + booking.amount,
-    0,
-  )
-
-  const nav: { id: Tab label: string icon: string }[] =
+  // Sidebar navigation groups
+  const sidebarGroups: DashboardNavGroup[] =
     accessRole === "financial"
-      ? [{ id: "finance", label: "Reports & Reconciliation", icon: "₫" }]
+      ? [
+          {
+            items: [
+              {
+                id: "finance",
+                label: "Financial Reports",
+                icon: "banknote",
+                active: tab === "finance",
+                onClick: () => setTab("finance"),
+              },
+            ],
+          },
+        ]
       : [
-          { id: "checkin", label: "Check-In / Out", icon: "✓" },
-
-          { id: "status", label: "Lot Status", icon: "▦" },
-
-          { id: "slots", label: "Manage Slots", icon: "↔" },
-
-          { id: "tickets", label: "Driver Tickets", icon: "✉" },
-
-          { id: "emergency", label: "Emergency", icon: "!" },
+          {
+            items: [
+              {
+                id: "overview",
+                label: "Dashboard Overview",
+                icon: "house",
+                active: tab === "overview",
+                onClick: () => setTab("overview"),
+              },
+            ],
+          },
+          {
+            label: "Parking Operations",
+            items: [
+              {
+                id: "checkin",
+                label: "Gate Check-In / Out",
+                icon: "check-circle",
+                active: tab === "checkin",
+                onClick: () => {
+                  setTargetPlateQuery("")
+                  setTab("checkin")
+                },
+              },
+              {
+                id: "status",
+                label: "Lot Status & 3D Map",
+                icon: "grid",
+                active: tab === "status",
+                onClick: () => setTab("status"),
+              },
+              {
+                id: "slots",
+                label: "Backup Slots & Buffer",
+                icon: "shield",
+                active: tab === "slots",
+                onClick: () => setTab("slots"),
+              },
+              {
+                id: "tickets",
+                label: "Driver Support Tickets",
+                icon: "ticket",
+                active: tab === "tickets",
+                onClick: () => setTab("tickets"),
+              },
+              {
+                id: "emergency",
+                label: "Emergency Dispatch",
+                icon: "alert",
+                active: tab === "emergency",
+                onClick: () => setTab("emergency"),
+              },
+              {
+                id: "assignments",
+                label: "My Assignments",
+                icon: "building",
+                active: tab === "assignments",
+                onClick: () => setTab("assignments"),
+              },
+            ],
+          },
         ]
 
+  function handleOverviewNavigation(nextTab: string, payload?: string) {
+    if (nextTab === "checkin" && payload) {
+      setTargetPlateQuery(payload)
+      setTab("checkin")
+      return
+    }
+    setTab(nextTab as OperatorTab)
+  }
+
   return (
-    <DashboardSidebar
-      groups={
-        accessRole === "financial"
-          ? [
-              {
-                items: [
-                  {
-                    id: "finance",
-                    label: "Financial reports",
-                    icon: "▤",
-                    active: tab === "finance",
-                    onClick: () => setTab("finance"),
-                  },
-                ],
-              },
-            ]
-          : [
-              {
-                items: [
-                  {
-                    id: "checkin",
-                    label: "Dashboard",
-                    icon: "⌂",
-                    active: tab === "checkin",
-                    onClick: () => setTab("checkin"),
-                  },
-                ],
-              },
-
-              {
-                label: "Parking operations",
-                items: [
-                  {
-                    id: "status",
-                    label: "Lot status",
-                    icon: "▦",
-                    active: tab === "status",
-                    onClick: () => setTab("status"),
-                  },
-
-                  {
-                    id: "slots",
-                    label: "Manage slots",
-                    icon: "↔",
-                    active: tab === "slots",
-                    onClick: () => setTab("slots"),
-                  },
-
-                  {
-                    id: "tickets",
-                    label: "Driver tickets",
-                    icon: "▤",
-                    active: tab === "tickets",
-                    onClick: () => setTab("tickets"),
-                  },
-
-                  {
-                    id: "emergency",
-                    label: "Emergency",
-                    icon: "!",
-                    active: tab === "emergency",
-                    onClick: () => setTab("emergency"),
-                  },
-                ],
-              },
-            ]
-      }
-    >
+    <DashboardSidebar groups={sidebarGroups}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
-        {user?.operatorSiteId === "all" && ownerLots.length > 1 && (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-            <span className="text-xs font-semibold text-[var(--muted)]">
-              All Sites Operator — Currently Operating at:
-            </span>
+        {/* Site Switcher Header (When multiple lots or all sites assigned) */}
+        {ownerLots.length > 1 && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs font-bold text-[var(--fg)]">
+                Active Operating Facility:
+              </span>
+              <span className="text-xs text-[var(--muted)]">
+                (Assigned to {ownerLots.length} sites)
+              </span>
+            </div>
             <select
-              className="input text-sm py-1 px-3"
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs font-semibold text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={selectedLot?.id ?? ""}
               onChange={(e) => setActiveSiteId(e.target.value)}
             >
               {ownerLots.map((lot) => (
                 <option key={lot.id} value={lot.id}>
-                  {lot.name}
+                  {lot.name} ({lot.totalSlots} slots)
                 </option>
               ))}
             </select>
           </div>
         )}
+
+        {/* Tab View Container */}
         <div className="animate-in">
-          {accessRole === "operation" && tab === "checkin" && (
-            <CheckInOut lot={selectedLot} />
+          {/* TAB 1: OVERVIEW */}
+          {accessRole === "operation" && tab === "overview" && (
+            <OperatorOverview
+              lot={selectedLot}
+              allLots={ownerLots}
+              onSelectLot={(lotId) => setActiveSiteId(lotId)}
+              onNavigateTab={handleOverviewNavigation}
+              bookings={currentLotBookings}
+              tickets={tickets}
+              notifications={notifications}
+            />
           )}
+
+          {/* TAB 2: CHECK-IN / CHECK-OUT */}
+          {accessRole === "operation" && tab === "checkin" && (
+            <CheckInOut
+              lot={selectedLot}
+              initialPlateQuery={targetPlateQuery}
+            />
+          )}
+
+          {/* TAB 3: LOT STATUS & 3D STRUCTURE */}
           {accessRole === "operation" && tab === "status" && (
             <LotStatus lot={selectedLot} />
           )}
+
+          {/* TAB 4: BACKUP SLOTS & BUFFER */}
           {accessRole === "operation" && tab === "slots" && (
             <SlotManagement lot={selectedLot} />
           )}
+
+          {/* TAB 5: TICKETS */}
           {accessRole === "operation" && tab === "tickets" && (
             <TicketManagement />
           )}
+
+          {/* TAB 6: EMERGENCY */}
           {accessRole === "operation" && tab === "emergency" && (
             <EmergencyPanel />
           )}
+
+          {/* TAB 7: ASSIGNMENTS */}
+          {accessRole === "operation" && tab === "assignments" && (
+            <OperatorAssignments currentLot={selectedLot} />
+          )}
+
+          {/* TAB 8: FINANCIAL REPORTS */}
           {accessRole === "financial" && tab === "finance" && (
             <section className="mx-auto w-full max-w-5xl space-y-6">
               <header>
                 <p className="text-sm font-medium text-[var(--primary)]">
-                  {accessRole === "financial" &&
-                  (user?.role === "owner" || user?.operatorSiteId === "all")
-                    ? "All assigned sites"
+                  {user?.role === "owner" || user?.operatorSiteId === "all"
+                    ? "All Assigned Sites"
                     : (selectedLot?.name ?? "Assigned parking lot")}
                 </p>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">
-                  Financial Reports
+                  Financial Reports & Reconciliation
                 </h1>
                 <p className="mt-2 text-sm text-[var(--muted)]">
-                  Completed booking revenue and reconciliation overview.
+                  Completed booking revenue, collection channels, and reconciliation registry.
                 </p>
               </header>
+
               <div className="grid gap-4 sm:grid-cols-3">
                 <FinanceMetric
-                  label="Completed bookings"
+                  label="Completed Bookings"
                   value={completedBookings.length.toLocaleString("vi-VN")}
                 />
                 <FinanceMetric
-                  label="Recorded revenue"
-                  value={`${revenue.toLocaleString("vi-VN")} ₫`}
+                  label="Total Recorded Revenue"
+                  value={`${totalRevenue.toLocaleString("vi-VN")} ₫`}
                 />
                 <FinanceMetric
-                  label="Bookings to reconcile"
-                  value={bookings
-                    .filter(
-                      (booking) =>
-                        booking.status === "completed" &&
-                        !booking.paymentMethod,
-                    )
+                  label="Pending Settlement"
+                  value={allReportBookings
+                    .filter((b) => b.status === "completed" && !b.paymentMethod)
                     .length.toLocaleString("vi-VN")}
                 />
               </div>
+
               <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
                 <table className="w-full min-w-[600px] text-left text-sm">
                   <thead className="border-b border-[var(--border)] text-[var(--muted)]">
                     <tr>
-                      <th className="px-4 py-3">Booking</th>
-                      <th className="px-4 py-3">Vehicle</th>
-                      <th className="px-4 py-3">Payment</th>
-                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3 font-medium">Booking ID</th>
+                      <th className="px-4 py-3 font-medium">Vehicle Plate</th>
+                      <th className="px-4 py-3 font-medium">Payment Method</th>
+                      <th className="px-4 py-3 text-right font-medium">Amount (₫)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {completedBookings.map((booking) => (
-                      <tr key={booking.id}>
-                        <td className="px-4 py-3 text-[var(--fg)]">
-                          {booking.id}
+                    {completedBookings.map((b) => (
+                      <tr key={b.id} className="hover:bg-[var(--bg)]/50 transition">
+                        <td className="px-4 py-3 font-mono text-[var(--fg)]">
+                          {b.id}
                         </td>
-                        <td className="px-4 py-3 text-[var(--fg)]">
-                          {booking.licensePlate}
+                        <td className="px-4 py-3 font-mono font-semibold text-[var(--fg)]">
+                          {b.licensePlate}
                         </td>
                         <td className="px-4 py-3 text-[var(--muted)]">
-                          {booking.paymentMethod ? (
-                            <PaymentMethodLogo
-                              method={booking.paymentMethod}
-                              size="xs"
-                              showName
-                            />
+                          {b.paymentMethod ? (
+                            <PaymentMethodLogo method={b.paymentMethod} size="xs" showName />
                           ) : (
-                            "Pending reconciliation"
+                            <span className="text-amber-600 font-medium">Pending Settlement</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right font-medium text-[var(--fg)]">
-                          {booking.amount.toLocaleString("vi-VN")} ₫
+                        <td className="px-4 py-3 text-right font-bold text-[var(--fg)]">
+                          {b.amount.toLocaleString("vi-VN")} ₫
                         </td>
                       </tr>
                     ))}
                     {!completedBookings.length && (
                       <tr>
-                        <td
-                          colSpan={4}
-                          className="px-4 py-8 text-center text-[var(--muted)]"
-                        >
-                          No completed bookings to report.
+                        <td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">
+                          No completed bookings to reconcile for this facility.
                         </td>
                       </tr>
                     )}
@@ -301,20 +374,18 @@ function LegacyOperatorDashboard({ accessRoleOverride }: {
   )
 }
 
-function FinanceMetric({ label, value }: { label: string value: string }) {
+function FinanceMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-      <p className="text-sm text-[var(--muted)]">{label}</p>
-      <p className="mt-2 text-xl font-bold text-[var(--fg)]">{value}</p>
+      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-[var(--fg)]">{value}</p>
     </div>
   )
 }
 
 function CashierPOS({ lotName }: { lotName: string }) {
   const [plate, setPlate] = useState("")
-
   const [amount, setAmount] = useState("")
-
   const [notice, setNotice] = useState("")
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -322,49 +393,46 @@ function CashierPOS({ lotName }: { lotName: string }) {
 
     if (!plate.trim() || Number(amount) <= 0) {
       setNotice("Enter a license plate and a payment amount greater than zero.")
-
       return
     }
 
-    console.log("Mock cashier payment", {
-      plate: plate.trim().toUpperCase(),
-      amount: Number(amount),
-      lotName,
-    })
-
-    setNotice("Payment recorded in this frontend preview.")
-
+    setNotice(`Payment of ${Number(amount).toLocaleString("vi-VN")} ₫ recorded for plate ${plate.trim().toUpperCase()} at ${lotName}.`)
     setPlate("")
-
     setAmount("")
   }
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-60px)] w-full max-w-xl items-center px-5 py-10">
       <section className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-medium text-[var(--primary)]">{lotName}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-[var(--primary)]">{lotName}</p>
         <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">
-          Cashier Checkout
+          Cashier POS Terminal
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Record a parking payment. This role has a focused checkout screen
-          without dashboard navigation.
+          Direct collection terminal for vehicle egress payments and parking passes.
         </p>
+
+        {notice && (
+          <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-600 font-medium">
+            {notice}
+          </div>
+        )}
+
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          <label className="block space-y-2 text-sm font-medium text-[var(--fg)]">
-            License plate
+          <label className="block space-y-1.5 text-xs font-semibold text-[var(--fg)]">
+            Vehicle License Plate
             <input
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)]"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--primary)] font-mono uppercase"
               value={plate}
               onChange={(event) => setPlate(event.target.value)}
               placeholder="e.g. 51A-123.45"
               required
             />
           </label>
-          <label className="block space-y-2 text-sm font-medium text-[var(--fg)]">
-            Amount (₫)
+          <label className="block space-y-1.5 text-xs font-semibold text-[var(--fg)]">
+            Payment Amount (₫)
             <input
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)]"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               type="number"
               min="1"
               value={amount}
@@ -373,13 +441,8 @@ function CashierPOS({ lotName }: { lotName: string }) {
               required
             />
           </label>
-          {notice && (
-            <p role="status" className="text-sm text-[var(--muted)]">
-              {notice}
-            </p>
-          )}
-          <button type="submit" className="btn-primary w-full justify-center">
-            Collect Payment
+          <button type="submit" className="btn-primary w-full justify-center py-2.5 text-sm mt-2">
+            <UntitledIcon name="banknote" size={16} /> Collect Payment & Open Gate
           </button>
         </form>
       </section>

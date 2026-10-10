@@ -137,7 +137,7 @@ export function mapModelSlots(
 
   // 1. Discover all candidate slot meshes with their world positions
 
-  const candidateList: Array<{ mesh: THREE.Mesh worldPos: THREE.Vector3 }> = []
+  const candidateList: Array<{ mesh: THREE.Mesh; worldPos: THREE.Vector3 }> = []
 
   scene.traverse((child) => {
     if (

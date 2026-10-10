@@ -210,9 +210,16 @@ export function NotificationBell({ userId }: { userId: string }) {
                 aria-label={`${
                   item.isRead ? "Read" : "Mark as read"
                 }: ${item.title}`}
-                onClick={() =>
-                  !item.isRead && store.markNotificationRead(item.id, userId)
-                }
+                onClick={() => {
+                  if (!item.isRead) store.markNotificationRead(item.id, userId)
+                  if (item.type.includes("TICKET")) {
+                    window.dispatchEvent(new CustomEvent("sp:dashboard-nav", { detail: "tickets" }))
+                    setOpen(false)
+                  } else if (item.type.includes("PARK") || item.type.includes("PAYMENT") || item.relatedEntityId) {
+                    window.dispatchEvent(new CustomEvent("sp:dashboard-nav", { detail: "checkin" }))
+                    setOpen(false)
+                  }
+                }}
                 style={{
                   display: "flex",
                   gap: "0.65rem",

@@ -33,8 +33,6 @@ import { SignUp } from "./roles/authentications/Sign Up/SignUp"
 
 import { AccountSecurityPanel } from "./components/forms/AccountSecurityPanel"
 
-import { OperatorBackupPanel } from "./roles/operator/dashboard/OperatorBackupPanel"
-
 import { BootstrapPassword } from "./roles/authentications/BootstrapPassword"
 
 import { DriverDashboard } from "./roles/driver/dashboard/DriverDashboard"
@@ -116,7 +114,6 @@ function AppContent() {
             <AccountSecurityPanel key={user.id} />
           </details>
         )}
-        {user?.role === "operator" && <OperatorBackupPanel key={user.id} />}
         {authError && (
           <div role="alert" className="p-4 text-center text-red-600">
             {authError}

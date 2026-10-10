@@ -1010,7 +1010,7 @@ export const store = {
     window.dispatchEvent(new Event("sp-data-change"))
   },
 
-  getLotPolicyPdf: (lotId: string): LotPolicyPdf | null => {
+  getLotPolicyPdf: (lotId: string, fallbackOwnerId?: string): LotPolicyPdf | null => {
     try {
       const stored = localStorage.getItem(`sp_lot_policy_pdf_${lotId}`)
       if (stored) return JSON.parse(stored)
@@ -1018,11 +1018,21 @@ export const store = {
       // Fallback to lot's owner policy PDF if exists
       const lots = get<ParkingLot>(KEYS.lots)
       const lot = lots.find((l) => l.id === lotId)
-      if (lot?.ownerId) {
+      const ownerId = fallbackOwnerId || lot?.ownerId
+      if (ownerId) {
         const ownerPdf = localStorage.getItem(
-          `sp_owner_policy_pdf_${lot.ownerId}`,
+          `sp_owner_policy_pdf_${ownerId}`,
         )
         if (ownerPdf) return JSON.parse(ownerPdf)
+      }
+
+      // Check if any owner policy PDF exists in storage
+      const ownerKeys = Object.keys(localStorage).filter((k) =>
+        k.startsWith("sp_owner_policy_pdf_"),
+      )
+      if (ownerKeys.length > 0) {
+        const anyOwnerPdf = localStorage.getItem(ownerKeys[0])
+        if (anyOwnerPdf) return JSON.parse(anyOwnerPdf)
       }
 
       // Default policy document for any parking lot

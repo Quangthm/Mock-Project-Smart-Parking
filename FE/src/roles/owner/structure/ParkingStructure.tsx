@@ -194,7 +194,7 @@ export function ParkingStructure({
       pendingPayment: stats.pendingPaymentHolds,
       backup: stats.backupCapacity,
       maintenance: stats.maintenanceSpaces + stats.disabledSpaces,
-      available: stats.availableSpaces,
+      available: stats.availableCapacity,
     }
   }, [stats, capacityCategory])
 
