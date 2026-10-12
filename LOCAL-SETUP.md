@@ -3,7 +3,7 @@
 Mở PowerShell tại đúng checkout và kiểm tra nhánh trước khi chạy:
 
 ```powershell
-cd D:\DataFPTU\Semester6\Mock-Project-Smart-Parking
+# Mở terminal tại root checkout vừa clone
 git branch --show-current
 .\setup.ps1
 ```
@@ -12,7 +12,7 @@ Nhánh làm việc là `develop-fix-application`. Cần .NET SDK 10 và Docker D
 
 Setup tạo `.env` từ `.env.example`, sinh giá trị local còn thiếu cho password PostgreSQL, service key và password Admin. Nếu tìm thấy thông tin tương ứng trong user-secrets, script dùng lại chúng. Script giữ nguyên `.env` đã cấu hình và mọi khóa user-secrets đang có; chỉ bổ sung khóa thiếu, không in mật khẩu ra terminal. Cấu hình `.cache/qa-local.json` cũ được giữ nguyên nhưng runner hiện tại đọc `.env`. Không commit `.env`, user-secrets hoặc thư mục workflow keys.
 
-Setup dựng sáu PostgreSQL database riêng theo `compose.schema-integration.yml`, kiểm tra xác thực ba database chính, áp dụng workflow migration và restore solution. Không tự chạy các API, frontend hoặc SonarQube. Nếu chỉ muốn cấu hình và restore backend mà chưa dựng database:
+Setup dựng sáu PostgreSQL database riêng theo `compose.schema-integration.yml`, kiểm tra xác thực ba database chính, áp dụng workflow migration và restore solution. Không tự chạy API hoặc frontend. SonarQube chỉ được dựng khi thêm `-WithSonarQube`. Nếu chỉ muốn cấu hình và restore backend mà chưa dựng database:
 
 ```powershell
 .\setup.ps1 -SkipDatabase
@@ -83,3 +83,7 @@ npm run dev
 Vite chạy mặc định trên http://localhost:5173. Điền `SMARTPARK_SMTP_HOST`, `PORT`, `USERNAME`, `PASSWORD`, `FROM` vào root `.env` để gửi OTP email, rồi khởi động lại UserService. Runner chuyển các giá trị này sang cấu hình `Otp:Smtp`. Không tự điền credential SMTP hoặc MapTiler của người khác.
 
 Lỗi thường gặp: Docker Desktop chưa chạy; cổng database/API bị chiếm; password không khớp volume cũ; .NET SDK chưa đúng phiên bản; dependency chưa restore. Thông báo setup chỉ ra bước lỗi và không xóa dữ liệu để khắc phục. Xem thêm [schema integration](docs/02-architecture/database/schema-integration.md) và [workflow migrations](docs/02-architecture/database/workflow-upgrades-2026-10-08.md).
+
+## Credential Team và công cụ tùy chọn
+
+Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvPath <file>`, `-SkipUserSecrets`, URL service xuyên máy, MapTiler và `-WithSonarQube`. Xem [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) để backup script local trước khi chuyển sang setup tracked. Setup không thay password của Admin đã có trong DB.

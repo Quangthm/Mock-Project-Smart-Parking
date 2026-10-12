@@ -24,6 +24,10 @@ $env:Services__Key = $env:SMARTPARK_SERVICE_KEY
 $env:Services__User = 'http://localhost:5035/'
 $env:Services__Parking = 'http://localhost:5045/'
 $env:Services__Reservation = 'http://localhost:5055/'
+foreach ($remoteService in @('User','Parking','Reservation')) {
+    $url = [Environment]::GetEnvironmentVariable('SMARTPARK_SERVICE_' + $remoteService.ToUpperInvariant() + '_URL')
+    if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
+}
 
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT' }
 $defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443' }
