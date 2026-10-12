@@ -2,11 +2,12 @@
 
 **Document Reference**: `3D_ENTERPRISE_MODEL_INGESTION_RULES.md`  
 **System Reference**: SmartPark / Parking Lot Management System (Phase 2 Multi-Tenant SaaS)  
-**Baseline Standard**: SmartPark SRS v0.8.5 (§3.2.3 Non-authoritative Digital Twin, Performance SLA < 3s, BR-CAP-01, BR-VEH-03)  
+**Baseline Standard**: SmartPark SRS v0.9 (§3.2.3 Non-authoritative Digital Twin, Performance SLA < 3s, BR-CAP-01, BR-VEH-03)  
 **Target Audience**: B2B Enterprise Facility Owners, 3D Artists (Blender / 3ds Max / Spline / Revit), Frontend Engineers, QA / CI/CD DevOps  
 **Language**: English (Official Compliance Standard)  
 **Status**: Active Specification  
-**Last Updated**: 2026-10-06  
+**Version**: `v1.2.0` (SRS v0.9 Canonical Baseline)  
+**Last Updated**: 2026-10-07  
 
 ---
 
@@ -40,7 +41,7 @@ Every external `.glb` model must pass all 6 compliance gates:
 | **R3** | **Scene Graph Hierarchy** | Strict 2-tier tree structure: Model Root $\rightarrow$ `Floor_[Level]` Group $\rightarrow$ Functional Mesh Groups $\rightarrow$ Meshes. | **CRITICAL (Blocker)** |
 | **R4** | **Semantic Naming** | Parking slots prefixed with `PARKING_[ID]`; floors prefixed with `Floor_[Level]`. Dedicated EV slots contain `_EV_`. | **CRITICAL (Blocker)** |
 | **R5** | **Mesh & Geometry Budget** | Total scene triangle count $\le 250,000$. Max active draw calls $\le 250$. No static vehicle meshes baked into the facility model. | **WARNING / Blocker** |
-| **R6** | **PBR Material Neutrality** | Models must be exported without proprietary third-party shaders. SmartPark PBR Engine applies materials programmatically at runtime. | **INFO / Auto-Fix** |
+| **R6** | **Dual-Track Material Policy** | Embedded PBR materials and textures are preserved 100%; untextured clay models automatically receive fallback PBR styling. | **INFO / Auto-Preserve** |
 
 ---
 
@@ -191,7 +192,7 @@ To allow automatic material application (PBR shading), structure objects should 
 ## 7. RULE 5: GEOMETRY & RENDERING CONSTRAINTS
 
 ### 7.1. Banned Techniques
-1. **Pre-baked Vehicle Meshes**: Do **NOT** export permanent 3D car models sitting in parking slots. The SmartPark frontend dynamically instantiates cars using `InstancedMesh` based on live database occupancy. Baked cars permanently obstruct slot color feedback.
+1. **Pre-baked Vehicle Meshes**: Do **NOT** export permanent 3D car models sitting in parking slots. The SmartPark frontend dynamically instantiates cars using `InstancedMesh` based on live database occupancy. Baked cars permanently obstruct slot status and interfere with the dynamic **`car_color status`** session visualization.
 2. **Embedded Heavy Light Sources**: Do **NOT** embed dozens of PointLights or SpotLights. Use unlit materials or emissive shader values (`emissiveIntensity`). SmartPark provides a performant 2-light ambient rig.
 3. **Excessive Mesh Fragmentation**: Do not split a single road into 200 tiny polygon fragments. Merge static architectural meshes by material before export.
 
@@ -202,30 +203,63 @@ To allow automatic material application (PBR shading), structure objects should 
 
 ---
 
-## 8. RULE 6: MATERIALS & PBR PALETTE COMPLIANCE
+## 8. RULE 6: DUAL-TRACK MATERIAL & TEXTURE INGESTION POLICY
 
-### 8.1. Why glTF Models Default to Grey Clay
-Third-party tools (Spline, Blender Shader Nodes, 3ds Max Corona/V-Ray) use proprietary mathematical node graphs. During standard `.glb` export, these complex graphs cannot be encoded and are stripped, defaulting all objects to monochrome grey.
+> [!WARNING]
+> **LƯU Ý DÀNH CHO DEV TEAM (PENDING PM & TEAM REVIEW)**:
+> Quy định tại Rule 6 (Dual-Track Material Ingestion Policy) và Rule 7 (Database Synchronization) thuộc phạm vi mở rộng **Phase 2 (Enterprise Self-Service Ingestion)** và hiện là bản đề xuất kỹ thuật đang chờ PM cùng Core Dev Team review chính thức.
+> Để tránh gây nhầm lẫn khi push mã nguồn lên repository, trong giai đoạn phát triển Sprint MVP hiện tại, các Developer vui lòng tuân thủ quy chuẩn tích hợp trực tiếp được hướng dẫn chi tiết tại tài liệu [3D_MODEL_IMPLEMENTATION_GUIDE.md](../3D_MODEL_IMPLEMENTATION_GUIDE.md).
 
-### 8.2. SmartPark Zero-Shader Runtime Policy
-External clients **do not need to spend days texture baking**. The SmartPark WebGL runtime uses an automated semantic material override system (`ColorMaterialService`):
+### 8.1. Problem Context: Avoiding Material Erasure on Enterprise Assets
+In earlier revisions, the SmartPark engine assumed all external models were untextured grey clay exports (common in raw CAD or Spline exports) and forcibly recolored all scene meshes via code. 
 
-```typescript
-// The SmartPark Engine automatically matches keywords to industrial PBR tokens:
-if (name.includes('Floor') || name.includes('Tarmac')) applyPBR(0x272e3b, roughness 0.85);
-if (name.includes('Line') || name.includes('Marking'))  applyPBR(0xfbbf24, roughness 0.40);
-if (name.includes('_EV_'))                             applyPBR(0x00e5ff, roughness 0.30);
-if (name.includes('Vinfast_'))                         applyPBR(0x0f766e, roughness 0.30);
+In **Phase 2 Commercial SaaS**, commercial clients invest significant design effort into custom architectural assets:
+* High-resolution embedded textures (asphalt wear, customized driving arrows, enterprise corporate logos).
+* Photographic decal images on parking stalls (custom handicap graphics, branded EV charging emblems).
+* Fine-tuned PBR roughness, metallic, and normal maps.
+
+> [!IMPORTANT]
+> **Preservation Guarantee**: The SmartPark WebGL engine operates on a **Native-First Material Policy**. If an ingested `.glb` file contains valid embedded textures or authored PBR materials, the engine **preserves them 100% without modification**.
+
+### 8.2. Dual-Track Material Classification
+
+```text
+Uploaded Model (.glb) ──▶ SmartPark Asset Inspector
+                                  │
+         ┌────────────────────────┴────────────────────────┐
+         │                                                 │
+[Has Embedded Textures / PBR]                     [Untextured Grey Clay]
+         ▼                                                 ▼
+TRACK 1: NATIVE PBR PRESERVATION                  TRACK 2: SEMANTIC FALLBACK COLORIZER
+• Preserves custom textures & decals             • Automatically maps node prefixes
+• Preserves corporate branding                    • Applies SmartPark PBR design tokens
+• Slot surface graphics untouched                • Zero setup required for raw CAD files
 ```
 
-**What the 3D Artist Needs to Do**:
-* Simply assign separate mesh objects for different architectural elements.
-* Give each mesh an accurate semantic name following Rule 4.
-* Let the SmartPark PBR Engine handle visual styling, reflectivity, and live occupancy states automatically.
+1. **Track 1: Enterprise PBR Authoring (Recommended)**:
+   * 3D artists author models in **Blender 5.2.2 LTS** using standard **Principled BSDF** nodes.
+   * Textures (PNG/JPEG) must be embedded directly into the binary `.glb`.
+   * Parking slot surfaces can feature high-fidelity graphics, pavement text, or specialized decals.
+2. **Track 2: Fallback Auto-Colorizer (Zero-Texture Rapid Onboarding)**:
+   * If a client uploads an untextured model (default `#CCCCCC` grey clay), the engine automatically detects semantic keywords (`Floor`, `PARKING_`, `_EV_`, `Column_`) and applies the standardized SmartPark matte PBR palette.
+
+### 8.3. The `car_color status` Paradigm
+To ensure that enterprise floor textures and stall markings are never corrupted or obscured by state recoloring:
+* The digital twin **never recolors the slot floor surface** to communicate occupancy.
+* Occupancy and live session telemetry are communicated by **spawning dynamic 3D vehicle proxies with status-coded chassis colors (`car_color status`)**:
+  * **Standard Occupied**: `#1E3A8A` (Deep Metallic Navy)
+  * **Active EV Charging**: `#00E5FF` (Electric Cyan with gentle pulse)
+  * **App Reserved Hold**: `#F59E0B` (Amber Gold)
+  * **VIP / Executive**: `#7C3AED` (Regal Purple)
+  * **Alert / Overstay Violation**: `#EF4444` (Warning Red)
+* Reservation holds (Channel B) utilize a subtle, non-destructive perimeter outline or beacon halo, leaving the underlying floor image perfectly crisp and visible.
 
 ---
 
 ## 9. RULE 7: DATABASE & SLOT SYNCHRONIZATION
+
+> [!NOTE]
+> **PHASE 2 SCOPE CAVEAT**: Quy trình đối soát tự động (Slot Count Reconciliation & Schema Linters) dưới đây sẽ được kích hoạt tại cổng Ingestion Portal trong Phase 2. Đối với Phase 1 MVP, việc đối soát ID và số lượng slot tuân thủ hướng dẫn tại Mục 18 của `3D_MODEL_IMPLEMENTATION_GUIDE.md`.
 
 The 3D model represents a direct digital twin of the backend database. In Phase 2 onboarding, the facility owner registers their slot inventory (SRS FR-LOT-01 / FR-LOT-03).
 

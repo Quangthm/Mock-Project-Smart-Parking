@@ -1,18 +1,15 @@
-param(
-    [string]$ConfigPath,
-    [switch]$SkipDatabase,
-    [switch]$ResetAdminPassword
-)
+# =============================================================================
+# DEPRECATED: setup-local.ps1 has been replaced by setup.ps1 at the repo root.
+# This shim is kept so existing documentation keeps working; it forwards every
+# argument to the new script.
+# =============================================================================
 $ErrorActionPreference = 'Stop'
-$taskRoot = Split-Path $PSScriptRoot -Parent
-if (!$ConfigPath) { $ConfigPath = Join-Path $taskRoot '.cache/qa-local.json' }
 
-function New-LocalSecret {
-    param([int]$Bytes = 32)
-    $buffer = New-Object byte[] $Bytes
-    $random = [Security.Cryptography.RandomNumberGenerator]::Create()
-    try { $random.GetBytes($buffer) } finally { $random.Dispose() }
-    return [Convert]::ToBase64String($buffer)
+Write-Warning 'setup-local.ps1 has been replaced by setup.ps1 at the repository root.'
+
+$rootSetup = Join-Path (Split-Path $PSScriptRoot -Parent) 'setup.ps1'
+if (!(Test-Path -LiteralPath $rootSetup -PathType Leaf)) {
+    throw "Missing $rootSetup. Restore setup.ps1 at the repository root."
 }
 
 if (!(Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
@@ -142,3 +139,5 @@ foreach ($service in @('User', 'Parking', 'Reservation')) {
 & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
 if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
 Write-Output 'Setup complete. Run the APIs in Visual Studio (Development) or scripts/run-schema-service.ps1.'
+& $rootSetup @args
+if ($LASTEXITCODE) { exit $LASTEXITCODE }

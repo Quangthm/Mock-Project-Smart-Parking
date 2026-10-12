@@ -92,3 +92,15 @@ docs/04-testing/mentor-demo-readiness-2026-10-09.md
 docs/04-testing/environment-schema-review-2026-10-08.md
 docs/04-testing/manual-demo-flow-test-guide-2026-10-09.md
 docs/04-testing/develop-sync-review-2026-10-08.md
+
+# =========================
+# Onboarding setup script
+# =========================
+# Local setup (contains environment-specific values; distribute via team channel, not git)
+setup.ps1
+
+# =========================
+# Blender
+# =========================
+# Blender auto-saved backup files (*.blend1, *.blend2, ...)
+*.blend[0-9]
