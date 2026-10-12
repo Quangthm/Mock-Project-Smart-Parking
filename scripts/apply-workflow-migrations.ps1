@@ -17,4 +17,14 @@ foreach ($table in $required) {
 $sql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$migration") -Raw
 $sql | & docker compose -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) { throw "Migration failed for $Service; its transaction was rolled back. Reconcile conflicting data before retrying." }
-Write-Output "$Service workflow migration applied."
+
+if ($Service -in @('Parking','Reservation')) {
+    $additionalMigration = @{
+        Parking='05.11-Parking-Structure-Synchronization.sql'
+        Reservation='05.12-Reservation-Structure-Receipts.sql'
+    }[$Service]
+    $serviceSql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$additionalMigration") -Raw
+    $serviceSql | & docker compose -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw "Structure synchronization migration failed for $Service." }
+}
+Write-Output "$Service workflow migrations applied."
