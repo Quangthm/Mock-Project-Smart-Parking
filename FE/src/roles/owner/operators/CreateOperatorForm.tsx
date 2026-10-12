@@ -129,14 +129,6 @@ export function CreateOperatorForm({
       return
     }
 
-    const duplicateName = existingOperators.find(
-      (op) => op.fullName.toLowerCase() === trimmedName.toLowerCase(),
-    )
-    if (duplicateName) {
-      setNameError("An operator with this display name already exists.")
-      return
-    }
-
     // 3. Password validation
     if (!isPasswordValid) {
       setGeneralError(
@@ -151,13 +143,10 @@ export function CreateOperatorForm({
     }
 
     // 4. Sites check
-    const siteIds =
-      form.siteId === "all"
-        ? sites.map((s) => s.id)
-        : sites.filter((s) => s.id === form.siteId).map((s) => s.id)
+    const siteIds = sites.filter((s) => s.id === form.siteId).map((s) => s.id)
 
     if (!siteIds.length) {
-      setGeneralError("Please select at least one active parking site.")
+      setGeneralError("Please select an active site.")
       return
     }
 
@@ -216,10 +205,10 @@ export function CreateOperatorForm({
             </div>
             <div>
               <h2 id="operator-modal-title" className="text-lg font-bold text-[var(--fg)]">
-                Create Operator Account
+                Create Operator
               </h2>
               <p className="text-xs text-[var(--muted)]">
-                Provision a parking operator account and facility dispatch.
+                Set the operator's login email, password, and work site.
               </p>
             </div>
           </div>
@@ -271,7 +260,7 @@ export function CreateOperatorForm({
           {/* Email */}
           <div>
             <label className="label" htmlFor="op-email">
-              Email Address <span className="text-red-500">*</span>
+              Email <span className="text-red-500">*</span>
             </label>
             <input
               id="op-email"
@@ -327,7 +316,7 @@ export function CreateOperatorForm({
 
             <div>
               <label className="label" htmlFor="op-confirm-password">
-                Confirm Password <span className="text-red-500">*</span>
+                Re-Password <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -364,42 +353,27 @@ export function CreateOperatorForm({
             </div>
           </div>
 
-          {/* Password Validation Checklist */}
           {form.password && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-medium text-[var(--muted)]">
-                <span>Password Requirements (Sign Up Policy)</span>
-                <span
-                  className={
-                    passwordErrors.length === 0
-                      ? "text-emerald-600 font-bold"
-                      : "text-amber-500 font-semibold"
-                  }
-                >
-                  {6 - passwordErrors.length}/6 met
-                </span>
+            <div className="space-y-1.5" aria-label="Password requirements">
+              <div className="h-1 overflow-hidden rounded-sm bg-[var(--border)]">
+                <div
+                  className="h-full transition-all"
+                  style={{
+                    width: `${((6 - passwordErrors.length) / 6) * 100}%`,
+                    background: passwordErrors.length >= 4 ? "#ef4444" : passwordErrors.length >= 2 ? "#f59e0b" : "#22c55e",
+                  }}
+                />
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {PASSWORD_RULES.map((rule) => {
-                  const passed = !passwordErrors.includes(rule)
-                  return (
-                    <span
-                      key={rule}
-                      className={`flex items-center gap-1.5 text-[11px] ${
-                        passed
-                          ? "text-emerald-600 dark:text-emerald-400 font-medium"
-                          : "text-[var(--muted)]"
-                      }`}
-                    >
-                      {passed ? (
-                        <UntitledIcon name="check" size={13} />
-                      ) : (
-                        <span className="text-[10px] opacity-60">○</span>
-                      )}
-                      {rule}
-                    </span>
-                  )
-                })}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                {PASSWORD_RULES.map((rule) => (
+                  <span
+                    key={rule}
+                    className={`flex items-center gap-1 ${passwordErrors.includes(rule) ? "text-[var(--muted)]" : "text-green-500"}`}
+                  >
+                    {passwordErrors.includes(rule) ? <span aria-hidden="true">○</span> : <UntitledIcon name="check" size={13} />}
+                    {rule}
+                  </span>
+                ))}
               </div>
             </div>
           )}
@@ -407,7 +381,7 @@ export function CreateOperatorForm({
           {/* Assigned Facility */}
           <div>
             <label className="label" htmlFor="op-site">
-              Assigned Parking Facility <span className="text-red-500">*</span>
+              Site <span className="text-red-500">*</span>
             </label>
             <select
               id="op-site"
@@ -416,30 +390,23 @@ export function CreateOperatorForm({
               onChange={(e) =>
                 setForm((f) => ({ ...f, siteId: e.target.value }))
               }
-              disabled={busy}
+              disabled={busy || !sites.length}
               required
             >
               <option value="" disabled>
-                Select a parking facility
+                Select a site
               </option>
-              <option value="all">All active sites ({sites.length} sites)</option>
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.code} - {site.name} ({site.totalPhysicalCapacity} slots)
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Role and Permissions Info */}
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 flex items-center justify-between text-xs">
-            <div>
-              <span className="text-[var(--muted)] block text-[11px]">Assigned Role:</span>
-              <span className="font-semibold text-[var(--fg)]">SITE_OPERATOR (Operation)</span>
-            </div>
-            <span className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--primary)] border border-[var(--primary)]/20">
-              Standard Access
-            </span>
+            {!sites.length && (
+              <p role="status" className="mt-1 text-xs text-[var(--muted)]">
+                No active sites are available. Create an active site in Sites before creating this account.
+              </p>
+            )}
           </div>
 
           {/* Modal Footer Controls */}

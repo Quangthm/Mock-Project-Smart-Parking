@@ -31,8 +31,6 @@ import { SignIn } from "./roles/authentications/Sign In/SignIn"
 
 import { SignUp } from "./roles/authentications/Sign Up/SignUp"
 
-import { AccountSecurityPanel } from "./components/forms/AccountSecurityPanel"
-
 import { BootstrapPassword } from "./roles/authentications/BootstrapPassword"
 
 import { DriverDashboard } from "./roles/driver/dashboard/DriverDashboard"
@@ -108,12 +106,6 @@ function AppContent() {
     >
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
       <main style={{ flex: 1 }}>
-        {user && (
-          <details className="card" style={{ margin: "1rem" }}>
-            <summary>Account security</summary>
-            <AccountSecurityPanel key={user.id} />
-          </details>
-        )}
         {authError && (
           <div role="alert" className="p-4 text-center text-red-600">
             {authError}

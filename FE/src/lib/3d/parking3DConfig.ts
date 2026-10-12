@@ -26,7 +26,7 @@ export const ALLOWED_PARKING_MODELS: Record<LotType, Parking3DModelDef> = {
 
     lotType: "outdoor",
 
-    description: "Mô hình 3D bãi đỗ xe ngoài trời (outdoor_parking_lot.glb)",
+    description: "Outdoor parking 3D model (outdoor_parking_lot.glb)",
   },
 
   "multi-storey": {
@@ -41,7 +41,7 @@ export const ALLOWED_PARKING_MODELS: Record<LotType, Parking3DModelDef> = {
     lotType: "multi-storey",
 
     description:
-      "Mô hình 3D bãi đỗ xe trong nhà / nhiều tầng (indoor_parking_lot.glb)",
+      "Indoor / multi-storey parking 3D model (indoor_parking_lot.glb)",
   },
 
   basement: {
@@ -56,7 +56,7 @@ export const ALLOWED_PARKING_MODELS: Record<LotType, Parking3DModelDef> = {
     lotType: "basement",
 
     description:
-      "Mô hình 3D bãi đỗ tầng hầm ngầm (underground_parking_lot.glb)",
+      "Underground parking 3D model (underground_parking_lot.glb)",
   },
 }
 
@@ -114,7 +114,7 @@ export function validateModelUpload(
     return {
       isValid: false,
 
-      message: `Tên file "${fileName}" không hợp lệ! Hệ thống chỉ chấp nhận đúng 3 file mô hình chuẩn: outdoor_parking_lot.glb, indoor_parking_lot.glb hoặc underground_parking_lot.glb.`,
+      message: `File name "${fileName}" is invalid. Only outdoor_parking_lot.glb, indoor_parking_lot.glb, or underground_parking_lot.glb are supported.`,
     }
   }
 
@@ -124,7 +124,7 @@ export function validateModelUpload(
     return {
       isValid: false,
 
-      message: "Mô hình 3D không tìm thấy định nghĩa tương ứng.",
+      message: "No matching 3D model definition was found.",
     }
   }
 
@@ -132,7 +132,7 @@ export function validateModelUpload(
     return {
       isValid: false,
 
-      message: `File "${fileName}" thuộc loại bãi "${modelDef.label}", nhưng loại bãi hiện tại đang chọn là "${ALLOWED_PARKING_MODELS[expectedLotType].label}". Vui lòng chọn đúng file tương ứng với loại bãi hoặc đổi loại bãi.`,
+      message: `File "${fileName}" is for "${modelDef.label}", but the selected site type is "${ALLOWED_PARKING_MODELS[expectedLotType].label}". Choose a matching model file or change the site type.`,
 
       modelDef,
     }

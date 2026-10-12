@@ -70,7 +70,7 @@ export function SiteManagement({
   function handleSavedSite(site: Site) {
     setSites((current) =>
       [...current.filter((s) => s.id !== site.id), site].sort((a, b) =>
-        a.code.localeCompare(b.code),
+        a.name.localeCompare(b.name),
       ),
     )
     setShowFormModal(false)
@@ -141,7 +141,6 @@ export function SiteManagement({
       const matchSearch =
         !searchTerm.trim() ||
         site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        site.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
         site.address.toLowerCase().includes(searchTerm.toLowerCase())
       return matchStatus && matchSearch
     })
@@ -214,7 +213,7 @@ export function SiteManagement({
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
-            placeholder="Search site by code, name, or location…"
+            placeholder="Search site by name or location…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -273,9 +272,6 @@ export function SiteManagement({
                     <td className="px-4 py-3.5">
                       <div className="font-semibold text-xs text-[var(--fg)]">
                         {site.name}
-                      </div>
-                      <div className="text-[11px] font-mono text-[var(--muted)]">
-                        Code: {site.code}
                       </div>
                     </td>
 
@@ -428,7 +424,7 @@ export function SiteManagement({
                     Assign Staff to Facility
                   </h3>
                   <p className="text-xs text-[var(--muted)]">
-                    Facility: <strong>{assignModal.targetSite.name}</strong> ({assignModal.targetSite.code})
+                    Facility: <strong>{assignModal.targetSite.name}</strong>
                   </p>
                 </div>
                 <button
@@ -545,7 +541,7 @@ export function SiteManagement({
                     {inspectSite.name} — Staff Roster
                   </h3>
                   <p className="text-xs text-[var(--muted)]">
-                    {inspectSite.code} · {inspectSite.address}
+                    {inspectSite.address}
                   </p>
                 </div>
                 <button

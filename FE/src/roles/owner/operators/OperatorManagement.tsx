@@ -8,7 +8,6 @@ import {
   type Site,
 } from "../../../lib/parkingApi"
 import { CreateOperatorForm } from "./CreateOperatorForm"
-import { SiteForm } from "../parking-lots/SiteForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 export function OperatorManagement({
@@ -22,7 +21,6 @@ export function OperatorManagement({
   const [operators, setOperators] = useState<Operator[]>([])
   const [sites, setSites] = useState<Site[]>([])
   const [showCreate, setShowCreate] = useState(false)
-  const [showSiteModal, setShowSiteModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -33,7 +31,6 @@ export function OperatorManagement({
   // Reassign Site State & Confirmation
   const [transferOp, setTransferOp] = useState<Operator | null>(null)
   const [targetSiteId, setTargetSiteId] = useState<string>("")
-  const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState("")
 
   useEffect(() => {
@@ -79,7 +76,7 @@ export function OperatorManagement({
     )
     setShowCreate(false)
     setMessage(
-      `Account created for ${operator.email}. Initial credentials configured and onboarding registered.`,
+      `Account created for ${operator.email}. The operator can sign in with this email and the password you provided.`,
     )
     onOperatorsChanged()
   }
@@ -91,46 +88,18 @@ export function OperatorManagement({
   }
 
   function closeTransferModal() {
-    if (transferBusy) return
     setTransferOp(null)
     setTargetSiteId("")
     setTransferError("")
   }
 
-  async function handleConfirmTransfer() {
-    if (!transferOp || !targetSiteId) return
-    setTransferBusy(true)
-    setTransferError("")
-
-    const newSiteIds =
-      targetSiteId === "all" ? sites.map((s) => s.id) : [targetSiteId]
-
-    try {
-      // Call API to persist site assignment
-      const updated = await operatorsApi.reassignSite(
-        transferOp.id,
-        newSiteIds,
-      )
-      setOperators((current) =>
-        current.map((op) => (op.id === updated.id ? updated : op)),
-      )
-      setMessage(
-        `Successfully transferred ${transferOp.fullName} to new site assignment.`,
-      )
-      closeTransferModal()
-      onOperatorsChanged()
-    } catch (err: unknown) {
-      // Keep previous state intact and explain failure
-      const errText =
-        err instanceof Error
-          ? err.message
-          : "Site assignment update failed. Backend endpoint may not be available yet."
-      setTransferError(
-        `${errText} (Previous site assignment was kept unchanged).`,
-      )
-    } finally {
-      setTransferBusy(false)
-    }
+  function handleConfirmTransfer() {
+    if (!transferOp || !sites.some((site) => site.id === targetSiteId)) return
+    // The current backend exposes creation and read-only assignments only.
+    // Keep the existing assignment until a reassignment endpoint is available.
+    setTransferError(
+      "Site changes cannot be saved yet because the server does not support reassignment. The current site assignment has been kept.",
+    )
   }
 
   const visibleOperators = useMemo(() => {
@@ -154,7 +123,7 @@ export function OperatorManagement({
             Operator Management
           </h2>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Manage operational personnel, assigned parking facilities, and security access.
+            Create login accounts for your operators and assign their work sites.
           </p>
         </div>
 
@@ -171,19 +140,19 @@ export function OperatorManagement({
             type="button"
             className="btn-primary text-xs px-3.5 py-2 font-medium flex items-center gap-1.5"
             disabled={loading}
-            onClick={() => {
-              if (!sites.length) {
-                setShowSiteModal(true)
-              } else {
-                setShowCreate(true)
-              }
-            }}
+            onClick={() => setShowCreate(true)}
           >
             <UntitledIcon name="plus" size={14} />
             <span>Create Operator</span>
           </button>
         </div>
       </div>
+
+      {!loading && !error && !sites.length && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] p-3 text-xs">
+          <p>Create an active site in Sites before assigning an operator.</p>
+        </div>
+      )}
 
       {/* Status Banners */}
       {error && (
@@ -337,26 +306,6 @@ export function OperatorManagement({
         onClose={() => setShowCreate(false)}
       />
 
-      {/* Modal 2: Site Fallback Modal if no sites exist */}
-      {showSiteModal &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-            <div className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
-              <SiteForm
-                onSaved={(site) => {
-                  setSites((current) => [...current, site])
-                  setShowSiteModal(false)
-                  setShowCreate(true)
-                  onOperatorsChanged()
-                }}
-                onCancel={() => setShowSiteModal(false)}
-              />
-            </div>
-          </div>,
-          document.body,
-        )}
-
       {/* Modal 3: Transfer / Reassign Site Confirmation Modal (Requirement C) */}
       {transferOp &&
         typeof document !== "undefined" &&
@@ -367,14 +316,14 @@ export function OperatorManagement({
             aria-labelledby="transfer-title"
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
             onClick={(e) => {
-              if (e.target === e.currentTarget && !transferBusy) closeTransferModal()
+              if (e.target === e.currentTarget) closeTransferModal()
             }}
           >
             <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-[var(--fg)] space-y-4 animate-in">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 id="transfer-title" className="text-base font-bold text-[var(--fg)]">
-                    Confirm Site Reassignment
+                    Change Site
                   </h3>
                   <p className="text-xs text-[var(--muted)] mt-0.5">
                     Update facility assignment for operator account.
@@ -384,7 +333,6 @@ export function OperatorManagement({
                   type="button"
                   className="text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
                   onClick={closeTransferModal}
-                  disabled={transferBusy}
                 >
                   <UntitledIcon name="x" size={16} />
                 </button>
@@ -421,10 +369,11 @@ export function OperatorManagement({
                     id="transfer-target-site"
                     className="input"
                     value={targetSiteId}
-                    onChange={(e) => setTargetSiteId(e.target.value)}
-                    disabled={transferBusy}
+                    onChange={(e) => {
+                      setTargetSiteId(e.target.value)
+                      setTransferError("")
+                    }}
                   >
-                    <option value="all">All active sites ({sites.length} sites)</option>
                     {sites.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.code} - {s.name}
@@ -434,21 +383,12 @@ export function OperatorManagement({
                 </div>
               </div>
 
-              {/* Business Warning */}
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-                <UntitledIcon name="alert" size={16} className="shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <strong>Operational Notice:</strong> Reassigning will update gate, barrier, and ticketing permissions. The operator will lose operational control over previous facilities and gain control over the selected facility.
-                </p>
-              </div>
-
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
                   className="btn-outline text-xs px-3.5 py-2"
                   onClick={closeTransferModal}
-                  disabled={transferBusy}
                 >
                   Cancel
                 </button>
@@ -456,9 +396,9 @@ export function OperatorManagement({
                   type="button"
                   className="btn-primary text-xs px-4 py-2 font-medium"
                   onClick={handleConfirmTransfer}
-                  disabled={transferBusy || !targetSiteId}
+                  disabled={!targetSiteId || (transferOp.siteIds.length === 1 && transferOp.siteIds[0] === targetSiteId)}
                 >
-                  {transferBusy ? "Confirming…" : "Confirm Reassignment"}
+                  Confirm Changes
                 </button>
               </div>
             </div>

@@ -169,7 +169,7 @@ export function OnboardingWizard({
     if (!validation.isValid) {
       setModelUploadError(
         validation.message ||
-          `Tên file "${file.name}" không hợp lệ! Hệ thống chỉ chấp nhận đúng 3 file mô hình chuẩn: outdoor_parking_lot.glb, indoor_parking_lot.glb hoặc underground_parking_lot.glb.`,
+          `File name "${file.name}" is invalid. Only outdoor_parking_lot.glb, indoor_parking_lot.glb, or underground_parking_lot.glb are supported.`,
       )
 
       e.target.value = ""
@@ -480,7 +480,7 @@ export function OnboardingWizard({
                       gap: "0.5rem",
                     }}
                   >
-                    <span>🎮 Tích Hợp Mô Hình 3D Bãi Đỗ Xe</span>
+                    <span>🎮 3D Parking Model Integration</span>
                     <span
                       style={{
                         fontSize: "0.7rem",
@@ -491,7 +491,7 @@ export function OnboardingWizard({
                         fontWeight: 600,
                       }}
                     >
-                      Tự động nhận diện
+                      Auto-detected
                     </span>
                   </div>
                   <div
@@ -501,7 +501,7 @@ export function OnboardingWizard({
                       marginTop: "0.2rem",
                     }}
                   >
-                    Mô hình liên kết:{" "}
+                    Linked model:{" "}
                     <strong style={{ color: "var(--primary)" }}>
                       {activeModelFileName}
                     </strong>
@@ -519,8 +519,7 @@ export function OnboardingWizard({
                       gap: 4,
                     }}
                   >
-                    <UntitledIcon name="file" size={14} /> Tải file .glb tùy
-                    chỉnh
+                    <UntitledIcon name="file" size={14} /> Upload .glb File
                   </span>
                   <input
                     type="file"
@@ -545,9 +544,9 @@ export function OnboardingWizard({
                 }}
               >
                 <strong style={{ color: "var(--primary)" }}>
-                  Quy định 3D:
+                  3D Model Requirements:
                 </strong>{" "}
-                Chỉ chấp nhận đúng 3 file mô hình:
+                Only these three model files are supported:
                 <span
                   style={{
                     fontWeight: 600,
@@ -1130,7 +1129,7 @@ export function OnboardingWizard({
               <Row label="Lot Type" value={LOT_TYPE_INFO[lotType].label} />
               <Row
                 label="3D Digital Twin"
-                value={`${activeModelFileName} (Tích hợp)`}
+                value={`${activeModelFileName} (Integrated)`}
               />
               <Row label="Name" value={lotConfig.name} />
               <Row label="Address" value={lotConfig.address} />
@@ -1155,15 +1154,15 @@ export function OnboardingWizard({
               />
               <Row
                 label="Hourly Rate"
-                value={`${pricing.hourlyRate.toLocaleString("vi-VN")}₫`}
+                value={`${pricing.hourlyRate.toLocaleString("en-US")}₫`}
               />
               <Row
                 label="Daily Rate"
-                value={`${pricing.dailyRate.toLocaleString("vi-VN")}₫`}
+                value={`${pricing.dailyRate.toLocaleString("en-US")}₫`}
               />
               <Row
                 label="Monthly Pass"
-                value={`${pricing.subscriptionMonthly.toLocaleString("vi-VN")}₫`}
+                value={`${pricing.subscriptionMonthly.toLocaleString("en-US")}₫`}
               />
               <Row
                 label="Grace Period"

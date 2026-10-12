@@ -15,6 +15,21 @@ import { store as mainStore } from "../../../lib/store"
 
 const STRUCTURES_KEY = "sp_parking_structures"
 
+const DEFAULT_STRUCTURE_NAMES: Record<string, string> = {
+  "Ground Level (Mặt đất)": "Ground Level",
+  "Zone A - Ô Tô & Xe Điện": "Zone A - Cars & Electric Vehicles",
+  "Zone B - Ô Tô Tiêu Chuẩn": "Zone B - Standard Cars",
+  "Zone M - Xe Máy": "Zone M - Motorcycles",
+  "Tầng Hầm B1": "Basement B1",
+  "Tầng Hầm B2": "Basement B2",
+  "Tầng 1 (Trệt)": "Ground Floor",
+  "Khu Ô Tô": "Car Zone",
+  "Khu Xe Máy": "Motorcycle Zone",
+  "Khu Ô Tô B1": "Car Zone B1",
+  "Khu Ô Tô B2": "Car Zone B2",
+  "Khu Xe Máy B1": "Motorcycle Zone B1",
+}
+
 function generateInitialSpaces(
   count: number,
   prefix: string,
@@ -163,7 +178,7 @@ function buildDefaultStructure(
     const floorG: ParkingFloorItem = {
       id: "fl-lot-002-g",
       lotId,
-      name: "Ground Level (Mặt đất)",
+      name: "Ground Level",
       code: "G",
       status: "active",
       zones: [
@@ -171,7 +186,7 @@ function buildDefaultStructure(
           id: "zn-002-car-a",
           floorId: "fl-lot-002-g",
           lotId,
-          name: "Zone A - Ô Tô & Xe Điện",
+          name: "Zone A - Cars & Electric Vehicles",
           vehicleType: "car",
           status: "active",
           spaces: generateInitialSpaces(
@@ -188,7 +203,7 @@ function buildDefaultStructure(
           id: "zn-002-car-b",
           floorId: "fl-lot-002-g",
           lotId,
-          name: "Zone B - Ô Tô Tiêu Chuẩn",
+          name: "Zone B - Standard Cars",
           vehicleType: "car",
           status: "active",
           spaces: generateInitialSpaces(
@@ -205,7 +220,7 @@ function buildDefaultStructure(
           id: "zn-002-moto",
           floorId: "fl-lot-002-g",
           lotId,
-          name: "Zone M - Xe Máy",
+          name: "Zone M - Motorcycles",
           vehicleType: "motorcycle",
           status: "active",
           spaces: generateInitialSpaces(
@@ -235,7 +250,7 @@ function buildDefaultStructure(
     const floorB1: ParkingFloorItem = {
       id: "fl-001-b1",
       lotId,
-      name: "Tầng Hầm B1",
+      name: "Basement B1",
       code: "B1",
       status: "active",
       zones: [
@@ -243,7 +258,7 @@ function buildDefaultStructure(
           id: "zn-001-b1-car",
           floorId: "fl-001-b1",
           lotId,
-          name: "Khu Ô Tô B1",
+          name: "Car Zone B1",
           vehicleType: "car",
           status: "active",
           spaces: generateInitialSpaces(
@@ -260,7 +275,7 @@ function buildDefaultStructure(
           id: "zn-001-b1-moto",
           floorId: "fl-001-b1",
           lotId,
-          name: "Khu Xe Máy B1",
+          name: "Motorcycle Zone B1",
           vehicleType: "motorcycle",
           status: "active",
           spaces: generateInitialSpaces(
@@ -279,7 +294,7 @@ function buildDefaultStructure(
     const floorB2: ParkingFloorItem = {
       id: "fl-001-b2",
       lotId,
-      name: "Tầng Hầm B2",
+      name: "Basement B2",
       code: "B2",
       status: "active",
       zones: [
@@ -287,7 +302,7 @@ function buildDefaultStructure(
           id: "zn-001-b2-car",
           floorId: "fl-001-b2",
           lotId,
-          name: "Khu Ô Tô B2",
+          name: "Car Zone B2",
           vehicleType: "car",
           status: "active",
           spaces: generateInitialSpaces(
@@ -316,7 +331,7 @@ function buildDefaultStructure(
   const defaultFloor: ParkingFloorItem = {
     id: `fl-${lotId}-1`,
     lotId,
-    name: "Tầng 1 (Trệt)",
+    name: "Ground Floor",
     code: "1F",
     status: "active",
     zones: [
@@ -324,7 +339,7 @@ function buildDefaultStructure(
         id: `zn-${lotId}-car`,
         floorId: `fl-${lotId}-1`,
         lotId,
-        name: "Khu Ô Tô",
+        name: "Car Zone",
         vehicleType: "car",
         status: "active",
         spaces: generateInitialSpaces(
@@ -341,7 +356,7 @@ function buildDefaultStructure(
         id: `zn-${lotId}-moto`,
         floorId: `fl-${lotId}-1`,
         lotId,
-        name: "Khu Xe Máy",
+        name: "Motorcycle Zone",
         vehicleType: "motorcycle",
         status: "active",
         spaces: generateInitialSpaces(
@@ -401,10 +416,12 @@ function normalizeStructure(data: ParkingStructureData): ParkingStructureData {
   }
 
   for (const floor of data.floors) {
+    floor.name = DEFAULT_STRUCTURE_NAMES[floor.name] ?? floor.name
     if (!floor.zones || !Array.isArray(floor.zones)) {
       floor.zones = []
     }
     for (const zone of floor.zones) {
+      zone.name = DEFAULT_STRUCTURE_NAMES[zone.name] ?? zone.name
       if (!zone.spaces || !Array.isArray(zone.spaces)) {
         zone.spaces = []
       }
@@ -687,7 +704,7 @@ export const structureStore = {
           id: newZoneId,
           floorId: newFloorId,
           lotId,
-          name: `Khu Ô Tô ${code.trim().toUpperCase()}`,
+          name: `Car Zone ${code.trim().toUpperCase()}`,
           vehicleType: "car",
           status: "active",
           spaces: generateInitialSpaces(

@@ -115,13 +115,13 @@ export function DashboardNavbar() {
     if (!user) return
     const name = profileForm.name.trim()
     if (!name) {
-      setProfileMsg("Vui lòng nhập họ và tên.")
+      setProfileMsg("Please enter your full name.")
       return
     }
     const updated = { ...user, name, phone: profileForm.phone.trim() || undefined }
     store.saveUser(updated)
     setUser(updated)
-    setProfileMsg("Đã lưu thông tin tài khoản thành công.")
+    setProfileMsg("Your account settings have been saved.")
   }
 
   function toggleNavigation() {
@@ -276,16 +276,7 @@ export function DashboardNavbar() {
                   onClick={() => handleOpenAccountModal("profile")}
                 >
                   <UntitledIcon name="users" size={16} />
-                  <span>Thông tin tài khoản</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="popover-item"
-                  onClick={() => handleOpenAccountModal("security")}
-                >
-                  <UntitledIcon name="shield" size={16} />
-                  <span>Bảo mật tài khoản (2FA)</span>
+                  <span>Account Settings</span>
                 </button>
 
                 {user?.role === "driver" && (
@@ -300,7 +291,7 @@ export function DashboardNavbar() {
                     }}
                   >
                     <UntitledIcon name="car" size={16} />
-                    <span>Phương tiện của tôi</span>
+                    <span>My Vehicles</span>
                   </button>
                 )}
 
@@ -310,7 +301,7 @@ export function DashboardNavbar() {
                   onClick={() => setPanel("settings")}
                 >
                   <UntitledIcon name="settings" size={16} />
-                  <span>Cài đặt giao diện</span>
+                  <span>Appearance Settings</span>
                 </button>
 
                 <div className="popover-divider" />
@@ -321,7 +312,7 @@ export function DashboardNavbar() {
                   onClick={signOut}
                 >
                   <UntitledIcon name="log-out" size={16} />
-                  <span>Đăng xuất</span>
+                  <span>Sign Out</span>
                 </button>
               </div>
             )}
@@ -330,16 +321,16 @@ export function DashboardNavbar() {
             {panel === "settings" && (
               <div className="dashboard-popover settings-popover animate-in">
                 <div className="popover-title-row">
-                  <strong>Cài đặt giao diện</strong>
+                  <strong>Appearance Settings</strong>
                   <button
                     type="button"
                     className="text-button"
                     onClick={() => setPanel("profile")}
                   >
-                    Quay lại
+                    Back
                   </button>
                 </div>
-                <div className="appearance-label">Chế độ sáng / tối</div>
+                <div className="appearance-label">Display Mode</div>
                 <div className="theme-options">
                   {(["light", "dark"] as const).map((option) => (
                     <button
@@ -354,11 +345,11 @@ export function DashboardNavbar() {
                       <span className="theme-option-icon">
                         <ThemeIcon mode={option} />
                       </span>
-                      <span>{option === "light" ? "Sáng" : "Tối"}</span>
+                      <span>{option === "light" ? "Light" : "Dark"}</span>
                     </button>
                   ))}
                 </div>
-                <div className="appearance-label accent-label">Màu sắc chủ đạo</div>
+                <div className="appearance-label accent-label">Accent Color</div>
                 <div className="accent-options">
                   {accents.map((accent) => (
                     <button
@@ -408,10 +399,10 @@ export function DashboardNavbar() {
               <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
                 <div>
                   <h2 id="account-dialog-title" className="text-base font-bold text-[var(--fg)]">
-                    Quản lý tài khoản & Bảo mật
+                    Account Settings
                   </h2>
                   <p className="text-xs text-[var(--muted)]">
-                    Vai trò hiện tại:{" "}
+                    Current role:{" "}
                     <strong className="text-[var(--primary)] uppercase font-mono">
                       {user?.role}
                     </strong>
@@ -421,7 +412,7 @@ export function DashboardNavbar() {
                   type="button"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
                   onClick={() => setAccountModalTab(null)}
-                  aria-label="Đóng"
+                  aria-label="Close"
                 >
                   <UntitledIcon name="x" size={16} />
                 </button>
@@ -439,7 +430,7 @@ export function DashboardNavbar() {
                   onClick={() => setAccountModalTab("profile")}
                 >
                   <UntitledIcon name="users" size={14} />
-                  <span>Thông tin cá nhân</span>
+                  <span>Personal Information</span>
                 </button>
                 <button
                   type="button"
@@ -451,7 +442,7 @@ export function DashboardNavbar() {
                   onClick={() => setAccountModalTab("security")}
                 >
                   <UntitledIcon name="shield" size={14} />
-                  <span>Bảo mật 2FA (Authenticator)</span>
+                  <span>Security (2FA)</span>
                 </button>
               </div>
 
@@ -461,7 +452,7 @@ export function DashboardNavbar() {
                   <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
                     <div>
                       <label className="label" htmlFor="acc-name">
-                        Họ và tên
+                        Full Name
                       </label>
                       <input
                         id="acc-name"
@@ -476,7 +467,7 @@ export function DashboardNavbar() {
 
                     <div>
                       <label className="label" htmlFor="acc-email">
-                        Địa chỉ Email
+                        Email Address
                       </label>
                       <input
                         id="acc-email"
@@ -485,13 +476,13 @@ export function DashboardNavbar() {
                         readOnly
                       />
                       <span className="text-[10px] text-[var(--muted)] mt-1 block">
-                        Email được liên kết với định danh đăng nhập và không thể thay đổi tại đây.
+                        Your email is used to sign in and cannot be changed here.
                       </span>
                     </div>
 
                     <div>
                       <label className="label" htmlFor="acc-phone">
-                        Số điện thoại liên hệ
+                        Phone Number
                       </label>
                       <input
                         id="acc-phone"
@@ -516,10 +507,10 @@ export function DashboardNavbar() {
                         className="btn-outline text-xs px-3.5 py-2"
                         onClick={() => setAccountModalTab(null)}
                       >
-                        Đóng
+                        Close
                       </button>
                       <button type="submit" className="btn-primary text-xs px-4 py-2">
-                        Lưu thay đổi
+                        Save Changes
                       </button>
                     </div>
                   </form>

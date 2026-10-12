@@ -21,10 +21,10 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
   }, [lot.id])
 
   const documentTitle =
-    policyPdf?.title || `Quy định & Chính sách Vận hành Bãi đỗ: ${lot.name}`
+    policyPdf?.title || `Parking Policies & Rules: ${lot.name}`
   const fileName =
     policyPdf?.fileName ||
-    `Chinh_Sach_Bai_Do_${lot.name.replace(/\s+/g, "_")}.pdf`
+    `Parking_Policy_${lot.name.replace(/\s+/g, "_")}.pdf`
   const hasUploadedPdf = Boolean(
     policyPdf?.fileData &&
       policyPdf.fileData.startsWith("data:application/pdf"),
@@ -34,25 +34,25 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
   const downloadUrl = hasUploadedPdf
     ? policyPdf!.fileData
     : `data:text/plain;charset=utf-8,${encodeURIComponent(
-        `SMARTPARK - CHÍNH SÁCH VẬN HÀNH BÃI ĐỖ XE\n\n` +
-          `Cơ sở: ${lot.name}\n` +
-          `Địa chỉ: ${lot.address}\n` +
-          `Loại hình: ${lot.type}\n` +
-          `Ngày cập nhật: ${new Date(policyPdf?.uploadedAt || lot.createdAt).toLocaleDateString("vi-VN")}\n\n` +
-          `1. GIỜ HOẠT ĐỘNG VÀ BIỂU PHÍ:\n` +
-          `- Biểu phí ban ngày: ${lot.hourlyRate.toLocaleString("vi-VN")} ₫/giờ\n` +
-          `- Biểu phí ban đêm: ${lot.nightRate.toLocaleString("vi-VN")} ₫/giờ\n` +
-          `- Thời gian ân hạn miễn phí: ${lot.gracePeriodMinutes || 15} phút đầu tiên khi vào bãi\n\n` +
-          `2. QUY ĐỊNH BẢO VỆ ĐẶT CHỖ (SRS v0.9):\n` +
-          `- Khung giờ bảo vệ đặt chỗ (Reservation Protection Window): 60 phút tính từ thời điểm đặt hẹn\n` +
-          `- Thời gian xử lý điều phối (Allocation Lead Time): Tối đa 15 phút trước giờ nhận chỗ\n` +
-          `- Tỷ lệ đặt cọc giữ chỗ: 20% trên tổng chi phí dự tính\n\n` +
-          `3. CHÍNH SÁCH HỦY VÀ HOÀN TIỀN:\n` +
-          `- Hủy trước 30 phút so với giờ hẹn: Hoàn 100% tiền cọc về ví tài xế\n` +
-          `- Quá giờ hẹn sau thời gian bảo vệ mà không vào bãi: Hệ thống chuyển trạng thái NO_SHOW và giải phóng vị trí đỗ\n\n` +
-          `4. AN TOÀN VÀ TRÁCH NHIỆM:\n` +
-          `- Phương tiện phải tuân thủ biển báo hướng dẫn và giới hạn tốc độ 10 km/h trong khuôn viên\n` +
-          `- Không để tài sản quý giá trong xe. Bãi đỗ xe không chịu trách nhiệm với mất mát tư trang cá nhân không khai báo.`,
+        `SMARTPARK - PARKING OPERATIONS POLICY\n\n` +
+          `Site: ${lot.name}\n` +
+          `Address: ${lot.address}\n` +
+          `Type: ${lot.type}\n` +
+          `Updated: ${new Date(policyPdf?.uploadedAt || lot.createdAt).toLocaleDateString("en-US")}\n\n` +
+          `1. OPERATING HOURS AND RATES:\n` +
+          `- Daytime rate: ${lot.hourlyRate.toLocaleString("en-US")} VND/hour\n` +
+          `- Nighttime rate: ${lot.nightRate.toLocaleString("en-US")} VND/hour\n` +
+          `- Free grace period: First ${lot.gracePeriodMinutes || 15} minutes after entry\n\n` +
+          `2. RESERVATION PROTECTION (SRS v0.9):\n` +
+          `- Reservation protection window: 60 minutes from the scheduled arrival time\n` +
+          `- Allocation lead time: Up to 15 minutes before arrival\n` +
+          `- Reservation deposit: 20% of the estimated total\n\n` +
+          `3. CANCELLATIONS AND REFUNDS:\n` +
+          `- Cancel at least 30 minutes before arrival: 100% deposit refund to the driver's wallet\n` +
+          `- Failure to arrive before the protection window ends: Marked NO_SHOW and the space is released\n\n` +
+          `4. SAFETY AND RESPONSIBILITY:\n` +
+          `- Follow signs and the 10 km/h speed limit on site\n` +
+          `- Do not leave valuables in your vehicle. The site is not responsible for undeclared personal belongings.`,
       )}`
 
   return (
@@ -128,7 +128,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  Chính sách & Quy định Bãi đỗ
+                  Parking Policies & Rules
                 </h3>
                 <span
                   style={{
@@ -142,7 +142,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: hasUploadedPdf ? "#16a34a" : "var(--primary)",
                   }}
                 >
-                  {hasUploadedPdf ? "File PDF Chính Thức" : "Tài liệu Chuẩn"}
+                  {hasUploadedPdf ? "Official PDF" : "Default Document"}
                 </span>
               </div>
               <p
@@ -160,7 +160,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng"
+            aria-label="Close"
             style={{
               background: "none",
               border: "none",
@@ -189,7 +189,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
             onClick={() => setActiveTab("document")}
             style={{ padding: "0.35rem 0.8rem", fontSize: "0.8rem" }}
           >
-            <UntitledIcon name="file" size={14} /> Văn Bản Quy Định (PDF)
+            <UntitledIcon name="file" size={14} /> Policy Document (PDF)
           </button>
           <button
             type="button"
@@ -197,7 +197,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
             onClick={() => setActiveTab("summary")}
             style={{ padding: "0.35rem 0.8rem", fontSize: "0.8rem" }}
           >
-            <UntitledIcon name="check" size={14} /> Tóm Tắt Quy Chuẩn Nhanh
+            <UntitledIcon name="check" size={14} /> Quick Summary
           </button>
         </div>
 
@@ -231,20 +231,20 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                   }}
                 >
                   <span>
-                    Tệp đính kèm:{" "}
+                    Attachment:{" "}
                     <strong style={{ color: "var(--fg)" }}>{fileName}</strong> (
                     {policyPdf?.fileSize || "PDF"})
                   </span>
                   <span>
-                    Cập nhật:{" "}
+                    Updated:{" "}
                     {new Date(
                       policyPdf?.uploadedAt || Date.now(),
-                    ).toLocaleDateString("vi-VN")}
+                    ).toLocaleDateString("en-US")}
                   </span>
                 </div>
                 <iframe
                   src={policyPdf?.fileData}
-                  title="Tài liệu chính sách bãi xe"
+                  title="Parking policy document"
                   style={{
                     width: "100%",
                     height: "440px",
@@ -286,7 +286,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                       color: "var(--muted)",
                     }}
                   >
-                    HỆ THỐNG QUẢN LÝ BÃI ĐỖ THÔNG MINH SMARTPARK
+                    SMARTPARK SMART PARKING MANAGEMENT
                   </p>
                   <h4
                     style={{
@@ -305,7 +305,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                       color: "var(--muted)",
                     }}
                   >
-                    Cơ sở: <strong>{lot.name}</strong> · Địa chỉ: {lot.address}
+                    Site: <strong>{lot.name}</strong> · Address: {lot.address}
                   </p>
                 </div>
 
@@ -325,22 +325,21 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                         color: "var(--primary)",
                       }}
                     >
-                      Điều 1. Khung giờ hoạt động & Biểu giá dịch vụ
+                      Section 1. Operating Hours & Service Rates
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Bãi xe phục vụ 24/7 đối với tất cả phương tiện đăng ký
-                      hợp lệ qua hệ thống SmartPark.
-                      <br />- Đơn giá ban ngày (06:00 - 22:00):{" "}
+                      - Open 24/7 for vehicles registered through SmartPark.
+                      <br />- Daytime rate (06:00 - 22:00):{" "}
                       <strong>
-                        {lot.hourlyRate.toLocaleString("vi-VN")} VNĐ/giờ
+                        {lot.hourlyRate.toLocaleString("en-US")} VND/hour
                       </strong>
-                      .<br />- Đơn giá ban đêm (22:00 - 06:00 hôm sau):{" "}
+                      .<br />- Nighttime rate (22:00 - 06:00 the next day):{" "}
                       <strong>
-                        {lot.nightRate.toLocaleString("vi-VN")} VNĐ/giờ
+                        {lot.nightRate.toLocaleString("en-US")} VND/hour
                       </strong>
-                      .<br />- Thời gian ân hạn (Grace Period): Miễn phí{" "}
-                      <strong>{lot.gracePeriodMinutes || 15} phút</strong> đầu
-                      tiên khi xe vào bãi làm thủ tục hoặc quay đầu.
+                      .<br />- Grace period: The first{" "}
+                      <strong>{lot.gracePeriodMinutes || 15} minutes</strong> are
+                      free for entry processing or turning around.
                     </p>
                   </div>
 
@@ -353,20 +352,16 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                         color: "var(--primary)",
                       }}
                     >
-                      Điều 2. Quy định Đặt chỗ & Khung bảo vệ chỗ đỗ
+                      Section 2. Reservations & Protection
                       (Reservation Protection Window)
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Khung giờ bảo vệ đặt chỗ (
-                      <strong>Reservation Protection Window</strong>): Bãi xe
-                      cam kết bảo lưu và giữ nguyên vị trí đỗ trong vòng{" "}
-                      <strong>60 phút</strong> tính từ thời điểm đặt hẹn.
-                      <br />- Tỷ lệ đặt cọc: Tài xế thanh toán trước{" "}
-                      <strong>20%</strong> giá trị dự tính để kích hoạt trạng
-                      thái giữ chỗ.
-                      <br />- Thời gian xử lý điều phối (Allocation Lead Time):
-                      Hệ thống chốt phân bổ cố định trước giờ vào bãi tối thiểu
-                      15 phút.
+                      - <strong>Reservation Protection Window</strong>: The space
+                      is held for <strong>60 minutes</strong> from the scheduled arrival time.
+                      <br />- Deposit: Pay <strong>20%</strong> of the estimated
+                      total to confirm the reservation.
+                      <br />- Allocation lead time: The system finalizes the
+                      assigned space at least 15 minutes before arrival.
                     </p>
                   </div>
 
@@ -379,17 +374,15 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                         color: "var(--primary)",
                       }}
                     >
-                      Điều 3. Chính sách Hủy chỗ & Xử lý Quá giờ (No-show
-                      Policy)
+                      Section 3. Cancellation & No-show Policy
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Hủy trước giờ hẹn từ 30 phút trở lên: Hoàn lại{" "}
-                      <strong>100%</strong> tiền cọc về tài khoản tài xế.
-                      <br />- Hủy trong vòng 30 phút trước giờ hẹn: Khấu trừ phí
-                      đặt chỗ tương đương 1 giờ lưu xe.
-                      <br />- Quá 60 phút bảo vệ không vào bãi (No-show): Chỗ đỗ
-                      tự động được giải phóng để phục vụ tài xế vãng lai; tiền
-                      cọc không được hoàn lại.
+                      - Cancel at least 30 minutes before arrival: Receive a{" "}
+                      <strong>100%</strong> deposit refund.
+                      <br />- Cancel within 30 minutes of arrival: A fee equal to
+                      one hour of parking is deducted.
+                      <br />- No arrival within the 60-minute protection window:
+                      The space is released for walk-ins and the deposit is non-refundable.
                     </p>
                   </div>
 
@@ -402,14 +395,12 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                         color: "var(--primary)",
                       }}
                     >
-                      Điều 4. An toàn giao thông & Trách nhiệm phương tiện
+                      Section 4. Safety & Vehicle Responsibility
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Tài xế tuân thủ biển báo, vạch kẻ chỉ dẫn và tốc độ tối
-                      đa không quá 10 km/h trong bãi đỗ.
-                      <br />- Tự bảo quản tài sản có giá trị trong xe. Mọi sự cố
-                      kỹ thuật hoặc tranh chấp vui lòng liên hệ Ban Quản lý bãi
-                      đỗ để trích xuất camera giám sát.
+                      - Follow signs, lane markings, and the 10 km/h speed limit.
+                      <br />- Keep your valuables safe. Contact site management
+                      for technical issues, disputes, or surveillance footage.
                     </p>
                   </div>
                 </div>
@@ -439,7 +430,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginBottom: "0.25rem",
                   }}
                 >
-                  Mức giá ban ngày
+                  Daytime Rate
                 </div>
                 <div
                   style={{
@@ -448,7 +439,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  {lot.hourlyRate.toLocaleString("vi-VN")} ₫/h
+                  {lot.hourlyRate.toLocaleString("en-US")} ₫/h
                 </div>
                 <div
                   style={{
@@ -457,7 +448,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginTop: "0.2rem",
                   }}
                 >
-                  Khung giờ 06:00 – 22:00
+                  Hours: 06:00 – 22:00
                 </div>
               </div>
 
@@ -476,7 +467,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginBottom: "0.25rem",
                   }}
                 >
-                  Mức giá ban đêm
+                  Nighttime Rate
                 </div>
                 <div
                   style={{
@@ -485,7 +476,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  {lot.nightRate.toLocaleString("vi-VN")} ₫/h
+                  {lot.nightRate.toLocaleString("en-US")} ₫/h
                 </div>
                 <div
                   style={{
@@ -494,7 +485,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginTop: "0.2rem",
                   }}
                 >
-                  Khung giờ 22:00 – 06:00
+                  Hours: 22:00 – 06:00
                 </div>
               </div>
 
@@ -513,7 +504,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginBottom: "0.25rem",
                   }}
                 >
-                  Bảo vệ giữ chỗ (SRS)
+                  Reservation Protection (SRS)
                 </div>
                 <div
                   style={{
@@ -522,7 +513,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "#818cf8",
                   }}
                 >
-                  60 Phút
+                  60 Minutes
                 </div>
                 <div
                   style={{
@@ -550,7 +541,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginBottom: "0.25rem",
                   }}
                 >
-                  Thời gian ân hạn
+                  Grace Period
                 </div>
                 <div
                   style={{
@@ -559,7 +550,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "#22c55e",
                   }}
                 >
-                  {lot.gracePeriodMinutes || 15} Phút
+                  {lot.gracePeriodMinutes || 15} Minutes
                 </div>
                 <div
                   style={{
@@ -568,7 +559,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginTop: "0.2rem",
                   }}
                 >
-                  Miễn phí vào và rời bãi
+                  Free Entry and Exit
                 </div>
               </div>
 
@@ -588,7 +579,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     marginBottom: "0.25rem",
                   }}
                 >
-                  Chính sách cọc & Hoàn tiền
+                  Deposits & Refunds
                 </div>
                 <div
                   style={{
@@ -597,11 +588,11 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     lineHeight: 1.5,
                   }}
                 >
-                  ✓ Đặt cọc <strong>20%</strong> để xác nhận giữ chỗ.
-                  <br />✓ Hoàn trả <strong>100%</strong> tiền cọc khi hủy trước
-                  giờ hẹn 30 phút.
-                  <br />✓ Hỗ trợ xử lý điều chuyển tự động nếu vị trí gặp sự cố
-                  bảo trì đột xuất.
+                  ✓ Pay a <strong>20%</strong> deposit to confirm a reservation.
+                  <br />✓ Receive a <strong>100%</strong> deposit refund when
+                  cancelling at least 30 minutes before arrival.
+                  <br />✓ Automatic reallocation is supported if the space
+                  requires unexpected maintenance.
                 </div>
               </div>
             </div>
@@ -633,7 +624,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
               gap: "0.4rem",
             }}
           >
-            <UntitledIcon name="download" size={15} /> Tải xuống Văn Bản PDF
+            <UntitledIcon name="download" size={15} /> Download Policy Document
           </a>
 
           <button
@@ -642,7 +633,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
             onClick={onClose}
             style={{ fontSize: "0.84rem", padding: "0.45rem 1rem" }}
           >
-            Đóng
+            Close
           </button>
         </div>
       </div>

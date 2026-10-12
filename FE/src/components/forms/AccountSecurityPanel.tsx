@@ -9,10 +9,22 @@ export function AccountSecurityPanel() {
   const [code, setCode] = useState("")
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
+  const [copyMessage, setCopyMessage] = useState("")
+
+  async function copySecurityKey() {
+    if (!setup) return
+    try {
+      await navigator.clipboard.writeText(setup.secret)
+      setCopyMessage("Security key copied in full.")
+    } catch {
+      setCopyMessage("Unable to copy automatically. Select the entire security key and copy it manually.")
+    }
+  }
 
   async function start() {
     setBusy(true)
     setMessage("")
+    setCopyMessage("")
     try {
       setSetup(
         (
@@ -121,9 +133,9 @@ export function AccountSecurityPanel() {
               lineHeight: 1.5,
             }}
           >
-            <strong>Your security key has been generated.</strong> Copy the key
-            below and save it in a secure location. It will be used to generate
-            your sign-in verification codes.
+            <strong>Your security key has been generated.</strong> Copy the entire
+            key below into an authenticator app, such as Google Authenticator or
+            Microsoft Authenticator. The app will generate your 6-digit verification code.
           </div>
 
           <div>
@@ -152,6 +164,15 @@ export function AccountSecurityPanel() {
             >
               {setup.secret}
             </div>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => void copySecurityKey()}
+              style={{ marginTop: "0.5rem" }}
+            >
+              Copy Security Key
+            </button>
+            {copyMessage && <p role="status">{copyMessage}</p>}
             <p
               style={{
                 margin: "0.375rem 0 0",
@@ -185,8 +206,8 @@ export function AccountSecurityPanel() {
                 color: "var(--muted)",
               }}
             >
-              Enter the 6-digit code generated for your account to confirm and
-              activate 2FA.
+              Enter the 6-digit code from your authenticator app to activate 2FA.
+              Do not paste the security key into this field.
             </p>
           </div>
 

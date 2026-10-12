@@ -52,7 +52,7 @@ export function ZoneModal({
 
       setStatus(initialData.status)
     } else {
-      setName(`Khu Ô Tô ${floorCode || "A"}`)
+      setName(`Car Zone ${floorCode || "A"}`)
 
       setVehicleType("car")
 
@@ -218,7 +218,7 @@ export function ZoneModal({
             </label>
             <input
               className="input"
-              placeholder="e.g. Zone A - Ô Tô Tiêu Chuẩn, Zone M - Xe Máy"
+              placeholder="e.g. Zone A - Standard Cars, Zone M - Motorcycles"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
@@ -276,7 +276,7 @@ export function ZoneModal({
                 }}
               >
                 <UntitledIcon name="car" size={18} />
-                <span>Car (Ô tô)</span>
+                <span>Car</span>
               </button>
               <button
                 type="button"
@@ -313,7 +313,7 @@ export function ZoneModal({
                 }}
               >
                 <UntitledIcon name="motorcycle" size={18} />
-                <span>Motorcycle (Xe máy)</span>
+                <span>Motorcycle</span>
               </button>
             </div>
           </div>

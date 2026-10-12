@@ -13,16 +13,9 @@ import {
 } from "../../../lib/parkingApi"
 
 import { BackupCapacityPanel } from "./BackupCapacityPanel"
+import { CreateOperatorForm } from "../operators/CreateOperatorForm"
 
 import { request } from "../../../lib/authApi"
-
-const permissions = [
-  "DEVICE_MANAGE",
-  "DEVICE_STATUS_VIEW",
-  "CASH_COLLECT",
-  "APPEAL_REVIEW",
-  "SLOT_OVERRIDE",
-]
 
 export function OwnerWorkspace() {
   const { user } = useApp()
@@ -67,13 +60,7 @@ export function OwnerWorkspace() {
     type: "STANDARD",
   })
 
-  const [operatorForm, setOperatorForm] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-    siteIds: [] as string[],
-    permissions: [] as string[],
-  })
+  const [showCreateOperator, setShowCreateOperator] = useState(false)
 
   useEffect(() => {
     let current = true
@@ -716,130 +703,25 @@ export function OwnerWorkspace() {
                   )}
               </div>
             ))}
-            <form
-              className="card"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void mutate(async () => {
-                  await operatorsApi.create(operatorForm)
-                  setOperatorForm({
-                    fullName: "",
-                    email: "",
-                    password: "",
-                    siteIds: [],
-                    permissions: [],
-                  })
-                }, "Operator created. The account can sign in with the initial password. Onboarding email is queued separately.")
-              }}
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={busy || !sites.some((site) => site.isActive)}
+              onClick={() => setShowCreateOperator(true)}
             >
-              <h3>Create operator</h3>
-              {field(
-                "Full name",
-                <input
-                  className="input"
-                  required
-                  maxLength={255}
-                  disabled={busy}
-                  value={operatorForm.fullName}
-                  onChange={(e) =>
-                    setOperatorForm({
-                      ...operatorForm,
-                      fullName: e.target.value,
-                    })
-                  }
-                />,
-              )}
-              {field(
-                "Email",
-                <input
-                  className="input"
-                  type="email"
-                  required
-                  maxLength={255}
-                  disabled={busy}
-                  value={operatorForm.email}
-                  onChange={(e) =>
-                    setOperatorForm({ ...operatorForm, email: e.target.value })
-                  }
-                />,
-              )}
-              {field(
-                "Initial password (8–15 characters; upper/lowercase, digit, special character)",
-                <input
-                  className="input"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  maxLength={15}
-                  disabled={busy}
-                  value={operatorForm.password}
-                  onChange={(e) =>
-                    setOperatorForm({
-                      ...operatorForm,
-                      password: e.target.value,
-                    })
-                  }
-                />,
-              )}
-              <fieldset disabled={busy}>
-                <legend>Active sites</legend>
-                {sites
-                  .filter((site) => site.isActive)
-                  .map((site) => (
-                    <label key={site.id} style={{ display: "block" }}>
-                      <input
-                        type="checkbox"
-                        checked={operatorForm.siteIds.includes(site.id)}
-                        onChange={(e) =>
-                          setOperatorForm({
-                            ...operatorForm,
-                            siteIds: e.target.checked
-                              ? [...operatorForm.siteIds, site.id]
-                              : operatorForm.siteIds.filter(
-                                  (id) => id !== site.id,
-                                ),
-                          })
-                        }
-                      />{" "}
-                      {site.name}
-                    </label>
-                  ))}
-              </fieldset>
-              <fieldset disabled={busy}>
-                <legend>Permissions for each selected site</legend>
-                {permissions.map((permission) => (
-                  <label key={permission} style={{ display: "block" }}>
-                    <input
-                      type="checkbox"
-                      checked={operatorForm.permissions.includes(permission)}
-                      onChange={(e) =>
-                        setOperatorForm({
-                          ...operatorForm,
-                          permissions: e.target.checked
-                            ? [...operatorForm.permissions, permission]
-                            : operatorForm.permissions.filter(
-                                (p) => p !== permission,
-                              ),
-                        })
-                      }
-                    />{" "}
-                    {permission}
-                  </label>
-                ))}
-              </fieldset>
-              <button
-                className="btn-primary"
-                style={{ marginTop: "1rem" }}
-                disabled={
-                  busy ||
-                  !operatorForm.siteIds.length ||
-                  !operatorForm.permissions.length
-                }
-              >
-                Create operator
-              </button>
-            </form>
+              Create Operator
+            </button>
+            <CreateOperatorForm
+              isOpen={showCreateOperator}
+              sites={sites.filter((site) => site.isActive)}
+              existingOperators={operators}
+              onCreated={() => {
+                setShowCreateOperator(false)
+                setNotice("Operator created successfully.")
+                setReload((value) => value + 1)
+              }}
+              onClose={() => setShowCreateOperator(false)}
+            />
           </>
         )}
       </main>

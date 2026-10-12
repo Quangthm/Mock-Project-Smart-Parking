@@ -115,7 +115,7 @@ export function PolicySettings({
         setCurrentPdf({
           ...ownerPdf,
           lotId: selectedLotId,
-          title: `Chính sách & Quy định Bãi đỗ: ${lot?.name || "SmartPark"}`,
+          title: `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
         })
       } else {
         setCurrentPdf(lotPdf)
@@ -131,7 +131,7 @@ export function PolicySettings({
       !file.type.includes("pdf") &&
       !file.name.toLowerCase().endsWith(".pdf")
     ) {
-      setPdfNotice("Vui lòng chọn định dạng file PDF hợp lệ (.pdf).")
+      setPdfNotice("Please select a valid PDF file (.pdf).")
       return
     }
 
@@ -149,9 +149,9 @@ export function PolicySettings({
         uploadedAt: new Date().toISOString(),
         title:
           selectedLotId === "all"
-            ? "Chính sách Vận hành Bãi đỗ Toàn hệ thống"
-            : `Chính sách & Quy định Bãi đỗ: ${lot?.name || "SmartPark"}`,
-        summaryText: `Quy định chính thức được cập nhật cho cơ sở ${lot?.name || "toàn bộ bãi đỗ của chủ bãi"}.`,
+            ? "System-wide Parking Operations Policy"
+            : `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+        summaryText: `Official updated rules for ${lot?.name || "all of the owner's parking sites"}.`,
       }
 
       if (selectedLotId === "all") {
@@ -162,7 +162,7 @@ export function PolicySettings({
 
       setCurrentPdf(payload)
       setPdfNotice(
-        `Đã tải lên file PDF chính sách "${file.name}" thành công! Tài xế giờ có thể đọc tài liệu này.`,
+        `Uploaded policy PDF "${file.name}" successfully. Drivers can now read this document.`,
       )
       setTimeout(() => setPdfNotice(null), 5000)
 
@@ -179,8 +179,8 @@ export function PolicySettings({
       store.notifyRole(
         "driver",
         "POLICY_UPDATED",
-        "Chính sách bãi đỗ được cập nhật",
-        `Bãi đỗ ${lot?.name || "SmartPark"} vừa cập nhật tài liệu chính sách vận hành mới.`,
+        "Parking Policy Updated",
+        `Parking site ${lot?.name || "SmartPark"} has updated its operations policy document.`,
       )
     }
 
@@ -191,7 +191,7 @@ export function PolicySettings({
     if (!user) return
     if (
       confirm(
-        "Bạn có chắc muốn xóa file PDF chính sách này và quay về chính sách mặc định?",
+        "Delete this policy PDF and restore the default policy?",
       )
     ) {
       if (selectedLotId === "all") {
@@ -205,7 +205,7 @@ export function PolicySettings({
           setCurrentPdf({
             ...ownerPdf,
             lotId: selectedLotId,
-            title: `Chính sách & Quy định Bãi đỗ: ${lot?.name || "SmartPark"}`,
+            title: `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
           })
         } else {
           const fallback = store.getLotPolicyPdf(selectedLotId, user.id)
@@ -213,7 +213,7 @@ export function PolicySettings({
         }
       }
       setPdfNotice(
-        "Đã xóa file PDF tùy chỉnh. Hệ thống chuyển về chính sách mặc định.",
+        "Custom PDF deleted. The default policy has been restored.",
       )
       setTimeout(() => setPdfNotice(null), 4000)
     }
@@ -223,7 +223,7 @@ export function PolicySettings({
     const lot = ownerLots.find((l) => l.id === selectedLotId) ||
       ownerLots[0] || {
         id: "sample",
-        name: "Bãi đỗ Xe Mẫu SmartPark",
+        name: "SmartPark Sample Parking Site",
         address: "72 Lê Thánh Tôn, Quận 1, TP.HCM",
         type: "basement",
         slots: [],
@@ -340,21 +340,20 @@ export function PolicySettings({
       {/* PDF Policy Document Upload & Management Section */}
       <section
         className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 space-y-4"
-        aria-label="Cập nhật văn bản chính sách bãi đỗ PDF"
+        aria-label="Update parking policy PDF"
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-[var(--fg)]">
-                Tài Liệu Chính Sách Bãi Đỗ (File PDF)
+                Parking Policy Document (PDF)
               </h2>
               <span className="rounded px-2 py-0.5 text-xs font-semibold bg-blue-500/15 text-blue-500">
                 Update Policy (PDF)
               </span>
             </div>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Tải lên hoặc cập nhật văn bản chính sách đỗ xe chính thức. Tài xế
-              sẽ có thể trực tiếp đọc tài liệu này khi tìm kiếm và đặt bãi.
+              Upload or update the official parking policy. Drivers can read this document when searching and booking.
             </p>
           </div>
 
@@ -364,7 +363,7 @@ export function PolicySettings({
               htmlFor="policy-lot-scope"
               className="text-xs font-medium text-[var(--muted)] whitespace-nowrap"
             >
-              Áp dụng cho:
+              Applies to:
             </label>
             <select
               id="policy-lot-scope"
@@ -372,7 +371,7 @@ export function PolicySettings({
               value={selectedLotId}
               onChange={(e) => handleLotChange(e.target.value)}
             >
-              <option value="all">Tất cả cơ sở (Mặc định)</option>
+              <option value="all">All Sites (Default)</option>
               {ownerLots.map((lot) => (
                 <option key={lot.id} value={lot.id}>
                   {lot.name}
@@ -405,18 +404,18 @@ export function PolicySettings({
                   }`}
                 >
                   {currentPdf?.fileData
-                    ? "File đã tải lên"
-                    : "Tài liệu chuẩn SmartPark"}
+                    ? "Uploaded File"
+                    : "Default SmartPark Document"}
                 </span>
               </div>
               <p className="mt-1 text-xs text-[var(--muted)]">
                 {currentPdf?.fileSize
-                  ? `Dung lượng: ${currentPdf.fileSize} · `
+                  ? `Size: ${currentPdf.fileSize} · `
                   : ""}
-                Cập nhật:{" "}
+                Updated:{" "}
                 {new Date(
                   currentPdf?.uploadedAt || Date.now(),
-                ).toLocaleDateString("vi-VN")}
+                ).toLocaleDateString("en-US")}
               </p>
             </div>
           </div>
@@ -435,14 +434,14 @@ export function PolicySettings({
               className="btn-primary text-xs py-2 px-3.5"
               onClick={() => fileInputRef.current?.click()}
             >
-              <UntitledIcon name="upload" size={14} /> Tải lên File PDF mới
+              <UntitledIcon name="upload" size={14} /> Upload New PDF
             </button>
             <button
               type="button"
               className="btn-outline text-xs py-2 px-3"
               onClick={handleOpenPreview}
             >
-              <UntitledIcon name="eye" size={14} /> Xem & Đọc trước PDF
+              <UntitledIcon name="eye" size={14} /> Preview PDF
             </button>
             {currentPdf?.fileData && (
               <>
@@ -451,14 +450,14 @@ export function PolicySettings({
                   download={currentPdf.fileName}
                   className="btn-outline text-xs py-2 px-3 no-underline inline-flex items-center gap-1.5"
                 >
-                  <UntitledIcon name="download" size={14} /> Tải về
+                  <UntitledIcon name="download" size={14} /> Download
                 </a>
                 <button
                   type="button"
                   className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/20"
                   onClick={handleDeletePdf}
                 >
-                  Xóa
+                  Delete
                 </button>
               </>
             )}
@@ -467,8 +466,7 @@ export function PolicySettings({
 
         <p className="text-xs text-[var(--muted)] flex items-center gap-1.5">
           <UntitledIcon name="check" size={13} />
-          Văn bản chính sách PDF này được đồng bộ tức thì để Tài xế (Driver) có
-          thể xem và tải về tại màn hình Tìm kiếm và Đặt chỗ.
+          This policy PDF syncs immediately so drivers can view and download it when searching and booking.
         </p>
       </section>
 
@@ -715,7 +713,7 @@ function PreviewAmount({
           emphasized ? "text-[var(--primary)]" : "text-[var(--fg)]"
         }`}
       >
-        {Math.round(amount).toLocaleString("vi-VN")} ₫
+        {Math.round(amount).toLocaleString("en-US")} ₫
       </p>
     </div>
   )

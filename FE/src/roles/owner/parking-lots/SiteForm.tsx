@@ -12,9 +12,9 @@ const LOT_TYPE_INFO: Record<LotType, {
   hasFloors: boolean
   desc: string
 }> = {
-  outdoor: { icon: "🌳", label: "Outdoor Lot", hasFloors: false, desc: "Bãi đỗ ngoài trời mặt đất" },
-  basement: { icon: "🏢", label: "Basement Parking", hasFloors: true, desc: "Hầm gửi xe ngầm có phân tầng" },
-  "multi-storey": { icon: "🏗️", label: "Multi-Storey", hasFloors: true, desc: "Tòa nhà nhà để xe cao tầng" },
+  outdoor: { icon: "🌳", label: "Outdoor Lot", hasFloors: false, desc: "Outdoor ground-level parking" },
+  basement: { icon: "🏢", label: "Basement Parking", hasFloors: true, desc: "Underground parking with multiple levels" },
+  "multi-storey": { icon: "🏗️", label: "Multi-Storey", hasFloors: true, desc: "Multi-storey parking building" },
 }
 
 const CITIES = [
@@ -27,11 +27,11 @@ const CITIES = [
 ]
 
 const DEVICE_OPTIONS = [
-  { type: "camera", label: "AI Camera System", desc: "Tự động nhận diện biển số (ANPR)" },
-  { type: "barrier", label: "Barrier Gate", desc: "Hệ thống cổng chắn tự động đóng/mở" },
-  { type: "sensor", label: "Slot Sensors", desc: "Cảm biến sóng âm/quang học nhận diện xe tại chỗ" },
-  { type: "rfid", label: "RFID Card Reader", desc: "Đầu đọc thẻ từ kiểm soát ra vào" },
-  { type: "ev-charger", label: "EV Charging Station", desc: "Trụ sạc xe điện thông minh" },
+  { type: "camera", label: "AI Camera System", desc: "Automatic license plate recognition (ANPR)" },
+  { type: "barrier", label: "Barrier Gate", desc: "Automatic barrier gate system" },
+  { type: "sensor", label: "Slot Sensors", desc: "Ultrasonic or optical vehicle occupancy sensors" },
+  { type: "rfid", label: "RFID Card Reader", desc: "RFID reader for entry and exit control" },
+  { type: "ev-charger", label: "EV Charging Station", desc: "Smart electric vehicle charging station" },
 ]
 
 function generateSlug(text: string): string {
@@ -67,7 +67,7 @@ export function SiteForm({
   const [selectedCity, setSelectedCity] = useState(CITIES[0].code)
   const [district, setDistrict] = useState(CITIES[0].districts[0])
   const [streetAddress, setStreetAddress] = useState(site?.address ? site.address.split(",")[0].trim() : "")
-  const [isManualCode, setIsManualCode] = useState(Boolean(site?.code))
+  const isManualCode = Boolean(site?.code)
 
   const [form, setForm] = useState({
     code: site?.code ?? "",
@@ -137,7 +137,7 @@ export function SiteForm({
     const finalAddress = fullAddress || form.address.trim() || `${form.name}, ${district}, ${selectedCity}`
 
     if (!siteCode || !siteName || !finalAddress) {
-      setError("Vui lòng nhập đầy đủ Mã bãi đỗ, Tên bãi đỗ và Địa chỉ.")
+      setError("Please enter the site name and address.")
       return
     }
 
@@ -262,7 +262,7 @@ export function SiteForm({
         onSaved(createdSite)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể lưu thông tin bãi đỗ xe.")
+      setError(err instanceof Error ? err.message : "Unable to save the parking site.")
     } finally {
       setBusy(false)
     }
@@ -273,22 +273,22 @@ export function SiteForm({
       {/* Header */}
       <div className="border-b border-[var(--border)] pb-3">
         <h3 className="text-lg font-bold text-[var(--fg)] flex items-center gap-2">
-          <span>{site ? "Chỉnh sửa bãi đỗ xe" : "Thiết lập bãi đỗ xe mới"}</span>
+          <span>{site ? "Edit Parking Site" : "Create Parking Site"}</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] font-semibold">
             Smart Facility
           </span>
         </h3>
         <p className="text-xs text-[var(--muted)] mt-1">
           {site
-            ? "Cập nhật loại hình, cấu trúc bãi, quy tắc định danh chuẩn và thiết bị vận hành."
-            : "Khởi tạo cơ sở đỗ xe thông minh theo chuẩn cấu trúc Owner. Các thông số sẽ đồng bộ tự động với sơ đồ vận hành."}
+            ? "Update the site type, layout, identification, and operating equipment."
+            : "Create a parking site. Its settings will sync with the operational layout."}
         </p>
       </div>
 
       <fieldset disabled={busy} className="space-y-4.5" style={{ border: 0, padding: 0, margin: 0 }}>
         {/* Section 1: Choose Lot Type (Giống form Owner) */}
         <div className="space-y-2">
-          <label className="label font-semibold text-xs">Loại hình bãi đỗ (Structural Type) *</label>
+          <label className="label font-semibold text-xs">Parking Structure Type *</label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {(Object.entries(LOT_TYPE_INFO) as [LotType, (typeof LOT_TYPE_INFO)[LotType]][]).map(
               ([type, info]) => {
@@ -325,72 +325,38 @@ export function SiteForm({
         {/* Section 2: Site Identification with Smart Code Logic */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3.5">
           <div className="font-semibold text-xs text-[var(--fg)] flex items-center justify-between">
-            <span>Định danh cơ sở đỗ xe (Site Identification)</span>
-            <span className="text-[11px] font-mono text-[var(--primary)]">
-              Mã chuẩn: {isManualCode && form.code ? form.code.toUpperCase() : computedCode}
-            </span>
+            <span>Site Identification</span>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3">
             <div>
               <label className="label" htmlFor={`${formId}-site-name`}>
-                Tên bãi đỗ xe (Site Name) *
+                Site Name *
               </label>
               <input
                 id={`${formId}-site-name`}
                 className="input"
                 maxLength={255}
-                placeholder="Ví dụ: Vincom Center Đồng Khởi"
+                placeholder="e.g. Vincom Center Dong Khoi"
                 value={form.name}
                 onChange={(e) => handleNameChange(e.target.value)}
                 required
               />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="label mb-0" htmlFor={`${formId}-site-code`}>
-                  Mã bãi đỗ (Site Code) *
-                </label>
-                <button
-                  type="button"
-                  className="text-[10px] text-[var(--primary)] hover:underline"
-                  onClick={() => {
-                    setIsManualCode(!isManualCode)
-                    if (isManualCode) {
-                      setForm((c) => ({ ...c, code: computedCode }))
-                    }
-                  }}
-                >
-                  {isManualCode ? "Tự động sinh mã" : "Sửa mã thủ công"}
-                </button>
-              </div>
-              <input
-                id={`${formId}-site-code`}
-                className="input font-mono uppercase"
-                maxLength={50}
-                placeholder={computedCode}
-                value={isManualCode ? form.code : computedCode}
-                onChange={(e) => {
-                  setIsManualCode(true)
-                  setForm((c) => ({ ...c, code: e.target.value.toUpperCase() }))
-                }}
-                required
-              />
-            </div>
           </div>
         </div>
 
         {/* Section 3: Structured Address */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3.5">
           <div className="font-semibold text-xs text-[var(--fg)]">
-            Địa chỉ & Tọa độ định vị (Location & Coordinates)
+            Location & Coordinates
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor={`${formId}-city`}>
-                Tỉnh / Thành phố *
+                Province / City *
               </label>
               <select
                 id={`${formId}-city`}
@@ -408,7 +374,7 @@ export function SiteForm({
 
             <div>
               <label className="label" htmlFor={`${formId}-district`}>
-                Quận / Huyện *
+                District *
               </label>
               <select
                 id={`${formId}-district`}
@@ -427,13 +393,13 @@ export function SiteForm({
 
           <div>
             <label className="label" htmlFor={`${formId}-street`}>
-              Số nhà, tên đường, khu phức hợp *
+              Street Address / Complex *
             </label>
             <input
               id={`${formId}-street`}
               className="input"
               maxLength={500}
-              placeholder="Ví dụ: Số 72 Lê Thánh Tôn, Phường Bến Nghé"
+              placeholder="e.g. 72 Le Thanh Ton Street, Ben Nghe Ward"
               value={streetAddress}
               onChange={(e) => setStreetAddress(e.target.value)}
               required
@@ -444,8 +410,8 @@ export function SiteForm({
           <div className="p-2.5 rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--muted)] flex items-start gap-2">
             <UntitledIcon name="map-pin" size={14} className="text-[var(--primary)] mt-0.5 shrink-0" />
             <div className="leading-relaxed">
-              <span className="font-semibold text-[var(--fg)]">Địa chỉ hiển thị hoàn chỉnh: </span>
-              <span>{fullAddress || "Chưa hoàn tất nhập địa chỉ"}</span>
+              <span className="font-semibold text-[var(--fg)]">Full address: </span>
+              <span>{fullAddress || "Address is incomplete"}</span>
             </div>
           </div>
         </div>
@@ -453,7 +419,7 @@ export function SiteForm({
         {/* Section 4: Physical Capacity & Structure */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3.5">
           <div className="font-semibold text-xs text-[var(--fg)]">
-            Quy mô & Cấu trúc phân tầng
+            Capacity & Levels
           </div>
 
           <div
@@ -463,7 +429,7 @@ export function SiteForm({
           >
             <div>
               <label className="label" htmlFor={`${formId}-slots`}>
-                Tổng số slot đỗ xe (Total Slots) *
+                Total Parking Spaces *
               </label>
               <input
                 id={`${formId}-slots`}
@@ -480,7 +446,7 @@ export function SiteForm({
             {LOT_TYPE_INFO[lotType].hasFloors && (
               <div>
                 <label className="label" htmlFor={`${formId}-floors`}>
-                  Số tầng / Hầm (Number of Levels) *
+                  Number of Levels *
                 </label>
                 <input
                   id={`${formId}-floors`}
@@ -494,7 +460,7 @@ export function SiteForm({
                 />
                 {form.totalSlots && parseInt(form.floors, 10) > 0 && (
                   <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    ~ {Math.ceil(parseInt(form.totalSlots, 10) / parseInt(form.floors, 10))} slots / tầng
+                    ~ {Math.ceil(parseInt(form.totalSlots, 10) / parseInt(form.floors, 10))} spaces / level
                   </p>
                 )}
               </div>
@@ -505,7 +471,7 @@ export function SiteForm({
         {/* Section 5: Installed IoT Devices */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3">
           <div className="font-semibold text-xs text-[var(--fg)]">
-            Hạ tầng thiết bị thông minh (Installed IoT Devices)
+            Installed IoT Devices
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {DEVICE_OPTIONS.map((dev) => {
@@ -541,7 +507,7 @@ export function SiteForm({
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3.5">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-xs text-[var(--fg)]">
-              Bảng giá cơ bản & Trạng thái bãi
+              Base Pricing & Site Status
             </span>
             <label className="flex items-center gap-2 cursor-pointer text-xs">
               <input
@@ -551,7 +517,7 @@ export function SiteForm({
                 onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.checked }))}
               />
               <span className={`font-semibold ${form.isActive ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--muted)]"}`}>
-                {form.isActive ? "Hoạt động (Active)" : "Tạm ngưng (Inactive)"}
+                {form.isActive ? "Active" : "Inactive"}
               </span>
             </label>
           </div>
@@ -559,7 +525,7 @@ export function SiteForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor={`${formId}-hourly-rate`}>
-                Giá theo giờ (VND / giờ)
+                Hourly Rate (VND / hour)
               </label>
               <input
                 id={`${formId}-hourly-rate`}
@@ -573,7 +539,7 @@ export function SiteForm({
             </div>
             <div>
               <label className="label" htmlFor={`${formId}-daily-rate`}>
-                Giá theo ngày (VND / ngày)
+                Daily Rate (VND / day)
               </label>
               <input
                 id={`${formId}-daily-rate`}
@@ -598,10 +564,10 @@ export function SiteForm({
         {/* Buttons */}
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
           <button type="button" className="btn-outline text-xs px-4 py-2" onClick={onCancel} disabled={busy}>
-            Hủy bỏ
+            Cancel
           </button>
           <button type="submit" className="btn-primary text-xs px-5 py-2 font-medium" disabled={busy}>
-            {busy ? "Đang lưu…" : site ? "Lưu thay đổi bãi đỗ" : "Khởi tạo bãi đỗ xe"}
+            {busy ? "Saving…" : site ? "Save Changes" : "Create Parking Site"}
           </button>
         </div>
       </fieldset>

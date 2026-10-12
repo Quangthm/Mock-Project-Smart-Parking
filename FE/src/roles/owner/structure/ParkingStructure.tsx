@@ -5,10 +5,6 @@ import type {
   ParkingZoneItem,
   ParkingSpaceItem,
   ParkingStructureData,
-  SpaceStatus,
-  VehicleCategory,
-  PhysicalState,
-  ReservationProtectionState,
 } from "../../../lib/structureTypes"
 import type { Site } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -25,28 +21,28 @@ interface ParkingStructureProps {
 // 6 Canonical Status Configuration for UI
 export const STATUS_DEFINITIONS = {
   available: {
-    label: "Trống",
+    label: "Available",
     color: "#16a34a",
     bg: "rgba(34, 197, 94, 0.12)",
     border: "rgba(34, 197, 94, 0.35)",
     icon: "check-circle",
-    desc: "Slot trống, sẵn sàng nhận xe hoặc cho khách đặt",
+    desc: "Available for parking or reservations",
   },
   reserved: {
-    label: "Đã đặt",
+    label: "Reserved",
     color: "#2563eb",
     bg: "rgba(37, 99, 235, 0.12)",
     border: "rgba(37, 99, 235, 0.35)",
     icon: "clock",
-    desc: "Khách đã đặt trước thành công qua ứng dụng",
+    desc: "Reserved through the app",
   },
   pending_payment: {
-    label: "Đang chờ thanh toán",
+    label: "Pending Payment",
     color: "#d97706",
     bg: "rgba(245, 158, 11, 0.12)",
     border: "rgba(245, 158, 11, 0.35)",
     icon: "banknote",
-    desc: "Khách đang giữ chỗ và tiến hành thanh toán (hold)",
+    desc: "Temporarily held while payment is in progress",
   },
   backup: {
     label: "Slot Backup",
@@ -54,15 +50,15 @@ export const STATUS_DEFINITIONS = {
     bg: "rgba(147, 51, 234, 0.12)",
     border: "rgba(147, 51, 234, 0.35)",
     icon: "shield",
-    desc: "Chỗ dự phòng khẩn cấp/điều phối sự cố bãi đỗ",
+    desc: "Backup space for emergencies and reallocation",
   },
   occupied: {
-    label: "Đã có xe",
+    label: "Occupied",
     color: "#dc2626",
     bg: "rgba(239, 68, 68, 0.12)",
     border: "rgba(239, 68, 68, 0.35)",
     icon: "car",
-    desc: "Hiện đang có xe thực tế đỗ tại vị trí",
+    desc: "A vehicle is currently parked in this space",
   },
   protected: {
     label: "Protected",
@@ -70,7 +66,7 @@ export const STATUS_DEFINITIONS = {
     bg: "rgba(99, 102, 241, 0.15)",
     border: "rgba(99, 102, 241, 0.45)",
     icon: "shield",
-    desc: "Khóa slot bảo vệ cho khách đặt trước, cấm xe vãng lai",
+    desc: "Protected for an upcoming reservation; walk-ins are blocked",
   },
 }
 
@@ -134,14 +130,12 @@ export function ParkingStructure({
   const [searchQuery, setSearchQuery] = useState("")
 
   // Owner Protected Buffer Setting (x hours)
-  const [protectionWindowHours, setProtectionWindowHours] = useState<number>(1.0)
+  const [protectionWindowHours, setProtectionWindowHours] = useState<number>(
+    () => (structure.policy?.reservationProtectionWindowMinutes ?? 60) / 60,
+  )
 
-  // Simulation State
-  const [simStep, setSimStep] = useState<number>(0)
-  const [simLogs, setSimLogs] = useState<
-    Array<{ time: string; msg: string; type: "info" | "warning" | "success" }>
-  >([])
-
+  const protectionStartMinutes = 10 * 60 - Math.round(protectionWindowHours * 60)
+  const protectionStartTime = `${String(Math.floor(protectionStartMinutes / 60)).padStart(2, "0")}:${String(protectionStartMinutes % 60).padStart(2, "0")}`
   // Modal States
   const [isFloorModalOpen, setIsFloorModalOpen] = useState(false)
   const [editingFloor, setEditingFloor] = useState<ParkingFloorItem | null>(null)
@@ -152,14 +146,28 @@ export function ParkingStructure({
   useEffect(() => {
     const s = structureStore.getStructure(activeLotId)
     setStructure(s)
+    setProtectionWindowHours((s.policy?.reservationProtectionWindowMinutes ?? 60) / 60)
     setSelectedFloorId(s.floors?.[0]?.id || "")
     setSelectedZoneFilter("all")
-    setSimStep(0)
-    setSimLogs([])
   }, [activeLotId])
 
   const reloadStructure = () => {
     setStructure(structureStore.getStructure(activeLotId))
+    onChanged?.()
+  }
+
+  function updateProtectionWindow(hours: number) {
+    const updated = {
+      ...structure,
+      policy: {
+        ...structure.policy,
+        protectionWindowHours: hours,
+        reservationProtectionWindowMinutes: Math.round(hours * 60),
+      },
+    }
+    structureStore.saveStructure(updated)
+    setStructure(updated)
+    setProtectionWindowHours(hours)
     onChanged?.()
   }
 
@@ -266,110 +274,6 @@ export function ParkingStructure({
     return result
   }, [currentFloor, selectedZoneFilter, statusFilter, searchQuery])
 
-  // Simulation Controller: Step-by-step conflict detection & Auto-reallocation
-  function handleNextSimStep() {
-    const nextStep = simStep + 1
-    setSimStep(nextStep)
-
-    const updated = { ...structure }
-    const firstZone = updated.floors?.[0]?.zones?.[0]
-    if (!firstZone || !firstZone.spaces.length) return
-
-    const slot1 = firstZone.spaces[0] // A-01
-    const slot5 = firstZone.spaces[4] || firstZone.spaces[1] // A-05 fallback
-
-    if (nextStep === 1) {
-      // Step 1: 06:00 - 08:30: Xe 1 đang đậu (Occupied). Khách B đặt 10h-12h
-      slot1.status = "occupied"
-      slot1.physicalState = "OCCUPIED"
-      slot1.reservationState = "NONE"
-      slot1.isProtected = false
-      slot1.conflictReason = undefined
-      slot1.currentBooking = {
-        bookingId: "bk-sim-01",
-        driverName: "Nguyễn Văn An (Xe vãng lai)",
-        licensePlate: "51K-889.23",
-        startTime: "06:00",
-        endTime: "09:00",
-      }
-
-      setSimLogs((cur) => [
-        {
-          time: "06:00 - 08:30",
-          msg: `Xe vãng lai (51K-889.23) đậu vào slot ${slot1.code} từ 06:00 đến 09:00. Khách B (Lê Minh Đạt) đã đặt trước slot ${slot1.code} khung giờ 10:00 - 12:00.`,
-          type: "info",
-        },
-        ...cur,
-      ])
-    } else if (nextStep === 2) {
-      // Step 2: 09:00 (10h - x): Kích hoạt Protected!
-      // Slot trở thành OCCUPIED + PROTECTED (Dual State)
-      slot1.isProtected = true
-      slot1.reservationState = "PROTECTED"
-      slot1.protectionStartTime = "09:00"
-      slot1.conflictReason = `Khung bảo vệ kích hoạt (${protectionWindowHours}h trước). Slot ${slot1.code} bị KHÓA chống xe vãng lai.`
-
-      setSimLogs((cur) => [
-        {
-          time: "09:00 (10h - x)",
-          msg: `[KÍCH HOẠT PROTECTED] Bắt đầu quyền bảo vệ cho khách B (10h-12h). Slot ${slot1.code} chuyển sang trạng thái DUAL: Vừa OCCUPIED (xe 51K-889.23 chưa rời) vừa PROTECTED! Hệ thống khóa slot cấm xe vãng lai khác.`,
-          type: "warning",
-        },
-        ...cur,
-      ])
-    } else if (nextStep === 3) {
-      // Step 3: 09:15 (Trong khoảng 9h -> 9h45): Phát hiện xe chưa rời!
-      slot1.conflictReason = `CẢNH BÁO XUNG ĐỘT: Xe cũ (51K-889.23) chưa rời khỏi vị trí đặt. Hệ thống bắt đầu quét tìm slot trống để tự động điều phối!`
-
-      setSimLogs((cur) => [
-        {
-          time: "09:15 (9h -> 9h45)",
-          msg: `[PHÁT HIỆN XUNG ĐỘT] Quá 9h15 mà xe cũ chưa rời đi. Hệ thống gửi thông báo cho khách B: "Vị trí đặt ${slot1.code} đang có xe khác đậu, hệ thống đang tự động tìm vị trí mới..." và quét tìm slot trống phù hợp.`,
-          type: "warning",
-        },
-        ...cur,
-      ])
-    } else if (nextStep === 4) {
-      // Step 4: TH1: Tìm thấy slot mới -> Auto Reallocate sang slot5!
-      slot5.status = "reserved"
-      slot5.physicalState = "AVAILABLE"
-      slot5.reservationState = "PROTECTED"
-      slot5.isProtected = true
-      slot5.requestedSlotCode = slot1.code
-      slot5.allocationTime = "09:16"
-      slot5.currentBooking = {
-        bookingId: "bk-sim-02",
-        driverName: "Lê Minh Đạt (Khách đặt 10h-12h)",
-        licensePlate: "30A-999.88",
-        startTime: "10:00",
-        endTime: "12:00",
-        isAllocated: true,
-        isReallocated: true,
-      }
-
-      // Slot 1 remains with original parking car until exit
-      slot1.conflictReason = `Đã tự động điều phối khách 10h-12h sang vị trí mới: ${slot5.code}.`
-
-      setSimLogs((cur) => [
-        {
-          time: "09:16 (TH1 Thành công)",
-          msg: `[TỰ ĐỘNG ALLOCATE SLOT MỚI] Tìm thấy slot trống ${slot5.code}! Tự động gán vị trí mới cho khách B (30A-999.88). Gửi thông báo Push tới Driver: "Vị trí đặt đỗ xe của bạn đã được chuyển từ ${slot1.code} sang ${slot5.code}. Vui lòng theo chỉ dẫn mới."`,
-          type: "success",
-        },
-        ...cur,
-      ])
-    }
-
-    structureStore.saveStructure(updated)
-    setStructure(updated)
-  }
-
-  function handleResetSim() {
-    setSimStep(0)
-    setSimLogs([])
-    reloadStructure()
-  }
-
   return (
     <section className="space-y-6 text-[var(--fg)]">
       {/* Page Header */}
@@ -382,13 +286,13 @@ export function ParkingStructure({
             </span>
           </h1>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Cấu hình bố cục không gian, quản lý 6 trạng thái vận hành, cơ chế bảo vệ chỗ đỗ và tự động tái cấp phát khi có xung đột.
+            Manage the parking layout, space statuses, reservation protection, and conflict reallocation.
           </p>
         </div>
 
         {/* Site Selector */}
         <div className="flex items-center gap-2.5">
-          <label className="text-xs font-semibold text-[var(--muted)]">Cơ sở:</label>
+          <label className="text-xs font-semibold text-[var(--muted)]">Site:</label>
           <select
             className="input min-w-[200px] text-xs font-medium"
             value={activeLotId}
@@ -405,7 +309,7 @@ export function ParkingStructure({
 
       {/* 6 Canonical Status Metrics Bar with DUAL STATE Highlight */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-        {/* 1. Trống */}
+        {/* 1. Available */}
         <div
           onClick={() => setStatusFilter(statusFilter === "available" ? "all" : "available")}
           className={`p-3 rounded-xl border cursor-pointer transition-all ${
@@ -414,7 +318,7 @@ export function ParkingStructure({
           style={{ background: STATUS_DEFINITIONS.available.bg, borderColor: STATUS_DEFINITIONS.available.border }}
         >
           <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
-            <span>Trống</span>
+            <span>Available</span>
             <UntitledIcon name="check-circle" size={13} />
           </div>
           <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
@@ -422,7 +326,7 @@ export function ParkingStructure({
           </div>
         </div>
 
-        {/* 2. Đã đặt */}
+        {/* 2. Reserved */}
         <div
           onClick={() => setStatusFilter(statusFilter === "reserved" ? "all" : "reserved")}
           className={`p-3 rounded-xl border cursor-pointer transition-all ${
@@ -431,7 +335,7 @@ export function ParkingStructure({
           style={{ background: STATUS_DEFINITIONS.reserved.bg, borderColor: STATUS_DEFINITIONS.reserved.border }}
         >
           <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 flex items-center justify-between">
-            <span>Đã đặt</span>
+            <span>Reserved</span>
             <UntitledIcon name="clock" size={13} />
           </div>
           <div className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1">
@@ -439,7 +343,7 @@ export function ParkingStructure({
           </div>
         </div>
 
-        {/* 3. Chờ thanh toán */}
+        {/* 3. Pending Payment */}
         <div
           onClick={() => setStatusFilter(statusFilter === "pending_payment" ? "all" : "pending_payment")}
           className={`p-3 rounded-xl border cursor-pointer transition-all ${
@@ -448,7 +352,7 @@ export function ParkingStructure({
           style={{ background: STATUS_DEFINITIONS.pending_payment.bg, borderColor: STATUS_DEFINITIONS.pending_payment.border }}
         >
           <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 flex items-center justify-between">
-            <span>Chờ thanh toán</span>
+            <span>Pending Payment</span>
             <UntitledIcon name="banknote" size={13} />
           </div>
           <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">
@@ -473,7 +377,7 @@ export function ParkingStructure({
           </div>
         </div>
 
-        {/* 5. Đã có xe */}
+        {/* 5. Occupied */}
         <div
           onClick={() => setStatusFilter(statusFilter === "occupied" ? "all" : "occupied")}
           className={`p-3 rounded-xl border cursor-pointer transition-all ${
@@ -482,7 +386,7 @@ export function ParkingStructure({
           style={{ background: STATUS_DEFINITIONS.occupied.bg, borderColor: STATUS_DEFINITIONS.occupied.border }}
         >
           <div className="text-[11px] font-semibold text-red-700 dark:text-red-300 flex items-center justify-between">
-            <span>Đã có xe</span>
+            <span>Occupied</span>
             <UntitledIcon name="car" size={13} />
           </div>
           <div className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">
@@ -537,29 +441,29 @@ export function ParkingStructure({
             </div>
             <div>
               <h3 className="font-semibold text-xs text-[var(--fg)]">
-                Cấu hình thời gian bảo vệ chỗ đặt (Protected Window x tiếng)
+                Reservation Protection Window
               </h3>
               <p className="text-[11px] text-[var(--muted)]">
-                Owner có toàn quyền thiết lập thời gian bảo vệ trước giờ khách đến. Trong khoảng (Giờ đặt - x), slot tự động khóa bảo vệ.
+                Choose how long before a reservation the space is protected from walk-ins.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--muted)] font-medium">Thời gian bảo vệ x:</span>
+            <span className="text-xs text-[var(--muted)] font-medium">Protection window:</span>
             <div className="flex rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0.5">
               {[0.5, 1.0, 1.5, 2.0].map((val) => (
                 <button
                   key={val}
                   type="button"
-                  onClick={() => setProtectionWindowHours(val)}
+                  onClick={() => updateProtectionWindow(val)}
                   className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
                     protectionWindowHours === val
                       ? "bg-[var(--primary)] text-white shadow-xs"
                       : "text-[var(--muted)] hover:text-[var(--fg)]"
                   }`}
                 >
-                  {val === 0.5 ? "30 phút" : `${val} tiếng`}
+                  {val === 0.5 ? "30 minutes" : `${val} hours`}
                 </button>
               ))}
             </div>
@@ -568,119 +472,16 @@ export function ParkingStructure({
 
         {/* Formula Explainer */}
         <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--bg)]/60 text-xs text-[var(--muted)] flex items-start gap-2">
-          <UntitledIcon name="info" size={14} className="text-[var(--primary)] mt-0.5 shrink-0" />
+          <UntitledIcon name="help" size={14} className="text-[var(--primary)] mt-0.5 shrink-0" />
           <div className="leading-relaxed">
-            <strong className="text-[var(--fg)]">Quy tắc bảo vệ: </strong>
-            Nếu khách đặt chỗ từ <strong>10:00 - 12:00</strong> với x = <strong>{protectionWindowHours} tiếng</strong>, slot bắt đầu được bảo vệ từ{" "}
+            <strong className="text-[var(--fg)]">Protection rule: </strong>
+            For a reservation from <strong>10:00 - 12:00</strong> with a protection window of <strong>{protectionWindowHours} hours</strong>, protection starts at{" "}
             <strong className="text-indigo-600 dark:text-indigo-400">
-              {10 - protectionWindowHours}:00
+              {protectionStartTime}
             </strong>
-            . Trong khoảng từ {10 - protectionWindowHours}:00 đến 10:00, slot tính là <strong>Protected</strong> $\rightarrow$ Khóa slot, cấm xe vãng lai vào.
+            . From {protectionStartTime} to 10:00, the space is <strong>Protected</strong> → Walk-ins cannot use this space.
           </div>
         </div>
-      </div>
-
-      {/* Interactive Simulation Widget: Conflict & Auto-Reallocation Demo */}
-      <div className="rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/5 via-[var(--card)] to-purple-500/5 p-4.5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--border)] pb-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 text-white text-xs font-bold">
-                🎮
-              </span>
-              <h3 className="font-bold text-sm text-[var(--fg)]">
-                Trình mô phỏng Kịch bản Đặt chỗ & Xử lý Xung đột tự động
-              </h3>
-            </div>
-            <p className="text-xs text-[var(--muted)] mt-0.5">
-              Mô phỏng xe vãng lai đỗ 6h-9h, khách đặt 10h-12h, kích hoạt Protected, phát hiện xe chưa rời và tự động Reallocate slot mới.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn-outline text-xs px-3 py-1.5"
-              onClick={handleResetSim}
-              disabled={simStep === 0}
-            >
-              Đặt lại kịch bản
-            </button>
-            <button
-              type="button"
-              className="btn-primary text-xs px-4 py-1.5 flex items-center gap-1.5"
-              onClick={handleNextSimStep}
-              disabled={simStep >= 4}
-            >
-              <span>{simStep === 0 ? "Bắt đầu mô phỏng" : `Tiến trình: Bước ${simStep + 1} / 4`}</span>
-              <UntitledIcon name="arrow-right" size={13} />
-            </button>
-          </div>
-        </div>
-
-        {/* Step Indicator */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-          <div
-            className={`p-2.5 rounded-lg border text-xs transition-all ${
-              simStep >= 1 ? "border-blue-500/40 bg-blue-500/10" : "border-[var(--border)] bg-[var(--bg)]/50 opacity-60"
-            }`}
-          >
-            <div className="font-bold text-blue-700 dark:text-blue-300">Bước 1: 06h - 08h30</div>
-            <div className="text-[11px] text-[var(--muted)] mt-1">Xe 1 đỗ (Occupied). Khách B đặt trước 10h-12h.</div>
-          </div>
-
-          <div
-            className={`p-2.5 rounded-lg border text-xs transition-all ${
-              simStep >= 2 ? "border-indigo-500/40 bg-indigo-500/10" : "border-[var(--border)] bg-[var(--bg)]/50 opacity-60"
-            }`}
-          >
-            <div className="font-bold text-indigo-700 dark:text-indigo-300">Bước 2: 09h00 (10h - x)</div>
-            <div className="text-[11px] text-[var(--muted)] mt-1">Kích hoạt Protected. Trạng thái Occupied + Protected!</div>
-          </div>
-
-          <div
-            className={`p-2.5 rounded-lg border text-xs transition-all ${
-              simStep >= 3 ? "border-amber-500/40 bg-amber-500/10" : "border-[var(--border)] bg-[var(--bg)]/50 opacity-60"
-            }`}
-          >
-            <div className="font-bold text-amber-700 dark:text-amber-300">Bước 3: 09h15 (9h - 9h45)</div>
-            <div className="text-[11px] text-[var(--muted)] mt-1">Phát hiện xe chưa rời! Báo khách B & tìm slot mới.</div>
-          </div>
-
-          <div
-            className={`p-2.5 rounded-lg border text-xs transition-all ${
-              simStep >= 4 ? "border-emerald-500/40 bg-emerald-500/10" : "border-[var(--border)] bg-[var(--bg)]/50 opacity-60"
-            }`}
-          >
-            <div className="font-bold text-emerald-700 dark:text-emerald-300">Bước 4: 09h16 (TH1 Thành công)</div>
-            <div className="text-[11px] text-[var(--muted)] mt-1">Auto Reallocate slot mới & gửi thông báo Driver.</div>
-          </div>
-        </div>
-
-        {/* Real-time simulation event stream */}
-        {simLogs.length > 0 && (
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 space-y-2 max-h-40 overflow-y-auto font-mono text-[11px]">
-            <div className="font-sans font-bold text-xs text-[var(--fg)] mb-1 flex items-center justify-between">
-              <span>Nhật ký điều phối thời gian thực:</span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400">● Live Stream</span>
-            </div>
-            {simLogs.map((log, idx) => (
-              <div
-                key={idx}
-                className={`p-2 rounded border flex items-start gap-2 ${
-                  log.type === "success"
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                    : log.type === "warning"
-                      ? "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-                      : "border-blue-500/30 bg-blue-500/10 text-blue-800 dark:text-blue-300"
-                }`}
-              >
-                <span className="font-bold shrink-0">[{log.time}]</span>
-                <span className="font-sans text-xs leading-relaxed">{log.msg}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Floors, Zones & Visual Slots Grid */}
@@ -714,19 +515,19 @@ export function ParkingStructure({
               }}
             >
               <UntitledIcon name="plus" size={12} />
-              <span>Thêm tầng</span>
+              <span>Add Floor</span>
             </button>
           </div>
 
           {/* Zone filter */}
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-[var(--muted)] font-medium">Khu vực:</span>
+            <span className="text-[var(--muted)] font-medium">Zone:</span>
             <select
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
               value={selectedZoneFilter}
               onChange={(e) => setSelectedZoneFilter(e.target.value)}
             >
-              <option value="all">Tất cả khu vực ({currentFloor?.zones?.length || 0})</option>
+              <option value="all">All Zones ({currentFloor?.zones?.length || 0})</option>
               {currentFloor?.zones?.map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name} ({z.spaces?.length || 0} slots)
@@ -742,7 +543,7 @@ export function ParkingStructure({
                 setIsZoneModalOpen(true)
               }}
             >
-              + Thêm Zone
+              + Add Zone
             </button>
           </div>
         </div>
@@ -753,7 +554,7 @@ export function ParkingStructure({
             <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
             <input
               className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
-              placeholder="Tìm theo mã slot (ví dụ: A01), biển số xe, tên khách…"
+              placeholder="Search by space code (e.g. A01), license plate, or driver name…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -765,7 +566,7 @@ export function ParkingStructure({
           </div>
 
           <div className="text-[11px] text-[var(--muted)]">
-            Hiển thị: <strong>{displayedSpaces.length}</strong> / {allSpaces.length} slots
+            Showing: <strong>{displayedSpaces.length}</strong> / {allSpaces.length} slots
           </div>
         </div>
 
@@ -842,7 +643,7 @@ export function ParkingStructure({
 
                     {isReallocated && (
                       <div className="text-[9px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                        ⚡ Realloc từ {space.requestedSlotCode}
+                        ⚡ Reallocated from {space.requestedSlotCode}
                       </div>
                     )}
 
@@ -861,7 +662,7 @@ export function ParkingStructure({
           </div>
         ) : (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-12 text-center text-xs text-[var(--muted)]">
-            Không tìm thấy slot đỗ xe nào phù hợp với bộ lọc hiện tại.
+            No parking spaces match the current filters.
           </div>
         )}
       </div>

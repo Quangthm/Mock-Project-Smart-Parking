@@ -432,8 +432,8 @@ export function SpaceDetailModal({
                 size={15}
               />
               {space.vehicleType === "car"
-                ? "Car (Ô tô)"
-                : "Motorcycle (Xe máy)"}
+                ? "Car"
+                : "Motorcycle"}
             </strong>
           </div>
 

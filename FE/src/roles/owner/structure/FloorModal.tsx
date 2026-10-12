@@ -230,7 +230,7 @@ export function FloorModal({
             </label>
             <input
               className="input"
-              placeholder="e.g. Basement 1 (Tầng Hầm B1) or Ground Level"
+              placeholder="e.g. Basement 1 or Ground Level"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
