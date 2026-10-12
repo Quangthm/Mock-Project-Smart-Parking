@@ -96,11 +96,15 @@ docs/04-testing/develop-sync-review-2026-10-08.md
 # =========================
 # Onboarding setup script
 # =========================
-# Local setup (contains environment-specific values; distribute via team channel, not git)
-setup.ps1
+# setup.ps1 contains no credentials and is tracked; .env remains ignored.
 
 # =========================
 # Blender
 # =========================
 # Blender auto-saved backup files (*.blend1, *.blend2, ...)
 *.blend[0-9]
+
+# Generated dotnet test output
+TestResults/
+*.coverage
+*.coveragexml

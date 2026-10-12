@@ -45,6 +45,19 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     $env:DevelopmentAdmin__Password = $env:SMARTPARK_ADMIN_PASSWORD
 }
 
+# Optional .env settings override saved user-secrets only for this runner process.
+if ($Service -eq 'User') {
+    foreach ($field in @('Host','Port','Username','Password','From')) {
+        $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
+        if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
+    }
+    if ($env:SMARTPARK_JWT_PRIVATE_KEY_PEM) { $env:Jwt__PrivateKeyPem = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM }
+    if ($env:SMARTPARK_WORKFLOW_KEY_DIRECTORY) {
+        $keyDirectory = $env:SMARTPARK_WORKFLOW_KEY_DIRECTORY
+        if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
+        $env:Workflow__KeyDirectory = $keyDirectory
+    }
+}
 $projectDir = Join-Path $taskRoot "src/Services/${Service}Service/SmartParking.${Service}Service.API"
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
 if ($LASTEXITCODE -ne 0) { throw "${Service}Service exited with code $LASTEXITCODE" }

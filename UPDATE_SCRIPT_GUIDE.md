@@ -1,3 +1,4 @@
+> **Hướng dẫn cũ:** onboarding hiện tại dùng [`LOCAL-SETUP.md`](LOCAL-SETUP.md) và `setup.ps1` được lưu trong Git. Quy trình cũ nhiều bước, mật khẩu dùng chung của team và tự dựng SonarQube trong tài liệu này không còn áp dụng. Giữ phần còn lại để tham khảo lịch sử; dùng lệnh trong LOCAL-SETUP để chạy checkout hiện tại.
 # UPDATE SCRIPT GUIDE - SmartPark onboarding scripts
 
 Tài liệu này dành cho maintainer sửa/mở rộng bộ script setup. Mục tiêu: giữ
