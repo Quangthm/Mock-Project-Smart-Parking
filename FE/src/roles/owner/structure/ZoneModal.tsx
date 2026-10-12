@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react"
+import { createPortal } from "react-dom"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
@@ -90,8 +91,9 @@ export function ZoneModal({
     onClose()
   }
 
-  return (
-    <div
+  return typeof document !== "undefined"
+    ? createPortal(
+        <div
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
@@ -404,6 +406,7 @@ export function ZoneModal({
           </div>
         </form>
       </div>
-    </div>
-  )
+    </div>,
+    document.body,
+  ) : null
 }

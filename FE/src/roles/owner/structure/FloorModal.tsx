@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react"
+import { createPortal } from "react-dom"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
@@ -71,8 +72,9 @@ export function FloorModal({
     onClose()
   }
 
-  return (
-    <div
+  return typeof document !== "undefined"
+    ? createPortal(
+        <div
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
@@ -290,6 +292,7 @@ export function FloorModal({
           </div>
         </form>
       </div>
-    </div>
-  )
+    </div>,
+    document.body,
+  ) : null
 }

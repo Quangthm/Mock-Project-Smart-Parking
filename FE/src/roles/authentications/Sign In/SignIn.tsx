@@ -17,7 +17,7 @@ export function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [mode, setMode] = useState<"otp" | "password">("otp")
+  const [mode, setMode] = useState<"otp" | "password">("password")
 
   const [challenge, setChallenge] = useState<{
     challengeId: string
@@ -41,6 +41,9 @@ export function SignIn() {
   const [fpError, setFpError] = useState("")
   const [fpSubmitting, setFpSubmitting] = useState(false)
 
+  const [requireTotp, setRequireTotp] = useState(false)
+  const [totpCode, setTotpCode] = useState("")
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (submitting) return
@@ -60,7 +63,7 @@ export function SignIn() {
               code,
               totp || undefined,
             )
-          : await authApi.login(email, password)
+          : await authApi.login(email, password, totpCode || undefined)
 
       const signedInUser = { ...user, lastLoginAt: new Date().toISOString() }
       store.saveUser(signedInUser)
@@ -85,11 +88,22 @@ export function SignIn() {
       setView(user.role)
       navigate(getUserHomePath(user), { replace: true })
     } catch (error) {
-      setError(
+      const msg =
         error instanceof Error
           ? error.message
-          : "Sign in failed. Please try again.",
-      )
+          : "Sign in failed. Please try again."
+
+      // Backend requires TOTP — show the code field inline, don't display the raw error
+      if (
+        mode === "password" &&
+        msg.toLowerCase().includes("otp") &&
+        !requireTotp
+      ) {
+        setRequireTotp(true)
+        setError("")
+      } else {
+        setError(msg)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -234,6 +248,8 @@ export function SignIn() {
                 setCode("")
                 setTotp("")
                 setError("")
+                setRequireTotp(false)
+                setTotpCode("")
               }}
             >
               <option value="otp">Email / SMS code</option>
@@ -324,6 +340,39 @@ export function SignIn() {
                   <PasswordVisibilityIcon visible={showPassword} />
                 </button>
               </div>
+            </div>
+          )}
+
+          {mode === "password" && requireTotp && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+              <div
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "var(--radius)",
+                  background: "#f59e0b10",
+                  border: "1px solid #f59e0b40",
+                  color: "#b45309",
+                  fontSize: "0.825rem",
+                  lineHeight: 1.5,
+                }}
+              >
+                Your account has two-factor authentication enabled. Please enter your security code below.
+              </div>
+              <label className="label" style={{ fontSize: "0.925rem" }}>
+                Security Code (2FA)
+                <input
+                  className="input"
+                  placeholder="Enter your 6-digit security code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  autoFocus
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  style={{ fontSize: "1rem" }}
+                />
+              </label>
             </div>
           )}
 

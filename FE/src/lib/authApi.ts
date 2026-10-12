@@ -247,11 +247,11 @@ export const authApi = {
 
   expiresAt: () => Number(sessionStorage.getItem(expiryKey) ?? 0),
 
-  async login(email: string, password: string): Promise<User> {
+  async login(email: string, password: string, totp?: string): Promise<User> {
     const response = await request<ApiResponse<LoginSession>>(
       "/login",
       "POST",
-      { email: email.trim(), password },
+      { email: email.trim(), password, ...(totp ? { totp } : {}) },
     )
 
     if (
