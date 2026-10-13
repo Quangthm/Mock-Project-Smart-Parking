@@ -151,6 +151,10 @@ export interface Booking {
 
   plateImageUrl?: string
 
+  entryImageUrl?: string | null
+
+  exitImageUrl?: string | null
+
   startTime: string
 
   endTime: string

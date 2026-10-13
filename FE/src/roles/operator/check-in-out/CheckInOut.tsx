@@ -9,15 +9,17 @@ import type { Booking, BookingStatus } from "../../../lib/types"
 type GateAction = "check-in" | "check-out"
 type QuickGateResult =
   | { kind: "reservation"; booking: Booking; action: GateAction }
-  | { kind: "walk-in"; plate: string; session: WalkInParkingSession | null; action: GateAction }
+  | { kind: "walk-in"; plate: string; session: WalkInParkingSession | null; action: GateAction; vehicleType?: string }
 
 interface CheckInOutProps {
+  mode: "check-in" | "check-out"
   lot: OperatorSite | null
   initialPlateQuery?: string
   onDataChanged?: () => void
 }
 
 export function CheckInOut({
+  mode,
   lot,
   initialPlateQuery = "",
   onDataChanged,
@@ -26,6 +28,8 @@ export function CheckInOut({
   const [quickInput, setQuickInput] = useState(initialPlateQuery)
   const [quickResult, setQuickResult] = useState<QuickGateResult | null>(null)
   const [quickError, setQuickError] = useState("")
+  const [latestScanImage, setLatestScanImage] = useState("")
+  const [latestImageIsUpload, setLatestImageIsUpload] = useState(false)
 
   // Table filters & search
   const [searchQuery, setSearchQuery] = useState("")
@@ -41,6 +45,7 @@ export function CheckInOut({
   const [confirmingAction, setConfirmingAction] = useState<{
     booking: Booking
     action: "check-in" | "check-out"
+    imageData?: string
   } | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [actionFeedback, setActionFeedback] = useState<{
@@ -90,7 +95,12 @@ export function CheckInOut({
     }
   }, [initialPlateQuery, lot?.id])
 
-  async function handleQuickSearch(inputToUse?: string, autoCheckIn = false) {
+  async function handleQuickSearch(
+    inputToUse?: string,
+    autoCheckIn = false,
+    imageData?: string,
+    vehicleType?: string,
+  ) {
     setQuickError("")
     setQuickResult(null)
     const term = (inputToUse ?? quickInput).trim()
@@ -107,18 +117,19 @@ export function CheckInOut({
     setLookupLoading(true)
     try {
       const match = await reservationApi.lookup(lot.id, term)
-      if (!["confirmed", "checked-in"].includes(match.status)) {
+      const expectedStatus = mode === "check-in" ? "confirmed" : "checked-in"
+      if (match.status !== expectedStatus) {
         setQuickError(`Reservation ${match.id} is ${match.status} and cannot use this gate.`)
         return
       }
       const result: QuickGateResult = {
         kind: "reservation",
         booking: match,
-        action: match.status === "confirmed" ? "check-in" : "check-out",
+        action: mode,
       }
       setQuickResult(result)
-      if (autoCheckIn && result.action === "check-in") {
-        await executeCheckAction(match, "check-in")
+      if (autoCheckIn && mode === "check-in") {
+        await executeCheckAction(match, "check-in", imageData)
       }
     } catch (error) {
       if (!(error instanceof AuthApiError) || error.status !== 404) {
@@ -133,18 +144,28 @@ export function CheckInOut({
 
       try {
         const activeSession = await reservationApi.walkInLookup(lot.id, term)
-        const assignedSlot = lot.slots.find((slot) => slot.id === activeSession.slotId)
+        if (mode === "check-in") {
+          setQuickError("This vehicle already has an active parking session. Use Gate Check-Out.")
+          return
+        }
+        const assignedSlot = activeSession.slotId
+          ? lot.slots.find((slot) => slot.id === activeSession.slotId)
+          : undefined
         setQuickResult({
           kind: "walk-in",
           plate: activeSession.licensePlate,
           session: assignedSlot
             ? { ...activeSession, slotNumber: assignedSlot.number }
             : activeSession,
-          action: "check-out",
+          action: mode,
         })
       } catch (walkInError) {
         if (!(walkInError instanceof AuthApiError) || walkInError.status !== 404) {
           setQuickError(walkInError instanceof Error ? walkInError.message : "Could not look up the active parking session.")
+          return
+        }
+        if (mode === "check-out") {
+          setQuickError("No active parking session was found for this plate.")
           return
         }
         const result: QuickGateResult = {
@@ -152,24 +173,29 @@ export function CheckInOut({
           plate: term,
           session: null,
           action: "check-in",
+          vehicleType,
         }
         setQuickResult(result)
-        if (autoCheckIn) await executeWalkInAction(result, "check-in")
+        if (autoCheckIn) await executeWalkInAction(result, "check-in", imageData, vehicleType)
       }
     } finally {
       setLookupLoading(false)
     }
   }
 
-  async function executeCheckAction(booking: Booking, action: "check-in" | "check-out") {
+  async function executeCheckAction(
+    booking: Booking,
+    action: "check-in" | "check-out",
+    imageData?: string,
+  ) {
     setActionLoading(true)
     setActionFeedback(null)
 
     try {
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
       const updatedBooking = action === "check-in"
-        ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate)
-        : await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate)
+        ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
+        : await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate, imageData)
 
       setBookings((current) =>
         current.map((item) => item.id === updatedBooking.id ? updatedBooking : item),
@@ -181,6 +207,8 @@ export function CheckInOut({
       setConfirmingAction(null)
       setQuickResult(null)
       setQuickInput("")
+      setLatestScanImage("")
+      setLatestImageIsUpload(false)
       onDataChanged?.()
     } catch (error) {
       setActionFeedback({
@@ -192,7 +220,12 @@ export function CheckInOut({
     }
   }
 
-  async function executeWalkInAction(result: Extract<QuickGateResult, { kind: "walk-in" }>, action: GateAction) {
+  async function executeWalkInAction(
+    result: Extract<QuickGateResult, { kind: "walk-in" }>,
+    action: GateAction,
+    imageData?: string,
+    vehicleType?: string,
+  ) {
     setActionLoading(true)
     setActionFeedback(null)
 
@@ -200,19 +233,26 @@ export function CheckInOut({
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
       let session: WalkInParkingSession
       if (action === "check-in") {
-        session = await reservationApi.walkInCheckIn(lot.id, result.plate)
+        session = await reservationApi.walkInCheckIn(
+          lot.id,
+          result.plate,
+          imageData,
+          vehicleType ?? result.vehicleType,
+        )
       } else {
         if (!result.session) throw new Error("The active walk-in session was not found.")
-        session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate)
+        session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
       }
       setActionFeedback({
         type: "success",
         message: action === "check-in"
-          ? `Walk-in check-in completed for ${session.licensePlate} (${session.slotNumber}).`
-          : `Walk-in check-out completed for ${session.licensePlate} (${session.slotNumber}).`,
+          ? `Walk-in check-in completed for ${session.licensePlate} (${session.slotNumber ?? "No slot assigned"}).`
+          : `Walk-in check-out completed for ${session.licensePlate} (${session.slotNumber ?? "No slot assigned"}).`,
       })
       setQuickResult(null)
       setQuickInput("")
+      setLatestScanImage("")
+      setLatestImageIsUpload(false)
       onDataChanged?.()
     } catch (error) {
       setActionFeedback({
@@ -227,6 +267,8 @@ export function CheckInOut({
   // Filtered Bookings for the Table
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
+      if (mode === "check-in" && b.status !== "confirmed") return false
+      if (mode === "check-out" && b.status !== "checked-in") return false
       if (statusFilter !== "all" && b.status !== statusFilter) return false
       if (vehicleTypeFilter !== "all") {
         const slot = lot?.slots.find((item) => item.id === b.slotId)
@@ -245,7 +287,7 @@ export function CheckInOut({
       }
       return true
     })
-  }, [bookings, lot, statusFilter, vehicleTypeFilter, searchQuery])
+  }, [bookings, lot, mode, statusFilter, vehicleTypeFilter, searchQuery])
 
   // Pagination calculation
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / itemsPerPage))
@@ -284,10 +326,12 @@ export function CheckInOut({
       {/* Page Title */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Booking & Vehicle Management
+          {mode === "check-in" ? "Gate Check-In" : "Gate Check-Out"}
         </h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Manage gate check-in / check-out, inspect booking records, and verify driver credentials for {lot.name}.
+          {mode === "check-in"
+            ? `Register incoming vehicles for ${lot.name}.`
+            : `Verify outgoing vehicles and compare their entry image for ${lot.name}.`}
         </p>
       </div>
 
@@ -318,7 +362,7 @@ export function CheckInOut({
         </div>
       )}
 
-      {/* SECTION 1: Fast Gate Check-In / Out Terminal */}
+      {/* Gate terminal for this direction */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -326,9 +370,13 @@ export function CheckInOut({
               <UntitledIcon name="car" size={20} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[var(--fg)]">Gate Terminal / Fast Lookup</h2>
+              <h2 className="text-base font-bold text-[var(--fg)]">
+                {mode === "check-in" ? "Check-In Terminal" : "Check-Out Terminal"}
+              </h2>
               <p className="text-xs text-[var(--muted)]">
-                Scan or enter vehicle license plate or booking ID for instant gate arrival/departure
+                {mode === "check-in"
+                  ? "Scan or enter the vehicle's plate to start a parking session."
+                  : "Scan or enter the plate to find an active session and compare its check-in photo."}
               </p>
             </div>
           </div>
@@ -337,12 +385,17 @@ export function CheckInOut({
 
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
+            <label htmlFor="gate-plate-input" className="sr-only">Enter vehicle license plate manually</label>
             <input
+              id="gate-plate-input"
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--primary)] uppercase font-mono tracking-wider"
               value={quickInput}
-              onChange={(e) => setQuickInput(e.target.value)}
+              onChange={(e) => {
+                setQuickInput(e.target.value)
+                if (!latestImageIsUpload) setLatestScanImage("")
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleQuickSearch()}
-              placeholder="e.g. 51A-123.45 or BOOKING ID"
+              placeholder={mode === "check-in" ? "AI unavailable? Enter the license plate" : "AI unavailable? Enter the license plate to check out"}
             />
           </div>
           <button
@@ -350,16 +403,31 @@ export function CheckInOut({
             className="btn-primary text-sm px-6 py-2.5 justify-center"
             onClick={() => handleQuickSearch()}
           >
-            <UntitledIcon name="search" size={16} /> Search Gate
+            <UntitledIcon name="search" size={16} /> {mode === "check-in" ? "Find Check-In" : "Find Check-Out"}
           </button>
         </div>
 
         <PlateScanPanel
-          onPlateRecognized={async (plate, confidence) => {
+          siteId={lot.id}
+          tenantId={lot.tenantId}
+          direction={mode === "check-in" ? "INBOUND" : "OUTBOUND"}
+          mode={mode}
+          onImageCaptured={(imageData) => {
+            setLatestScanImage(imageData)
+            setLatestImageIsUpload(true)
+          }}
+          onPlateRecognized={async (plate, confidence, imageData, vehicleType, isUploadedImage) => {
+            setLatestScanImage(imageData ?? "")
+            setLatestImageIsUpload(isUploadedImage ?? false)
             setQuickInput(plate)
             await handleQuickSearch(
               plate,
-              typeof confidence === "number" && Number.isFinite(confidence) && confidence >= 0.9,
+              mode === "check-in" &&
+                typeof confidence === "number" &&
+                Number.isFinite(confidence) &&
+                confidence >= 0.9,
+              imageData,
+              vehicleType,
             )
           }}
         />
@@ -371,7 +439,7 @@ export function CheckInOut({
           </div>
         )}
 
-        {/* Quick Result Preview Card */}
+        {/* Lookup result is limited to the active direction. */}
         {quickResult && (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 animate-in">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
@@ -397,6 +465,18 @@ export function CheckInOut({
                     : "No reservation — walk-in vehicle"}
               </span>
             </div>
+
+            {mode === "check-out" && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <EvidenceImage
+                  label="Check-in image"
+                  image={quickResult.kind === "reservation"
+                    ? quickResult.booking.entryImageUrl ?? null
+                    : quickResult.session?.entryImageUrl ?? null}
+                />
+                <EvidenceImage label="Current check-out scan" image={latestScanImage || null} />
+              </div>
+            )}
 
             {quickResult.kind === "reservation" ? (
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
@@ -429,7 +509,7 @@ export function CheckInOut({
                 <div>
                   <span className="text-[var(--muted)] block">Slot:</span>
                   <span className="font-bold text-[var(--fg)] text-sm">
-                    {quickResult.session?.slotNumber ?? "Assigned automatically at check-in"}
+                    {quickResult.session?.slotNumber ?? "Not assigned"}
                   </span>
                 </div>
                 {quickResult.session && (
@@ -461,8 +541,13 @@ export function CheckInOut({
                 }`}
                 disabled={actionLoading || lookupLoading}
                 onClick={() => quickResult.kind === "reservation"
-                  ? setConfirmingAction(quickResult)
-                  : void executeWalkInAction(quickResult, quickResult.action)}
+                  ? setConfirmingAction({ ...quickResult, imageData: latestScanImage || undefined })
+                  : void executeWalkInAction(
+                      quickResult,
+                      quickResult.action,
+                      latestScanImage || undefined,
+                      quickResult.vehicleType,
+                    )}
               >
                 <UntitledIcon
                   name={quickResult.action === "check-in" ? "check-circle" : "car"}
@@ -607,7 +692,7 @@ export function CheckInOut({
                         >
                           Details
                         </button>
-                        {b.status === "confirmed" && (
+                        {mode === "check-in" && b.status === "confirmed" && (
                           <button
                             type="button"
                             className="text-[11px] py-1 px-2.5 rounded bg-green-600 hover:bg-green-700 text-white font-semibold transition"
@@ -616,7 +701,7 @@ export function CheckInOut({
                             Check-In
                           </button>
                         )}
-                        {b.status === "checked-in" && (
+                        {mode === "check-out" && b.status === "checked-in" && (
                           <button
                             type="button"
                             className="text-[11px] py-1 px-2.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
@@ -757,7 +842,7 @@ export function CheckInOut({
               >
                 Close
               </button>
-              {selectedBooking.status === "confirmed" && (
+              {mode === "check-in" && selectedBooking.status === "confirmed" && (
                 <button
                   type="button"
                   className="btn-primary text-xs py-1.5 px-3 bg-green-600 hover:bg-green-700"
@@ -770,7 +855,7 @@ export function CheckInOut({
                   Proceed to Check-In
                 </button>
               )}
-              {selectedBooking.status === "checked-in" && (
+              {mode === "check-out" && selectedBooking.status === "checked-in" && (
                 <button
                   type="button"
                   className="btn-primary text-xs py-1.5 px-3 bg-blue-600 hover:bg-blue-700"
@@ -834,7 +919,7 @@ export function CheckInOut({
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">Slot Number:</span>
                 <span className="font-bold text-[var(--primary)]">
-                  {slotLabel(confirmingAction.booking)}
+                  {confirmingAction.booking.slotNumber || "Not assigned"}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -846,6 +931,16 @@ export function CheckInOut({
                 <span className="font-semibold uppercase">{confirmingAction.booking.status}</span>
               </div>
             </div>
+
+            {confirmingAction.action === "check-out" && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <EvidenceImage
+                  label="Check-in image"
+                  image={confirmingAction.booking.entryImageUrl ?? null}
+                />
+                <EvidenceImage label="Current check-out scan" image={confirmingAction.imageData ?? null} />
+              </div>
+            )}
 
             <p className="mt-3 text-xs text-[var(--muted)]">
               {confirmingAction.action === "check-in"
@@ -870,12 +965,35 @@ export function CheckInOut({
                     : "bg-blue-600 hover:bg-blue-700"
                 }`}
                 disabled={actionLoading}
-                onClick={() => executeCheckAction(confirmingAction.booking, confirmingAction.action)}
+                onClick={() => executeCheckAction(
+                  confirmingAction.booking,
+                  confirmingAction.action,
+                  confirmingAction.imageData,
+                )}
               >
                 {actionLoading ? "Processing..." : `Confirm ${confirmingAction.action === "check-in" ? "Check-In" : "Check-Out"}`}
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EvidenceImage({ label, image }: { label: string; image: string | null }) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-xs font-semibold text-[var(--muted)]">{label}</p>
+      {image ? (
+        <img
+          src={image}
+          alt={label}
+          className="h-40 w-full rounded-lg border border-[var(--border)] bg-black object-contain"
+        />
+      ) : (
+        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)] px-3 text-center text-xs text-[var(--muted)]">
+          No image saved for this session.
         </div>
       )}
     </div>

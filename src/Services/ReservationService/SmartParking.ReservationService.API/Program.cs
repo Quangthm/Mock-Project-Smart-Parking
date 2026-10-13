@@ -20,12 +20,6 @@ public static class ReservationHost
             client.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
-        builder.Services.AddHttpClient<IOperatorGateSlotClaims, ParkingGateSlotClient>(client =>
-        {
-            client.BaseAddress = new(builder.Configuration["Services:Parking"] ?? "http://localhost:5045/");
-            client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.Add("X-Service-Key", key);
-        });
         builder.Services.AddScoped<StructureSafetyStore>();
         builder.Services.AddScoped<ReservationGateStore>();
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -122,25 +116,25 @@ public static class ReservationHost
             WalkInGateActionRequest body,
             OperatorIdentityClient identity,
             ReservationGateStore store,
-            IOperatorGateSlotClaims slots,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.PlateNumber) || body.PlateNumber.Length > 50)
                 return Results.BadRequest(new { success = false, code = "INVALID_PLATE", message = "Enter a valid vehicle plate." });
+            if (!IsValidImageData(body.ImageData))
+                return Results.BadRequest(new { success = false, code = "INVALID_IMAGE", message = "Gate image must be a JPEG, PNG, or WebP data URL no larger than 14 MB." });
+            var vehicleType = NormalizeVehicleType(body.VehicleType);
+            if (vehicleType is null)
+                return Results.BadRequest(new { success = false, code = "INVALID_VEHICLE_TYPE", message = "Vehicle type must be CAR or MOTORCYCLE." });
             var scope = await identity.RequireSiteAsync(siteId, ct);
             var sessionId = Guid.NewGuid();
-            await using var claim = await slots.ClaimAvailableAsync(
-                scope.TenantId, siteId, "ANY", null, null, false, ct);
             var session = await store.CreateWalkInAsync(
                 scope.TenantId,
                 siteId,
                 sessionId,
-                claim.Slot.Id,
-                claim.Slot.Code,
-                claim.Slot.VehicleType,
+                vehicleType,
                 body.PlateNumber,
+                body.ImageData,
                 ct);
-            claim.Commit();
             return Results.Ok(new { success = true, data = session });
         });
         app.MapPost("/api/parking-sessions/{sessionId:guid}/walk-in/check-out", async (
@@ -149,14 +143,14 @@ public static class ReservationHost
             WalkInGateActionRequest body,
             OperatorIdentityClient identity,
             ReservationGateStore store,
-            IOperatorGateSlotClaims slots,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.PlateNumber) || body.PlateNumber.Length > 50)
                 return Results.BadRequest(new { success = false, code = "INVALID_PLATE", message = "Enter a valid vehicle plate." });
+            if (!IsValidImageData(body.ImageData))
+                return Results.BadRequest(new { success = false, code = "INVALID_IMAGE", message = "Gate image must be a JPEG, PNG, or WebP data URL no larger than 14 MB." });
             var scope = await identity.RequireSiteAsync(siteId, ct);
-            var session = await store.CheckOutWalkInAsync(scope.TenantId, siteId, sessionId, body.PlateNumber, ct);
-            await slots.ReleaseAsync(scope.TenantId, siteId, session.SlotId, ct);
+            var session = await store.CheckOutWalkInAsync(scope.TenantId, siteId, sessionId, body.PlateNumber, body.ImageData, ct);
             return Results.Ok(new { success = true, data = session });
         });
         app.MapPost("/api/reservations/{reservationId:guid}/check-in", async (
@@ -169,8 +163,10 @@ public static class ReservationHost
         {
             if (body.PlateNumber is { Length: > 50 })
                 return Results.BadRequest(new { success = false, code = "INVALID_PLATE", message = "Plate number is too long." });
+            if (!IsValidImageData(body.ImageData))
+                return Results.BadRequest(new { success = false, code = "INVALID_IMAGE", message = "Gate image must be a JPEG, PNG, or WebP data URL no larger than 14 MB." });
             var scope = await identity.RequireSiteAsync(siteId, ct);
-            var entry = await store.CheckInAsync(scope.TenantId, siteId, scope.UserId, reservationId, body.PlateNumber, ct);
+            var entry = await store.CheckInAsync(scope.TenantId, siteId, scope.UserId, reservationId, body.PlateNumber, body.ImageData, ct);
             return Results.Ok(new { success = true, data = entry });
         });
         app.MapPost("/api/reservations/{reservationId:guid}/check-out", async (
@@ -183,15 +179,33 @@ public static class ReservationHost
         {
             if (body.PlateNumber is { Length: > 50 })
                 return Results.BadRequest(new { success = false, code = "INVALID_PLATE", message = "Plate number is too long." });
+            if (!IsValidImageData(body.ImageData))
+                return Results.BadRequest(new { success = false, code = "INVALID_IMAGE", message = "Gate image must be a JPEG, PNG, or WebP data URL no larger than 14 MB." });
             var scope = await identity.RequireSiteAsync(siteId, ct);
-            var entry = await store.CheckOutAsync(scope.TenantId, siteId, scope.UserId, reservationId, body.PlateNumber, ct);
+            var entry = await store.CheckOutAsync(scope.TenantId, siteId, scope.UserId, reservationId, body.PlateNumber, body.ImageData, ct);
             return Results.Ok(new { success = true, data = entry });
         });
         return app;
     }
+
+    private static string? NormalizeVehicleType(string? value) =>
+        value?.Trim().ToUpperInvariant() switch
+        {
+            null or "" => "CAR",
+            "MOTORCYCLE" or "MOTORBIKE" => "MOTORCYCLE",
+            "CAR" => "CAR",
+            _ => null
+        };
+
+    private static bool IsValidImageData(string? imageData) =>
+        imageData is null ||
+        imageData.Length <= 14 * 1024 * 1024 &&
+        (imageData.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase) ||
+         imageData.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase) ||
+         imageData.StartsWith("data:image/webp;base64,", StringComparison.OrdinalIgnoreCase));
 }
 public sealed record HoldRequest(Guid TenantId);
 public sealed record ReleaseRequest(Guid TenantId, EditOutcome? Outcome);
-public sealed record GateActionRequest(string? PlateNumber);
-public sealed record WalkInGateActionRequest(string PlateNumber);
+public sealed record GateActionRequest(string? PlateNumber, string? ImageData = null);
+public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null);
 public static class Program { public static void Main(string[] args) => ReservationHost.Build(args).Run(); }

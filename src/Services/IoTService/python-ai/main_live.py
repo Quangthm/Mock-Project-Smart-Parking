@@ -1,6 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════
-# main_live.py — AI service CHUYÊN CHO QUÉT REALTIME (camera laptop), chạy yolov8s.
-# Chạy song song với main.py (port 5001). Mặc định port 5002.
+# main_live.py — IoT AI service cho quét camera và ảnh upload. Mặc định port 5002.
 # Endpoint dùng cho realtime: POST /api/v1/stream/recognize_live
 # ══════════════════════════════════════════════════════════════════════════
 import argparse
@@ -11,9 +10,20 @@ import numpy as np
 import base64
 import re
 import torch
+from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ultralytics import YOLO
+from dotenv import load_dotenv
+from recognition_store import (
+    persist_recognition_event,
+    require_event_context,
+    validate_store_configuration,
+)
+
+load_dotenv(Path(__file__).resolve().parents[4] / ".env")
+if __name__ == '__main__':
+    validate_store_configuration()
 
 # Import các hàm AI core từ util.py của bạn
 from util import get_car, read_license_plate, USING_PADDLE, reader, preprocess_license_plate, crop_lower_vehicle
@@ -584,6 +594,7 @@ def clean_plate_string(raw_text):
 # 4. Khởi tạo Flask Server & Cấu hình API Endpoint
 # ══════════════════════════════════════════════════════════════════════════
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
 CORS(app)
 
 @app.route('/api/v1/post_process', methods=['POST'])
@@ -612,8 +623,11 @@ def recognize_uploaded_image():
         return jsonify({"success": False, "message": "Không nhận được chuỗi hình ảnh từ client React."}), 400
 
     try:
+        event_context = require_event_context(data)
         # ── Bước 1: Giải mã ảnh Base64 từ Client ──
         image_data = data['image']
+        if not isinstance(image_data, str) or len(image_data) > 14 * 1024 * 1024:
+            return jsonify({"success": False, "message": "Ảnh không hợp lệ hoặc vượt quá giới hạn 14 MB."}), 413
         if "," in image_data:
             image_data = image_data.split(",")[1]
             
@@ -715,12 +729,18 @@ def recognize_uploaded_image():
         # ── Bước 6: Phản hồi JSON đạt chuẩn cấu trúc cho Client ──
         if detected_plate and len(detected_plate) >= 4:  # Biển số hợp lệ tối thiểu phải từ 4 ký tự trở lên
             print(f"[AI OPTIMIZED SUCCESS] Plate: {detected_plate} | Type: {vehicle_type_name} | Score: {ocr_score}")
+            confidence = float(ocr_score) if ocr_score else float(best_lp_score)
+            persist_recognition_event(
+                *event_context,
+                detected_plate,
+                confidence,
+            )
             return jsonify({
                 "success": True,
                 "plate": detected_plate,
                 "vehicle_type_id": vehicle_type_id,
                 "vehicle_type_name": vehicle_type_name,
-                "confidence": float(ocr_score) if ocr_score else float(best_lp_score),
+                "confidence": confidence,
                 "cropped_image": cropped_image_data,
                 "message": "AI phân tích ảnh đơn lẻ tối ưu thành công!"
             }), 200
@@ -730,6 +750,8 @@ def recognize_uploaded_image():
                 "message": "Hệ thống phát hiện được phương tiện nhưng chất lượng ảnh không đủ để bóc tách chữ số."
             }), 422 # Khuyên dùng mã 422 (Unprocessable Entity) thay vì 400 để phân biệt lỗi logic AI
 
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
     except Exception as e:
         print(f"[AI CRITICAL ERROR] Lỗi xử lý: {str(e)}")
         return jsonify({"success": False, "message": f"Lỗi xử lý hệ thống: {str(e)}"}), 500
@@ -968,7 +990,10 @@ def recognize_live():
         return jsonify({"success": False, "message": "Không nhận được chuỗi hình ảnh từ client."}), 400
 
     try:
+        event_context = require_event_context(data)
         image_data = data['image']
+        if not isinstance(image_data, str) or len(image_data) > 14 * 1024 * 1024:
+            return jsonify({"success": False, "message": "Ảnh không hợp lệ hoặc vượt quá giới hạn 14 MB."}), 413
         if "," in image_data:
             image_data = image_data.split(",")[1]
         img_bytes = base64.b64decode(image_data)
@@ -1036,12 +1061,22 @@ def recognize_live():
                 "skipped_ocr": skipped
             })
 
+        for vehicle in results:
+            if vehicle["plate"]:
+                persist_recognition_event(
+                    *event_context,
+                    vehicle["plate"],
+                    vehicle["ocr_confidence"],
+                )
+
         return jsonify({
             "success": True,
             "vehicle_count": len(results),
             "vehicles": results
         }), 200
 
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
     except Exception as e:
         print(f"[AI CRITICAL ERROR] Lỗi xử lý recognize_live: {str(e)}")
         return jsonify({"success": False, "message": f"Lỗi xử lý hệ thống: {str(e)}"}), 500

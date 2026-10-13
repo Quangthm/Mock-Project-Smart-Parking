@@ -22,9 +22,8 @@ RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(lang='en', use_angle_c
 # Copy source code and AI models
 COPY . .
 
-# Expose Flask API port
-EXPOSE 5001
+# Expose the combined upload and live-scanning API port
+EXPOSE 5002
 
-# Run the Flask AI Parking API Server
-CMD ["python", "main.py", "--port", "5001", "--device", "cpu"]
-
+# Run the IoT AI service; supply IOT_DATABASE_URL at container runtime.
+CMD ["python", "main_live.py", "--port", "5002", "--device", "cpu"]

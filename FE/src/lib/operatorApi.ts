@@ -68,18 +68,22 @@ export interface GateReservation {
   endTime: string
   entryTime: string | null
   exitTime: string | null
+  entryImageUrl: string | null
+  exitImageUrl: string | null
   createdAt: string
 }
 
 export interface WalkInParkingSession {
   id: string
   siteId: string
-  slotId: string
-  slotNumber: string
+  slotId: string | null
+  slotNumber: string | null
   licensePlate: string
   vehicleType: string
   entryTime: string
   exitTime: string | null
+  entryImageUrl: string | null
+  exitImageUrl: string | null
 }
 
 export interface OperatorIncident {
@@ -188,6 +192,8 @@ function toBooking(reservation: GateReservation): Booking {
     status: reservation.status,
     paymentStatus: reservation.paymentStatus ?? undefined,
     completedAt: reservation.exitTime ?? undefined,
+    entryImageUrl: reservation.entryImageUrl,
+    exitImageUrl: reservation.exitImageUrl,
     paymentMethod,
     amount: reservation.amount ?? 0,
     createdAt: reservation.createdAt,
@@ -277,20 +283,20 @@ export const reservationApi = {
     return toBooking(item)
   },
 
-  async checkIn(siteId: string, reservationId: string, plateNumber?: string) {
+  async checkIn(siteId: string, reservationId: string, plateNumber?: string, imageData?: string) {
     const item = await reservationRequest<GateReservation>(
       `/${encodeURIComponent(reservationId)}/check-in?siteId=${encodeURIComponent(siteId)}`,
       "POST",
-      { plateNumber },
+      { plateNumber, imageData },
     )
     return toBooking(item)
   },
 
-  async checkOut(siteId: string, reservationId: string, plateNumber?: string) {
+  async checkOut(siteId: string, reservationId: string, plateNumber?: string, imageData?: string) {
     const item = await reservationRequest<GateReservation>(
       `/${encodeURIComponent(reservationId)}/check-out?siteId=${encodeURIComponent(siteId)}`,
       "POST",
-      { plateNumber },
+      { plateNumber, imageData },
     )
     return toBooking(item)
   },
@@ -301,19 +307,19 @@ export const reservationApi = {
     )
   },
 
-  walkInCheckIn(siteId: string, plateNumber: string) {
+  walkInCheckIn(siteId: string, plateNumber: string, imageData?: string, vehicleType?: string) {
     return parkingSessionRequest<WalkInParkingSession>(
       `/walk-in/check-in?siteId=${encodeURIComponent(siteId)}`,
       "POST",
-      { plateNumber },
+      { plateNumber, imageData, vehicleType },
     )
   },
 
-  walkInCheckOut(siteId: string, sessionId: string, plateNumber: string) {
+  walkInCheckOut(siteId: string, sessionId: string, plateNumber: string, imageData?: string) {
     return parkingSessionRequest<WalkInParkingSession>(
       `/${encodeURIComponent(sessionId)}/walk-in/check-out?siteId=${encodeURIComponent(siteId)}`,
       "POST",
-      { plateNumber },
+      { plateNumber, imageData },
     )
   },
 }

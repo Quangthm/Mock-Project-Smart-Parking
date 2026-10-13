@@ -45,6 +45,7 @@ services:
       - reservation-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/03-reservation-session-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/integration/03-reservation-structure-safety.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+      - ./scripts/database/microservices/03.2-reservation-gate-images.sql:/docker-entrypoint-initdb.d/03-gate-images.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_reservation -d smartpark_reservation"]
       interval: 5s

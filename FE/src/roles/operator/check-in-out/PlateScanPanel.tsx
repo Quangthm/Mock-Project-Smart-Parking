@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 const aiServer = (
-  import.meta.env.VITE_AI_API_BASE_URL ?? "http://localhost:5001"
+  import.meta.env.VITE_AI_API_BASE_URL ?? "http://localhost:5002"
 ).replace(/\/$/, "")
 const liveAiServer = (
   import.meta.env.VITE_AI_LIVE_API_BASE_URL ?? "http://localhost:5002"
@@ -37,12 +37,23 @@ interface RecognizedPlate {
   plate: string
   confidence?: number
   vehicleType?: string
+  imageData: string
 }
 
 export function PlateScanPanel({
+  siteId,
+  tenantId,
+  direction,
+  mode,
+  onImageCaptured,
   onPlateRecognized,
 }: {
-  onPlateRecognized: (plate: string, confidence?: number) => void | Promise<void>
+  siteId: string
+  tenantId: string
+  direction: "INBOUND" | "OUTBOUND"
+  mode: "check-in" | "check-out"
+  onImageCaptured: (imageData: string) => void
+  onPlateRecognized: (plate: string, confidence?: number, imageData?: string, vehicleType?: string, isUploadedImage?: boolean) => void | Promise<void>
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -55,6 +66,7 @@ export function PlateScanPanel({
   const [recognized, setRecognized] = useState<RecognitionResult | null>(null)
   const [livePlates, setLivePlates] = useState<RecognizedPlate[]>([])
   const [vehiclesInFrame, setVehiclesInFrame] = useState(0)
+  const [preview, setPreview] = useState("")
 
   useEffect(() => {
     onPlateRecognizedRef.current = onPlateRecognized
@@ -94,7 +106,12 @@ export function PlateScanPanel({
               const response = await fetch(`${liveAiServer}/api/v1/stream/recognize_live`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image: canvas.toDataURL("image/jpeg", 0.85) }),
+                body: JSON.stringify({
+                  image: canvas.toDataURL("image/jpeg", 0.85),
+                  site_id: siteId,
+                  tenant_id: tenantId,
+                  direction,
+                }),
                 signal: controller.signal,
               })
               const result = await response.json() as LiveRecognitionResult
@@ -112,6 +129,7 @@ export function PlateScanPanel({
                   plate,
                   confidence: vehicle.ocr_confidence,
                   vehicleType: vehicle.vehicle_type,
+                  imageData: canvas.toDataURL("image/jpeg", 0.85),
                 })
               }
 
@@ -138,7 +156,12 @@ export function PlateScanPanel({
 
               for (const plateResult of newPlates) {
                 callbackQueueRef.current = callbackQueueRef.current
-                  .then(() => onPlateRecognizedRef.current(plateResult.plate, plateResult.confidence))
+                  .then(() => onPlateRecognizedRef.current(
+                    plateResult.plate,
+                    plateResult.confidence,
+                    plateResult.imageData,
+                    plateResult.vehicleType,
+                  ))
                   .catch((cause: unknown) => {
                     if (!stopped)
                       setError(cause instanceof Error ? cause.message : "Could not process the recognized plate.")
@@ -165,7 +188,7 @@ export function PlateScanPanel({
       videoElement.pause()
       videoElement.srcObject = null
     }
-  }, [cameraReady])
+  }, [cameraReady, direction, siteId, tenantId])
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -199,12 +222,19 @@ export function PlateScanPanel({
   async function recognizeImage(image: string) {
     setBusy(true)
     setError("")
+    setPreview(image)
+    onImageCaptured(image)
 
     try {
       const response = await fetch(`${aiServer}/api/v1/stream/recognize_uploaded_image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image }),
+        body: JSON.stringify({
+          image,
+          site_id: siteId,
+          tenant_id: tenantId,
+          direction,
+        }),
       })
       const result = await response.json() as RecognitionResult
       if (!response.ok || !result.success || !result.plate) {
@@ -212,7 +242,7 @@ export function PlateScanPanel({
       }
 
       setRecognized(result)
-      await onPlateRecognizedRef.current(result.plate, result.confidence)
+      await onPlateRecognizedRef.current(result.plate, result.confidence, image, result.vehicle_type_name, true)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not reach the AI recognition service.")
     } finally {
@@ -248,7 +278,9 @@ export function PlateScanPanel({
         <div>
           <h3 className="text-sm font-bold text-[var(--fg)]">AI Plate Scanner</h3>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            The scanner is ready. Open the camera to continuously detect plates; new plates with at least 90% confidence are checked in automatically.
+            {mode === "check-in"
+              ? "Open the camera to continuously detect new plates. Check-in happens automatically at 90% confidence; lower confidence needs operator review."
+              : "Open the camera to continuously detect plates and find active sessions. Check-out always requires operator confirmation."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -283,11 +315,19 @@ export function PlateScanPanel({
           className="mt-4 max-h-72 w-full rounded-lg bg-black object-contain"
         />
       ) : (
-        <div className="mt-4 flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-center">
-          <UntitledIcon name="camera" size={24} />
-          <p className="mt-2 text-sm font-semibold text-[var(--fg)]">Camera is off</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">The check-in/out screen stays ready here. Press Open camera to start live scanning.</p>
-        </div>
+        preview ? (
+          <img
+            src={preview}
+            alt="Uploaded or captured vehicle image"
+            className="mt-4 max-h-72 w-full rounded-lg bg-black object-contain"
+          />
+        ) : (
+          <div className="mt-4 flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-center">
+            <UntitledIcon name="camera" size={24} />
+            <p className="mt-2 text-sm font-semibold text-[var(--fg)]">Camera is off</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">The check-in/out screen stays ready here. Press Open camera to start live scanning.</p>
+          </div>
+        )
       )}
 
       {cameraReady && (
@@ -330,9 +370,11 @@ export function PlateScanPanel({
             <span className="text-xs text-[var(--muted)]">{recognized.vehicle_type_name}</span>
           )}
           <span className="text-xs text-green-700">
-            {typeof recognized.confidence === "number" && recognized.confidence >= 0.9
-              ? "High-confidence plate sent for automatic check-in."
-              : "Review this plate and complete check-in manually."}
+            {mode === "check-out"
+              ? "Review the plate and confirm check-out."
+              : typeof recognized.confidence === "number" && recognized.confidence >= 0.9
+                ? "High-confidence plate sent for automatic check-in."
+                : "Review this plate and complete check-in manually."}
           </span>
         </div>
       )}

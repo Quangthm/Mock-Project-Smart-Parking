@@ -79,10 +79,10 @@ CREATE TABLE parking_sessions (
     ticket_reference VARCHAR(100),
     
     entry_time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    entry_image_url VARCHAR(500),
+    entry_image_url TEXT,
     
     exit_time TIMESTAMPTZ,
-    exit_image_url VARCHAR(500),
+    exit_image_url TEXT,
     
     session_status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (session_status IN ('ACTIVE', 'PENDING_PAYMENT', 'COMPLETED', 'OVERSTAYED', 'DISPUTED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

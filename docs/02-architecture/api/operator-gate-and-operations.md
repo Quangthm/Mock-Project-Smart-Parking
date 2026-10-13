@@ -12,19 +12,25 @@ site assignment. The frontend uses these base URLs:
 | --- | --- | --- |
 | `GET` | `/api/reservations?siteId={siteId}` | List reservations scoped to the operator's assigned site |
 | `GET` | `/api/reservations/lookup?siteId={siteId}&query={plateOrReservationId}` | Find a reservation by ID or normalized plate |
-| `POST` | `/api/reservations/{reservationId}/check-in?siteId={siteId}` | Check in a confirmed reservation; optional body `{ "plateNumber": "..." }` |
-| `POST` | `/api/reservations/{reservationId}/check-out?siteId={siteId}` | Check out an active parking session; optional body `{ "plateNumber": "..." }` |
+| `POST` | `/api/reservations/{reservationId}/check-in?siteId={siteId}` | Check in a confirmed reservation; body `{ "plateNumber": "...", "imageData": "data:image/jpeg;base64,..." }` |
+| `POST` | `/api/reservations/{reservationId}/check-out?siteId={siteId}` | Check out an active parking session; body `{ "plateNumber": "...", "imageData": "data:image/jpeg;base64,..." }` |
 | `GET` | `/api/parking-sessions/walk-in/lookup?siteId={siteId}&plate={plate}` | Find an active walk-in session by plate |
-| `POST` | `/api/parking-sessions/walk-in/check-in?siteId={siteId}` | Create a walk-in session and claim an available slot; body `{ "plateNumber": "..." }` |
-| `POST` | `/api/parking-sessions/{sessionId}/walk-in/check-out?siteId={siteId}` | Complete a walk-in session; body `{ "plateNumber": "..." }` |
+| `POST` | `/api/parking-sessions/walk-in/check-in?siteId={siteId}` | Create a walk-in session without requiring a slot; body `{ "plateNumber": "...", "vehicleType": "CAR|MOTORCYCLE", "imageData": "data:image/jpeg;base64,..." }` |
+| `POST` | `/api/parking-sessions/{sessionId}/walk-in/check-out?siteId={siteId}` | Complete a walk-in session; body `{ "plateNumber": "...", "imageData": "data:image/jpeg;base64,..." }` |
 
 The Reservation Service validates site assignment and plate match. Gate changes
 are persisted transactionally. AI results with confidence of at least `0.90`
 automatically check in a matching confirmed reservation or create a walk-in
 session when no reservation exists. Lower confidence results require the
-operator to activate the displayed check-in action. Check-out completes the
-parking session; payment calculation and collection remain the Payment
-Service's responsibility.
+operator to activate the displayed check-in action. Gate photos are persisted
+as data URLs in the reservation session's `entry_image_url` and
+`exit_image_url` fields (TEXT, up to 14 MB). A missing slot does not block
+session creation; an existing allocation is updated when available.
+Successful check-out retries return the already completed session.
+Check-out completes the parking session; payment calculation and collection
+remain the Payment Service's responsibility. Existing databases must apply
+`scripts/database/microservices/03.2-reservation-gate-images.sql` before
+storing the larger image payloads.
 
 ## Parking Service
 
@@ -36,11 +42,8 @@ Service's responsibility.
 
 Backup actions require the operator's `SLOT_OVERRIDE` permission.
 Layout reads use a read-only Reservation snapshot and do not acquire the durable structure-edit hold.
-The Reservation Service calls internal Parking Service gate-slot claim/release
-endpoints. The Reservation database requires
-`scripts/database/microservices/03.1-reservation-gate-audit.sql` before enabling
-gate check-in. Parking slot release uses the `current_slot_id` stored on the
-Reservation Service's parking session; Parking DB does not duplicate a session ID.
+The gate flow does not call Parking Service slot-claim APIs; it creates a
+session even when no slot is configured.
 
 ## Parking Service — operator operations
 

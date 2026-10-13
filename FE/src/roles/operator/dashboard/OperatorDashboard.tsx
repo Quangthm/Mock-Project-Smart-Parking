@@ -22,6 +22,7 @@ import type { Booking } from "../../../lib/types"
 export type OperatorTab =
   | "overview"
   | "checkin"
+  | "checkout"
   | "status"
   | "slots"
   | "tickets"
@@ -66,7 +67,7 @@ export function OperatorDashboard({
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail as OperatorTab
-      if (["overview", "checkin", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
+      if (["overview", "checkin", "checkout", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
         setTab(detail)
     }
     window.addEventListener("sp:dashboard-nav", onNavigate)
@@ -191,12 +192,22 @@ export function OperatorDashboard({
             items: [
               {
                 id: "checkin",
-                label: "Gate Check-In / Out",
+                label: "Gate Check-In",
                 icon: "check-circle",
                 active: tab === "checkin",
                 onClick: () => {
                   setTargetPlateQuery("")
                   setTab("checkin")
+                },
+              },
+              {
+                id: "checkout",
+                label: "Gate Check-Out",
+                icon: "log-out",
+                active: tab === "checkout",
+                onClick: () => {
+                  setTargetPlateQuery("")
+                  setTab("checkout")
                 },
               },
               {
@@ -239,7 +250,7 @@ export function OperatorDashboard({
         ]
 
   function handleOverviewNavigation(nextTab: string, payload?: string) {
-    if (nextTab === "checkin" && payload) {
+    if ((nextTab === "checkin" || nextTab === "checkout") && payload) {
       setTargetPlateQuery(payload)
       setTab("checkin")
       return
@@ -313,8 +324,10 @@ export function OperatorDashboard({
           )}
 
           {/* TAB 2: CHECK-IN / CHECK-OUT */}
-          {accessRole === "operation" && tab === "checkin" && (
+          {accessRole === "operation" && (tab === "checkin" || tab === "checkout") && (
             <CheckInOut
+              key={tab}
+              mode={tab === "checkin" ? "check-in" : "check-out"}
               lot={selectedLot}
               initialPlateQuery={targetPlateQuery}
               onDataChanged={() => setRefreshKey((value) => value + 1)}

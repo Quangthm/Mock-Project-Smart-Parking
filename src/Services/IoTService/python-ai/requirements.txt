@@ -10,3 +10,5 @@ torch
 torchvision
 flask
 flask-cors
+python-dotenv
+psycopg[binary]>=3.2.0

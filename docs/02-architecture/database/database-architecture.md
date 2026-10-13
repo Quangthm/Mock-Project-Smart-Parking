@@ -6,10 +6,10 @@ SmartPark uses a **Database-per-Service** microservices architecture. There is n
 The architecture consists of 6 distinct databases:
 1. **User Service DB** (`01-user-service-db.sql`): Manages authentication, identity, contextual accounts, roles, registered vehicles, and onboarding workflows (Driver OTP registrations, Owner applications, and Operator grants).
 2. **Parking Service DB** (`02-parking-service-db.sql`): Manages the physical parking infrastructure, spatial units, capacity, hardware mapping, pricing rules, access routing paths, and operator support/incident/audit/notification data (`02.2-parking-operator-operations.sql`).
-3. **Reservation & Session Service DB** (`03-reservation-session-service-db.sql`): The transactional core managing dynamic capacity allocations, reservations, and active parking sessions.
+3. **Reservation & Session Service DB** (`03-reservation-session-service-db.sql`): The transactional core managing dynamic capacity allocations, reservations, active parking sessions, and gate entry/exit image evidence.
 4. **Payment Service DB** (`04-payment-service-db.sql`): Handles payment orders, transactions, billing invoices, and refund lifecycles.
 5. **Notification Service DB** (`05-notification-service-db.sql`): Manages notification templates and delivery logs (Email/SMS/Push).
-6. **IoT Service DB** (`06-iot-service-db.sql`): Stores high-volume telemetry, LPR events, and device statuses.
+6. **IoT Service DB** (`06-iot-service-db.sql`): Stores high-volume telemetry, device statuses, and Python AI gate recognition events (`lpr_events`).
 
 ## 2. Multi-Tenancy & Security Boundary (RLS)
 The database is designed with **Row-Level Security (RLS)** in mind. 
