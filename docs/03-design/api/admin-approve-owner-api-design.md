@@ -16,6 +16,8 @@
 This document defines the normative REST API contract for **Admin Approving Owner Registration Applications** (`GET /api/owner-applications`, `GET /api/owner-applications/{id}`, and `PATCH /api/owner-applications/{id}/review`) for SmartPark Sprint 2. It bridges requirement specifications (SRS §3.1.1, §3.7.4, §2.3.1; FR-AUTH-05/06; UC-AUTH-02; US-A01; BR-AUTH-01/02/03; BR-PRIV-03) with the persistence layer (`owner_applications`, `users`, `accounts`, `tenants`, `workflow_deliveries`) defined in `scripts/database/05.1-Database-Scripts.sql` and `05.5-Owner-Registration-Approval.sql`.
 
 ### 1.2 Core Scope & Business Rules
+
+1. **Restricted Administrative Authority:**
    - Only an authenticated user with active `PLATFORM_ADMIN` / `admin` role and current `ACCOUNT_ADMIN` authority can view, inspect, approve, or reject Owner applications.
    - Non-administrators (Drivers, Operators, unapproved Owners) receive `403 Forbidden` (`FORBIDDEN`).
 
