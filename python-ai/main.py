@@ -74,6 +74,16 @@ def optimize_lp_image(crop_img):
     
     # Chuyển ngược lại dạng 3 kênh màu cho OCR đầu vào
     final_img = cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR)
+
+    # Bước E: Thêm viền đệm (padding) quanh ảnh — bộ phát hiện text của EasyOCR cần khoảng
+    # đệm xung quanh chữ để nhận diện vùng text; ảnh biển số bị crop sát mép (gần như chạm
+    # viền khung ảnh) rất dễ khiến EasyOCR "không thấy" chữ dù mắt người vẫn đọc được.
+    border = max(15, int(min(final_img.shape[0], final_img.shape[1]) * 0.15))
+    final_img = cv2.copyMakeBorder(
+        final_img, border, border, border, border,
+        cv2.BORDER_CONSTANT, value=(255, 255, 255)  # viền trắng, giống nền biển số thật
+    )
+
     return final_img
 
 VALID_PROVINCES = {
@@ -759,8 +769,8 @@ def recognize_multi():
                 if lp_res:
                     lx1, ly1, lx2, ly2, lscore, _ = lp_res[0]
                     # Nới biên nhẹ quanh box đã gộp để không cắt sát mép chữ
-                    pad_x = max(2, int((lx2 - lx1) * 0.03))
-                    pad_y = max(2, int((ly2 - ly1) * 0.06))
+                    pad_x = max(8, int((lx2 - lx1) * 0.05))
+                    pad_y = max(8, int((ly2 - ly1) * 0.08))
                     lx1 = max(0, lx1 - pad_x)
                     ly1 = max(0, ly1 - pad_y)
                     lx2 = min(vehicle_crop.shape[1], lx2 + pad_x)
@@ -777,17 +787,28 @@ def recognize_multi():
                 if lp_crop is not None and lp_crop.size > 0:
                     cv2.imwrite(f'./debug_output/vehicle_{len(results)}_plate_raw.jpg', lp_crop)
 
-            # ── Bước 3: OCR như endpoint cũ ──
+            # ── Bước 3: OCR — thử ảnh MÀU GỐC (chưa qua grayscale/CLAHE) trước tiên ──
+            # EasyOCR là model deep learning hiện đại, tự xử lý ảnh khá tốt; grayscale+CLAHE+blur
+            # đôi khi làm mất chi tiết hữu ích thay vì giúp ích, nhất là với ảnh vốn đã đủ rõ.
             plate_text, ocr_score = None, 0.0
+
+            raw_ocr, confs = read_license_plate_segments(lp_crop) if lp_crop is not None and lp_crop.size > 0 else ([], [])
+            post_res = post_process_vietnamese_plate(raw_ocr, confs)
+
             processed = optimize_lp_image(lp_crop)
             if debug and processed is not None and processed.size > 0:
                 cv2.imwrite(f'./debug_output/vehicle_{len(results)}_plate_processed.jpg', processed)
-            if processed is not None and processed.size > 0:
-                raw_ocr, confs = read_license_plate_segments(processed)
-                post_res = post_process_vietnamese_plate(raw_ocr, confs)
-                if post_res["status"] == "success":
-                    plate_text = post_res["formatted_plate"]
-                    ocr_score = post_res["avg_conf"]
+
+            # Nếu đọc trên ảnh màu gốc thất bại, thử tiếp trên ảnh đã xử lý (phương án dự phòng)
+            if post_res["status"] != "success" and processed is not None and processed.size > 0:
+                raw_ocr2, confs2 = read_license_plate_segments(processed)
+                post_res2 = post_process_vietnamese_plate(raw_ocr2, confs2)
+                if post_res2["status"] == "success":
+                    post_res = post_res2
+
+            if post_res["status"] == "success":
+                plate_text = post_res["formatted_plate"]
+                ocr_score = post_res["avg_conf"]
 
             results.append({
                 "vehicle_bbox": [x1, y1, x2, y2],
