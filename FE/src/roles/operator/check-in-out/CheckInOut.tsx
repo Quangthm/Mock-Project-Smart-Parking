@@ -355,9 +355,12 @@ export function CheckInOut({
         </div>
 
         <PlateScanPanel
-          onPlateRecognized={(plate, confidence) => {
+          onPlateRecognized={async (plate, confidence) => {
             setQuickInput(plate)
-            void handleQuickSearch(plate, typeof confidence === "number" && Number.isFinite(confidence) && confidence >= 0.9)
+            await handleQuickSearch(
+              plate,
+              typeof confidence === "number" && Number.isFinite(confidence) && confidence >= 0.9,
+            )
           }}
         />
 

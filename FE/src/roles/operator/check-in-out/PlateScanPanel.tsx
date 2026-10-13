@@ -4,6 +4,12 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 const aiServer = (
   import.meta.env.VITE_AI_API_BASE_URL ?? "http://localhost:5001"
 ).replace(/\/$/, "")
+const liveAiServer = (
+  import.meta.env.VITE_AI_LIVE_API_BASE_URL ?? "http://localhost:5002"
+).replace(/\/$/, "")
+
+const scanIntervalMs = 750
+const framesBeforePlateIsRearmed = 5
 
 interface RecognitionResult {
   success: boolean
@@ -13,33 +19,161 @@ interface RecognitionResult {
   message?: string
 }
 
+interface LiveVehicleResult {
+  plate?: string | null
+  ocr_confidence?: number
+  vehicle_type?: string
+  vehicle_bbox?: number[]
+}
+
+interface LiveRecognitionResult {
+  success: boolean
+  message?: string
+  vehicle_count?: number
+  vehicles?: LiveVehicleResult[]
+}
+
+interface RecognizedPlate {
+  plate: string
+  confidence?: number
+  vehicleType?: string
+}
+
 export function PlateScanPanel({
   onPlateRecognized,
 }: {
-  onPlateRecognized: (plate: string, confidence?: number) => void
+  onPlateRecognized: (plate: string, confidence?: number) => void | Promise<void>
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const onPlateRecognizedRef = useRef(onPlateRecognized)
+  const activePlatesRef = useRef(new Map<string, number>())
+  const callbackQueueRef = useRef(Promise.resolve())
   const [cameraReady, setCameraReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [recognized, setRecognized] = useState<RecognitionResult | null>(null)
-  const [preview, setPreview] = useState("")
+  const [livePlates, setLivePlates] = useState<RecognizedPlate[]>([])
+  const [vehiclesInFrame, setVehiclesInFrame] = useState(0)
+
+  useEffect(() => {
+    onPlateRecognizedRef.current = onPlateRecognized
+  }, [onPlateRecognized])
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
   }, [])
 
   useEffect(() => {
-    if (!cameraReady || !videoRef.current || !streamRef.current) return
-    videoRef.current.srcObject = streamRef.current
-    void videoRef.current.play()
+    if (!cameraReady) return
+
+    const video = videoRef.current
+    const stream = streamRef.current
+    if (!video || !stream) return
+
+    const videoElement = video
+    let stopped = false
+    const controller = new AbortController()
+    activePlatesRef.current.clear()
+    videoElement.srcObject = stream
+
+    async function scanContinuously() {
+      try {
+        await videoElement.play()
+        while (!stopped) {
+          if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+            const scale = Math.min(1, 1280 / videoElement.videoWidth)
+            const canvas = document.createElement("canvas")
+            canvas.width = Math.round(videoElement.videoWidth * scale)
+            canvas.height = Math.round(videoElement.videoHeight * scale)
+            const context = canvas.getContext("2d")
+            if (!context) throw new Error("Could not capture a frame from the device camera.")
+            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+
+            try {
+              const response = await fetch(`${liveAiServer}/api/v1/stream/recognize_live`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: canvas.toDataURL("image/jpeg", 0.85) }),
+                signal: controller.signal,
+              })
+              const result = await response.json() as LiveRecognitionResult
+              if (!response.ok || !result.success || !Array.isArray(result.vehicles)) {
+                throw new Error(result.message || `Live plate scan failed (${response.status}).`)
+              }
+
+              const currentFramePlates = new Map<string, RecognizedPlate>()
+              for (const vehicle of result.vehicles) {
+                const plate = vehicle.plate?.trim()
+                if (!plate) continue
+                const key = plate.replace(/[^a-z0-9]/gi, "").toUpperCase()
+                if (!key) continue
+                currentFramePlates.set(key, {
+                  plate,
+                  confidence: vehicle.ocr_confidence,
+                  vehicleType: vehicle.vehicle_type,
+                })
+              }
+
+              for (const [key, missedFrames] of activePlatesRef.current) {
+                if (currentFramePlates.has(key)) {
+                  activePlatesRef.current.set(key, 0)
+                } else if (missedFrames + 1 >= framesBeforePlateIsRearmed) {
+                  activePlatesRef.current.delete(key)
+                } else {
+                  activePlatesRef.current.set(key, missedFrames + 1)
+                }
+              }
+
+              const newPlates: RecognizedPlate[] = []
+              for (const [key, plateResult] of currentFramePlates) {
+                if (!activePlatesRef.current.has(key)) {
+                  activePlatesRef.current.set(key, 0)
+                  newPlates.push(plateResult)
+                }
+              }
+              setLivePlates([...currentFramePlates.values()])
+              setVehiclesInFrame(result.vehicle_count ?? result.vehicles.length)
+              setError("")
+
+              for (const plateResult of newPlates) {
+                callbackQueueRef.current = callbackQueueRef.current
+                  .then(() => onPlateRecognizedRef.current(plateResult.plate, plateResult.confidence))
+                  .catch((cause: unknown) => {
+                    if (!stopped)
+                      setError(cause instanceof Error ? cause.message : "Could not process the recognized plate.")
+                  })
+              }
+            } catch (cause) {
+              if (!stopped && !(cause instanceof DOMException && cause.name === "AbortError"))
+                setError(cause instanceof Error ? cause.message : "Could not reach the AI recognition service.")
+            }
+          }
+
+          await new Promise<void>((resolve) => window.setTimeout(resolve, scanIntervalMs))
+        }
+      } catch (cause) {
+        if (!stopped)
+          setError(cause instanceof Error ? cause.message : "Could not start continuous camera scanning.")
+      }
+    }
+
+    void scanContinuously()
+    return () => {
+      stopped = true
+      controller.abort()
+      videoElement.pause()
+      videoElement.srcObject = null
+    }
   }, [cameraReady])
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
     setCameraReady(false)
+    setLivePlates([])
+    setVehiclesInFrame(0)
+    activePlatesRef.current.clear()
   }
 
   async function startCamera() {
@@ -65,8 +199,6 @@ export function PlateScanPanel({
   async function recognizeImage(image: string) {
     setBusy(true)
     setError("")
-    setRecognized(null)
-    setPreview(image)
 
     try {
       const response = await fetch(`${aiServer}/api/v1/stream/recognize_uploaded_image`, {
@@ -80,31 +212,12 @@ export function PlateScanPanel({
       }
 
       setRecognized(result)
-      onPlateRecognized(result.plate, result.confidence)
+      await onPlateRecognizedRef.current(result.plate, result.confidence)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not reach the AI recognition service.")
     } finally {
       setBusy(false)
     }
-  }
-
-  function captureFrame() {
-    const video = videoRef.current
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
-      setError("The camera has not produced a frame yet.")
-      return
-    }
-
-    const canvas = document.createElement("canvas")
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    const context = canvas.getContext("2d")
-    if (!context) {
-      setError("Could not capture a frame from the camera.")
-      return
-    }
-    context.drawImage(video, 0, 0)
-    void recognizeImage(canvas.toDataURL("image/jpeg", 0.9))
   }
 
   function uploadImage(event: React.ChangeEvent<HTMLInputElement>) {
@@ -135,7 +248,7 @@ export function PlateScanPanel({
         <div>
           <h3 className="text-sm font-bold text-[var(--fg)]">AI Plate Scanner</h3>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Plates recognized with at least 90% confidence are checked in automatically. Lower confidence requires operator review.
+            The scanner is ready. Open the camera to continuously detect plates; new plates with at least 90% confidence are checked in automatically.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -144,29 +257,24 @@ export function PlateScanPanel({
               <UntitledIcon name="camera" size={14} /> Open camera
             </button>
           ) : (
-            <>
-              <button type="button" className="btn-primary text-xs" onClick={captureFrame} disabled={busy}>
-                <UntitledIcon name="scan" size={14} /> Capture & recognize
-              </button>
-              <button type="button" className="btn-outline text-xs" onClick={stopCamera} disabled={busy}>
-                Close camera
-              </button>
-            </>
+            <button type="button" className="btn-outline text-xs" onClick={stopCamera}>
+              Close camera
+            </button>
           )}
-          <label className={`btn-outline cursor-pointer text-xs ${busy ? "pointer-events-none opacity-50" : ""}`}>
+          <label className={`btn-outline cursor-pointer text-xs ${busy || cameraReady ? "pointer-events-none opacity-50" : ""}`}>
             <UntitledIcon name="upload" size={14} /> Upload image
             <input
               type="file"
               accept="image/*"
               className="sr-only"
               onChange={uploadImage}
-              disabled={busy}
+              disabled={busy || cameraReady}
             />
           </label>
         </div>
       </div>
 
-      {cameraReady && (
+      {cameraReady ? (
         <video
           ref={videoRef}
           autoPlay
@@ -174,11 +282,32 @@ export function PlateScanPanel({
           playsInline
           className="mt-4 max-h-72 w-full rounded-lg bg-black object-contain"
         />
-      )}
-      {!cameraReady && preview && (
-        <img src={preview} alt="Captured vehicle for plate recognition" className="mt-4 max-h-72 w-full rounded-lg bg-black object-contain" />
+      ) : (
+        <div className="mt-4 flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-center">
+          <UntitledIcon name="camera" size={24} />
+          <p className="mt-2 text-sm font-semibold text-[var(--fg)]">Camera is off</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">The check-in/out screen stays ready here. Press Open camera to start live scanning.</p>
+        </div>
       )}
 
+      {cameraReady && (
+        <p role="status" className="mt-3 text-xs font-medium text-[var(--muted)]">
+          Continuously scanning · {vehiclesInFrame} vehicle{vehiclesInFrame === 1 ? "" : "s"} in frame
+        </p>
+      )}
+      {livePlates.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {livePlates.map((item) => (
+            <span key={`${item.plate}-${item.vehicleType ?? ""}`} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">
+              <span className="font-mono font-bold text-[var(--fg)]">{item.plate}</span>
+              {typeof item.confidence === "number" && (
+                <span className="ml-2 text-[var(--muted)]">{Math.round(item.confidence * 100)}%</span>
+              )}
+              {item.vehicleType && <span className="ml-2 text-[var(--muted)]">{item.vehicleType}</span>}
+            </span>
+          ))}
+        </div>
+      )}
       {busy && (
         <p role="status" className="mt-3 text-xs font-medium text-[var(--muted)]">
           Analyzing image with the AI service…
