@@ -6,6 +6,7 @@ import { OwnerOverview } from './OwnerOverview';
 import { OperatorManagement } from '../operators/OperatorManagement';
 import { PolicySettings } from '../policies/PolicySettings';
 import { SiteManagement } from '../parking-lots/SiteManagement';
+import { LotManagement } from '../parking-lots/LotManagement';
 import { RevenueDashboard } from '../revenue/RevenueDashboard';
 import { ParkingStructure } from '../structure/ParkingStructure';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
@@ -71,7 +72,7 @@ export function OwnerDashboard() {
         <div className="animate-in">
           {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} sites={sites} operators={operators} />}
           {tab === 'sites' && <SiteManagement onSiteCreated={() => setSiteRefresh(value => value + 1)} />}
-          {tab === 'lots' && <SiteManagement onSiteCreated={() => setSiteRefresh(value => value + 1)} />}
+          {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
           {tab === 'structure' && <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}

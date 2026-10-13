@@ -2,27 +2,50 @@ import { store } from "../../../lib/store"
 
 export const driverData = {
   addAuditLog: store.addAuditLog,
+
   createBooking: store.createBooking,
+
   createTicket: store.createTicket,
+
   createNotification: store.createNotification,
+
   createVehicle: store.createVehicle,
+
   updateVehicle: store.updateVehicle,
+
   getLots: store.getLots,
+
   deleteVehicle: store.deleteVehicle,
+
   generateId: store.generateId,
+
   getBookingsByDriver: store.getBookingsByDriver,
+
   getTickets: store.getTickets,
+
   getPassesByDriver: store.getPassesByDriver,
+
   getPackageOrdersByDriver: store.getPackageOrdersByDriver,
+
   createPackageOrder: store.createPackageOrder,
+
   createPass: store.createPass,
+
   updatePackageOrder: store.updatePackageOrder,
+
   getUsers: store.getUsers,
+
   getWalletTransactions: store.getWalletTransactions,
+
   findUserById: store.findUserById,
+
   getVehiclesByDriver: store.getVehiclesByDriver,
+
   saveBooking: store.saveBooking,
+
   saveLot: store.saveLot,
+
   saveUser: store.saveUser,
+
   addWalletTransaction: store.addWalletTransaction,
 }
