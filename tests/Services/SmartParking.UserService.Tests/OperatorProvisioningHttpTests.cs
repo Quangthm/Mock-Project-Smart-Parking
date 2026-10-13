@@ -40,6 +40,7 @@ public sealed class OperatorProvisioningHttpTests
         builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
         builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture(); var operators = new Operators();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);

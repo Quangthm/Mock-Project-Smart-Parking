@@ -4,7 +4,7 @@
 > SMTP đã gửi thành công, Services:Key đã được cấu hình tại local. Owner onboarding đã sửa dùng email OTP; không cần SMS config cho luồng Owner.
 > đây chưa phải kết quả retest môi trường QA bên ngoài.
 
-Ngày 08/10/2026. Contract đối chiếu trực tiếp với controller/DTO trên `develop` tại thời điểm bàn giao. Khi phát hành, ghi code commit, schema commit và URL môi trường vào phiếu kết quả test.
+Contract API dưới đây được bàn giao ngày 08/10/2026 trên `develop`. Hướng dẫn môi trường được cập nhật ngày 12/10/2026 cho `develop-fix-application`; đây không phải xác nhận retest toàn bộ contract trên nhánh mới. Khi phát hành, ghi code commit, schema commit và URL môi trường vào phiếu kết quả test.
 
 Phạm vi: Driver Register, Owner Register, Login/Logout, Vehicle Registration, Parking Structure (SPARK-188), Owner Create Operator (SPARK-192), Admin Approve Owner (SPARK-196), AI chatbot **project structure**. Reservation/Payment/IoT và các task của thành viên khác chỉ là dependency; không đưa toàn bộ acceptance của chúng vào nghiệm thu phần này.
 
@@ -31,9 +31,13 @@ Collection khởi tạo email tại `example.test`, token/OTP để trống. Tha
 
 Protected API: `Authorization: Bearer <accessToken>`. JSON body: `Content-Type: application/json`. Không cần `X-Service-Key` cho các public API này. UUID lấy từ response, không dùng UUID giả. Không commit/export giá trị token, OTP, secret MFA, password-link hoặc mật khẩu QA thật.
 
-Chuẩn bị database: baseline + integration overlays ở `arch/database-schema`, sau đó các upgrade User `05.8`, Parking `05.9`, Reservation `05.10`. Deployment operator dùng [migration script](../../scripts/apply-workflow-migrations.ps1) với đúng `-Service` và `-SchemaRoot`. Không chạy lại baseline CREATE TABLE trên DB đã có dữ liệu. Lượt sửa này **chưa migrate DB dự án**.
+Chuẩn bị local theo [LOCAL-SETUP.md](../../LOCAL-SETUP.md): checkout `develop-fix-application`, mở Docker Desktop, cài .NET SDK 10 rồi chạy `./setup.ps1` tại repo root. Script tạo/giữ `.env`, dựng database riêng bằng `compose.schema-integration.yml`, áp dụng workflow migration và restore solution. Không dùng `docker compose up` mặc định: `docker-compose.yml` là cấu hình monolith cũ.
 
-Local: sau khi restore/build và chuẩn bị DB/config, đặt `SMARTPARK_DEV_PASSWORD`, `SMARTPARK_SERVICE_KEY` (ít nhất 32 ký tự) trong từng terminal, chạy `./scripts/run-schema-service.ps1 -Service User`, `Parking`, `Reservation`. SMTP/SMS QA, HTTPS `Onboarding:PublicOrigin`, key ring bền vững phải được người quản trị cấu hình. Password và service key không đưa vào tài liệu công khai.
+Migration hiện hành: User `05.8`; Parking `05.9` và **`05.11`** (structure synchronization); Reservation `05.10` và **`05.12`** (release receipts). Database mới được bootstrap từ baseline/overlay trong repo. Volume có sẵn được áp dụng workflow migration qua [migration script](../../scripts/apply-workflow-migrations.ps1); không áp lại baseline CREATE TABLE trên DB đã có dữ liệu. Setup không xóa/reset volume. Khi nâng cấp môi trường đang dùng, dừng các phiên bản service cũ và áp dụng migration Parking/Reservation trước khi khởi động phiên bản mới.
+
+Sau setup, mở ba terminal riêng tại repo và chạy `./scripts/run-schema-service.ps1 -Service User`, `Reservation`, `Parking`. Runner đọc `.env`; không cần đặt lại password/service key trong từng terminal. API lần lượt ở `5035`, `5055`, `5045`. Chạy frontend bằng `npm install` và `npm run dev` tại `FE` nếu test giao diện. SMTP QA cần được cấu hình trong `.env` để nhận email OTP; HTTPS `Onboarding:PublicOrigin` và key ring bền vững của môi trường QA do người quản trị cấu hình. Không đưa `.env`, password hoặc service key vào tài liệu bàn giao.
+
+Phần refactor Parking Structure, journal/recovery và các test PostgreSQL xem [hướng dẫn SPARK-188](../02-architecture/service-boundaries/parking-structure-spark-188.md). Test PostgreSQL chỉ chạy khi có `SMARTPARK_STRUCTURE_TEST_CONNECTION`; nếu thiếu thì báo skipped. Các bước setup này không phải bằng chứng Docker/DB đã chạy thành công trên máy tester: đính kèm kết quả startup, migration và smoke test khi bàn giao kết quả.
 
 ## 2. Cách đọc response
 
@@ -178,7 +182,8 @@ Mỗi dòng dùng fixture độc lập để không khóa actor của happy path
 | AUTH-06 | Pending/unverified/disabled/locked; revoke sau cấp JWT | Protected operation deny với current state |
 | AUTH-07 | Refresh replay; logout rồi dùng JWT/refresh; independent session | Revocation/rotation và current-session scope đúng |
 | AUTH-08 | MFA missing/wrong/replayed; password route sau enable | MFA_REQUIRED/deny; không bypass, không leak secret |
-| OWN-01 | Chỉ verify một contact, approve chưa eligible | Deny approval/operational access |
+| OWN-01 | Email chưa verify hoặc application không còn pending/eligible | Deny approval; pending Owner chưa có operational access |
+| OWN-01B | Email đã verify, phone chưa verify, application pending và các điều kiện khác hợp lệ | Admin được approve; không yêu cầu OTP phone. Trước approval vẫn deny operational access |
 | OWN-02 | Public domain; thiếu company/contact; injected approval | Domain được nhận; invalid/injected input bị reject |
 | OWN-03 | Hai Admin approve concurrent; retry; racing lock/disable | Một logical decision, audit; không unlock độc lập |
 | OPR-01 | Foreign site, undelegable grant, duplicate email/concurrent creation | Deny/controlled conflict; không partial grant hoặc duplicate |

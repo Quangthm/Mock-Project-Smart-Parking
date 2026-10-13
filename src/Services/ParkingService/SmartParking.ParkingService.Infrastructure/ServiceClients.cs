@@ -9,13 +9,13 @@ namespace SmartParking.ParkingService.Infrastructure;
 public sealed record IdentityScope(Guid UserId, Guid[] TenantIds);
 public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor context) : IOwnerAuthorizer
 {
-    public async Task<IdentityScope> ScopeAsync(CancellationToken ct,string permission="PARKING_MANAGE")
+    public async Task<IdentityScope> ScopeAsync(CancellationToken ct, string permission = "PARKING_MANAGE")
     {
         var bearer = context.HttpContext?.Request.Headers.Authorization.ToString();
         if (string.IsNullOrWhiteSpace(bearer)) throw new StructureException("UNAUTHENTICATED", "Sign in as an Owner.");
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "api/auth/owner-scope?permission="+Uri.EscapeDataString(permission));
+            using var request = new HttpRequestMessage(HttpMethod.Get, "api/auth/owner-scope?permission=" + Uri.EscapeDataString(permission));
             request.Headers.TryAddWithoutValidation("Authorization", bearer);
             using var response = await client.SendAsync(request, ct);
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new StructureException("UNAUTHENTICATED", "Session is invalid or revoked.");
@@ -34,45 +34,50 @@ public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor 
     }
 }
 
+
 public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCommitments
 {
-    public async Task<IStructureLease> AcquireAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    public async Task<CommitmentSnapshot> AcquireAsync(
+        Guid tenantId, Guid siteId, Guid token, CancellationToken cancellationToken)
     {
-        var token = Guid.NewGuid();
         try
         {
-            using var response = await client.PutAsJsonAsync($"internal/structure/{siteId}/{token}", new { tenantId }, ct);
-            if (response.StatusCode == System.Net.HttpStatusCode.Conflict) throw new StructureException("STRUCTURE_BUSY", "Another edit is pending. Retry or reconcile its hold.");
+            using var response = await client.PutAsJsonAsync(
+                $"internal/structure/{siteId}/{token}", new { tenantId }, cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                throw new StructureException("STRUCTURE_BUSY", "Another edit has a pending hold.");
             if (!response.IsSuccessStatusCode) throw Unavailable();
-            var snapshot = await response.Content.ReadFromJsonAsync<CommitmentSnapshot>(ct) ?? throw Unavailable();
-            if (snapshot.ProtectedSlots is null) throw Unavailable();
-            return new Lease(client, tenantId, siteId, token, snapshot);
+
+            var snapshot = await response.Content.ReadFromJsonAsync<CommitmentSnapshot>(cancellationToken);
+            return snapshot?.ProtectedSlots is not null ? snapshot : throw Unavailable();
         }
-        catch (Exception e) when (e is HttpRequestException or JsonException || e is OperationCanceledException && !ct.IsCancellationRequested) { throw Unavailable(); }
+        catch (Exception error) when (IsTransportFailure(error, cancellationToken))
+        {
+            throw Unavailable();
+        }
     }
-    private static StructureException Unavailable() => new("COMMITMENTS_UNAVAILABLE", "Cannot safely edit structure while Reservation service is unavailable.");
-    private sealed class Lease(HttpClient client, Guid tenantId, Guid siteId, Guid token, CommitmentSnapshot snapshot) : IStructureLease
+
+    public async Task ReleaseAsync(
+        Guid tenantId, Guid siteId, Guid token, StructureOutcome? outcome,
+        CancellationToken cancellationToken)
     {
-        private bool committing;
-        public CommitmentSnapshot Snapshot => snapshot;
-        public void BeginCommit() => committing = true;
-        public async Task CompleteAsync(StructureOutcome outcome, CancellationToken ct)
+        try
         {
-            // No automatic release after an ambiguous commit or an unacknowledged projection update.
-            committing = true;
-            try
-            {
-                using var response = await client.PostAsJsonAsync($"internal/structure/{siteId}/{token}/release", new { tenantId, outcome }, ct);
-                if (!response.IsSuccessStatusCode) throw Unavailable();
-            }
-            catch (Exception e) when (e is HttpRequestException || e is OperationCanceledException && !ct.IsCancellationRequested) { throw Unavailable(); }
+            using var response = await client.PostAsJsonAsync(
+                $"internal/structure/{siteId}/{token}/release",
+                new { tenantId, outcome }, cancellationToken);
+            if (!response.IsSuccessStatusCode) throw Unavailable();
         }
-        public async ValueTask DisposeAsync()
+        catch (Exception error) when (IsTransportFailure(error, cancellationToken))
         {
-            if (committing) return;
-            // Only an edit that never began committing may release without publishing a result.
-            try { using var response = await client.PostAsJsonAsync($"internal/structure/{siteId}/{token}/release", new { tenantId, outcome = (object?)null }, CancellationToken.None); }
-            catch (Exception e) when (e is HttpRequestException or OperationCanceledException) { /* Leave the durable hold closed. */ }
+            throw Unavailable();
         }
     }
+
+    private static bool IsTransportFailure(Exception error, CancellationToken cancellationToken)
+        => error is HttpRequestException or JsonException ||
+           error is OperationCanceledException && !cancellationToken.IsCancellationRequested;
+
+    private static StructureException Unavailable()
+        => new("COMMITMENTS_UNAVAILABLE", "Reservation synchronization is pending; retry after recovery.");
 }
