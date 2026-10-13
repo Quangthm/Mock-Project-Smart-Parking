@@ -38,9 +38,9 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
   }, [selectedSiteId, sites, operators]);
 
   const stats = [
-    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} ₫`, accent: 'text-green-600' },
-    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('vi-VN'), accent: 'text-blue-600' },
-    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('vi-VN'), accent: 'text-violet-600' },
+    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('en-US')} ₫`, accent: 'text-green-600' },
+    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US'), accent: 'text-blue-600' },
+    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US'), accent: 'text-violet-600' },
   ];
 
   return (
@@ -63,7 +63,7 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
             <YAxis tickFormatter={value => value === 0 ? '0' : `${(Number(value) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
-            <Tooltip formatter={value => `${Number(value).toLocaleString('vi-VN')} ₫`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+            <Tooltip formatter={value => `${Number(value).toLocaleString('en-US')} ₫`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
             <Area type="monotone" dataKey="revenue" stroke="#2563eb" fill="#2563eb18" strokeWidth={2} name="Revenue" />
             <Area type="monotone" dataKey="netRevenue" stroke="#22c55e" fill="#22c55e18" strokeWidth={2} name="Net Revenue (85%)" />
           </AreaChart>

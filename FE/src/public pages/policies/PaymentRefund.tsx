@@ -1,4 +1,4 @@
-import { UntitledIcon } from '../../components/icon/UntitledIcon';
+import { UntitledIcon } from "../../components/icon/UntitledIcon"
 
 export function PaymentRefund() {
   return (
@@ -8,9 +8,13 @@ export function PaymentRefund() {
       <h1
         style={{
           fontFamily: "Inter, sans-serif",
+
           fontWeight: 800,
+
           fontSize: "1.75rem",
+
           color: "var(--fg)",
+
           marginBottom: "0.5rem",
         }}
       >
@@ -19,7 +23,9 @@ export function PaymentRefund() {
       <p
         style={{
           color: "var(--muted)",
+
           fontSize: "0.875rem",
+
           marginBottom: "2rem",
         }}
       >
@@ -30,22 +36,31 @@ export function PaymentRefund() {
       <div
         style={{
           background: "var(--card)",
+
           border: "2px solid var(--primary)",
+
           borderRadius: "var(--radius)",
+
           padding: "1.25rem",
+
           marginBottom: "2rem",
         }}
       >
         <h3
           style={{
             fontFamily: "Inter, sans-serif",
+
             fontWeight: 700,
+
             fontSize: "1rem",
+
             color: "var(--primary)",
+
             marginBottom: "0.875rem",
           }}
         >
-          <UntitledIcon name="clipboard" size={18} /> Tóm tắt Chính sách Hoàn tiền
+          <UntitledIcon name="clipboard" size={18} /> Tóm tắt Chính sách Hoàn
+          tiền
         </h3>
         <div
           style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
@@ -53,22 +68,33 @@ export function PaymentRefund() {
           {[
             {
               label: "Hủy trước 30 phút",
+
               value: "Hoàn 100% tiền cọc",
+
               color: "#22c55e",
             },
+
             {
               label: "Hủy trước 15–30 phút",
+
               value: "Hoàn 50% tiền cọc",
+
               color: "#f59e0b",
             },
+
             {
               label: "Hủy dưới 15 phút hoặc không đến",
+
               value: "Không hoàn tiền",
+
               color: "#ef4444",
             },
+
             {
               label: "Lỗi kỹ thuật từ SmartParking",
+
               value: "Hoàn 100% toàn bộ",
+
               color: "#22c55e",
             },
           ].map((row) => (
@@ -76,11 +102,17 @@ export function PaymentRefund() {
               key={row.label}
               style={{
                 display: "flex",
+
                 justifyContent: "space-between",
+
                 alignItems: "center",
+
                 padding: "0.5rem 0.75rem",
+
                 background: `${row.color}10`,
+
                 borderRadius: "6px",
+
                 border: `1px solid ${row.color}30`,
               }}
             >
@@ -90,7 +122,9 @@ export function PaymentRefund() {
               <span
                 style={{
                   fontWeight: 700,
+
                   color: row.color,
+
                   fontSize: "0.875rem",
                 }}
               >
@@ -208,9 +242,11 @@ export function PaymentRefund() {
 
 function PolicySection({
   title,
+
   children,
 }: {
   title: string
+
   children: React.ReactNode
 }) {
   return (
@@ -218,11 +254,17 @@ function PolicySection({
       <h2
         style={{
           fontFamily: "Inter, sans-serif",
+
           fontWeight: 700,
+
           fontSize: "1.05rem",
+
           color: "var(--fg)",
+
           marginBottom: "0.75rem",
+
           borderLeft: "3px solid var(--primary)",
+
           paddingLeft: "0.75rem",
         }}
       >
@@ -231,8 +273,11 @@ function PolicySection({
       <div
         style={{
           fontFamily: "Inter, sans-serif",
+
           fontSize: "0.9rem",
+
           color: "var(--muted)",
+
           lineHeight: 1.8,
         }}
       >

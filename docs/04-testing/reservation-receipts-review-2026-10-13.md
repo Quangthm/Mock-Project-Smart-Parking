@@ -2,7 +2,7 @@
 
 ## Kết luận
 
-Commit `f794d60` chỉ cập nhật `LOCAL-SETUP.md`. Cách khắc phục thiếu bảng trong report khớp với code và migration hiện tại; chưa thấy lỗi chặn riêng commit tài liệu này. Sau khi chuyển authentication test sang PostgreSQL thật và khởi động Docker, 33/33 test Parking/Reservation pass, không skip; upgrade trên volume cũ mô phỏng cũng pass. Có thể mở PR để leader review, nhưng vẫn cần resolve conflict và review phạm vi toàn nhánh trước merge. Các kết quả fail/skip bên dưới là lịch sử trước lần kiểm chứng thực tế cuối cùng.
+Commit `f794d60` chỉ cập nhật `LOCAL-SETUP.md`. Cách khắc phục thiếu bảng trong report khớp với code và migration hiện tại; chưa thấy lỗi chặn riêng commit tài liệu này. Authentication test đã chuyển sang PostgreSQL thật; upgrade trên volume cũ mô phỏng pass. Khi chuẩn bị PR, đã tích hợp `origin/develop`, xử lý hai conflict, chạy toàn bộ backend: 110/110 pass, không skip; FE build pass. Có thể mở PR cho PM review. Các kết quả fail/skip và conflict chưa xử lý bên dưới là lịch sử trước lần kiểm chứng cuối cùng; xem mục chuẩn bị PR ở cuối file.
 
 Phạm vi đối chiếu: report trong Downloads, commit `f794d60`, compose, migration runner, schema receipts, code acquire/release và test liên quan. Đây không phải review đầy đủ tất cả thay đổi của nhánh.
 
@@ -74,3 +74,21 @@ Sau thay đổi: build thành công, 24 passed, 0 failed, 9 skipped. Test Postgr
 - Chưa thực hiện smoke test HTTP qua frontend/API đang chạy; kết quả này kiểm chứng integration với PostgreSQL thật, không phải toàn bộ hành trình UI.
 
 Bằng chứng local: `.cache/review-results/parking-real-postgres.trx` và `.cache/review-results/workflow-upgrade-real-postgres.log`. Runner kiểm chứng: `.cache/run-real-postgres-review.ps1`. Thay đổi test và report chưa commit/push.
+
+## Chuẩn bị PR develop-fix-application → develop
+
+Đã fetch GitHub thành công; base `origin/develop` tại `d39cc7d310c3a29fc7beaa93e2491eab0dd603a1`. Commit `98de7c8` đưa authentication test PostgreSQL thật và report này vào nhánh. Tích hợp develop vào nhánh nguồn để giải quyết conflict trước khi mở PR.
+
+### Conflict đã xử lý
+
+- `.gitignore`: giữ `setup.ps1` trong Git vì script dùng cấu hình bên ngoài và không hardcode credential; giữ ignore `.env`, SonarScanner, coverage, TestResults và TRX từ develop, bỏ block test output trùng lặp.
+- `FE/src/lib/store.ts`: giữ phiên bản develop đã format và chức năng `LotPolicyPdf`; áp email `admin@smartpark.local` ở cả kiểm tra dữ liệu seed và admin seed. Diff cuối so với develop chỉ có hai thay đổi email, không ghi đè chức năng PDF.
+
+### Kiểm chứng sau xử lý conflict
+
+- `dotnet test SmartParking.slnx --no-restore` với cả `SMARTPARK_AUTH_TEST_CONNECTION`, `SMARTPARK_STRUCTURE_TEST_CONNECTION` và schema root trên PostgreSQL 16.15 thật: **77 UserService + 33 Parking/Reservation = 110 passed, 0 failed, 0 skipped**.
+- `npm ci --no-audit --no-fund` và `npm run build` trong FE: pass; Vite cảnh báo chunk sau minify lớn hơn 500 kB. Chưa kiểm chứng hành trình UI trên browser.
+- File TRX post-merge `.cache/review-results/post-merge/post-merge-real-postgres.trx` ghi kết quả UserService (77 pass); logger dùng cùng tên nên đã ghi đè kết quả Parking. Kết quả Parking post-merge là 33 pass trong output test; TRX riêng lượt PostgreSQL trước merge vẫn ở `.cache/review-results/parking-real-postgres.trx`.
+- Upgrade test 05.11/05.12 đã pass trong lượt trước; merge chỉ thêm thay đổi phía develop, hai conflict được xử lý như trên. Không khẳng định đã gọi lại HTTP request của máy thành viên hoặc smoke test UI.
+
+PR bao gồm toàn bộ sửa structure recovery, driver/vehicle workflow, setup/migration, CI và tài liệu trên nhánh; cần PM review phạm vi này trước merge. Các báo cáo review trước đây trong repo ghi bằng chứng ở thời điểm riêng; không đồng nhất chúng với kết quả chạy cuối ở trên.
