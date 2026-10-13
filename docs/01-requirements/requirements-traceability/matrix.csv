@@ -1,0 +1,136 @@
+FR,status,module,rules,stories,use_cases
+FR-AUTH-01,CONFIRMED — implementation pending / not assessed,01-identity-access,BR-AUTH-02,US-D08,UC-AUTH-01
+FR-AUTH-02,CONFIRMED — implementation pending / not assessed,01-identity-access,"BR-AUTH-01, BR-AUTH-04, BR-AUTH-07","US-A01, US-D08",UC-AUTH-01
+FR-AUTH-03,CONFIRMED — implementation pending / not assessed,01-identity-access,BR-AUTH-03,US-D08,UC-AUTH-01
+FR-AUTH-04,CONFIRMED — implementation pending / not assessed,01-identity-access,"BR-AUTH-01, BR-AUTH-02",US-OW03,UC-AUTH-03
+FR-AUTH-05,CONFIRMED — implementation pending / not assessed,01-identity-access,"BR-AUTH-01, BR-AUTH-06",US-A01,"UC-AUTH-02, UC-AUTH-06"
+FR-AUTH-06,CONFIRMED — implementation pending / not assessed,01-identity-access,"BR-AUTH-01, BR-AUTH-03, BR-PRIV-01",US-A01,UC-AUTH-02
+FR-VEH-01,CONFIRMED — implementation pending / not assessed,01-identity-access,BR-VEH-01,US-D09,UC-VEH-01
+FR-VEH-02,CONFIRMED — implementation pending / not assessed,01-identity-access,BR-VEH-02,"US-A04, US-D09",UC-VEH-02
+FR-VEH-03,CONFIRMED — implementation pending / not assessed,01-identity-access,BR-VEH-01,"US-D09, US-O01",UC-VEH-01
+FR-VEH-04,CONFIRMED — implementation pending / not assessed,01-identity-access,"BR-CAP-01, BR-VEH-03","US-D01, US-O01",UC-VEH-01
+FR-BAS-08,CONFIRMED — implementation pending / not assessed,01-identity-access,"BR-AUTH-02, BR-AUTH-04, BR-AUTH-07","US-A01, US-D08",UC-AUTH-01
+FR-LOT-01,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-CAP-01, BR-EMERG-01",US-OW01,UC-LOT-01
+FR-LOT-02,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-CAP-01, BR-EMERG-01",US-OW01,UC-LOT-01
+FR-LOT-03,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-CAP-01, BR-EMERG-01",US-OW01,UC-LOT-01
+FR-LOT-04,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-CAP-01, BR-EMERG-01","US-O05, US-OW01",UC-LOT-01
+FR-LOT-05,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-AUTH-01, BR-FAIL-03","US-O03, US-O05",UC-LOT-02
+FR-LOT-06,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-AUTH-01, BR-GATE-01",US-A02,UC-POL-02
+FR-LOT-07,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-AUTH-01, BR-FAIL-03","US-O03, US-OW05",UC-LOT-02
+FR-POL-01,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-04, BR-PAY-01, BR-POL-01, BR-POL-02, BR-POL-03",US-OW02,UC-POL-01
+FR-POL-02,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-04, BR-PAY-01, BR-POL-01, BR-POL-02, BR-POL-03",US-A02,UC-POL-01
+FR-POL-03,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-POL-01,"US-A02, US-OW02",UC-POL-01
+FR-POL-04,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-POL-02,"US-A02, US-OW02",UC-POL-01
+FR-POL-05,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-POL-03,"US-A02, US-OW02",UC-POL-01
+FR-POL-06,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-POL-04,"US-D01, US-OW02",UC-RES-01
+FR-POL-07,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-POL-01,"US-A02, US-OW02",UC-POL-01
+FR-POL-08,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-POL-02, BR-POL-03","US-A02, US-OW02",UC-POL-01
+FR-POL-09,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,04-reservations-allocation,"BR-AUTH-01, BR-GATE-01",US-A07,UC-POL-02
+FR-CAP-02,CONFIRMED — implementation pending / not assessed,02-facility-capacity,BR-CAP-01,"US-D03, US-O03",UC-SEARCH-01
+FR-CAP-03,CONFIRMED — implementation pending / not assessed,02-facility-capacity,"BR-CAP-02, BR-RES-06","US-D01, US-O01",UC-RES-01
+FR-CAP-04,CONFIRMED — implementation pending / not assessed,02-facility-capacity,BR-CAP-03,"US-D01, US-O01",UC-RES-01
+FR-CAP-05,CONFIRMED — implementation pending / not assessed,02-facility-capacity,BR-CAP-05,"US-O01, US-O02",UC-GATE-01
+FR-CAP-06,CONFIRMED — implementation pending / not assessed,02-facility-capacity,BR-CAP-02,"US-O01, US-O02, US-O03",UC-RES-02
+FR-CAP-07,CONFIRMED — implementation pending / not assessed,02-facility-capacity,BR-CAP-04,"US-O05, US-OW02",UC-POL-01
+FR-CAP-01,CONFIRMED — implementation pending / not assessed,03-discovery-visualization,"BR-AI-01, BR-CAP-01",US-D03,UC-SEARCH-01
+FR-MAP-01,CONFIRMED — implementation pending / not assessed,03-discovery-visualization,"BR-AI-01, BR-CAP-01",US-D16,UC-SEARCH-01
+FR-RES-01,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-02, BR-CAP-03, BR-POL-04, BR-RES-01, BR-RES-02, BR-RES-06",US-D01,UC-RES-01
+FR-RES-02,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-RES-02, BR-RES-06",US-D01,UC-RES-01
+FR-RES-03,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-01,US-D01,UC-RES-01
+FR-RES-04,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-02, BR-CAP-03, BR-POL-04, BR-REF-01, BR-RES-01, BR-RES-02, BR-RES-06, M-07",US-D01,"UC-MON-04, UC-RES-01"
+FR-RES-05,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-02, BR-CAP-03, BR-POL-04, BR-RES-01, BR-RES-02, BR-RES-06",US-D01,UC-RES-01
+FR-RES-06,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-03,US-D01,UC-RES-03
+FR-RES-07,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-04,"US-D01, US-O01",UC-GATE-01
+FR-RES-08,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-05,US-D10,UC-RES-03
+FR-RES-09,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-05,"US-D10, US-O05",UC-RES-03
+FR-RES-10,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-RES-03, BR-RES-05, BR-RES-07",US-D05,UC-RES-03
+FR-RES-11,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-03,"US-D01, US-O01",UC-GATE-01
+FR-RES-12,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-03, BR-RES-07","US-D01, US-D10, US-O01",UC-RES-03
+FR-RES-13,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-01,"US-D01, US-O01",UC-RES-02
+FR-BAS-01,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-01,US-D01,UC-RES-01
+FR-BAS-02,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-RES-01, BR-RES-08","US-D01, US-O05",UC-RES-02
+FR-BAS-03,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,BR-RES-08,US-D17,UC-RES-02
+FR-BAS-04,CONFIRMED — implementation pending / not assessed,04-reservations-allocation,"BR-CAP-04, BR-RES-08","US-D01, US-O05, US-OW02",UC-RES-01
+FR-PAY-01,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-01,US-OW02,UC-POL-01
+FR-PAY-02,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-01,"US-D02, US-O02",UC-GATE-02
+FR-PAY-03,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-03,"US-D02, US-O02",UC-PAY-01
+FR-PAY-04,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-04,"US-D02, US-O02",UC-PAY-01
+FR-PAY-05,CONFIRMED — implementation pending / not assessed,06-pricing-payments,"BR-FAIL-03, BR-PAY-04","US-D02, US-O02",UC-PAY-01
+FR-PAY-06,CONFIRMED — implementation pending / not assessed,06-pricing-payments,"BR-REF-01, BR-RES-05","US-D10, US-O05, US-OW04, US-OW07",UC-INC-02
+FR-PAY-07,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-03,US-D06,UC-PAY-02
+FR-PAY-08,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-02,"US-D11, US-OW02",UC-NOT-01
+FR-PAY-09,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-06,"US-D02, US-OW02",UC-GATE-02
+FR-PAY-10,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-01,"US-D02, US-OW02",UC-POL-01
+FR-PAY-11,CONFIRMED — implementation pending / not assessed,06-pricing-payments,"BR-PAY-05, BR-PAY-06","US-D02, US-O02, US-OW02",UC-GATE-02
+FR-BAS-05,CONFIRMED — implementation pending / not assessed,06-pricing-payments,"BR-CAP-04, BR-PAY-01, BR-POL-01, BR-POL-02, BR-POL-03","US-D02, US-OW02",UC-POL-01
+FR-BAS-16,CONFIRMED — implementation pending / not assessed,06-pricing-payments,BR-PAY-03,"US-D02, US-O02",UC-PAY-01
+FR-RPT-01,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,"BR-FAIL-03, BR-PAY-02",US-D11,UC-NOT-01
+FR-BAS-06,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,"BR-FAIL-03, BR-PAY-02",US-D11,UC-NOT-01
+FR-GATE-01,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-GATE-01,"US-O01, US-O08",UC-GATE-01
+FR-GATE-02,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-CAP-05, BR-GATE-01, BR-GATE-02, BR-RES-04, M-04",US-O01,UC-GATE-01
+FR-GATE-03,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-GATE-02,US-O01,UC-GATE-01
+FR-GATE-04,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-AUTH-01, BR-PRIV-01",US-O03,UC-RPT-01
+FR-GATE-05,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-CAP-05, BR-GATE-02, BR-PAY-05","US-O02, US-O05",UC-GATE-02
+FR-GATE-06,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-GATE-04,"US-O02, US-O05",UC-GATE-02
+FR-GATE-07,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-GATE-03,"US-O02, US-O05",UC-GATE-02
+FR-GATE-08,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-GATE-02, BR-GATE-03, BR-GATE-04, BR-PAY-05, BR-PAY-06, M-04",US-D04,UC-GATE-02
+FR-GATE-09,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-CAP-05, BR-GATE-02","US-O01, US-O02",UC-GATE-01
+FR-INC-01,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-EMERG-01, BR-EMERG-04, BR-VIOL-02, BR-VIOL-03",US-O05,UC-INC-01
+FR-INC-02,FUTURE — outside MVP,05-sessions-operations,BR-VIOL-01,US-O08,UC-FUT-01
+FR-INC-03,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-VIOL-02,US-O05,UC-INC-01
+FR-INC-04,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-VIOL-03,US-O05,UC-INC-01
+FR-INC-05,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-REF-01, BR-VIOL-04","US-D07, US-OW07",UC-INC-02
+FR-INC-06,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-EMERG-01,US-O05,UC-INC-01
+FR-INC-07,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-VIOL-04,US-D07,UC-INC-02
+FR-OPS-01,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-EMERG-02,US-O04,UC-OPS-01
+FR-OPS-02,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-EMERG-03,US-O04,UC-OPS-01
+FR-OPS-03,CONFIRMED — implementation pending / not assessed,05-sessions-operations,BR-EMERG-04,US-O05,UC-INC-01
+FR-OPS-04,FUTURE — outside MVP,05-sessions-operations,BR-FAIL-01,US-O06,UC-OPS-02
+FR-OPS-05,FUTURE — outside MVP,05-sessions-operations,BR-FAIL-02,US-O06,UC-OPS-02
+FR-OPS-06,CONFIRMED — implementation pending / not assessed,05-sessions-operations,"BR-EMERG-03, BR-FAIL-03",US-O05,UC-OPS-01
+FR-RPT-02,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,"BR-AUTH-01, BR-PRIV-01",US-OW04,UC-RPT-01
+FR-RPT-03,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,BR-PRIV-03,US-A03,UC-RPT-02
+FR-RPT-04,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,BR-PRIV-03,US-A03,UC-RPT-02
+FR-RPT-05,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,"BR-PRIV-01, BR-PRIV-02",US-A05,UC-RPT-02
+FR-BAS-07,CONFIRMED — implementation pending / not assessed,08-notifications-reporting,"BR-AUTH-01, BR-PRIV-01",US-OW04,UC-RPT-01
+FR-MAP-02,CONFIRMED — implementation pending / not assessed,03-discovery-visualization,BR-EMERG-01,"US-D16, US-O03",UC-MAP-01
+FR-MAP-03,CONFIRMED — implementation pending / not assessed,03-discovery-visualization,BR-EMERG-01,US-D16,UC-MAP-01
+FR-MAP-04,CONFIRMED — implementation pending / not assessed,03-discovery-visualization,BR-EMERG-01,"US-D16, US-O03",UC-MAP-01
+FR-SIM-01,FUTURE — outside MVP,10-ai-assistance,BR-FAIL-03,US-A06,UC-SIM-01
+FR-BAS-09,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-GATE-01, BR-PRIV-02",US-O08,UC-LPR-01
+FR-AI-01,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-AI-01, BR-AI-02, BR-AI-04, BR-AI-05",US-D12,UC-AI-01
+FR-AI-02,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-01,US-D12,UC-AI-01
+FR-AI-03,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-01,US-D12,UC-AI-01
+FR-AI-04,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-01,US-D12,UC-AI-01
+FR-AI-05,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-AI-02, BR-AUTH-03",US-D12,UC-AI-02
+FR-AI-06,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-03,US-D12,UC-AI-02
+FR-AI-07,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-AI-03, BR-POL-04",US-D12,UC-AI-02
+FR-AI-08,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-04,US-D12,UC-AI-02
+FR-AI-09,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-05,US-D12,UC-AI-01
+FR-AI-10,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-AI-02, BR-AI-04",US-D12,UC-AI-01
+FR-AI-11,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,BR-AI-01,US-D12,UC-AI-01
+FR-BAS-10,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-AI-02, BR-PRIV-01","US-D12, US-O09",UC-AI-03
+FR-BAS-11,CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0,10-ai-assistance,"BR-AI-02, BR-AI-03, BR-AI-04, BR-POL-04",US-D12,UC-AI-02
+FR-BAS-12,FUTURE — outside MVP,10-ai-assistance,BR-AI-01,US-D18,UC-FUT-02
+FR-BAS-13,FUTURE — outside MVP,10-ai-assistance,BR-VIOL-01,US-O08,UC-FUT-01
+FR-BAS-14,FUTURE — outside MVP,10-ai-assistance,BR-AI-04,US-OW08,UC-FUT-03
+FR-BAS-15,FUTURE — outside MVP,10-ai-assistance,BR-AI-04,US-O10,UC-FUT-03
+FR-MON-01,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-01, M-06, M-09",US-OW06,UC-MON-01
+FR-MON-02,CONFIRMED — implementation pending / not assessed,07-monthly-passes,M-01,US-D13,UC-MON-02
+FR-MON-03,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-01, M-02, M-07, M-09",US-D13,UC-MON-02
+FR-MON-04,CONFIRMED — implementation pending / not assessed,07-monthly-passes,M-01,"US-D13, US-OW06",UC-MON-02
+FR-MON-05,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-02, M-03",US-D13,UC-MON-02
+FR-MON-06,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-04, M-07","US-O07, US-OW06",UC-MON-02
+FR-MON-07,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-04, M-08",US-O07,UC-MON-04
+FR-MON-08,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-04, M-08","US-D14, US-O07",UC-MON-04
+FR-MON-09,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-01, M-02, M-08",US-D14,UC-MON-03
+FR-MON-10,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-02, M-03",US-D14,UC-MON-03
+FR-MON-11,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-05, M-06, M-07, M-09",US-D15,UC-MON-05
+FR-MON-12,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-05, M-06, M-09",US-OW06,UC-MON-01
+FR-MON-13,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-03, M-05",US-OW06,UC-MON-01
+FR-MON-14,CONFIRMED — implementation pending / not assessed,07-monthly-passes,"M-04, M-05, M-07, M-08","US-D14, US-O07","UC-MON-03, UC-MON-05"
+FR-AUTH-07,CONFIRMED MVP — implementation and acceptance pending,01-identity-access,"BR-AUTH-04, BR-AUTH-07",US-SEC01,UC-AUTH-04
+FR-AUTH-08,CONFIRMED MVP — implementation and acceptance pending,01-identity-access,"BR-AUTH-04, BR-AUTH-07",US-SEC01,"UC-AUTH-01, UC-AUTH-04"
+FR-AUTH-09,CONFIRMED MVP — implementation and acceptance pending,01-identity-access,"BR-AUTH-05, BR-AUTH-07",US-SEC02,UC-AUTH-05
+FR-AUTH-10,CONFIRMED MVP — implementation and acceptance pending,01-identity-access,"BR-AUTH-06, BR-AUTH-07","US-SEC02, US-SEC03",UC-AUTH-06
+FR-AUTH-11,CONFIRMED MVP — implementation and acceptance pending,01-identity-access,"BR-AUTH-06, BR-AUTH-07",US-SEC03,"UC-AUTH-02, UC-AUTH-06"
