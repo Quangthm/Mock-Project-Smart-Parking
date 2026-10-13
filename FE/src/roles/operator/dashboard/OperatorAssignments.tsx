@@ -148,7 +148,7 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 text-xs space-y-2">
             <div className="flex items-center gap-2 text-[var(--fg)] font-semibold">
               <UntitledIcon name="building" size={16} />
-              <span>{currentLot ? `Current site: ${currentLot.name}` : "No active site assignment"}</span>
+              <span>Current Facility Assignment: {currentLot?.name || "No site assigned"}</span>
             </div>
             <p className="text-[var(--muted)]">
               No site permissions were returned by the assignment service.

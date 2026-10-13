@@ -78,6 +78,7 @@ export function ParkingStructure({
   // Available lots list
   const availableLots = useMemo(() => {
     if (sites && sites.length > 0) return sites
+    return []
     return [
       {
         id: "lot-002",
@@ -99,7 +100,7 @@ export function ParkingStructure({
 
   const [activeLotId, setActiveLotId] = useState<string>(() => {
     if (selectedSiteId && selectedSiteId !== "all") return selectedSiteId
-    return availableLots[0]?.id || "lot-002"
+    return availableLots[0]?.id || ""
   })
 
   useEffect(() => {
@@ -141,6 +142,10 @@ export function ParkingStructure({
   const [editingFloor, setEditingFloor] = useState<ParkingFloorItem | null>(null)
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
   const [editingZone, setEditingZone] = useState<ParkingZoneItem | null>(null)
+  const [isSlotModalOpen, setIsSlotModalOpen] = useState(false)
+  const [slotCode, setSlotCode] = useState("")
+  const [slotVehicleType, setSlotVehicleType] = useState<"car" | "motorcycle">("car")
+  const [slotError, setSlotError] = useState("")
   const [inspectingSpace, setInspectingSpace] = useState<ParkingSpaceItem | null>(null)
 
   useEffect(() => {
@@ -280,13 +285,10 @@ export function ParkingStructure({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[var(--border)] pb-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-[var(--fg)] flex items-center gap-2">
-            <span>Parking Structure & Protection System</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] font-semibold">
-              SRS 3.2.2 / 8.2
-            </span>
+            <span>Parking Structure</span>
           </h1>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Manage the parking layout, space statuses, reservation protection, and conflict reallocation.
+            Manage floors, zones, and parking slots.
           </p>
         </div>
 
@@ -432,6 +434,7 @@ export function ParkingStructure({
         </div>
       </div>
 
+      {false && (<>
       {/* Owner Protected Buffer Time (x) Configuration Card */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -483,6 +486,8 @@ export function ParkingStructure({
           </div>
         </div>
       </div>
+
+      </>)}
 
       {/* Floors, Zones & Visual Slots Grid */}
       <div className="space-y-4">
@@ -544,6 +549,17 @@ export function ParkingStructure({
               }}
             >
               + Add Zone
+            </button>
+            <button
+              type="button"
+              className="btn-primary text-xs px-2.5 py-1"
+              onClick={() => {
+                setSlotCode("")
+                setSlotError("")
+                setIsSlotModalOpen(true)
+              }}
+            >
+              <UntitledIcon name="plus" size={12} /> Add Slot
             </button>
           </div>
         </div>
@@ -714,6 +730,51 @@ export function ParkingStructure({
           setIsZoneModalOpen(false)
         }}
       />
+
+      {isSlotModalOpen && currentFloor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form
+            className="w-full max-w-sm space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const zoneId = selectedZoneFilter === "all" ? currentFloor.zones[0]?.id : selectedZoneFilter
+              if (!zoneId || !slotCode.trim()) {
+                setSlotError("Select a zone and enter a slot code.")
+                return
+              }
+              if (!structureStore.addSpace(activeLotId, currentFloor.id, zoneId, slotCode, slotVehicleType)) {
+                setSlotError("This slot code already exists in the selected zone.")
+                return
+              }
+              reloadStructure()
+              setIsSlotModalOpen(false)
+            }}
+          >
+            <div>
+              <h3 className="text-base font-semibold text-[var(--fg)]">Add slot</h3>
+              <p className="mt-1 text-xs text-[var(--muted)]">Add a slot to the current floor.</p>
+            </div>
+            <label className="label">Zone
+              <select className="input" value={selectedZoneFilter === "all" ? currentFloor.zones[0]?.id || "" : selectedZoneFilter} onChange={(event) => setSelectedZoneFilter(event.target.value)}>
+                {currentFloor.zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+              </select>
+            </label>
+            <label className="label">Slot code
+              <input className="input" value={slotCode} onChange={(event) => setSlotCode(event.target.value)} placeholder="A01" autoFocus />
+            </label>
+            <label className="label">Vehicle type
+              <select className="input" value={slotVehicleType} onChange={(event) => setSlotVehicleType(event.target.value as "car" | "motorcycle")}>
+                <option value="car">Car</option><option value="motorcycle">Motorcycle</option>
+              </select>
+            </label>
+            {slotError && <p className="m-0 text-xs text-red-600">{slotError}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-outline text-xs" onClick={() => setIsSlotModalOpen(false)}>Cancel</button>
+              <button type="submit" className="btn-primary text-xs">Add slot</button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   )
 }

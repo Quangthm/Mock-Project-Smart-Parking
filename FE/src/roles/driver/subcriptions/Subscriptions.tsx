@@ -26,29 +26,15 @@ function getLotEnterprise(lot: ParkingLot, users: User[]): string {
 
   const name = lot.name.toLowerCase()
 
-  if (name.includes("vinhomes") || name.includes("vincom"))
-    return "Vingroup Real Estate Corp"
-
-  if (name.includes("bitexco")) return "Bitexco Group"
-
-  if (name.includes("nguyen hue") || name.includes("outdoor"))
-    return "Saigon Urban Infrastructure"
-
-  return "Urban SmartParking Network"
+  return "Parking operator"
 }
 
 function getLotDistance(lot: ParkingLot): number {
-  if (lot.id === "lot-002") return 0.4
-
-  if (lot.id === "lot-003") return 0.8
-
-  if (lot.id === "lot-001") return 11.5
-
-  return 1.8
+  return lot.lat != null && lot.lng != null ? 0 : Number.POSITIVE_INFINITY
 }
 
 function isHotLot(lot: ParkingLot): boolean {
-  return lot.id === "lot-001" || lot.id === "lot-002" || lot.totalSlots >= 70
+  return lot.totalSlots > 0
 }
 
 function isNearLot(lot: ParkingLot): boolean {
@@ -133,21 +119,12 @@ export function Subscriptions() {
       })
     }
 
-    // Default view: No query entered
-
-    if (filterTag === "recommended") {
-      return lots.filter((lot) => isHotLot(lot) || isNearLot(lot))
-    }
-
-    if (filterTag === "hot") {
-      return lots.filter((lot) => isHotLot(lot))
-    }
-
-    if (filterTag === "near") {
-      return lots.filter((lot) => isNearLot(lot))
-    }
-
-    return lots
+    return lots.filter((lot) => {
+      if (filterTag === "hot") return isHotLot(lot)
+      if (filterTag === "near") return isNearLot(lot)
+      if (filterTag === "recommended") return isHotLot(lot) || isNearLot(lot)
+      return true
+    })
   }, [lots, searchQuery, filterTag, users])
 
   function handleOpenLotDetail(lot: ParkingLot) {
@@ -457,7 +434,7 @@ export function Subscriptions() {
                   className="input"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by enterprise (e.g. Vingroup, Bitexco) or parking lot name..."
+                  placeholder="Search by enterprise or parking lot name..."
                   style={{
                     paddingLeft: "2.4rem",
                     paddingRight: searchQuery ? "2.4rem" : "0.85rem",
@@ -1035,7 +1012,7 @@ export function Subscriptions() {
               </h3>
               <p style={{ margin: "0 0 1rem", fontSize: "0.85rem" }}>
                 Try searching with a broader enterprise name (e.g. "Vingroup",
-                "Bitexco") or clear the search field to see hot hubs.
+                a different keyword or clear the search field to see available hubs.
               </p>
               <button
                 type="button"

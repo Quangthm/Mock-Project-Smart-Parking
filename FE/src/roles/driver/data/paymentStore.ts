@@ -8,6 +8,10 @@ const PAYMENTS_KEY = "sp_driver_payment_transactions"
 function buildInitialTransactions(
   driverId: string,
 ): PaymentTransactionRecord[] {
+  // Payment history is populated by real payment events. Do not seed accounts
+  // with demo transactions when the API/local store has no records.
+  return []
+
   const now = Date.now()
 
   return [

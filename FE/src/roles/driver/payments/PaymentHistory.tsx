@@ -18,7 +18,7 @@ import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo
 export function PaymentHistory() {
   const { user } = useApp()
 
-  const driverId = user?.id || "usr-driver-001"
+  const driverId = user?.id ?? ""
 
   const [transactions, setTransactions] = useState<PaymentTransactionRecord[]>(
     [],
@@ -41,6 +41,8 @@ export function PaymentHistory() {
   const [dateFrom, setDateFrom] = useState("")
 
   const [dateTo, setDateTo] = useState("")
+
+  const [showFilters, setShowFilters] = useState(false)
 
   // Selected for Modal
 
@@ -365,14 +367,73 @@ export function PaymentHistory() {
         </div>
       )}
 
-      {/* SECTION A: COMPACT SUMMARY STATISTICS */}
+      {/* Compact summary */}
+      <div className="card" style={{ padding: "1rem 1.15rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+          <div>
+            <div style={{ color: "var(--muted)", fontSize: "0.78rem", fontWeight: 600 }}>Total paid</div>
+            <div style={{ color: "var(--fg)", fontFamily: "Outfit", fontSize: "1.45rem", fontWeight: 800 }}>
+              {stats.totalPaidAmount.toLocaleString("vi-VN")} ₫
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.8rem" }}>
+            <span><strong style={{ color: "var(--fg)" }}>{stats.totalCount}</strong> transactions</span>
+            <span><strong style={{ color: "#16a34a" }}>{stats.paidCount}</strong> paid</span>
+            {stats.pendingCount > 0 && <span><strong style={{ color: "#d97706" }}>{stats.pendingCount}</strong> pending</span>}
+            {stats.failedCount > 0 && <span><strong style={{ color: "#dc2626" }}>{stats.failedCount}</strong> failed</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Search and optional filters */}
       <div
+        className="card"
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          padding: "0.85rem 1rem",
+          display: "flex",
+          flexDirection: "column",
           gap: "0.75rem",
         }}
       >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--muted)" }}>
+              <UntitledIcon name="search" size={15} />
+            </span>
+            <input
+              className="input"
+              style={{ paddingLeft: "2.25rem", fontSize: "0.85rem" }}
+              placeholder="Search transactions, bookings, or parking lots"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button type="button" className="btn-outline" style={{ whiteSpace: "nowrap", fontSize: "0.8rem", padding: "0.55rem 0.75rem" }} onClick={() => setShowFilters((visible) => !visible)}>
+            <UntitledIcon name="settings" size={14} /> Filters{hasFilters ? " · On" : ""}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "end", gap: "0.65rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
+            <label className="label" style={{ margin: 0, fontSize: "0.78rem" }}>Status
+              <select className="input" style={{ fontSize: "0.82rem" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+                <option value="all">All statuses</option><option value="paid">Paid</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="refunded">Refunded</option>
+              </select>
+            </label>
+            <label className="label" style={{ margin: 0, fontSize: "0.78rem" }}>Method
+              <select className="input" style={{ fontSize: "0.82rem" }} value={methodFilter} onChange={(e) => setMethodFilter(e.target.value as any)}>
+                <option value="all">All methods</option><option value="qr">VietQR</option><option value="momo">MoMo</option><option value="vnpay">VNPay</option><option value="visa">Card</option><option value="applepay">Apple Pay</option><option value="zalopay">ZaloPay</option>
+              </select>
+            </label>
+            <label className="label" style={{ margin: 0, fontSize: "0.78rem" }}>From<input type="date" className="input" style={{ fontSize: "0.82rem" }} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
+            <label className="label" style={{ margin: 0, fontSize: "0.78rem" }}>To<input type="date" className="input" style={{ fontSize: "0.82rem" }} value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
+            {hasFilters && <button type="button" className="btn-outline" style={{ fontSize: "0.78rem", padding: "0.45rem 0.65rem" }} onClick={() => { setSearchQuery(""); setStatusFilter("all"); setMethodFilter("all"); setDateFrom(""); setDateTo("") }}>Clear</button>}
+          </div>
+        )}
+      </div>
+
+      {/* Legacy summary/filter layout removed in favor of the compact controls above. */}
+      {false && <div>
         {/* Total Transactions */}
         <div className="card" style={{ padding: "0.875rem 1rem" }}>
           <div
@@ -519,8 +580,6 @@ export function PaymentHistory() {
             {stats.totalPaidAmount.toLocaleString("vi-VN")} ₫
           </div>
         </div>
-      </div>
-
       {/* SECTION C & D: SEARCH & FILTER CONTROLS */}
       <div
         className="card"
@@ -733,6 +792,8 @@ export function PaymentHistory() {
         </div>
       </div>
 
+      </div>}
+
       {/* SECTION B: PAYMENT TRANSACTION LIST */}
       <div className="card" style={{ padding: "0", overflow: "hidden" }}>
         {loading ? (
@@ -758,7 +819,7 @@ export function PaymentHistory() {
         ) : filteredTransactions.length > 0 ? (
           <>
             {/* Desktop Table View (Hidden on Small screens) */}
-            <div className="hidden md:block" style={{ overflowX: "auto" }}>
+            <div className="block" style={{ overflowX: "auto" }}>
               <table
                 style={{
                   width: "100%",
@@ -779,10 +840,7 @@ export function PaymentHistory() {
                     }}
                   >
                     <th style={{ padding: "0.85rem 1rem", fontWeight: 600 }}>
-                      Transaction ID
-                    </th>
-                    <th style={{ padding: "0.85rem 1rem", fontWeight: 600 }}>
-                      Booking ID
+                      Booking
                     </th>
                     <th style={{ padding: "0.85rem 1rem", fontWeight: 600 }}>
                       Parking Lot
@@ -792,9 +850,6 @@ export function PaymentHistory() {
                     </th>
                     <th style={{ padding: "0.85rem 1rem", fontWeight: 600 }}>
                       Amount
-                    </th>
-                    <th style={{ padding: "0.85rem 1rem", fontWeight: 600 }}>
-                      Method
                     </th>
                     <th style={{ padding: "0.85rem 1rem", fontWeight: 600 }}>
                       Status
@@ -814,8 +869,6 @@ export function PaymentHistory() {
                   {filteredTransactions.map((txn) => {
                     const badge = getStatusBadge(txn.paymentStatus)
 
-                    const methodInfo = getMethodBadge(txn.paymentMethod)
-
                     return (
                       <tr
                         key={txn.id}
@@ -825,15 +878,6 @@ export function PaymentHistory() {
                         }}
                         className="hover:bg-[var(--card)]"
                       >
-                        <td
-                          style={{
-                            padding: "0.85rem 1rem",
-                            fontFamily: "monospace",
-                            fontWeight: 700,
-                          }}
-                        >
-                          {txn.id}
-                        </td>
                         <td
                           style={{
                             padding: "0.85rem 1rem",
@@ -891,13 +935,6 @@ export function PaymentHistory() {
                           }}
                         >
                           {txn.amount.toLocaleString("vi-VN")} ₫
-                        </td>
-                        <td style={{ padding: "0.85rem 1rem" }}>
-                          <PaymentMethodLogo
-                            method={txn.paymentMethod}
-                            size="sm"
-                            showName
-                          />
                         </td>
                         <td style={{ padding: "0.85rem 1rem" }}>
                           <span
@@ -975,6 +1012,7 @@ export function PaymentHistory() {
               </table>
             </div>
 
+            {false && (<>
             {/* Mobile Card Stack View */}
             <div
               className="block md:hidden"
@@ -982,8 +1020,6 @@ export function PaymentHistory() {
             >
               {filteredTransactions.map((txn) => {
                 const badge = getStatusBadge(txn.paymentStatus)
-
-                const methodInfo = getMethodBadge(txn.paymentMethod)
 
                 return (
                   <div
@@ -1013,19 +1049,10 @@ export function PaymentHistory() {
                       }}
                     >
                       <div>
-                        <span
-                          style={{
-                            fontFamily: "monospace",
-                            fontWeight: 700,
-                            fontSize: "0.88rem",
-                          }}
-                        >
-                          {txn.id}
-                        </span>
                         <div
-                          style={{ fontSize: "0.75rem", color: "var(--muted)" }}
+                          style={{ fontSize: "0.85rem", color: "var(--fg)", fontWeight: 700 }}
                         >
-                          Booking: {txn.bookingId}
+                          Booking {txn.bookingId}
                         </div>
                       </div>
                       <span
@@ -1084,11 +1111,6 @@ export function PaymentHistory() {
                           color: "var(--muted)",
                         }}
                       >
-                        <PaymentMethodLogo
-                          method={txn.paymentMethod}
-                          size="xs"
-                          showName
-                        />
                         <span>
                           ·{" "}
                           {new Date(txn.createdAt).toLocaleDateString("vi-VN")}
@@ -1108,7 +1130,7 @@ export function PaymentHistory() {
                   </div>
                 )
               })}
-            </div>
+            </div></>)}
           </>
         ) : (
           /* Empty State */
