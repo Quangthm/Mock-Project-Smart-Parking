@@ -6,9 +6,13 @@ export function PrivacyPolicy() {
       <h1
         style={{
           fontFamily: "Inter, sans-serif",
+
           fontWeight: 800,
+
           fontSize: "1.75rem",
+
           color: "var(--fg)",
+
           marginBottom: "0.5rem",
         }}
       >
@@ -17,7 +21,9 @@ export function PrivacyPolicy() {
       <p
         style={{
           color: "var(--muted)",
+
           fontSize: "0.875rem",
+
           marginBottom: "2rem",
         }}
       >
@@ -163,9 +169,11 @@ export function PrivacyPolicy() {
 
 function PolicySection({
   title,
+
   children,
 }: {
   title: string
+
   children: React.ReactNode
 }) {
   return (
@@ -173,11 +181,17 @@ function PolicySection({
       <h2
         style={{
           fontFamily: "Inter, sans-serif",
+
           fontWeight: 700,
+
           fontSize: "1.05rem",
+
           color: "var(--fg)",
+
           marginBottom: "0.75rem",
+
           borderLeft: "3px solid var(--primary)",
+
           paddingLeft: "0.75rem",
         }}
       >
@@ -186,8 +200,11 @@ function PolicySection({
       <div
         style={{
           fontFamily: "Inter, sans-serif",
+
           fontSize: "0.9rem",
+
           color: "var(--muted)",
+
           lineHeight: 1.8,
         }}
       >

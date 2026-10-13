@@ -1,4 +1,4 @@
-import { UntitledIcon } from '../components/icon/UntitledIcon';
+import { UntitledIcon } from "../components/icon/UntitledIcon"
 
 export function About() {
   return (
@@ -9,8 +9,11 @@ export function About() {
       <div
         style={{
           borderRadius: "14px",
+
           overflow: "hidden",
+
           marginBottom: "3rem",
+
           position: "relative",
         }}
       >
@@ -19,19 +22,27 @@ export function About() {
           alt="City parking"
           style={{
             width: "100%",
+
             height: "240px",
+
             objectFit: "cover",
+
             opacity: 0.75,
           }}
         />
         <div
           style={{
             position: "absolute",
+
             inset: 0,
+
             background:
               "linear-gradient(to right, rgba(11,22,40,0.85) 0%, rgba(11,22,40,0.3) 100%)",
+
             display: "flex",
+
             alignItems: "center",
+
             paddingLeft: "2.5rem",
           }}
         >
@@ -39,9 +50,13 @@ export function About() {
             <h1
               style={{
                 fontFamily: "Outfit",
+
                 fontWeight: 800,
+
                 fontSize: "2rem",
+
                 color: "#fff",
+
                 margin: "0 0 0.5rem",
               }}
             >
@@ -50,7 +65,9 @@ export function About() {
             <p
               style={{
                 color: "rgba(255,255,255,0.78)",
+
                 fontSize: "0.95rem",
+
                 margin: 0,
               }}
             >
@@ -64,11 +81,17 @@ export function About() {
         <h2
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1.3rem",
+
             color: "var(--fg)",
+
             marginBottom: "1rem",
+
             borderLeft: "3px solid var(--primary)",
+
             paddingLeft: "0.75rem",
           }}
         >
@@ -77,7 +100,9 @@ export function About() {
         <p
           style={{
             color: "var(--muted)",
+
             fontSize: "0.95rem",
+
             lineHeight: 1.8,
           }}
         >
@@ -93,11 +118,17 @@ export function About() {
         <h2
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1.3rem",
+
             color: "var(--fg)",
+
             marginBottom: "1rem",
+
             borderLeft: "3px solid var(--primary)",
+
             paddingLeft: "0.75rem",
           }}
         >
@@ -106,7 +137,9 @@ export function About() {
         <p
           style={{
             color: "var(--muted)",
+
             fontSize: "0.95rem",
+
             lineHeight: 1.8,
           }}
         >
@@ -120,8 +153,11 @@ export function About() {
         <p
           style={{
             color: "var(--muted)",
+
             fontSize: "0.95rem",
+
             lineHeight: 1.8,
+
             marginTop: "0.875rem",
           }}
         >
@@ -135,11 +171,17 @@ export function About() {
         <h2
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1.3rem",
+
             color: "var(--fg)",
+
             marginBottom: "1.25rem",
+
             borderLeft: "3px solid var(--primary)",
+
             paddingLeft: "0.75rem",
           }}
         >
@@ -148,42 +190,59 @@ export function About() {
         <div
           style={{
             display: "grid",
+
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+
             gap: "1rem",
           }}
         >
           {[
             {
               icon: "🎯",
+
               title: "Transparency",
+
               desc: "Clear pricing, honest refund policies, and no hidden fees.",
             },
+
             {
               icon: "⚡",
+
               title: "Efficiency",
+
               desc: "Every feature is designed to save time — for drivers and operators.",
             },
+
             {
               icon: "🔒",
+
               title: "Security",
+
               desc: "Enterprise-grade data protection compliant with Vietnamese law.",
             },
+
             {
               icon: "🌱",
+
               title: "Sustainability",
+
               desc: "Reducing idle driving reduces emissions. Smart parking is green parking.",
             },
           ].map((v) => (
             <div key={v.title} className="card">
-              <div style={{ color: 'var(--primary)', marginBottom: "0.5rem" }}>
+              <div style={{ color: "var(--primary)", marginBottom: "0.5rem" }}>
                 <UntitledIcon name={v.icon} size={24} />
               </div>
               <div
                 style={{
                   fontFamily: "Outfit",
+
                   fontWeight: 600,
+
                   fontSize: "0.9rem",
+
                   color: "var(--fg)",
+
                   marginBottom: "0.375rem",
                 }}
               >
@@ -192,7 +251,9 @@ export function About() {
               <div
                 style={{
                   fontSize: "0.82rem",
+
                   color: "var(--muted)",
+
                   lineHeight: 1.6,
                 }}
               >
@@ -207,11 +268,17 @@ export function About() {
         <h2
           style={{
             fontFamily: "Outfit",
+
             fontWeight: 700,
+
             fontSize: "1.3rem",
+
             color: "var(--fg)",
+
             marginBottom: "1rem",
+
             borderLeft: "3px solid var(--primary)",
+
             paddingLeft: "0.75rem",
           }}
         >
@@ -219,10 +286,12 @@ export function About() {
         </h2>
         <div className="card">
           <p style={{ color: "var(--muted)", fontSize: "0.9rem", margin: 0 }}>
-            <UntitledIcon name="map-pin" size={16} /> Tòa nhà Smart Hub, 17 Lê Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ
-            Chí Minh, Việt Nam
+            <UntitledIcon name="map-pin" size={16} /> Tòa nhà Smart Hub, 17 Lê
+            Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh, Việt Nam
             <br />
-            <UntitledIcon name="mail" size={16} /> support.smartparkingvn@gmail.com &nbsp;|&nbsp; <UntitledIcon name="phone" size={16} /> 1900-xxxx
+            <UntitledIcon name="mail" size={16} />{" "}
+            support.smartparkingvn@gmail.com &nbsp;|&nbsp;{" "}
+            <UntitledIcon name="phone" size={16} /> 1900-xxxx
           </p>
         </div>
       </section>
