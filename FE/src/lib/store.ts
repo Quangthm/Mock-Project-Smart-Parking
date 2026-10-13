@@ -47,7 +47,7 @@ function generateSlots(total: number, floors: number): ParkingSlot[] {
 
 function seedInitialData() {
   const users = get<User>(KEYS.users);
-  if (users.find(u => u.email === 'admin@smartparking.vn')) {
+  if (users.find(u => u.email === 'admin@smartpark.local')) {
     const lots = get<ParkingLot>(KEYS.lots);
     const updatedLots = lots.map(lot => {
       if (lot.id === 'lot-001') {
@@ -100,7 +100,7 @@ function seedInitialData() {
 
   const admin: User = {
     id: 'admin-001',
-    email: 'admin@smartparking.vn',
+    email: 'admin@smartpark.local',
     name: 'System Admin',
     role: 'admin',
     password: 'Admin@123',

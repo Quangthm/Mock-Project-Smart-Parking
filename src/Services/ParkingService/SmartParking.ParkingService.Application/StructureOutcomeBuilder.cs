@@ -28,10 +28,12 @@ public static class StructureOutcomeBuilder
             }
         }
 
+        // Canonical ordering keeps the serialized outcome stable: Reservation compares the
+        // persisted receipt with `outcome=$4::jsonb`, and JSONB arrays are order-sensitive.
         return new StructureOutcome(
             structure.Site.IsActive,
-            originalSlots.Except(structure.Slots.Select(slot => slot.Id)).ToArray(),
-            originalUnits.Except(structure.Units.Select(unit => unit.Id)).ToArray(),
-            capacities.ToArray());
+            originalSlots.Except(structure.Slots.Select(slot => slot.Id)).OrderBy(id => id).ToArray(),
+            originalUnits.Except(structure.Units.Select(unit => unit.Id)).OrderBy(id => id).ToArray(),
+            capacities.OrderBy(c => c.UnitId).ThenBy(c => c.VehicleType, StringComparer.Ordinal).ToArray());
     }
 }

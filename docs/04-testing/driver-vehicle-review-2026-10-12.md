@@ -1,6 +1,6 @@
 # Driver / Vehicle — implementation, review và QA handoff
 
-Ngày: 12/10/2026. Workspace đúng: `D:/DataFPTU/Semester6/Mock-Project-Smart-Parking`. Nhánh: `develop-fix-application`. Base commit: `304487ad0009be2de9be936dfca88d88658fe4fd`; kết quả áp dụng cho working tree hiện tại. Không sử dụng kết quả test ở bản `GithubNew` làm bằng chứng cho nhánh này.
+Ngày: 12/10/2026. Workspace: thư mục repo đã clone. Nhánh: `develop-fix-application`. Base commit: `304487ad0009be2de9be936dfca88d88658fe4fd`; kết quả áp dụng cho working tree hiện tại. Không sử dụng kết quả test ở bản `GithubNew` làm bằng chứng cho nhánh này.
 
 ## Thay đổi và phạm vi
 
@@ -27,7 +27,7 @@ Mỗi service dùng DB của mình. Parking/Reservation trao đổi qua HTTP, se
 Reproduce backend verification trên PostgreSQL isolated riêng có quyền CREATE DATABASE (không dùng production):
 
 ```powershell
-cd D:\DataFPTU\Semester6\Mock-Project-Smart-Parking
+cd <đường-dẫn-tới-repo-đã-clone>
 $env:SMARTPARK_SCHEMA_ROOT = (Get-Location).Path
 $env:SMARTPARK_AUTH_TEST_CONNECTION = '<isolated-postgres-connection>'
 $env:SMARTPARK_STRUCTURE_TEST_CONNECTION = $env:SMARTPARK_AUTH_TEST_CONNECTION

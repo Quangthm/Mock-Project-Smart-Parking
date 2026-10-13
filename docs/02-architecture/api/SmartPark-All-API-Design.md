@@ -2,7 +2,7 @@
 
 [TOC]
 
-Workspace: `D:/DataFPTU/Semester6/Mock-Project-Smart-Parking`; branch **develop-fix-application**; base commit `304487ad0009be2de9be936dfca88d88658fe4fd`, with the current working tree.
+Workspace: thư mục repo đã clone; branch **develop-fix-application**; base commit `304487ad0009be2de9be936dfca88d88658fe4fd`, with the current working tree.
 
 Ngày snapshot: **12/10/2026 (Asia/Saigon)**. Nguồn: code hiện có trong workspace; áp cấu trúc của **API Design Template.md** do người dùng cung cấp. Tài liệu mô tả implementation, không biến requirement OPEN thành tính năng đã duyệt. Sample UUID/contact/token/password đều là dữ liệu minh họa; không phải credential/fixture deployment thật.
 

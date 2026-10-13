@@ -39,4 +39,6 @@ npm run dev
 
 Port mặc định: User/Parking/Reservation API 5035/5045/5055; User/Parking/Reservation DB 5441/5442/5443; Payment/Notification/IoT DB 5444/5445/5446; FE 5173. DB bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng.
 
+Gặp warning `relation "structure_synchronizations" does not exist` (hoặc bảng khác bị thiếu) trên volume cũ: áp migration bằng `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .`; chi tiết ở [LOCAL-SETUP.md](LOCAL-SETUP.md).
+
 Chi tiết về volume, migrations và chuyển từ script cũ: [LOCAL-SETUP.md](LOCAL-SETUP.md). Hướng dẫn sửa script: [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md).
