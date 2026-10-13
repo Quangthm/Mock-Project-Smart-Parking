@@ -9,7 +9,7 @@ Contract: [owner-registration-approval.md](../02-architecture/api/owner-registra
 ## Review and fixes
 
 - Matched the existing FE fields and lot types (`outdoor`, `basement`, `multi-storey`). Business name, email, phone and terms acceptance are required on the server.
-- Fixed the role mismatch between canonical database codes (`PLATFORM_ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`) and JWT/FE roles (`admin`, `owner`, `operator`). Existing short auth aliases remain supported; unsupported roles cannot create a session.
+- Fixed the role mismatch between canonical database codes (`PLATFORM_ADMIN`, `OWNER`, `OPERATOR`) and JWT/FE roles (`admin`, `owner`, `operator`). Existing short auth aliases remain supported; unsupported roles cannot create a session.
 - Pending/rejected users cannot log in or obtain a protected session. Admin operations check current active database permissions, including rejection of tokens after a role change.
 - Case-insensitive email uniqueness and phone uniqueness reject competing duplicate registrations without overwriting identity/password.
 - Row locks serialize competing approvals/rejections. A final decision cannot be overwritten or activate a deleted/ineligible user.

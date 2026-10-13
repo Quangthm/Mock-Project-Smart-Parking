@@ -6,7 +6,7 @@ Implemented 2026-10-06 from SRS v0.9 §3.2, FR-LOT-01/02/03 and the existing Pos
 
 `src/Services/ParkingService` contains three .NET 10 projects: Domain, Application and Persistence. It does not depend on UserService assemblies. Identity is checked against the shared database's existing IAM tables as an interim adapter; a future service deployment can replace this adapter with an agreed identity contract.
 
-Create one `NpgsqlDataSource` for the configured connection string, register `IParkingStructureRepository` as scoped with `PostgresParkingStructureRepository`, and register `ParkingStructureService` as scoped. The HTTP adapter must derive `OwnerScope.UserId` from validated authentication, never from an owner ID in a request. The repository verifies current user, tenant, account and `BUSINESS_OWNER` role on every operation. Only an ACTIVE, non-deleted user with ACTIVE BUSINESS_OPERATOR membership in an ACTIVE tenant may proceed. Approval currently does not provision a tenant; provisioning is required before this service can be used.
+Create one `NpgsqlDataSource` for the configured connection string, register `IParkingStructureRepository` as scoped with `PostgresParkingStructureRepository`, and register `ParkingStructureService` as scoped. The HTTP adapter must derive `OwnerScope.UserId` from validated authentication, never from an owner ID in a request. The repository verifies current user, tenant, account and `OWNER` role on every operation. Only an ACTIVE, non-deleted user with ACTIVE BUSINESS_OPERATOR membership in an ACTIVE tenant may proceed. Approval currently does not provision a tenant; provisioning is required before this service can be used.
 
 Application operations:
 

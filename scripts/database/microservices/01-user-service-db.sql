@@ -14,7 +14,9 @@ CREATE TABLE users (
     avatar_url TEXT,
     failed_login_attempts INT NOT NULL DEFAULT 0,
     locked_until TIMESTAMPTZ,
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
+    email_verified_at TIMESTAMPTZ,
+    phone_verified_at TIMESTAMPTZ,
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL', 'PENDING_VERIFICATION', 'REJECTED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ
@@ -30,6 +32,7 @@ CREATE TABLE accounts (
     tenant_id UUID, 
     site_id UUID, 
     
+    permissions TEXT[],
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -47,6 +50,12 @@ CREATE TABLE roles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+INSERT INTO roles (code, name) VALUES 
+('ADMIN', 'System Administrator'),
+('DRIVER', 'Driver'),
+('OWNER', 'Owner'),
+('OPERATOR', 'Site Operator / Attendant') 
+ON CONFLICT DO NOTHING;
 
 -- 4. BẢNG PHÂN VAI TRÒ CHO TÀI KHOẢN
 CREATE TABLE account_roles (
@@ -61,7 +70,7 @@ CREATE INDEX idx_account_roles_role_code ON account_roles (role_code);
 CREATE TABLE vehicles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
-    original_plate VARCHAR(20) NOT NULL,
+    original_plate VARCHAR(30) NOT NULL,
     normalized_plate VARCHAR(20) NOT NULL,
     vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE')),
     image_url TEXT,
@@ -69,7 +78,7 @@ CREATE TABLE vehicles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ
 );
-CREATE UNIQUE INDEX uq_active_vehicle_plate ON vehicles (normalized_plate) WHERE deleted_at IS NULL;
+CREATE INDEX ix_active_vehicle_plate ON vehicles (normalized_plate) WHERE deleted_at IS NULL;
 CREATE INDEX idx_vehicles_account_id ON vehicles (account_id);
 
 -- 6. BẢNG QUẢN LÝ REFRESH TOKEN
@@ -108,7 +117,6 @@ CREATE TABLE owner_applications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL UNIQUE REFERENCES users(id),
     business_name VARCHAR(255) NOT NULL,
-    lot_type VARCHAR(30) NOT NULL CHECK (lot_type IN ('outdoor', 'basement', 'multi-storey')),
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     submitted_at TIMESTAMPTZ NOT NULL,
     reviewed_at TIMESTAMPTZ,
@@ -124,8 +132,50 @@ CREATE TABLE operator_grants (
     created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     permissions TEXT[] NOT NULL,
-    CHECK (cardinality(permissions) BETWEEN 1 AND 4),
+    CHECK (cardinality(permissions) BETWEEN 1 AND 7),
     CHECK (array_position(permissions, NULL) IS NULL),
-    CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW']::TEXT[])
+    CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW','SLOT_OVERRIDE','EMERGENCY_GATE_RELEASE','VIOLATION_REVIEW']::TEXT[])
 );
 CREATE INDEX idx_operator_grants_creator ON operator_grants(created_by);
+
+-- 10. BẢNG XÁC THỰC (AUTH CHALLENGES & MFA)
+CREATE TABLE auth_challenges (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id),
+    purpose TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    resend_at TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
+    consumed_at TIMESTAMPTZ
+);
+CREATE INDEX ix_auth_challenge_user ON auth_challenges(user_id, purpose);
+
+CREATE TABLE workflow_deliveries (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id),
+    actor_id UUID NOT NULL REFERENCES users(id),
+    kind TEXT NOT NULL,
+    protected_payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL,
+    sent_at TIMESTAMPTZ,
+    retry_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    challenge_id UUID REFERENCES auth_challenges(id),
+    CHECK(status IN ('pending','failed','sent','cancelled'))
+);
+CREATE INDEX ix_workflow_delivery_due ON workflow_deliveries(status, retry_at);
+
+CREATE TABLE mfa_credentials (
+    user_id UUID PRIMARY KEY REFERENCES users(id),
+    protected_secret TEXT NOT NULL,
+    enabled BOOL NOT NULL DEFAULT FALSE,
+    last_step BIGINT NOT NULL DEFAULT -1,
+    attempts INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ
+);

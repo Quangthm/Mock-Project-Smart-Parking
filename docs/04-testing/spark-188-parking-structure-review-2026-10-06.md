@@ -14,7 +14,7 @@ Date: 2026-10-06. Scope: backend core (domain/application/PostgreSQL repository)
 
 ## Review findings addressed
 
-1. Owner IDs or tenant IDs alone do not authorize structure access. Every operation checks current ACTIVE user/account/tenant and BUSINESS_OWNER role; role revocation and account lock are tested.
+1. Owner IDs or tenant IDs alone do not authorize structure access. Every operation checks current ACTIVE user/account/tenant and OWNER role; role revocation and account lock are tested.
 2. Outdoor layouts must not manufacture a floor. Root zones work independently of floors.
 3. A single reserved/occupied status would contradict the SRS. Structure retains physical operational status/occupancy separately and reads active allocation/reservation/session commitments.
 4. Destructive edits cannot discard occupancy or future entitlements. Occupied/UNKNOWN/allocated slots and site-wide live commitments block removal, relocation, compatibility/map changes and deactivation. Positive capacity pools conservatively require reconciliation first.

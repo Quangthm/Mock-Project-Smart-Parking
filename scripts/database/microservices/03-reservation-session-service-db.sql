@@ -45,6 +45,7 @@ CREATE TABLE reservations (
     
     expected_start_time TIMESTAMPTZ NOT NULL,
     expected_end_time TIMESTAMPTZ NOT NULL,
+    confirmed_at TIMESTAMPTZ,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING_PAYMENT' CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'UNFULFILLABLE')),
     hold_expires_at TIMESTAMPTZ,
     cancelled_at TIMESTAMPTZ,
@@ -52,7 +53,13 @@ CREATE TABLE reservations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (id, tenant_id, site_id),
     CHECK (expected_end_time > expected_start_time),
-    CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL))
+    CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL)),
+    CONSTRAINT no_overlapping_reservations_per_vehicle EXCLUDE USING gist (
+        tenant_id WITH =,
+        site_id WITH =,
+        normalized_plate WITH =,
+        tstzrange(expected_start_time, expected_end_time) WITH &&
+    ) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))
 );
 
 CREATE INDEX idx_reservations_tenant_site ON reservations(tenant_id, site_id);
@@ -84,7 +91,7 @@ CREATE TABLE parking_sessions (
     exit_time TIMESTAMPTZ,
     exit_image_url VARCHAR(500),
     
-    session_status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (session_status IN ('ACTIVE', 'PENDING_PAYMENT', 'COMPLETED', 'OVERSTAYED', 'DISPUTED')),
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'PENDING_PAYMENT', 'COMPLETED', 'OVERSTAYED', 'DISPUTED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (id, tenant_id, site_id),
     CHECK (exit_time IS NULL OR exit_time > entry_time),
@@ -93,12 +100,12 @@ CREATE TABLE parking_sessions (
 
 CREATE INDEX idx_parking_sessions_tenant_site ON parking_sessions(tenant_id, site_id);
 CREATE INDEX idx_parking_sessions_account ON parking_sessions(account_id);
-CREATE INDEX idx_parking_sessions_status ON parking_sessions(session_status);
+CREATE INDEX idx_parking_sessions_status ON parking_sessions(status);
 CREATE INDEX idx_parking_sessions_plate ON parking_sessions(normalized_plate);
 CREATE INDEX idx_parking_sessions_ticket ON parking_sessions(ticket_reference);
 
-CREATE UNIQUE INDEX idx_parking_sessions_active_ticket ON parking_sessions(ticket_reference) WHERE session_status = 'ACTIVE' AND ticket_reference IS NOT NULL;
-CREATE UNIQUE INDEX idx_parking_sessions_active_access ON parking_sessions(access_item_id) WHERE session_status = 'ACTIVE' AND access_item_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_parking_sessions_active_ticket ON parking_sessions(ticket_reference) WHERE status = 'ACTIVE' AND ticket_reference IS NOT NULL;
+CREATE UNIQUE INDEX idx_parking_sessions_active_access ON parking_sessions(access_item_id) WHERE status = 'ACTIVE' AND access_item_id IS NOT NULL;
 
 -- 4. BẢNG GÁN TÀI NGUYÊN VẬT LÝ (Chống Double-Booking)
 CREATE TABLE slot_allocations (
@@ -126,3 +133,89 @@ CREATE TABLE slot_allocations (
 
 CREATE INDEX idx_slot_allocations_tenant_site ON slot_allocations(tenant_id, site_id);
 CREATE INDEX idx_slot_allocations_times ON slot_allocations(allocated_start_time, allocated_end_time);
+
+-- ======================================================================================
+-- 5. BẢNG VÉ THÁNG (MONTHLY PASSES)
+-- [Merged từ 07-subscription-service-db.sql]
+-- Bounded Context: Vé tháng là entitlement dài hạn ảnh hưởng trực tiếp đến
+-- capacity pool và tạo ra parking session khi xe vào bãi — cùng domain với reservations.
+-- Cross-service links dùng Logical ID, không dùng FK vật lý.
+-- ======================================================================================
+CREATE TABLE monthly_passes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Cross-domain References (Logical IDs)
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    account_id UUID NOT NULL,   -- Logical ID từ User Service
+
+    pass_code VARCHAR(100) NOT NULL UNIQUE,
+    entitlement_type VARCHAR(50) NOT NULL CHECK (entitlement_type IN ('WHEN_SPACE_AVAILABLE', 'GUARANTEED_CAPACITY_SLOT')),
+    vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE')),
+    normalized_plate VARCHAR(50),
+
+    valid_from TIMESTAMPTZ NOT NULL,
+    valid_until TIMESTAMPTZ NOT NULL,
+
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('PENDING_PAYMENT', 'ACTIVE', 'EXPIRED', 'CANCELLED')),
+
+    -- Optional: chỉ dùng khi entitlement_type = 'GUARANTEED_CAPACITY_SLOT'
+    target_spatial_unit_id UUID,    -- Logical ID từ Parking Service
+    target_slot_id UUID,            -- Logical ID từ Parking Service
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (id, tenant_id, site_id),
+    CHECK (valid_until > valid_from),
+    CONSTRAINT no_overlapping_passes_per_vehicle EXCLUDE USING gist (
+        tenant_id WITH =,
+        site_id WITH =,
+        normalized_plate WITH =,
+        tstzrange(valid_from, valid_until) WITH &&
+    ) WHERE (status = 'ACTIVE'),
+    CONSTRAINT chk_guaranteed_target CHECK (
+        (entitlement_type = 'WHEN_SPACE_AVAILABLE' AND target_spatial_unit_id IS NULL AND target_slot_id IS NULL) OR
+        (entitlement_type = 'GUARANTEED_CAPACITY_SLOT' AND (target_spatial_unit_id IS NOT NULL OR target_slot_id IS NOT NULL))
+    )
+);
+
+CREATE INDEX idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
+CREATE INDEX idx_monthly_passes_account ON monthly_passes(account_id);
+
+CREATE OR REPLACE FUNCTION record_reservation_confirmation() RETURNS trigger LANGUAGE plpgsql AS 
+BEGIN
+ IF NEW.status IN ('CONFIRMED','ALLOCATED','PARKING') AND NEW.confirmed_at IS NULL THEN
+  IF TG_OP='INSERT' THEN NEW.confirmed_at=clock_timestamp();
+  ELSIF OLD.status NOT IN ('CONFIRMED','ALLOCATED','PARKING') THEN NEW.confirmed_at=clock_timestamp();
+  END IF;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.confirmed_at IS NOT NULL THEN NEW.confirmed_at=OLD.confirmed_at; END IF;
+ RETURN NEW;
+END ;
+DROP TRIGGER IF EXISTS reservation_confirmation_time ON reservations;
+CREATE TRIGGER reservation_confirmation_time BEFORE INSERT OR UPDATE ON reservations
+ FOR EACH ROW EXECUTE FUNCTION record_reservation_confirmation();
+
+-- ======================================================================================
+-- 6. BẢN SAO TRẠNG THÁI VẬT LÝ (LOCAL CACHE / CQRS READ-MODEL)
+-- ======================================================================================
+-- Lưu ý: Không dùng Trigger DB để khóa chéo. Dữ liệu được đồng bộ qua Message Broker.
+
+CREATE TABLE IF NOT EXISTS structure_edit_holds (
+    site_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    token UUID NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS structure_site_state (
+    site_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    active BOOLEAN NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS structure_removed_resources (
+    id UUID PRIMARY KEY,
+    site_id UUID NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('slot','unit'))
+);
