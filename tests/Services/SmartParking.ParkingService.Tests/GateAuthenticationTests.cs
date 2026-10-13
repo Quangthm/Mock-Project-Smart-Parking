@@ -1,7 +1,3 @@
-using System.Buffers.Binary;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using Npgsql;
 using SmartParking.ParkingService.Persistence;
 
@@ -9,62 +5,93 @@ namespace SmartParking.ParkingService.Tests;
 
 public sealed class GateAuthenticationTests
 {
-    [Fact]
+    [StructurePostgresFact]
     public async Task GatePoolPreservesConfiguredPasswordDuringAuthentication()
     {
-        // A tiny local protocol peer requests the configured password then rejects
-        // the connection. This tests credential forwarding without an installed
-        // PostgreSQL server or any real application credentials.
-        const string dummyPassword = "only-for-this-protocol-test";
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var endpoint = (IPEndPoint)listener.LocalEndpoint;
+        var input = Environment.GetEnvironmentVariable("SMARTPARK_STRUCTURE_TEST_CONNECTION")!;
+        var suffix = Guid.NewGuid().ToString("N");
+        var role = "gate_auth_role_" + suffix;
+        var database = "gate_auth_test_" + suffix;
+        var password = Guid.NewGuid().ToString("N");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await using var admin = new NpgsqlConnection(input);
+        await admin.OpenAsync(deadline.Token);
 
-        var peer = Task.Run(async () =>
+        // Only generated identifiers/credentials are interpolated. A dedicated
+        // login verifies password authentication without changing application users.
+        await using (var createRole = new NpgsqlCommand(
+            $"CREATE ROLE {role} LOGIN PASSWORD '{password}'", admin))
+            await createRole.ExecuteNonQueryAsync(deadline.Token);
+        try
         {
-            using var socket = await listener.AcceptTcpClientAsync(deadline.Token);
-            await using var stream = socket.GetStream();
-            var length = new byte[4];
-            await stream.ReadExactlyAsync(length, deadline.Token);
-            var startupLength = BinaryPrimitives.ReadInt32BigEndian(length);
-            Assert.InRange(startupLength, 8, 65536);
-            await stream.ReadExactlyAsync(new byte[startupLength - 4], deadline.Token);
+            await using (var createDatabase = new NpgsqlCommand(
+                $"CREATE DATABASE {database} OWNER {role}", admin))
+                await createDatabase.ExecuteNonQueryAsync(deadline.Token);
 
-            // PostgreSQL AuthenticationCleartextPassword (authentication code 3).
-            await stream.WriteAsync(new byte[] { (byte)'R', 0, 0, 0, 8, 0, 0, 0, 3 }, deadline.Token);
-            var header = new byte[5];
-            await stream.ReadExactlyAsync(header, deadline.Token);
-            Assert.Equal((byte)'p', header[0]);
-            var passwordLength = BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(1));
-            Assert.InRange(passwordLength, 5, 1024);
-            var payload = new byte[passwordLength - 4];
-            await stream.ReadExactlyAsync(payload, deadline.Token);
-            var received = Encoding.UTF8.GetString(payload).TrimEnd('\0');
+            var settings = new NpgsqlConnectionStringBuilder(input)
+            {
+                Database = database,
+                Username = role,
+                Password = password,
+                PersistSecurityInfo = false,
+                Timeout = 5,
+                CommandTimeout = 5
+            };
 
-            // Send a controlled FATAL response: the only successful behavior
-            // expected by this test is forwarding the original dummy credential.
-            var error = Encoding.UTF8.GetBytes("SFATAL\0C28P01\0MControlled test rejection\0\0");
-            var response = new byte[5 + error.Length];
-            response[0] = (byte)'E';
-            BinaryPrimitives.WriteInt32BigEndian(response.AsSpan(1, 4), error.Length + 4);
-            error.CopyTo(response, 5);
-            await stream.WriteAsync(response, deadline.Token);
-            return received;
-        }, deadline.Token);
+            // Reject trust/peer configurations: success alone would not prove
+            // that the pool preserved the configured password.
+            var incorrect = new NpgsqlConnectionStringBuilder(settings.ConnectionString)
+            {
+                Password = Guid.NewGuid().ToString("N")
+            };
+            await using (var rejectedPool = new ParkingGateConnectionPool(incorrect.ConnectionString, 2))
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(async () =>
+                {
+                    await using var unexpected = await rejectedPool.TryOpenAsync(deadline.Token);
+                });
+                Assert.Equal(PostgresErrorCodes.InvalidPassword, error.SqlState);
+            }
 
-        var settings = new NpgsqlConnectionStringBuilder
+            await using var gates = new ParkingGateConnectionPool(settings.ConnectionString, 2);
+            // Reopen after disposal to exercise both authentication and lease reuse.
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                await using var lease = await gates.TryOpenAsync(deadline.Token);
+                Assert.NotNull(lease);
+                await using var identity = new NpgsqlCommand(
+                    "SELECT current_user, current_database(), current_setting('application_name')",
+                    lease.Connection);
+                await using (var reader = await identity.ExecuteReaderAsync(deadline.Token))
+                {
+                    Assert.True(await reader.ReadAsync(deadline.Token));
+                    Assert.Equal(role, reader.GetString(0));
+                    Assert.Equal(database, reader.GetString(1));
+                    Assert.Equal("SmartParking.SessionGates", reader.GetString(2));
+                }
+
+                await using var acquire = new NpgsqlCommand(
+                    "SELECT pg_try_advisory_lock(12345::bigint)", lease.Connection);
+                Assert.Equal(true, await acquire.ExecuteScalarAsync(deadline.Token));
+                await using var release = new NpgsqlCommand(
+                    "SELECT pg_advisory_unlock(12345::bigint)", lease.Connection);
+                Assert.Equal(true, await release.ExecuteScalarAsync(deadline.Token));
+            }
+        }
+        finally
         {
-            Host = "127.0.0.1",
-            Port = endpoint.Port,
-            Database = "test",
-            Username = "test",
-            Password = dummyPassword,
-            SslMode = SslMode.Disable,
-            Timeout = 5
-        };
-        await using var gates = new ParkingGateConnectionPool(settings.ConnectionString, 2);
-        await Assert.ThrowsAnyAsync<NpgsqlException>(() => gates.TryOpenAsync(deadline.Token));
-        Assert.Equal(dummyPassword, await peer);
+            // Clean only this test's database and role, including on assertion failure.
+            try
+            {
+                await using var dropDatabase = new NpgsqlCommand(
+                    $"DROP DATABASE IF EXISTS {database} WITH (FORCE)", admin);
+                await dropDatabase.ExecuteNonQueryAsync();
+            }
+            finally
+            {
+                await using var dropRole = new NpgsqlCommand($"DROP ROLE {role}", admin);
+                await dropRole.ExecuteNonQueryAsync();
+            }
+        }
     }
 }
