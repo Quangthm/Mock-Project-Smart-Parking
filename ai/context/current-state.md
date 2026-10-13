@@ -1,15 +1,24 @@
 # SmartPark AI Development Current State
 
 **Status:** WORKING
-**Snapshot Date:** 2026-10-01
+**Snapshot Date:** 2026-10-12
 
 ## Current phase
 
-The team is establishing the architecture foundation before implementing the full CQRS/application pipeline.
+The architecture foundation is established and the first services are implemented. The team is now building features on top of the working baseline.
 
-The first template microservice is User Service.
+**Verified implementation state (2026-10-12):**
 
-The current foundation intentionally defers CQRS/MediatR, validation pipeline, global exception handling, EF Core/PostgreSQL implementation, Kafka implementation, Docker implementation, and GitHub CI/CD until the relevant milestone.
+- **UserService** — full 5-layer Clean Architecture; CQRS/MediatR, FluentValidation, AutoMapper, EF Core + PostgreSQL, JWT auth, BCrypt. This is the reference/template service.
+- **ParkingService** — 5-layer structure; Minimal APIs; raw Npgsql (no EF Core).
+- **ReservationService** — only API + Persistence layers; raw Npgsql.
+- **Frontend** — React 19 + Vite + Tailwind v4 + Three.js; auth and operator-provisioning flows wired to the backend.
+- **Tests** — xUnit backend tests (`tests/Services/*`), node:test frontend tests (`tests/frontend/*`).
+- **Docker** — `docker-compose.yml` present (PostgreSQL + services).
+
+No longer deferred (previously listed as deferred): CQRS/MediatR, validation pipeline, EF Core/PostgreSQL implementation, Docker implementation.
+
+Still not implemented: messaging broker (RabbitMQ planned), API Gateway, SignalR/MQTT/Redis, payment/LPR/AI integrations, GitHub CI/CD (GitLab CI present but uses a mismatched SDK image).
 
 ## Parallel workstreams
 
