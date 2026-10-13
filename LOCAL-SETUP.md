@@ -55,27 +55,38 @@ Database mới chạy SQL baseline trong `scripts/database/microservices`, tiế
 
 PostgreSQL chỉ chạy init SQL khi volume mới hoàn toàn. Với volume đã tồn tại, setup chạy lại workflow migration có thể lặp lại an toàn, qua script `scripts/apply-workflow-migrations.ps1` đang có. Nếu baseline hoặc overlay bị thiếu, script dừng và yêu cầu kiểm tra schema; không chạy lại CREATE TABLE trên dữ liệu đang dùng. Migration báo contact trùng thì cần xử lý dữ liệu trước khi thử lại.
 
-### Lỗi thiếu bảng trên volume đã tồn tại (ví dụ `structure_synchronizations`)
+### Lỗi thiếu bảng trên volume đã tồn tại (ví dụ `structure_synchronizations`, `structure_release_receipts`)
 
-Vì PostgreSQL chỉ chạy init SQL khi volume mới hoàn toàn, một volume tạo trước khi migration được thêm vào `compose.schema-integration.yml` sẽ thiếu bảng của migration đó. Triệu chứng thường gặp là ParkingService log warning lặp mỗi 10 giây:
+Vì PostgreSQL chỉ chạy init SQL khi volume mới hoàn toàn, một volume tạo trước khi migration được thêm vào `compose.schema-integration.yml` sẽ thiếu bảng của migration đó. Đây là lỗi trạng thái database, không phải lỗi code.
+
+ParkingService log warning lặp mỗi 10 giây:
 
 ```text
 warn: SmartParking.ParkingService.Infrastructure.StructureSynchronizationWorker[0] Structure synchronization failed and will be retried. Npgsql.PostgresException (0x80004005): 42P01: relation "structure_synchronizations" does not exist
 ```
 
-Đây là lỗi trạng thái database, không phải lỗi code. Áp migration lên volume hiện có (idempotent, không mất dữ liệu):
+ReservationService trả HTTP 500 khi load parking structure:
+
+```text
+Npgsql.PostgresException (0x80004005): 42P01: relation "structure_release_receipts" does not exist
+   at SmartParking.ReservationService.Persistence.StructureSafetyStore.AcquireAsync(...)
+```
+
+Áp migration lên volume hiện có (idempotent, không mất dữ liệu):
 
 ```powershell
 .\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .
+.\scripts\apply-workflow-migrations.ps1 -Service Reservation -SchemaRoot .
 ```
 
-Script kiểm tra bảng nền tảng bắt buộc trước, rồi áp `05.9` và `05.11`; các câu lệnh dùng `CREATE TABLE IF NOT EXISTS` nên chạy lại an toàn. Kiểm tra lại:
+Script kiểm tra bảng nền tảng bắt buộc trước, rồi áp `05.9` + `05.11` (Parking) hoặc `05.10` + `05.12` (Reservation); các câu lệnh dùng `CREATE TABLE IF NOT EXISTS` nên chạy lại an toàn. Kiểm tra lại:
 
 ```powershell
 docker compose -f compose.schema-integration.yml exec -T parking-db psql -U smartpark_parking -d smartpark_parking -At -c "SELECT to_regclass('structure_synchronizations') IS NOT NULL;"
+docker compose -f compose.schema-integration.yml exec -T reservation-db psql -U smartpark_reservation -d smartpark_reservation -At -c "SELECT to_regclass('structure_release_receipts') IS NOT NULL;"
 ```
 
-Kết quả `t` nghĩa là bảng đã có; warning tự dừng ở chu kỳ worker kế tiếp. Cách khác: chạy lại `.\setup.ps1` không kèm `-SkipDatabase`. Không cần xóa volume. Với service khác, thay `-Service` và container/database tương ứng (Reservation dùng `05.12`).
+Kết quả `t` nghĩa là bảng đã có; warning/HTTP 500 tự dừng. Cách khác: chạy lại `.\setup.ps1` không kèm `-SkipDatabase`. Không cần xóa volume. Với service khác, thay `-Service` và container/database tương ứng.
 
 Không có thao tác xóa/reset volume trong setup. Nếu có volume cũ mà không có password local, khôi phục `SMARTPARK_DEV_PASSWORD` gốc vào `.env`. Đổi environment variable không đổi password bên trong PostgreSQL. Sao lưu database trước khi chỉnh dữ liệu hoặc schema quan trọng.
 
