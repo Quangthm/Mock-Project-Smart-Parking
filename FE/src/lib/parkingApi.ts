@@ -203,4 +203,8 @@ export const operatorsApi = {
 
     return result.data
   },
+
+  async remove(operatorId: string) {
+    await request<void>(`/${operatorId}`, "DELETE", undefined, "/api/operators")
+  },
 }

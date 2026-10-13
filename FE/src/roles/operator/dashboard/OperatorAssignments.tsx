@@ -148,7 +148,7 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 text-xs space-y-2">
             <div className="flex items-center gap-2 text-[var(--fg)] font-semibold">
               <UntitledIcon name="building" size={16} />
-              <span>Current Local Facility Assignment: {currentLot?.name || "Bitexco Financial Tower Outdoor Lot"}</span>
+              <span>Current Facility Assignment: {currentLot?.name || "No site assigned"}</span>
             </div>
             <p className="text-[var(--muted)]">
               Permissions active: <code className="font-mono font-bold text-[var(--primary)]">CHECK_IN, CHECK_OUT, LIVE_MONITORING, TICKET_HANDLE, SLOT_OVERRIDE</code>

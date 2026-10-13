@@ -105,7 +105,7 @@ export function OperatorOverview({
       </div>
 
       {/* Primary KPI Grid (clickable cards) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="pointer-events-none grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Parking site summary">
         <button
           type="button"
           onClick={() => onNavigateTab("status")}
@@ -197,6 +197,7 @@ export function OperatorOverview({
         </button>
       </div>
 
+      {false && (<>
       {/* Quick Action Toolbar */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -237,10 +238,12 @@ export function OperatorOverview({
         </div>
       </div>
 
+      </>)}
+
       {/* Main Grid: Occupancy Bar & Active Bookings */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-5">
         {/* Left Column (2 cols): Occupancy Breakdown & Active Queue */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="space-y-5">
           {/* Real-time Occupancy Progress Bar */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
             <div className="flex items-center justify-between mb-3">
@@ -376,6 +379,7 @@ export function OperatorOverview({
           </div>
         </div>
 
+        {false && (<>
         {/* Right Column (1 col): Driver Tickets & Recent Notifications */}
         <div className="space-y-6">
           {/* Driver Support Queue */}
@@ -455,7 +459,7 @@ export function OperatorOverview({
               </div>
             )}
           </div>
-        </div>
+        </div></>)}
       </div>
     </div>
   )
