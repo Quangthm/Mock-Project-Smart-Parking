@@ -36,6 +36,23 @@ public sealed class StructureSafetyStore(NpgsqlDataSource source)
         await using (var cmd = Cmd(db, tx, "INSERT INTO structure_edit_holds(site_id,tenant_id,token) VALUES ($1,$2,$3) ON CONFLICT(site_id) DO NOTHING", siteId, tenantId, token)) await cmd.ExecuteNonQueryAsync(ct);
         await using (var cmd = Cmd(db, tx, "SELECT token FROM structure_edit_holds WHERE site_id=$1 AND tenant_id=$2", siteId, tenantId))
             if (await cmd.ExecuteScalarAsync(ct) is not Guid current || current != token) throw new HoldConflictException();
+
+        var snapshot = await ReadSnapshotAsync(db, tx, tenantId, siteId, ct);
+        await tx.CommitAsync(ct);
+        return snapshot;
+    }
+
+    public async Task<HoldSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    {
+        await using var db = await source.OpenConnectionAsync(ct);
+        await using var tx = await db.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
+        var snapshot = await ReadSnapshotAsync(db, tx, tenantId, siteId, ct);
+        await tx.CommitAsync(ct);
+        return snapshot;
+    }
+
+    private static async Task<HoldSnapshot> ReadSnapshotAsync(NpgsqlConnection db, NpgsqlTransaction tx, Guid tenantId, Guid siteId, CancellationToken ct)
+    {
         var protectedIds = new List<Guid>();
         await using (var cmd = Cmd(db, tx, """
             SELECT slot_id FROM slot_allocations WHERE site_id=$1 AND allocation_status IN ('RESERVED','OCCUPIED')
@@ -54,7 +71,6 @@ public sealed class StructureSafetyStore(NpgsqlDataSource source)
         var capacities=new List<CapacityClaim>();
         await using(var cmd=Cmd(db,tx,"SELECT spatial_unit_id,vehicle_type,pending_payment_count,protected_count FROM site_capacity_pools WHERE site_id=$1 AND tenant_id=$2",siteId,tenantId))
         await using(var r=await cmd.ExecuteReaderAsync(ct))while(await r.ReadAsync(ct))capacities.Add(new(r.IsDBNull(0)?null:r.GetGuid(0),r.GetString(1),r.GetInt32(2),r.GetInt32(3)));
-        await tx.CommitAsync(ct);
         return new(protectedIds.ToArray(), live,capacities.ToArray());
     }
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid token, EditOutcome? outcome, CancellationToken ct)

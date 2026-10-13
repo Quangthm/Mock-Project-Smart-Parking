@@ -29,17 +29,34 @@ thì có trong git).
 
 ### Backend
 
-Sau khi setup xong, mở ba terminal tại repo và chạy mỗi service một lệnh:
+Sau khi setup xong, PostgreSQL đã chạy và mỗi API có thể được khởi động riêng
+bằng `dotnet run`. Ví dụ chạy Parking Service:
 
 ```powershell
-.\scripts\run-schema-service.ps1 -Service User
-.\scripts\run-schema-service.ps1 -Service Parking
-.\scripts\run-schema-service.ps1 -Service Reservation
+Set-Location .\src\Services\ParkingService\SmartParking.ParkingService.API
+dotnet run
 ```
 
-`run-schema-service.ps1` đọc root `.env` qua `scripts/load-env.ps1`, set
-`Services__*` và `ConnectionStrings__<Service>` (port DB theo `.env`), rồi chạy
-`dotnet run`. (Không còn dùng `.cache/qa-local.json`.)
+Nếu muốn chạy User thay cho Parking, dùng:
+
+```powershell
+Set-Location .\src\Services\UserService\SmartParking.UserService.API
+dotnet run
+```
+
+Nếu muốn chạy Reservation thay cho Parking, dùng:
+
+```powershell
+Set-Location .\src\Services\ReservationService\SmartParking.ReservationService.API
+dotnet run
+```
+
+`setup.ps1` ghi cấu hình cần thiết từ root `.env` vào User Secrets của từng
+project API. ASP.NET tự nạp User Secrets trong Development, nên chỉ cần mở
+project và chạy `dotnet run`; lệnh chỉ khởi động service đó, không tự khởi
+động PostgreSQL hay các service phụ thuộc. Nếu thay đổi `.env`, chạy lại bước
+cập nhật cấu hình của `setup.ps1` hoặc cập nhật User Secrets tương ứng.
+`scripts/run-schema-service.ps1` vẫn có thể dùng trong quy trình script hóa.
 
 | Service | HTTP API | PostgreSQL trên máy | Database |
 | --- | --- | --- | --- |

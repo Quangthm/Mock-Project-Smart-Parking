@@ -16,7 +16,8 @@ public interface IParkingStructureRepository
     Task<SiteProfile> CreateAsync(OwnerScope owner, string code, string name, string address, decimal? latitude, decimal? longitude, CancellationToken ct);
     Task<T> ChangeAsync<T>(OwnerScope owner, Guid siteId, Func<ParkingStructure, T> change, CancellationToken ct, Guid? operationId = null);
     Task<ParkingStructure> ReadOperationalAsync(OwnerScope actor,Guid site,CancellationToken ct);
-    Task MarkOperationalBackupAsync(OwnerScope actor,Guid site,Guid slot,string reason,CancellationToken ct);
+    Task<ParkingStructure> ReadAssignedOperatorAsync(OwnerScope actor,Guid site,CancellationToken ct);
+    Task MarkOperationalBackupAsync(OwnerScope actor,Guid site,Guid slot,bool marked,string reason,CancellationToken ct);
 }
 
 public sealed class ParkingStructureService(IParkingStructureRepository repository)

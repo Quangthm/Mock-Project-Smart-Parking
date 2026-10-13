@@ -27,6 +27,8 @@ services:
       - parking-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/02-parking-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/integration/02-parking-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+      - ./scripts/database/microservices/02.1-parking-remove-gate-session.sql:/docker-entrypoint-initdb.d/03-remove-gate-session.sql:ro
+      - ./scripts/database/microservices/02.2-parking-operator-operations.sql:/docker-entrypoint-initdb.d/04-operator-operations.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_parking -d smartpark_parking"]
       interval: 5s

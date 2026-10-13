@@ -60,23 +60,34 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source, 
     public async Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid siteId, CancellationToken ct)
         =>await ReadCoreAsync(owner,siteId,ct,false);
     public Task<ParkingStructure> ReadOperationalAsync(OwnerScope actor,Guid site,CancellationToken ct)=>ReadCoreAsync(actor,site,ct,true);
+    public async Task<ParkingStructure> ReadAssignedOperatorAsync(OwnerScope actor,Guid site,CancellationToken ct)
+    {
+        await using var db=await source.OpenConnectionAsync(ct);
+        await using var tx=await db.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead,ct);
+        await using(var check=Command(db,tx,"SELECT 1 FROM tenants WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL",actor.TenantId))
+            if(await check.ExecuteScalarAsync(ct)is null)throw new StructureException("FORBIDDEN","Active tenant is required.");
+        var snapshot=await commitments.ReadSnapshotAsync(actor.TenantId,site,ct);
+        var structure=await Load(db,tx,actor.TenantId,site,false,ct,snapshot);
+        await tx.CommitAsync(ct);
+        return structure;
+    }
     private async Task<ParkingStructure> ReadCoreAsync(OwnerScope owner,Guid siteId,CancellationToken ct,bool operational)
     {
         await using var db = await source.OpenConnectionAsync(ct);
         await using var tx = await db.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
         await Authorize(db, tx, owner, ct,operational?siteId:null);
-        await using var lease=await commitments.AcquireAsync(owner.TenantId,siteId,ct);
-        var structure = await Load(db, tx, owner.TenantId, siteId, false, ct,lease.Snapshot);
+        var snapshot=await commitments.ReadSnapshotAsync(owner.TenantId,siteId,ct);
+        var structure = await Load(db, tx, owner.TenantId, siteId, false, ct,snapshot);
         await tx.CommitAsync(ct); return structure;
     }
     public async Task<T> ChangeAsync<T>(OwnerScope owner, Guid siteId, Func<ParkingStructure, T> change, CancellationToken ct, Guid? operationId = null)
         =>await ChangeCoreAsync(owner,siteId,change,ct,operationId,null,null);
-    public Task MarkOperationalBackupAsync(OwnerScope actor,Guid site,Guid slot,string reason,CancellationToken ct)
+    public Task MarkOperationalBackupAsync(OwnerScope actor,Guid site,Guid slot,bool marked,string reason,CancellationToken ct)
     {
         if(string.IsNullOrWhiteSpace(reason) || reason.Trim().Length>2000)throw new StructureException("INVALID_STRUCTURE","Provide an operational reason (1–2000 characters).");
-        return ChangeCoreAsync(actor,site,s=>{s.MarkBackup(slot,true);return true;},ct,null,slot,reason.Trim());
+        return ChangeCoreAsync(actor,site,s=>{s.MarkBackup(slot,marked);return true;},ct,null,slot,reason.Trim(),marked?"MARK_BACKUP":"RELEASE_BACKUP");
     }
-    private async Task<T> ChangeCoreAsync<T>(OwnerScope owner,Guid siteId,Func<ParkingStructure,T> change,CancellationToken ct,Guid? operationId,Guid? markedSlot,string? reason)
+    private async Task<T> ChangeCoreAsync<T>(OwnerScope owner,Guid siteId,Func<ParkingStructure,T> change,CancellationToken ct,Guid? operationId,Guid? markedSlot,string? reason,string? slotAction=null)
     {
         await using var db = await source.OpenConnectionAsync(ct); await using var tx = await db.BeginTransactionAsync(ct);
         await Authorize(db, tx, owner, ct,markedSlot is not null?siteId:null);
@@ -147,7 +158,7 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source, 
             if(markedSlot is {} marked)
             {
                 await Authorize(db,tx,owner,ct,siteId);
-                await Execute(db,tx,"INSERT INTO structure_slot_audit(id,site_id,slot_id,actor_id,action,reason) VALUES ($1,$2,$3,$4,'MARK_BACKUP',$5)",ct,Guid.NewGuid(),siteId,marked,owner.UserId,reason);
+                await Execute(db,tx,"INSERT INTO structure_slot_audit(id,site_id,slot_id,actor_id,action,reason) VALUES ($1,$2,$3,$4,$5,$6)",ct,Guid.NewGuid(),siteId,marked,owner.UserId,slotAction,reason);
             }
             await tx.CommitAsync(ct);
             await lease.CompleteAsync(new(site.IsActive, oldSlots.Except(structure.Slots.Select(s => s.Id)).ToArray(),

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
 import { useApp } from "../../../context/AppContext"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import type { ParkingLot } from "../../../lib/types"
+import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface OperatorAssignmentsProps {
-  currentLot?: ParkingLot | null
+  currentLot?: OperatorSite | null
 }
 
 export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
@@ -31,7 +31,7 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           setError(
             err instanceof Error
               ? err.message
-              : "Unable to connect to live assignment service. Showing local operational permissions.",
+              : "Unable to connect to the assignment service.",
           )
         }
       })
@@ -148,10 +148,10 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 text-xs space-y-2">
             <div className="flex items-center gap-2 text-[var(--fg)] font-semibold">
               <UntitledIcon name="building" size={16} />
-              <span>Current Local Facility Assignment: {currentLot?.name || "Bitexco Financial Tower Outdoor Lot"}</span>
+              <span>{currentLot ? `Current site: ${currentLot.name}` : "No active site assignment"}</span>
             </div>
             <p className="text-[var(--muted)]">
-              Permissions active: <code className="font-mono font-bold text-[var(--primary)]">CHECK_IN, CHECK_OUT, LIVE_MONITORING, TICKET_HANDLE, SLOT_OVERRIDE</code>
+              No site permissions were returned by the assignment service.
             </p>
           </div>
         )}

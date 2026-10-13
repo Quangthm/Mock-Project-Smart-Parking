@@ -17,4 +17,5 @@ public interface IStructureLease : IAsyncDisposable
 public interface IStructureCommitments
 {
     Task<IStructureLease> AcquireAsync(Guid tenantId, Guid siteId, CancellationToken ct);
+    Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken ct);
 }

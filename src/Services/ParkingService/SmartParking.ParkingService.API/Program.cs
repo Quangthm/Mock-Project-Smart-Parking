@@ -10,7 +10,7 @@ namespace SmartParking.ParkingService.API;
 
 public static class ParkingHost
 {
-    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
+    public static async Task<WebApplication> BuildAsync(string[] args, Action<WebApplicationBuilder>? configure = null)
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
@@ -23,14 +23,17 @@ public static class ParkingHost
         builder.Services.AddScoped<IOwnerAuthorizer>(s => s.GetRequiredService<OwnerIdentityClient>());
         builder.Services.AddHttpClient<SlotOperatorClient>(c=>{c.BaseAddress=new(builder.Configuration["Services:User"]??"http://localhost:5035/");c.Timeout=TimeSpan.FromSeconds(10);});
         builder.Services.AddScoped<ISlotOperatorAuthorizer>(s=>s.GetRequiredService<SlotOperatorClient>());
+        builder.Services.AddHttpClient<OperatorSiteClient>(c=>{c.BaseAddress=new(builder.Configuration["Services:User"]??"http://localhost:5035/");c.Timeout=TimeSpan.FromSeconds(10);});
+        builder.Services.AddScoped<OperatorOperationsStore>();
         builder.Services.AddHttpClient<IStructureCommitments, StructureCommitmentsClient>(c =>
         { c.BaseAddress = new(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(10); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
         builder.Services.AddScoped<IParkingStructureRepository, PostgresParkingStructureRepository>();
         builder.Services.AddScoped<ParkingStructureService>();
         builder.Services.AddScoped<IStructureOperationStore,StructureOperationStore>();
         builder.Services.AddScoped<StructureOperationService>();
+        builder.Services.AddScoped<OperatorGateSlotStore>();
         builder.Services.AddHttpClient<IStructureImpactPlanner,StructureImpactPlanner>(c=>{c.BaseAddress=new Uri(builder.Configuration["Services:Reservation"]??"http://localhost:5055/");c.Timeout=TimeSpan.FromSeconds(15);c.DefaultRequestHeaders.Add("X-Service-Key",key);});
-        builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173").AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443").AllowAnyHeader().AllowAnyMethod()));
         var app = builder.Build();
         app.UseCors();
         app.Use(async (context, next) =>
@@ -43,7 +46,7 @@ public static class ParkingHost
             catch (StructureException e)
             {
                 context.Response.StatusCode = e.Code switch { "UNAUTHENTICATED" => 401, "FORBIDDEN" => 403, "SITE_NOT_FOUND" or "UNIT_NOT_FOUND" or "SLOT_NOT_FOUND" => 404,
-                    "IDENTITY_UNAVAILABLE" or "COMMITMENTS_UNAVAILABLE" => 503, "STRUCTURE_BUSY" or "STRUCTURE_IN_USE" or "STRUCTURE_CONFLICT" or "DUPLICATE_IDENTIFIER" => 409, _ => 400 };
+                    "IDENTITY_UNAVAILABLE" or "COMMITMENTS_UNAVAILABLE" => 503, "STRUCTURE_BUSY" or "STRUCTURE_IN_USE" or "STRUCTURE_CONFLICT" or "DUPLICATE_IDENTIFIER" or "NO_AVAILABLE_SLOT" => 409, _ => 400 };
                 await context.Response.WriteAsJsonAsync(new { success = false, code = e.Code, message = e.Message });
             }
         });
@@ -68,6 +71,36 @@ public static class ParkingHost
             while (await reader.ReadAsync(ct)) sites.Add(new { id = reader.GetGuid(0), tenantId = reader.GetGuid(1) });
             return Results.Ok(sites);
         });
+        app.MapPost("/internal/gate-sites/{siteId:guid}/slots/claim", async (
+            Guid siteId,
+            GateSlotClaim body,
+            OperatorGateSlotStore store,
+            CancellationToken ct) =>
+        {
+            if (body.TenantId == Guid.Empty || siteId == Guid.Empty ||
+                body.VehicleType is not ("CAR" or "MOTORCYCLE" or "ANY"))
+                return Results.BadRequest();
+            return Results.Ok(await store.ClaimAvailableAsync(
+                body.TenantId,
+                siteId,
+                body.VehicleType,
+                body.PreferredSlotId,
+                body.TargetUnitId,
+                body.AllowReservedSlot,
+                ct));
+        });
+        app.MapPost("/internal/gate-sites/{siteId:guid}/slots/{slotId:guid}/release", async (
+            Guid siteId,
+            Guid slotId,
+            GateSlotRelease body,
+            OperatorGateSlotStore store,
+            CancellationToken ct) =>
+        {
+            if (body.TenantId == Guid.Empty || siteId == Guid.Empty || slotId == Guid.Empty)
+                return Results.BadRequest();
+            await store.ReleaseAsync(body.TenantId, siteId, slotId, ct);
+            return Results.NoContent();
+        });
         async Task<OwnerScope> Scope(OwnerIdentityClient identity, Guid? tenant, CancellationToken ct)
         {
             var scope = await identity.ScopeAsync(ct);
@@ -83,8 +116,11 @@ public static class ParkingHost
         });
         app.MapGet("/api/parking-lots/{id:guid}/structure", async (Guid id, Guid? tenantId, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success=true, data=await service.GetAsync(await Scope(identity, tenantId, ct), id, ct) }));
         app.MapGet("/api/parking-lots/{id:guid}/operational-layout",async(Guid id,SlotOperatorClient identity,IParkingStructureRepository repository,CancellationToken ct)=>Results.Ok(new{success=true,data=await repository.ReadOperationalAsync(await identity.ScopeAsync(id,ct),id,ct)}));
+        app.MapGet("/api/parking-lots/{id:guid}/operator-layout",async(Guid id,OperatorSiteClient identity,IParkingStructureRepository repository,CancellationToken ct)=>Results.Ok(new{success=true,data=await repository.ReadAssignedOperatorAsync(await identity.ScopeAsync(id,ct),id,ct)}));
         app.MapPost("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup",async(Guid id,Guid slot,BackupMarkBody body,SlotOperatorClient identity,IParkingStructureRepository repository,CancellationToken ct)=>
-        {await repository.MarkOperationalBackupAsync(await identity.ScopeAsync(id,ct),id,slot,body.Reason,ct);return Results.Ok(new{success=true});});
+        {await repository.MarkOperationalBackupAsync(await identity.ScopeAsync(id,ct),id,slot,true,body.Reason,ct);return Results.Ok(new{success=true});});
+        app.MapDelete("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup",async(Guid id,Guid slot,SlotOperatorClient identity,IParkingStructureRepository repository,CancellationToken ct)=>
+        {await repository.MarkOperationalBackupAsync(await identity.ScopeAsync(id,ct),id,slot,false,"Backup designation released by operator.",ct);return Results.Ok(new{success=true});});
         app.MapPost("/api/parking-lots/{id:guid}/operations",async(Guid id,OperationBody body,OwnerIdentityClient identity,StructureOperationService operations,CancellationToken ct)=>
         {
             var result=await operations.ExecuteAsync(await Scope(identity,body.TenantId,ct),id,body.IdempotencyKey,body.Edit,ct);
@@ -118,6 +154,7 @@ public static class ParkingHost
             return Results.Ok(new { success=true });
         });
         app.MapPost("/api/parking-lots/{id:guid}/paths", async (Guid id, PathBody body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success=true, data=await service.AddAccessPathAsync(await Scope(identity,body.TenantId,ct),id,body.Code,body.From,body.To,body.MapData,ct) }));
+        await app.MapOperatorOperationsAsync();
         return app;
     }
 }
@@ -126,9 +163,16 @@ public sealed record TenantBody(string Name, string Email, string Phone);
 public sealed record BackupMarkBody(string Reason);
 public sealed record OperationBody(Guid IdempotencyKey,StructureEdit Edit,Guid? TenantId=null);
 public sealed record SiteValidation(Guid[] SiteIds, Guid[] TenantIds);
+public sealed record GateSlotClaim(
+    Guid TenantId,
+    string VehicleType,
+    Guid? PreferredSlotId = null,
+    Guid? TargetUnitId = null,
+    bool AllowReservedSlot = false);
+public sealed record GateSlotRelease(Guid TenantId);
 public sealed record CreateSite(string Code, string Name, string Address, decimal? Latitude, decimal? Longitude, Guid? TenantId=null);
 public sealed record UnitBody(UnitType Type,string Name,Guid? ParentId,int Capacity,Guid? TenantId=null);
 public sealed record SlotBody(Guid UnitId,string Code,VehicleType VehicleType,SlotType Type=SlotType.STANDARD,Guid? TenantId=null);
 public sealed record PathBody(string Code,Guid? From,Guid? To,string? MapData,Guid? TenantId=null);
 public sealed record EditStructure(string Action,Guid ResourceId,Guid UnitId,string? Code,string? Name,string? Address,bool Active,int Capacity,VehicleType VehicleType,SlotType SlotType,string? Coordinates3D,string? Features,decimal? Latitude,decimal? Longitude,Guid? TenantId=null);
-public static class Program { public static void Main(string[] args) => ParkingHost.Build(args).Run(); }
+public static class Program { public static async Task Main(string[] args) => (await ParkingHost.BuildAsync(args)).Run(); }
