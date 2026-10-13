@@ -1,7 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartParking.ReservationService.Persistence;
+using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Domain;
 
 namespace SmartParking.ReservationService.API;
 

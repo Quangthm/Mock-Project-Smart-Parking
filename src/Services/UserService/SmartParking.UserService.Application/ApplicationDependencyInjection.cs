@@ -28,6 +28,7 @@ public static class ApplicationDependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddScoped<IAccessTokenService, AccessTokenService>();
         services.AddScoped<AuthSessionService>();
+        services.AddScoped<IVehicleRegistration, VehicleRegistrationService>();
         var policy = configuration.GetSection("AuthenticationPolicy").Get<AuthenticationPolicy>() ?? new();
         if (policy.MaxFailedLoginAttempts < 1 || policy.LockoutMinutes < 1 || policy.RefreshTokenDays < 1)
             throw new InvalidOperationException("Authentication policy values must be positive.");

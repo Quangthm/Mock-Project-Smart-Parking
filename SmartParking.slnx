@@ -9,6 +9,8 @@
     <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Services/ReservationService/">
+    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Application/SmartParking.ReservationService.Application.csproj" />
+    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Domain/SmartParking.ReservationService.Domain.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Persistence/SmartParking.ReservationService.Persistence.csproj" />
   </Folder>

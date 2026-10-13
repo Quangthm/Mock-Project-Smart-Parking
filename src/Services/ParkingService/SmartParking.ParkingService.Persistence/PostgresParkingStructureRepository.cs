@@ -5,7 +5,7 @@ using SmartParking.ParkingService.Domain;
 namespace SmartParking.ParkingService.Persistence;
 
 // One transaction and site row lock per mutation. Register as scoped; NpgsqlDataSource is singleton.
-public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source, IOwnerAuthorizer identity, IStructureCommitments commitments,ISlotOperatorAuthorizer? operators=null) : IParkingStructureRepository
+public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) : IParkingStructureRepository
 {
     private static NpgsqlCommand Command(NpgsqlConnection db, NpgsqlTransaction tx, string sql, params object?[] values)
     {
@@ -15,43 +15,45 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source, 
     }
     private static async Task Execute(NpgsqlConnection db, NpgsqlTransaction tx, string sql, CancellationToken ct, params object?[] values)
     { await using var cmd = Command(db, tx, sql, values); await cmd.ExecuteNonQueryAsync(ct); }
-    private async Task Authorize(NpgsqlConnection db, NpgsqlTransaction tx, OwnerScope owner, CancellationToken ct,Guid? operationalSite=null)
+    private static async Task EnsureTenantAsync(
+        NpgsqlConnection db, NpgsqlTransaction tx, OwnerScope owner, CancellationToken ct)
     {
-        var allowed=operationalSite is {} site?operators is not null && await operators.IsAuthorizedAsync(owner,site,ct):await identity.IsOwnerAsync(owner,ct);
-        if (!allowed)
-            throw new StructureException("FORBIDDEN", "Active Owner membership is required.");
-        await using var cmd = Command(db, tx, "SELECT id FROM tenants WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL FOR SHARE", owner.TenantId);
-        if (await cmd.ExecuteScalarAsync(ct) is null)
+        await using var command = Command(db, tx,
+            "SELECT id FROM tenants WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL FOR SHARE",
+            owner.TenantId);
+        if (await command.ExecuteScalarAsync(ct) is null)
+        {
             throw new StructureException("FORBIDDEN", "Active tenant is required.");
+        }
     }
     private static SiteProfile Profile(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.GetString(4),
         r.IsDBNull(5) ? null : r.GetDecimal(5), r.IsDBNull(6) ? null : r.GetDecimal(6), r.GetString(7) == "ACTIVE", r.GetInt32(8), r.GetString(7));
     private const string SiteColumns = "id, tenant_id, site_code, name, address, latitude, longitude, status, total_physical_capacity";
-    private static string AuditState(ParkingStructure structure)=>System.Text.Json.JsonSerializer.Serialize(new{structure.Site,structure.Units,structure.Slots,structure.Paths,structure.BackupPolicies});
+    private static string AuditState(ParkingStructure structure) => System.Text.Json.JsonSerializer.Serialize(new { structure.Site, structure.Units, structure.Slots, structure.Paths, structure.BackupPolicies });
 
     public async Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct)
     {
         await using var db = await source.OpenConnectionAsync(ct); await using var tx = await db.BeginTransactionAsync(ct);
-        await Authorize(db, tx, owner, ct);
+        await EnsureTenantAsync(db, tx, owner, ct);
         var result = new List<SiteProfile>();
         await using (var cmd = Command(db, tx, $"SELECT {SiteColumns} FROM parking_sites WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY site_code", owner.TenantId))
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
             while (await reader.ReadAsync(ct)) result.Add(Profile(reader));
         await tx.CommitAsync(ct); return result;
     }
-    public async Task<SiteProfile> CreateAsync(OwnerScope owner, string code, string name, string address, decimal? latitude, decimal? longitude, CancellationToken ct)
+    public async Task<SiteProfile> CreateAsync(OwnerScope owner, SiteProfile site, CancellationToken ct)
     {
-        var aggregate = new ParkingStructure(new(Guid.NewGuid(), owner.TenantId, "", "", "", null, null, true, 0));
-        aggregate.UpdateProfile(code, name, address, latitude, longitude); var site = aggregate.Site;
+        if (site.TenantId != owner.TenantId)
+            throw new StructureException("FORBIDDEN", "Site must belong to the supplied tenant.");
         await using var db = await source.OpenConnectionAsync(ct); await using var tx = await db.BeginTransactionAsync(ct);
-        await Authorize(db, tx, owner, ct);
+        await EnsureTenantAsync(db, tx, owner, ct);
         try
         {
             await Execute(db, tx, """
                 INSERT INTO parking_sites(id, tenant_id, site_code, name, address, latitude, longitude)
                 VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::numeric)
                 """, ct, site.Id, site.TenantId, site.Code, site.Name, site.Address, site.Latitude, site.Longitude);
-            await Execute(db,tx,"INSERT INTO structure_change_audit(id,site_id,actor_id,after_state) VALUES ($1,$2,$3,$4::jsonb)",ct,Guid.NewGuid(),site.Id,owner.UserId,AuditState(aggregate));
+            await Execute(db, tx, "INSERT INTO structure_change_audit(id,site_id,actor_id,after_state) VALUES ($1,$2,$3,$4::jsonb)", ct, Guid.NewGuid(), site.Id, owner.UserId, AuditState(new ParkingStructure(site)));
             await tx.CommitAsync(ct); return site;
         }
         catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation)
@@ -184,7 +186,6 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source, 
                 result.Add(new(unit.Id, vehicle.ToString(), slots.Count(s => descendants.Contains(s.UnitId)),view.EffectiveBackup));
             }
         }
-        return result.ToArray();
     }
 
     private static async Task<ParkingStructure> Load(NpgsqlConnection db, NpgsqlTransaction tx, Guid tenantId, Guid siteId, bool write, CancellationToken ct, CommitmentSnapshot? snapshot = null)
@@ -204,9 +205,9 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source, 
         await using (var cmd = Command(db, tx, "SELECT id,path_code,from_unit_id,to_unit_id,map_data::text FROM parking_access_paths WHERE site_id=$1 AND tenant_id=$2 AND deleted_at IS NULL", siteId, tenantId))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct)) paths.Add(new(r.GetGuid(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetGuid(2), r.IsDBNull(3) ? null : r.GetGuid(3), r.IsDBNull(4) ? null : r.GetString(4)));
-        var backups=new List<BackupPolicy>();
-        await using(var cmd=Command(db,tx,"SELECT unit_id,vehicle_type,count FROM structure_backup_policies WHERE site_id=$1",siteId))
-        await using(var r=await cmd.ExecuteReaderAsync(ct))while(await r.ReadAsync(ct))backups.Add(new(r.IsDBNull(0)?null:r.GetGuid(0),Enum.Parse<VehicleType>(r.GetString(1)),r.GetInt32(2)));
-        return new(site, units, slots, paths, snapshot?.ProtectedSlots, snapshot?.HasLiveCommitments ?? false,backups,snapshot?.Capacities);
+        var backups = new List<BackupPolicy>();
+        await using (var cmd = Command(db, tx, "SELECT unit_id,vehicle_type,count FROM structure_backup_policies WHERE site_id=$1", siteId))
+        await using (var r = await cmd.ExecuteReaderAsync(ct)) while (await r.ReadAsync(ct)) backups.Add(new(r.IsDBNull(0) ? null : r.GetGuid(0), Enum.Parse<VehicleType>(r.GetString(1)), r.GetInt32(2)));
+        return new(site, units, slots, paths, snapshot?.ProtectedSlots, snapshot?.HasLiveCommitments ?? false, backups, snapshot?.Capacities);
     }
 }

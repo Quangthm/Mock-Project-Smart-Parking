@@ -9,13 +9,13 @@ namespace SmartParking.ParkingService.Infrastructure;
 public sealed record IdentityScope(Guid UserId, Guid[] TenantIds);
 public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor context) : IOwnerAuthorizer
 {
-    public async Task<IdentityScope> ScopeAsync(CancellationToken ct,string permission="PARKING_MANAGE")
+    public async Task<IdentityScope> ScopeAsync(CancellationToken ct, string permission = "PARKING_MANAGE")
     {
         var bearer = context.HttpContext?.Request.Headers.Authorization.ToString();
         if (string.IsNullOrWhiteSpace(bearer)) throw new StructureException("UNAUTHENTICATED", "Sign in as an Owner.");
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "api/auth/owner-scope?permission="+Uri.EscapeDataString(permission));
+            using var request = new HttpRequestMessage(HttpMethod.Get, "api/auth/owner-scope?permission=" + Uri.EscapeDataString(permission));
             request.Headers.TryAddWithoutValidation("Authorization", bearer);
             using var response = await client.SendAsync(request, ct);
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new StructureException("UNAUTHENTICATED", "Session is invalid or revoked.");
@@ -34,6 +34,7 @@ public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor 
     }
 }
 
+
 public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCommitments
 {
     public async Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken ct)
@@ -51,7 +52,6 @@ public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCo
 
     public async Task<IStructureLease> AcquireAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
-        var token = Guid.NewGuid();
         try
         {
             using var response = await client.PutAsJsonAsync($"internal/structure/{siteId}/{token}", new { tenantId }, ct);
