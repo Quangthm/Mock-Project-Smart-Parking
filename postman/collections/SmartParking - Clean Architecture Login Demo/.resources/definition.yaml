@@ -1,0 +1,4 @@
+$kind: collection
+description: "In-memory Login demo: API -> MediatR -> Validation -> Handler -> IUnitOfWork/IUserRepository -> Persistence. No database connection."
+variables:
+  baseUrl: http://localhost:5035

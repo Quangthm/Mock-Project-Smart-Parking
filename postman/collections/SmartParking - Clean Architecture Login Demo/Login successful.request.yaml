@@ -1,0 +1,29 @@
+$kind: http-request
+url: "{{baseUrl}}/api/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "driver@gmail.com",
+      "password": "Password@123"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", function () { pm.response.to.have.status(200); });
+      const body = pm.response.json();
+      pm.test("Success flag", function () { pm.expect(body.success).to.eql(true); });
+      pm.test("Session and seeded user", function () {
+        pm.expect(body.data.accessToken.split(".")).to.have.lengthOf(3);
+        pm.expect(body.data.refreshToken).to.match(/^[a-f0-9]{32}$/);
+        pm.expect(body.data.tokenType).to.eql("Bearer");
+        pm.expect(body.data.expiresIn).to.eql(300);
+        pm.expect(body.data.user.userId).to.eql("11111111-1111-1111-1111-111111111111");
+        pm.expect(body.data.user.email).to.eql("driver@gmail.com");
+        pm.expect(body.data.user).not.to.have.property("passwordHash");
+      });
+    language: text/javascript
+order: 1000
