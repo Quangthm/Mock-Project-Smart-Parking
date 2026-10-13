@@ -104,3 +104,23 @@ setup.ps1
 # =========================
 # Blender auto-saved backup files (*.blend1, *.blend2, ...)
 *.blend[0-9]
+
+# =========================
+# SonarQube / Test Coverage
+# =========================
+
+# SonarScanner for .NET working directory
+.sonarqube/
+
+# Generic SonarScanner working directory
+.scannerwork/
+
+# .NET coverage reports
+coverage.xml
+coverage*.xml
+*.coverage
+*.coveragexml
+
+# Test result artifacts
+TestResults/
+*.trx
