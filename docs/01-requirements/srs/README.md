@@ -1,3 +1,5 @@
+> **Main entry point:** [Consolidated SRS v1.0](smartpark-srs-v1.0.md) summarizes the current RC3 direction. The modules below retain the detailed requirements; earlier revision labels do not override later approved amendments.
+
 # SmartPark SRS — v1.0 RC3
 
 **Review candidate, 13 October 2026.** Start with overview; read only the relevant domain module, then canonical rules/use cases. Implementation/evidence is not assessed.
