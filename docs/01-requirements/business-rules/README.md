@@ -1,6 +1,6 @@
-# Business rules — RC1
+﻿# Business rules - RC1
 
-Canonical 53 BR and 9 monthly M definitions. Monthly M rules are defined once in the monthly rule file; SRS/UC reference them.
+Canonical 57 BR and 9 monthly M definitions. Monthly M rules are defined once in the monthly rule file; SRS/UC reference them.
 
 - [01-identity-access](01-identity-access.md)
 - [02-facility-capacity](02-facility-capacity.md)
@@ -15,4 +15,4 @@ Canonical 53 BR and 9 monthly M definitions. Monthly M rules are defined once in
 
 ## RC2 security rules
 
-BR-AUTH-04–07 add optional TOTP, backup recovery, reviewed Admin reset and replay/revocation invariants. Current count:57 BRs +9 monthly rules. Original rules and IDs are preserved.
+BR-AUTH-04-07 add optional TOTP, backup recovery, reviewed Admin reset and replay/revocation invariants. Current count:57 BRs +9 monthly rules. Original rules and IDs are preserved.

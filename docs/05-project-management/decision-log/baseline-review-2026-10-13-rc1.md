@@ -2,13 +2,13 @@
 
 # SmartPark v1.0 baseline — decision review
 
-Original review: 7 October 2026. Latest decision update: **12 October 2026 (Asia/Ho_Chi_Minh)**, incorporating the user’s explicit approvals in this conversation. Supersedes conflicting 8–9 October choices; historical review findings and revision history remain traceable. **Status: WORKING decision review; approved choices incorporated, remaining ambiguities explicit. This is not the published SRS v1.0, an executed migration, or evidence of implementation/test completion.**
+Latest decision update: **13 October 2026 (Asia/Ho_Chi_Minh)**, including SEC-01/SEC-02 amendment.
 
 ## 1. Scope and reading guide
 
 This review compares the supplied SRS v0.9, business rules v0.8.5, use cases v0.9, user stories v0.8.5, `drawdb-schema.sql`, database architecture, data dictionary and database README with the originally reviewed `develop` architecture and relevant persistence code. Repository snapshot: `7d5e2656d286fc4acc0b423cba2efdb464b71b55`. This was a static review; the SQL was not executed, migrations were not validated against a live database, and no source documents or code were changed by that original review. This update changes only this decision review; it does not modify SRS/BR/UC/schema/code. §17 records the limited static repository observations already obtained in this conversation at newer pinned commits; it is not a new full repository audit.
 
-Read **§16 for the 12 October approvals**, **§18 for the policy/permission/state worksheet, §19 for approved E01–E03 contracts, and §20 for project-manager closure actions**, **§15 for remaining decisions/tasks**, and §12 for the updated disposition register. §1.2 and §14 are synchronized summaries; §2–5 contain the decisions and historical findings with the greatest downstream effect. §6 covers every TESTER-DEF item, §7 every ARCH-DEF item, §8 every AI-DEP item, and §9 the remaining functional proposals. §10 proposes the documentation layout and closure criteria.
+Read **§16 for the 12 October approvals**, **§18 for the policy/permission/state worksheet, §19 for approved E01—E03 contracts, and §20 for project-manager closure actions**, **§15 for remaining decisions/tasks**, and §12 for the updated disposition register. §1.2 and §14 are synchronized summaries; §2—5 contain the decisions and historical findings with the greatest downstream effect. §6 covers every TESTER-DEF item, §7 every ARCH-DEF item, §8 every AI-DEP item, and §9 the remaining functional proposals. §10 proposes the documentation layout and closure criteria.
 
 **Approved in this conversation:** D1 Cloudinary first evaluation behind a portable interface, R2 the future development direction; D2 one provider and service-owned metadata, no initial Media service; D3 backend uploads and restricted evidence access; D4 fixed 3D deployment assets; D5 modular business-domain SRS; D6 stable paths, manifest and preserved history; D7 local acceptance profile with production targets labeled separately. D8 now confirms SignalR for the views in §14.6; Redis remains optional. Duplicate D6 is one decision.
 
@@ -16,7 +16,7 @@ Read **§16 for the 12 October approvals**, **§18 for the policy/permission/sta
 
 ### 1.1 Confirmed service-boundary decision — SB-01
 
-Sources: user-supplied **SmartPark Microservice Boundary Decision Handoff** (`Pasted text.txt`), confirmed 7 October 2026, and supplied **smartpark-microservice-data-ownership-v1.0(1).md**, applied in this 8 October update. This section supersedes conflicting service-split proposals in the original review. Historical code/schema findings describe the previously reviewed commit; this document update does not implement repository changes.
+Derived from the approved baseline decision record. Historical code/schema findings describe the previously reviewed commit; this document update does not implement repository changes.
 
 | Confirmed deployable service | Authoritative ownership | Logical persistence boundary |
 |---|---|---|
@@ -37,7 +37,7 @@ These are six main deployable services. **Search/discovery is an Operations modu
 
 **Data/communication rules are confirmed:** Each service owns its logical persistence boundary and credentials; one local PostgreSQL server is permitted. Logical DB names above are naming guidance, not an executed migration. No cross-service joins, foreign keys, repository or DbContext access. Cross-service IDs are references validated through contracts/workflows/events or justified local projections. Prefer authenticated HTTP/OpenAPI for immediate requests and durable asynchronous outcomes for propagation. Important audit facts are committed durably with the originating operation/outbox, then projected into Audit; a synchronous central audit call is not a global prerequisite for business success. Notification failure does not roll back the original operation. Use one coordinator per workflow and avoid same-workflow synchronous dependency cycles. RabbitMQ + MassTransit is selected for inter-service asynchronous messaging; MQTT remains for IoT/device messaging, with real hardware still deferred; Kafka is deferred. Exact event contracts and recovery implementation remain open.
 
-**Decision effect:** SB-01 and the supplied microservice data-ownership guide settle service/module ownership, including ARCH-DEF-02/04. The consolidated 8–9 October confirmations below additionally settle billing, checkout, monthly product, broker, facility-change protocol, version preservation, authentication direction, media-access principles and the core local acceptance targets. Remaining details are enumerated in §12. Approval of behavior never means code, schema or tests are complete.
+**Decision effect:** SB-01 and the supplied microservice data-ownership guide settle service/module ownership, including ARCH-DEF-02/04. The consolidated 8-9 October confirmations below additionally settle billing, checkout, monthly product, broker, facility-change protocol, version preservation, authentication direction, media-access principles and the core local acceptance targets. Remaining details are enumerated in §12. Approval of behavior never means code, schema or tests are complete.
 
 ### 1.2 Confirmed decisions — consolidated through 12 October 2026
 
@@ -52,7 +52,7 @@ Latest explicit user choices supersede conflicting proposals in this review. Exi
 | Monthly fulfillment | Operations validates entitlement; Payment creates financial order; verified payment reaches Operations recoverably; Operations commits only if deadline/conditions hold; failed fulfillment remains visible for reconciliation/refund. | Temporary resource commitment is used only where actually required. This available-only pass creates **no parking-capacity hold**. Preserve strict monthly A<H, rolling anchors, [S,E), renewal and expiry rules unless expressly amended. |
 | Monthly refund | Paid price × unused timestamp fraction × applicable accepted rate. Defaults: prestart 100%, voluntary midperiod 50% of unused value, facility failure 100% of eligible unused value. | Sum once, half-up to nearest 1,000 VND; cap cumulative refunds at eligible collected money. Owner handles monthly cancellation. Detailed override bounds remain to specify. |
 | Facility changes | Planned change remains pending while Operations restricts conflicting new claims and evaluates existing commitments; finalize recoverably with affected outcomes. Emergency physical closure is recorded immediately with operational restriction and recovery. | Physical emergencies cannot wait for successful propagation; admission must be stopped operationally if communication is unavailable. Exact command/timeouts are implementation work. |
-| Policy versions | Preserve accepted-booking terms using immutable Operations policy and Payment financial/tariff versions. | No retroactive rewriting by later Owner edits. Remaining catalogue entries/bounds/override permissions need specification; approved defaults are in §16.1–2. |
+| Policy versions | Preserve accepted-booking terms using immutable Operations policy and Payment financial/tariff versions. | No retroactive rewriting by later Owner edits. Remaining catalogue entries/bounds/override permissions need specification; approved defaults are in §16.1-2. |
 | B08 authentication | Password and verified flows retained; **passwordless OTP login for all four roles through email and phone**. Access 15 min; absolute refresh session 7 days; refresh inactivity 24 h. Turnstile and current authorization retained. | TOTP remains future. Login uses verified bound contact; either verified bound channel independently is confirmed; challenge, recovery and provider contracts need specification (§16.5). |
 | B07 messaging | RabbitMQ + MassTransit inter-service messaging; MQTT device messaging; Kafka deferred. | Redis optional pending concrete approved use; SignalR scope is confirmed in §14.6. Broker selection does not prove reliable fulfillment. |
 | B06/B09 media | Backend uploads, owner references, restricted proxy delivery, published facility media, acknowledged holds and accepted limits retained. Financial documents 7 years; conversations 90 days; hold review every 30 days and at case closure. | Existing image/audit/operational retention retained. Clock anchors are confirmed in §16.4; exceptional hold/evidence handling remains specification work. Provider capabilities remain unverified. |
@@ -1037,7 +1037,7 @@ RC1 is a reviewable requirements candidate, not a PM-signed v1.0 release or evid
 
 ## 22. SEC-01 / SEC-02 — approved RC2 amendment
 
-**PM CONFIRMED on13 October2026; RC2 document amendment.**
+**PM CONFIRMED on 13 October 2026; RC2 document amendment.**
 
 - TOTP enters current MVP, optional for Driver, Operator, Owner and Admin. Six-digit enrollment proof activates the factor; enabled accounts require second-step proof before normal session issuance.
 - Backup recovery codes selected instead of emailed-code-only recovery. Restricted replacement requires primary proof plus an unused backup code; old factor survives until successful replacement.
@@ -1047,6 +1047,6 @@ RC1 is a reviewable requirements candidate, not a PM-signed v1.0 release or evid
 - At least one existing verified contact plus independent evidence review required. OTP alone insufficient; no contact/insufficient evidence stays pending/escalated. No new routine national-ID collection.
 - Current role/account/Owner approval/lot grants remain unchanged. Admin recovery grants no blanket operational override.
 
-These decisions supersede all earlier TOTP-FUTURE statements in RC1, including baseline review14.5/16.5 and ARCH-DEF-07 commentary. Original history and RC1 comparison reports are retained as historical evidence, not current TOTP scope. Other deferred AI/hardware work remains deferred.
+These decisions supersede all earlier TOTP-FUTURE statements in RC1, including baseline review §§14.5 and 16.5 and ARCH-DEF-07 commentary. Original history and RC1 comparison reports are retained as historical evidence, not current TOTP scope. Other deferred AI/hardware work remains deferred.
 
 Technical elaborations explicitly disclosed: account security/factor-version serialization; purpose-bound restricted contexts; TOTP/backup replay protection; session invalidation on completed factor/password changes; separate reviewed case, authorized grant and executed result. Numeric challenge/window/backup-count/throttle parameters are security implementation-review items, not newly PM-approved values. No implementation or acceptance pass is asserted.

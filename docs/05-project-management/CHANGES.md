@@ -1,6 +1,6 @@
-# SmartPark v1.0 RC1 — change summary
+﻿# SmartPark v1.0 RC1 — change summary
 
-Prepared 13 October 2026 from the five supplied files and the PM's subsequent Option A confirmation. This is a synchronized requirements release candidate, not a signed release, repository commit, implemented system or passed acceptance result.
+Prepared 13 October 2026 from the the reviewed documentation set. This is a synchronized requirements release candidate, not a signed release, repository commit, implemented system or passed acceptance result.
 
 ## What changed
 

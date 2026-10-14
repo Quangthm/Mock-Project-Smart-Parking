@@ -1,6 +1,6 @@
-# Service boundaries and durable contracts — RC1
+﻿# Service boundaries and durable contracts — RC1
 
-Sources: user-supplied **SmartPark Microservice Boundary Decision Handoff** (`Pasted text.txt`), confirmed 7 October 2026, and supplied **smartpark-microservice-data-ownership-v1.0(1).md**, applied in this 8 October update. This section supersedes conflicting service-split proposals in the original review. Historical code/schema findings describe the previously reviewed commit; this document update does not implement repository changes.
+Derived from the approved baseline decision record. Historical code/schema findings describe the previously reviewed commit; this document update does not implement repository changes.
 
 | Confirmed deployable service | Authoritative ownership | Logical persistence boundary |
 |---|---|---|
@@ -21,7 +21,7 @@ These are six main deployable services. **Search/discovery is an Operations modu
 
 **Data/communication rules are confirmed:** Each service owns its logical persistence boundary and credentials; one local PostgreSQL server is permitted. Logical DB names above are naming guidance, not an executed migration. No cross-service joins, foreign keys, repository or DbContext access. Cross-service IDs are references validated through contracts/workflows/events or justified local projections. Prefer authenticated HTTP/OpenAPI for immediate requests and durable asynchronous outcomes for propagation. Important audit facts are committed durably with the originating operation/outbox, then projected into Audit; a synchronous central audit call is not a global prerequisite for business success. Notification failure does not roll back the original operation. Use one coordinator per workflow and avoid same-workflow synchronous dependency cycles. RabbitMQ + MassTransit is selected for inter-service asynchronous messaging; MQTT remains for IoT/device messaging, with real hardware still deferred; Kafka is deferred. Exact event contracts and recovery implementation remain open.
 
-**Decision effect:** SB-01 and the supplied microservice data-ownership guide settle service/module ownership, including ARCH-DEF-02/04. The consolidated 8–9 October confirmations below additionally settle billing, checkout, monthly product, broker, facility-change protocol, version preservation, authentication direction, media-access principles and the core local acceptance targets. Remaining details are enumerated in §12. Approval of behavior never means code, schema or tests are complete.
+**Decision effect:** SB-01 and the supplied microservice data-ownership guide settle service/module ownership, including ARCH-DEF-02/04. The consolidated 8—9 October confirmations below additionally settle billing, checkout, monthly product, broker, facility-change protocol, version preservation, authentication direction, media-access principles and the core local acceptance targets. Remaining details are enumerated in §12. Approval of behavior never means code, schema or tests are complete.
 
 ## Implementation layering
 
