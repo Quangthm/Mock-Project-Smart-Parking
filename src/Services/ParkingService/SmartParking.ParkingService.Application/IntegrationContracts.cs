@@ -1,23 +1,19 @@
-using SmartParking.ParkingService.Domain;
-
 namespace SmartParking.ParkingService.Application;
 
 public interface IOwnerAuthorizer
 {
-    Task<bool> IsOwnerAsync(OwnerScope owner, CancellationToken cancellationToken);
+    Task<bool> IsOwnerAsync(OwnerScope owner, CancellationToken ct);
 }
-
-public sealed record CommitmentSnapshot(
-    Guid[] ProtectedSlots,
-    bool HasLiveCommitments,
-    CapacityClaim[]? Capacities = null);
-
-public sealed record PoolCapacity(Guid? UnitId, string VehicleType, int Capacity, int Backup = 0);
-public sealed record StructureOutcome(
-    bool SiteActive, Guid[] RemovedSlots, Guid[] RemovedUnits, PoolCapacity[] Capacities);
-
-// Tokens are created and persisted by Application before the first HTTP request.
-// Infrastructure must never replace a token when retrying an uncertain request.
+public sealed record CommitmentSnapshot(Guid[] ProtectedSlots, bool HasLiveCommitments, SmartParking.ParkingService.Domain.CapacityClaim[]? Capacities=null);
+public sealed record PoolCapacity(Guid? UnitId, string VehicleType, int Capacity, int Backup=0);
+public sealed record StructureOutcome(bool SiteActive, Guid[] RemovedSlots, Guid[] RemovedUnits, PoolCapacity[] Capacities);
+public interface IStructureLease : IAsyncDisposable
+{
+    CommitmentSnapshot Snapshot { get; }
+    void BeginCommit();
+    // Called after Parking DB commit; failure must leave the durable hold closed for reconciliation.
+    Task CompleteAsync(StructureOutcome outcome, CancellationToken ct);
+}
 public interface IStructureCommitments
 {
     Task<IStructureLease> AcquireAsync(Guid tenantId, Guid siteId, CancellationToken ct);
