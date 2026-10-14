@@ -1,18 +1,16 @@
-﻿# RC2 documentation validation
+# RC3 documentation validation
 
-Executed 13 October2026 against RC1 plus the replacement overlay. These are document checks, not application/security acceptance.
+Executed 13 October 2026 against the RC2 tree plus PAY-01 overlay. These are document checks, not application or provider acceptance.
 
 | Check | Result | Evidence |
 |---|---|---|
-| FR definitions | PASS | 135 |
-| BR/M definitions | PASS | 66 |
-| UC definitions | PASS | 41 |
-| Stories | PASS | 43 retained +3 new |
-| Original input bytes | PASS | All five identical |
-| Parking/money/monthly rules unchanged | PASS | Domain modules02-07 byte-identical |
-| No active TOTP deferral | PASS | Historical excerpts explicitly superseded |
-| Acceptance status | PASS | 65 NOT RUN; no application testing |
-| Merged-tree local links | PASS | All resolve |
+| Existing FR/BR/UC/US identifiers | PASS | No new identifiers; counts remain 135 FR, 57 BR + 9 M, 41 UC, 46 US |
+| Original history and comparisons | PASS | Byte-identical to RC2 |
+| Domain and security preservation | PASS | Unaffected SRS domain modules, permissions, state transitions and authentication/recovery byte-identical |
+| Payment amendment | PASS | Payment/quality/rules/use case/story/trace/acceptance/review/PM guidance synchronized to PAY-01 |
+| Old sandbox gate | PASS | No active one-real-sandbox obligation; historical/supersession descriptions retained explicitly |
+| Acceptance cases | PASS | AC-001–072 unique; all NOT RUN |
+| Relative Markdown file links | PASS | All targets resolve in merged tree |
+| Replacement inventory and reconstruction | PASS | Old/new hashes recorded; overlay reconstructs RC3 without deletions |
 
-# REMOVED: unverifiable archive claim (no RC1 validation archive found)
-Active publication-tree links validated. Documentation validation is separate from application/security/product acceptance.
+Not tested: application behavior, actual payOS collection/refund capability, payer-app compatibility, deployment or security. Technical configuration and controlled payment execution remain pending. No real money moved. Final requirements release remains unsigned.

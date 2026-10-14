@@ -58,3 +58,7 @@ The original 43 IDs/goals remain. New security stories cover all four roles with
 | US-SEC01 | Driver, Operator, Owner, Admin | As an account holder, I want to optionally enroll/manage TOTP and complete its challenge when enabled. | CONFIRMED MVP; implementation pending | FR-AUTH-07, FR-AUTH-08 | UC-AUTH-01, UC-AUTH-04 |
 | US-SEC02 | Driver, Operator, Owner, Admin | As an account holder, I want to recover a lost Authenticator with backup codes or submit a restricted account-recovery request. | CONFIRMED MVP; implementation pending | FR-AUTH-09, FR-AUTH-10 | UC-AUTH-05, UC-AUTH-06 |
 | US-SEC03 | Admin | As Admin, I want to review account-recovery evidence and authorize scoped password/factor resets without knowing user secrets or approving my own case. | CONFIRMED MVP; implementation pending | FR-AUTH-10, FR-AUTH-11 | UC-AUTH-06 |
+
+## PAY-01 clarification for US-D02 and US-D06
+
+US-D02 acceptance distinguishes payOS QR as the MVP implementation-priority route from native VNPay/MoMo/ZaloPay options. Unfinished native integrations are labelled simulated/deferred, not claimed as working via payOS. Real-money checkout lists functioning routes only. US-D06 history identifies the actual provider/mode and independently tracks pending versus completed refunds. No new story ID or change to the amount owed is introduced.

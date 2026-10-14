@@ -1,4 +1,4 @@
-# Pricing Payments — business rules RC1
+# Pricing Payments — business rules RC3
 
 [Rule index](README.md) · [SRS module](../srs/modules/06-pricing-payments.md)
 
@@ -22,7 +22,7 @@ Show approved extra-use charges and configured overstay notices while occupancy 
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-MVP payment channels are VNPay, MoMo and ZaloPay, with CASH_COLLECT for Operator-recorded manual cash collection; PDF invoice behavior remains the domain contract. Additional provider/card channels are future extensions.
+payOS QR receives implementation priority for MVP online payment. VNPay, MoMo and ZaloPay remain separate planned options, with integration or fixture status explicitly identified. If resources are insufficient, payOS QR provides the working online-payment path; unfinished native provider integrations remain explicitly simulated or deferred. payOS transactions must not be presented or recorded as native VNPay, MoMo or ZaloPay transactions. Payer-application compatibility is claimed only after verification. Assigned-Operator CASH_COLLECT remains unchanged. PDF invoice behavior remains the domain contract. Other additional provider/card channels remain future extensions. The acceptance profile is defined by PAY-01; choosing a payer app does not change the actual processing provider recorded on a transaction.
 
 **Trace:** FR-PAY-03/07, FR-BAS-16; UC-PAY-01, UC-PAY-02
 

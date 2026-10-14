@@ -46,3 +46,7 @@ Abbreviated source FR lists were expanded. Missing direct rule links use existin
 ## RC2 security additions
 
 FR-AUTH-07–11, BR-AUTH-04–07, UC-AUTH-04–06 and US-SEC01–03 are new IDs. FR-AUTH-02/FR-BAS-08 gain staged-login rule links; FR-AUTH-05 gains assisted-recovery links. No original ID is removed or renumbered. TOTP-FUTURE source labels are superseded by SEC-01/02; previous comparison reports remain RC1 history.
+
+## RC3 / PAY-01 — 13 October 2026
+
+Amended FR-PAY-03/BR-PAY-03 channel implementation priority and the acceptance environment. Existing FR/BR/US/UC edges and matrix.csv remain valid. Added decision-to-acceptance mapping to payment traceability; AC-066–072 supplement retained scenarios. No money, capacity, permissions or authentication rule changes.

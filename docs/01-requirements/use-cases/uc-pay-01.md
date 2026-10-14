@@ -38,3 +38,9 @@ Persist the accepted outcome and history once; failed/unknown work is shown hone
 ## Remaining work
 
 Implementation and acceptance evidence pending; use the policy, permission and transition contracts without inventing business defaults.
+
+## PAY-01 channel selection and evidence
+
+Offer payOS QR as the implementation-priority online route. Real-money checkout lists only functioning routes. In demonstrations, native VNPay/MoMo/ZaloPay fixtures are clearly labelled simulations and cannot create real-money effects. Persist actual provider, route and environment/mode with the logical payment. Do not silently translate a selected native-provider option into payOS. If a payer application can scan payOS QR, record the transaction as payOS; do not infer a native provider integration from that scan.
+
+Use controlled low-value payOS production evidence plus deterministic failure/race fixtures for acceptance. Refund capability remains a separate implementation verification: unsupported online refunds stay visibly pending/reconciled; link cancellation is not payout proof. Existing success, retry, UNKNOWN, late-payment and refund rules above remain binding.

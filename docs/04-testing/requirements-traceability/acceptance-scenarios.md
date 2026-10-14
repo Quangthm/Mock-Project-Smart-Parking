@@ -1,4 +1,4 @@
-# Acceptance scenarios — RC1
+# Acceptance scenarios — RC3
 
 **ALL NOT RUN.** This file specifies expected outcomes; documentation checks are not product acceptance. Execute with actual build/commit, machine/resources, dataset distribution, provider/fixture modes, timestamps and retained evidence.
 
@@ -56,7 +56,7 @@
 
 | Integration | Approved local profile | Evidence / limit |
 |---|---|---|
-| Payments | One real sandbox adapter, **VNPay first candidate**; deterministic MoMo/ZaloPay fixtures; tested Operator cash collection | Keep all named channel directions, but label mode in acceptance report. Actual sandbox availability/credentials must be verified; do not silently substitute fixtures for the one sandbox gate or claim three real integrations. |
+| Payments | **payOS QR first:** controlled, low-value production integration tests plus deterministic failure/race fixtures; tested Operator cash collection | PAY-01 replaces the one-real-sandbox gate. VNPay/MoMo/ZaloPay retain separate planned identities and honest integration/fixture/deferred labels. Native VNPay may be simulated/deferred if resources are insufficient. Fixtures do not prove real collection/refund delivery; no claim that payOS implements all three providers. |
 | Media | Evaluate Cloudinary adapter for backend upload, restricted reads, holds, deletion and recovery; fixtures for deterministic failures | Provider capability and account limits unverified until tested. No production/free-tier suitability claim. |
 | Notifications | Local email capture and SMS fixtures; real delivery tests separately labelled if configured | No proof of external delivery from local capture. Applies to all-role OTP flows. |
 | Hardware/gate | Deterministic events and Operator workflows | No real adapter or physical device acceptance. |
@@ -64,7 +64,7 @@
 | Assistant/LPR | General contracts and manual/ordinary-UI fallback; detailed integration/evaluation deferred after v1.0 | No accuracy, model-completion or live-provider claim from fixtures. |
 | Deployment | Docker local profile, one instance per required service, separate PostgreSQL databases/credentials, RabbitMQ and scoped SignalR | One PostgreSQL server permitted. No mandatory clustering or Redis scale-out. |
 
-Three real payment sandboxes, live SMS/email, real hardware and production HA were alternatives, not selected local acceptance requirements. Local fixtures must be isolated from any real-money/live-device environment. UNKNOWN payment outcomes are reconciled rather than blindly recharged.
+PAY-01 supersedes the earlier one-real-payment-sandbox requirement with controlled low-value payOS production tests plus deterministic failure/race fixtures. Three native real payment integrations, live SMS/email, real hardware and production HA are not required by this local acceptance profile. Local fixtures must be isolated from any real-money/live-device environment. UNKNOWN payment outcomes are reconciled rather than blindly recharged.
 
 | Aspect | Approved target / recipe | Required test-plan detail |
 |---|---|---|
@@ -80,9 +80,9 @@ Three real payment sandboxes, live SMS/email, real hardware and production HA we
 | Backup schedule / RPO | Daily backup; backup RPO ≤24 hours | Backup-loss tolerance is separate from ordinary-restart durability. Failed/overdue backup must be visible. |
 | Restore | ≤30 minutes | Restore into declared clean local target and verify core data/relationships and recoverable workflows. Define recovery dataset/configuration scope. |
 
-No incompatible double capacity commitment, duplicate collection/refund or unauthorized access is acceptable merely because aggregate latency/error targets pass. Scope provider upload/payment/AI latency separately. Record sandbox versus fixture mode and actual timings; unexecuted tests stay NOT RUN. These are local mock-project objectives, not production SLOs or claims of achieved throughput.
+No incompatible double capacity commitment, duplicate collection/refund or unauthorized access is acceptable merely because aggregate latency/error targets pass. Scope provider upload/payment/AI latency separately. Record production, sandbox (if separately used) and fixture modes and actual timings; unexecuted tests stay NOT RUN. These are local mock-project objectives, not production SLOs or claims of achieved throughput.
 
-Delivery team must choose and record workload mix/pacing, actual hardware, seeded distribution, provider capability checks and fault injection. Ordinary conflicts are counted separately, not hidden as success. Product invariants have zero tolerance for incompatible double capacity, duplicate money and unauthorized access even if aggregate performance passes. Any concrete required-gate exception returns to PM-04 with evidence; no preapproved fixture substitution for the one-real-sandbox gate.
+Delivery team must choose and record workload mix/pacing, actual hardware, seeded distribution, provider capability checks and fault injection. Ordinary conflicts are counted separately, not hidden as success. Product invariants have zero tolerance for incompatible double capacity, duplicate money and unauthorized access even if aggregate performance passes. Any concrete required-gate exception returns to PM-04 with evidence; no preapproved fixture-only substitution for the required payOS production integration evidence.
 
 
 ## SEC-01/SEC-02 additional acceptance — NOT RUN
@@ -109,3 +109,17 @@ Use a real local TOTP implementation with documented security settings and clock
 | AC-063 | Duplicate Admin command or support timeout | One mutation; query same operation; approved ticket is not completed reset; durable recovery retains outcome. | NOT RUN |
 | AC-064 | Blocked account/Owner pending approval after recovery | Credential recovery does not unblock, approve or grant rights. | NOT RUN |
 | AC-065 | Evidence/notification export and log inspection | Scoped access and redaction; no secrets/QR/codes/tokens in log/event/export; delivery failure separate from mutation. | NOT RUN |
+
+## PAY-01 additional acceptance — NOT RUN
+
+[Execution plan](../payment-integration/payos-test-plan.md). Use controlled low-value payOS production evidence where indicated; isolate deterministic simulations. These cases supplement, rather than replace, existing money/capacity/refund scenarios.
+
+| Case | Scenario | Required outcome | Result |
+|---|---|---|---|
+| AC-066 | Checkout route identity and simulation/deferred options | payOS recorded as payOS; no silent native-provider substitution; only working routes in real-money checkout; demo simulations clearly labelled and isolated. | NOT RUN |
+| AC-067 | Controlled low-value production payOS collection and callback/query | Authentic amount/order/currency/payee/transaction verified, credit once, appropriate owning-domain fulfillment; real evidence retained with secrets redacted. | NOT RUN |
+| AC-068 | VNPay native adapter unfinished; MoMo/ZaloPay fixtures | Separate planned identities and actual modes visible; no separate sandbox gate; payOS does not claim three native integrations. | NOT RUN |
+| AC-069 | Create timeout, callback replay and callback/query race | Reconcile stable operation; no blind fresh order or duplicate credit; existing retry bound preserved. | NOT RUN |
+| AC-070 | Cancel/expiry races verified money; ordinary versus monthly late payment | Cancellation is not refund/no-money proof; ordinary compatible reacquisition or refund; monthly strict A<H preserved. | NOT RUN |
+| AC-071 | Advertised payer application compatibility | Require tested app/flow evidence; retain actual payOS provider identity; unsupported/unverified apps not advertised as supported. | NOT RUN |
+| AC-072 | Surplus refund via selected provider arrangement, unsupported or UNKNOWN result | One eligible obligation; payout proof required; unknown reserves balance; unsupported remains visible/pending; no silent cash/manual online-refund fallback. Record actual capability separately from fixtures. | NOT RUN |

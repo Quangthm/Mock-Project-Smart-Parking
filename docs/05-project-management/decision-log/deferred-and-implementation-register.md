@@ -161,3 +161,16 @@ Architecture alignment: SB-01 supersedes old SA-21 session placement and selects
 ## Additional original exclusions retained
 
 Native mobile app; autonomous-vehicle integration; loyalty points; national digital-map integration; full complaint/ticketing suite beyond the approved minimal asynchronous cases. Source promotional notification category is retained without introducing a promotions engine.
+
+## RC3 / PAY-01 implementation disposition — approved 13 October 2026
+
+| Work | Disposition | Completion evidence |
+|---|---|---|
+| payOS QR adapter | Current MVP, first implementation priority | Controlled low-value production collection/reconciliation; signed webhook and query behavior; actual build/evidence. NOT RUN. |
+| Native VNPay | Retained separate planned option; may be simulated/deferred if resources are insufficient | Mode explicitly declared. No separate sandbox adapter is required by PAY-01. |
+| Native MoMo / ZaloPay | Retained separate planned options; existing deterministic fixtures remain | Native integrations unfinished unless supported by actual evidence. payOS scanning does not close native integration work. |
+| Payer-app compatibility | Verify before advertising any app as supported | Exact app/version/flow and successful payOS transaction evidence; not a native-provider completion claim. |
+| Refund execution | Current financial requirements retained; provider capability validation pending | Original-route support, eligible recipient correlation, actual payout proof and unknown-outcome reconciliation. Separate payout service is not automatically accepted as equivalent. No new manual online-refund workflow approved. |
+| Technical configuration | Implementation/design review pending | Merchant/payee mapping, credentials, provider limits, test budget/amounts, timeouts/reconciliation scheduling, SDK/API version and callback hosting. No invented numeric business defaults. |
+
+Do not downgrade money/capacity/refund requirements because a native provider is deferred. If the approved payOS acceptance or required refund execution cannot be demonstrated, record the concrete blocker under PM-04; do not claim completion from fixtures.

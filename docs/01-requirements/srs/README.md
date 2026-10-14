@@ -1,4 +1,4 @@
-# SmartPark SRS — v1.0 RC1
+# SmartPark SRS — v1.0 RC3
 
 **Review candidate, 13 October 2026.** Start with overview; read only the relevant domain module, then canonical rules/use cases. Implementation/evidence is not assessed.
 
@@ -30,3 +30,7 @@ Scope labels: CONFIRMED/implementation pending; confirmed direction with POST-v1
 ## RC2 security amendment
 
 [Authentication/recovery contract](authentication-recovery.md) and [SEC-01/SEC-02 decisions](../../05-project-management/decision-log/2026-10-13-totp-account-recovery-sec-01-02.md) supersede the earlier TOTP deferral. TOTP/backup-code/Admin-recovery scope is now MVP; technical configuration and implementation evidence remain pending. Unchanged domain files retain RC1 revision labels intentionally.
+
+## RC3 payment amendment
+
+[PAY-01 decision](../../05-project-management/decision-log/2026-10-13-payos-priority-pay-01.md) approves payOS implementation priority and controlled low-value production testing plus deterministic failure/race fixtures in place of the sandbox requirement. See the [payment module](modules/06-pricing-payments.md), [adapter design](../../02-architecture/payment-integration/payos.md) and [test plan](../../04-testing/payment-integration/payos-test-plan.md). Unchanged files retain their prior revision labels.

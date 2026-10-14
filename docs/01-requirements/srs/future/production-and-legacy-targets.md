@@ -63,4 +63,4 @@
 3. **Financial**: Development cost estimated at \$50,000 \- \$150,000  
 5. **Resources**: Requires 1 BAs, 2 BEs, 2 FEs, 1 DevOps, 1 QA, 1 PM
 
-Supersession: GPS denial has manual fallback; hardware is fixture-only for current acceptance; payment modes follow one real sandbox plus fixtures/cash. No production budget or named staffing assignment is inferred from historical examples.
+Supersession: GPS denial has manual fallback; hardware is fixture-only for current acceptance; payment modes follow PAY-01: controlled low-value payOS production tests plus deterministic failure/race fixtures and tested cash; native VNPay/MoMo/ZaloPay remain separately identified, with unfinished integrations simulated/deferred. No production budget or named staffing assignment is inferred from historical examples.

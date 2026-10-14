@@ -1,4 +1,4 @@
-# Quality Deployment — SRS v1.0 RC1
+# Quality Deployment — SRS v1.0 RC3
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
@@ -6,7 +6,7 @@
 
 | Integration | Approved local profile | Evidence / limit |
 |---|---|---|
-| Payments | One real sandbox adapter, **VNPay first candidate**; deterministic MoMo/ZaloPay fixtures; tested Operator cash collection | Keep all named channel directions, but label mode in acceptance report. Actual sandbox availability/credentials must be verified; do not silently substitute fixtures for the one sandbox gate or claim three real integrations. |
+| Payments | **payOS QR first:** controlled, low-value production integration tests plus deterministic failure/race fixtures; tested Operator cash collection | PAY-01 replaces the one-real-sandbox gate. VNPay/MoMo/ZaloPay retain separate planned identities and honest integration/fixture/deferred labels. Native VNPay may be simulated/deferred if resources are insufficient. Fixtures do not prove real collection/refund delivery; no claim that payOS implements all three providers. |
 | Media | Evaluate Cloudinary adapter for backend upload, restricted reads, holds, deletion and recovery; fixtures for deterministic failures | Provider capability and account limits unverified until tested. No production/free-tier suitability claim. |
 | Notifications | Local email capture and SMS fixtures; real delivery tests separately labelled if configured | No proof of external delivery from local capture. Applies to all-role OTP flows. |
 | Hardware/gate | Deterministic events and Operator workflows | No real adapter or physical device acceptance. |
@@ -14,7 +14,7 @@
 | Assistant/LPR | General contracts and manual/ordinary-UI fallback; detailed integration/evaluation deferred after v1.0 | No accuracy, model-completion or live-provider claim from fixtures. |
 | Deployment | Docker local profile, one instance per required service, separate PostgreSQL databases/credentials, RabbitMQ and scoped SignalR | One PostgreSQL server permitted. No mandatory clustering or Redis scale-out. |
 
-Three real payment sandboxes, live SMS/email, real hardware and production HA were alternatives, not selected local acceptance requirements. Local fixtures must be isolated from any real-money/live-device environment. UNKNOWN payment outcomes are reconciled rather than blindly recharged.
+PAY-01 supersedes the earlier one-real-payment-sandbox requirement with controlled low-value payOS production tests plus deterministic failure/race fixtures. Three native real payment integrations, live SMS/email, real hardware and production HA are not required by this local acceptance profile. Local fixtures must be isolated from any real-money/live-device environment. UNKNOWN payment outcomes are reconciled rather than blindly recharged.
 
 | Aspect | Approved target / recipe | Required test-plan detail |
 |---|---|---|
@@ -30,7 +30,7 @@ Three real payment sandboxes, live SMS/email, real hardware and production HA we
 | Backup schedule / RPO | Daily backup; backup RPO ≤24 hours | Backup-loss tolerance is separate from ordinary-restart durability. Failed/overdue backup must be visible. |
 | Restore | ≤30 minutes | Restore into declared clean local target and verify core data/relationships and recoverable workflows. Define recovery dataset/configuration scope. |
 
-No incompatible double capacity commitment, duplicate collection/refund or unauthorized access is acceptable merely because aggregate latency/error targets pass. Scope provider upload/payment/AI latency separately. Record sandbox versus fixture mode and actual timings; unexecuted tests stay NOT RUN. These are local mock-project objectives, not production SLOs or claims of achieved throughput.
+No incompatible double capacity commitment, duplicate collection/refund or unauthorized access is acceptable merely because aggregate latency/error targets pass. Scope provider upload/payment/AI latency separately. Record production, sandbox (if separately used) and fixture modes and actual timings; unexecuted tests stay NOT RUN. These are local mock-project objectives, not production SLOs or claims of achieved throughput.
 
 ## Functional requirements
 

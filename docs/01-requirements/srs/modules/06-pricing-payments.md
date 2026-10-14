@@ -1,4 +1,4 @@
-# Pricing Payments — SRS v1.0 RC1
+# Pricing Payments — SRS v1.0 RC3
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
@@ -61,7 +61,9 @@ Payment & Pricing owns versioned Owner day/night time-block tariffs by category/
 **Actors:** Driver, Operator, Payment Provider  
 **Stories:** US-D02, US-O02
 
-Retain VNPay, MoMo and ZaloPay channel directions and assigned-Operator CASH_COLLECT. Local acceptance requires one real sandbox adapter (VNPay first candidate), deterministic MoMo/ZaloPay fixtures and tested cash. Mode is explicit; fixtures do not prove live or sandbox provider integration.
+payOS QR receives implementation priority for MVP online payment. VNPay, MoMo and ZaloPay remain separate planned options, with integration or fixture status explicitly identified. If resources are insufficient, payOS QR provides the working online-payment path; unfinished native provider integrations remain explicitly simulated or deferred. payOS transactions must not be presented or recorded as native VNPay, MoMo or ZaloPay transactions. Payer-application compatibility is claimed only after verification. Assigned-Operator CASH_COLLECT remains unchanged.
+
+Controlled, low-value payOS production testing plus deterministic payment failure/race fixtures replaces the one-real-sandbox-adapter requirement. VNPay native integration may remain simulated/deferred when resources are insufficient; MoMo/ZaloPay fixture arrangements remain. No separate working sandbox adapter is required. Real-money checkout exposes functioning routes only; demo fixtures are explicitly labelled and isolated from real-money data and effects. Fixture-only results cannot satisfy the required payOS real integration evidence.
 
 ### FR-PAY-04
 
@@ -142,3 +144,5 @@ Dynamic pricing is an MVP capability using Owner-configured time blocks; event/h
 **Stories:** US-D02, US-O02
 
 Allow three additional payment attempts after the initial attempt only after definitive retryable failure; four total. Command replay or callback redelivery consumes no attempt. UNKNOWN requires lookup/reconciliation. Issue replay-safe PDF invoices for settled financial obligations and linked adjustments; never mark a refund paid from approval alone.
+
+[PAY-01 decision](../../../05-project-management/decision-log/2026-10-13-payos-priority-pay-01.md) · [payOS adapter design](../../../02-architecture/payment-integration/payos.md) · [Integration test plan](../../../04-testing/payment-integration/payos-test-plan.md)

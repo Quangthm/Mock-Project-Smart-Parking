@@ -17,3 +17,12 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | FR-PAY-11 | CONFIRMED — implementation pending / not assessed | 06-pricing-payments | BR-PAY-05, BR-PAY-06 | US-D02, US-O02, US-OW02 | UC-GATE-02 |
 | FR-BAS-05 | CONFIRMED — implementation pending / not assessed | 06-pricing-payments | BR-CAP-04, BR-PAY-01, BR-POL-01, BR-POL-02, BR-POL-03 | US-D02, US-OW02 | UC-POL-01 |
 | FR-BAS-16 | CONFIRMED — implementation pending / not assessed | 06-pricing-payments | BR-PAY-03 | US-D02, US-O02 | UC-PAY-01 |
+
+## PAY-01 amendment mapping
+
+| Decision | Existing requirements/rules/stories/use cases | Acceptance |
+|---|---|---|
+| payOS priority; truthful channel/mode mapping; revised acceptance environment | FR-PAY-03, FR-BAS-16; BR-PAY-03; US-D02; UC-PAY-01 | AC-066–AC-068, AC-071 |
+| Provider verification, UNKNOWN/replay, late money and refund capability evidence (existing rules retained) | FR-PAY-04/05/06/07; BR-PAY-04, BR-REF-01; US-D02, US-D06; UC-PAY-01/02 | AC-069–AC-070, AC-072; existing AC-005–007, AC-030/032/044/045 |
+
+[PAY-01 decision](../../05-project-management/decision-log/2026-10-13-payos-priority-pay-01.md). Existing matrix ID associations remain valid; no new FR/BR/UC/US identifiers are added.

@@ -1,6 +1,6 @@
-﻿# SmartPark v1.0 RC1 — change summary
+# SmartPark v1.0 RC1 — change summary
 
-Prepared 13 October 2026 from the the reviewed documentation set. This is a synchronized requirements release candidate, not a signed release, repository commit, implemented system or passed acceptance result.
+Prepared 13 October 2026 from the five supplied files and the PM's subsequent Option A confirmation. This is a synchronized requirements release candidate, not a signed release, repository commit, implemented system or passed acceptance result.
 
 ## What changed
 
@@ -81,3 +81,7 @@ New IDs: FR-AUTH-07–11; BR-AUTH-04–07; UC-AUTH-04–06; US-SEC01–03. Total
 Technical elaborations: security/factor version checks, replay guards, restricted grants, atomic backup-code consumption and replacement, revoked-session enforcement, outbox/inbox recovery. Numeric TOTP profile/window, challenge TTL, recent-auth age, backup-code count/entropy and throttling remain explicit implementation-review settings. No unapproved numeric defaults or implemented results are claimed.
 
 Historical source files and RC1 before/after reports are unchanged; the updated baseline review carries a supersession banner and new decision section. Use the RC2 diff for this amendment. Unchanged modules may still say RC1; that is their last-edit revision, not current TOTP authority.
+
+## RC3 / PAY-01 — 13 October 2026
+
+payOS QR is now first implementation priority. Controlled low-value payOS production testing plus deterministic failure/race fixtures replaces the one-real-sandbox gate. Native VNPay/MoMo/ZaloPay stay separate planned options with truthful modes; unfinished native integrations may be simulated/deferred. Added adapter clarification and integration test plan. Pricing/refund/capacity/security rules are preserved; refund execution still requires capability evidence. See [complete RC3 changes](docs/05-project-management/decision-log/rc3-change-summary.md) and patch RC2-to-RC3.diff for exact edits. Prior sections describe earlier revision deltas.
