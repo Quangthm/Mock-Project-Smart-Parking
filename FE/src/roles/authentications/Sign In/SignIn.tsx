@@ -93,31 +93,14 @@ export function SignIn() {
           ? error.message
           : "Sign in failed. Please try again."
 
-      // MFA accounts must complete the OTP challenge endpoint. The password endpoint
-      // deliberately returns MFA_REQUIRED and cannot accept a TOTP on retry.
+      // Backend requires TOTP — show the code field inline, don't display the raw error
       if (
         mode === "password" &&
-        msg.toLowerCase().includes("use otp sign-in") &&
+        msg.toLowerCase().includes("otp") &&
         !requireTotp
       ) {
-        try {
-          const nextChallenge = await authApi.requestOtp(email)
-          setMode("otp")
-          setChallenge(nextChallenge)
-          setCode("")
-          setTotp("")
-          setRequireTotp(false)
-          setTotpCode("")
-          setError(
-            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code.",
-          )
-        } catch (otpError) {
-          setError(
-            otpError instanceof Error
-              ? otpError.message
-              : "Unable to start OTP sign-in. Please try again.",
-          )
-        }
+        setRequireTotp(true)
+        setError("")
       } else {
         setError(msg)
       }

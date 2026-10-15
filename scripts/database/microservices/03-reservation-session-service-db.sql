@@ -79,10 +79,10 @@ CREATE TABLE parking_sessions (
     ticket_reference VARCHAR(100),
     
     entry_time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    entry_image_url TEXT,
+    entry_image_url VARCHAR(500),
     
     exit_time TIMESTAMPTZ,
-    exit_image_url TEXT,
+    exit_image_url VARCHAR(500),
     
     session_status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (session_status IN ('ACTIVE', 'PENDING_PAYMENT', 'COMPLETED', 'OVERSTAYED', 'DISPUTED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -126,17 +126,3 @@ CREATE TABLE slot_allocations (
 
 CREATE INDEX idx_slot_allocations_tenant_site ON slot_allocations(tenant_id, site_id);
 CREATE INDEX idx_slot_allocations_times ON slot_allocations(allocated_start_time, allocated_end_time);
-
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id UUID NOT NULL,
-    site_id UUID NOT NULL,
-    actor_id UUID NOT NULL,
-    actor_role VARCHAR(50) NOT NULL,
-    action VARCHAR(100) NOT NULL,
-    target_entity VARCHAR(100) NOT NULL,
-    target_id UUID NOT NULL,
-    reason TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX idx_audit_logs_site_created ON audit_logs(site_id, created_at DESC);
