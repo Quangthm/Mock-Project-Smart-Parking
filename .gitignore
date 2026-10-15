@@ -123,3 +123,6 @@ coverage*.xml
 # Test result artifacts
 TestResults/
 *.trx
+
+# Agents
+.agents/*
