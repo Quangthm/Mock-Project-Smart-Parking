@@ -1,5 +1,6 @@
 import { useState, useId, useMemo, type FormEvent } from "react"
 import { parkingApi, type Site } from "../../../lib/parkingApi"
+import { AuthApiError } from "../../../lib/authApi"
 import { ownerData as store } from "../data/data"
 import { useApp } from "../../../context/AppContext"
 import type { LotType } from "../../../lib/types"
@@ -44,6 +45,26 @@ function generateSlug(text: string): string {
     .slice(0, 8)
 }
 
+type SiteDraft = {
+  lotType: LotType
+  selectedCity: string
+  district: string
+  streetAddress: string
+  form: {
+    code: string
+    name: string
+    address: string
+    totalSlots: string
+    floors: string
+    latitude: number
+    longitude: number
+    isActive: boolean
+    hourlyRate: number
+    dailyRate: number
+  }
+  devices: Record<string, boolean>
+}
+
 export function SiteForm({
   site,
   onSaved,
@@ -55,18 +76,27 @@ export function SiteForm({
 }) {
   const { user } = useApp()
   const formId = useId()
+  const draftKey = `sp_site_create_draft_${user?.id ?? "anonymous"}`
+  const [draft] = useState(() => {
+    try {
+      return site ? null : JSON.parse(sessionStorage.getItem(draftKey) ?? "null") as SiteDraft | null
+    } catch {
+      return null
+    }
+  })
 
   // Infer lot type from existing site or default to outdoor
   const [lotType, setLotType] = useState<LotType>(() => {
+    if (draft?.lotType) return draft.lotType
     if (site?.name.toLowerCase().includes("hầm") || site?.name.toLowerCase().includes("basement")) return "basement"
     if (site?.name.toLowerCase().includes("tầng") || site?.name.toLowerCase().includes("storey")) return "multi-storey"
     return "outdoor"
   })
 
   // Address Parsing
-  const [selectedCity, setSelectedCity] = useState(CITIES[0].code)
-  const [district, setDistrict] = useState(CITIES[0].districts[0])
-  const [streetAddress, setStreetAddress] = useState(site?.address ? site.address.split(",")[0].trim() : "")
+  const [selectedCity, setSelectedCity] = useState(draft?.selectedCity ?? CITIES[0].code)
+  const [district, setDistrict] = useState(draft?.district ?? CITIES[0].districts[0])
+  const [streetAddress, setStreetAddress] = useState(draft?.streetAddress ?? (site?.address ? site.address.split(",")[0].trim() : ""))
   const isManualCode = Boolean(site?.code)
 
   const [form, setForm] = useState({
@@ -80,6 +110,7 @@ export function SiteForm({
     isActive: site?.isActive ?? true,
     hourlyRate: 15000,
     dailyRate: 100000,
+    ...draft?.form,
   })
 
   const [devices, setDevices] = useState<Record<string, boolean>>({
@@ -88,6 +119,7 @@ export function SiteForm({
     sensor: true,
     rfid: false,
     "ev-charger": false,
+    ...draft?.devices,
   })
 
   const [busy, setBusy] = useState(false)
@@ -173,7 +205,7 @@ export function SiteForm({
             floors: floorsNum,
             modelUrl: activeModelDef.path,
             modelFileName: activeModelDef.fileName,
-            slots: store.generateSlots(totalSlotsNum, floorsNum),
+            slots: store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id)?.slots ?? [],
             devices: Object.entries(devices).filter(([, v]) => v).map(([k]) => ({
               type: k as any,
               label: DEVICE_OPTIONS.find((d) => d.type === k)?.label ?? k,
@@ -205,32 +237,20 @@ export function SiteForm({
         })
       } else {
         // Create new site via API
-        let createdSite: Site
-        try {
-          createdSite = await parkingApi.create({
-            code: siteCode,
-            name: siteName,
-            address: finalAddress,
-          })
-        } catch {
-          // Fallback if backend API offline: generate local client Site
-          createdSite = {
-            id: `site-${Date.now()}`,
-            tenantId: user?.id ?? "tenant-001",
-            code: siteCode,
-            name: siteName,
-            address: finalAddress,
-            latitude: form.latitude,
-            longitude: form.longitude,
-            status: "ACTIVE",
-            isActive: true,
-            totalPhysicalCapacity: totalSlotsNum,
-          }
+        const createdSite = await parkingApi.create({
+          code: siteCode,
+          name: siteName,
+          address: finalAddress,
+        })
+        if (!createdSite || typeof createdSite.id !== "string" || !createdSite.id.trim()) {
+          throw new Error("The server did not return a valid site ID. Please try again.")
         }
 
         // Also persist to owner store for visual lot manager
         try {
-          store.createLot({
+          store.saveLot({
+            id: createdSite.id,
+            createdAt: new Date().toISOString(),
             ownerId: user?.id ?? "owner-001",
             name: siteName,
             type: lotType,
@@ -239,7 +259,7 @@ export function SiteForm({
             floors: floorsNum,
             modelUrl: activeModelDef.path,
             modelFileName: activeModelDef.fileName,
-            slots: store.generateSlots(totalSlotsNum, floorsNum),
+            slots: [],
             devices: Object.entries(devices).filter(([, v]) => v).map(([k]) => ({
               type: k as any,
               label: DEVICE_OPTIONS.find((d) => d.type === k)?.label ?? k,
@@ -259,10 +279,29 @@ export function SiteForm({
           // ignore local store sync errors
         }
 
+        sessionStorage.removeItem(draftKey)
         onSaved(createdSite)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save the parking site.")
+      if (err instanceof AuthApiError) {
+        if (!site && err.status === 401) {
+          sessionStorage.setItem(draftKey, JSON.stringify({ lotType, selectedCity, district, streetAddress, form, devices }))
+        }
+        const messages: Record<number, string> = {
+          400: "Please check the site details and try again.",
+          401: "Your session has expired. Please sign in again.",
+          403: "You do not have permission to create this parking site.",
+          409: "A parking site with these details already exists.",
+          500: "The parking server could not create the site. Please try again later.",
+        }
+        setError(err.status === 400 && err.message !== "Authentication request failed."
+          ? err.message
+          : messages[err.status] ?? err.message)
+      } else if (err instanceof Error && err.message.startsWith("Cannot reach the authentication server.")) {
+        setError("Cannot connect to the parking server. Please try again.")
+      } else {
+        setError(err instanceof Error ? err.message : "Unable to save the parking site.")
+      }
     } finally {
       setBusy(false)
     }
@@ -281,7 +320,7 @@ export function SiteForm({
         <p className="text-xs text-[var(--muted)] mt-1">
           {site
             ? "Update the site type, layout, identification, and operating equipment."
-            : "Create a parking site. Its settings will sync with the operational layout."}
+            : "Create a parking site, then add units and slots in Parking Structure for operators to use."}
         </p>
       </div>
 
@@ -429,7 +468,7 @@ export function SiteForm({
           >
             <div>
               <label className="label" htmlFor={`${formId}-slots`}>
-                Total Parking Spaces *
+                Planned Parking Spaces *
               </label>
               <input
                 id={`${formId}-slots`}
@@ -563,7 +602,7 @@ export function SiteForm({
 
         {/* Buttons */}
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
-          <button type="button" className="btn-outline text-xs px-4 py-2" onClick={onCancel} disabled={busy}>
+          <button type="button" className="btn-outline text-xs px-4 py-2" onClick={() => { if (!site) sessionStorage.removeItem(draftKey); onCancel() }} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn-primary text-xs px-5 py-2 font-medium" disabled={busy}>

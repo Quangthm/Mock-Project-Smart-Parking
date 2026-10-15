@@ -75,6 +75,10 @@ export function OperatorDashboard({
   }, [])
 
   useEffect(() => {
+    if (tab === "status" || tab === "slots") setRefreshKey((value) => value + 1)
+  }, [tab])
+
+  useEffect(() => {
     let active = true
     setSitesLoading(true)
     setDataError("")
@@ -83,7 +87,10 @@ export function OperatorDashboard({
         if (active) setAllLots(sites)
       })
       .catch((error) => {
-        if (active) setDataError(error instanceof Error ? error.message : "Could not load assigned parking sites.")
+        if (active) {
+          setAllLots([])
+          setDataError(error instanceof Error ? error.message : "Could not load assigned parking sites.")
+        }
       })
       .finally(() => {
         if (active) setSitesLoading(false)
@@ -91,7 +98,7 @@ export function OperatorDashboard({
     return () => {
       active = false
     }
-  }, [user])
+  }, [user, refreshKey])
 
   const ownerLots = allLots
 
@@ -280,6 +287,11 @@ export function OperatorDashboard({
         )}
         {sitesLoading && (
           <p role="status" className="mb-5 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>
+        )}
+        {(tab === "status" || tab === "slots") && (
+          <div className="mb-4 flex justify-end">
+            <button type="button" className="btn-outline px-3 py-1.5 text-xs" disabled={sitesLoading} onClick={() => setRefreshKey((value) => value + 1)}>Refresh sites and slots</button>
+          </div>
         )}
 
         {/* Site Switcher Header (When multiple lots or all sites assigned) */}

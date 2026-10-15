@@ -13,7 +13,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 export function SiteManagement({
   onSiteCreated,
 }: {
-  onSiteCreated: () => void
+  onSiteCreated: (site: Site, created: boolean) => void
 }) {
   const { user } = useApp()
   const [sites, setSites] = useState<Site[]>([])
@@ -46,17 +46,14 @@ export function SiteManagement({
     setError("")
     setShowFormModal(false)
 
-    Promise.all([parkingApi.list(), operatorsApi.list()])
-      .then(([siteList, operatorList]) => {
+    Promise.allSettled([parkingApi.list(), operatorsApi.list()])
+      .then(([siteResult, operatorResult]) => {
         if (!current) return
-        setSites(siteList)
-        setOperators(operatorList)
-      })
-      .catch((err) => {
-        if (current)
-          setError(
-            err instanceof Error ? err.message : "Cannot load sites and operators.",
-          )
+        if (siteResult.status === "fulfilled") setSites(siteResult.value)
+        else setError(siteResult.reason instanceof Error ? siteResult.reason.message : "Cannot load sites.")
+        if (operatorResult.status === "fulfilled") setOperators(operatorResult.value)
+        else if (siteResult.status === "fulfilled")
+          setError(operatorResult.reason instanceof Error ? operatorResult.reason.message : "Cannot load operators.")
       })
       .finally(() => {
         if (current) setLoading(false)
@@ -68,6 +65,7 @@ export function SiteManagement({
   }, [user?.id, reload])
 
   function handleSavedSite(site: Site) {
+    const created = !editingSite
     setSites((current) =>
       [...current.filter((s) => s.id !== site.id), site].sort((a, b) =>
         a.name.localeCompare(b.name),
@@ -76,7 +74,8 @@ export function SiteManagement({
     setShowFormModal(false)
     setEditingSite(undefined)
     setMessage(`Successfully saved parking facility: ${site.name}`)
-    onSiteCreated()
+    setReload((value) => value + 1)
+    onSiteCreated(site, created)
   }
 
   function handleOpenAssignModal(site: Site) {

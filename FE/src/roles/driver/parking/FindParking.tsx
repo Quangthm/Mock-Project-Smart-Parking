@@ -658,7 +658,7 @@ export function FindParking({
                   <button
                     type="button"
                     className="btn-outline"
-                    title="Xem quy định & chính sách bãi đỗ xe (PDF)"
+                    title="View parking rules and policies (PDF)"
                     onClick={(event) => {
                       event.stopPropagation()
 
@@ -683,7 +683,7 @@ export function FindParking({
                     }}
                   >
                     <UntitledIcon name="file" size={13} />
-                    Chính sách
+                    Policies
                   </button>
                 </div>
               </article>

@@ -210,6 +210,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
       {structure && !loading && (
         <>
+          {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No backend parking slots are configured for this site yet. Add a unit, then add slots here for operators to use.</p>}
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="Physical slots" value={slots.length} tone="available" />
             <Metric label="Available" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? total("available") : "—"} tone="available" />

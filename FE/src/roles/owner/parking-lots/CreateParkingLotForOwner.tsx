@@ -1,6 +1,7 @@
 import { useState, useId } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { parkingApi } from "../../../lib/parkingApi"
 
 import { ownerData as store } from "../data/data"
 
@@ -190,7 +191,8 @@ export function OnboardingWizard({
     setCustomModelFileName(file.name)
   }
 
-  function handleComplete() {
+  async function handleComplete() {
+    if (isCompleting) return
     if (!user) {
       setCompletionError(
         "Please sign in to an Owner account before activating a parking lot.",
@@ -204,18 +206,35 @@ export function OnboardingWizard({
     setIsCompleting(true)
 
     try {
+      const name = lotConfig.name.trim()
+      const address = lotConfig.address.trim()
+      if (!name || !address) {
+        throw new Error("Please enter the parking lot name and address.")
+      }
+
       const totalSlots = parseInt(String(lotConfig.totalSlots)) || 50
 
       const floors = LOT_TYPE_INFO[lotType].hasFloors
         ? parseInt(String(lotConfig.floors)) || 1
         : 1
 
-      const lot = store.createLot({
+      const site = await parkingApi.create({
+        code: `SPK-ONB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        name,
+        address,
+      })
+      if (!site || typeof site.id !== "string" || !site.id.trim()) {
+        throw new Error("The server did not return a valid site ID. Please try again.")
+      }
+
+      const lot: ParkingLot = {
+        id: site.id,
+        createdAt: new Date().toISOString(),
         ownerId: user.id,
-        name: lotConfig.name,
+        name,
         type: lotType,
 
-        address: lotConfig.address,
+        address,
         totalSlots,
 
         floors,
@@ -224,7 +243,7 @@ export function OnboardingWizard({
 
         modelFileName: activeModelFileName,
 
-        slots: store.generateSlots(totalSlots, floors),
+        slots: [],
 
         devices: Object.entries(devices)
           .filter(([, v]) => v)
@@ -239,7 +258,13 @@ export function OnboardingWizard({
 
         lat: 10.77 + Math.random() * 0.1,
         lng: 106.69 + Math.random() * 0.1,
-      })
+      }
+
+      try {
+        store.saveLot(lot)
+      } catch (error) {
+        console.error("Site created, but the local lot could not be saved.", error)
+      }
 
       const updatedUser = {
         ...user,
@@ -250,8 +275,6 @@ export function OnboardingWizard({
       store.saveUser(updatedUser)
 
       setUser(updatedUser)
-
-      setIsCompleting(false)
 
       onComplete(lot)
 
@@ -272,13 +295,13 @@ export function OnboardingWizard({
         )
       }
     } catch (error) {
-      setIsCompleting(false)
-
       setCompletionError(
         error instanceof Error
           ? error.message
           : "Could not save your parking lot. Please try again.",
       )
+    } finally {
+      setIsCompleting(false)
     }
   }
 
@@ -1193,6 +1216,9 @@ export function OnboardingWizard({
                 )}
               </button>
             </div>
+            <p className="mt-3 text-xs text-[var(--muted)]">
+              Activation creates your site. Add floors, zones, and parking slots in Parking Structure next; operators will see slots saved there.
+            </p>
             {completionError && (
               <p
                 role="alert"
