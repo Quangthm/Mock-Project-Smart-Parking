@@ -25,7 +25,10 @@ public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory c
         {
             if(string.IsNullOrWhiteSpace(config["Otp:Smtp:Host"]))throw new InvalidOperationException("Configure SMTP delivery.");
             using var smtp=new SmtpClient(config["Otp:Smtp:Host"],config.GetValue("Otp:Smtp:Port",587)){EnableSsl=true,Credentials=new NetworkCredential(config["Otp:Smtp:Username"],config["Otp:Smtp:Password"])};
-            using var mail=new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body);mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());await smtp.SendMailAsync(mail,ct);return;
+            using var mail=message.OtpCode is null
+                ? new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body)
+                : OtpEmailTemplate.Create(config["Otp:Smtp:From"]!,message);
+            mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());await smtp.SendMailAsync(mail,ct);return;
         }
         if(message.Channel=="sms" && Uri.TryCreate(config["Otp:Sms:Url"],UriKind.Absolute,out var url) && url.Scheme=="https")
         {
