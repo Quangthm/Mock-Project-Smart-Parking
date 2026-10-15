@@ -81,6 +81,21 @@ export function OperatorManagement({
     onOperatorsChanged()
   }
 
+  async function handleDeleteOperator(operator: Operator) {
+    if (!window.confirm(`Delete the operator account for ${operator.fullName}?`)) return
+
+    setError("")
+    setMessage("")
+    try {
+      await operatorsApi.remove(operator.id)
+      setOperators((current) => current.filter((item) => item.id !== operator.id))
+      setMessage(`Operator account ${operator.email} was deleted.`)
+      onOperatorsChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete operator account.")
+    }
+  }
+
   function openTransferModal(op: Operator) {
     setTransferOp(op)
     setTargetSiteId(op.siteIds[0] ?? sites[0]?.id ?? "")
@@ -209,7 +224,7 @@ export function OperatorManagement({
             <option value="all">All Sites ({operators.length} operators)</option>
             {sites.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.code} - {s.name}
+                {s.name}
               </option>
             ))}
           </select>
@@ -280,6 +295,14 @@ export function OperatorManagement({
                           title="Change assigned parking site for this operator"
                         >
                           Change Site
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400"
+                          onClick={() => void handleDeleteOperator(op)}
+                          title="Delete this operator account"
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>
@@ -376,7 +399,7 @@ export function OperatorManagement({
                   >
                     {sites.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.code} - {s.name}
+                        {s.name}
                       </option>
                     ))}
                   </select>

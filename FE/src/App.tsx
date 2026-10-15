@@ -19,6 +19,8 @@ import { RoleRoute } from "./components/navigation/RoleRoute"
 
 import { Footer } from "./components/layout/Footer"
 
+import { FloatingChatbot } from "./components/chat/FloatingChatbot"
+
 import { Landing } from "./public pages/Landing"
 
 import { Pricing } from "./public pages/Pricing"
@@ -149,6 +151,9 @@ function AppContent() {
           </div>
         )}
       </main>
+      {authReady && user && usesDashboardNavbar && (
+        <FloatingChatbot key={user.id} role={user.role} />
+      )}
       {!isDashboard && <Footer />}
     </div>
   )
