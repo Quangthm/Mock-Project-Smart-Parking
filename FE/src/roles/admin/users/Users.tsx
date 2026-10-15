@@ -223,7 +223,8 @@ export function Users() {
             </span>
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Search accounts, view user details, and lock or unlock sign-in access.
+            Search platform accounts, view registration data, manage security
+            lockouts, and audit login sessions.
           </p>
         </div>
       </header>
@@ -235,13 +236,11 @@ export function Users() {
       >
         {/* Search Field */}
         <div className="relative min-w-[240px] flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 items-center text-[var(--muted)]">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]">
             <UntitledIcon name="search" size={16} />
           </span>
           <input
-            className="input w-full"
-            style={{ paddingLeft: "2.75rem", paddingRight: "2.25rem" }}
-            aria-label="Search users by name, email, or phone number"
+            className="input w-full pl-9 pr-8"
             placeholder="Search by name, email, or phone number..."
             maxLength={200}
             disabled={saving}
@@ -681,7 +680,7 @@ export function Users() {
                     )}
                   </div>
 
-                  {/* Locking disables sign-in access and revokes active sessions. */}
+                  {/* Lock / Unlock Control */}
                   {canChange && (
                     <div className="border-t border-[var(--border)] pt-3">
                       <button
@@ -697,8 +696,8 @@ export function Users() {
                         {saving
                           ? "Updating…"
                           : managed.status === "locked"
-                            ? "Unlock Account · Restore Access"
-                            : "Lock Account · Disable Access"}
+                            ? "Unlock Account & Allow Sign-in"
+                            : "Lock Account & Revoke Sessions"}
                       </button>
                     </div>
                   )}

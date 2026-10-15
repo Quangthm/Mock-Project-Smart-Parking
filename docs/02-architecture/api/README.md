@@ -9,4 +9,3 @@ business capability. Do not use API shape to invent missing business rules.
 - [SPARK-179 / SPARK-196 — Owner registration and Admin approval](owner-registration-approval.md)
 - [SPARK-206 — Admin user management](admin-user-management.md)
 - [SPARK-192 — Create Operator](operator-provisioning.md)
-- [Operator gate and operations APIs](operator-gate-and-operations.md)

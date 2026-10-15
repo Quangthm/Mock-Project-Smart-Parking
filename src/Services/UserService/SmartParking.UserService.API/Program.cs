@@ -61,7 +61,7 @@ public static class UserHost
         builder.Services.AddAuthorization();
         // Only allow the local frontend during this demo. Production uses explicit configured origins.
         builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
+            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
             .AllowAnyHeader()
             .AllowAnyMethod()));
 

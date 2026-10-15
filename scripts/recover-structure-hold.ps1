@@ -68,11 +68,34 @@ $snapshot = Read-Database 'parking-db' 'smartpark_parking' $snapshotSql
 if (!$snapshot) { throw 'Site missing in authoritative Parking DB; manual investigation required.' }
 $body = $snapshot | ConvertFrom-Json
 if ([guid]$body.tenantId -ne [guid]$pending.tenant_id) { throw 'Hold tenant differs from Parking site tenant; manual investigation required.' }
+
+$tracked = $null
+$hasSynchronizationTable = Read-Database 'parking-db' 'smartpark_parking' "SELECT to_regclass('structure_synchronizations') IS NOT NULL"
+if (($hasSynchronizationTable -join '').Trim() -eq 't') {
+    $trackedJson = Read-Database 'parking-db' 'smartpark_parking' "SELECT row_to_json(s) FROM structure_synchronizations s WHERE token='$([guid]$pending.token)'::uuid"
+    if ($trackedJson) {
+        $tracked = $trackedJson | ConvertFrom-Json
+        if ($tracked.state -eq 'completed') { throw 'A completed synchronization still has a hold; investigate before releasing it.' }
+        if ($tracked.state -eq 'ready') {
+            $body = @{ tenantId = $tracked.tenant_id; outcome = $tracked.outcome }
+        } else {
+            # With all Parking instances stopped and no DB connections remaining,
+            # an uncommitted preparation can only be aborted.
+            $body = @{ tenantId = $tracked.tenant_id; outcome = $null }
+        }
+        $snapshot = $body | ConvertTo-Json -Depth 30 -Compress
+    }
+}
+
 Write-Output "Hold: $($pending.token); site: $SiteId; created: $($pending.created_at)"
 Write-Output $snapshot
 if (!$Apply) { Write-Output 'Inspection only. Review the snapshot, then repeat with -Apply while Parking remains stopped.'; return }
 if (!$env:SMARTPARK_SERVICE_KEY -or $env:SMARTPARK_SERVICE_KEY.Length -lt 32) { throw 'Set SMARTPARK_SERVICE_KEY.' }
-# This publishes authoritative projections and capacities before releasing; never use outcome=null here.
+# Committed edits replay their durable outcome. Legacy holds use the authoritative
+# snapshot; tracked preparations that never committed use a null abort outcome.
 Invoke-RestMethod -Method Post -Uri "$($ReservationUrl.TrimEnd('/'))/internal/structure/$SiteId/$($pending.token)/release" -Headers @{ 'X-Service-Key'=$env:SMARTPARK_SERVICE_KEY } -ContentType 'application/json' -Body $snapshot | Out-Null
 Read-Database 'parking-db' 'smartpark_parking' "UPDATE structure_operations SET status='completed',reason='Recovered from authoritative Parking snapshot after projection acknowledgement',updated_at=now() WHERE site_id='$SiteId'::uuid AND tenant_id='$([guid]$body.tenantId)'::uuid AND physical_committed AND status<>'completed'" | Out-Null
+if ($tracked) {
+    Read-Database 'parking-db' 'smartpark_parking' "UPDATE structure_synchronizations SET state='completed',updated_at=now() WHERE token='$([guid]$pending.token)'::uuid" | Out-Null
+}
 Write-Output 'Reconciled and released. Parking API can now restart.'

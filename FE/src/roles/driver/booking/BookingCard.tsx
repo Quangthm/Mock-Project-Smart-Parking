@@ -21,7 +21,13 @@ export function BookingCard({
 
   const lot = store.getLots().find((l) => l.id === booking.lotId)
 
-  const paymentStatus = booking.paymentStatus
+  const paymentStatus =
+    booking.paymentStatus ??
+    (booking.status === "completed" ||
+    booking.status === "checked-in" ||
+    booking.status === "confirmed"
+      ? "paid"
+      : "pending")
 
   const bookingColor =
     booking.status === "completed"
@@ -32,9 +38,7 @@ export function BookingCard({
           ? "#2563eb"
           : booking.status === "confirmed"
             ? "#22c55e"
-      : paymentStatus === "pending"
-        ? "#f59e0b"
-        : "var(--muted)"
+            : "#f59e0b"
 
   const paymentColor =
     paymentStatus === "paid"
@@ -180,7 +184,7 @@ export function BookingCard({
                   : `1px solid ${paymentColor}30`,
             }}
           >
-            Payment {paymentStatus?.toUpperCase() ?? "UNKNOWN"}
+            Payment {paymentStatus.toUpperCase()}
           </div>
         </div>
 
@@ -221,7 +225,7 @@ export function BookingCard({
             </button>
           )}
           {onPayNow &&
-            (paymentStatus === "pending" || paymentStatus === "failed") &&
+            paymentStatus !== "paid" &&
             booking.status !== "completed" &&
             booking.status !== "cancelled" && (
               <button
