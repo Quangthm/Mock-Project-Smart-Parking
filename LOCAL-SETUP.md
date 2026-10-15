@@ -51,7 +51,7 @@ Runner dùng `.env` cho connection strings, shared service key, Admin và tùy c
 
 ## Schema và dữ liệu có sẵn
 
-Database mới chạy SQL baseline trong `scripts/database/microservices`, tiếp theo overlay trong `integration`, rồi workflow `05.8`, `05.9`, `05.10`, đồng bộ cấu trúc `05.11` và receipts `05.12` theo từng service. Các migration lịch sử `05.2`–`05.7` thuộc đường nâng cấp monolith, không chạy lên database service mới. `docker-compose.yml` là compose monolith cũ (port 5433), không được setup hiện tại sử dụng.
+Database mới chạy SQL baseline trong `scripts/database/microservices`, tiếp theo overlay trong `integration`, rồi workflow `05.8`, `05.9`, `05.10`, đồng bộ cấu trúc `05.11` và receipts `05.12` và vòng đời 2FA `05.13` theo từng service. Các migration lịch sử `05.2`–`05.7` thuộc đường nâng cấp monolith, không chạy lên database service mới. `docker-compose.yml` là compose monolith cũ (port 5433), không được setup hiện tại sử dụng.
 
 PostgreSQL chỉ chạy init SQL khi volume mới hoàn toàn. Với volume đã tồn tại, setup chạy lại workflow migration có thể lặp lại an toàn, qua script `scripts/apply-workflow-migrations.ps1` đang có. Nếu baseline hoặc overlay bị thiếu, script dừng và yêu cầu kiểm tra schema; không chạy lại CREATE TABLE trên dữ liệu đang dùng. Migration báo contact trùng thì cần xử lý dữ liệu trước khi thử lại.
 

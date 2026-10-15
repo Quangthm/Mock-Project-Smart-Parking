@@ -12,6 +12,8 @@ services:
       - ./scripts/database/microservices/01-user-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/integration/01-user-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
       - ./scripts/database/05.8-Account-Workflow-Vehicles.sql:/docker-entrypoint-initdb.d/03-workflows.sql:ro
+      - ./scripts/database/05.13-Mfa-Lifecycle.sql:/docker-entrypoint-initdb.d/04-mfa.sql:ro
+      - ./scripts/database/05.14-Identity-Access-Hardening.sql:/docker-entrypoint-initdb.d/05-identity-access.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_user -d smartpark_user"]
       interval: 5s

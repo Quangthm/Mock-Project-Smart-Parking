@@ -51,6 +51,13 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
 
 # Optional .env settings override saved user-secrets only for this runner process.
 if ($Service -eq 'User') {
+    if ($env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN) { $env:Onboarding__PublicOrigin = $env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN }
+    if ($env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK) { $env:Onboarding__AllowHttpLoopback = $env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK }
+    if ($env:SMARTPARK_MESSAGING_ENABLED) { $env:Messaging__Enabled = $env:SMARTPARK_MESSAGING_ENABLED }
+    foreach ($field in @('Host','Port','VirtualHost','Username','Password')) {
+        $value = [Environment]::GetEnvironmentVariable('SMARTPARK_RABBITMQ_' + $field.ToUpperInvariant())
+        if ($value) { [Environment]::SetEnvironmentVariable('Messaging__' + $field, $value, 'Process') }
+    }
     foreach ($field in @('Host','Port','Username','Password','From')) {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }

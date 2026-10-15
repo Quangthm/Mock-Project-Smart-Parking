@@ -23,13 +23,19 @@ $sql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$migratio
 $sql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) { throw "Migration failed for $Service; its transaction was rolled back. Reconcile conflicting data before retrying." }
 
-if ($Service -in @('Parking','Reservation')) {
+if ($Service -in @('User','Parking','Reservation')) {
     $additionalMigration = @{
+        User='05.13-Mfa-Lifecycle.sql'
         Parking='05.11-Parking-Structure-Synchronization.sql'
         Reservation='05.12-Reservation-Structure-Receipts.sql'
     }[$Service]
     $serviceSql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$additionalMigration") -Raw
     $serviceSql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw "Structure synchronization migration failed for $Service." }
+}
+if ($Service -eq 'User') {
+    $identitySql = Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/05.14-Identity-Access-Hardening.sql') -Raw
+    $identitySql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'Identity access hardening migration failed.' }
 }
 Write-Output "$Service workflow migrations applied."
