@@ -1,16 +1,7 @@
-import { useState, useMemo, useEffect } from "react"
-import { structureStore } from "../data/structureStore"
-import type {
-  ParkingFloorItem,
-  ParkingZoneItem,
-  ParkingSpaceItem,
-  ParkingStructureData,
-} from "../../../lib/structureTypes"
-import type { Site } from "../../../lib/parkingApi"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { parkingApi, type Site, type Slot, type Structure, type Unit } from "../../../lib/parkingApi"
+import { BackupCapacityPanel } from "../dashboard/BackupCapacityPanel"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { FloorModal } from "./FloorModal"
-import { ZoneModal } from "./ZoneModal"
-import { SpaceDetailModal } from "./SpaceDetailModal"
 
 interface ParkingStructureProps {
   sites?: Site[]
@@ -18,702 +9,288 @@ interface ParkingStructureProps {
   onChanged?: () => void
 }
 
-// 6 Canonical Status Configuration for UI
-export const STATUS_DEFINITIONS = {
-  available: {
-    label: "Available",
-    color: "#16a34a",
-    bg: "rgba(34, 197, 94, 0.12)",
-    border: "rgba(34, 197, 94, 0.35)",
-    icon: "check-circle",
-    desc: "Available for parking or reservations",
-  },
-  reserved: {
-    label: "Reserved",
-    color: "#2563eb",
-    bg: "rgba(37, 99, 235, 0.12)",
-    border: "rgba(37, 99, 235, 0.35)",
-    icon: "clock",
-    desc: "Reserved through the app",
-  },
-  pending_payment: {
-    label: "Pending Payment",
-    color: "#d97706",
-    bg: "rgba(245, 158, 11, 0.12)",
-    border: "rgba(245, 158, 11, 0.35)",
-    icon: "banknote",
-    desc: "Temporarily held while payment is in progress",
-  },
-  backup: {
-    label: "Slot Backup",
-    color: "#9333ea",
-    bg: "rgba(147, 51, 234, 0.12)",
-    border: "rgba(147, 51, 234, 0.35)",
-    icon: "shield",
-    desc: "Backup space for emergencies and reallocation",
-  },
-  occupied: {
-    label: "Occupied",
-    color: "#dc2626",
-    bg: "rgba(239, 68, 68, 0.12)",
-    border: "rgba(239, 68, 68, 0.35)",
-    icon: "car",
-    desc: "A vehicle is currently parked in this space",
-  },
-  protected: {
-    label: "Protected",
-    color: "#6366f1",
-    bg: "rgba(99, 102, 241, 0.15)",
-    border: "rgba(99, 102, 241, 0.45)",
-    icon: "shield",
-    desc: "Protected for an upcoming reservation; walk-ins are blocked",
-  },
+const unitTypes = ["FLOOR", "ZONE", "BLOCK"] as const
+const vehicleTypes = ["CAR", "MOTORCYCLE", "OVERSIZED"] as const
+const slotTypes = ["STANDARD", "VIP", "EV", "DISABLED"] as const
+
+const inputClass = "input w-full text-sm"
+const labelClass = "space-y-1 text-xs font-medium text-[var(--muted)]"
+
+const metricStyles = {
+  available: { color: "text-emerald-700 dark:text-emerald-300", bg: "rgba(34,197,94,.10)", border: "rgba(34,197,94,.3)", icon: "check-circle" },
+  occupied: { color: "text-red-700 dark:text-red-300", bg: "rgba(239,68,68,.10)", border: "rgba(239,68,68,.3)", icon: "car" },
+  protected: { color: "text-indigo-700 dark:text-indigo-300", bg: "rgba(99,102,241,.10)", border: "rgba(99,102,241,.3)", icon: "shield" },
+  payment: { color: "text-amber-700 dark:text-amber-300", bg: "rgba(245,158,11,.10)", border: "rgba(245,158,11,.3)", icon: "banknote" },
+  backup: { color: "text-purple-700 dark:text-purple-300", bg: "rgba(147,51,234,.10)", border: "rgba(147,51,234,.3)", icon: "shield" },
+} as const
+
+function Metric({ label, value, tone }: { label: string; value: string | number; tone: keyof typeof metricStyles }) {
+  const style = metricStyles[tone]
+  return <div className="min-w-0 rounded-xl border p-3" style={{ background: style.bg, borderColor: style.border }}><div className={`flex items-center justify-between gap-2 text-[11px] font-semibold ${style.color}`}><span>{label}</span><UntitledIcon name={style.icon} size={14} /></div><div className={`mt-1 truncate text-xl font-bold ${style.color}`}>{value}</div></div>
 }
 
-export function ParkingStructure({
-  sites = [],
-  selectedSiteId = "all",
-  onChanged,
-}: ParkingStructureProps) {
-  // Available lots list
-  const availableLots = useMemo(() => {
-    if (sites && sites.length > 0) return sites
-    return [
-      {
-        id: "lot-002",
-        name: "Bitexco Financial Tower Outdoor Lot",
-        address: "2 Hải Triều, Bến Nghé, Quận 1, TP. Hồ Chí Minh",
-      } as Site,
-      {
-        id: "lot-001",
-        name: "Vinhomes Grand Park Parking Center",
-        address: "Khu đô thị Vinhomes Grand Park, Phường Long Thạnh Mỹ, TP. Thủ Đức",
-      } as Site,
-      {
-        id: "lot-003",
-        name: "Nguyen Hue Boulevard Outdoor Lot",
-        address: "68 Nguyễn Huệ, Bến Nghé, Quận 1, TP. Hồ Chí Minh",
-      } as Site,
-    ]
-  }, [sites])
+function errorText(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
 
-  const [activeLotId, setActiveLotId] = useState<string>(() => {
-    if (selectedSiteId && selectedSiteId !== "all") return selectedSiteId
-    return availableLots[0]?.id || "lot-002"
-  })
+function slotAppearance(slot: Slot) {
+  if (slot.isPhysicallyOccupied && slot.reservationState === "PROTECTED") return { label: "Occupied + protected", color: "#be123c", bg: "rgba(225,29,72,.12)", border: "rgba(225,29,72,.55)" }
+  if (slot.isPhysicallyOccupied) return { label: "Occupied", color: "#dc2626", bg: "rgba(239,68,68,.10)", border: "rgba(239,68,68,.4)" }
+  if (slot.reservationState === "PROTECTED") return { label: "Protected", color: "#4f46e5", bg: "rgba(99,102,241,.10)", border: "rgba(99,102,241,.4)" }
+  if (slot.reservationState === "PENDING_PAYMENT") return { label: "Pending payment", color: "#d97706", bg: "rgba(245,158,11,.10)", border: "rgba(245,158,11,.4)" }
+  if (slot.reservationState && slot.reservationState !== "NONE") return { label: slot.reservationState.replaceAll("_", " "), color: "#2563eb", bg: "rgba(37,99,235,.10)", border: "rgba(37,99,235,.4)" }
+  if (slot.operationalStatus !== "ACTIVE" && slot.operationalStatus !== "AVAILABLE") return { label: slot.operationalStatus.replaceAll("_", " "), color: "#9333ea", bg: "rgba(147,51,234,.10)", border: "rgba(147,51,234,.4)" }
+  return { label: slot.operationalStatus, color: "#16a34a", bg: "rgba(34,197,94,.10)", border: "rgba(34,197,94,.4)" }
+}
 
-  useEffect(() => {
-    if (selectedSiteId && selectedSiteId !== "all") {
-      setActiveLotId(selectedSiteId)
-    }
-  }, [selectedSiteId])
+export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: ParkingStructureProps) {
+  const [siteId, setSiteId] = useState("")
+  const [structure, setStructure] = useState<Structure | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const [error, setError] = useState("")
+  const [notice, setNotice] = useState("")
+  const [reload, setReload] = useState(0)
+  const [search, setSearch] = useState("")
+  const [unitFilter, setUnitFilter] = useState("")
+  const [floorFilter, setFloorFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const [createModal, setCreateModal] = useState<"unit" | "slot" | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
+  const [unitForm, setUnitForm] = useState({ type: "FLOOR", name: "", parentId: "", capacity: "0" })
+  const [slotForm, setSlotForm] = useState({ unitId: "", code: "", vehicleType: "CAR", type: "STANDARD" })
 
   useEffect(() => {
-    if (availableLots.length > 0 && !availableLots.some((l) => l.id === activeLotId)) {
-      setActiveLotId(availableLots[0].id)
-    }
-  }, [availableLots, activeLotId])
+    setSiteId((current) => {
+      if (selectedSiteId && selectedSiteId !== "all" && sites.some((site) => site.id === selectedSiteId)) return selectedSiteId
+      return sites.some((site) => site.id === current) ? current : (sites[0]?.id ?? "")
+    })
+  }, [selectedSiteId, sites])
 
-  // Current Structure Data
-  const [structure, setStructure] = useState<ParkingStructureData>(() =>
-    structureStore.getStructure(activeLotId),
+  useEffect(() => {
+    let current = true
+    setStructure(null)
+    setSelectedSlot(null)
+    setError("")
+    setUnitFilter("")
+    setFloorFilter("")
+    setStatusFilter("")
+    setCreateModal(null)
+    if (!siteId) {
+      setLoading(false)
+      return () => { current = false }
+    }
+    setLoading(true)
+    parkingApi.structure(siteId)
+      .then((data) => {
+        if (!current) return
+        setStructure(data)
+        setSlotForm((form) => ({ ...form, unitId: data.units.some((unit) => unit.id === form.unitId) ? form.unitId : (data.units[0]?.id ?? "") }))
+      })
+      .catch((cause) => { if (current) setError(errorText(cause, "Cannot load parking structure.")) })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [siteId, reload])
+
+  const units = structure?.units ?? []
+  const slots = structure?.slots ?? []
+  const unitById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units])
+  const parentOptions = units.filter((unit) =>
+    unitForm.type === "ZONE" ? unit.type === "FLOOR" : unitForm.type === "BLOCK" && (unit.type === "FLOOR" || unit.type === "ZONE"),
   )
 
-  // Floor Selection
-  const [selectedFloorId, setSelectedFloorId] = useState<string>("")
-  const [selectedZoneFilter, setSelectedZoneFilter] = useState<string>("all")
+  function location(unitId: string) {
+    const names: string[] = []
+    const seen = new Set<string>()
+    let cursor: Unit | undefined = unitById.get(unitId)
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id)
+      names.unshift(cursor.name)
+      cursor = cursor.parentId ? unitById.get(cursor.parentId) : undefined
+    }
+    return names.length ? names.join(" / ") : "Unknown location"
+  }
 
-  // Filter & Search
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "available" | "reserved" | "pending_payment" | "backup" | "occupied" | "protected" | "dual"
-  >("all")
-  const [searchQuery, setSearchQuery] = useState("")
+  function insideUnit(slotUnitId: string, selectedUnitId: string) {
+    const seen = new Set<string>()
+    let cursor: Unit | undefined = unitById.get(slotUnitId)
+    while (cursor && !seen.has(cursor.id)) {
+      if (cursor.id === selectedUnitId) return true
+      seen.add(cursor.id)
+      cursor = cursor.parentId ? unitById.get(cursor.parentId) : undefined
+    }
+    return false
+  }
 
-  // Owner Protected Buffer Setting (x hours)
-  const [protectionWindowHours, setProtectionWindowHours] = useState<number>(
-    () => (structure.policy?.reservationProtectionWindowMinutes ?? 60) / 60,
+  const shownSlots = slots.filter((slot) =>
+    (!floorFilter || insideUnit(slot.unitId, floorFilter)) &&
+    (!unitFilter || insideUnit(slot.unitId, unitFilter)) &&
+    (!statusFilter || (statusFilter === "occupied" ? slot.isPhysicallyOccupied : statusFilter === "empty" ? !slot.isPhysicallyOccupied : statusFilter === "protected" ? slot.reservationState === "PROTECTED" : statusFilter === "payment" ? slot.reservationState === "PENDING_PAYMENT" : slot.operationalStatus === statusFilter)) &&
+    slot.code.toLowerCase().includes(search.trim().toLowerCase()),
   )
+  const siteCapacity = (structure?.capacityViews ?? []).filter((view) => view.unitId === null)
+  const floors = units.filter((unit) => unit.type === "FLOOR")
+  const visibleUnits = units.filter((unit) => !floorFilter || insideUnit(unit.id, floorFilter))
+  const total = (field: "available" | "protected" | "pendingPayment" | "effectiveBackup") => siteCapacity.reduce((sum, view) => sum + (view[field] ?? 0), 0)
 
-  const protectionStartMinutes = 10 * 60 - Math.round(protectionWindowHours * 60)
-  const protectionStartTime = `${String(Math.floor(protectionStartMinutes / 60)).padStart(2, "0")}:${String(protectionStartMinutes % 60).padStart(2, "0")}`
-  // Modal States
-  const [isFloorModalOpen, setIsFloorModalOpen] = useState(false)
-  const [editingFloor, setEditingFloor] = useState<ParkingFloorItem | null>(null)
-  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
-  const [editingZone, setEditingZone] = useState<ParkingZoneItem | null>(null)
-  const [inspectingSpace, setInspectingSpace] = useState<ParkingSpaceItem | null>(null)
-
-  useEffect(() => {
-    const s = structureStore.getStructure(activeLotId)
-    setStructure(s)
-    setProtectionWindowHours((s.policy?.reservationProtectionWindowMinutes ?? 60) / 60)
-    setSelectedFloorId(s.floors?.[0]?.id || "")
-    setSelectedZoneFilter("all")
-  }, [activeLotId])
-
-  const reloadStructure = () => {
-    setStructure(structureStore.getStructure(activeLotId))
-    onChanged?.()
+  async function mutate(action: () => Promise<unknown>, success: string) {
+    if (savingRef.current || !siteId) return false
+    savingRef.current = true
+    setSaving(true)
+    setError("")
+    setNotice("")
+    try {
+      await action()
+      setNotice(success)
+      setReload((value) => value + 1)
+      onChanged?.()
+      return true
+    } catch (cause) {
+      setError(errorText(cause, "Cannot save parking structure."))
+      return false
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
   }
 
-  function updateProtectionWindow(hours: number) {
-    const updated = {
-      ...structure,
-      policy: {
-        ...structure.policy,
-        protectionWindowHours: hours,
-        reservationProtectionWindowMinutes: Math.round(hours * 60),
-      },
+  function addUnit(event: FormEvent) {
+    event.preventDefault()
+    const name = unitForm.name.trim()
+    const capacity = Number(unitForm.capacity)
+    if (!name || !Number.isInteger(capacity) || capacity < 0) {
+      setError("Enter a unit name and a non-negative whole-number capacity.")
+      return
     }
-    structureStore.saveStructure(updated)
-    setStructure(updated)
-    setProtectionWindowHours(hours)
-    onChanged?.()
+    const parentId = unitForm.type === "FLOOR" ? null : (unitForm.parentId || null)
+    if (unitForm.type === "BLOCK" && !parentId) {
+      setError("Select a parent floor or zone for the block.")
+      return
+    }
+    void mutate(
+      () => parkingApi.unit(siteId, { type: unitForm.type, name, parentId, capacity }),
+      "Unit created.",
+    ).then((saved) => { if (saved) { setUnitForm((form) => ({ ...form, name: "" })); setCreateModal(null) } })
   }
 
-  const currentFloor = useMemo(() => {
-    if (!structure?.floors || structure.floors.length === 0) return null
-    return structure.floors.find((f) => f.id === selectedFloorId) || structure.floors[0] || null
-  }, [structure, selectedFloorId])
-
-  // Get all spaces flattened for stats
-  const allSpaces = useMemo(() => {
-    const spaces: ParkingSpaceItem[] = []
-    structure?.floors?.forEach((fl) => {
-      fl.zones?.forEach((zn) => {
-        zn.spaces?.forEach((sp) => spaces.push(sp))
-      })
-    })
-    return spaces
-  }, [structure])
-
-  // Count by the 6 canonical states
-  const counts = useMemo(() => {
-    let available = 0
-    let reserved = 0
-    let pendingPayment = 0
-    let backup = 0
-    let occupied = 0
-    let protectedCount = 0
-    let dualOccupiedProtected = 0
-
-    allSpaces.forEach((s) => {
-      const physical = s.physicalState || (s.status === "occupied" ? "OCCUPIED" : "AVAILABLE")
-      const reservation =
-        s.reservationState ||
-        (s.isProtected ? "PROTECTED" : s.isBackup ? "BACKUP" : s.isPendingPayment ? "PENDING_PAYMENT" : s.status === "reserved" ? "RESERVED" : "NONE")
-
-      const isOcc = physical === "OCCUPIED"
-      const isProt = reservation === "PROTECTED" || s.isProtected
-
-      if (isOcc && isProt) dualOccupiedProtected++
-      if (isOcc) occupied++
-      if (isProt) protectedCount++
-      if (s.isBackup || reservation === "BACKUP") backup++
-      if (s.isPendingPayment || reservation === "PENDING_PAYMENT") pendingPayment++
-      if (s.status === "reserved" && !isProt && !s.isBackup && !s.isPendingPayment) reserved++
-      if (!isOcc && !isProt && !s.isBackup && !s.isPendingPayment && s.status === "available") available++
-    })
-
-    return {
-      total: allSpaces.length,
-      available,
-      reserved,
-      pendingPayment,
-      backup,
-      occupied,
-      protected: protectedCount,
-      dual: dualOccupiedProtected,
+  function addSlot(event: FormEvent) {
+    event.preventDefault()
+    const code = slotForm.code.trim()
+    if (!slotForm.unitId || !code) {
+      setError("Select a location and enter a slot code.")
+      return
     }
-  }, [allSpaces])
-
-  // Filtered spaces for current floor
-  const displayedSpaces = useMemo(() => {
-    if (!currentFloor || !currentFloor.zones) return []
-
-    let zones = currentFloor.zones
-    if (selectedZoneFilter !== "all") {
-      zones = zones.filter((z) => z.id === selectedZoneFilter)
-    }
-
-    const result: Array<ParkingSpaceItem & { zoneName: string }> = []
-    zones.forEach((z) => {
-      z.spaces.forEach((s) => {
-        const physical = s.physicalState || (s.status === "occupied" ? "OCCUPIED" : "AVAILABLE")
-        const reservation =
-          s.reservationState ||
-          (s.isProtected ? "PROTECTED" : s.isBackup ? "BACKUP" : s.isPendingPayment ? "PENDING_PAYMENT" : s.status === "reserved" ? "RESERVED" : "NONE")
-
-        const isOcc = physical === "OCCUPIED"
-        const isProt = reservation === "PROTECTED" || s.isProtected
-        const isDual = isOcc && isProt
-
-        // Status matching
-        let matchesStatus = true
-        if (statusFilter === "dual") matchesStatus = isDual
-        else if (statusFilter === "occupied") matchesStatus = isOcc
-        else if (statusFilter === "protected") matchesStatus = isProt
-        else if (statusFilter === "backup") matchesStatus = s.isBackup || reservation === "BACKUP"
-        else if (statusFilter === "pending_payment") matchesStatus = s.isPendingPayment || reservation === "PENDING_PAYMENT"
-        else if (statusFilter === "reserved") matchesStatus = s.status === "reserved"
-        else if (statusFilter === "available") matchesStatus = !isOcc && !isProt && !s.isBackup && s.status === "available"
-
-        // Search matching
-        const matchesSearch =
-          !searchQuery.trim() ||
-          s.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.currentBooking?.licensePlate?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.currentBooking?.driverName?.toLowerCase().includes(searchQuery.toLowerCase())
-
-        if (matchesStatus && matchesSearch) {
-          result.push({ ...s, zoneName: z.name })
-        }
-      })
-    })
-
-    return result
-  }, [currentFloor, selectedZoneFilter, statusFilter, searchQuery])
+    void mutate(
+      () => parkingApi.slot(siteId, { ...slotForm, code }),
+      "Slot created.",
+    ).then((saved) => { if (saved) { setSlotForm((form) => ({ ...form, code: "" })); setCreateModal(null) } })
+  }
 
   return (
-    <section className="space-y-6 text-[var(--fg)]">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[var(--border)] pb-4">
+    <section className="space-y-5 text-[var(--fg)]">
+      <header className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--fg)] flex items-center gap-2">
-            <span>Parking Structure & Protection System</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] font-semibold">
-              SRS 3.2.2 / 8.2
-            </span>
-          </h1>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Manage the parking layout, space statuses, reservation protection, and conflict reallocation.
-          </p>
+          <h1 className="text-xl font-bold">Parking Structure</h1>
+          <p className="mt-1 text-xs text-[var(--muted)]">Manage floors, zones, blocks and parking slots.</p>
         </div>
-
-        {/* Site Selector */}
-        <div className="flex items-center gap-2.5">
-          <label className="text-xs font-semibold text-[var(--muted)]">Site:</label>
-          <select
-            className="input min-w-[200px] text-xs font-medium"
-            value={activeLotId}
-            onChange={(e) => setActiveLotId(e.target.value)}
-          >
-            {availableLots.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
+        <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
+          <span>Site</span>
+          <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
+            {!sites.length && <option value="">No sites available</option>}
+            {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
-        </div>
-      </div>
+        </label>
+      </header>
 
-      {/* 6 Canonical Status Metrics Bar with DUAL STATE Highlight */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-        {/* 1. Available */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "available" ? "all" : "available")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "available" ? "ring-2 ring-emerald-500 shadow-xs" : ""
-          }`}
-          style={{ background: STATUS_DEFINITIONS.available.bg, borderColor: STATUS_DEFINITIONS.available.border }}
-        >
-          <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
-            <span>Available</span>
-            <UntitledIcon name="check-circle" size={13} />
-          </div>
-          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-            {counts.available}
-          </div>
-        </div>
+      {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
+      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-700 dark:text-red-300"><span>{error}</span>{siteId && <button type="button" className="underline" onClick={() => setReload((value) => value + 1)}>Retry</button>}</div>}
+      {!siteId && <p className="rounded-xl border border-[var(--border)] p-6 text-sm text-[var(--muted)]">No parking sites are available for this account.</p>}
+      {loading && <p role="status" className="rounded-xl border border-[var(--border)] p-6 text-sm text-[var(--muted)]">Loading parking structure…</p>}
 
-        {/* 2. Reserved */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "reserved" ? "all" : "reserved")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "reserved" ? "ring-2 ring-blue-500 shadow-xs" : ""
-          }`}
-          style={{ background: STATUS_DEFINITIONS.reserved.bg, borderColor: STATUS_DEFINITIONS.reserved.border }}
-        >
-          <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 flex items-center justify-between">
-            <span>Reserved</span>
-            <UntitledIcon name="clock" size={13} />
+      {structure && !loading && (
+        <>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+            <Metric label="Physical slots" value={slots.length} tone="available" />
+            <Metric label="Available" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? total("available") : "—"} tone="available" />
+            <Metric label="Occupied" value={slots.filter((slot) => slot.isPhysicallyOccupied).length} tone="occupied" />
+            <Metric label="Protected" value={siteCapacity.length ? total("protected") : "—"} tone="protected" />
+            <Metric label="Pending payment" value={siteCapacity.length ? total("pendingPayment") : "—"} tone="payment" />
+            <Metric label="Backup" value={siteCapacity.length ? total("effectiveBackup") : "—"} tone="backup" />
           </div>
-          <div className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-            {counts.reserved}
-          </div>
-        </div>
 
-        {/* 3. Pending Payment */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "pending_payment" ? "all" : "pending_payment")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "pending_payment" ? "ring-2 ring-amber-500 shadow-xs" : ""
-          }`}
-          style={{ background: STATUS_DEFINITIONS.pending_payment.bg, borderColor: STATUS_DEFINITIONS.pending_payment.border }}
-        >
-          <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 flex items-center justify-between">
-            <span>Pending Payment</span>
-            <UntitledIcon name="banknote" size={13} />
-          </div>
-          <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">
-            {counts.pendingPayment}
-          </div>
-        </div>
-
-        {/* 4. Slot Backup */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "backup" ? "all" : "backup")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "backup" ? "ring-2 ring-purple-500 shadow-xs" : ""
-          }`}
-          style={{ background: STATUS_DEFINITIONS.backup.bg, borderColor: STATUS_DEFINITIONS.backup.border }}
-        >
-          <div className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 flex items-center justify-between">
-            <span>Slot Backup</span>
-            <UntitledIcon name="shield" size={13} />
-          </div>
-          <div className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-            {counts.backup}
-          </div>
-        </div>
-
-        {/* 5. Occupied */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "occupied" ? "all" : "occupied")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "occupied" ? "ring-2 ring-red-500 shadow-xs" : ""
-          }`}
-          style={{ background: STATUS_DEFINITIONS.occupied.bg, borderColor: STATUS_DEFINITIONS.occupied.border }}
-        >
-          <div className="text-[11px] font-semibold text-red-700 dark:text-red-300 flex items-center justify-between">
-            <span>Occupied</span>
-            <UntitledIcon name="car" size={13} />
-          </div>
-          <div className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">
-            {counts.occupied}
-          </div>
-        </div>
-
-        {/* 6. Protected */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "protected" ? "all" : "protected")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "protected" ? "ring-2 ring-indigo-500 shadow-xs" : ""
-          }`}
-          style={{ background: STATUS_DEFINITIONS.protected.bg, borderColor: STATUS_DEFINITIONS.protected.border }}
-        >
-          <div className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
-            <span>Protected</span>
-            <UntitledIcon name="shield" size={13} />
-          </div>
-          <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-            {counts.protected}
-          </div>
-        </div>
-
-        {/* Dual State: Vừa Occupied vừa Protected */}
-        <div
-          onClick={() => setStatusFilter(statusFilter === "dual" ? "all" : "dual")}
-          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-            statusFilter === "dual" ? "ring-2 ring-rose-500 shadow-xs" : ""
-          } ${counts.dual > 0 ? "animate-pulse" : ""}`}
-          style={{
-            background: "rgba(225, 29, 72, 0.12)",
-            borderColor: "rgba(225, 29, 72, 0.4)",
-          }}
-        >
-          <div className="text-[11px] font-semibold text-rose-700 dark:text-rose-300 flex items-center justify-between">
-            <span>Occupied + Protected</span>
-            <UntitledIcon name="alert" size={13} />
-          </div>
-          <div className="text-xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-            {counts.dual}
-          </div>
-        </div>
-      </div>
-
-      {/* Owner Protected Buffer Time (x) Configuration Card */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
-              <UntitledIcon name="shield" size={16} />
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
+            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
+              <button type="button" onClick={() => { setFloorFilter(""); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${!floorFilter ? "bg-[var(--primary)] text-white" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>All areas</button>
+              {floors.map((floor) => <button key={floor.id} type="button" onClick={() => { setFloorFilter(floor.id); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${floorFilter === floor.id ? "bg-[var(--primary)] text-white" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>{floor.name}</button>)}
             </div>
-            <div>
-              <h3 className="font-semibold text-xs text-[var(--fg)]">
-                Reservation Protection Window
-              </h3>
-              <p className="text-[11px] text-[var(--muted)]">
-                Choose how long before a reservation the space is protected from walk-ins.
-              </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Zone:</span><select className="input max-w-48 text-xs" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}><option value="">All locations</option>{visibleUnits.filter((unit) => unit.type !== "FLOOR").map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>
+              <button type="button" className="btn-outline px-2.5 py-1 text-xs" onClick={() => { setUnitForm((form) => ({ ...form, type: floorFilter ? "ZONE" : "FLOOR", parentId: floorFilter })); setCreateModal("unit") }}><UntitledIcon name="plus" size={12} /> Add unit</button>
+              <button type="button" className="btn-primary px-2.5 py-1 text-xs" onClick={() => setCreateModal("slot")} disabled={!units.length}><UntitledIcon name="plus" size={12} /> Add slot</button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--muted)] font-medium">Protection window:</span>
-            <div className="flex rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0.5">
-              {[0.5, 1.0, 1.5, 2.0].map((val) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => updateProtectionWindow(val)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    protectionWindowHours === val
-                      ? "bg-[var(--primary)] text-white shadow-xs"
-                      : "text-[var(--muted)] hover:text-[var(--fg)]"
-                  }`}
-                >
-                  {val === 0.5 ? "30 minutes" : `${val} hours`}
-                </button>
-              ))}
+          {createModal && <div role="dialog" aria-modal="true" aria-label={createModal === "unit" ? "Add unit" : "Add slot"} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setCreateModal(null) }} onKeyDown={(event) => { if (event.key === "Escape" && !saving) setCreateModal(null) }}>
+            {createModal === "unit" ? <form onSubmit={addUnit} className="w-full max-w-lg space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
+              <h2 className="font-semibold">Add floor, zone or block</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={labelClass}><span>Type</span><select className={inputClass} value={unitForm.type} onChange={(event) => setUnitForm((form) => ({ ...form, type: event.target.value, parentId: "" }))}>{unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                <label className={labelClass}><span>Name</span><input className={inputClass} value={unitForm.name} onChange={(event) => setUnitForm((form) => ({ ...form, name: event.target.value }))} required /></label>
+                {unitForm.type !== "FLOOR" && <label className={labelClass}><span>Parent {unitForm.type === "ZONE" ? "(optional)" : "(required)"}</span><select className={inputClass} value={unitForm.parentId} onChange={(event) => setUnitForm((form) => ({ ...form, parentId: event.target.value }))} required={unitForm.type === "BLOCK"}><option value="">{unitForm.type === "ZONE" ? "Site root" : "Select a parent"}</option>{parentOptions.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>}
+                <label className={labelClass}><span>Capacity (0 = unlimited)</span><input className={inputClass} type="number" min="0" step="1" value={unitForm.capacity} onChange={(event) => setUnitForm((form) => ({ ...form, capacity: event.target.value }))} required /></label>
+              </div>
+              {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+              <div className="flex justify-end gap-2"><button type="button" className="btn-outline" onClick={() => setCreateModal(null)} disabled={saving}>Cancel</button><button type="submit" className="btn-primary" disabled={saving}>{saving ? "Saving…" : "Add unit"}</button></div>
+            </form> : <form onSubmit={addSlot} className="w-full max-w-lg space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
+              <h2 className="font-semibold">Add parking slot</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={labelClass}><span>Location</span><select className={inputClass} value={slotForm.unitId} onChange={(event) => setSlotForm((form) => ({ ...form, unitId: event.target.value }))} required><option value="">Select a unit</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>
+                <label className={labelClass}><span>Slot code</span><input className={inputClass} value={slotForm.code} onChange={(event) => setSlotForm((form) => ({ ...form, code: event.target.value }))} required /></label>
+                <label className={labelClass}><span>Vehicle type</span><select className={inputClass} value={slotForm.vehicleType} onChange={(event) => setSlotForm((form) => ({ ...form, vehicleType: event.target.value }))}>{vehicleTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                <label className={labelClass}><span>Slot type</span><select className={inputClass} value={slotForm.type} onChange={(event) => setSlotForm((form) => ({ ...form, type: event.target.value }))}>{slotTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+              </div>
+              {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+              <div className="flex justify-end gap-2"><button type="button" className="btn-outline" onClick={() => setCreateModal(null)} disabled={saving}>Cancel</button><button type="submit" className="btn-primary" disabled={saving || !units.length}>{saving ? "Saving…" : "Add slot"}</button></div>
+            </form>}
+          </div>}
+
+          <section className="space-y-3">
+            <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <label className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-sm">
+                <UntitledIcon name="search" size={15} className="shrink-0 text-[var(--muted)]" />
+                <span className="sr-only">Search slot code</span>
+                <input className="min-w-0 flex-1 bg-transparent text-xs text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by slot code…" />
+              </label>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><select className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
+                <span className="whitespace-nowrap text-[11px] text-[var(--muted)]">Showing <strong className="text-[var(--fg)]">{shownSlots.length}</strong> / {slots.length}</span>
+              </div>
             </div>
-          </div>
-        </div>
+            {!shownSlots.length ? <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-10 text-center text-xs text-[var(--muted)]">{slots.length ? "No parking slots match the current filters." : "No parking slots have been created for this site."}</p> :
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+                {shownSlots.map((slot) => {
+                  const appearance = slotAppearance(slot)
+                  return <button key={slot.id} type="button" onClick={() => setSelectedSlot(slot)} className="flex min-h-28 min-w-0 flex-col justify-between rounded-xl border-2 p-3 text-left transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" style={{ background: appearance.bg, borderColor: appearance.border }}>
+                    <span className="flex w-full items-start justify-between gap-1"><strong className="truncate font-mono text-sm text-[var(--fg)]">{slot.code}</strong><span className="text-xs" aria-label={slot.vehicleType} title={slot.vehicleType}>{slot.vehicleType === "MOTORCYCLE" ? "🏍️" : slot.vehicleType === "CAR" ? "🚗" : "🚐"}</span></span>
+                    <span className="my-1.5 text-[10px] font-bold uppercase leading-tight" style={{ color: appearance.color }}>{appearance.label}</span>
+                    <span className="w-full truncate text-[10px] text-[var(--muted)]" title={location(slot.unitId)}>{location(slot.unitId)}</span>
+                  </button>
+                })}
+              </div>}
+          </section>
 
-        {/* Formula Explainer */}
-        <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--bg)]/60 text-xs text-[var(--muted)] flex items-start gap-2">
-          <UntitledIcon name="help" size={14} className="text-[var(--primary)] mt-0.5 shrink-0" />
-          <div className="leading-relaxed">
-            <strong className="text-[var(--fg)]">Protection rule: </strong>
-            For a reservation from <strong>10:00 - 12:00</strong> with a protection window of <strong>{protectionWindowHours} hours</strong>, protection starts at{" "}
-            <strong className="text-indigo-600 dark:text-indigo-400">
-              {protectionStartTime}
-            </strong>
-            . From {protectionStartTime} to 10:00, the space is <strong>Protected</strong> → Walk-ins cannot use this space.
-          </div>
-        </div>
-      </div>
+          {selectedSlot && <div role="dialog" aria-modal="true" aria-label={`Slot ${selectedSlot.code}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedSlot(null) }}><div className="w-full max-w-md space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Slot {selectedSlot.code}</h2><button type="button" className="rounded px-2 py-1 text-sm hover:bg-[var(--border)]" onClick={() => setSelectedSlot(null)} aria-label="Close slot details">Close</button></div><dl className="grid grid-cols-2 gap-2 text-sm"><dt className="text-[var(--muted)]">Location</dt><dd>{location(selectedSlot.unitId)}</dd><dt className="text-[var(--muted)]">Vehicle type</dt><dd>{selectedSlot.vehicleType}</dd><dt className="text-[var(--muted)]">Slot type</dt><dd>{selectedSlot.type}</dd><dt className="text-[var(--muted)]">Physical state</dt><dd>{selectedSlot.isPhysicallyOccupied ? "Occupied" : "Empty"}</dd><dt className="text-[var(--muted)]">Operational status</dt><dd>{selectedSlot.operationalStatus}</dd><dt className="text-[var(--muted)]">Reservation state</dt><dd>{selectedSlot.reservationState ?? "None"}</dd></dl></div></div>}
 
-      {/* Floors, Zones & Visual Slots Grid */}
-      <div className="space-y-4">
-        {/* Floor and Zone Selector Tabs */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
-          {/* Floor tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            {structure?.floors?.map((fl) => (
-              <button
-                key={fl.id}
-                type="button"
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
-                  currentFloor?.id === fl.id
-                    ? "bg-[var(--primary)] text-white shadow-xs"
-                    : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:text-[var(--fg)]"
-                }`}
-                onClick={() => setSelectedFloorId(fl.id)}
-              >
-                <span>{fl.name}</span>
-                <span className="text-[10px] opacity-75 font-mono">({fl.code})</span>
-              </button>
-            ))}
-
-            <button
-              type="button"
-              className="px-2.5 py-1.5 rounded-lg border border-dashed border-[var(--border)] text-xs text-[var(--muted)] hover:text-[var(--fg)] flex items-center gap-1"
-              onClick={() => {
-                setEditingFloor(null)
-                setIsFloorModalOpen(true)
-              }}
-            >
-              <UntitledIcon name="plus" size={12} />
-              <span>Add Floor</span>
-            </button>
-          </div>
-
-          {/* Zone filter */}
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-[var(--muted)] font-medium">Zone:</span>
-            <select
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
-              value={selectedZoneFilter}
-              onChange={(e) => setSelectedZoneFilter(e.target.value)}
-            >
-              <option value="all">All Zones ({currentFloor?.zones?.length || 0})</option>
-              {currentFloor?.zones?.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.name} ({z.spaces?.length || 0} slots)
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              className="btn-outline text-xs px-2.5 py-1"
-              onClick={() => {
-                setEditingZone(null)
-                setIsZoneModalOpen(true)
-              }}
-            >
-              + Add Zone
-            </button>
-          </div>
-        </div>
-
-        {/* Search bar inside floor layout */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--card)] text-xs">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
-            <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
-            <input
-              className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
-              placeholder="Search by space code (e.g. A01), license plate, or driver name…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="text-[var(--muted)]">
-                <UntitledIcon name="x" size={12} />
-              </button>
-            )}
-          </div>
-
-          <div className="text-[11px] text-[var(--muted)]">
-            Showing: <strong>{displayedSpaces.length}</strong> / {allSpaces.length} slots
-          </div>
-        </div>
-
-        {/* Visual Slot Grid Map */}
-        {displayedSpaces.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-            {displayedSpaces.map((space) => {
-              const physical = space.physicalState || (space.status === "occupied" ? "OCCUPIED" : "AVAILABLE")
-              const reservation =
-                space.reservationState ||
-                (space.isProtected
-                  ? "PROTECTED"
-                  : space.isBackup
-                    ? "BACKUP"
-                    : space.isPendingPayment
-                      ? "PENDING_PAYMENT"
-                      : space.status === "reserved"
-                        ? "RESERVED"
-                        : "NONE")
-
-              const isOcc = physical === "OCCUPIED"
-              const isProt = reservation === "PROTECTED" || space.isProtected
-              const isDual = isOcc && isProt
-              const isReallocated = Boolean(space.requestedSlotCode && space.requestedSlotCode !== space.code)
-
-              // Determine primary style definition
-              const def = isDual
-                ? {
-                    label: "Occupied + Protected",
-                    bg: "rgba(225, 29, 72, 0.15)",
-                    border: "rgba(225, 29, 72, 0.7)",
-                    color: "#e11d48",
-                  }
-                : isProt
-                  ? STATUS_DEFINITIONS.protected
-                  : isOcc
-                    ? STATUS_DEFINITIONS.occupied
-                    : space.isBackup
-                      ? STATUS_DEFINITIONS.backup
-                      : space.isPendingPayment
-                        ? STATUS_DEFINITIONS.pending_payment
-                        : space.status === "reserved"
-                          ? STATUS_DEFINITIONS.reserved
-                          : STATUS_DEFINITIONS.available
-
-              return (
-                <div
-                  key={space.id}
-                  onClick={() => setInspectingSpace(space)}
-                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all hover:scale-[1.02] flex flex-col justify-between min-h-[110px] relative overflow-hidden ${
-                    isDual ? "animate-pulse ring-2 ring-rose-500 shadow-md" : ""
-                  }`}
-                  style={{
-                    background: def.bg,
-                    borderColor: def.border,
-                  }}
-                >
-                  {/* Top row: Code & Vehicle Icon */}
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-sm text-[var(--fg)]">{space.code}</span>
-                    <span className="text-xs" title={space.vehicleType}>
-                      {space.vehicleType === "motorcycle" ? "🏍️" : "🚗"}
-                    </span>
-                  </div>
-
-                  {/* Middle row: Badges */}
-                  <div className="my-1.5 space-y-1">
-                    <div
-                      className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase truncate max-w-full"
-                      style={{ color: def.color }}
-                    >
-                      {def.label}
-                    </div>
-
-                    {isReallocated && (
-                      <div className="text-[9px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                        ⚡ Reallocated from {space.requestedSlotCode}
-                      </div>
-                    )}
-
-                    {space.currentBooking?.licensePlate && (
-                      <div className="text-[10px] font-mono text-[var(--fg)] truncate">
-                        {space.currentBooking.licensePlate}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bottom row: Zone name */}
-                  <div className="text-[9px] text-[var(--muted)] truncate">{space.zoneName}</div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-12 text-center text-xs text-[var(--muted)]">
-            No parking spaces match the current filters.
-          </div>
-        )}
-      </div>
-
-      {/* Modal 1: Space Detail Modal */}
-      {inspectingSpace && (
-        <SpaceDetailModal
-          space={inspectingSpace}
-          floorName={currentFloor?.name || "Ground Floor"}
-          floorCode={currentFloor?.code || "G"}
-          zoneName={currentFloor?.zones?.find((z) => z.id === inspectingSpace.zoneId)?.name || "Zone"}
-          onClose={() => setInspectingSpace(null)}
-          onUpdateStatus={(spaceId, newStatus, note, options) => {
-            structureStore.updateSpaceStatus(activeLotId, spaceId, newStatus, note, options)
-            reloadStructure()
-            setInspectingSpace(null)
-          }}
-        />
+          <details className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-violet-500/5">
+              <span className="flex min-w-0 items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300"><UntitledIcon name="shield" size={17} /></span><span><strong className="block text-sm">Capacity and backup settings</strong><span className="mt-0.5 block text-xs text-[var(--muted)]">View inventory and configure backup capacity</span></span></span>
+              <UntitledIcon name="chevron-down" size={16} className="shrink-0 text-[var(--muted)] transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-[var(--border)] p-4"><BackupCapacityPanel structure={structure} onChanged={() => { setReload((value) => value + 1); onChanged?.() }} /></div>
+          </details>
+        </>
       )}
-
-      {/* Modal 2: Floor Create/Edit Modal */}
-      <FloorModal
-        isOpen={isFloorModalOpen}
-        initialData={editingFloor}
-        onClose={() => {
-          setIsFloorModalOpen(false)
-          setEditingFloor(null)
-        }}
-        onSave={(name, code) => {
-          structureStore.createFloor(activeLotId, name, code)
-          reloadStructure()
-          setIsFloorModalOpen(false)
-        }}
-      />
-
-      {/* Modal 3: Zone Create/Edit Modal */}
-      <ZoneModal
-        isOpen={isZoneModalOpen}
-        floorCode={currentFloor?.code || "G"}
-        initialData={editingZone}
-        onClose={() => {
-          setIsZoneModalOpen(false)
-          setEditingZone(null)
-        }}
-        onSave={(name, vehicleType, initialSpaces) => {
-          if (!currentFloor) return
-          structureStore.createZone(activeLotId, currentFloor.id, name, vehicleType, initialSpaces || 12)
-          reloadStructure()
-          setIsZoneModalOpen(false)
-        }}
-      />
     </section>
   )
 }
