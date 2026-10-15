@@ -1,5 +1,7 @@
 # API handoff cho tester — các task của tác giả
 
+> Contract Operator trong phần lịch sử bên dưới đã được thay thế ngày 15/10: create không nhận password, Operator pending phải activate bằng invitation trước login. Dùng [API contract hiện tại](../02-architecture/api/operator-provisioning.md) và [bộ test case hành trình mới](test-cases/demo-user-journey-2026-10-15.md) khi retest working tree hiện tại.
+
 > Cập nhật môi trường local ngày 08/10/2026; xem [review sửa email OTP](owner-email-otp-fix-review-2026-10-08.md):
 > SMTP đã gửi thành công, Services:Key đã được cấu hình tại local. Owner onboarding đã sửa dùng email OTP; không cần SMS config cho luồng Owner.
 > đây chưa phải kết quả retest môi trường QA bên ngoài.
