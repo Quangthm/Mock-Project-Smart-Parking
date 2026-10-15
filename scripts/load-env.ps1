@@ -10,8 +10,7 @@
 # original name (KEY=VALUE -> $env:KEY). Values are never written to the log.
 # =============================================================================
 param(
-    [string]$EnvPath,
-    [switch]$NoExport
+    [string]$EnvPath
 )
 $ErrorActionPreference = 'Stop'
 
@@ -47,7 +46,7 @@ foreach ($envRawLine in Get-Content -LiteralPath $EnvPath -Encoding UTF8) {
     }
 
     $envPairs[$envKey] = $envValue
-    if (!$NoExport) { [Environment]::SetEnvironmentVariable($envKey, $envValue, 'Process') }
+    [Environment]::SetEnvironmentVariable($envKey, $envValue, 'Process')
 }
 
 return $envPairs

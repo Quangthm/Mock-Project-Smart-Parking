@@ -29,6 +29,7 @@ Chạy baseline một lần trên DB mới, rồi overlay đúng service:
 
 - User: `integration/01-user-service-alignment.sql` thêm `PENDING_VERIFICATION`, `REJECTED` cho users và bảo đảm role dictionary. Accounts dùng status có sẵn; rejection account là INACTIVE. Account context được xác định bằng account_roles, không có account_type/membership_tier/loyalty_points.
 - Parking: `integration/02-parking-service-alignment.sql` thêm tọa độ layout JSON, bảo vệ slot đã xóa và uniqueness code theo site. `physical_state` và `reservation_state` tách biệt; occupied/unknown/reserved/protected/backup không được xóa hay chuyển tùy ý.
+- Parking operator operations: `microservices/02.2-parking-operator-operations.sql` tạo bảng tickets, incidents, operator audit và notifications trong Parking DB.
 - Reservation: `integration/03-reservation-structure-safety.sql` tạo durable fence và projection trạng thái site/resource đã xóa. Trigger chỉ tác động DB Reservation. Booking/allocation/session/pool writers phải đi qua fence này; không disable trigger trong các service tương lai.
 
 Overlay chạy lặp lại được. Baseline SQL của thành viên nhóm là CREATE TABLE, không phải migration cho database đã có dữ liệu. Không chạy baseline lên volume/DB cũ và không dùng EF EnsureCreated để thay thế baseline. Nếu đã có dữ liệu production, cần migration/backfill riêng sau khi kiểm kê dữ liệu; hướng dẫn dưới đây tạo môi trường phát triển độc lập.
@@ -51,15 +52,22 @@ docker compose -f "$schemaRoot/compose.schema-integration.yml" up -d --wait
 dotnet restore SmartParking.slnx
 ```
 
-Mở ba terminal tại checkout code `develop`, đặt các biến trên (SMARTPARK_SCHEMA_ROOT là đường dẫn tuyệt đối tới checkout database) trong mỗi terminal, chạy mỗi service riêng. Scripts dưới đây nằm trên `develop`:
+Sau khi tạo `.env`, chạy setup để lưu cấu hình service vào User Secrets và
+chuẩn bị database. Sau đó mở project API cần chạy và dùng `dotnet run`. ASP.NET
+tự nạp User Secrets trong Development; `.env` không được service đọc trực tiếp:
 
 ```powershell
-./scripts/run-schema-service.ps1 -Service Reservation
-./scripts/run-schema-service.ps1 -Service Parking
-./scripts/run-schema-service.ps1 -Service User
+Set-Location .\src\Services\ReservationService\SmartParking.ReservationService.API
+dotnet run
 ```
 
-Ports: User 5035 → DB 5441; Parking 5045 → DB 5442; Reservation 5055 → DB 5443. `ConnectionStrings:User/Parking/Reservation` chỉ cấp cho host tương ứng. User vẫn đọc `DefaultConnection` để tương thích cấu hình cũ, nhưng phải trỏ vào User DB riêng. Services:Key giống nhau ở ba host; internal endpoints không nhận bearer người dùng để thay thế service credential.
+Chọn thư mục User hoặc Parking nếu cần chạy service đó thay cho Reservation.
+Ports: User 5035 → DB 5441; Parking 5045 → DB 5442; Reservation 5055 → DB 5443.
+`ConnectionStrings:User/Parking/Reservation` chỉ cấp cho host tương ứng. User
+vẫn đọc `DefaultConnection` để tương thích cấu hình cũ, nhưng phải trỏ vào User
+DB riêng. `Services:Key` giống nhau ở ba host; internal endpoints không nhận
+bearer người dùng để thay thế service credential. `dotnet run` chỉ khởi động
+project đang chọn, không tự chạy PostgreSQL hay các service khác.
 
 Nếu FE đã có server đang chạy thì dùng server đó. Nếu chưa có, terminal FE dùng `npm run dev`. `FE/.env.schema.example` cho biết hai API URL; sao chép thành `.env.local` khi cần, không ghi đè cấu hình local hiện có. Nếu dùng port khác 5173 cần bổ sung CORS origin trong host tương ứng.
 

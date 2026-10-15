@@ -23,7 +23,7 @@ export interface DriverVehicle {
 
   licensePlate: string
 
-  plateType: "vn" | "foreign"
+  plateType?: "vn" | "foreign"
 
   plateImageUrl?: string
 
@@ -147,9 +147,13 @@ export interface Booking {
 
   licensePlate: string
 
-  plateType: "vn" | "foreign"
+  plateType?: "vn" | "foreign"
 
   plateImageUrl?: string
+
+  entryImageUrl?: string | null
+
+  exitImageUrl?: string | null
 
   startTime: string
 
@@ -165,11 +169,11 @@ export interface Booking {
 
   amount: number
 
-  depositAmount: number
+  depositAmount?: number
 
   createdAt: string
 
-  otpAttempts: number
+  otpAttempts?: number
 }
 
 export interface OwnerApplication {
