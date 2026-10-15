@@ -70,8 +70,10 @@ export function DashboardNavbar() {
 
   // Universal Account & Security Modal state
   const [accountModalTab, setAccountModalTab] = useState<"profile" | "security" | null>(null)
+  const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
+  const [recoveryNotice, setRecoveryNotice] = useState(() => sessionStorage.getItem("sp_mfa_recovery_remaining"))
 
   useEffect(() => {
     if (user) {
@@ -381,6 +383,21 @@ export function DashboardNavbar() {
         )}
       </nav>
 
+      {recoveryNotice !== null && (
+        <div role="status" className="card" style={{ margin: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+          <span>You signed in with a recovery code. {recoveryNotice} codes remain. If you lost your authenticator, set up a new one.</span>
+          <button className="btn-outline" onClick={() => {
+            handleOpenAccountModal("security")
+            setRecoveryNotice(null)
+            sessionStorage.removeItem("sp_mfa_recovery_remaining")
+          }}>Review 2FA settings</button>
+          <button className="text-button" onClick={() => {
+            setRecoveryNotice(null)
+            sessionStorage.removeItem("sp_mfa_recovery_remaining")
+          }}>Later</button>
+        </div>
+      )}
+
       {/* Universal Account & Security Modal for ALL ROLES */}
       {accountModalTab &&
         typeof document !== "undefined" &&
@@ -391,7 +408,7 @@ export function DashboardNavbar() {
             aria-labelledby="account-dialog-title"
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setAccountModalTab(null)
+              if (e.target === e.currentTarget && !securityDismissBlocked) setAccountModalTab(null)
             }}
           >
             <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl text-[var(--fg)] animate-in">
@@ -411,7 +428,8 @@ export function DashboardNavbar() {
                 <button
                   type="button"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
-                  onClick={() => setAccountModalTab(null)}
+                  disabled={securityDismissBlocked}
+                  onClick={() => { if (!securityDismissBlocked) setAccountModalTab(null) }}
                   aria-label="Close"
                 >
                   <UntitledIcon name="x" size={16} />
@@ -427,7 +445,8 @@ export function DashboardNavbar() {
                       ? "border-[var(--primary)] text-[var(--primary)]"
                       : "border-transparent text-[var(--muted)] hover:text-[var(--fg)]"
                   }`}
-                  onClick={() => setAccountModalTab("profile")}
+                  disabled={securityDismissBlocked}
+                  onClick={() => { if (!securityDismissBlocked) setAccountModalTab("profile") }}
                 >
                   <UntitledIcon name="users" size={14} />
                   <span>Personal Information</span>
@@ -517,7 +536,7 @@ export function DashboardNavbar() {
                 )}
 
                 {accountModalTab === "security" && (
-                  <AccountSecurityPanel key={user?.id} />
+                  <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
                 )}
               </div>
             </div>

@@ -26,7 +26,7 @@ function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
   return [tree, ...[tree.props?.children].flat(Infinity).flatMap(nodes)];
 }
-function fixture(mode, fail = false) {
+function fixture(mode, fail = false, mfaRequired = false) {
   const state = [], calls = [], identities = [], navigations = [];
   let cursor = 0;
   const react = { useState(initial) {
@@ -38,7 +38,16 @@ function fixture(mode, fail = false) {
   const failure = 'Your account has not been approved yet. Please wait for administrator approval before signing in.';
   const api = {
     async requestOtp(email) { calls.push(['otp', email]); if (fail) throw new Error(failure); return { challengeId: 'challenge' }; },
-    async login(email, password) { calls.push(['password', email, password]); if (fail) throw new Error(failure); return { id: 'owner', role: 'owner', name: 'Owner' }; },
+    async login(email, password) {
+      calls.push(['password', email, password]);
+      if (fail) throw new Error(failure);
+      if (mfaRequired) return { mfaRequired: true, challenge: { challengeId: 'mfa-challenge', challengeToken: 'proof', expiresAt: 'future' } };
+      return { id: 'owner', role: 'owner', name: 'Owner' };
+    },
+    async completeMfaLogin(challenge, totp, recoveryCode) {
+      calls.push(['mfa', challenge, totp, recoveryCode]);
+      return { id: 'owner', role: 'owner', name: 'Owner' };
+    },
   };
   const component = load('roles/authentications/Sign In/SignIn.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
@@ -48,7 +57,9 @@ function fixture(mode, fail = false) {
     '../../operator/data/roleRoutes': { getUserHomePath: () => '/' },
     '../../../components/brand/BrandLogo': { BrandLogo: 'brand' },
     '../../../components/forms/PasswordVisibilityIcon': { PasswordVisibilityIcon: 'password-icon' },
-    '../../../lib/authApi': { authApi: api }, '../../../lib/signInContact': contact,
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../../../components/forms/MfaCodeInput': { MfaCodeInput: 'mfa-input' },
+    '../../../lib/authApi': { authApi: api, AuthApiError: class extends Error {} }, '../../../lib/signInContact': contact,
   }).SignIn;
   const render = () => { cursor = 0; return component(); };
   const input = () => nodes(render()).find(node => node.props?.autoComplete === 'username');
@@ -80,3 +91,22 @@ for (const mode of ['password', 'otp']) {
     assert.equal(nodes(f.render()).find(node => node.type === 'button' && node.props?.type === 'submit').props.disabled, false);
   });
 }
+
+test('MFA challenge holds navigation until a recovery code is verified and clears the password', async () => {
+  const f = fixture('password', false, true);
+  f.input().props.onChange({ target: { value: 'owner@example.com' } });
+  await f.submit();
+  assert.equal(f.identities.length, 0);
+  assert.equal(f.navigations.length, 0);
+  assert.ok(!nodes(f.render()).some(node => node.props?.autoComplete === 'current-password'));
+  let mfa = nodes(f.render()).find(node => node.type === 'mfa-input');
+  mfa.props.onMethodChange(true);
+  mfa = nodes(f.render()).find(node => node.type === 'mfa-input');
+  mfa.props.onChange('saved-code');
+  await f.submit();
+  assert.equal(f.calls[1][0], 'mfa');
+  assert.equal(f.calls[1][2], undefined);
+  assert.equal(f.calls[1][3], 'saved-code');
+  assert.equal(f.identities.length, 1);
+  assert.equal(f.navigations.length, 1);
+});

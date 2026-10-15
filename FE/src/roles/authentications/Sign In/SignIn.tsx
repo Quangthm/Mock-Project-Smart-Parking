@@ -6,7 +6,9 @@ import { getUserHomePath } from "../../operator/data/roleRoutes"
 import { BrandLogo } from "../../../components/brand/BrandLogo"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { authApi } from "../../../lib/authApi"
+import { authApi, AuthApiError, type MfaLoginChallenge } from "../../../lib/authApi"
+import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
+import { isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
 
 export function SignIn() {
   const { setUser, setView } = useApp()
@@ -26,7 +28,8 @@ export function SignIn() {
   } | null>(null)
 
   const [code, setCode] = useState("")
-  const [totp, setTotp] = useState("")
+  const [mfaValue, setMfaValue] = useState("")
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false)
 
   // Forgot Password Modal State
   const [showForgotPassword, setShowForgotPassword] = useState(false)
@@ -41,13 +44,16 @@ export function SignIn() {
   const [fpError, setFpError] = useState("")
   const [fpSubmitting, setFpSubmitting] = useState(false)
 
-  const [requireTotp, setRequireTotp] = useState(false)
-  const [totpCode, setTotpCode] = useState("")
+  const [mfaChallenge, setMfaChallenge] = useState<MfaLoginChallenge | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (submitting) return
     setError("")
+    if (!isValidSignInContact(email)) {
+      setError(signInContactMessage)
+      return
+    }
     setSubmitting(true)
 
     try {
@@ -56,14 +62,20 @@ export function SignIn() {
         return
       }
 
-      const user =
-        mode === "otp"
-          ? await authApi.loginOtp(
-              challenge!.challengeId,
-              code,
-              totp || undefined,
-            )
-          : await authApi.login(email, password, totpCode || undefined)
+      const totp = useRecoveryCode ? undefined : mfaValue || undefined
+      const recoveryCode = useRecoveryCode ? mfaValue || undefined : undefined
+      const result = mode === "otp"
+        ? await authApi.loginOtp(challenge!.challengeId, code, totp, recoveryCode)
+        : mfaChallenge
+          ? await authApi.completeMfaLogin(mfaChallenge, totp, recoveryCode)
+          : await authApi.login(email, password)
+
+      if ("mfaRequired" in result) {
+        setMfaChallenge(result.challenge)
+        setPassword("")
+        return
+      }
+      const user = result
 
       const signedInUser = { ...user, lastLoginAt: new Date().toISOString() }
       store.saveUser(signedInUser)
@@ -84,6 +96,8 @@ export function SignIn() {
       )
 
       setPassword("")
+      setMfaValue("")
+      setMfaChallenge(null)
       setUser(signedInUser)
       setView(user.role)
       navigate(getUserHomePath(user), { replace: true })
@@ -93,17 +107,12 @@ export function SignIn() {
           ? error.message
           : "Sign in failed. Please try again."
 
-      // Backend requires TOTP — show the code field inline, don't display the raw error
-      if (
-        mode === "password" &&
-        msg.toLowerCase().includes("otp") &&
-        !requireTotp
-      ) {
-        setRequireTotp(true)
-        setError("")
-      } else {
-        setError(msg)
+      if (error instanceof AuthApiError &&
+          ["MFA_CHALLENGE_INVALID", "CHALLENGE_CLOSED"].includes(error.code ?? "")) {
+        setMfaChallenge(null)
+        setMfaValue("")
       }
+      setError(msg)
     } finally {
       setSubmitting(false)
     }
@@ -246,10 +255,11 @@ export function SignIn() {
                 setMode(e.target.value as "otp" | "password")
                 setChallenge(null)
                 setCode("")
-                setTotp("")
+                setMfaValue("")
+                setUseRecoveryCode(false)
                 setError("")
-                setRequireTotp(false)
-                setTotpCode("")
+                setMfaChallenge(null)
+                setPassword("")
               }}
             >
               <option value="otp">Email / SMS code</option>
@@ -266,7 +276,7 @@ export function SignIn() {
               type="text"
               autoComplete="username"
               value={email}
-              disabled={submitting || !!challenge}
+              disabled={submitting || !!challenge || !!mfaChallenge}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com or phone number"
               required
@@ -275,7 +285,7 @@ export function SignIn() {
             />
           </div>
 
-          {mode === "password" && (
+          {mode === "password" && !mfaChallenge && (
             <div>
               <div
                 style={{
@@ -343,39 +353,26 @@ export function SignIn() {
             </div>
           )}
 
-          {mode === "password" && requireTotp && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-              <div
-                style={{
-                  padding: "0.5rem 0.75rem",
-                  borderRadius: "var(--radius)",
-                  background: "#f59e0b10",
-                  border: "1px solid #f59e0b40",
-                  color: "#b45309",
-                  fontSize: "0.825rem",
-                  lineHeight: 1.5,
-                }}
-              >
-                Your account has two-factor authentication enabled. Please enter your security code below.
-              </div>
-              <label className="label" style={{ fontSize: "0.925rem" }}>
-                Security Code (2FA)
-                <input
-                  className="input"
-                  placeholder="Enter your 6-digit security code"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  autoFocus
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
-                  style={{ fontSize: "1rem" }}
-                />
-              </label>
-            </div>
+          {mode === "password" && mfaChallenge && (
+            <>
+              <p role="status">Your password was verified. Enter your authenticator code or a saved recovery code.</p>
+              <MfaCodeInput
+                recovery={useRecoveryCode}
+                value={mfaValue}
+                onChange={setMfaValue}
+                onMethodChange={setUseRecoveryCode}
+                disabled={submitting}
+              />
+              <button type="button" className="text-button" disabled={submitting}
+                onClick={() => {
+                  setMfaChallenge(null)
+                  setMfaValue("")
+                  setError("")
+                }}>
+                Back to password sign-in
+              </button>
+            </>
           )}
-
           {mode === "otp" && challenge && (
             <>
               <p
@@ -399,16 +396,15 @@ export function SignIn() {
                   onChange={(e) => setCode(e.target.value)}
                 />
               </label>
-              <label className="label">
-                Authenticator code (if MFA enabled)
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={totp}
-                  onChange={(e) => setTotp(e.target.value)}
-                />
-              </label>
+              <MfaCodeInput
+                recovery={useRecoveryCode}
+                value={mfaValue}
+                onChange={setMfaValue}
+                onMethodChange={setUseRecoveryCode}
+                required={false}
+                disabled={submitting}
+              />
+              <p style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Required only if two-factor authentication is enabled.</p>
               <button
                 className="btn-outline"
                 type="button"
@@ -425,6 +421,7 @@ export function SignIn() {
 
           {error && (
             <div
+              role="alert"
               style={{
                 background: "#fee2e2",
                 border: "1px solid #fca5a5",

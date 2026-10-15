@@ -144,18 +144,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  useEffect(() => {
-    if (!user) return
-
-    const remaining = authApi.expiresAt() - Date.now()
-
-    const timer = window.setTimeout(
-      () => window.dispatchEvent(new Event(authExpiredEvent)),
-      Math.max(0, remaining),
-    )
-
-    return () => window.clearTimeout(timer)
-  }, [user])
+  // Requests refresh an expiring access token on demand. An unattended tab must
+  // neither discard a valid refresh session nor keep it alive with a timer.
 
   useEffect(() => {
     store.remindExpiringBookings()
