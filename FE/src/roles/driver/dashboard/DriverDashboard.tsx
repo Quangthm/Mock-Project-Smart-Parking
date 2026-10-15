@@ -6,8 +6,6 @@ import { driverData as store } from "../data/data"
 
 import type { ParkingLot } from "../../../lib/types"
 
-import type { Booking } from "../../../lib/types"
-
 import { FindParking } from "../parking/FindParking"
 
 import { BookingFlow } from "../booking/BookingFlow"
@@ -45,8 +43,6 @@ export function DriverDashboard() {
 
   const [bookingLot, setBookingLot] = useState<ParkingLot | null>(null)
 
-  const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null)
-
   const [profileSection, setProfileSection] = useState<ProfileSection | null>(
     null,
   )
@@ -83,12 +79,6 @@ export function DriverDashboard() {
       window.removeEventListener("sp:driver-profile", onProfile)
     }
   })
-
-  const bookings = store.getBookingsByDriver(user?.id ?? "")
-
-  const active = bookings.filter(
-    (b) => !["completed", "cancelled"].includes(b.status),
-  )
 
   function openProfileSection(section: ProfileSection) {
     setProfileSection(section)
@@ -457,10 +447,7 @@ export function DriverDashboard() {
         {bookingLot ? (
           <BookingFlow
             lot={bookingLot}
-            resumeBooking={paymentBooking ?? undefined}
             onDone={() => {
-              setPaymentBooking(null)
-
               setBookingLot(null)
 
               setTab("home")
@@ -475,10 +462,8 @@ export function DriverDashboard() {
                 {homePanel === "find" ? (
                   <FindParking
                     onBook={(lot) => {
-                      setPaymentBooking(null)
                       setBookingLot(lot)
                     }}
-                    onNavigateToBookings={() => setHomePanel("bookings")}
                   />
                 ) : homePanel === "bookings" ? (
                   <section>
@@ -491,16 +476,7 @@ export function DriverDashboard() {
                     >
                       Bookings
                     </h3>
-                    <ActiveBookings
-                      onPayNow={(booking) => {
-                        setPaymentBooking(booking)
-                        setBookingLot(
-                          store
-                            .getLots()
-                            .find((lot) => lot.id === booking.lotId) ?? null,
-                        )
-                      }}
-                    />
+                    <ActiveBookings />
                   </section>
                 ) : (
                   <section>
