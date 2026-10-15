@@ -17,7 +17,7 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork
     public User User { get; } = new()
     {
         Id = Guid.Parse("11111111-1111-1111-1111-111111111111"), Email = "driver@gmail.com", FullName = "Demo Driver",
-        PasswordHash = PasswordHash, Status = UserStatus.Active,
+        PasswordHash = PasswordHash, Status = UserStatus.Active, EmailVerifiedAt = DateTimeOffset.UtcNow,
         Accounts = [new Account { AccountRoles = [new AccountRole { RoleCode = "DRIVER" }] }]
     };
     public AuthenticationPolicy Policy { get; } = new();
@@ -87,10 +87,10 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     {
         lock (gate)
         {
-            if (!items.TryGetValue(old.Id, out var s) || s.IsRevoked || s.ExpiresAt <= clock.Now
+            if (!items.TryGetValue(old.Id, out var s) || !SessionLifetime.CanRefresh(s, clock.Now)
                 || s.TokenHash != old.TokenHash || s.AccessTokenId != old.AccessTokenId || s.UserId != old.UserId)
                 return Task.FromResult(false);
-            s.AccessTokenId = id; s.TokenHash = hash; s.AccessExpiresAt = expires;
+            s.AccessTokenId = id; s.TokenHash = hash; s.AccessExpiresAt = expires; s.LastRefreshedAt = clock.Now;
             return Task.FromResult(true);
         }
     }
@@ -109,6 +109,7 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     private static AuthSession Clone(AuthSession s) => new()
     {
         Id = s.Id, UserId = s.UserId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
-        AccessExpiresAt = s.AccessExpiresAt, ExpiresAt = s.ExpiresAt, CreatedAt = s.CreatedAt, IsRevoked = s.IsRevoked
+        AccessExpiresAt = s.AccessExpiresAt, ExpiresAt = s.ExpiresAt, CreatedAt = s.CreatedAt, IsRevoked = s.IsRevoked,
+        LastRefreshedAt = s.LastRefreshedAt
     };
 }

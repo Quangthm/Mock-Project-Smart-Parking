@@ -14,6 +14,8 @@
         public int ExpiresIn { get; set; }
 
         public UserInfoDto? User { get; set; }
+
+        public int? RecoveryCodesRemaining { get; set; }
     }
 
     public class UserInfoDto

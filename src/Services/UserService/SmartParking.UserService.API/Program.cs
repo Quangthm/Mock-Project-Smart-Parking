@@ -9,7 +9,8 @@ namespace UserService.API;
 
 public static class UserHost
 {
-    public static async Task<WebApplication> BuildAsync(string[] args, Action<WebApplicationBuilder>? configure = null)
+    public static async Task<WebApplication> BuildAsync(string[] args, Action<WebApplicationBuilder>? configure = null,
+        Action<WebApplicationBuilder>? configureServices = null)
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
@@ -59,12 +60,19 @@ public static class UserHost
                 { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         builder.Services.AddAuthorization();
+        builder.Services.AddSignalR();
+        builder.Services.AddSingleton<UserService.API.Hubs.AccessConnections>();
+        builder.Services.AddScoped<IAccessChangeNotifier, UserService.API.Hubs.AccessChangeNotifier>();
+        // Outbox intent is always persisted. Delivery is enabled explicitly when RabbitMQ is configured.
+        if (builder.Configuration.GetValue<bool>("Messaging:Enabled"))
+            builder.Services.AddAccessMessaging(builder.Configuration);
         // Only allow the local frontend during this demo. Production uses explicit configured origins.
         builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
             .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
+        configureServices?.Invoke(builder);
         var app = builder.Build();
         // Fail early when the signing key is missing or invalid.
         _ = app.Services.GetRequiredService<JwtKeyProvider>();
@@ -96,6 +104,7 @@ public static class UserHost
         app.UseAuthorization();
         app.UseRateLimiter();
         app.MapControllers();
+        app.MapHub<UserService.API.Hubs.OperatorAccessHub>("/hubs/operators", options => options.CloseOnAuthenticationExpiration = true);
         return app;
     }
 }

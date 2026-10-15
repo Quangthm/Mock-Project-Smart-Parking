@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
+using MediatR;
+using UserService.Application.Usecase.IdentityAccess;
 
 namespace UserService.API.Controllers;
 
@@ -31,9 +33,9 @@ public sealed class UsersController(IUserManagementService users) : ControllerBa
     [HttpPost]
     [Authorize(Roles = "owner")]
     public async Task<IActionResult> CreateOperator([FromBody] CreateOperatorDto body,
-        [FromServices] IOperatorProvisioningService operators, CancellationToken ct)
+        [FromServices] ISender sender, CancellationToken ct)
     {
-        var result = await operators.CreateAsync(ActorId, body, ct);
+        var result = await sender.Send(new CreateOperatorCommand(ActorId, body), ct);
         return StatusCode(201, new { success = true, data = result });
     }
 }

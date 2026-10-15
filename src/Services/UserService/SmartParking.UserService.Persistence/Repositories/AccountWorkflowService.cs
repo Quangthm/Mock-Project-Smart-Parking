@@ -10,10 +10,12 @@ using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
 using UserService.Application.Services;
+using UserService.Application.Common.Models.JwT;
 
 namespace UserService.Persistence.Repositories;
 
-public sealed class AccountWorkflowService(AppDbContext db, IPasswordService passwords, IWorkflowProtector protector, TimeProvider clock) : IMfaPolicy,IAccountWorkflows
+public sealed partial class AccountWorkflowService(AppDbContext db, IPasswordService passwords, IWorkflowProtector protector,
+    TimeProvider clock, AuthenticationPolicy? authenticationPolicy = null) : IMfaPolicy,IAccountWorkflows
 {
     private static AuthException Error(string code, string message, int status=400) => new(code,message,status);
     public static void Validate(object body)
@@ -95,7 +97,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         if(user is null) throw Error("AUTH_FAILED","Account is not eligible for sign in.",401);
         if(user.Status!=UserStatus.Active || AccessTokenService.CurrentRole(user) is null) throw SignInErrors.ForStatus(user.Status);
         var role=AccessTokenService.CurrentRole(user);
-        if(role is "driver" or "owner" && (contact.Contains('@')?user.EmailVerifiedAt is null:user.PhoneVerifiedAt is null))
+        if(contact.Contains('@')?user.EmailVerifiedAt is null:user.PhoneVerifiedAt is null)
             throw Error("CONTACT_UNVERIFIED","Use a verified contact for OTP sign in.",401);
         // One outstanding login challenge per account: changing browser cannot reset counters.
         var previous=await db.AuthChallenges.Where(c=>c.UserId==user.Id && c.Purpose=="LOGIN" && c.ConsumedAt==null).OrderByDescending(c=>c.ExpiresAt).FirstOrDefaultAsync(ct);
@@ -169,81 +171,33 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         if(user.Status!=UserStatus.Active || AccessTokenService.CurrentRole(user) is null)throw SignInErrors.ForStatus(user.Status);
         if(!await CheckAsync(c,body.Code,ct)) {await tx.CommitAsync(ct);throw Error(c.LockedUntil!=null?"OTP_LOCKED":"OTP_INVALID","Invalid code.",c.LockedUntil!=null?423:400);}
         var mfa=await db.MfaCredentials.FromSqlInterpolated($"SELECT * FROM mfa_credentials WHERE user_id={c.UserId} FOR UPDATE").SingleOrDefaultAsync(ct);
-        if(mfa?.Enabled==true && !CheckTotp(mfa,body.Totp)) {await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);throw Error("MFA_REQUIRED","Valid authenticator code is required.",401);}
-        c.ConsumedAt=clock.GetUtcNow();c.CodeHash="";await db.SaveChangesAsync(ct);var result=await sessions.CreateAsync(user,ct);await tx.CommitAsync(ct);return result;
-    }
-    public async Task<Guid> QueueOnboardingAsync(User user,Guid actor,string initialPassword,CancellationToken ct)
-    {
-        var token=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        var c=new AuthChallenge {Id=Guid.NewGuid(),UserId=user.Id!.Value,Purpose="BOOTSTRAP_PASSWORD",Destination=user.Email!,CodeHash=AuthSessionService.HashRefreshToken(token),
-            ExpiresAt=clock.GetUtcNow().AddHours(24),ResendAt=clock.GetUtcNow()};db.AuthChallenges.Add(c);await db.SaveChangesAsync(ct);
-        // Relative path is combined with a configured public origin by the delivery adapter.
-        return await QueueAsync(user.Id.Value,actor,"OPERATOR_ONBOARDING",new("email",user.Email!,"SmartPark Operator account",
-            $"Login: {user.Email}\nInitial password: {initialPassword}\nOptional password change (24 hours): /change-password?challengeId={c.Id}&token={token}"),ct,c.Id);
-    }
-    public async Task ChangeBootstrapPasswordAsync(ChangeBootstrapPasswordDto body,CancellationToken ct)
-    {
-        Validate(body);await using var tx=await db.Database.BeginTransactionAsync(ct);var c=await LoadAsync(body.ChallengeId,"BOOTSTRAP_PASSWORD",ct);
-        if(c.ExpiresAt<=clock.GetUtcNow() || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(c.CodeHash),Encoding.UTF8.GetBytes(AuthSessionService.HashRefreshToken(body.Token)))) throw Error("INVALID_TOKEN","Password link is invalid or expired.",401);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").SingleAsync(ct);
-        if(user.Status!=UserStatus.Active || user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
-        user.PasswordHash=passwords.Hash(body.Password);c.ConsumedAt=clock.GetUtcNow();c.CodeHash="";
-        await db.AuthSessions.Where(s=>s.UserId==c.UserId).ExecuteUpdateAsync(s=>s.SetProperty(x=>x.IsRevoked,true),ct);
-        await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
-    }
-    public async Task<object> SetupMfaAsync(Guid id,CancellationToken ct)
-    {
-        await using var tx=await db.Database.BeginTransactionAsync(ct);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR UPDATE").SingleAsync(ct);
-        if(user.Status!=UserStatus.Active || user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
-        var existing=await db.MfaCredentials.FindAsync([id],ct);
-        if(existing?.Enabled==true)throw Error("MFA_ALREADY_ENABLED","MFA is already enabled.",409);
-        var secret=Base32(RandomNumberGenerator.GetBytes(20));var m=existing??new MfaCredential{UserId=id};
-        m.ProtectedSecret=protector.Protect(secret);m.LastStep=-1;m.Attempts=0;m.LockedUntil=null;if(existing is null)db.MfaCredentials.Add(m);
-        await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
-        return new {secret,uri=$"otpauth://totp/SmartPark:{Uri.EscapeDataString(user.Email??user.Phone!)}?secret={secret}&issuer=SmartPark&digits=6&period=30"};
-    }
-    public async Task EnableMfaAsync(Guid id,string code,CancellationToken ct)
-    {
-        await using var tx=await db.Database.BeginTransactionAsync(ct);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR SHARE").SingleAsync(ct);
-        if(user.Status!=UserStatus.Active || user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
-        var m=await db.MfaCredentials.FromSqlInterpolated($"SELECT * FROM mfa_credentials WHERE user_id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
-        if(m is null || !CheckTotp(m,code)){await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);throw Error("MFA_INVALID","Invalid authenticator code.");}
-        m.Enabled=true;await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
-    }
-    private bool CheckTotp(MfaCredential m,string? code)
-    {
-        if(m.LockedUntil>clock.GetUtcNow())return false;
-        if(m.LockedUntil!=null){m.LockedUntil=null;m.Attempts=0;}
-        var step=clock.GetUtcNow().ToUnixTimeSeconds()/30;
-        for(var offset=-1;offset<=1;offset++)
+        if (mfa?.Enabled == true)
         {
-            var current=step+offset;
-            if(current<=m.LastStep)continue;
-            if(code==Totp(protector.Unprotect(m.ProtectedSecret),current)){m.LastStep=current;m.Attempts=0;return true;}
+            await VerifyMfaAsync(mfa, body.Totp, body.RecoveryCode, ct);
         }
-        if(++m.Attempts>=3)m.LockedUntil=clock.GetUtcNow().AddMinutes(15);return false;
+        c.ConsumedAt = clock.GetUtcNow();
+        c.CodeHash = "";
+        await db.SaveChangesAsync(ct);
+        var result = await sessions.CreateAsync(user, ct);
+        if (!string.IsNullOrWhiteSpace(body.RecoveryCode) && mfa?.Enabled == true)
+            result.RecoveryCodesRemaining = await RemainingRecoveryCodesAsync(c.UserId, ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
-    public static string Totp(string secret,long step)
-    {
-        var alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";var bits=0;var buffer=0;var bytes=new List<byte>();
-        foreach(var ch in secret){buffer=(buffer<<5)|alphabet.IndexOf(ch);bits+=5;if(bits>=8){bits-=8;bytes.Add((byte)(buffer>>bits));}}
-        Span<byte> counter=stackalloc byte[8];System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(counter,step);
-        var hash=HMACSHA1.HashData(bytes.ToArray(),counter);var p=hash[^1]&15;var n=((hash[p]&127)<<24)|(hash[p+1]<<16)|(hash[p+2]<<8)|hash[p+3];return (n%1_000_000).ToString("D6");
-    }
-    private static string Base32(byte[] value)
-    {
-        const string alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";var result=new StringBuilder();var bits=0;var buffer=0;
-        foreach(var b in value){buffer=(buffer<<8)|b;bits+=8;while(bits>=5){bits-=5;result.Append(alphabet[(buffer>>bits)&31]);}}if(bits>0)result.Append(alphabet[(buffer<<(5-bits))&31]);return result.ToString();
-    }
-    public async Task<bool> MfaEnabledAsync(Guid id,CancellationToken ct)=>await db.MfaCredentials.AnyAsync(m=>m.UserId==id && m.Enabled,ct);
     public async Task<object> DeliveryAsync(Guid actor,Guid id,bool retry,CancellationToken ct)
     {
         await using var tx=await db.Database.BeginTransactionAsync(ct);
         var d=await db.WorkflowDeliveries.FromSqlInterpolated($"SELECT * FROM workflow_deliveries WHERE id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
         if(d is null || d.ActorId!=actor)throw Error("DELIVERY_NOT_FOUND","Delivery was not found.",404);
-        await RequirePermissionAsync(db,actor,d.Kind=="OPERATOR_ONBOARDING"?"OPERATOR_MANAGE":"ACCOUNT_ADMIN",ct);
+        if (d.Kind == "OPERATOR_ONBOARDING")
+        {
+            var tenants = await new IdentityAccessRepository(db).OwnerTenantsAsync(actor, "OPERATOR_MANAGE", ct);
+            var targetTenants = await db.OperatorGrants.AsNoTracking().Where(g => g.Account.UserId == d.UserId && g.Account.DeletedOn == null)
+                .Select(g => g.Account.TenantId).ToArrayAsync(ct);
+            if (targetTenants.Length == 0 || targetTenants.Any(t => t is null || !tenants.Contains(t.Value)))
+                throw Error("FORBIDDEN", "Current permission for every invitation tenant is required.", 403);
+        }
+        else await RequirePermissionAsync(db, actor, "ACCOUNT_ADMIN", ct);
         if(retry && d.Status=="failed") {d.Status="pending";d.RetryAt=null;await db.SaveChangesAsync(ct);}
         await tx.CommitAsync(ct);return new {d.Id,d.Kind,d.Status,d.Attempts,d.SentAt};
     }

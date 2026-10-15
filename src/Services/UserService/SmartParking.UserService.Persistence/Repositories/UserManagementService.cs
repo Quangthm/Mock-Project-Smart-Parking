@@ -85,6 +85,7 @@ public sealed class UserManagementService(AppDbContext db, TimeProvider clock) :
         if (user.Status != UserStatus.Active && user.Status != UserStatus.Locked)
             throw Error("INVALID_STATUS_TRANSITION", "Verification or owner approval must complete before managing access.", 409);
         user.Status = body.Status == "locked" ? UserStatus.Locked : UserStatus.Active;
+        if (user.Status == UserStatus.Active) OperatorActivation.RequireVerification(user);
         user.LockedUntil = null; // An Admin lock stays in effect until explicitly unlocked.
         user.FailedLoginAttempts = 0;
         user.ModifiedOn = clock.GetUtcNow();

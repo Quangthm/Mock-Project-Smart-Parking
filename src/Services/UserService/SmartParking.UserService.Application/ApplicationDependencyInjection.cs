@@ -28,6 +28,7 @@ public static class ApplicationDependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddScoped<IAccessTokenService, AccessTokenService>();
         services.AddScoped<AuthSessionService>();
+        services.AddScoped<IOperatorInvitationFactory, OperatorInvitationFactory>();
         services.AddScoped<IVehicleRegistration, VehicleRegistrationService>();
         var policy = configuration.GetSection("AuthenticationPolicy").Get<AuthenticationPolicy>() ?? new();
         if (policy.MaxFailedLoginAttempts < 1 || policy.LockoutMinutes < 1 || policy.RefreshTokenDays < 1)
@@ -44,12 +45,19 @@ public static class ApplicationDependencyInjection
         services.AddSingleton(_ => new JwtKeyProvider(jwtOptions, allowEphemeralKey));
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<JwtKeyProvider>((options, keys) =>
+            .Configure<JwtKeyProvider, TimeProvider>((options, keys, clock) =>
             {
                 options.MapInboundClaims = false;
-                options.TokenValidationParameters = AccessTokenService.ValidationParameters(jwtOptions, keys);
+                options.TokenValidationParameters = AccessTokenService.ValidationParameters(jwtOptions, keys, clock);
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        if (context.HttpContext.Request.Path.StartsWithSegments("/hubs/operators") &&
+                            context.HttpContext.Request.Query.TryGetValue("access_token", out var token))
+                            context.Token = token;
+                        return Task.CompletedTask;
+                    },
                     OnTokenValidated = async context =>
                     {
                         var principal = context.Principal;

@@ -10,15 +10,18 @@ namespace UserService.Application.Services;
 public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
     IAuthSessionStore sessions, TimeProvider clock) : IAccessTokenService
 {
-    public const int LifetimeSeconds = 24 * 60 * 60;
+    public const int LifetimeSeconds = SessionLifetime.AccessSeconds;
 
-    public static TokenValidationParameters ValidationParameters(JwtOptions options, JwtKeyProvider keys) => new()
+    public static TokenValidationParameters ValidationParameters(JwtOptions options, JwtKeyProvider keys, TimeProvider? clock = null) => new()
     {
         ValidateIssuer = true, ValidateAudience = true, ValidateLifetime = true,
         ValidateIssuerSigningKey = true, RequireSignedTokens = true, RequireExpirationTime = true,
         ValidIssuer = options.Issuer, ValidAudience = options.Audience,
         ValidAlgorithms = [SecurityAlgorithms.RsaSha256], IssuerSigningKey = keys.ValidationKey,
-        ClockSkew = TimeSpan.Zero, NameClaimType = JwtRegisteredClaimNames.Sub, RoleClaimType = "role"
+        ClockSkew = TimeSpan.Zero, NameClaimType = JwtRegisteredClaimNames.Sub, RoleClaimType = "role",
+        LifetimeValidator = clock is null ? null : (notBefore, expires, _, _) =>
+            expires.HasValue && expires.Value > clock.GetUtcNow().UtcDateTime &&
+            (!notBefore.HasValue || notBefore.Value <= clock.GetUtcNow().UtcDateTime)
     };
 
     public static string? CurrentRole(User user)
@@ -29,7 +32,7 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
         {
             "PLATFORM_ADMIN" or "ADMIN" => "admin",
             "BUSINESS_OWNER" or "OWNER" => "owner",
-            "SITE_OPERATOR" or "OPERATOR" => "operator",
+            "SITE_OPERATOR" or "OPERATOR" when user.EmailVerifiedAt is not null || user.PhoneVerifiedAt is not null => "operator",
             "DRIVER" => "driver",
             _ => null
         };
@@ -52,7 +55,7 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
         try
         {
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
-            var principal = handler.ValidateToken(accessToken, ValidationParameters(options, keys), out _);
+            var principal = handler.ValidateToken(accessToken, ValidationParameters(options, keys, clock), out _);
             return Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId)
                 && Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value, out var tokenId)
                 && await sessions.IsActiveAsync(tokenId, userId, cancellationToken);

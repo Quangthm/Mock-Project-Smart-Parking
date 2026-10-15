@@ -32,10 +32,14 @@ public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService
         {
             // Only valid credentials may disclose why account access is blocked.
             if (!passwords.Verify(request.Password, user.PasswordHash)) return new(null, "AUTH_FAILED");
+            if (user.Status == UserStatus.Active && SmartParking.UserService.Domain.Entities.OperatorActivation.NeedsContactVerification(user))
+            {
+                SmartParking.UserService.Domain.Entities.OperatorActivation.RequireVerification(user);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
             return new(null, SignInErrors.ForStatus(user.Status).Code);
         }
-        if (mfa is not null && await mfa.MfaEnabledAsync(user.Id!.Value,cancellationToken))
-            return new(null,"MFA_REQUIRED");
         if (!passwords.Verify(request.Password, user.PasswordHash))
         {
             user.FailedLoginAttempts++;
@@ -52,6 +56,13 @@ public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService
         user.FailedLoginAttempts = 0;
         user.LockedUntil = null;
         user.ModifiedOn = now;
+        if (mfa is not null && await mfa.MfaEnabledAsync(user.Id!.Value, cancellationToken))
+        {
+            var challenge = await mfa.CreateMfaLoginChallengeAsync(user.Id.Value, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new(null, MfaChallenge: challenge);
+        }
         var session = await sessions.CreateAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

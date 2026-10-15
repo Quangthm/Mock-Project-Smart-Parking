@@ -3,6 +3,7 @@ using System.Net.Mail;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using UserService.Application.Common.Interfaces.Services;
 namespace UserService.Infrastructure.Services;
 public sealed class WorkflowProtector(IDataProtectionProvider provider):IWorkflowProtector
@@ -11,14 +12,17 @@ public sealed class WorkflowProtector(IDataProtectionProvider provider):IWorkflo
     public string Protect(string value)=>protector.Protect(value);
     public string Unprotect(string value)=>protector.Unprotect(value);
 }
-public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory clients):IWorkflowTransport
+public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory clients,IHostEnvironment environment):IWorkflowTransport
 {
     public async Task SendAsync(WorkflowMessage message,Guid deliveryId,CancellationToken ct)
     {
         var body=message.Body;
         if(body.Contains("/change-password?"))
         {
-            if(!Uri.TryCreate(config["Onboarding:PublicOrigin"],UriKind.Absolute,out var origin) || origin.Scheme!="https")throw new InvalidOperationException("Configure HTTPS Onboarding:PublicOrigin.");
+            if(!Uri.TryCreate(config["Onboarding:PublicOrigin"],UriKind.Absolute,out var origin) ||
+                (origin.Scheme!="https" && !(environment.IsDevelopment() && config.GetValue<bool>("Onboarding:AllowHttpLoopback") &&
+                    origin.Scheme=="http" && origin.IsLoopback)))
+                throw new InvalidOperationException("Configure HTTPS Onboarding:PublicOrigin (or explicitly allow loopback HTTP in Development).");
             body=body.Replace("/change-password?",origin.GetLeftPart(UriPartial.Authority)+"/change-password?");
         }
         if(message.Channel=="email")

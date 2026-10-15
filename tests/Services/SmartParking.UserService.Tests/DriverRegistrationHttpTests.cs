@@ -38,6 +38,10 @@ public sealed class DriverRegistrationHttpTests
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
         builder.Services.AddApplicationServices(builder.Configuration);
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
+        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         var fixture = new AuthTestFixture();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();

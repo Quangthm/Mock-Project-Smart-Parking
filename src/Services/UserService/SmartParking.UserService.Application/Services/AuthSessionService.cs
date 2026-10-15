@@ -22,7 +22,7 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
         {
             Id = Guid.NewGuid(), UserId = user.Id!.Value, AccessTokenId = Guid.NewGuid(),
             TokenHash = HashRefreshToken(refresh), AccessExpiresAt = now.AddSeconds(AccessTokenService.LifetimeSeconds),
-            ExpiresAt = now.AddDays(policy.RefreshTokenDays), CreatedAt = now
+            ExpiresAt = now.AddDays(Math.Min(policy.RefreshTokenDays, 7)), CreatedAt = now, LastRefreshedAt = now
         };
         var result = Response(user, session.AccessTokenId, refresh, session.AccessExpiresAt);
         await sessions.AddAsync(session, cancellationToken);
@@ -32,7 +32,7 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
     public async Task<UserSessionDto> RotateAsync(User user, AuthSession previous, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
-        if (previous.UserId != user.Id || previous.IsRevoked || previous.ExpiresAt <= now)
+        if (previous.UserId != user.Id || !SessionLifetime.CanRefresh(previous, now))
             throw AuthException.InvalidToken();
         var id = Guid.NewGuid();
         var refresh = NewRefreshToken();

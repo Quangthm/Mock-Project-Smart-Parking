@@ -61,7 +61,9 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
             var failure = SignInErrors.ForCode(result.ErrorCode);
             return StatusCode(failure.StatusCode, new { success = false, code = failure.Code, message = failure.Message });
         }
-        return Ok(new { success = true, message = "Login successful", data = result.Session });
+        if (result.MfaChallenge is not null)
+            return Ok(new { success = true, mfaRequired = true, data = result.MfaChallenge });
+        return Ok(new { success = true, mfaRequired = false, message = "Login successful", data = result.Session });
     }
 
     [Authorize]

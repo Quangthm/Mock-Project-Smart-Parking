@@ -44,7 +44,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         catch { await fixture.DisposeAsync(); throw; }
     }
 
-    public async Task<WebApplication> StartHostAsync()
+    public async Task<WebApplication> StartHostAsync(TimeProvider? clock = null, Action<WebApplicationBuilder>? configure = null)
     {
         using var signingKey = RSA.Create(2048);
         var app = await UserHost.BuildAsync(["--environment", "Testing"], builder =>
@@ -52,6 +52,13 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
             builder.WebHost.UseTestServer();
             builder.Logging.ClearProviders();
             builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            if (clock is not null)
+            {
+                builder.Services.AddSingleton(clock);
+                // Lifecycle tests verify account-level lockout, independently of
+                // the shared TestServer IP's per-minute transport limit.
+                builder.Services.AddSingleton<IStartupFilter, MfaTestClientAddresses>();
+            }
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:User"] = ConnectionString,
@@ -63,7 +70,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
                 ["SeedDemoUser"] = "false",
                 ["DevelopmentAdmin:Email"] = null
             });
-        });
+        }, configure);
         await app.StartAsync();
         // Delivery scheduling is exercised explicitly against PostgreSQL in DriverWorkflowTests.
         // Stop the timer here so extracting test-only OTP fixtures cannot race provider retries.
@@ -83,4 +90,17 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         using var pool = new NpgsqlConnection(ConnectionString);
         NpgsqlConnection.ClearPool(pool);
     }
+}
+
+internal sealed class MfaTestClientAddresses : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use((context, handler) =>
+        {
+            context.Connection.RemoteIpAddress = new System.Net.IPAddress(RandomNumberGenerator.GetBytes(4));
+            return handler(context);
+        });
+        next(app);
+    };
 }

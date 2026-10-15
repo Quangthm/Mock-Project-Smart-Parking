@@ -13,7 +13,7 @@ namespace SmartParking.UserService.Tests;
 public sealed class AuthSessionTests
 {
     [Fact]
-    public async Task Login_IssuesRs256BearerOneHourAndRealRefreshToken()
+    public async Task Login_IssuesRs256BearerFifteenMinutesAndRealRefreshToken()
     {
         var f = new AuthTestFixture();
         var result = await f.SignIn();
@@ -21,11 +21,11 @@ public sealed class AuthSessionTests
         Assert.Equal(f.User.Id, result.Session!.User!.UserId);
         Assert.Equal("driver", result.Session.User.Role);
         Assert.Equal("Bearer", result.Session.TokenType);
-        Assert.Equal(86400, result.Session.ExpiresIn);
+        Assert.Equal(900, result.Session.ExpiresIn);
         Assert.NotEmpty(result.Session.RefreshToken!);
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Session.AccessToken);
         Assert.Equal("RS256", jwt.Header.Alg);
-        Assert.Equal(86400, (jwt.ValidTo - jwt.ValidFrom).TotalSeconds);
+        Assert.Equal(900, (jwt.ValidTo - jwt.ValidFrom).TotalSeconds);
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(result.Session.AccessToken!));
         var stored = Assert.Single(f.Sessions.Snapshot);
         Assert.NotEqual(result.Session.RefreshToken, stored.TokenHash);

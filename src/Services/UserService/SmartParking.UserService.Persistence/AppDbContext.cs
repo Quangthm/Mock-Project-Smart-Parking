@@ -14,20 +14,47 @@ namespace UserService.Persistence
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<AccountRole> AccountRoles { get; set; } = null!;
         public DbSet<AuthSession> AuthSessions { get; set; } = null!;
+        public DbSet<AccessEventOutbox> AccessEventOutbox { get; set; } = null!;
+        public DbSet<RotatedSessionProof> RotatedSessionProofs { get; set; } = null!;
         public DbSet<DriverRegistration> DriverRegistrations { get; set; } = null!;
         public DbSet<OwnerApplication> OwnerApplications { get; set; } = null!;
         public DbSet<OperatorGrant> OperatorGrants { get; set; } = null!;
         public DbSet<AuthChallenge> AuthChallenges { get; set; } = null!;
         public DbSet<WorkflowDelivery> WorkflowDeliveries { get; set; } = null!;
         public DbSet<MfaCredential> MfaCredentials { get; set; } = null!;
+        public DbSet<MfaRecoveryCode> MfaRecoveryCodes { get; set; } = null!;
         public DbSet<RegisteredVehicle> RegisteredVehicles { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<RotatedSessionProof>(entity =>
+            {
+                entity.ToTable("rotated_session_proofs");
+                entity.HasKey(e => e.AccessTokenId);
+                entity.Property(e => e.AccessTokenId).HasColumnName("access_token_id");
+                entity.Property(e => e.SessionId).HasColumnName("session_id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.TokenHash).HasColumnName("token_hash");
+                entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
+                entity.HasOne<AuthSession>().WithMany().HasForeignKey(e => e.SessionId).OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<AccessEventOutbox>(entity =>
+            {
+                entity.ToTable("access_event_outbox");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Payload).HasColumnName("payload");
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+                entity.Property(e => e.PublishedAt).HasColumnName("published_at");
+                entity.Property(e => e.LeaseId).HasColumnName("lease_id");
+                entity.Property(e => e.LeaseUntil).HasColumnName("lease_until");
+            });
             MapWorkflow<AuthChallenge>(modelBuilder, "auth_challenges", "Id");
             MapWorkflow<WorkflowDelivery>(modelBuilder, "workflow_deliveries", "Id");
             MapWorkflow<MfaCredential>(modelBuilder, "mfa_credentials", "UserId");
+            MapWorkflow<MfaRecoveryCode>(modelBuilder, "mfa_recovery_codes", "Id");
+            modelBuilder.Entity<MfaRecoveryCode>().HasIndex(code => new { code.UserId, code.CodeHash }).IsUnique();
             modelBuilder.Entity<RegisteredVehicle>(entity=>
             {
                 entity.ToTable("vehicles");entity.HasKey(v=>v.Id);
@@ -99,6 +126,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.Email).HasColumnName("email");
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
                 entity.Property(e => e.FullName).HasColumnName("full_name");
+                entity.Property(e => e.AccessVersion).HasColumnName("access_version");
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
                 entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
                 entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
@@ -177,6 +205,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.AccessTokenId).HasColumnName("access_token_id");
                 entity.Property(e => e.TokenHash).HasColumnName("token_hash").HasMaxLength(255);
                 entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
+                entity.Property(e => e.LastRefreshedAt).HasColumnName("last_refreshed_at");
                 entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
                 entity.Property(e => e.IsRevoked).HasColumnName("is_revoked");
                 entity.Property(e => e.CreatedAt).HasColumnName("created_at");

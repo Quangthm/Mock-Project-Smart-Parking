@@ -13,24 +13,35 @@ using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.DTOs;
 using UserService.Infrastructure.Services;
+using SmartParking.UserService.Domain.Entities;
 
 namespace SmartParking.UserService.Tests;
 
 public sealed class OperatorProvisioningHttpTests
 {
-    private sealed class Operators : IOperatorProvisioningService
+    private sealed class OperatorRepository : UnusedIdentityRepository
     {
-        public int Calls;
-        public Guid OwnerId;
-        public Task<OperatorDto> CreateAsync(Guid ownerId, CreateOperatorDto body, CancellationToken ct)
+        public Guid TenantId { get; } = Guid.NewGuid();
+        public User? CreatedOperator { get; private set; }
+        public Guid? CreatedBy { get; private set; }
+
+        public override Task<Guid[]> OwnerTenantsAsync(Guid actor, string permission, CancellationToken cancellationToken)
+            => Task.FromResult(new[] { TenantId });
+
+        public override Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken)
+            => Task.FromResult(false);
+
+        public override void AddOperator(User user, IEnumerable<OperatorGrant> grants, AuthChallenge challenge, WorkflowDelivery delivery)
         {
-            Calls++; OwnerId = ownerId;
-            return Task.FromResult(new OperatorDto(Guid.NewGuid(), body.FullName, body.Email,
-                "operator", "active", ownerId, body.SiteIds, body.Permissions));
+            CreatedOperator = user;
+            CreatedBy = grants.Single().CreatedBy;
         }
-        public Task<bool> HasPermissionAsync(Guid operatorId, Guid siteId, string permission, CancellationToken ct) => Task.FromResult(false);
-        public Task<IReadOnlyList<OperatorDto>> ListAsync(Guid ownerId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorDto>>([]);
-        public Task<IReadOnlyList<OperatorAssignment>> AssignmentsAsync(Guid operatorId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorAssignment>>([]);
+    }
+
+    private sealed class RecordedAccessEvents : UnusedAccessEvents
+    {
+        public List<OperatorAccessChanged> Messages { get; } = [];
+        public override void Stage(OperatorAccessChanged message) => Messages.Add(message);
     }
 
     [Fact]
@@ -41,20 +52,28 @@ public sealed class OperatorProvisioningHttpTests
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
         builder.Services.AddApplicationServices(builder.Configuration);
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        var repository = new OperatorRepository();
+        var events = new RecordedAccessEvents();
+        var directory = new TestParkingDirectory();
+        var siteId = Guid.NewGuid();
+        directory.Sites[siteId] = repository.TenantId;
+        builder.Services.AddSingleton<IIdentityAccessRepository>(repository);
+        builder.Services.AddSingleton<IAccessEventStore>(events);
+        builder.Services.AddSingleton<IParkingDirectory>(directory);
+        builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
-        var fixture = new AuthTestFixture(); var operators = new Operators();
+        var fixture = new AuthTestFixture();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
-        builder.Services.AddSingleton<IOperatorProvisioningService>(operators);
-        // Create only uses the action-level provisioning service.
+        // Use the real command handler; only persistence and external ports are substitutes.
         builder.Services.AddSingleton<IUserManagementService, UnusedUsers>();
         await using var app = builder.Build();
         app.UseMiddleware<AuthExceptionMiddleware>(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
         await app.StartAsync(); using var client = app.GetTestClient();
         CreateOperatorDto Body() => new() { FullName = "Operator", Email = "staff@personal.example",
-            Password = "Password@123", SiteIds = [Guid.NewGuid()], Permissions = ["DEVICE_MANAGE"] };
+            SiteIds = [siteId], Permissions = ["DEVICE_MANAGE"] };
         async Task Login(string role)
         {
             fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = role;
@@ -69,29 +88,35 @@ public sealed class OperatorProvisioningHttpTests
             await Login(role);
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/users", Body())).StatusCode);
         }
-        Assert.Equal(0, operators.Calls);
+        Assert.Null(repository.CreatedOperator);
         await Login("BUSINESS_OWNER");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/users")).StatusCode);
         foreach (var body in new[] {
             new CreateOperatorDto(),
             BodyWith(b => b.FullName = "   "), BodyWith(b => b.Email = "invalid"),
-            BodyWith(b => b.Password = "weakpass"), BodyWith(b => b.Password = "Password@12345678"),
             BodyWith(b => b.SiteIds = []), BodyWith(b => b.SiteIds = [Guid.Empty]),
             BodyWith(b => b.SiteIds = [b.SiteIds[0], b.SiteIds[0]]), BodyWith(b => b.SiteIds = null!),
             BodyWith(b => b.Permissions = []), BodyWith(b => b.Permissions = ["REFUND_APPROVE"]),
             BodyWith(b => b.Permissions = ["DEVICE_MANAGE", "DEVICE_MANAGE"]), BodyWith(b => b.Permissions = null!) })
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/users", body)).StatusCode);
-        Assert.Equal(0, operators.Calls);
+        var obsoleteRequest = new { fullName = "Operator", email = "staff@personal.example",
+            password = "Password@123", siteIds = new[] { siteId }, permissions = new[] { "DEVICE_MANAGE" } };
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/users", obsoleteRequest)).StatusCode);
+        Assert.Null(repository.CreatedOperator);
         var result = await client.PostAsJsonAsync("/api/users", Body());
         Assert.Equal(HttpStatusCode.Created, result.StatusCode);
         Assert.Contains("no-store", result.Headers.CacheControl!.ToString());
-        Assert.Equal(fixture.User.Id, operators.OwnerId);
+        Assert.Equal(fixture.User.Id, repository.CreatedBy);
+        Assert.NotNull(repository.CreatedOperator);
+        Assert.Empty(repository.CreatedOperator.PasswordHash);
+        Assert.Equal(SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification, repository.CreatedOperator.Status);
+        Assert.Equal("pending_verification", Assert.Single(events.Messages).Status);
         var json = await result.Content.ReadAsStringAsync();
         Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
         fixture.User.Status = SmartParking.UserService.Domain.Enum.UserStatus.Locked;
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/users", Body())).StatusCode);
-        Assert.Equal(1, operators.Calls);
+        Assert.Single(events.Messages);
 
         CreateOperatorDto BodyWith(Action<CreateOperatorDto> change) { var b = Body(); change(b); return b; }
     }

@@ -53,9 +53,13 @@ internal static class ServiceSchema
     }
     public static async Task ApplyFeaturesAsync(AppDbContext db)
     {
-        var sql=await File.ReadAllTextAsync(FeaturePath("05.8-Account-Workflow-Vehicles.sql"));
         await db.Database.OpenConnectionAsync();
-        await using var cmd=new NpgsqlCommand(sql,(NpgsqlConnection)db.Database.GetDbConnection());await cmd.ExecuteNonQueryAsync();
+        foreach (var file in new[] { "05.8-Account-Workflow-Vehicles.sql", "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql" })
+        {
+            var sql = await File.ReadAllTextAsync(FeaturePath(file));
+            await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
+            await cmd.ExecuteNonQueryAsync();
+        }
         await db.Database.CloseConnectionAsync();
     }
 }
