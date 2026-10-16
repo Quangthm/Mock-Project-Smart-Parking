@@ -50,7 +50,7 @@ export function Affiliates() {
           {
             icon: "🚗",
             title: "Refer Drivers",
-            desc: "Earn 20,000₫ credit for every driver who books their first spot.",
+            desc: "Earn 20.000 VND credit for every driver who books their first spot.",
           },
 
           {
@@ -112,7 +112,7 @@ export function Affiliates() {
 
             {
               type: "Driver Referral",
-              rate: "20,000₫ credit",
+              rate: "20.000 VND credit",
               period: "Per first booking",
               color: "#22c55e",
             },

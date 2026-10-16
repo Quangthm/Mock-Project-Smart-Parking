@@ -393,7 +393,7 @@ export function DriverAccounts() {
                 >
                   {booking.id} · {booking.lotName} · {booking.status} /{" "}
                   {booking.paymentStatus ?? "pending"} ·{" "}
-                  {booking.amount.toLocaleString("vi-VN")}₫
+                  {booking.amount.toLocaleString("vi-VN")} VND
                 </p>
               ))}
               {!store.getBookingsByDriver(selected.id).length && (

@@ -58,14 +58,14 @@ public static class OtpEmailTemplate
                       <img src="cid:{LogoContentId}" width="112" height="112" alt="SmartParking logo" style="display:block;width:112px;height:112px;border:0;">
                     </td></tr>
                     <tr><td align="center" style="padding:0 24px 24px;font-size:17px;font-weight:700;letter-spacing:.2px;color:#07558d;">SmartParking</td></tr>
-                    <tr><td style="padding:0 40px;">
+                    <tr><td align="center" style="padding:0 40px;text-align:center;">
                       <h1 style="margin:0 0 12px;font-size:24px;line-height:1.3;font-weight:700;color:#17324d;">Your verification code</h1>
                       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#496175;">Enter this code to continue with SmartParking.</p>
                     </td></tr>
                     <tr><td align="center" style="padding:0 24px 24px;">
                       <div style="display:inline-block;padding:16px 24px;background:#edf5fb;border:1px solid #c9dfee;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:32px;line-height:1.2;font-weight:700;letter-spacing:7px;color:#07558d;">{safeCode}</div>
                     </td></tr>
-                    <tr><td style="padding:0 40px 32px;">
+                    <tr><td align="center" style="padding:0 40px 32px;text-align:center;">
                       <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#496175;">This code is valid for 5 minutes. Do not share it with anyone.</p>
                       <p style="margin:0;font-size:14px;line-height:1.6;color:#496175;">If you did not request this code, you can ignore this email.</p>
                     </td></tr>

@@ -20,17 +20,19 @@ export function OwnerDashboard() {
   const [setupSiteId, setSetupSiteId] = useState<string | null>(null);
   const [siteRefresh, setSiteRefresh] = useState(0);
   const [sites, setSites] = useState<Site[]>([]);
+  const [sitesLoaded, setSitesLoaded] = useState(false);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   useEffect(() => {
     let current = true;
-    setLoading(true); setError('');
+    setLoading(true); setSitesLoaded(false); setError('');
     Promise.allSettled([parkingApi.list(), operatorsApi.list()])
       .then(([siteResult, operatorResult]) => {
         if (!current) return;
         if (siteResult.status === 'fulfilled') {
           setSites(siteResult.value);
+          setSitesLoaded(true);
           setSelectedSiteId(current => current === setupSiteId || current === 'all' || siteResult.value.some(site => site.id === current) ? current : 'all');
         } else {
           setSites([]);
@@ -52,7 +54,7 @@ export function OwnerDashboard() {
     return () => window.removeEventListener('sp:dashboard-nav', onNavigate);
   }, []);
 
-  if (!user?.onboardingComplete) {
+  if (!loading && sitesLoaded && !user?.onboardingComplete && sites.length === 0) {
     return <div style={{ minHeight: 'calc(100vh - 60px)', background: 'var(--bg)' }}><OnboardingWizard onComplete={(lot) => { setSetupSiteId(lot.id); setSelectedSiteId(lot.id); setTab('structure'); setSiteRefresh(value => value + 1); }} /></div>;
   }
 
@@ -66,7 +68,7 @@ export function OwnerDashboard() {
       ] },
       { label: 'Business', items: [
         { id: 'operators', label: 'Operators', icon: '♙', active: tab === 'operators', onClick: () => setTab('operators') },
-        { id: 'finance', label: 'Financial', icon: '₫', active: tab === 'finance', onClick: () => setTab('finance') },
+        { id: 'finance', label: 'Financial', icon: 'banknote', active: tab === 'finance', onClick: () => setTab('finance') },
         { id: 'policy', label: 'Policies', icon: '⚖', active: tab === 'policy', onClick: () => setTab('policy') },
       ] },
     ]}>

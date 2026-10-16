@@ -141,7 +141,7 @@ export function Overview() {
         {[
           {
             label: "Platform Revenue",
-            value: `${totalRevenue.toLocaleString("vi-VN")}₫`,
+            value: `${totalRevenue.toLocaleString("vi-VN")} VND`,
             sub: "All-time booking settlements",
             icon: "banknote",
             badge: "Financial",

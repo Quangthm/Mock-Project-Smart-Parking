@@ -225,7 +225,7 @@ export function FindParking({
                     color: #666;
                     margin-top: 4px;
                   ">
-                    ${(lot.hourlyRate / 1000).toFixed(0)}K₫/hr
+                    ${lot.hourlyRate.toLocaleString("vi-VN")} VND/hr
                   </div>
                 </div>
               `),
@@ -621,7 +621,7 @@ export function FindParking({
                       color: "var(--muted)",
                     }}
                   >
-                    {(lot.hourlyRate / 1000).toFixed(0)}K₫/hr
+                    {lot.hourlyRate.toLocaleString("vi-VN")} VND/hr
                   </span>
                 </div>
 

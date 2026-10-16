@@ -70,18 +70,18 @@ export function OwnerVerification({
   }
 
   return (
-    <form className="card" onSubmit={verify}>
+    <form className="card text-center" onSubmit={verify}>
       <h2>Verify email</h2>
       <p>
-        Enter the code sent to your email. After verification, your application
-        will await Admin approval.
+        Your parking lot setup is saved. Enter the code sent to your email to
+        submit your application for Admin review.
       </p>
       <label className="label" htmlFor="owner-code">
         Verification code
       </label>
       <input
         id="owner-code"
-        className="input"
+        className="input text-center"
         required
         pattern="[0-9]{6}"
         maxLength={6}
