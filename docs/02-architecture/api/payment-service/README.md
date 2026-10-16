@@ -23,6 +23,6 @@ Mọi API Contract thuộc Payment Service phải tuân thủ nghiêm ngặt quy
 | STT | Mã Jira | Tên Contract / Tính năng | API Version | Document Revision | Loại giao tiếp | Trạng thái | Đường dẫn tài liệu |
 | :---: | :---: | :--- | :---: | :---: | :--- | :---: | :--- |
 | **01** | `SPARK-229` | **Parking Pricing Calculator** (Core Rules & Contract) | `N/A` *(Internal)* | `v1.1` | Internal Domain Interface *(Companion HTTP Deferred)* | `Approved` | [01-pricing-calculation.contract.md](01-pricing-calculation.contract.md) |
-| **02** | `SPARK-247` | **Payment Gateway Integration** (VNPay, MoMo, ZaloPay, Cash) | `TBD` | `v1.0` | HTTP REST + Webhook Callback | `Backlog` | *(Kế hoạch Sprint tiếp theo)*
+| **02** | `SPARK-247` / `SPARK-249` | **Payment Gateway Integration** (payOS VietQR MVP, Extensible Outbound Port) | `v1` | `v1.0` | HTTP REST + Webhook Callback + Hexagonal Port | `In Review` | [02-payment-gateway-integration.contract.md](02-payment-gateway-integration.contract.md) |
 
 > **Quy ước:** `API Version` chỉ áp dụng cho route do SmartPark quản lý khi sử dụng URL/API versioning; `Document Revision` là phiên bản tài liệu contract. Với contract chưa xác định route/version, ghi `TBD`; không suy ra API Version từ Document Revision. Với tích hợp outbound sang Provider, version của API Provider do chính Provider quản lý.
