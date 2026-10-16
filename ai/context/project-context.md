@@ -20,7 +20,7 @@ Microservices
 Service-owned persistence
 ```
 
-Current direction includes synchronous API communication where an immediate response is required and Kafka only where asynchronous/event-driven communication provides a real benefit.
+Current direction includes synchronous API communication where an immediate response is required and RabbitMQ (via MassTransit) only where asynchronous/event-driven communication provides a real benefit.
 
 ## Current technology direction
 
@@ -29,7 +29,7 @@ Current direction includes synchronous API communication where an immediate resp
 - UI/styling: TailwindCSS + Material UI
 - Database: PostgreSQL
 - Containerization: Docker
-- Messaging/event layer: Kafka when justified
+- Messaging/event layer: RabbitMQ + MassTransit (Outbox/Inbox pattern) when justified
 - 3D parking visualization: Three.js
 - AI: chatbot, recommendation, and image-recognition capabilities are in MVP scope, but model/provider selection and some implementation details remain deferred.
 
