@@ -29,11 +29,4 @@ public sealed class OperatorsController(IOperatorProvisioningService operators) 
         var assignment=(await operators.AssignmentsAsync(actor,ct)).SingleOrDefault(a=>a.SiteId==siteId && a.Permissions.Contains("SLOT_OVERRIDE"));
         return assignment is null?Forbid():Ok(new{userId=actor,tenantIds=new[]{assignment.TenantId}});
     }
-    [HttpGet("site-scope"),Authorize(Roles="operator")]
-    public async Task<IActionResult> SiteScope(Guid siteId,CancellationToken ct)
-    {
-        if(!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value,out var actor))return Unauthorized();
-        var assignment=(await operators.AssignmentsAsync(actor,ct)).SingleOrDefault(a=>a.SiteId==siteId);
-        return assignment is null?Forbid():Ok(new{userId=actor,tenantIds=new[]{assignment.TenantId}});
-    }
 }
