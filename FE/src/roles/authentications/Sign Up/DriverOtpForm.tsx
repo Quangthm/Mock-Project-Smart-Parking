@@ -4,12 +4,16 @@ import { authApi, type DriverRegistration } from "../../../lib/authApi"
 
 export const pendingDriverKey = "sp_pending_driver_registration"
 
-export function restoreDriverRegistration(): DriverRegistration | null {
+export type PendingDriverRegistration = DriverRegistration & { contact: string }
+
+export function restoreDriverRegistration(): PendingDriverRegistration | null {
   try {
-    const value = JSON.parse(localStorage.getItem(pendingDriverKey) ?? "null")
+    const value = JSON.parse(sessionStorage.getItem(pendingDriverKey) ?? "null")
 
     return value &&
       typeof value.registrationId === "string" &&
+      typeof value.contact === "string" &&
+      value.contact.trim().length > 0 &&
       ["email", "sms"].includes(value.channel) &&
       Number.isFinite(Date.parse(value.expiresAt)) &&
       Number.isFinite(Date.parse(value.resendAvailableAt))
@@ -27,8 +31,8 @@ export function DriverOtpForm({
   onBack,
   onDifferentContact,
 }: {
-  registration: DriverRegistration
-  onUpdate: (value: DriverRegistration) => void
+  registration: PendingDriverRegistration
+  onUpdate: (value: PendingDriverRegistration) => void
 
   onVerified: () => void
   onBack: () => void
@@ -83,7 +87,10 @@ export function DriverOtpForm({
     setMessage("")
 
     try {
-      onUpdate(await authApi.resendDriver(registration.registrationId))
+      onUpdate({
+        ...(await authApi.resendDriver(registration.registrationId)),
+        contact: registration.contact,
+      })
       setCode("")
       setMessage("A new code is queued for delivery.")
     } catch (e) {
@@ -104,6 +111,9 @@ export function DriverOtpForm({
         Enter the 6-digit code delivered by{" "}
         {registration.channel === "email" ? "email" : "SMS"}. Delivery may take
         a moment. The code is valid for 5 minutes.
+      </p>
+      <p style={{ margin: 0, fontWeight: 600, overflowWrap: "anywhere" }}>
+        {registration.contact}
       </p>
       <label className="label" htmlFor="driver-otp">
         Verification code

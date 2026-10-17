@@ -47,6 +47,7 @@ export class AuthApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message)
   }
@@ -145,7 +146,7 @@ export async function request<T>(
         ? "Your session has expired. Please sign in again."
         : "Authentication request failed.")
 
-    throw new AuthApiError(message, response.status)
+    throw new AuthApiError(message, response.status, payload?.code)
   }
 
   return payload as T

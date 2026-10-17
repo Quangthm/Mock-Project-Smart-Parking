@@ -328,26 +328,6 @@ export function Landing() {
         }}
       >
         <div className="animate-in">
-          <div
-            style={{
-              display: "inline-flex",
-
-              alignItems: "center",
-
-              gap: "0.5rem",
-
-              background: "color-mix(in srgb, var(--primary) 9%, transparent)",
-
-              border:
-                "1px solid color-mix(in srgb, var(--primary) 25%, transparent)",
-
-              borderRadius: "999px",
-
-              padding: "0.3rem 0.875rem",
-
-              marginBottom: "1.25rem",
-            }}
-          ></div>
           <h1
             style={{
               fontFamily: "Outfit",
