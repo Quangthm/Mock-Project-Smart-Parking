@@ -499,7 +499,7 @@ export function CheckInOut({
                   <span className="text-[var(--muted)] block">Amount & Payment:</span>
                   <span className="font-bold text-[var(--fg)]">
                     {quickResult.booking.paymentStatus
-                      ? `${quickResult.booking.amount.toLocaleString("vi-VN")} ₫`
+                      ? `${quickResult.booking.amount.toLocaleString("vi-VN")} VND`
                       : "Managed by Payment Service"}
                   </span>
                 </div>
@@ -566,7 +566,7 @@ export function CheckInOut({
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
-            <h2 className="text-base font-bold text-[var(--fg)]">All Booking Records</h2>
+            <h2 className="text-base font-bold text-[var(--fg)]">Parking History</h2>
             <p className="text-xs text-[var(--muted)]">
               Showing {filteredBookings.length} bookings for {lot.name}
             </p>
@@ -674,7 +674,7 @@ export function CheckInOut({
                       </td>
                       <td className="px-4 py-3 font-medium text-[var(--fg)]">
                         {b.paymentStatus
-                          ? `${b.amount.toLocaleString("vi-VN")} ₫`
+                          ? `${b.amount.toLocaleString("vi-VN")} VND`
                           : "Managed by Payment Service"}
                       </td>
                       <td className="px-4 py-3">
@@ -815,7 +815,7 @@ export function CheckInOut({
                   <span className="text-[var(--muted)] block">Payment Amount:</span>
                   <span className="font-bold text-[var(--fg)]">
                     {selectedBooking.paymentStatus
-                      ? `${selectedBooking.amount.toLocaleString("vi-VN")} ₫`
+                      ? `${selectedBooking.amount.toLocaleString("vi-VN")} VND`
                       : "Managed by Payment Service"}
                   </span>
                 </div>

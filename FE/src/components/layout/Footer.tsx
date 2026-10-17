@@ -204,7 +204,7 @@ export function Footer() {
           }}
         >
           <p style={{ fontSize: "0.8rem", color: "var(--muted)", margin: 0 }}>
-            © 2026 Smart Parking. All rights reserved.
+            This product is for educational purposes.
           </p>
           <div style={{ display: "flex", gap: "1.25rem" }}>
             {[

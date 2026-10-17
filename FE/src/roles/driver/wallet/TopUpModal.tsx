@@ -147,7 +147,7 @@ export function TopUpModal({
               color: "var(--primary)",
             }}
           >
-            {current.toLocaleString("vi-VN")}₫
+            {current.toLocaleString("vi-VN")} VND
           </div>
         </div>
         <div
@@ -189,12 +189,12 @@ export function TopUpModal({
                 color: "var(--fg)",
               }}
             >
-              {p.toLocaleString("vi-VN")}₫
+              {p.toLocaleString("vi-VN")} VND
             </button>
           ))}
         </div>
         <div style={{ marginBottom: "1rem" }}>
-          <label className="label">Or enter custom amount (₫)</label>
+          <label className="label">Or enter custom amount (VND)</label>
           <input
             className="input"
             type="number"
@@ -285,7 +285,7 @@ export function TopUpModal({
             }}
           >
             New balance after top-up:{" "}
-            <strong>{(current + amount).toLocaleString("vi-VN")}₫</strong>
+            <strong>{(current + amount).toLocaleString("vi-VN")} VND</strong>
           </div>
         )}
         <button

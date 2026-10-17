@@ -832,7 +832,7 @@ export function BookingFlow({
             >
               Estimated total:{" "}
               <strong style={{ color: "var(--fg)" }}>
-                {amount.toLocaleString("vi-VN")}₫
+                {amount.toLocaleString("vi-VN")} VND
               </strong>
             </p>
           )}
@@ -910,7 +910,7 @@ export function BookingFlow({
             >
               Total due:{" "}
               <strong style={{ color: "var(--fg)" }}>
-                {(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")}₫
+                {(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")} VND
               </strong>
             </p>
             <button

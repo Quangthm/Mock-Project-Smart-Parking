@@ -197,7 +197,7 @@ export function BookingCard({
             marginTop: "0.375rem",
           }}
         >
-          {booking.amount.toLocaleString("vi-VN")}₫
+          {booking.amount.toLocaleString("vi-VN")} VND
         </div>
 
         <div

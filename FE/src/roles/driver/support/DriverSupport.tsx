@@ -62,6 +62,7 @@ export function DriverSupport() {
 
             setForm({ subject: "", message: "" })
 
+            setBookingId("")
           }}
         >
           New Ticket

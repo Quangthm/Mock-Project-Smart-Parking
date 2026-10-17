@@ -54,10 +54,7 @@ export function OperatorDashboard({
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [currentLotBookings, setCurrentLotBookings] = useState<Booking[]>([])
   const [allReportBookings, setAllReportBookings] = useState<Booking[]>([])
-  const [sitesError, setSitesError] = useState("")
-  const [resourcesError, setResourcesError] = useState("")
-  const [reportsError, setReportsError] = useState("")
-  const dataError = [sitesError, resourcesError, reportsError].filter(Boolean).join(" ")
+  const [dataError, setDataError] = useState("")
   const [sitesLoading, setSitesLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -84,7 +81,7 @@ export function OperatorDashboard({
   useEffect(() => {
     let active = true
     setSitesLoading(true)
-    setSitesError("")
+    setDataError("")
     loadOperatorSites(user)
       .then((sites) => {
         if (active) setAllLots(sites)
@@ -92,7 +89,7 @@ export function OperatorDashboard({
       .catch((error) => {
         if (active) {
           setAllLots([])
-          setSitesError(error instanceof Error ? error.message : "Could not load assigned parking sites.")
+          setDataError(error instanceof Error ? error.message : "Could not load assigned parking sites.")
         }
       })
       .finally(() => {
@@ -114,40 +111,34 @@ export function OperatorDashboard({
   }, [activeSiteId, ownerLots])
 
   useEffect(() => {
-    setCurrentLotBookings([])
-    setTickets([])
-    setNotifications([])
-    setResourcesError("")
-    if (!selectedLot) return
+    if (!selectedLot) {
+      setCurrentLotBookings([])
+      setTickets([])
+      setNotifications([])
+      return
+    }
     let active = true
-    Promise.allSettled([
+    setDataError("")
+    Promise.all([
       reservationApi.list(selectedLot.id),
       operatorOperationsApi.listTickets(selectedLot.id),
       operatorOperationsApi.listNotifications(selectedLot.id),
-    ]).then(([bookings, nextTickets, nextNotifications]) => {
-      if (!active) return
-      if (bookings.status === "fulfilled") setCurrentLotBookings(bookings.value)
-      if (nextTickets.status === "fulfilled") setTickets(nextTickets.value)
-      if (nextNotifications.status === "fulfilled") setNotifications(nextNotifications.value)
-      const failures = [
-        ["Reservations", bookings],
-        ["Support tickets", nextTickets],
-        ["Notifications", nextNotifications],
-      ] as const
-      setResourcesError(failures.flatMap(([label, result]) =>
-        result.status === "rejected"
-          ? [`${label} unavailable: ${result.reason instanceof Error ? result.reason.message : "request failed"}.`]
-          : [],
-      ).join(" "))
-    })
+    ])
+      .then(([bookings, nextTickets, nextNotifications]) => {
+        if (!active) return
+        setCurrentLotBookings(bookings)
+        setTickets(nextTickets)
+        setNotifications(nextNotifications)
+      })
+      .catch((error) => {
+        if (active) setDataError(error instanceof Error ? error.message : "Could not load operator data.")
+      })
     return () => {
       active = false
     }
   }, [selectedLot?.id, refreshKey])
 
   useEffect(() => {
-    setReportsError("")
-    setAllReportBookings([])
     const reportSites = accessRole === "financial" ? ownerLots : selectedLot ? [selectedLot] : []
     if (!reportSites.length) {
       setAllReportBookings([])
@@ -159,7 +150,7 @@ export function OperatorDashboard({
         if (active) setAllReportBookings(bookings.flat())
       })
       .catch((error) => {
-        if (active) setReportsError(error instanceof Error ? error.message : "Could not load reservation reports.")
+        if (active) setDataError(error instanceof Error ? error.message : "Could not load reservation reports.")
       })
     return () => {
       active = false
@@ -168,11 +159,7 @@ export function OperatorDashboard({
 
   // Cashier role shortcut view
   if (accessRole === "cashier") {
-    return <>
-      {dataError && <p role="alert" className="m-4 text-sm text-red-600">{dataError}</p>}
-      {sitesLoading && <p role="status" className="m-4 text-sm">Loading assigned parking sites…</p>}
-      <CashierPOS lot={selectedLot} onDataChanged={() => setRefreshKey((value) => value + 1)} />
-    </>
+    return <CashierPOS lot={selectedLot} onDataChanged={() => setRefreshKey((value) => value + 1)} />
   }
 
   // Financial reconciliation metrics
@@ -408,7 +395,7 @@ export function OperatorDashboard({
                 />
                 <FinanceMetric
                   label="Total Recorded Revenue"
-                  value={`${totalRevenue.toLocaleString("vi-VN")} ₫`}
+                  value={`${totalRevenue.toLocaleString("vi-VN")} VND`}
                 />
                 <FinanceMetric
                   label="Pending Settlement"
@@ -425,7 +412,7 @@ export function OperatorDashboard({
                       <th className="px-4 py-3 font-medium">Booking ID</th>
                       <th className="px-4 py-3 font-medium">Vehicle Plate</th>
                       <th className="px-4 py-3 font-medium">Payment Method</th>
-                      <th className="px-4 py-3 text-right font-medium">Amount (₫)</th>
+                      <th className="px-4 py-3 text-right font-medium">Amount (VND)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
@@ -445,7 +432,7 @@ export function OperatorDashboard({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-[var(--fg)]">
-                          {b.amount.toLocaleString("vi-VN")} ₫
+                          {b.amount.toLocaleString("vi-VN")} VND
                         </td>
                       </tr>
                     ))}
@@ -575,7 +562,7 @@ function CashierPOS({
             <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
               <div><dt className="text-[var(--muted)]">Reservation</dt><dd className="mt-1 font-mono text-[var(--fg)]">{booking.id}</dd></div>
               <div><dt className="text-[var(--muted)]">Slot</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.slotNumber}</dd></div>
-              <div><dt className="text-[var(--muted)]">Recorded amount</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.amount.toLocaleString("vi-VN")} ₫</dd></div>
+              <div><dt className="text-[var(--muted)]">Recorded amount</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.amount.toLocaleString("vi-VN")} VND</dd></div>
               <div><dt className="text-[var(--muted)]">Payment status</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.paymentStatus ?? "unknown"}</dd></div>
             </dl>
             <button type="button" className="btn-primary mt-4 w-full justify-center" onClick={() => void completeCheckout()} disabled={busy}>
