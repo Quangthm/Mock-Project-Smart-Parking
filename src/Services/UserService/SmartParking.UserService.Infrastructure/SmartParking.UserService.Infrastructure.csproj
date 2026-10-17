@@ -4,6 +4,7 @@
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <ProjectReference Include="..\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
     <ProjectReference Include="..\SmartParking.UserService.Domain\SmartParking.UserService.Domain.csproj" />
+    <EmbeddedResource Include="Assets\Logo.png" LogicalName="SmartParking.UserService.Infrastructure.Assets.Logo.png" />
   </ItemGroup>
 
   <PropertyGroup>

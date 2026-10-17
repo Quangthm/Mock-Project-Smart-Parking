@@ -13,7 +13,6 @@ export function DriverSupport() {
 
   const [form, setForm] = useState({ subject: "", message: "" })
 
-  const [bookingId, setBookingId] = useState("")
 
   const [sent, setSent] = useState(false)
 
@@ -31,7 +30,6 @@ export function DriverSupport() {
 
       message: form.message,
 
-      bookingId: bookingId || undefined,
     })
 
     store.createNotification({
@@ -64,7 +62,6 @@ export function DriverSupport() {
 
             setForm({ subject: "", message: "" })
 
-            setBookingId("")
           }}
         >
           New Ticket
@@ -109,21 +106,6 @@ export function DriverSupport() {
           placeholder="e.g. Incorrect charge, appeal"
           required
         />
-      </div>
-      <div>
-        <label className="label">Related Booking (optional)</label>
-        <select
-          className="input"
-          value={bookingId}
-          onChange={(e) => setBookingId(e.target.value)}
-        >
-          <option value="">No related booking</option>
-          {store.getBookingsByDriver(user?.id ?? "").map((booking) => (
-            <option key={booking.id} value={booking.id}>
-              {booking.id} · {booking.lotName}
-            </option>
-          ))}
-        </select>
       </div>
       <div>
         <label className="label">Message</label>

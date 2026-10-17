@@ -5,7 +5,7 @@ public interface IWorkflowProtector
     string Protect(string plaintext);
     string Unprotect(string ciphertext);
 }
-public sealed record WorkflowMessage(string Channel, string Destination, string Subject, string Body);
+public sealed record WorkflowMessage(string Channel, string Destination, string Subject, string Body, string? OtpCode = null);
 public interface IWorkflowTransport
 {
     Task SendAsync(WorkflowMessage message, Guid deliveryId, CancellationToken ct);

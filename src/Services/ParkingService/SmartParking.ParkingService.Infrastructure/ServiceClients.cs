@@ -37,6 +37,20 @@ public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor 
 
 public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCommitments
 {
+    public async Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    {
+        try
+        {
+            using var response = await client.PostAsJsonAsync($"internal/structure/{siteId}/snapshot", new { tenantId }, ct);
+            if (!response.IsSuccessStatusCode) throw Unavailable();
+            var snapshot = await response.Content.ReadFromJsonAsync<CommitmentSnapshot>(ct) ?? throw Unavailable();
+            if (snapshot.ProtectedSlots is null) throw Unavailable();
+            return snapshot;
+        }
+        catch (Exception e) when (e is HttpRequestException or JsonException || e is OperationCanceledException && !ct.IsCancellationRequested) { throw Unavailable(); }
+    }
+
+
     public async Task<CommitmentSnapshot> AcquireAsync(
         Guid tenantId, Guid siteId, Guid token, CancellationToken cancellationToken)
     {

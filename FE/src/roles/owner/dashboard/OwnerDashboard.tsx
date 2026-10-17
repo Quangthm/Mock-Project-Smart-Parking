@@ -17,6 +17,7 @@ export function OwnerDashboard() {
   const { user } = useApp();
   const [tab, setTab] = useState<Tab>('dashboard');
   const [selectedSiteId, setSelectedSiteId] = useState('all');
+  const [setupSiteId, setSetupSiteId] = useState<string | null>(null);
   const [siteRefresh, setSiteRefresh] = useState(0);
   const [sites, setSites] = useState<Site[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -25,16 +26,25 @@ export function OwnerDashboard() {
   useEffect(() => {
     let current = true;
     setLoading(true); setError('');
-    Promise.all([parkingApi.list(), operatorsApi.list()])
-      .then(([sites, operators]) => {
+    Promise.allSettled([parkingApi.list(), operatorsApi.list()])
+      .then(([siteResult, operatorResult]) => {
         if (!current) return;
-        setSites(sites); setOperators(operators);
-        setSelectedSiteId(current => current === 'all' || sites.some(site => site.id === current) ? current : 'all');
+        if (siteResult.status === 'fulfilled') {
+          setSites(siteResult.value);
+          setSelectedSiteId(current => current === setupSiteId || current === 'all' || siteResult.value.some(site => site.id === current) ? current : 'all');
+        } else {
+          setSites([]);
+          setError(siteResult.reason instanceof Error ? siteResult.reason.message : 'Cannot load owner sites.');
+        }
+        if (operatorResult.status === 'fulfilled') setOperators(operatorResult.value);
+        else {
+          setOperators([]);
+          if (siteResult.status === 'fulfilled') setError(operatorResult.reason instanceof Error ? operatorResult.reason.message : 'Cannot load operators.');
+        }
       })
-      .catch(err => { if (current) { setSites([]); setOperators([]); setError(err instanceof Error ? err.message : 'Cannot load owner data.'); } })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [user?.id, siteRefresh]);
+  }, [user?.id, siteRefresh, setupSiteId]);
 
   useEffect(() => {
     const onNavigate = (event: Event) => setTab((event as CustomEvent<Tab>).detail);
@@ -43,7 +53,7 @@ export function OwnerDashboard() {
   }, []);
 
   if (!user?.onboardingComplete) {
-    return <div style={{ minHeight: 'calc(100vh - 60px)', background: 'var(--bg)' }}><OnboardingWizard onComplete={() => setTab('dashboard')} /></div>;
+    return <div style={{ minHeight: 'calc(100vh - 60px)', background: 'var(--bg)' }}><OnboardingWizard onComplete={(lot) => { setSetupSiteId(lot.id); setSelectedSiteId(lot.id); setTab('structure'); setSiteRefresh(value => value + 1); }} /></div>;
   }
 
   return (
@@ -71,9 +81,11 @@ export function OwnerDashboard() {
         )}
         <div className="animate-in">
           {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} sites={sites} operators={operators} />}
-          {tab === 'sites' && <SiteManagement onSiteCreated={() => setSiteRefresh(value => value + 1)} />}
+          {tab === 'sites' && <SiteManagement onSiteCreated={(site, created) => { if (created) { setSetupSiteId(site.id); setSelectedSiteId(site.id); setTab('structure'); } setSiteRefresh(value => value + 1); }} />}
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
-          {tab === 'structure' && <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onChanged={() => setSiteRefresh(value => value + 1)} />}
+          {tab === 'structure' && (setupSiteId && !sites.some(site => site.id === setupSiteId)
+            ? <p role="status" className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Waiting for the new site to appear in the server list. Use Retry above if it does not load.</p>
+            : <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onChanged={() => setSiteRefresh(value => value + 1)} />)}
           {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}

@@ -13,7 +13,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 export function SiteManagement({
   onSiteCreated,
 }: {
-  onSiteCreated: () => void
+  onSiteCreated: (site: Site, created: boolean) => void
 }) {
   const { user } = useApp()
   const [sites, setSites] = useState<Site[]>([])
@@ -33,7 +33,7 @@ export function SiteManagement({
     targetSite: Site
     selectedOpId: string
   } | null>(null)
-  const [assignBusy, setAssignBusy] = useState(false)
+  const assignBusy = false
   const [assignError, setAssignError] = useState("")
 
   // Search & Filter
@@ -46,17 +46,14 @@ export function SiteManagement({
     setError("")
     setShowFormModal(false)
 
-    Promise.all([parkingApi.list(), operatorsApi.list()])
-      .then(([siteList, operatorList]) => {
+    Promise.allSettled([parkingApi.list(), operatorsApi.list()])
+      .then(([siteResult, operatorResult]) => {
         if (!current) return
-        setSites(siteList)
-        setOperators(operatorList)
-      })
-      .catch((err) => {
-        if (current)
-          setError(
-            err instanceof Error ? err.message : "Cannot load sites and operators.",
-          )
+        if (siteResult.status === "fulfilled") setSites(siteResult.value)
+        else setError(siteResult.reason instanceof Error ? siteResult.reason.message : "Cannot load sites.")
+        if (operatorResult.status === "fulfilled") setOperators(operatorResult.value)
+        else if (siteResult.status === "fulfilled")
+          setError(operatorResult.reason instanceof Error ? operatorResult.reason.message : "Cannot load operators.")
       })
       .finally(() => {
         if (current) setLoading(false)
@@ -68,6 +65,7 @@ export function SiteManagement({
   }, [user?.id, reload])
 
   function handleSavedSite(site: Site) {
+    const created = !editingSite
     setSites((current) =>
       [...current.filter((s) => s.id !== site.id), site].sort((a, b) =>
         a.name.localeCompare(b.name),
@@ -76,7 +74,8 @@ export function SiteManagement({
     setShowFormModal(false)
     setEditingSite(undefined)
     setMessage(`Successfully saved parking facility: ${site.name}`)
-    onSiteCreated()
+    setReload((value) => value + 1)
+    onSiteCreated(site, created)
   }
 
   function handleOpenAssignModal(site: Site) {
@@ -87,41 +86,6 @@ export function SiteManagement({
       selectedOpId: unassigned?.id ?? operators[0]?.id ?? "",
     })
     setAssignError("")
-  }
-
-  async function handleConfirmAssign() {
-    if (!assignModal || !assignModal.selectedOpId) return
-    const op = operators.find((o) => o.id === assignModal.selectedOpId)
-    if (!op) return
-
-    setAssignBusy(true)
-    setAssignError("")
-
-    // Add target site to operator's site list if not present
-    const updatedSiteIds = Array.from(
-      new Set([...op.siteIds, assignModal.targetSite.id]),
-    )
-
-    try {
-      const updated = await operatorsApi.reassignSite(op.id, updatedSiteIds)
-      setOperators((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      )
-      setMessage(
-        `Assigned operator ${op.fullName} to site ${assignModal.targetSite.name}.`,
-      )
-      setAssignModal(null)
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Site assignment update failed. Backend endpoint may not be available yet."
-      setAssignError(
-        `${msg} (Previous operator assignments were kept unchanged).`,
-      )
-    } finally {
-      setAssignBusy(false)
-    }
   }
 
   function handleNavigateToStructure(siteId: string) {
@@ -495,7 +459,7 @@ export function SiteManagement({
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
                 <UntitledIcon name="alert" size={15} className="shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  Confirming assignment authorizes this operator to monitor barrier controls, manage check-in tickets, and supervise slots at <strong>{assignModal.targetSite.name}</strong>.
+                  Operator reassignment is not available yet. Existing assignments remain unchanged.
                 </p>
               </div>
 
@@ -511,10 +475,10 @@ export function SiteManagement({
                 <button
                   type="button"
                   className="btn-primary text-xs px-4 py-2 font-medium"
-                  onClick={handleConfirmAssign}
-                  disabled={assignBusy || !assignModal.selectedOpId}
+                  disabled
+                  title="Operator reassignment is not available yet"
                 >
-                  {assignBusy ? "Confirming…" : "Confirm Assignment"}
+                  Reassignment unavailable
                 </button>
               </div>
             </div>

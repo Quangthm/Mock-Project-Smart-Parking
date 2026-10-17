@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react"
+
 import { adminData as store } from "../data/data"
+import { usersApi } from "../../../lib/usersApi"
 
 import {
   AreaChart,
@@ -16,9 +19,53 @@ import {
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 export function Overview() {
-  const users = store.getUsers()
+  const [userStats, setUserStats] = useState<{
+    total: number
+    drivers: number
+    owners: number
+    operators: number
+  } | null>(null)
+  const [userStatsLoading, setUserStatsLoading] = useState(true)
+  const [userStatsError, setUserStatsError] = useState("")
+  const [userStatsReload, setUserStatsReload] = useState(0)
 
-  const lots = store.getLots()
+  useEffect(() => {
+    let current = true
+    const query = (role: string) =>
+      usersApi.list({ search: "", role, status: "", page: 1 })
+
+    setUserStatsLoading(true)
+    setUserStats(null)
+    setUserStatsError("")
+    Promise.all([query(""), query("driver"), query("owner"), query("operator")])
+      .then(([all, drivers, owners, operators]) => {
+        if (!current) return
+        const totals = [all.total, drivers.total, owners.total, operators.total]
+        if (totals.some((value) => !Number.isInteger(value) || value < 0)) {
+          throw new Error("Invalid user count response.")
+        }
+        setUserStats({
+          total: all.total,
+          drivers: drivers.total,
+          owners: owners.total,
+          operators: operators.total,
+        })
+      })
+      .catch((error) => {
+        if (!current) return
+        setUserStats(null)
+        setUserStatsError(
+          error instanceof Error ? error.message : "Cannot load user counts.",
+        )
+      })
+      .finally(() => {
+        if (current) setUserStatsLoading(false)
+      })
+
+    return () => {
+      current = false
+    }
+  }, [userStatsReload])
 
   const bookings = store.getBookings()
 
@@ -57,19 +104,19 @@ export function Overview() {
   const userRoleData = [
     {
       role: "Drivers",
-      count: users.filter((u) => u.role === "driver").length,
+      count: userStats?.drivers ?? 0,
       color: "#2563eb",
     },
 
     {
       role: "Owners",
-      count: users.filter((u) => u.role === "owner").length,
+      count: userStats?.owners ?? 0,
       color: "#f59e0b",
     },
 
     {
       role: "Operators",
-      count: users.filter((u) => u.role === "operator").length,
+      count: userStats?.operators ?? 0,
       color: "#a855f7",
     },
   ]
@@ -102,16 +149,21 @@ export function Overview() {
 
           {
             label: "Total Registered Users",
-            value: users.length,
-            sub: `${users.filter((u) => u.role === "driver").length} drivers · ${users.filter((u) => u.role === "owner").length} owners · ${users.filter((u) => u.role === "operator").length} operators`,
+            value: userStatsLoading ? "Loading…" : userStats?.total ?? "—",
+            sub: userStatsLoading
+              ? "Loading account counts"
+              : userStatsError
+                ? "Cannot load account counts"
+                : `${userStats?.drivers} drivers · ${userStats?.owners} owners · ${userStats?.operators} operators`,
             icon: "users",
             badge: "Accounts",
+            retry: !!userStatsError,
           },
 
           {
             label: "Active Facilities",
-            value: lots.filter((l) => l.status === "active").length,
-            sub: `${lots.reduce((s, l) => s + l.totalSlots, 0)} slots across ${lots.length} lots`,
+            value: "—",
+            sub: "Platform-wide facility data is unavailable to Admin",
             icon: "building",
             badge: "Facilities",
           },
@@ -196,6 +248,15 @@ export function Overview() {
             >
               <UntitledIcon name={k.icon} size={13} />
               <span>{k.sub}</span>
+              {k.retry && (
+                <button
+                  type="button"
+                  onClick={() => setUserStatsReload((value) => value + 1)}
+                  style={{ color: "var(--primary)", textDecoration: "underline" }}
+                >
+                  Retry
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -312,74 +373,85 @@ export function Overview() {
                 color: "var(--muted)",
               }}
             >
-              Active platform roles breakdown
+              Platform roles breakdown
             </p>
           </div>
-          <ResponsiveContainer width="100%" height={150}>
-            <BarChart data={userRoleData} barSize={28}>
-              <XAxis
-                dataKey="role"
-                tick={{ fontSize: 11, fill: "var(--muted)" }}
-                tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "var(--muted)" }}
-                allowDecimals={false}
-                tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  fontSize: "0.8rem",
-                  color: "var(--fg)",
-                }}
-              />
-              <Bar dataKey="count" name="Users" radius={[4, 4, 0, 0]}>
-                {userRoleData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div
-            style={{
-              display: "flex",
-              gap: "0.875rem",
-              marginTop: "0.75rem",
-              justifyContent: "center",
-              borderTop: "1px solid var(--border)",
-              paddingTop: "0.6rem",
-            }}
-          >
-            {userRoleData.map((r) => (
+          {userStats ? (
+            <>
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={userRoleData} barSize={28}>
+                  <XAxis
+                    dataKey="role"
+                    tick={{ fontSize: 11, fill: "var(--muted)" }}
+                    tickLine={false}
+                    axisLine={{ stroke: "var(--border)" }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "var(--muted)" }}
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={{ stroke: "var(--border)" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--card)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      fontSize: "0.8rem",
+                      color: "var(--fg)",
+                    }}
+                  />
+                  <Bar dataKey="count" name="Users" radius={[4, 4, 0, 0]}>
+                    {userRoleData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
               <div
-                key={r.role}
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  fontSize: "0.72rem",
+                  gap: "0.875rem",
+                  marginTop: "0.75rem",
+                  justifyContent: "center",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "0.6rem",
                 }}
               >
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "2px",
-                    background: r.color,
-                  }}
-                />
-                <span style={{ color: "var(--muted)" }}>
-                  {r.role}:{" "}
-                  <strong style={{ color: "var(--fg)" }}>{r.count}</strong>
-                </span>
+                {userRoleData.map((r) => (
+                  <div
+                    key={r.role}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      fontSize: "0.72rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "2px",
+                        background: r.color,
+                      }}
+                    />
+                    <span style={{ color: "var(--muted)" }}>
+                      {r.role}:{" "}
+                      <strong style={{ color: "var(--fg)" }}>{r.count}</strong>
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div
+              role="status"
+              style={{ color: "var(--muted)", fontSize: "0.82rem", padding: "2rem 0" }}
+            >
+              {userStatsLoading ? "Loading user distribution…" : "User distribution is unavailable."}
+            </div>
+          )}
         </div>
       </div>
 
@@ -419,7 +491,7 @@ export function Overview() {
                   color: "var(--muted)",
                 }}
               >
-                Overview of managed parking lots and capacity
+                Platform-wide facility data requires an Admin data source
               </p>
             </div>
             <span
@@ -433,94 +505,19 @@ export function Overview() {
                 fontWeight: 600,
               }}
             >
-              {lots.length} Registered
+              Unavailable
             </span>
           </div>
 
           <div
-            style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
+            style={{
+              color: "var(--muted)",
+              fontSize: "0.82rem",
+              padding: "1rem",
+              textAlign: "center",
+            }}
           >
-            {lots.slice(0, 4).map((lot) => {
-              const freeCount = lot.slots.filter(
-                (s) => s.status === "available",
-              ).length
-
-              return (
-                <div
-                  key={lot.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "0.6rem 0.75rem",
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: 1, paddingRight: "0.5rem" }}>
-                    <div
-                      style={{
-                        fontSize: "0.82rem",
-                        fontWeight: 600,
-                        color: "var(--fg)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {lot.name}
-                    </div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>
-                      {lot.type} · {lot.totalSlots} capacity
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "0.72rem",
-                        color: "#16a34a",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {freeCount} vacant
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.68rem",
-                        padding: "0.1rem 0.4rem",
-                        borderRadius: "3px",
-                        background:
-                          lot.status === "active" ? "#22c55e15" : "#ef444415",
-                        color: lot.status === "active" ? "#16a34a" : "#dc2626",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {lot.status.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-            {!lots.length && (
-              <div
-                style={{
-                  textAlign: "center",
-                  color: "var(--muted)",
-                  fontSize: "0.82rem",
-                  padding: "1rem",
-                }}
-              >
-                No parking facilities registered.
-              </div>
-            )}
+            Platform-wide parking facility data is unavailable to Admin.
           </div>
         </div>
 

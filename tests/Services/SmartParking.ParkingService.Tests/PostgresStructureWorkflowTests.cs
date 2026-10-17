@@ -365,6 +365,14 @@ public sealed class PostgresStructureWorkflowTests
     private sealed class ReservationBridge(ReservationApplication.StructureSafetyService service) : IStructureCommitments
     {
         public bool FailAfterRelease { get; set; }
+        public async Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenant, Guid site, CancellationToken ct)
+        {
+            var snapshot = await service.ReadSnapshotAsync(tenant, site, ct);
+            return new(snapshot.ProtectedSlots, snapshot.HasLiveCommitments,
+                snapshot.Capacities?.Select(claim => new CapacityClaim(
+                    claim.UnitId, claim.VehicleType, claim.PendingPayment, claim.Protected)).ToArray());
+        }
+
         public async Task<CommitmentSnapshot> AcquireAsync(Guid tenant, Guid site, Guid token, CancellationToken ct)
         {
             var snapshot = await service.PrepareAsync(tenant, site, token, ct);
