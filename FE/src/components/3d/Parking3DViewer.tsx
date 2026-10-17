@@ -756,7 +756,7 @@ export function Parking3DViewer({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#090d16]/85 backdrop-blur-xs z-10">
           <div className="w-9 h-9 border-3 border-[var(--primary)] border-t-transparent rounded-full animate-spin mb-3" />
           <p className="text-xs font-medium text-slate-300">
-            Đang nạp mô hình 3D bãi đỗ...
+            Loading the 3D parking model...
           </p>
           <span className="text-[11px] text-slate-400 mt-1">
             {expectedFileName}
@@ -789,7 +789,7 @@ export function Parking3DViewer({
           <button
             type="button"
             onClick={handleResetCamera}
-            title="Đặt lại góc nhìn toàn cảnh"
+            title="Reset camera view"
             className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-xs transition-all active:scale-95 cursor-pointer"
           >
             🎯
@@ -797,7 +797,7 @@ export function Parking3DViewer({
           <button
             type="button"
             onClick={() => handleZoom(1)}
-            title="Phóng to"
+            title="Zoom in"
             className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-sm font-bold transition-all active:scale-95 cursor-pointer"
           >
             +
@@ -805,7 +805,7 @@ export function Parking3DViewer({
           <button
             type="button"
             onClick={() => handleZoom(-1)}
-            title="Thu nhỏ"
+            title="Zoom out"
             className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-sm font-bold transition-all active:scale-95 cursor-pointer"
           >
             −
@@ -813,7 +813,7 @@ export function Parking3DViewer({
           <button
             type="button"
             onClick={handleToggleFullscreen}
-            title={isFullscreen ? "Thu nhỏ cửa sổ" : "Mở toàn màn hình"}
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-xs transition-all active:scale-95 cursor-pointer"
           >
             {isFullscreen ? "⤦" : "⛶"}
@@ -841,20 +841,20 @@ export function Parking3DViewer({
           </div>
           <div className="text-[10px] text-slate-300 capitalize">
             {hoveredSlot.slot.id === selectedSlotId
-              ? "Đang chọn"
+              ? "Selected"
               : hoveredSlot.slot.status === "available"
-                ? "Còn trống (Available)"
+                ? "Available"
                 : hoveredSlot.slot.status === "occupied"
-                  ? "Đã có xe (Occupied)"
+                  ? "Occupied"
                   : hoveredSlot.slot.status === "maintenance"
-                    ? "Đang bảo trì (Maintenance)"
+                    ? "Under maintenance"
                     : hoveredSlot.slot.status === "disabled"
-                      ? "Vô hiệu hóa (Disabled)"
-                      : "Đã đặt trước (Reserved)"}
+                      ? "Disabled"
+                      : "Reserved"}
           </div>
           {interactive && (
             <div className="text-[9px] text-sky-400 mt-0.5">
-              Click để chọn slot này
+              Click to select this slot
             </div>
           )}
         </div>
@@ -866,24 +866,24 @@ export function Parking3DViewer({
           <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-[11px] text-slate-200">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              Trống (Available)
+              Available
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-              Đã có xe (Occupied)
+              Occupied
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-              Đã đặt (Reserved)
+              Reserved
             </span>
             <span className="flex items-center gap-1.5 font-semibold text-sky-300">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse inline-block" />
-              Đang chọn (Selected)
+              Selected
             </span>
           </div>
 
           <div className="text-[10px] text-slate-400 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-xs hidden sm:block">
-            🖱️ Chuột trái: Xoay · Chuột phải: Di chuyển · Con lăn: Zoom
+            🖱️ Left drag: Rotate · Right drag: Pan · Scroll: Zoom
           </div>
         </div>
       )}

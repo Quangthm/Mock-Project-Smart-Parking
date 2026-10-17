@@ -37,7 +37,7 @@ export function WalletView() {
 
       action: "WALLET_TOPUP",
 
-      details: `Added ${amount.toLocaleString("vi-VN")}₫ to wallet`,
+      details: `Added ${amount.toLocaleString("vi-VN")} VND to wallet`,
     })
 
     setShowTopUp(false)
@@ -83,7 +83,7 @@ export function WalletView() {
             marginBottom: "0.25rem",
           }}
         >
-          {balance.toLocaleString("vi-VN")}₫
+          {balance.toLocaleString("vi-VN")} VND
         </div>
         <div style={{ fontSize: "0.78rem", opacity: 0.75 }}>{user?.name}</div>
         <button
@@ -173,7 +173,7 @@ export function WalletView() {
                 }}
               >
                 {t.amount > 0 ? "+" : ""}
-                {t.amount.toLocaleString("vi-VN")}₫
+                {t.amount.toLocaleString("vi-VN")} VND
               </div>
             </div>
           ))}

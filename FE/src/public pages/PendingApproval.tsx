@@ -51,8 +51,8 @@ export function PendingApproval() {
             marginBottom: "1.5rem",
           }}
         >
-          Thank you for applying to become a SmartParking partner. Your
-          application is now under review by our team.
+          Your email is verified and your parking lot setup has been submitted.
+          Your application is now under Admin review.
         </p>
 
         <div
@@ -80,24 +80,24 @@ export function PendingApproval() {
             {[
               {
                 step: "01",
-                label: "Application Review",
-                desc: "An Admin will review your company and contact details.",
+                label: "Business and Lot Setup",
+                desc: "Your Business registration and parking lot setup are complete.",
                 color: "#2563eb",
                 done: true,
               },
 
               {
                 step: "02",
-                label: "Admin Decision",
-                desc: "The Admin records an approval or rejection. Contact support for your application status.",
+                label: "Admin Review",
+                desc: "An Admin reviews your verified account and parking lot before approval.",
                 color: "#f59e0b",
                 done: false,
               },
 
               {
                 step: "03",
-                label: "Account Activation",
-                desc: "Once approved, sign in to access your Owner dashboard and set up your lot.",
+                label: "Owner Access",
+                desc: "Once approved, sign in to use your Owner dashboard and parking lot.",
                 color: "#22c55e",
                 done: false,
               },

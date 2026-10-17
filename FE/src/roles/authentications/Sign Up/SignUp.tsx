@@ -326,20 +326,43 @@ export function SignUp() {
   )
 
   const [ownerRegistration, setOwnerRegistration] =
-    useState<Pick<OwnerApplicationRecord, "email" | "verification"> | null>(
+    useState<(Pick<OwnerApplicationRecord, "email" | "verification"> &
+      Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete">>) | null>(
       () => {
         try {
           const value = JSON.parse(
-            localStorage.getItem("sp_pending_owner_registration") ?? "null",
+            sessionStorage.getItem("sp_pending_owner_registration") ??
+              localStorage.getItem("sp_pending_owner_registration") ?? "null",
           )
-          return typeof value?.email === "string" && value?.verification
-            ? value
+          return typeof value?.email === "string" &&
+            (value?.verification || (value?.id && value?.setupToken))
+            ? { ...value, lotSetupComplete: value.lotSetupComplete === true }
             : null
         } catch {
           return null
         }
       },
     )
+
+  function saveOwnerRegistration(
+    application: Pick<OwnerApplicationRecord, "email" | "verification"> &
+      Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete">>,
+  ) {
+    const pending = {
+      id: application.id,
+      email: application.email,
+      lotType: application.lotType,
+      setupToken: application.lotSetupComplete ? undefined : application.setupToken,
+      lotSetupComplete: application.lotSetupComplete,
+      verification: application.verification,
+    }
+    setOwnerRegistration(pending)
+    try {
+      sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(pending))
+    } catch {
+      /* The current tab can continue without saved registration metadata. */
+    }
+  }
 
   function saveRegistration(value: DriverRegistration) {
     setRegistration(value)
@@ -472,35 +495,25 @@ export function SignUp() {
 
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
-      setOwnerRegistration(application)
-      try {
-        localStorage.setItem(
-          "sp_pending_owner_registration",
-          JSON.stringify(application),
-        )
-      } catch {
-        /* This tab retains its challenges. */
-      }
+      saveOwnerRegistration({ ...application, lotSetupComplete: false })
+      setView("parking-lot-setup")
     } catch (e) {
       try {
         const recovered = await request<{
-          data: Pick<OwnerApplicationRecord, "verification">
+          data: Pick<OwnerApplicationRecord, "verification"> &
+            Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete">>
         }>("/register/owner/recover", "POST", {
           contact: ownerForm.email.trim(),
         })
 
-        const pending = { email: ownerForm.email.trim(), ...recovered.data }
-        setOwnerRegistration(pending)
+        const pending = {
+          email: ownerForm.email.trim(),
+          ...recovered.data,
+          lotSetupComplete: recovered.data.lotSetupComplete === true,
+        }
+        saveOwnerRegistration(pending)
         setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
-        try {
-          localStorage.setItem(
-            "sp_pending_owner_registration",
-            JSON.stringify(pending),
-          )
-        } catch {
-          /* Current tab retains its challenges. */
-        }
       } catch {
         setError(e instanceof Error ? e.message : "Registration failed.")
       }
@@ -567,7 +580,7 @@ export function SignUp() {
           </p>
         </div>
 
-        {!registration && !ownerRegistration && (
+        {!registration && (!ownerRegistration || ownerRegistration.lotSetupComplete === false) && (
           <div
             style={{
               display: "flex",
@@ -589,12 +602,21 @@ export function SignUp() {
           </div>
         )}
 
-        {ownerRegistration ? (
+        {ownerRegistration?.lotSetupComplete === false && tab === "business" ? (
+          <div className="card">
+            <h2>Continue parking lot setup</h2>
+            <p>Your Business account is registered. Complete your parking lot setup before verifying your email.</p>
+            <button className="btn-primary" onClick={() => setView("parking-lot-setup")}>
+              Continue to Parking Lot Setup
+            </button>
+          </div>
+        ) : ownerRegistration?.lotSetupComplete ? (
           <OwnerVerification
             application={ownerRegistration}
             onVerified={() => {
               try {
                 localStorage.removeItem("sp_pending_owner_registration")
+                sessionStorage.removeItem("sp_pending_owner_registration")
                 localStorage.removeItem("sp_owner_verification_step")
               } catch {
                 /* This tab can continue. */
@@ -780,8 +802,8 @@ export function SignUp() {
                 Business Partnership Registration
               </strong>
               <br />
-              Submit your application. Our team will review and contact you
-              within 2–3 business days.
+              Create your Business account, set up your parking lot, then verify
+              your email. Admin review comes after these steps.
             </div>
             <Field label="Contact Person Name">
               <input
@@ -978,7 +1000,7 @@ export function SignUp() {
                 padding: "0.75rem",
               }}
             >
-              {registering ? "Submitting..." : "Submit Partnership Application"}
+              {registering ? "Registering..." : "Continue to Parking Lot Setup"}
             </button>
             <p
               style={{
