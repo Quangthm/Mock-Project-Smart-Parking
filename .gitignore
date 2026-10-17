@@ -128,6 +128,33 @@ __pycache__/
 coverage.xml
 htmlcov/
 
+# Test result artifacts
+TestResults/
+*.trx
+# =========================
+# Python / IoT AI
+# =========================
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+coverage.xml
+htmlcov/
+
 # Build / packaging artifacts
 build/
 dist/
