@@ -322,7 +322,7 @@ export function CheckInOut({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5">
       {/* Page Title */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
@@ -363,9 +363,9 @@ export function CheckInOut({
       )}
 
       {/* Gate terminal for this direction */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
+      <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="rounded-lg bg-[var(--primary)]/10 p-2 text-[var(--primary)]">
               <UntitledIcon name="car" size={20} />
             </div>
@@ -380,11 +380,11 @@ export function CheckInOut({
               </p>
             </div>
           </div>
-          <span className="text-xs font-semibold text-[var(--muted)]">Gate Mode: Active</span>
+          <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">Gate Mode: Active</span>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+          <div className="relative min-w-0 flex-1">
             <label htmlFor="gate-plate-input" className="sr-only">Enter vehicle license plate manually</label>
             <input
               id="gate-plate-input"
@@ -400,48 +400,49 @@ export function CheckInOut({
           </div>
           <button
             type="button"
-            className="btn-primary text-sm px-6 py-2.5 justify-center"
+            className="btn-primary justify-center px-6 py-2.5 text-sm sm:shrink-0"
             onClick={() => handleQuickSearch()}
           >
             <UntitledIcon name="search" size={16} /> {mode === "check-in" ? "Find Check-In" : "Find Check-Out"}
           </button>
         </div>
+      </div>
 
-        <PlateScanPanel
-          siteId={lot.id}
-          tenantId={lot.tenantId}
-          direction={mode === "check-in" ? "INBOUND" : "OUTBOUND"}
-          mode={mode}
-          onImageCaptured={(imageData) => {
-            setLatestScanImage(imageData)
-            setLatestImageIsUpload(true)
-          }}
-          onPlateRecognized={async (plate, confidence, imageData, vehicleType, isUploadedImage) => {
-            setLatestScanImage(imageData ?? "")
-            setLatestImageIsUpload(isUploadedImage ?? false)
-            setQuickInput(plate)
-            await handleQuickSearch(
-              plate,
-              mode === "check-in" &&
-                typeof confidence === "number" &&
-                Number.isFinite(confidence) &&
-                confidence >= 0.9,
-              imageData,
-              vehicleType,
-            )
-          }}
-        />
+      <PlateScanPanel
+        siteId={lot.id}
+        tenantId={lot.tenantId}
+        direction={mode === "check-in" ? "INBOUND" : "OUTBOUND"}
+        mode={mode}
+        onImageCaptured={(imageData) => {
+          setLatestScanImage(imageData)
+          setLatestImageIsUpload(true)
+        }}
+        onPlateRecognized={async (plate, confidence, imageData, vehicleType, isUploadedImage) => {
+          setLatestScanImage(imageData ?? "")
+          setLatestImageIsUpload(isUploadedImage ?? false)
+          setQuickInput(plate)
+          await handleQuickSearch(
+            plate,
+            mode === "check-in" &&
+              typeof confidence === "number" &&
+              Number.isFinite(confidence) &&
+              confidence >= 0.9,
+            imageData,
+            vehicleType,
+          )
+        }}
+      />
 
-        {quickError && (
-          <div role="alert" className="mt-3 text-xs text-red-600 font-medium flex items-center gap-1.5">
-            <UntitledIcon name="alert" size={14} />
-            <span>{quickError}</span>
-          </div>
-        )}
+      {quickError && (
+        <div role="alert" className="flex items-center gap-1.5 text-xs font-medium text-red-600">
+          <UntitledIcon name="alert" size={14} />
+          <span>{quickError}</span>
+        </div>
+      )}
 
         {/* Lookup result is limited to the active direction. */}
         {quickResult && (
-          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 animate-in">
+          <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 animate-in sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
               <div className="flex items-center gap-3">
                 <span className="font-mono text-base font-bold bg-[var(--card)] px-2.5 py-1 rounded border border-[var(--border)] text-[var(--fg)]">
@@ -560,10 +561,8 @@ export function CheckInOut({
             </div>
           </div>
         )}
-      </div>
-
       {/* SECTION 2: Comprehensive Bookings Table & Filters */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+      <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
             <h2 className="text-base font-bold text-[var(--fg)]">Parking History</h2>
@@ -573,10 +572,10 @@ export function CheckInOut({
           </div>
 
           {/* Search & Filter Bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-auto">
               <input
-                className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] w-48"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] sm:w-48"
                 placeholder="Search plate, id, slot..."
                 value={searchQuery}
                 onChange={(e) => {

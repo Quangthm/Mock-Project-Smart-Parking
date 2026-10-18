@@ -273,17 +273,17 @@ export function PlateScanPanel({
   }
 
   return (
-    <section className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-[var(--fg)]">AI Plate Scanner</h3>
-          <p className="mt-1 text-xs text-[var(--muted)]">
+    <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 max-w-3xl">
+          <h3 className="text-base font-bold text-[var(--fg)]">AI Plate Scanner</h3>
+          <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
             {mode === "check-in"
               ? "Open the camera to continuously detect new plates. Check-in happens automatically at 90% confidence; lower confidence needs operator review."
               : "Open the camera to continuously detect plates and find active sessions. Check-out always requires operator confirmation."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
           {!cameraReady ? (
             <button type="button" className="btn-outline text-xs" onClick={() => void startCamera()} disabled={busy}>
               <UntitledIcon name="camera" size={14} /> Open camera
@@ -306,29 +306,29 @@ export function PlateScanPanel({
         </div>
       </div>
 
-      {cameraReady ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className="mt-4 max-h-72 w-full rounded-lg bg-black object-contain"
-        />
-      ) : (
-        preview ? (
+      <div className="mt-5 flex h-[clamp(220px,50vw,480px)] w-full items-center justify-center overflow-hidden rounded-lg bg-black">
+        {cameraReady ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className="h-full w-full object-contain"
+          />
+        ) : preview ? (
           <img
             src={preview}
             alt="Uploaded or captured vehicle image"
-            className="mt-4 max-h-72 w-full rounded-lg bg-black object-contain"
+            className="h-full w-full object-contain"
           />
         ) : (
-          <div className="mt-4 flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-center">
+          <div className="flex h-full w-full flex-col items-center justify-center border border-dashed border-[var(--border)] p-6 text-center text-[var(--muted)]">
             <UntitledIcon name="camera" size={24} />
             <p className="mt-2 text-sm font-semibold text-[var(--fg)]">Camera is off</p>
             <p className="mt-1 text-xs text-[var(--muted)]">The check-in/out screen stays ready here. Press Open camera to start live scanning.</p>
           </div>
-        )
-      )}
+        )}
+      </div>
 
       {cameraReady && (
         <p role="status" className="mt-3 text-xs font-medium text-[var(--muted)]">
