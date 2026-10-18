@@ -1,15 +1,16 @@
-# User Service — Database Documentation
+# User & Access Service — Database Documentation
 
-> **Service**: User Service  
-> **Database file**: [`01-user-service-db.sql`](../../../../scripts/database/microservices/01-user-service-db.sql)  
-> **SRS baseline**: v0.9 (2026-10-05)  
-> **Scope**: Quản lý định danh con người (`users`), tài khoản theo ngữ cảnh (`accounts`), phân quyền RBAC (`roles`, `account_roles`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), và phân quyền vận hành bãi (`operator_grants`).
+> **Service**: User & Access Service (`UserDb`)  
+> **Database file**: [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql)  
+> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Message Broker**: RabbitMQ + MassTransit  
+> **Scope**: Quản lý định danh con người (`users`), tổ chức/doanh nghiệp (`tenants`), tài khoản theo ngữ cảnh (`accounts`), phân quyền RBAC (`roles`, `account_roles`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), phân quyền vận hành bãi (`operator_grants`), xác thực nâng cao (`auth_challenges`, `workflow_deliveries`), và MFA/TOTP (`mfa_credentials`).
 
 ---
 
 ## 1. Tổng quan kiến trúc
 
-User Service là **service định danh và phân quyền trung tâm** của hệ thống SmartPark. Toàn bộ các service khác (Parking, Reservation, Payment…) đều tham chiếu đến `user_id` / `account_id` dưới dạng **Logical ID** — không có FK vật lý xuyên database.
+User & Access Service là **dịch vụ định danh, bảo mật và phân quyền trung tâm** của hệ thống SmartPark theo chuẩn kiến trúc v1.0 RC3. Service này quản lý cả danh tính người dùng cá nhân lẫn tổ chức pháp nhân (`tenants`). Toàn bộ các service khác (Facility, Operations, Payment, IoT, Notification) đều tham chiếu đến `user_id`, `account_id`, và `tenant_id` dưới dạng **Logical ID** — không có FK vật lý xuyên database.
 
 ```
 Client → API Gateway (JWT RS256)
@@ -91,7 +92,49 @@ Lưu trữ **thông tin định danh vật lý của một con người** trong 
 
 ---
 
-## 3. Bảng `accounts` — Tài khoản vận hành theo ngữ cảnh
+---
+
+## 3. Bảng `tenants` — Doanh nghiệp / Tổ chức bãi xe
+
+### 3.1 Mục đích nghiệp vụ
+
+Quản lý thông tin **pháp nhân doanh nghiệp hoặc đơn vị vận hành bãi xe**. Theo kiến trúc chuẩn hóa v1.0 RC3, thực thể `tenants` thuộc quyền sở hữu chính thức của User & Access Service:
+- Lưu trữ thông tin pháp lý, mã doanh nghiệp, mã số thuế và thông tin liên hệ.
+- Là đơn vị tổ chức cha sở hữu các tài khoản Owner/Operator (`accounts.tenant_id`).
+- Được liên kết với đơn đăng ký bãi xe `owner_applications`.
+- Các service khác (Facility, Operations, Payment) chỉ lưu `tenant_id` dưới dạng **Logical Reference**.
+
+### 3.2 Traceability Mapping
+
+| Mã yêu cầu | Loại | Nội dung liên quan |
+|---|---|---|
+| **FR-AUTH-05** | C | Phê duyệt đăng ký doanh nghiệp chủ bãi |
+| **C-23** | — | Thông tin pháp nhân: business name, contact info |
+| **BR-AUTH-01** | — | Scope tổ chức và phân quyền đa người thuê (Multi-tenancy) |
+
+### 3.3 Bảng thuộc tính chi tiết
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
+|---|---|---|---|---|
+| `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh duy nhất của tổ chức/tenant | Tự sinh bởi `uuid_generate_v4()` | FR-AUTH-05 |
+| `code` | `VARCHAR(50) NOT NULL` | Mã định danh doanh nghiệp (viết hoa, không dấu, duy nhất) | Do Admin/Owner thiết lập khi duyệt đơn | C-23 |
+| `name` | `VARCHAR(255) NOT NULL` | Tên pháp nhân công ty / doanh nghiệp | Lấy từ `owner_applications.business_name` | FR-AUTH-05 |
+| `contact_email` | `VARCHAR(255) NOT NULL` | Email liên hệ chính thức của tổ chức | Do Owner cung cấp lúc đăng ký | FR-AUTH-05 |
+| `contact_phone` | `VARCHAR(20) NOT NULL` | Số điện thoại đại diện doanh nghiệp | Do Owner cung cấp lúc đăng ký | FR-AUTH-05 |
+| `tax_code` | `VARCHAR(50) NULL` | Mã số thuế của doanh nghiệp | Do Owner cung cấp | C-23 |
+| `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` | Trạng thái hoạt động: `ACTIVE`, `INACTIVE`, `SUSPENDED` | Quản lý bởi Admin | BR-AUTH-01 |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo bản ghi | Database tự sinh | — |
+| `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật cuối | Application cập nhật | — |
+| `deleted_at` | `TIMESTAMPTZ NULL` | Soft-delete timestamp | Application cập nhật | — |
+
+### 3.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `uq_active_tenant_code` | `UNIQUE(code) WHERE deleted_at IS NULL` | Đảm bảo mã tenant duy nhất cho các tổ chức đang hoạt động |
+| `idx_tenants_status` | `status` | Tối ưu lọc tenant theo trạng thái |
+
+## 4. Bảng `accounts` — Tài khoản vận hành theo ngữ cảnh
 
 ### 3.1 Mục đích nghiệp vụ
 
@@ -114,7 +157,7 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh account; đây là ID được dùng trong `account_roles`, `operator_grants`, `vehicles`, và là `account_id` được lưu dưới dạng Logical ID ở Reservation/Payment Service | Tự sinh bởi `uuid_generate_v4()` | FR-AUTH-02; FR-AUTH-06 |
 | `user_id` | `UUID NOT NULL` | FK vật lý đến `users.id`; liên kết account với con người sở hữu nó | Gán bằng `users.id` của user đang đăng nhập/được tạo tài khoản | FR-AUTH-02 |
-| `tenant_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `tenants.id` trong Parking Service DB. `NULL` với Driver account (không thuộc tenant nào). Khác `NULL` với Owner/Operator account | Được gán khi Owner đăng ký bãi hoặc Owner tạo Operator account; truyền qua API, không validate bằng FK vật lý | §2.3.1; FR-AUTH-04 |
+| `tenant_id` | `UUID NULL` | **FK nội bộ** trỏ đến `tenants.id` trong UserDb (`ON DELETE SET NULL`). `NULL` với Driver account (không thuộc tenant nào). Khác `NULL` với Owner/Operator account | Gán khi duyệt Owner application hoặc khi Owner tạo Operator account; đảm bảo tính toàn vẹn tổ chức | §2.3.1; FR-AUTH-04 |
 | `site_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `parking_sites.id` trong Parking Service DB. Dùng để giới hạn scope của Operator vào một site cụ thể. `NULL` với Owner account (scope toàn tenant) | Được gán khi Owner assign Operator vào site cụ thể | §2.3.1 (OPERATOR_MANAGE scope) |
 | `permissions` | `TEXT[] NULL` | Danh sách quyền hạn bổ sung hoặc bị ghi đè của tài khoản | Cập nhật bởi Admin/Owner khi gán quyền | FR-AUTH-06 |
 | `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` | Trạng thái vòng đời của account trong ngữ cảnh này. Hoạt động độc lập với `users.status` — một user ACTIVE có thể có account LOCKED tại một tenant cụ thể. FR-AUTH-06 yêu cầu kiểm tra **cả hai** | Mặc định `ACTIVE`; Owner/Admin có thể thay đổi | FR-AUTH-02; FR-AUTH-06 |
@@ -132,15 +175,15 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 | `idx_accounts_tenant_id` | `tenant_id` | Liệt kê toàn bộ account thuộc một tenant (dùng khi Owner/Admin quản lý) |
 | `idx_accounts_site_id` | `site_id` | Liệt kê account Operator được gắn vào một site cụ thể |
 
-### 3.5 Ghi chú Cross-service
+### 4.5 Ghi chú Quan hệ & Cross-service
 
-`tenant_id` và `site_id` là **Logical IDs** — User Service **không** import hay validate chúng qua FK vật lý đến Parking Service DB. Tính nhất quán được đảm bảo bằng:
-- Application validation: khi Owner/Admin gán `tenant_id`/`site_id`, User Service gọi Parking Service API để xác nhận sự tồn tại trước khi persist.
-- Integration event: khi một tenant/site bị xóa bên Parking Service, event `TenantDeleted`/`SiteDeleted` có thể được phát để User Service soft-delete các account liên quan.
+- `tenant_id` là **FK nội bộ** tham chiếu tới `tenants.id` ngay trong `UserDb` (`ON DELETE SET NULL`).
+- `site_id` là **Logical ID** tham chiếu tới `parking_sites.id` trong Facility & Visualization Service (`FacilityDb`). User & Access Service không enforce FK vật lý xuyên database.
+- Tính nhất quán với `site_id` được đảm bảo bằng API validation và RabbitMQ integration events (`SiteCreated`, `SiteDeleted`).
 
 ---
 
-## 4. Bảng `roles` — Danh mục vai trò
+## 5. Bảng `roles` — Danh mục vai trò
 
 ### 4.1 Mục đích nghiệp vụ
 
@@ -167,7 +210,7 @@ Lưu định nghĩa chuẩn (master data) các vai trò trong hệ thống. Đâ
 
 ---
 
-## 5. Bảng `account_roles` — Gán vai trò cho tài khoản
+## 6. Bảng `account_roles` — Gán vai trò cho tài khoản
 
 ### 5.1 Mục đích nghiệp vụ
 
@@ -202,7 +245,7 @@ Bảng junction thực hiện quan hệ nhiều-nhiều giữa `accounts` và `r
 
 ---
 
-## 6. Bảng `vehicles` — Phương tiện của Driver
+## 7. Bảng `vehicles` — Phương tiện của Driver
 
 ### 6.1 Mục đích nghiệp vụ
 
@@ -245,8 +288,8 @@ Lưu ý: Phương tiện không có biển số (xe không biển) **không** t�
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
 | `FK_vehicles_accounts` | `REFERENCES accounts(id) ON DELETE SET NULL` | `SET NULL` thay vì CASCADE là quyết định quan trọng để duy trì audit trail |
-| `chk_vehicles_type` | `CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE'))` | Ràng buộc loại phương tiện hợp lệ |
-| `ix_active_vehicle_plate` | `normalized_plate WHERE deleted_at IS NULL` | Cho phép tái sử dụng biển số (nhiều người có thể đăng ký cùng biển số chuẩn hóa) |
+| `chk_vehicles_type` | `CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED'))` | Ràng buộc loại phương tiện hợp lệ chuẩn v1.0 |
+| `uq_active_vehicle_plate` | `UNIQUE(normalized_plate) WHERE deleted_at IS NULL` | Đảm bảo mỗi biển số xe đã chuẩn hóa chỉ được kích hoạt bởi 1 tài khoản chưa bị xóa tại một thời điểm |
 | `idx_vehicles_account_id` | `account_id` | Tra cứu nhanh danh sách xe của một Driver |
 
 ### 6.5 Ghi chú Cross-service
@@ -258,7 +301,7 @@ Lưu ý: Phương tiện không có biển số (xe không biển) **không** t�
 
 ---
 
-## 7. Bảng `user_refresh_tokens` — Vòng đời Token xác thực
+## 8. Bảng `user_refresh_tokens` — Vòng đời Token xác thực
 
 ### 7.1 Mục đích nghiệp vụ
 
@@ -306,7 +349,7 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 
 ---
 
-## 8. Bảng `driver_registrations` — Đăng ký OTP cho Driver
+## 9. Bảng `driver_registrations` — Đăng ký OTP cho Driver
 
 ### 8.1 Mục đích nghiệp vụ
 
@@ -346,13 +389,47 @@ Quản lý luồng xác minh OTP trong quá trình đăng ký tài khoản Drive
 
 ---
 
-## 9. Bảng `owner_applications` — Đơn đăng ký Chủ bãi xe
+## 9A. Bảng `system_terms_and_conditions` — Điều khoản và thỏa thuận dịch vụ
 
-### 9.1 Mục đích nghiệp vụ
+### 9A.1 Mục đích nghiệp vụ
 
-Quản lý quy trình duyệt đơn đăng ký làm Owner. Theo §3.1.1 và FR-AUTH-05, Owner registration phải có Admin approval trước khi tài khoản được kích hoạt cho các hoạt động Owner. Bảng này lưu toàn bộ thông tin đơn và kết quả duyệt.
+Quản lý các phiên bản điều khoản dịch vụ và thỏa thuận pháp lý của hệ thống SmartPark (như chính sách đăng ký Owner, quy định mở Site mới). Bảng này lưu URL tài liệu (PDF/Doc) trên Cloud Storage và trạng thái hiệu lực (`is_active`), bảo đảm tính pháp lý và cơ chế versioning khi các điều khoản thay đổi theo thời gian.
 
-### 9.2 Traceability Mapping
+### 9A.2 Traceability Mapping
+
+| Mã yêu cầu | Loại | Nội dung liên quan |
+|---|---|---|
+| **System Governance** | Direct | Cơ chế quản lý điều khoản và sự đồng thuận pháp lý khi onboard Owner và tạo Site mới |
+| **FR-AUTH-05** | C | Đơn đăng ký Owner phải gắn liền với việc chấp thuận điều khoản hệ thống trước khi duyệt |
+
+### 9A.3 Bảng thuộc tính chi tiết
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
+|---|---|---|---|---|
+| `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh duy nhất của bản ghi điều khoản | Tự sinh bởi `uuid_generate_v4()` | — |
+| `term_code` | `VARCHAR(50) NOT NULL` | Mã loại điều khoản (VD: `'OWNER_ONBOARDING'`, `'NEW_SITE_POLICY'`) | Do Quản trị viên/Hệ thống quy định | System Governance |
+| `version` | `VARCHAR(20) NOT NULL` | Phiên bản điều khoản (VD: `'v1.0'`, `'v1.1'`) | Quản trị viên chỉ định khi ban hành văn bản mới | System Governance |
+| `title` | `VARCHAR(255) NOT NULL` | Tiêu đề văn bản thỏa thuận / điều khoản | Quản trị viên nhập khi cấu hình | System Governance |
+| `document_url` | `TEXT NOT NULL` | Đường dẫn URL tải file PDF/Doc trên Cloud Storage | Storage Service / CDN upload | System Governance |
+| `is_active` | `BOOLEAN NOT NULL DEFAULT TRUE` | Trạng thái hiệu lực hiện hành của điều khoản | Quản trị viên bật/tắt | System Governance |
+| `effective_from` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm bắt đầu có hiệu lực pháp lý | Quản trị viên chọn hoặc mặc định thời điểm tạo | System Governance |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo bản ghi | Tự sinh bởi database | — |
+
+### 9A.4 Constraints & Indexes
+
+| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
+|---|---|---|
+| `uq_system_terms_version` | `UNIQUE (term_code, version)` | Mỗi mã điều khoản chỉ có 1 bản ghi duy nhất cho mỗi phiên bản |
+
+---
+
+## 9B. Bảng `owner_applications` — Đơn đăng ký Chủ bãi xe
+
+### 9B.1 Mục đích nghiệp vụ
+
+Quản lý quy trình duyệt đơn đăng ký làm Owner. Theo §3.1.1, FR-AUTH-05 và quy trình nâng cấp Onboarding, Owner registration phải trải qua các bước: điền thông tin cơ bản, thiết lập cấu trúc bãi dự kiến (`draft_structure`), xác nhận đồng thuận với điều khoản (`terms_id`, `agreed_at`, `agreed_ip`), và phải có Admin approval trước khi tài khoản được kích hoạt cho các hoạt động Owner.
+
+### 9B.2 Traceability Mapping
 
 | Mã yêu cầu | Loại | Nội dung liên quan |
 |---|---|---|
@@ -361,27 +438,37 @@ Quản lý quy trình duyệt đơn đăng ký làm Owner. Theo §3.1.1 và FR-A
 | **§2.3.1** | — | `ACCOUNT_ADMIN`: Admin approves Owner registration |
 | **US-A01** | US | "Là Admin, tôi muốn phê duyệt hoặc từ chối đơn đăng ký chủ bãi xe" |
 
-### 9.3 Bảng thuộc tính chi tiết
+### 9B.3 Bảng thuộc tính chi tiết
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh đơn đăng ký | Tự sinh bởi `uuid_generate_v4()` | — |
 | `user_id` | `UUID NOT NULL` | FK đến user nộp đơn | Gán bằng `users.id` của người nộp đơn | FR-AUTH-05 |
-| `business_name` | `VARCHAR(255) NOT NULL` | Tên doanh nghiệp/công ty sở hữu bãi đỗ xe. Đây là thông tin Admin kiểm tra khi duyệt (§3.1.1 yêu cầu company name) | Do user nhập khi nộp đơn; phải trùng hoặc liên kết với `users.company_name` | FR-AUTH-05; §3.1.1 |
+| `business_name` | `VARCHAR(255) NOT NULL` | Tên doanh nghiệp/công ty sở hữu bãi đỗ xe (§3.1.1 yêu cầu company name) | Do user nhập khi nộp đơn; phải trùng hoặc liên kết với `users.company_name` | FR-AUTH-05; §3.1.1 |
+| `lot_type` | `VARCHAR(30) NOT NULL` | Loại bãi đỗ xe: `'outdoor'`, `'basement'`, `'multi-storey'` | Do Owner chọn trong form đăng ký | §3.2.1 |
+| `terms_id` | `UUID NULL` | FK đến `system_terms_and_conditions.id` — phiên bản điều khoản mà Owner đã đọc và đồng thuận | Hệ thống gán ID điều khoản active tại thời điểm submit | System Governance |
+| `agreed_at` | `TIMESTAMPTZ NULL` | Thời điểm Owner bấm đồng ý các điều khoản | Do Application gán `NOW()` khi user tick đồng ý | System Governance |
+| `agreed_ip` | `VARCHAR(50) NULL` | Địa chỉ IP của Owner tại thời điểm xác nhận điều khoản (Audit Trail) | Client IP từ HTTP Request | §4.3 (Audit) |
+| `tenant_id` | `UUID NULL` | FK liên kết đến `tenants.id` được tạo ra sau khi Admin duyệt đơn (`ON DELETE SET NULL`) | Gán bằng ID của tenant mới tạo khi duyệt đơn | FR-AUTH-05 |
+| `site_id` | `UUID NULL` | Logical ID của bãi xe được khởi tạo ở trạng thái `PENDING_APPROVAL` bên Facility & Visualization Service | Application sinh trước hoặc lấy từ Facility Service | FR-LOT-01 |
+| `draft_structure` | `JSONB NULL` | Snapshot cấu hình bãi dự kiến (Zone, Floor, Capacity) lúc đăng ký | Frontend gửi lên dưới dạng JSON | §3.2.3 |
 | `status` | `VARCHAR(20) NOT NULL DEFAULT 'pending'` | Trạng thái xử lý đơn. `pending`: chờ Admin xem xét. `approved`: được chấp thuận → system kích hoạt role OWNER cho account. `rejected`: bị từ chối | `'pending'` khi tạo; Admin cập nhật thành `'approved'` hoặc `'rejected'` | FR-AUTH-05 |
-| `submitted_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm nộp đơn chính thức. Có thể khác `created_at` nếu hệ thống cho phép lưu nháp | Do Application gán = `NOW()` khi user submit | FR-AUTH-05 |
+| `submitted_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm nộp đơn chính thức | Do Application gán = `NOW()` khi user submit | FR-AUTH-05 |
 | `reviewed_at` | `TIMESTAMPTZ NULL` | Thời điểm Admin xem xét và ra quyết định. `NULL` khi `status = 'pending'` | Do Application gán = `NOW()` khi Admin cập nhật `status` | FR-AUTH-05 |
 | `reviewed_by` | `UUID NULL` | FK đến `users.id` của Admin đã xem xét đơn. `NULL` khi `status = 'pending'` | Gán bằng `users.id` của Admin đang thực hiện review | FR-AUTH-05; §2.3.1 |
-| `review_note` | `VARCHAR(2000) NULL` | Ghi chú của Admin khi duyệt hoặc từ chối. Bắt buộc điền khi `status = 'rejected'` để thông báo lý do cho Owner | Do Admin nhập khi review | FR-AUTH-05 |
+| `review_note` | `VARCHAR(2000) NULL` | Ghi chú của Admin khi duyệt hoặc từ chối | Do Admin nhập khi review | FR-AUTH-05 |
 
-### 9.4 Constraints & Indexes
+### 9B.4 Constraints & Indexes
 
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
 | `FK_owner_applications_users` | `REFERENCES users(id)` | Khóa ngoại tới user nộp đơn |
-| `uq_owner_applications_user` | `UNIQUE(user_id)` | Mỗi user chỉ có thể có một đơn đăng ký (không cho nộp lại khi đã có đơn pending/rejected) |
+| `uq_owner_applications_user` | `UNIQUE(user_id)` | Mỗi user chỉ có thể có một đơn đăng ký |
 | `FK_owner_applications_reviewer` | `REFERENCES users(id)` | Khóa ngoại tới Admin duyệt đơn |
-| `chk_owner_lot_type` | `CHECK (lot_type IN ('outdoor', 'basement', 'multi-storey'))` | Giới hạn loại bãi |
+| `FK_owner_applications_terms` | `REFERENCES system_terms_and_conditions(id)` | Khóa ngoại tới điều khoản dịch vụ mà Owner đã đồng ý |
+| `FK_owner_applications_tenants` | `REFERENCES tenants(id) ON DELETE SET NULL` | Khóa ngoại tới tenant tổ chức tạo sau khi duyệt |
+| `idx_owner_applications_tenant_id` | `tenant_id` | Tra cứu đơn đăng ký theo tenant |
+| `chk_owner_lot_type` | `CHECK (lot_type IN ('outdoor', 'basement', 'multi-storey'))` | Giới hạn loại bãi hợp lệ |
 | `chk_owner_status` | `CHECK (status IN ('pending', 'approved', 'rejected'))` | Giới hạn trạng thái xử lý đơn |
 | `chk_owner_review_consistency` | `CHECK ((status = 'pending' AND reviewed_at IS NULL AND reviewed_by IS NULL) OR (status <> 'pending' AND reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL))` | Bảo đảm tính nhất quán: đơn đang xử lý thì chưa có người duyệt, đơn đã xử lý thì phải có người duyệt |
 
@@ -421,8 +508,8 @@ Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Oper
 | `CASH_COLLECT` | Operator được phép ghi nhận thu tiền mặt qua CASH_COLLECT interface | §2.3.1 |
 | `APPEAL_REVIEW` | Operator được phép xem xét và phê duyệt khiếu nại của Driver | §2.3.1 |
 | `SLOT_OVERRIDE` | Operator được phép can thiệp thủ công (override) trạng thái slot | §2.3.1 |
-
-> **Lưu ý**: VIOLATION_REVIEW và EMERGENCY_GATE_RELEASE cũng là "Explicit lot grant" trong §2.3.1 nhưng **chưa có trong `permissions` array**. Đây có thể là phạm vi MVP v0.9 — các quyền này có thể được bổ sung trong phiên bản sau.
+| `EMERGENCY_GATE_RELEASE` | Operator được phép mở cổng cưỡng bức trong tình huống khẩn cấp | §2.3.1 |
+| `VIOLATION_REVIEW` | Operator được phép xác minh vi phạm đỗ xe tại bãi | §2.3.1 |
 
 ### 10.4 Constraints & Indexes
 
@@ -430,9 +517,9 @@ Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Oper
 |---|---|---|
 | `FK_operator_grants_accounts` | `REFERENCES accounts(id) ON DELETE CASCADE` | Xóa account thì xóa grants |
 | `FK_operator_grants_creator` | `REFERENCES users(id) ON DELETE RESTRICT` | Không cho xóa user nếu vẫn còn grant do user đó tạo |
-| `chk_operator_permissions_count` | `CHECK (cardinality(permissions) BETWEEN 1 AND 7)` | Phải cấp ít nhất 1 quyền, tối đa 5 quyền (bằng tổng số quyền hợp lệ) |
+| `chk_operator_permissions_count` | `CHECK (cardinality(permissions) BETWEEN 1 AND 7)` | Phải cấp ít nhất 1 quyền, tối đa 7 quyền (bằng tổng số quyền hợp lệ) |
 | `chk_operator_permissions_no_null` | `CHECK (array_position(permissions, NULL) IS NULL)` | Không cho phép giá trị NULL trong mảng permissions |
-| `chk_operator_permissions_valid` | `CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW','SLOT_OVERRIDE']::TEXT[])` | Chỉ chấp nhận 5 quyền hợp lệ |
+| `chk_operator_permissions_valid` | `CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW','SLOT_OVERRIDE','EMERGENCY_GATE_RELEASE','VIOLATION_REVIEW']::TEXT[])` | Chấp nhận 7 quyền hợp lệ theo ma trận phân quyền §2.3.1 |
 | `idx_operator_grants_creator` | `created_by` | Tra cứu tất cả grants do một Owner cụ thể tạo ra |
 
 ---
@@ -516,7 +603,7 @@ Lưu vết (audit log) các tác vụ gửi tin nhắn, email chứa OTP. Đóng
 
 ---
 
-## 13. Bảng `mfa_credentials` — Cấu hình bảo mật 2 lớp
+## 14. Bảng `mfa_credentials` — Cấu hình bảo mật 2 lớp
 
 ### 13.1 Mục đích nghiệp vụ
 
@@ -548,7 +635,7 @@ Lưu trữ cấu hình MFA (Multi-Factor Authentication) của người dùng, �
 
 ---
 
-## 14. Tóm tắt quan hệ giữa các bảng
+## 15. Tóm tắt quan hệ giữa các bảng
 
 ```text
 users (1) ──── (N) accounts
@@ -557,6 +644,11 @@ users (1) ──── (0..1) owner_applications
 users (1) ──── (N) user_refresh_tokens
 users (1) ──── (N) auth_challenges
 users (1) ──── (0..1) mfa_credentials
+
+tenants (1) ──── (0..N) accounts  [tenant_id FK nội bộ]
+tenants (1) ──── (0..N) owner_applications  [tenant_id FK nội bộ]
+
+system_terms_and_conditions (1) ──── (0..N) owner_applications  [terms_id]
 
 accounts (1) ──── (N) account_roles
 accounts (N) ──── (N) roles  [qua account_roles]
@@ -569,18 +661,18 @@ owner_applications.reviewed_by ──── users.id [audit FK]
 
 ---
 
-## 15. Tóm tắt Cross-service References
+## 16. Tóm tắt Cross-service References
 
 | Cột | Bảng | Trỏ đến Service | Cơ chế đồng bộ |
 |---|---|---|---|
-| `tenant_id` | `accounts` | Parking Service (`tenants.id`) | Application validates qua Parking Service API trước khi persist; event `TenantDeleted` để cleanup |
-| `site_id` | `accounts` | Parking Service (`parking_sites.id`) | Application validates qua Parking Service API trước khi persist; event `SiteDeleted` để cleanup |
-| `normalized_plate` | `vehicles` | Reservation Service, IoT Service | Kafka event `VehicleRegistered` / `VehiclePlateUpdated`; Reservation Service cache plate |
-| `account_id` | `vehicles` | Reservation Service, Payment Service | Logical ID; consumer services gọi User Service API để resolve thông tin đầy đủ khi cần |
+| `site_id` | `accounts` | Facility & Visualization (`FacilityDb.parking_sites.id`) | Logical ID phạm vi gán Operator; đồng bộ trạng thái qua RabbitMQ |
+| `site_id` | `owner_applications` | Facility & Visualization (`FacilityDb.parking_sites.id`) | Logical ID bãi xe khởi tạo ở trạng thái `PENDING_APPROVAL`, active sau khi duyệt |
+| `normalized_plate` | `vehicles` | Operations, IoT & Recognition | RabbitMQ event `VehicleRegistered` / `VehiclePlateUpdated`; consumer cache plate |
+| `account_id` | `vehicles` | Operations, Payment & Pricing | Logical ID; consumer services gọi User & Access API để resolve thông tin đầy đủ khi cần |
 
 ---
 
-## 16. Extensions PostgreSQL sử dụng
+## 17. Extensions PostgreSQL sử dụng
 
 | Extension | Lý do sử dụng |
 |---|---|
