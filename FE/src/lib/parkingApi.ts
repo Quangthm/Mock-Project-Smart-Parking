@@ -87,6 +87,22 @@ export const parkingApi = {
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),
 
+  operatorLayout: (id: string) =>
+    call<Structure>(`/${encodeURIComponent(id)}/operator-layout`),
+
+  markBackup: (siteId: string, slotId: string, reason: string) =>
+    call<void>(
+      `/${encodeURIComponent(siteId)}/slots/${encodeURIComponent(slotId)}/backup`,
+      "POST",
+      { reason },
+    ),
+
+  releaseBackup: (siteId: string, slotId: string) =>
+    call<void>(
+      `/${encodeURIComponent(siteId)}/slots/${encodeURIComponent(slotId)}/backup`,
+      "DELETE",
+    ),
+
   unit: (
     id: string,
     body: {
@@ -204,5 +220,10 @@ export const operatorsApi = {
     if (!result.success) throw new Error("Operator creation failed.")
 
     return result.data
+  },
+
+
+  async remove(operatorId: string) {
+    await request<void>(`/${operatorId}`, "DELETE", undefined, "/api/operators")
   },
 }

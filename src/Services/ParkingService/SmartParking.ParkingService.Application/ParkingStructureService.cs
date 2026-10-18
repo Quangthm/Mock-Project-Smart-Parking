@@ -104,6 +104,10 @@ public sealed class ParkingStructureService(
 
     public Task MarkOperationalBackupAsync(
         OwnerScope actor, Guid siteId, Guid slotId, string reason, CancellationToken ct)
+        => SetOperationalBackupAsync(actor, siteId, slotId, true, reason, ct);
+
+    public Task SetOperationalBackupAsync(
+        OwnerScope actor, Guid siteId, Guid slotId, bool marked, string reason, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 2000)
         {
@@ -112,7 +116,7 @@ public sealed class ParkingStructureService(
 
         return EditAsync(actor, siteId, structure =>
         {
-            structure.MarkBackup(slotId, true);
+            structure.MarkBackup(slotId, marked);
             return true;
         }, null, slotId, reason.Trim(), ct);
     }

@@ -112,6 +112,36 @@ export function SignIn() {
         setMfaChallenge(null)
         setMfaValue("")
       }
+
+      // MFA accounts must complete the OTP challenge endpoint. The password endpoint
+      // deliberately returns MFA_REQUIRED and cannot accept a TOTP on retry.
+      if (
+        mode === "password" &&
+        msg.toLowerCase().includes("use otp sign-in") &&
+        !requireTotp
+      ) {
+        try {
+          const nextChallenge = await authApi.requestOtp(email)
+          setMode("otp")
+          setChallenge(nextChallenge)
+          setCode("")
+          setTotp("")
+          setRequireTotp(false)
+          setTotpCode("")
+          setError(
+            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code.",
+          )
+        } catch (otpError) {
+          setError(
+            otpError instanceof Error
+              ? otpError.message
+              : "Unable to start OTP sign-in. Please try again.",
+          )
+        }
+      } else {
+        setError(msg)
+      }
+      }
       setError(msg)
     } finally {
       setSubmitting(false)
@@ -376,18 +406,19 @@ export function SignIn() {
           {mode === "otp" && challenge && (
             <>
               <p
+                className="text-center"
                 style={{
                   margin: 0,
                   fontSize: "0.85rem",
                   color: "var(--muted)",
                 }}
               >
-                Your code is queued for delivery. It expires in five minutes.
+                Code queued. Expires in 5 minutes.
               </p>
-              <label className="label">
+              <label className="label text-center">
                 Verification code
                 <input
-                  className="input"
+                  className="input text-center"
                   required
                   pattern="[0-9]{6}"
                   inputMode="numeric"
@@ -406,7 +437,7 @@ export function SignIn() {
               />
               <p style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Required only if two-factor authentication is enabled.</p>
               <button
-                className="btn-outline"
+                className="btn-outline justify-center"
                 type="button"
                 disabled={submitting}
                 onClick={() => {
@@ -684,6 +715,7 @@ export function SignIn() {
                 }}
               >
                 <div
+                  className="text-center"
                   style={{
                     padding: "0.625rem 0.75rem",
                     borderRadius: "0.5rem",
@@ -697,11 +729,11 @@ export function SignIn() {
                 </div>
 
                 <div>
-                  <label className="label" style={{ fontSize: "0.85rem" }}>
+                  <label className="label text-center" style={{ fontSize: "0.85rem" }}>
                     Verification Code (OTP)
                   </label>
                   <input
-                    className="input"
+                    className="input text-center"
                     placeholder="Enter 6-digit code (e.g. 123456)"
                     value={fpOtp}
                     onChange={(e) => setFpOtp(e.target.value)}

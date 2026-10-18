@@ -250,7 +250,7 @@ export function CreateOperatorForm({
               </option>
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>
-                  {site.code} - {site.name} ({site.totalPhysicalCapacity} slots)
+                  {site.name} ({site.totalPhysicalCapacity} slots)
                 </option>
               ))}
             </select>

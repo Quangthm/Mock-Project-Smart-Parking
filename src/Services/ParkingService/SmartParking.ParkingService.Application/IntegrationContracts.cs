@@ -20,6 +20,7 @@ public sealed record StructureOutcome(
 // Infrastructure must never replace a token when retrying an uncertain request.
 public interface IStructureCommitments
 {
+    Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken);
     Task<CommitmentSnapshot> AcquireAsync(Guid tenantId, Guid siteId, Guid token, CancellationToken cancellationToken);
     Task ReleaseAsync(Guid tenantId, Guid siteId, Guid token, StructureOutcome? outcome, CancellationToken cancellationToken);
 }

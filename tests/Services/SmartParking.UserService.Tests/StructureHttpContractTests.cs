@@ -18,6 +18,41 @@ public sealed class StructureHttpContractTests
     private const string ServiceKey = "structure-http-tests-service-key-only";
 
     [Fact]
+    public async Task DashboardSnapshotUsesRealHttpContractWithoutCreatingAHold()
+    {
+        var store = new MemoryReservationStore();
+        await using var host = CreateHost(store);
+        await host.StartAsync();
+        using var client = host.GetTestClient();
+        client.DefaultRequestHeaders.Add("X-Service-Key", ServiceKey);
+        var snapshot = await new StructureCommitmentsClient(client).ReadSnapshotAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        Assert.Equal(store.ProtectedSlot, Assert.Single(snapshot.ProtectedSlots));
+        Assert.Null(store.CurrentToken);
+        Assert.Equal(0, store.ReleaseCalls);
+    }
+
+    [Fact]
+    public async Task PublicReservationRouteRequiresOperatorSessionAndInternalSnapshotRequiresServiceKey()
+    {
+        var store = new MemoryReservationStore();
+        await using var host = ReservationHost.Build([], builder =>
+        {
+            builder.WebHost.UseTestServer();
+            builder.Configuration["Services:Key"] = ServiceKey;
+            builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
+            builder.Services.AddSingleton<IStructureSafetyStore>(store);
+        });
+        await host.StartAsync();
+        using var client = host.GetTestClient();
+        using var list = await client.GetAsync($"api/reservations?siteId={Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.Unauthorized, list.StatusCode);
+        Assert.Contains("UNAUTHENTICATED", await list.Content.ReadAsStringAsync());
+        using var snapshot = await client.PostAsJsonAsync($"internal/structure/{Guid.NewGuid()}/snapshot", new { tenantId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.Unauthorized, snapshot.StatusCode);
+        Assert.Null(store.CurrentToken);
+    }
+
+    [Fact]
     public async Task RealAdapterRoundTripsTokenSnapshotAndIdempotentReleaseThroughApi()
     {
         var store = new MemoryReservationStore();
@@ -132,6 +167,9 @@ public sealed class StructureHttpContractTests
         public int ReleaseCalls { get; private set; }
         public int AppliedOutcomes { get; private set; }
         public ReservationDomain.EditOutcome? LastOutcome { get; private set; }
+
+        public Task<ReservationDomain.HoldSnapshot> ReadSnapshotAsync(Guid tenant, Guid site, CancellationToken ct)
+            => Task.FromResult(new ReservationDomain.HoldSnapshot([ProtectedSlot], false, [new(null, "CAR", 0, 0)]));
 
         public Task<ReservationDomain.HoldSnapshot> AcquireAsync(Guid tenant, Guid site, Guid token, CancellationToken ct)
         {

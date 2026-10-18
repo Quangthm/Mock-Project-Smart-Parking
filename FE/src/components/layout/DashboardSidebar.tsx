@@ -10,6 +10,7 @@ export type DashboardNavItem = {
   icon?: string
   active: boolean
   onClick: () => void
+  keepMenuOpen?: boolean
 }
 
 export type DashboardNavGroup = { label?: string; items: DashboardNavItem[] }
@@ -46,7 +47,7 @@ export function DashboardSidebar({
                 className={`dashboard-nav-item${item.active ? " active" : ""}`}
                 onClick={() => {
                   item.onClick()
-                  setDashboardMenuOpen(false)
+                  if (!item.keepMenuOpen) setDashboardMenuOpen(false)
                 }}
                 tabIndex={dashboardMenuOpen ? 0 : -1}
               >

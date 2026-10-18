@@ -165,7 +165,7 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) 
                 await Execute(db, tx, "INSERT INTO structure_change_audit(id,site_id,actor_id,operation_id,before_state,after_state) VALUES ($1,$2,$3,$4::uuid,$5::jsonb,$6::jsonb)", ct, Guid.NewGuid(), siteId, owner.UserId, operationId, before, AuditState(structure));
                 if (markedSlot is { } marked)
                 {
-                    await Execute(db, tx, "INSERT INTO structure_slot_audit(id,site_id,slot_id,actor_id,action,reason) VALUES ($1,$2,$3,$4,'MARK_BACKUP',$5)", ct, Guid.NewGuid(), siteId, marked, owner.UserId, reason);
+                    await Execute(db, tx, "INSERT INTO structure_slot_audit(id,site_id,slot_id,actor_id,action,reason) VALUES ($1,$2,$3,$4,$5,$6)", ct, Guid.NewGuid(), siteId, marked, owner.UserId, structure.Slots.Single(slot => slot.Id == marked).ReservationState == "BACKUP" ? "MARK_BACKUP" : "RELEASE_BACKUP", reason);
                 }
 
                 await using var ready = Command(db, tx, """

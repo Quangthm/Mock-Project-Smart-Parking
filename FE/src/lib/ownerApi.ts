@@ -1,6 +1,23 @@
 import { request } from "./authApi"
 
-import type { LotType } from "./types"
+import type { Device, LotType } from "./types"
+
+export interface OwnerLotSetup {
+  name: string
+  address: string
+  lotType: LotType
+  totalSlots: number
+  floors: number
+  devices: Device[]
+  modelFileName: string
+  hourlyRate: number
+  dailyRate: number
+  nightRate: number
+  gracePeriodMinutes: number
+  subscriptionMonthly: number
+  subscriptionYearly: number
+  policyAccepted: boolean
+}
 
 export interface OwnerApplicationRecord {
   id: string
@@ -20,6 +37,10 @@ export interface OwnerApplicationRecord {
   reviewNote?: string
 
   contactVerified: boolean
+
+  lotSetupComplete?: boolean
+  lotSetup?: OwnerLotSetup | null
+  setupToken?: string
 
   verification?: { challengeId: string; expiresAt: string; resendAt: string }
 
@@ -51,6 +72,29 @@ export const ownerApi = {
 
     if (!r.success || !r.data?.id)
       throw new Error("Invalid registration response.")
+
+    return r.data
+  },
+
+  async submitLotSetup(
+    registrationId: string,
+    setupToken: string,
+    lot: OwnerLotSetup,
+  ): Promise<OwnerApplicationRecord> {
+    if (!registrationId || !setupToken) {
+      throw new Error("Parking lot setup is unavailable. Please contact support.")
+    }
+
+    const r = await request<Response<OwnerApplicationRecord>>(
+      "/register/owner/lot-setup",
+      "POST",
+      { registrationId, setupToken, lot },
+    )
+
+    if (!r.success || r.data?.id !== registrationId ||
+        !r.data.lotSetupComplete || !r.data.verification?.challengeId) {
+      throw new Error("The server did not confirm the parking lot setup.")
+    }
 
     return r.data
   },

@@ -28,6 +28,7 @@ interface ApiUser {
   fullName: string
   email: string
   role: Role
+  onboardingComplete?: boolean
 }
 
 interface LoginSession {
@@ -108,6 +109,7 @@ function toUser(account: ApiUser): User {
     email: account.email,
     name: account.fullName,
     role: account.role,
+    onboardingComplete: account.onboardingComplete ?? cached?.onboardingComplete,
 
     password: "",
     accountStatus: "active",
@@ -231,6 +233,7 @@ export async function request<T>(
     const verificationFailed = isMfaManagement && ["AUTH_FAILED", "MFA_INVALID", "MFA_REQUIRED"].includes(payload?.code)
     if (
       response.status === 401 &&
+      token &&
       !anonymousPath(path, apiPrefix) && path !== "/logout" &&
       !verificationFailed &&
       token === sessionStorage.getItem(tokenKey)

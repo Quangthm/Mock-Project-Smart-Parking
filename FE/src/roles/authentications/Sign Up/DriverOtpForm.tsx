@@ -95,7 +95,7 @@ export function DriverOtpForm({
 
   return (
     <form
-      className="card auth-form-background"
+      className="card auth-form-background text-center"
       onSubmit={verify}
       style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
     >
@@ -110,7 +110,7 @@ export function DriverOtpForm({
       </label>
       <input
         id="driver-otp"
-        className="input"
+        className="input text-center"
         value={code}
         onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
         inputMode="numeric"

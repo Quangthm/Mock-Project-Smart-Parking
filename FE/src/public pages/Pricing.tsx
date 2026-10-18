@@ -6,7 +6,7 @@ const PLANS = [
   {
     name: "Driver — Pay as You Go",
 
-    price: "From 15,000₫/hr",
+    price: "From 15.000 VND/hr",
 
     period: "per session",
 
@@ -32,7 +32,7 @@ const PLANS = [
   {
     name: "Driver — Monthly Pass",
 
-    price: "800,000₫",
+    price: "800.000 VND",
 
     period: "per month",
 
