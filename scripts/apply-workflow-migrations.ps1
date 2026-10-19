@@ -38,4 +38,10 @@ if ($Service -eq 'User') {
     $identitySql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw 'Identity access hardening migration failed.' }
 }
+if ($Service -in @('User','Parking')) {
+    $onboardingMigration = @{ User='05.15-Owner-Onboarding.sql'; Parking='05.16-Parking-Owner-Onboarding.sql' }[$Service]
+    $onboardingSql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$onboardingMigration") -Raw
+    $onboardingSql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw "Owner onboarding migration failed for $Service." }
+}
 Write-Output "$Service workflow migrations applied."
