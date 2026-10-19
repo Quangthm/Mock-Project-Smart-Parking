@@ -9,6 +9,7 @@
     <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Services/ReservationService/">
+    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Infrastructure/SmartParking.ReservationService.Infrastructure.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Application/SmartParking.ReservationService.Application.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Domain/SmartParking.ReservationService.Domain.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
@@ -26,4 +27,9 @@
     <Project Path="tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
   </Folder>
+  <Folder Name="/src/Services/IoTService/">
+    <Project Path="src/Services/IoTService/SmartParking.IoTService.Application/SmartParking.IoTService.Application.csproj" />
+    <Project Path="src/Services/IoTService/SmartParking.IoTService.Infrastructure/SmartParking.IoTService.Infrastructure.csproj" />
+  </Folder>
+  <Project Path="tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj" />
 </Solution>

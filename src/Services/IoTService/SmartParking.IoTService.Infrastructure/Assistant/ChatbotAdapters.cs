@@ -1,5 +1,5 @@
-using UserService.Application.Chatbot;
-namespace UserService.Infrastructure.Services;
+using SmartParking.IoTService.Application.Assistant;
+namespace SmartParking.IoTService.Infrastructure.Assistant;
 public sealed class UnconfiguredChatModel:IChatModel
 {
     public Task<string> ClassifyIntentAsync(ChatInput input,CancellationToken ct)=>Task.FromResult("UNCONFIGURED");

@@ -1,4 +1,4 @@
-namespace UserService.Application.Chatbot;
+namespace SmartParking.IoTService.Application.Assistant;
 
 // Scaffold only: implementations call backend contracts, never duplicate business rules.
 public sealed class ChatbotOptions
@@ -21,7 +21,7 @@ public sealed class ChatbotCoordinator(ChatbotOptions options,IChatModel model,I
         if(string.IsNullOrWhiteSpace(input.Message) || input.Message.Length>4000)return new("Invalid request.","invalid");
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds));
         var intent=await model.ClassifyIntentAsync(input,timeout.Token);
-        if(!options.AllowedIntents.Contains(intent,StringComparer.Ordinal))return new("This action requires the normal application workflow.","handoff");
+        if(intent is not ("FAQ" or "PARKING_SEARCH") || !options.AllowedIntents.Contains(intent,StringComparer.Ordinal))return new("This action requires the normal application workflow.","handoff");
         return await backend.ExecuteReadAsync(intent,input,timeout.Token);
     }
 }
