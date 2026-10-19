@@ -812,6 +812,39 @@ export const structureStore = {
     structureStore.saveStructure(current)
   },
 
+  addSpace(
+    lotId: string,
+    floorId: string,
+    zoneId: string,
+    code: string,
+    vehicleType: VehicleCategory,
+  ) {
+    const current = structureStore.getStructure(lotId)
+    const floor = current.floors.find((item) => item.id === floorId)
+    const zone = floor?.zones.find((item) => item.id === zoneId)
+    if (!floor || !zone) return false
+
+    const normalizedCode = code.trim().toUpperCase()
+    if (!normalizedCode || zone.spaces.some((space) => space.code === normalizedCode)) {
+      return false
+    }
+
+    zone.spaces.push({
+      id: `sp-${zoneId}-${Date.now().toString(36)}`,
+      code: normalizedCode,
+      zoneId,
+      floorId,
+      lotId,
+      vehicleType,
+      status: "available",
+      physicalState: "AVAILABLE",
+      reservationState: "NONE",
+      lastUpdated: new Date().toISOString(),
+    })
+    structureStore.saveStructure(current)
+    return true
+  },
+
   updateSpaceStatus(
     lotId: string,
     spaceId: string,

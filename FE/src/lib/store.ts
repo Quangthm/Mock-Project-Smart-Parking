@@ -96,7 +96,7 @@ function generateSlots(total: number, floors: number): ParkingSlot[] {
 function seedInitialData() {
   const users = get<User>(KEYS.users)
 
-  if (users.find((u) => u.email === "admin@smartparking.vn")) {
+  if (users.find((u) => u.email === "admin@smartpark.local")) {
     const lots = get<ParkingLot>(KEYS.lots)
 
     const updatedLots = lots.map((lot) => {
@@ -181,7 +181,7 @@ function seedInitialData() {
   const admin: User = {
     id: "admin-001",
 
-    email: "admin@smartparking.vn",
+    email: "admin@smartpark.local",
 
     name: "System Admin",
 
@@ -410,81 +410,7 @@ function seedInitialData() {
 
   set(KEYS.lots, [lot1, lot2, lot3])
 
-  if (lot1.slots[0]) lot1.slots[0].status = "occupied"
-
-  if (lot2.slots[1]) lot2.slots[1].status = "occupied"
-
-  const bookings: Booking[] = [
-    {
-      id: "bk-001",
-
-      driverId: "driver-sample",
-
-      lotId: "lot-001",
-
-      lotName: "Vinhomes Grand Park Parking",
-
-      slotId: lot1.slots[0]?.id || "slot-1",
-
-      slotNumber: lot1.slots[0]?.number || "A-001",
-
-      licensePlate: "51A-12345",
-
-      plateType: "vn",
-
-      startTime: new Date(Date.now() - 3600000 * 3).toISOString(),
-
-      endTime: new Date(Date.now() + 3600000).toISOString(),
-
-      status: "checked-in",
-
-      paymentMethod: "momo",
-
-      amount: 60000,
-
-      depositAmount: 30000,
-
-      createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-
-      otpAttempts: 0,
-    },
-
-    {
-      id: "bk-002",
-
-      driverId: "driver-sample",
-
-      lotId: "lot-002",
-
-      lotName: "Bitexco Financial Tower Outdoor Lot",
-
-      slotId: lot2.slots[1]?.id || "slot-2",
-
-      slotNumber: lot2.slots[1]?.number || "A-002",
-
-      licensePlate: "51AB-67890",
-
-      plateType: "vn",
-
-      startTime: new Date(Date.now() - 86400000 * 2).toISOString(),
-
-      endTime: new Date(Date.now() - 86400000 * 2 + 3600000 * 2).toISOString(),
-
-      status: "completed",
-
-      paymentMethod: "vnpay",
-
-      amount: 40000,
-
-      depositAmount: 20000,
-
-      createdAt: new Date(Date.now() - 86400000 * 2 - 1800000).toISOString(),
-
-      otpAttempts: 0,
-    },
-  ]
-
-  set(KEYS.bookings, bookings)
+  set(KEYS.bookings, [])
 
   const logs: AuditLog[] = [
     {
@@ -617,58 +543,20 @@ export const store = {
     )
   },
 
-  getBookings: (): Booking[] =>
-    get<Booking>(KEYS.bookings).map((booking) => ({
-      ...booking,
-      paymentStatus:
-        booking.paymentStatus ??
-        (["completed", "checked-in", "confirmed"].includes(booking.status)
-          ? "paid"
-          : "pending"),
-    })),
+  getBookings: (): Booking[] => get<Booking>(KEYS.bookings),
 
   getBookingsByDriver: (driverId: string): Booking[] =>
-    get<Booking>(KEYS.bookings)
-      .filter((b) => b.driverId === driverId)
-      .map((booking) => ({
-        ...booking,
-        paymentStatus:
-          booking.paymentStatus ??
-          (["completed", "checked-in", "confirmed"].includes(booking.status)
-            ? "paid"
-            : "pending"),
-      })),
+    get<Booking>(KEYS.bookings).filter((b) => b.driverId === driverId),
 
   getBookingsByLot: (lotId: string): Booking[] =>
-    get<Booking>(KEYS.bookings)
-      .filter((b) => b.lotId === lotId)
-      .map((booking) => ({
-        ...booking,
-        paymentStatus:
-          booking.paymentStatus ??
-          (["completed", "checked-in", "confirmed"].includes(booking.status)
-            ? "paid"
-            : "pending"),
-      })),
+    get<Booking>(KEYS.bookings).filter((b) => b.lotId === lotId),
 
   saveBooking: (booking: Booking) => {
     const bookings = get<Booking>(KEYS.bookings).filter(
       (b) => b.id !== booking.id,
     )
 
-    set(KEYS.bookings, [
-      ...bookings,
-      {
-        ...booking,
-        paymentStatus:
-          booking.paymentStatus ??
-          (booking.status === "completed" ||
-          booking.status === "checked-in" ||
-          booking.status === "confirmed"
-            ? "paid"
-            : "pending"),
-      },
-    ])
+    set(KEYS.bookings, [...bookings, booking])
   },
 
   createBooking: (

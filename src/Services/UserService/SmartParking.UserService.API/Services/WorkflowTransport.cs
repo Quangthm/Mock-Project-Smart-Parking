@@ -8,7 +8,7 @@ public sealed class QueuedOtpSender(AppDbContext db,IAccountWorkflows workflows)
     {
         var user=db.Users.Local.Single(u=>u.DeletedOn==null && u.Status==SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification && (u.Email==destination || u.Phone==destination));
         await db.WorkflowDeliveries.Where(d=>d.UserId==user.Id && d.Kind=="DRIVER_OTP" && d.Status!="sent").ExecuteUpdateAsync(s=>s.SetProperty(d=>d.Status,"cancelled").SetProperty(d=>d.ProtectedPayload,""),ct);
-        await workflows.QueueAsync(user.Id!.Value,user.Id.Value,"DRIVER_OTP",new(channel,destination,"SmartPark verification",$"Your code is {code}. Valid for 5 minutes."),ct);
+        await workflows.QueueAsync(user.Id!.Value,user.Id.Value,"DRIVER_OTP",OtpWorkflowMessage.Create(channel,destination,code),ct);
     }
 }
 public sealed class WorkflowDeliveryWorker(IServiceScopeFactory scopes,ILogger<WorkflowDeliveryWorker> logger):BackgroundService

@@ -23,7 +23,8 @@ interface LotCapacityMetrics {
 interface SiteWithStructure {
   site: Site
   structure: Structure | null
-  metrics: LotCapacityMetrics
+  metrics: LotCapacityMetrics | null
+  structureError: string | null
 }
 
 export function LotManagement({
@@ -62,22 +63,14 @@ export function LotManagement({
           sites.map(async (site) => {
             try {
               const structure = await parkingApi.structure(site.id)
-              const metrics = calculateMetrics(site, structure.capacityViews)
-              return { site, structure, metrics }
-            } catch {
-              // Fallback to site base capacity if structure query fails
+              const metrics = calculateMetrics(structure.capacityViews)
+              return { site, structure, metrics, structureError: metrics ? null : "Capacity data is unavailable for this site." }
+            } catch (cause) {
               return {
                 site,
                 structure: null,
-                metrics: {
-                  total: site.totalPhysicalCapacity,
-                  available: site.totalPhysicalCapacity,
-                  occupied: 0,
-                  protected: 0,
-                  pendingPayment: 0,
-                  backup: 0,
-                  unavailable: 0,
-                },
+                metrics: null,
+                structureError: cause instanceof Error ? cause.message : "Could not load parking structure.",
               }
             }
           }),
@@ -100,25 +93,14 @@ export function LotManagement({
     }
   }, [user?.id, reload])
 
-  function calculateMetrics(
-    site: Site,
-    views: CapacityView[] = [],
-  ): LotCapacityMetrics {
-    if (!views || views.length === 0) {
-      return {
-        total: site.totalPhysicalCapacity,
-        available: site.totalPhysicalCapacity,
-        occupied: 0,
-        protected: 0,
-        pendingPayment: 0,
-        backup: 0,
-        unavailable: 0,
-      }
-    }
+  function calculateMetrics(views: CapacityView[] = []): LotCapacityMetrics | null {
+    if (!views?.length) return null
 
     // Top-level site views have unitId === null
     const siteViews = views.filter((v) => v.unitId === null)
-    const targetViews = siteViews.length > 0 ? siteViews : views
+    if (!siteViews.length) return null
+    const targetViews = siteViews
+    if (targetViews.some((view) => view.available === null)) return null
 
     const total = targetViews.reduce((acc, v) => acc + (v.total || 0), 0)
     const occupied = targetViews.reduce((acc, v) => acc + (v.occupied || 0), 0)
@@ -141,7 +123,7 @@ export function LotManagement({
     )
 
     return {
-      total: total || site.totalPhysicalCapacity,
+      total,
       available: Math.max(0, available),
       occupied,
       protected: protectedCount,
@@ -169,10 +151,10 @@ export function LotManagement({
       })
       .sort((a, b) => {
         if (sortBy === "name") return a.site.name.localeCompare(b.site.name)
-        if (sortBy === "capacity") return b.metrics.total - a.metrics.total
+        if (sortBy === "capacity") return (b.metrics?.total ?? -1) - (a.metrics?.total ?? -1)
         if (sortBy === "occupancy") {
-          const occA = a.metrics.total > 0 ? a.metrics.occupied / a.metrics.total : 0
-          const occB = b.metrics.total > 0 ? b.metrics.occupied / b.metrics.total : 0
+          const occA = a.metrics && a.metrics.total > 0 ? a.metrics.occupied / a.metrics.total : -1
+          const occB = b.metrics && b.metrics.total > 0 ? b.metrics.occupied / b.metrics.total : -1
           return occB - occA
         }
         return 0
@@ -184,13 +166,12 @@ export function LotManagement({
     return data.reduce(
       (acc, curr) => ({
         totalSites: acc.totalSites + 1,
-        totalCapacity: acc.totalCapacity + curr.metrics.total,
-        totalAvailable: acc.totalAvailable + curr.metrics.available,
-        totalOccupied: acc.totalOccupied + curr.metrics.occupied,
-        totalProtected: acc.totalProtected + curr.metrics.protected,
-        totalPendingPayment:
-          acc.totalPendingPayment + curr.metrics.pendingPayment,
-        totalBackup: acc.totalBackup + curr.metrics.backup,
+        totalCapacity: acc.totalCapacity + (curr.metrics?.total ?? 0),
+        totalAvailable: acc.totalAvailable + (curr.metrics?.available ?? 0),
+        totalOccupied: acc.totalOccupied + (curr.metrics?.occupied ?? 0),
+        totalProtected: acc.totalProtected + (curr.metrics?.protected ?? 0),
+        totalPendingPayment: acc.totalPendingPayment + (curr.metrics?.pendingPayment ?? 0),
+        totalBackup: acc.totalBackup + (curr.metrics?.backup ?? 0),
       }),
       {
         totalSites: 0,
@@ -203,6 +184,8 @@ export function LotManagement({
       },
     )
   }, [data])
+  const hasUnknownCapacity = data.some((item) => !item.metrics)
+  const summaryValue = (value: number) => hasUnknownCapacity ? "—" : value.toLocaleString()
 
   function handleNavigateToStructure(siteId: string) {
     window.dispatchEvent(
@@ -250,37 +233,37 @@ export function LotManagement({
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-1">
           <span className="text-[11px] font-medium text-[var(--muted)] block">Configured Capacity</span>
-          <span className="text-lg font-bold text-[var(--fg)]">{totals.totalCapacity.toLocaleString()}</span>
+          <span className="text-lg font-bold text-[var(--fg)]">{summaryValue(totals.totalCapacity)}</span>
           <span className="text-[10px] text-[var(--muted)] block">{totals.totalSites} active facilities</span>
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-1">
           <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block">Available (Free)</span>
-          <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{totals.totalAvailable.toLocaleString()}</span>
+          <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{summaryValue(totals.totalAvailable)}</span>
           <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 block">Ready for parking</span>
         </div>
 
         <div className="rounded-xl border border-slate-500/20 bg-slate-500/5 p-3.5 space-y-1">
           <span className="text-[11px] font-medium text-[var(--fg)] block">Physically Occupied</span>
-          <span className="text-lg font-bold text-[var(--fg)]">{totals.totalOccupied.toLocaleString()}</span>
+          <span className="text-lg font-bold text-[var(--fg)]">{summaryValue(totals.totalOccupied)}</span>
           <span className="text-[10px] text-[var(--muted)] block">Vehicle present in slot</span>
         </div>
 
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5 space-y-1">
           <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 block">Reserved / Protected</span>
-          <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{totals.totalProtected.toLocaleString()}</span>
+          <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{summaryValue(totals.totalProtected)}</span>
           <span className="text-[10px] text-blue-600/70 dark:text-blue-400/70 block">Guaranteed bookings</span>
         </div>
 
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-1">
           <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 block">Pending Payment</span>
-          <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{totals.totalPendingPayment.toLocaleString()}</span>
+          <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{summaryValue(totals.totalPendingPayment)}</span>
           <span className="text-[10px] text-amber-600/70 dark:text-amber-400/70 block">Awaiting checkout</span>
         </div>
 
         <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3.5 space-y-1">
           <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 block">Backup Buffer</span>
-          <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{totals.totalBackup.toLocaleString()}</span>
+          <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{summaryValue(totals.totalBackup)}</span>
           <span className="text-[10px] text-purple-600/70 dark:text-purple-400/70 block">Overflow guarantee</span>
         </div>
       </div>
@@ -358,12 +341,12 @@ export function LotManagement({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {filteredData.map(({ site, metrics, structure }) => {
-                const totalCap = metrics.total || 1
-                const occupiedPercent = Math.min(
+              {filteredData.map(({ site, metrics, structure, structureError }) => {
+                const totalCap = metrics?.total || 1
+                const occupiedPercent = metrics ? Math.min(
                   100,
                   Math.round(((metrics.occupied + metrics.protected) / totalCap) * 100),
-                )
+                ) : null
 
                 return (
                   <tr key={site.id} className="hover:bg-[var(--bg)]/50 transition-colors">
@@ -375,6 +358,7 @@ export function LotManagement({
                       <div className="text-[11px] text-[var(--muted)] font-mono">
                         {site.code} · {site.address}
                       </div>
+                      {structureError && <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-400" title={structureError}>Capacity unavailable · Refresh Data to retry</div>}
                     </td>
 
                     {/* Operational Status */}
@@ -392,38 +376,38 @@ export function LotManagement({
 
                     {/* Configured Capacity */}
                     <td className="px-3 py-3.5 text-right font-medium text-[var(--fg)]">
-                      {metrics.total}
+                      {metrics?.total ?? "—"}
                     </td>
 
                     {/* Available Spots */}
                     <td className="px-3 py-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                      {metrics.available}
+                      {metrics?.available ?? "—"}
                     </td>
 
                     {/* Occupied */}
                     <td className="px-3 py-3.5 text-right font-medium text-[var(--fg)]">
-                      {metrics.occupied}
+                      {metrics?.occupied ?? "—"}
                     </td>
 
                     {/* Reserved/Protected */}
                     <td className="px-3 py-3.5 text-right font-medium text-blue-600 dark:text-blue-400">
-                      {metrics.protected}
+                      {metrics?.protected ?? "—"}
                     </td>
 
                     {/* Pending Payment */}
                     <td className="px-3 py-3.5 text-right font-medium text-amber-600 dark:text-amber-400">
-                      {metrics.pendingPayment}
+                      {metrics?.pendingPayment ?? "—"}
                     </td>
 
                     {/* Backup */}
                     <td className="px-3 py-3.5 text-right font-medium text-purple-600 dark:text-purple-400">
-                      {metrics.backup}
+                      {metrics?.backup ?? "—"}
                     </td>
 
                     {/* Occupancy Rate Bar */}
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <div className="w-14 h-1.5 rounded-full bg-[var(--border)] overflow-hidden">
+                        {occupiedPercent !== null && <div className="w-14 h-1.5 rounded-full bg-[var(--border)] overflow-hidden">
                           <div
                             className={`h-full rounded-full ${
                               occupiedPercent > 85
@@ -434,9 +418,9 @@ export function LotManagement({
                             }`}
                             style={{ width: `${occupiedPercent}%` }}
                           />
-                        </div>
+                        </div>}
                         <span className="font-mono text-[11px] font-semibold text-[var(--fg)]">
-                          {occupiedPercent}%
+                          {occupiedPercent === null ? "—" : `${occupiedPercent}%`}
                         </span>
                       </div>
                     </td>
@@ -447,7 +431,7 @@ export function LotManagement({
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2.5"
-                          onClick={() => setDetailSite({ site, metrics, structure })}
+                          onClick={() => setDetailSite({ site, metrics, structure, structureError })}
                           title="View detailed floor and vehicle breakdown"
                         >
                           Breakdown
@@ -516,31 +500,37 @@ export function LotManagement({
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-4 text-xs">
+                {detailSite.structureError && (
+                  <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">
+                    <span>{detailSite.structureError}</span>
+                    <button type="button" className="ml-2 underline" onClick={() => { setDetailSite(null); setReload((value) => value + 1) }}>Retry</button>
+                  </div>
+                )}
                 {/* Overall stats grid */}
                 <div className="grid grid-cols-3 gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
                   <div>
                     <span className="text-[var(--muted)] block">Capacity:</span>
-                    <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics.total}</span>
+                    <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics?.total ?? "—"}</span>
                   </div>
                   <div>
                     <span className="text-emerald-600 dark:text-emerald-400 block font-medium">Available:</span>
-                    <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{detailSite.metrics.available}</span>
+                    <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{detailSite.metrics?.available ?? "—"}</span>
                   </div>
                   <div>
                     <span className="text-[var(--fg)] block font-medium">Occupied:</span>
-                    <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics.occupied}</span>
+                    <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics?.occupied ?? "—"}</span>
                   </div>
                   <div>
                     <span className="text-blue-600 dark:text-blue-400 block font-medium">Reserved:</span>
-                    <span className="font-bold text-sm text-blue-600 dark:text-blue-400">{detailSite.metrics.protected}</span>
+                    <span className="font-bold text-sm text-blue-600 dark:text-blue-400">{detailSite.metrics?.protected ?? "—"}</span>
                   </div>
                   <div>
                     <span className="text-amber-600 dark:text-amber-400 block font-medium">Pending Pay:</span>
-                    <span className="font-bold text-sm text-amber-600 dark:text-amber-400">{detailSite.metrics.pendingPayment}</span>
+                    <span className="font-bold text-sm text-amber-600 dark:text-amber-400">{detailSite.metrics?.pendingPayment ?? "—"}</span>
                   </div>
                   <div>
                     <span className="text-purple-600 dark:text-purple-400 block font-medium">Backup Buffer:</span>
-                    <span className="font-bold text-sm text-purple-600 dark:text-purple-400">{detailSite.metrics.backup}</span>
+                    <span className="font-bold text-sm text-purple-600 dark:text-purple-400">{detailSite.metrics?.backup ?? "—"}</span>
                   </div>
                 </div>
 

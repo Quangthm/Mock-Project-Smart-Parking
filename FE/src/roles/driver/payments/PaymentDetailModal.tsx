@@ -741,7 +741,7 @@ export function PaymentDetailModal({
                       textAlign: "right",
                     }}
                   >
-                    Unit Price (₫)
+                    Unit Price (VND)
                   </th>
                   <th
                     style={{
@@ -751,7 +751,7 @@ export function PaymentDetailModal({
                       textAlign: "right",
                     }}
                   >
-                    Amount (₫)
+                    Amount (VND)
                   </th>
                 </tr>
               </thead>
@@ -938,7 +938,7 @@ export function PaymentDetailModal({
                 fontFamily: "Outfit, sans-serif",
               }}
             >
-              {totalAmount.toLocaleString("vi-VN")} ₫
+              {totalAmount.toLocaleString("vi-VN")} VND
             </div>
           </div>
 
@@ -957,7 +957,7 @@ export function PaymentDetailModal({
             >
               <strong>Refund Notice:</strong> An amount of{" "}
               <strong>
-                {transaction.refundInfo.amount.toLocaleString("vi-VN")} ₫
+                {transaction.refundInfo.amount.toLocaleString("vi-VN")} VND
               </strong>{" "}
               was refunded on{" "}
               {new Date(transaction.refundInfo.refundedAt).toLocaleString(

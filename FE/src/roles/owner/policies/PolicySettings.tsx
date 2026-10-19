@@ -10,6 +10,10 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
 
+import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+
+import { digitsOnly } from "../../../lib/groupedDigits"
+
 type DepositMode = "percentage" | "fixed"
 
 interface PolicyState {
@@ -62,9 +66,16 @@ export function PolicySettings({
 }: PolicySettingsProps = {}) {
   const { user } = useApp()
 
-  const [policy, setPolicy] = useState<PolicyState>(() =>
-    user ? (store.getOwnerPolicy(user.id) ?? initialPolicy) : initialPolicy,
-  )
+  const [policy, setPolicy] = useState<PolicyState>(() => {
+    const stored = user ? store.getOwnerPolicy(user.id) : null
+    return stored
+      ? {
+          ...stored,
+          dayRate: digitsOnly(String(stored.dayRate)),
+          nightRate: digitsOnly(String(stored.nightRate)),
+        }
+      : initialPolicy
+  })
 
   const [dayHours, setDayHours] = useState("8")
 
@@ -508,28 +519,22 @@ export function PolicySettings({
                   {policy.pricingEnabled ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Day Rate (₫ / hour)
-                        <input
+                        Day Rate (VND / hour)
+                        <GroupedNumberInput
                           className={inputClass}
-                          type="number"
-                          min="0"
-                          step="1000"
                           value={policy.dayRate}
-                          onChange={(event) =>
-                            updatePolicy("dayRate", event.target.value)
+                          onValueChange={(digits) =>
+                            updatePolicy("dayRate", digits)
                           }
                         />
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Night Rate (₫ / hour)
-                        <input
+                        Night Rate (VND / hour)
+                        <GroupedNumberInput
                           className={inputClass}
-                          type="number"
-                          min="0"
-                          step="1000"
                           value={policy.nightRate}
-                          onChange={(event) =>
-                            updatePolicy("nightRate", event.target.value)
+                          onValueChange={(digits) =>
+                            updatePolicy("nightRate", digits)
                           }
                         />
                       </label>
@@ -577,13 +582,13 @@ export function PolicySettings({
                           }
                         >
                           <option value="percentage">Percentage (%)</option>
-                          <option value="fixed">Fixed amount (₫)</option>
+                          <option value="fixed">Fixed amount (VND)</option>
                         </select>
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
                         {policy.depositMode === "percentage"
                           ? "Deposit Percentage (%)"
-                          : "Deposit Amount (₫)"}
+                          : "Deposit Amount (VND)"}
                         <input
                           className={inputClass}
                           type="number"
@@ -713,7 +718,7 @@ function PreviewAmount({
           emphasized ? "text-[var(--primary)]" : "text-[var(--fg)]"
         }`}
       >
-        {Math.round(amount).toLocaleString("en-US")} ₫
+        {Math.round(amount).toLocaleString("vi-VN")} VND
       </p>
     </div>
   )

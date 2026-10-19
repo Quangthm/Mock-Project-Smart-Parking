@@ -75,9 +75,9 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
       {/* KPI METRIC CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
         {[
-          { label: 'Gross Revenue', value: `${totalRevenue.toLocaleString('en-US')}₫`, icon: '💰', color: '#22c55e', sub: 'From completed bookings' },
-          { label: 'Net Earnings (85%)', value: `${netProfit.toLocaleString('en-US')}₫`, icon: '📈', color: '#2563eb', sub: 'After platform fee settlement' },
-          { label: 'Platform Fee (15%)', value: `${platformFee.toLocaleString('en-US')}₫`, icon: '📊', color: '#f59e0b', sub: 'SmartParking system service fee' },
+          { label: 'Gross Revenue', value: `${totalRevenue.toLocaleString('vi-VN')} VND`, icon: '💰', color: '#22c55e', sub: 'From completed bookings' },
+          { label: 'Net Earnings (85%)', value: `${netProfit.toLocaleString('vi-VN')} VND`, icon: '📈', color: '#2563eb', sub: 'After platform fee settlement' },
+          { label: 'Platform Fee (15%)', value: `${platformFee.toLocaleString('vi-VN')} VND`, icon: '📊', color: '#f59e0b', sub: 'SmartParking system service fee' },
           { label: 'Completed Transactions', value: String(completedBookings.length), icon: '📋', color: '#a855f7', sub: `Across ${lots.length} active sites` },
         ].map(stat => (
           <div key={stat.label} className="card" style={{ padding: '1.15rem' }}>
@@ -120,7 +120,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
               <YAxis tickFormatter={v => v === 0 ? '0' : `${(Number(v) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
-              <Tooltip formatter={(v) => `${Number(v).toLocaleString('en-US')}₫`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.82rem' }} />
+              <Tooltip formatter={(v) => `${Number(v).toLocaleString('vi-VN')} VND`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.82rem' }} />
               <Area type="monotone" dataKey="revenue" stroke="#2563eb" fill="#2563eb18" strokeWidth={2} name="Gross Revenue" />
               <Area type="monotone" dataKey="profit" stroke="#22c55e" fill="#22c55e18" strokeWidth={2} name="Net Revenue" />
             </AreaChart>
@@ -201,10 +201,10 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
                       <PaymentMethodLogo method={booking.paymentMethod ?? 'qr'} size="xs" showName />
                     </td>
                     <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 600 }}>
-                      {booking.amount.toLocaleString('en-US')} ₫
+                      {booking.amount.toLocaleString('vi-VN')} VND
                     </td>
                     <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#22c55e' }}>
-                      {net.toLocaleString('en-US')} ₫
+                      {net.toLocaleString('vi-VN')} VND
                     </td>
                   </tr>
                 );

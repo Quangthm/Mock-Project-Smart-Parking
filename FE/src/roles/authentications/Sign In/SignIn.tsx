@@ -93,14 +93,31 @@ export function SignIn() {
           ? error.message
           : "Sign in failed. Please try again."
 
-      // Backend requires TOTP — show the code field inline, don't display the raw error
+      // MFA accounts must complete the OTP challenge endpoint. The password endpoint
+      // deliberately returns MFA_REQUIRED and cannot accept a TOTP on retry.
       if (
         mode === "password" &&
-        msg.toLowerCase().includes("otp") &&
+        msg.toLowerCase().includes("use otp sign-in") &&
         !requireTotp
       ) {
-        setRequireTotp(true)
-        setError("")
+        try {
+          const nextChallenge = await authApi.requestOtp(email)
+          setMode("otp")
+          setChallenge(nextChallenge)
+          setCode("")
+          setTotp("")
+          setRequireTotp(false)
+          setTotpCode("")
+          setError(
+            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code.",
+          )
+        } catch (otpError) {
+          setError(
+            otpError instanceof Error
+              ? otpError.message
+              : "Unable to start OTP sign-in. Please try again.",
+          )
+        }
       } else {
         setError(msg)
       }
@@ -379,18 +396,19 @@ export function SignIn() {
           {mode === "otp" && challenge && (
             <>
               <p
+                className="text-center"
                 style={{
                   margin: 0,
                   fontSize: "0.85rem",
                   color: "var(--muted)",
                 }}
               >
-                Your code is queued for delivery. It expires in five minutes.
+                Code queued. Expires in 5 minutes.
               </p>
-              <label className="label">
+              <label className="label text-center">
                 Verification code
                 <input
-                  className="input"
+                  className="input text-center"
                   required
                   pattern="[0-9]{6}"
                   inputMode="numeric"
@@ -399,10 +417,10 @@ export function SignIn() {
                   onChange={(e) => setCode(e.target.value)}
                 />
               </label>
-              <label className="label">
+              <label className="label text-center">
                 Authenticator code (if MFA enabled)
                 <input
-                  className="input"
+                  className="input text-center"
                   inputMode="numeric"
                   maxLength={6}
                   value={totp}
@@ -410,7 +428,7 @@ export function SignIn() {
                 />
               </label>
               <button
-                className="btn-outline"
+                className="btn-outline justify-center"
                 type="button"
                 disabled={submitting}
                 onClick={() => {
@@ -687,6 +705,7 @@ export function SignIn() {
                 }}
               >
                 <div
+                  className="text-center"
                   style={{
                     padding: "0.625rem 0.75rem",
                     borderRadius: "0.5rem",
@@ -700,11 +719,11 @@ export function SignIn() {
                 </div>
 
                 <div>
-                  <label className="label" style={{ fontSize: "0.85rem" }}>
+                  <label className="label text-center" style={{ fontSize: "0.85rem" }}>
                     Verification Code (OTP)
                   </label>
                   <input
-                    className="input"
+                    className="input text-center"
                     placeholder="Enter 6-digit code (e.g. 123456)"
                     value={fpOtp}
                     onChange={(e) => setFpOtp(e.target.value)}
