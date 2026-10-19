@@ -1,45 +1,9 @@
+using SmartParking.ParkingService.Application;
 using Npgsql;
 
 namespace SmartParking.ParkingService.Persistence;
 
-public sealed record OperatorTicket(
-    Guid Id,
-    string UserId,
-    string UserName,
-    string Subject,
-    string Message,
-    Guid? BookingId,
-    string Status,
-    DateTimeOffset CreatedAt);
-
-public sealed record OperatorIncident(
-    Guid Id,
-    Guid SiteId,
-    string Type,
-    string Details,
-    string Status,
-    Guid ActorId,
-    DateTimeOffset CreatedAt);
-
-public sealed record OperatorNotification(
-    Guid Id,
-    Guid RecipientId,
-    string Type,
-    string Title,
-    string Message,
-    DateTimeOffset Timestamp,
-    bool IsRead,
-    Guid? RelatedEntityId);
-
-public sealed record OperatorAuditLog(
-    Guid Id,
-    Guid? ActorId,
-    string ActorRole,
-    string Action,
-    string Details,
-    DateTimeOffset Timestamp);
-
-public sealed class OperatorOperationsStore(NpgsqlDataSource source)
+public sealed class OperatorOperationsStore(NpgsqlDataSource source) : IOperatorOperationsStore
 {
     public async Task EnsureSchemaAsync(CancellationToken ct)
     {

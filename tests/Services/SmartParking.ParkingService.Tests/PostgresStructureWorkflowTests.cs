@@ -21,6 +21,27 @@ public sealed class StructurePostgresFactAttribute : FactAttribute
 public sealed class PostgresStructureWorkflowTests
 {
     [StructurePostgresFact]
+    public async Task OwnerOnboardingIsAtomicRetryableAndPreservesSubsequentEdits()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var id = Guid.NewGuid();
+        var body = new OwnerOnboardingBody(id, "Business", "owner@example.com", "0911111111",
+            JsonSerializer.SerializeToElement(new { name = "Submitted lot", address = "Address", totalSlots = 20, floors = 2 }));
+        var store = new OwnerOnboardingStore(fixture.Parking);
+        await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => store.ProvisionAsync(id, body, default)));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM parking_sites WHERE id='{id}' AND total_physical_capacity=0 AND status='ACTIVE'"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM owner_onboarding_provisions WHERE application_id='{id}' AND payload->'Lot'->>'totalSlots'='20'"));
+        await Assert.ThrowsAsync<StructureException>(() => store.ProvisionAsync(id, body with { Name = "Changed" }, default));
+        await fixture.ExecuteAsync(fixture.Parking, $"UPDATE parking_sites SET name='Owner edited',status='INACTIVE' WHERE id='{id}'");
+        await new OwnerOnboardingStore(fixture.Parking).ProvisionAsync(id, body, default);
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM parking_sites WHERE id='{id}' AND name='Owner edited' AND status='INACTIVE'"));
+        var conflict = Guid.NewGuid();
+        await fixture.ExecuteAsync(fixture.Parking, $"INSERT INTO parking_sites(id,tenant_id,site_code,name,address) VALUES ('{conflict}','{fixture.Owner.TenantId}','conflict','existing','address')");
+        await Assert.ThrowsAsync<PostgresException>(() => store.ProvisionAsync(conflict, body with { TenantId = conflict }, default));
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM tenants WHERE id='{conflict}'"));
+    }
+
+    [StructurePostgresFact]
     public async Task CommittedEditSurvivesLostResponseAndRecoversWithANewApplicationInstance()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -291,7 +312,9 @@ public sealed class PostgresStructureWorkflowTests
                     "scripts/database/microservices/02-parking-service-db.sql",
                     "scripts/database/integration/02-parking-service-alignment.sql",
                     "scripts/database/05.9-Parking-Backup-Operations.sql",
-                    "scripts/database/05.11-Parking-Structure-Synchronization.sql");
+                    "scripts/database/05.11-Parking-Structure-Synchronization.sql",
+                    "scripts/database/05.16-Parking-Owner-Onboarding.sql",
+                    "scripts/database/05.16-Parking-Owner-Onboarding.sql");
                 await fixture.ApplyAsync(fixture.Reservation, root,
                     "scripts/database/microservices/03-reservation-session-service-db.sql",
                     "scripts/database/integration/03-reservation-structure-safety.sql",

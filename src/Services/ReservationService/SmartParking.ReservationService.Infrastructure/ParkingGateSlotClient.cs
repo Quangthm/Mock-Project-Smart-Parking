@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using SmartParking.ReservationService.Persistence;
+using SmartParking.ReservationService.Application;
 
-namespace SmartParking.ReservationService.API;
+namespace SmartParking.ReservationService.Infrastructure;
 
 public sealed class ParkingGateSlotClient(HttpClient client) : IOperatorGateSlotClaims
 {

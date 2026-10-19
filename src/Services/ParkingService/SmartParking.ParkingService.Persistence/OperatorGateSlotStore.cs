@@ -1,11 +1,10 @@
+using SmartParking.ParkingService.Application;
 using Npgsql;
 using SmartParking.ParkingService.Domain;
 
 namespace SmartParking.ParkingService.Persistence;
 
-public sealed record OperatorGateSlot(Guid Id, string Code, string VehicleType);
-
-public sealed class OperatorGateSlotStore(NpgsqlDataSource source)
+public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGateSlotStore
 {
     public async Task<OperatorGateSlot> ClaimAvailableAsync(
         Guid tenantId,

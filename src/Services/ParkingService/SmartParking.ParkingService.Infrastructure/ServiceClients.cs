@@ -6,8 +6,7 @@ using SmartParking.ParkingService.Domain;
 
 namespace SmartParking.ParkingService.Infrastructure;
 
-public sealed record IdentityScope(Guid UserId, Guid[] TenantIds);
-public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor context) : IOwnerAuthorizer
+public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor context) : IOwnerAuthorizer, IOwnerScopeReader
 {
     public async Task<IdentityScope> ScopeAsync(CancellationToken ct, string permission = "PARKING_MANAGE")
     {
