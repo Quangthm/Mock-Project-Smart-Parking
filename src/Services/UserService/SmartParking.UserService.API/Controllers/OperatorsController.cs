@@ -39,7 +39,7 @@ public sealed class OperatorsController(ISender sender) : ControllerBase
     public async Task<IActionResult> SiteScope(Guid siteId,CancellationToken ct)
     {
         if(!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value,out var actor))return Unauthorized();
-        var assignment=(await operators.AssignmentsAsync(actor,ct)).SingleOrDefault(a=>a.SiteId==siteId);
+        var assignment=(await sender.Send(new OperatorAssignmentsQuery(actor),ct)).SingleOrDefault(a=>a.SiteId==siteId);
         return assignment is null?Forbid():Ok(new{userId=actor,tenantIds=new[]{assignment.TenantId}});
     }
 }

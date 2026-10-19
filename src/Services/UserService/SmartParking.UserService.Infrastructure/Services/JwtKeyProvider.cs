@@ -2,7 +2,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
 using UserService.Application.Common.Models.JwT;
 
-namespace UserService.Application.Services;
+namespace UserService.Infrastructure.Services;
 
 public sealed class JwtKeyProvider : IDisposable
 {

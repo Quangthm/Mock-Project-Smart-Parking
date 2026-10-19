@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
@@ -5,7 +6,6 @@ using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
 using UserService.Application.Usecase.Login;
-using UserService.Infrastructure.Services;
 
 namespace SmartParking.UserService.Tests;
 

@@ -38,14 +38,14 @@ public sealed class IdentityMigrationTests
         Assert.Equal(verifiedAt, retained.PhoneVerifiedAt);
         Assert.Null(retained.EmailVerifiedAt);
         Assert.All(retained.Accounts, account => Assert.Equal("ACTIVE", account.Status));
-        Assert.Equal("operator", AccessTokenService.CurrentRole(retained));
+        Assert.Equal("operator", AccountRolePolicy.CurrentRole(retained));
 
         var pending = users[unverified.Id!.Value];
         Assert.Equal(UserStatus.PendingVerification, pending.Status);
         Assert.Null(pending.EmailVerifiedAt);
         Assert.Null(pending.PhoneVerifiedAt);
         Assert.All(pending.Accounts, account => Assert.Equal("PENDING_VERIFICATION", account.Status));
-        Assert.Null(AccessTokenService.CurrentRole(pending));
+        Assert.Null(AccountRolePolicy.CurrentRole(pending));
     }
 
     private static User Operator(string email, string phone, DateTimeOffset? phoneVerifiedAt)

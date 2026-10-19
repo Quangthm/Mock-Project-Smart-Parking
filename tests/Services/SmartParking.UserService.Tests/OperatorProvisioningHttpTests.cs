@@ -1,3 +1,6 @@
+using UserService.API;
+using Microsoft.Extensions.Configuration;
+using UserService.Application.Services;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -50,7 +53,7 @@ public sealed class OperatorProvisioningHttpTests
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
-        builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         var repository = new OperatorRepository();
         var events = new RecordedAccessEvents();

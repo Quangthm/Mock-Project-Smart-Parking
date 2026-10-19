@@ -1,6 +1,6 @@
+using UserService.Application.Common.Interfaces.Persistence;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Models.Exceptions;
@@ -8,7 +8,7 @@ using UserService.Application.Common.Models.JwT;
 using UserService.Application.DTOs;
 using UserService.Application.Services;
 
-namespace UserService.Persistence.Repositories;
+namespace UserService.Application.Services;
 
 // MFA shares the account workflow's DbContext and transaction. Lock the user first,
 // then the credential, so login and security changes serialize across API instances.
@@ -17,10 +17,10 @@ public sealed partial class AccountWorkflowService
     private const int RecoveryCodeCount = 8;
 
     public Task<bool> MfaEnabledAsync(Guid id, CancellationToken ct) =>
-        db.MfaCredentials.AnyAsync(credential => credential.UserId == id && credential.Enabled, ct);
+        db.IsMfaEnabledAsync(id, ct);
 
     private Task<int> RemainingRecoveryCodesAsync(Guid id, CancellationToken ct) =>
-        db.MfaRecoveryCodes.CountAsync(code => code.UserId == id && code.UsedAt == null, ct);
+        db.CountUnusedRecoveryCodesAsync(id, ct);
 
     public async Task<MfaStatusDto> MfaStatusAsync(Guid id, CancellationToken ct)
     {
@@ -41,7 +41,7 @@ public sealed partial class AccountWorkflowService
             ExpiresAt = clock.GetUtcNow().AddMinutes(5),
             ResendAt = clock.GetUtcNow()
         };
-        db.AuthChallenges.Add(challenge);
+        db.Stage(challenge);
         await db.SaveChangesAsync(ct);
         return new(challenge.Id, token, challenge.ExpiresAt);
     }
@@ -50,7 +50,7 @@ public sealed partial class AccountWorkflowService
         CompleteMfaLoginDto body, AuthSessionService sessions, CancellationToken ct)
     {
         Validate(body);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.BeginTransactionAsync(ct);
         var challenge = await LoadAsync(body.ChallengeId, "PASSWORD_MFA", ct);
         var suppliedHash = AuthSessionService.HashRefreshToken(body.ChallengeToken);
         if (challenge.ExpiresAt <= clock.GetUtcNow() || !CryptographicOperations.FixedTimeEquals(
@@ -76,7 +76,7 @@ public sealed partial class AccountWorkflowService
     public async Task<MfaSetupDto> SetupMfaAsync(Guid id, MfaVerificationDto body, CancellationToken ct)
     {
         Validate(body);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.BeginTransactionAsync(ct);
         var user = await LoadActiveMfaUserAsync(id, ct);
         var credential = await LoadMfaCredentialAsync(id, ct) ?? new MfaCredential { UserId = id };
         await VerifySecurityChangeAsync(user, credential, body, ct);
@@ -84,8 +84,8 @@ public sealed partial class AccountWorkflowService
         var secret = Base32(RandomNumberGenerator.GetBytes(20));
         credential.PendingProtectedSecret = protector.Protect(secret);
         credential.PendingExpiresAt = clock.GetUtcNow().AddMinutes(10);
-        if (db.Entry(credential).State == EntityState.Detached)
-            db.MfaCredentials.Add(credential);
+        if (db.IsNewCredential(credential))
+            db.Stage(credential);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         var label = Uri.EscapeDataString(user.Email ?? user.Phone!);
@@ -95,7 +95,7 @@ public sealed partial class AccountWorkflowService
 
     public async Task<MfaRecoveryCodesDto> EnableMfaAsync(Guid id, string code, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.BeginTransactionAsync(ct);
         var user = await LoadActiveMfaUserAsync(id, ct);
         var credential = await LoadMfaCredentialAsync(id, ct);
         if (credential?.PendingProtectedSecret is null || credential.PendingExpiresAt <= clock.GetUtcNow())
@@ -127,12 +127,12 @@ public sealed partial class AccountWorkflowService
     public async Task DisableMfaAsync(Guid id, MfaVerificationDto body, CancellationToken ct)
     {
         Validate(body);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.BeginTransactionAsync(ct);
         var user = await LoadActiveMfaUserAsync(id, ct);
         var credential = await RequireEnabledMfaAsync(id, ct);
         await VerifySecurityChangeAsync(user, credential, body, ct);
-        db.MfaCredentials.Remove(credential);
-        await db.MfaRecoveryCodes.Where(code => code.UserId == id).ExecuteDeleteAsync(ct);
+        db.RemoveCredential(credential);
+        await db.DeleteRecoveryCodesAsync(id, ct);
         DetachRecoveryCodes();
         await CloseLoginChallengesAsync(id, ct);
         await RevokeMfaSessionsAsync(id, ct);
@@ -145,7 +145,7 @@ public sealed partial class AccountWorkflowService
         Guid id, MfaVerificationDto body, CancellationToken ct)
     {
         Validate(body);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.BeginTransactionAsync(ct);
         var user = await LoadActiveMfaUserAsync(id, ct);
         var credential = await RequireEnabledMfaAsync(id, ct);
         await VerifySecurityChangeAsync(user, credential, body, ct);
@@ -159,16 +159,14 @@ public sealed partial class AccountWorkflowService
 
     private async Task<User> LoadActiveMfaUserAsync(Guid id, CancellationToken ct)
     {
-        var user = await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR UPDATE")
-            .Include(user => user.Accounts).ThenInclude(account => account.AccountRoles).SingleAsync(ct);
-        if (user.DeletedOn is not null || user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
+        var user = await db.LockUserWithRolesAsync(id, ct);
+        if (user.DeletedOn is not null || user.Status != UserStatus.Active || AccountRolePolicy.CurrentRole(user) is null)
             throw Error("AUTH_FAILED", "Account access is blocked.", 401);
         return user;
     }
 
     private Task<MfaCredential?> LoadMfaCredentialAsync(Guid id, CancellationToken ct) =>
-        db.MfaCredentials.FromSqlInterpolated($"SELECT * FROM mfa_credentials WHERE user_id={id} FOR UPDATE")
-            .SingleOrDefaultAsync(ct);
+        db.LockMfaCredentialAsync(id, ct);
 
     private async Task<MfaCredential> RequireEnabledMfaAsync(Guid id, CancellationToken ct)
     {
@@ -220,8 +218,7 @@ public sealed partial class AccountWorkflowService
         if (!string.IsNullOrWhiteSpace(recoveryCode))
         {
             var hash = AuthSessionService.HashRefreshToken(NormalizeRecoveryCode(recoveryCode));
-            var stored = await db.MfaRecoveryCodes.SingleOrDefaultAsync(
-                code => code.UserId == credential.UserId && code.CodeHash == hash && code.UsedAt == null, ct);
+            var stored = await db.FindUnusedRecoveryCodeAsync(credential.UserId, hash, ct);
             if (stored is not null)
             {
                 stored.UsedAt = clock.GetUtcNow();
@@ -253,7 +250,7 @@ public sealed partial class AccountWorkflowService
     private async Task CommitMfaFailureAsync(CancellationToken ct)
     {
         await db.SaveChangesAsync(ct);
-        await db.Database.CurrentTransaction!.CommitAsync(ct);
+        await db.CommitCurrentTransactionAsync(ct);
     }
 
     private bool CheckTotp(MfaCredential credential, string? code)
@@ -279,7 +276,7 @@ public sealed partial class AccountWorkflowService
 
     private async Task<string[]> ReplaceRecoveryCodesAsync(Guid id, CancellationToken ct)
     {
-        await db.MfaRecoveryCodes.Where(code => code.UserId == id).ExecuteDeleteAsync(ct);
+        await db.DeleteRecoveryCodesAsync(id, ct);
         // A recovery code may have been consumed earlier in this same transaction.
         DetachRecoveryCodes();
         var codes = new string[RecoveryCodeCount];
@@ -287,7 +284,7 @@ public sealed partial class AccountWorkflowService
         {
             var raw = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
             codes[index] = string.Join("-", Enumerable.Range(0, 4).Select(group => raw.Substring(group * 8, 8)));
-            db.MfaRecoveryCodes.Add(new MfaRecoveryCode
+            db.Stage(new MfaRecoveryCode
             {
                 Id = Guid.NewGuid(), UserId = id,
                 CodeHash = AuthSessionService.HashRefreshToken(raw)
@@ -298,19 +295,14 @@ public sealed partial class AccountWorkflowService
 
     private void DetachRecoveryCodes()
     {
-        foreach (var entry in db.ChangeTracker.Entries<MfaRecoveryCode>().ToArray())
-            entry.State = EntityState.Detached;
+        db.ForgetRecoveryCodes();
     }
 
     private Task<int> CloseLoginChallengesAsync(Guid id, CancellationToken ct) =>
-        db.AuthChallenges.Where(challenge => challenge.UserId == id && challenge.ConsumedAt == null &&
-                (challenge.Purpose == "PASSWORD_MFA" || challenge.Purpose == "LOGIN"))
-            .ExecuteUpdateAsync(update => update.SetProperty(challenge => challenge.ConsumedAt, clock.GetUtcNow())
-                .SetProperty(challenge => challenge.CodeHash, ""), ct);
+        db.CloseLoginChallengesAsync(id, clock.GetUtcNow(), ct);
 
     private Task<int> RevokeMfaSessionsAsync(Guid id, CancellationToken ct) =>
-        db.AuthSessions.Where(session => session.UserId == id)
-            .ExecuteUpdateAsync(update => update.SetProperty(session => session.IsRevoked, true), ct);
+        db.RevokeMfaSessionsAsync(id, ct);
 
     private async Task NotifyMfaChangeAsync(User user, string action, CancellationToken ct)
     {

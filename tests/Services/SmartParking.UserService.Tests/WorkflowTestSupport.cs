@@ -1,3 +1,4 @@
+using UserService.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
@@ -54,7 +55,7 @@ internal static class ServiceSchema
     public static async Task ApplyFeaturesAsync(AppDbContext db)
     {
         await db.Database.OpenConnectionAsync();
-        foreach (var file in new[] { "05.8-Account-Workflow-Vehicles.sql", "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql" })
+        foreach (var file in new[] { "05.8-Account-Workflow-Vehicles.sql", "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
         {
             var sql = await File.ReadAllTextAsync(FeaturePath(file));
             await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
@@ -66,10 +67,19 @@ internal static class ServiceSchema
 internal sealed class TestParkingDirectory : IParkingDirectory
 {
     public bool Unavailable { get; set; }
+    public bool LoseProvisionResponse { get; set; }
     public Dictionary<Guid,Guid> Sites { get; } = [];
     public HashSet<Guid> InactiveSites { get; } = [];
     public HashSet<Guid> InactiveTenants { get; } = [];
     public HashSet<Guid> Provisioned { get; } = [];
+    public Task ProvisionOwnerSiteAsync(Guid applicationId, Guid tenantId, string name, string email, string phone,
+        global::UserService.Application.DTOs.OwnerLotSetupDto lot, CancellationToken ct)
+    {
+        if (Unavailable) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE", "Unavailable", 503);
+        lock (Provisioned) { Provisioned.Add(tenantId); Sites[applicationId] = tenantId; }
+        if (LoseProvisionResponse) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE", "Lost response", 503);
+        return Task.CompletedTask;
+    }
     public Task ProvisionTenantAsync(Guid id,string name,string email,string phone,CancellationToken ct)
     {
         if(Unavailable) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE","Unavailable",503);

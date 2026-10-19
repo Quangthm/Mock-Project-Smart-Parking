@@ -28,7 +28,7 @@ public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService
             user.LockedUntil = null;
             user.FailedLoginAttempts = 0;
         }
-        if (user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
+        if (user.Status != UserStatus.Active || AccountRolePolicy.CurrentRole(user) is null)
         {
             // Only valid credentials may disclose why account access is blocked.
             if (!passwords.Verify(request.Password, user.PasswordHash)) return new(null, "AUTH_FAILED");

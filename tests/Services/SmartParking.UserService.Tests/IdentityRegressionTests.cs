@@ -1,10 +1,10 @@
+using UserService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
 using UserService.Application.Usecase.Login;
-using UserService.Infrastructure.Services;
 using UserService.Persistence.Repositories;
 
 namespace SmartParking.UserService.Tests;
@@ -65,7 +65,7 @@ public sealed class IdentityRegressionTests
             await new UserManagementService(db,clock).SetStatusAsync(admin.Id!.Value,blocked.Id!.Value,new(){Status="active"},default);
             var user=await db.Users.Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleAsync(u=>u.Id==blocked.Id);
             Assert.Equal(UserStatus.PendingVerification,user.Status);
-            Assert.Null(AccessTokenService.CurrentRole(user));
+            Assert.Null(AccountRolePolicy.CurrentRole(user));
             Assert.All(user.Accounts,a=>Assert.Equal("PENDING_VERIFICATION",a.Status));
         }
     }

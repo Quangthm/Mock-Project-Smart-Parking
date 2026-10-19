@@ -3,7 +3,7 @@ using SmartParking.UserService.Domain.Entities;
 
 namespace UserService.Persistence
 {
-    public class AppDbContext : DbContext
+    public partial class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
@@ -88,6 +88,10 @@ namespace UserService.Persistence
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.LotSetupJson).HasColumnName("lot_setup").HasColumnType("jsonb");
+                entity.Property(e => e.SetupTokenHash).HasColumnName("setup_token_hash");
+                entity.Property(e => e.SetupTokenExpiresAt).HasColumnName("setup_token_expires_at");
+                entity.Property(e => e.ApprovalRequestedBy).HasColumnName("approval_requested_by");
                 entity.Property(e => e.BusinessName).HasColumnName("business_name").HasMaxLength(255);
                 entity.Property(e => e.LotType).HasColumnName("lot_type").HasMaxLength(30);
                 entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20);
@@ -128,6 +132,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.FullName).HasColumnName("full_name");
                 entity.Property(e => e.AccessVersion).HasColumnName("access_version");
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
+                entity.Property(e=>e.OnboardingComplete).HasColumnName("onboarding_complete");
                 entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
                 entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(

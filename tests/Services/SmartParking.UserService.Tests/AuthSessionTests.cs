@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.UserService.Domain.Enum;
 using System.IdentityModel.Tokens.Jwt;
@@ -6,12 +7,26 @@ using System.Text;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.Services;
 using UserService.Application.Usecase.Session;
-using UserService.Infrastructure.Services;
 
 namespace SmartParking.UserService.Tests;
 
 public sealed class AuthSessionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OwnerSessionsAndMeUsePersistedOnboardingState(bool complete)
+    {
+        var fixture = new AuthTestFixture();
+        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "BUSINESS_OWNER";
+        fixture.User.OnboardingComplete = complete;
+        var result = await fixture.SignIn();
+        Assert.True(result.IsSuccess);
+        Assert.Equal(complete, result.Session!.User!.OnboardingComplete);
+        var current = await new GetCurrentUserQueryHandler(fixture).Handle(new(fixture.User.Id!.Value), default);
+        Assert.Equal(complete, current!.OnboardingComplete);
+    }
+
     [Fact]
     public async Task Login_IssuesRs256BearerFifteenMinutesAndRealRefreshToken()
     {
