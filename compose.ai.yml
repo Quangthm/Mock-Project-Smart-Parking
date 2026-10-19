@@ -1,0 +1,39 @@
+name: smartpark-ai
+
+x-ai-service: &ai-service
+  build: ./src/Services/IoTService/python-ai
+  image: smartpark-ai:local
+
+services:
+  ai-rest:
+    <<: *ai-service
+    command: ["python","main.py","--port","5001","--device","cpu"]
+    ports: ["127.0.0.1:5001:5001"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1',5001),3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  ai-live:
+    <<: *ai-service
+    command: ["python","main_live.py","--port","5002","--device","cpu"]
+    ports: ["127.0.0.1:5002:5002"]
+    environment:
+      IOT_DATABASE_HOST: iot-db
+      SMARTPARK_DB_IOT_PORT: "5432"
+      IOT_DATABASE_NAME: smartpark_iot
+      IOT_DATABASE_USER: smartpark_iot
+      SMARTPARK_DEV_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1',5002),3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+networks:
+  default:
+    name: smartpark-schema_default
+    external: true
