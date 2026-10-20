@@ -25,10 +25,15 @@ function dotnet {
     if ($args[0] -eq 'user-secrets') {
         $project = $args[[Array]::IndexOf($args, '--project') + 1]
         $service = @('User','Parking','Reservation') | Where-Object { $project -match "${_}Service.API$" }
-        $values = ($input | Out-String | ConvertFrom-Json)
         if (!$global:setupTestSecretMaps.ContainsKey($service)) { $global:setupTestSecretMaps[$service] = @{} }
-        foreach ($entry in $values.PSObject.Properties) { $global:setupTestSecretMaps[$service][$entry.Name] = $entry.Value }
-        $global:setupTestSecretWrites++
+        if ($args[1] -eq 'remove') {
+            $null = $global:setupTestSecretMaps[$service].Remove($args[2])
+            $global:setupTestSecretWrites++
+        } else {
+            $values = ($input | Out-String | ConvertFrom-Json)
+            foreach ($entry in $values.PSObject.Properties) { $global:setupTestSecretMaps[$service][$entry.Name] = $entry.Value }
+            $global:setupTestSecretWrites++
+        }
     }
     $global:LASTEXITCODE = 0
 }
@@ -50,7 +55,7 @@ function New-Fixture($name) {
     return $fixture
 }
 function Invoke-Fixture($fixture, $extra = @{}) {
-    $log = (& (Join-Path $fixture 'setup.ps1') -SkipDatabase -SkipRestore @extra | Out-String)
+    $log = (& (Join-Path $fixture 'setup.ps1') -SkipDatabase -SkipRestore -NonInteractive @extra | Out-String)
     Assert-Setup ($log -notmatch 'review-team-password|review-team-service-key|Review@123') 'Credential leaked into setup output.'
 }
 function Expect-Failure($action, $pattern) {
@@ -89,13 +94,20 @@ $before = [IO.File]::ReadAllText((Join-Path $teamB '.env'))
 Expect-Failure { Invoke-Fixture $teamB @{CredentialMode='Team'; TeamEnvPath=$teamFile} } 'Team/local conflict'
 Assert-Setup ([IO.File]::ReadAllText((Join-Path $teamB '.env')) -ceq $before) 'Conflict mutated .env.'
 $global:setupTestSecretMaps['Parking']['Services:Key'] = 'different-service-key-at-least-32-characters'
-Expect-Failure { Invoke-Fixture $teamB } 'Services:Key differs'
+Invoke-Fixture $teamB
+Assert-Setup ($global:setupTestSecretMaps['Parking']['Services:Key'] -ceq $teamKey) 'Services:Key was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true}
-$global:setupTestSecretMaps['Parking']['Services:Key'] = $teamKey
 $global:setupTestSecretMaps['User']['Services:Parking'] = 'http://old-parking.example.test/'
-Expect-Failure { Invoke-Fixture $teamB } 'Services:Parking differs'
-$global:setupTestSecretMaps['User']['Services:Parking'] = 'http://parking.example.test:5045/'
-Invoke-Fixture $teamB @{SkipUserSecrets=$true; WithSonarQube=$false}
+Invoke-Fixture $teamB
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -ceq 'http://parking.example.test:5045/') 'Services:Parking URL was not synced from .env.'
+Invoke-Fixture $teamB @{SkipUserSecrets=$true; SkipSonarQube=$true}
+$global:setupTestSecretMaps['User']['DevelopmentAdmin:Password'] = 'Different@Admin1'
+$global:setupTestSecretMaps['User']['Jwt:PrivateKeyPem'] = 'stale-jwt-key-material'
+$global:setupTestSecretMaps['User']['Otp:Smtp:Username'] = 'stale-smtp-user'
+Invoke-Fixture $teamB
+Assert-Setup ($global:setupTestSecretMaps['User']['DevelopmentAdmin:Password'] -ceq 'Review@123') 'Admin password was not synced from .env.'
+Assert-Setup (!$global:setupTestSecretMaps['User'].ContainsKey('Jwt:PrivateKeyPem')) 'Jwt:PrivateKeyPem was not removed when absent from .env.'
+Assert-Setup (!$global:setupTestSecretMaps['User'].ContainsKey('Otp:Smtp:Username')) 'Otp:Smtp:Username was not removed when absent from .env.'
 $invalidPort = New-Fixture 'invalid-port'
 $invalidTemplate = Join-Path $invalidPort '.env.example'
 [IO.File]::WriteAllText($invalidTemplate, ([IO.File]::ReadAllText($invalidTemplate).Replace('SMARTPARK_DB_IOT_PORT=5446','SMARTPARK_DB_IOT_PORT=99999')))
@@ -107,7 +119,7 @@ Assert-Setup (!(Test-Path -LiteralPath (Join-Path $fresh '.env'))) 'Invalid mode
 $global:setupTestSecretMaps = @{}
 $global:setupTestOldVolume = $true
 $freshVolume = New-Fixture 'old-volume'
-Expect-Failure { & (Join-Path $freshVolume 'setup.ps1') -SkipRestore } 'Existing database volumes found'
+Expect-Failure { & (Join-Path $freshVolume 'setup.ps1') -SkipRestore -NonInteractive } 'Existing database volumes found'
 Assert-Setup (!(Test-Path -LiteralPath (Join-Path $freshVolume '.env'))) 'Old-volume failure wrote .env.'
-Write-Output 'PASS: local reuse, idempotence, shared Team baseline, remote URL, MapTiler import, conflicts, skip-secrets and old-volume protection.'
+Write-Output 'PASS: local reuse, idempotence, shared Team baseline, remote URL, MapTiler import, secrets sync/overwrite/removal, skip-secrets and old-volume protection.'
 Write-Output "Scratch evidence retained at $testRoot"
