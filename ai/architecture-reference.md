@@ -2,11 +2,12 @@
 
 **Status:** WORKING
 **Last Updated:** 2026-10-12
-**Purpose:** Verified architecture facts for AI agents — tech stack (implemented vs planned), service boundaries, layer responsibilities, CQRS flow, function placement, and definition of done.
-**Read when:** planning or implementing any cross-cutting change, or when you need to know what actually exists in the repo.
-**Companion files:** `ai/context/architecture-guardrails.md` (rules), `ai/context/current-state.md` (state), `ai/context/project-context.md` (shared context).
+**Purpose:** Single source of truth for verified architecture facts — tech stack (implemented vs planned), service boundaries, layer responsibilities, CQRS flow, function placement, and definition of done.
+**Read when:** planning or implementing any backend, cross-service, database, architecture, or API contract change, or when you need to know what actually exists in the repo.
+**Canonical owner of:** Technology inventory, service boundaries, Clean Architecture rules, Conflict Register.
+**Companion files:** `ai/context/architecture-guardrails.md` (detailed guardrails), `ai/context/current-state.md` (current state + backlogs), `ai/context/project-context.md` (shared domain context), `ai/context/important-decisions.md` (locked/working decisions).
 
-> This file records **verified repo facts** (checked against code). Where docs and code disagree, the Conflict Register at the end is authoritative for "what actually exists".
+> This file records **verified repo facts** (checked against code). Where docs and code disagree, the Conflict Register (§8) is authoritative for "what actually exists".
 
 ---
 
@@ -51,7 +52,7 @@
 | ReservationService | Reservations, allocation/conflict logic | API, Persistence |
 
 - Each service owns its persistence boundary. No cross-service database access.
-- `payment-db`, `notification-db`, `iot-db` schemas exist in the database but have **no service project** yet.
+- `payment-db`, `notification-db`, `iot-db` schemas exist in the database design documentation but have **no service project** yet. Do not assume these databases are operationally available.
 
 ---
 
@@ -68,7 +69,7 @@ Service/
 └── Persistence
 ```
 
-Dependency direction:
+Dependency direction (MUST be followed):
 
 ```text
 Application → Domain
@@ -79,13 +80,13 @@ API → Application + implementations (composition/wiring only)
 
 Layer responsibilities:
 
-| Layer | Responsibility | Must not |
+| Layer | Responsibility | MUST NOT |
 |---|---|---|
-| API | HTTP endpoints, request/response mapping, DI composition | contain business logic; depend on DbContext/repositories directly |
-| Application | Commands/queries, handlers, validation, DTOs, interfaces | depend on infrastructure implementations |
-| Domain | Entities, value objects, business rules, domain events | depend on any other layer |
-| Infrastructure | External integrations (email, OTP transport, etc.) | own persistence |
-| Persistence | EF Core DbContext / raw Npgsql, repositories, migrations | contain business logic |
+| API | HTTP endpoints, request/response mapping, DI composition | Contain business logic; depend on DbContext/repositories directly |
+| Application | Commands/queries, handlers, validation, DTOs, interfaces | Depend on infrastructure implementations |
+| Domain | Entities, value objects, business rules, domain events | Depend on any other layer |
+| Infrastructure | External integrations (email, OTP transport, etc.) | Own persistence |
+| Persistence | EF Core DbContext / raw Npgsql, repositories, migrations | Contain business logic |
 
 ---
 
@@ -109,8 +110,8 @@ Application interface
 Persistence / Infrastructure implementation
 ```
 
-- Controllers talk to the Application layer via MediatR/`ISender`.
-- Controllers must not depend on `DbContext`, repository implementations, PostgreSQL, or other infrastructure implementations.
+- Controllers MUST talk to the Application layer via MediatR/`ISender`.
+- Controllers MUST NOT depend on `DbContext`, repository implementations, PostgreSQL, or other infrastructure implementations.
 
 ---
 
@@ -157,26 +158,33 @@ Before reporting a change complete:
 
 ## 8. Conflict Register (docs vs code)
 
-| # | Topic | Docs say | Repo reality | Handling |
-|---|---|---|---|---|
-| 1 | Messaging | Kafka | RabbitMQ is the current direction; no Kafka/MassTransit code (only a stub) | Follow RabbitMQ; flag Kafka references as stale |
-| 2 | `ai/context/current-state.md` | CQRS/EF/Postgres deferred | Implemented in UserService/ParkingService | Verify against code |
-| 3 | UI library | Material UI | Not present (Tailwind only) | Do not add MUI |
-| 4 | Gateway / SignalR / MQTT / Redis / payment / LPR / AI | Present | Not implemented (UI mockups / scaffold only) | Do not assume they exist |
-| 5 | CI | — | `.gitlab-ci.yml` uses `dotnet/sdk:7.0`; project targets `net10.0` | Flag mismatch; do not "fix" without approval |
-| 6 | ReservationService | 5 layers | Only API + Persistence | Do not assume missing layers exist |
-| 7 | UserService namespaces | — | Mixed `UserService.*` vs `SmartParking.UserService.*` | Match the surrounding file |
+> **This is the canonical location** for the Conflict Register. Other files may point here but MUST NOT reproduce this table.
+
+| # | Topic | Docs say | Repo reality | Business/technical risk | Required agent behavior | Resolution status |
+|---|---|---|---|---|---|---|
+| 1 | Messaging | Kafka (Solution Architecture doc) | RabbitMQ is the current direction; no Kafka/MassTransit code exists (only a stub constant) | Using Kafka APIs/contracts when only RabbitMQ is planned would create dead code and wrong dependencies | Follow RabbitMQ direction; flag any Kafka references as stale | Unresolved — Kafka references remain in architecture docs |
+| 2 | `ai/context/current-state.md` | CQRS/EF/Postgres listed as deferred | Implemented in UserService and ParkingService | Treating implemented features as deferred wastes effort re-implementing them | Treat current-state deferred list as stale for these items; verify against code | Partially resolved — current-state.md updated 2026-10-12 |
+| 3 | UI library | Material UI (Solution Architecture doc) | Not present in `FE/package.json` (Tailwind CSS only) | Adding MUI would conflict with existing Tailwind setup | Do not add MUI; use Tailwind CSS | Unresolved — MUI references remain in architecture docs |
+| 4 | Gateway / SignalR / MQTT / Redis / payment / LPR / AI | Present in architecture and SRS documents | Not implemented; UI mockups and scaffold only | Assuming these exist leads to broken integrations | Do not assume they exist; verify before depending on them | Unresolved — planned components |
+| 5 | CI SDK version | Not specified | `.gitlab-ci.yml` uses `dotnet/sdk:7.0`; project targets `net10.0` | CI builds will fail on target framework mismatch | Flag mismatch; do not "fix" CI without explicit approval | Unresolved |
+| 6 | ReservationService layers | 5 layers (architecture docs) | Only API + Persistence projects exist | Assuming Application/Domain/Infrastructure layers exist leads to import errors | Do not assume missing layers exist; check project structure | Unresolved |
+| 7 | UserService namespaces | Not specified | Mixed `UserService.*` vs `SmartParking.UserService.*` namespace conventions | Inconsistent namespaces cause build errors when adding references | Match the namespace convention of the surrounding file | Unresolved |
 
 ---
 
 ## 9. Canonical sources
 
-- Requirements: `docs/01-requirements/srs/smartpark-srs-v0.9.md`
-- Use cases: `docs/01-requirements/use-cases/smartpark-use-cases-v0.9.md`
-- Business rules: `docs/01-requirements/business-rules/smartpark-business-rules-v0.8.5.md`
-- Solution architecture: `docs/02-architecture/solution-architecture/SmartPark_Solution_Architecture_v0.9.md`
-- Service boundaries: `docs/02-architecture/service-boundaries/`
-- Database: `docs/02-architecture/database/`
+| Topic | Canonical source |
+|---|---|
+| Requirements | `docs/01-requirements/srs/smartpark-srs-v0.9.md` |
+| Use cases | `docs/01-requirements/use-cases/smartpark-use-cases-v0.9.md` |
+| Business rules | `docs/01-requirements/business-rules/smartpark-business-rules-v0.8.5.md` |
+| Solution architecture | `docs/02-architecture/solution-architecture/SmartPark_Solution_Architecture_v0.9.md` |
+| Service boundaries | `docs/02-architecture/service-boundaries/` |
+| Database | `docs/02-architecture/database/` |
+| Git / commit convention | `docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md` |
+
+Precedence: The SRS is authoritative. Context, handoff, and decision records explain how to interpret it; they do not replace it. When a question is unanswered, mark it `OPEN`, `DEFERRED`, or `PROPOSED`. Do not invent values.
 
 ---
 

@@ -1,33 +1,31 @@
 # SmartPark — AI Agent Instructions
 
-> **Thin operational entry point.** This file tells AI coding agents what to read and which rules must not be broken. Deep architecture, state, and decisions live in the companion files under `ai/` and `docs/` — read them; do not duplicate them here.
+> **Thin operational router.** Routes agents to the right context for the current task. Architecture facts live in `ai/architecture-reference.md`; session protocol in `ai/rule.md`. Read them when directed — do not duplicate them here.
 
-## Project snapshot
+## Core operating principles
 
-- **Repo root:** the repository root that contains this file. All paths in this document are relative to it.
-- **Solution:** `SmartParking.slnx`
-- **Backend:** ASP.NET Core / .NET 10 microservices — Clean Architecture + CQRS/MediatR
-- **Services present:** `src/Services/UserService`, `src/Services/ParkingService`, `src/Services/ReservationService`
-- **Frontend:** `FE/` — React 19 + Vite 8 + Tailwind CSS 4 + Three.js (see `FE/AGENTS.md`)
-- **Database:** PostgreSQL, one schema per service
-- **Messaging:** RabbitMQ (current direction) — see Conflict Register
-- **Current working branch:** `docs/agents-and-digital-twin-spec` (base `develop-v2`)
+1. **Inspect before acting.** Run `git status --short --branch` at session start. Never assume the branch, state, or working directory.
+2. **Lazy-load context.** Use the routing table below. Do not preload every file.
+3. **Single source of truth.** Each fact has one canonical owner. If sources disagree, consult the Conflict Register in `ai/architecture-reference.md`.
+4. **Verify before claiming.** Mark unverified work `[UNVERIFIED]`. Classify unknowns as `OPEN`, `DEFERRED`, or `PROPOSED`.
+5. **Minimal footprint.** Do only the requested task. No unrequested packages, abstractions, or "while I'm here" refactors.
 
-## Required context workflow
+## Context routing table (lazy loading)
 
-Read these before changing anything:
+| When your task involves… | You MUST read… | Skip reading… (unless the task crosses a boundary) |
+|---|---|---|
+| **Frontend-only changes** | `FE/AGENTS.md`; relevant source files, components, tests | Backend architecture docs, SRS, database docs |
+| **Backend / cross-service / database changes** | `ai/architecture-reference.md`; `ai/context/architecture-guardrails.md`; affected source, contracts, migrations, tests | Frontend-specific docs |
+| **Session init, continuation, or closure** | `ai/rule.md`; `ai/activity-log/_CURRENT_SESSION.md` | Architecture and SRS docs unless the task requires them |
+| **Architecture or API contract changes** | `ai/architecture-reference.md`; relevant canonical source (§ Source of truth below); affected tests and decision records | Unrelated service code |
+| **Documentation-only changes** | Target document and its canonical source | Application code, unless verifying described implementation |
+| **Build / test / CI failures** | Verification commands below; failing output; affected project config | Architecture docs, unless needed to diagnose the failure |
+| **Security / auth / secrets** | `ai/context/architecture-guardrails.md` (AI authority boundary); affected implementation | Unrelated service docs |
+| **Unknown or cross-cutting tasks** | Start with smallest useful context; expand when dependencies or risks require it | Nothing is unconditionally skipped |
 
-1. `ai/context/project-context.md` — minimum shared context
-2. `ai/context/current-state.md` — current state + backlogs
-3. `ai/context/architecture-guardrails.md` — architecture rules
-4. `ai/context/important-decisions.md` — locked / working decisions
-5. `ai/architecture-reference.md` — verified architecture facts, service map, layer responsibilities, DoD
-6. `ai/rule.md` — session progress tracking rule (live log)
-7. The canonical source document(s) for your task (see Source of truth)
+> **Conditional skips are not prohibitions.** Always load additional context when evidence shows the task crosses a previously assumed boundary.
 
 ## Source of truth
-
-Use the most specific applicable source. Do not silently resolve conflicts.
 
 | Topic | Canonical source |
 |---|---|
@@ -38,77 +36,46 @@ Use the most specific applicable source. Do not silently resolve conflicts.
 | Service boundaries | `docs/02-architecture/service-boundaries/` |
 | Database | `docs/02-architecture/database/` |
 | Git / commit convention | `docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md` |
+| Verified architecture & Conflict Register | `ai/architecture-reference.md` |
+| Session lifecycle & checkpointing | `ai/rule.md` |
 
-- The SRS is authoritative. Context, handoff, and decision records explain how to interpret it; they do not replace it.
-- When a question is unanswered, mark it `OPEN`, `DEFERRED`, or `PROPOSED`. Do not invent values.
-- Do not silently resolve conflicts between docs and code — surface them (see Conflict Register).
+The SRS is authoritative. Context and decision records interpret it; they do not replace it.
 
 ## Safety rules
 
-- Do not print, commit, or copy secrets (`.env`, `*.user`, user-secrets, connection strings).
-- Do not revert user/uncommitted changes unless explicitly requested.
-- Before risky operations (delete, drop DB, force push, destructive migration) → log pre-flight and ask the user.
-- Only commit, amend, push, or create PRs when explicitly requested.
-- Do not start/stop Docker containers or the app unless asked.
+- **Secrets:** NEVER print, commit, or copy secrets (`.env`, `*.user`, user-secrets, connection strings).
+- **User work:** Do NOT revert user/uncommitted changes unless explicitly requested.
+- **Risky operations:** Before any destructive action (delete, drop DB, force push, destructive migration) → record a pre-flight checkpoint and ask the user.
+- **Git:** Only commit, amend, push, or create PRs when explicitly requested.
+- **Docker/runtime:** Do NOT start/stop Docker containers or the app unless asked.
+- **Dependencies:** Do NOT add or change packages without explicit authorization.
+- **Business logic:** Do NOT make unrequested changes to business logic, database schemas, or runtime configuration.
 
-## Architecture guardrails (summary)
+## AI authority boundary
 
-Full rules: `ai/context/architecture-guardrails.md`.
+**AI assists → backend decides → user confirms writes → backend executes → AI reports actual result.**
 
-- Microservices; each service owns its business logic and persistence boundary.
-- Clean Architecture dependency direction: `Application → Domain`; `Persistence/Infrastructure → Application + Domain`; `API → Application + implementations` (composition/wiring only).
-- Controllers talk to the Application layer via MediatR/`ISender`. Controllers must not depend on `DbContext`, repository implementations, PostgreSQL, or other infrastructure implementations.
-- No cross-service database access. Cross-service calls use synchronous APIs when an immediate response is required, and messaging only when async/loose coupling gives a real benefit.
-- AI authority boundary: **AI assists → backend decides → user confirms writes → backend executes → AI reports actual result.** AI must not access authoritative databases, invent business state, or authorize payment.
-
-## Known conflicts / do-not-trust (Conflict Register)
-
-Docs and code disagree in places. Do not act on the "Docs say" column without confirming against code.
-
-| # | Topic | Docs say | Repo reality | Handling |
-|---|---|---|---|---|
-| 1 | Messaging | Kafka | RabbitMQ is the current direction; no Kafka/MassTransit code (only a stub) | Follow RabbitMQ; flag Kafka references as stale |
-| 2 | `ai/context/current-state.md` | CQRS/EF/Postgres deferred | Implemented in UserService/ParkingService | Treat current-state as stale; verify against code |
-| 3 | UI library | Material UI | Not present (Tailwind only) | Do not add MUI |
-| 4 | Gateway / SignalR / MQTT / Redis / payment / LPR / AI | Present | Not implemented (UI mockups / scaffold only) | Do not assume they exist |
-| 5 | CI | — | `.gitlab-ci.yml` uses `dotnet/sdk:7.0`; project targets `net10.0` | Flag mismatch; do not "fix" without approval |
-| 6 | ReservationService | 5 layers | Only API + Persistence | Do not assume missing layers exist |
-| 7 | UserService namespaces | — | Mixed `UserService.*` vs `SmartParking.UserService.*` | Match the surrounding file |
+AI MUST NOT: access authoritative databases directly, invent business state, authorize payment, or execute arbitrary SQL. Full rules: `ai/context/architecture-guardrails.md`.
 
 ## Verification commands
 
-Run from repo root unless noted.
+Run from repo root:
 
 ```powershell
 git status --short --branch --untracked-files=all
-```
-
-```powershell
 dotnet build SmartParking.slnx --nologo
-```
-
-```powershell
 dotnet test SmartParking.slnx --nologo
+node --test tests/frontend/*.test.cjs          # frontend tests
 ```
 
-Frontend tests (from repo root):
-
-```powershell
-node --test tests/frontend/*.test.cjs
-```
-
-## Config wiring (OpenCode)
+## Tool configuration (OpenCode & cross-tool compatibility)
 
 - This file lives at **`ai/AGENTS.md`** (inside the AI workspace), not the repo root.
-- The OpenCode config is kept at **`ai/config/opencode.json`**, also not the repo root, because not every developer uses OpenCode.
-- It sets `"instructions": ["ai/AGENTS.md"]`.
-- To enable it: copy `ai/config/opencode.json` to the repo root as `opencode.json` (OpenCode auto-loads the root config), or point your tool at it directly.
-- Because this file is not at the repo root, tools that only auto-discover a root `AGENTS.md` (Claude Code, Cursor, etc.) will not find it automatically — point them at `ai/AGENTS.md`, or add a root stub that references it.
+- **OpenCode:** Config at `ai/config/opencode.json` sets `"instructions": ["ai/AGENTS.md"]`. Copy it to the repo root as `opencode.json` to enable auto-loading, or point OpenCode at it directly.
+- **Claude Code / Cursor / other tools:** These tools auto-discover a root `AGENTS.md`. A minimal root stub redirects to this file. If a tool does not support file includes, configure its native instruction mechanism to load `ai/AGENTS.md`.
+- **Directory-scoped instructions:** `FE/AGENTS.md` provides frontend-specific rules and applies only to `FE/` work.
 
-## Productivity guidance
+## Session state
 
-- Prefer incremental edits to focused files.
-- For broad discovery, search before reading large files.
-- For multi-step tasks, keep todos current and update the session log (`ai/rule.md`) after meaningful edits, commands, decisions, errors, or milestones.
-- Do not add packages, abstractions, or "while I'm here" refactors — do only the requested task.
-- Frontend work: read `FE/AGENTS.md` first.
+Session lifecycle, checkpointing, crash recovery, and handoff rules: → `ai/rule.md`
+Current live session snapshot: → `ai/activity-log/_CURRENT_SESSION.md`
