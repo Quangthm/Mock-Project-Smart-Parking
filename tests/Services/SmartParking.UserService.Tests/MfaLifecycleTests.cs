@@ -215,6 +215,61 @@ public sealed class MfaLifecycleTests
         Assert.Equal(6, session.RecoveryCodesRemaining);
     }
 
+    [PostgresFact]
+    public async Task TotpLoginRejectsMalformedReplayAndExpiredChallengesWithoutServerErrors()
+    {
+        await using var fixture = await CreateFixtureAsync();
+        var clock = new TestClock { Now = DateTimeOffset.UtcNow.AddHours(-1) };
+        await using var host = await fixture.StartHostAsync(clock);
+        var client = host.GetTestClient();
+        var setup = await EnableAsync(client, clock);
+        client.DefaultRequestHeaders.Authorization = null;
+        // Enabling MFA consumes its time step. Use a new step for sign-in.
+        clock.Now = clock.Now.AddSeconds(30);
+        // A six-digit code can collide with an allowed adjacent step. Exclude that
+        // case so the replay assertion tests reuse rather than a new valid step.
+        while (Code(setup.Secret, clock) == AccountWorkflowService.Totp(
+                   setup.Secret, clock.Now.ToUnixTimeSeconds() / 30 + 1) ||
+               Code(setup.Secret, clock) == AccountWorkflowService.Totp(
+                   setup.Secret, clock.Now.ToUnixTimeSeconds() / 30 - 1))
+            clock.Now = clock.Now.AddSeconds(30);
+        var challenge = await PasswordChallengeAsync(client);
+        var code = Code(setup.Secret, clock);
+
+        using var malformed = await client.PostAsJsonAsync("/api/auth/mfa/login", new
+        {
+            challenge.ChallengeId, challenge.ChallengeToken, totp = code + " "
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+
+        var session = await PostDataAsync<UserSessionDto>(client, "/api/auth/mfa/login", new
+        {
+            challenge.ChallengeId, challenge.ChallengeToken, totp = code
+        });
+        Assert.False(string.IsNullOrWhiteSpace(session.AccessToken));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
+        using var me = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var replayChallenge = await PasswordChallengeAsync(client);
+        using var replay = await client.PostAsJsonAsync("/api/auth/mfa/login", new
+        {
+            replayChallenge.ChallengeId, replayChallenge.ChallengeToken, totp = code
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+        clock.Now = replayChallenge.ExpiresAt;
+        using var expired = await client.PostAsJsonAsync("/api/auth/mfa/login", new
+        {
+            replayChallenge.ChallengeId, replayChallenge.ChallengeToken, totp = Code(setup.Secret, clock)
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, expired.StatusCode);
+
+        await using var db = fixture.Open();
+        Assert.Null((await db.AuthChallenges.SingleAsync(item => item.Id == replayChallenge.ChallengeId)).ConsumedAt);
+        Assert.All(await db.MfaRecoveryCodes.ToListAsync(), item => Assert.Null(item.UsedAt));
+    }
+
     private static string Code(string secret, TestClock clock) =>
         AccountWorkflowService.Totp(secret, clock.Now.ToUnixTimeSeconds() / 30);
 
