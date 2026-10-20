@@ -48,6 +48,16 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     $env:DevelopmentAdmin__Email = $adminEmail
     $env:DevelopmentAdmin__Password = $env:SMARTPARK_ADMIN_PASSWORD
 }
+if ($Service -eq 'User') {
+    if ($env:SMARTPARK_OWNER_EMAIL -and $env:SMARTPARK_OWNER_PASSWORD) {
+        $env:DevelopmentOwner__Email = $env:SMARTPARK_OWNER_EMAIL
+        $env:DevelopmentOwner__Password = $env:SMARTPARK_OWNER_PASSWORD
+    }
+    if ($env:SMARTPARK_OPERATOR_EMAIL -and $env:SMARTPARK_OPERATOR_PASSWORD) {
+        $env:DevelopmentOperator__Email = $env:SMARTPARK_OPERATOR_EMAIL
+        $env:DevelopmentOperator__Password = $env:SMARTPARK_OPERATOR_PASSWORD
+    }
+}
 
 # Optional .env settings override saved user-secrets only for this runner process.
 if ($Service -eq 'User') {

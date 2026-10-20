@@ -1,6 +1,6 @@
 # Database alignment — implementation pending
 
-Historical findings are evidence at pinned revisions, not a current database execution result. No SQL migration is executed by this deliverable. Reconcile against actual branch before changing schema.
+Historical findings are evidence at pinned revisions, not a current database execution result. No SQL migration is executed by this deliverable. Reconcile against actual branch before changing schema. Paths/claims below use pre-D1 names (e.g. `03-reservation-session-service-db.sql`); see `database-architecture.md` and report 10 for the deployed 6-DB profile.
 
 ## 5. Schema and documentation conflicts
 

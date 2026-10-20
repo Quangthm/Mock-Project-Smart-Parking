@@ -1,122 +1,112 @@
-# Tích hợp các task hiện có với database của nhóm
+# Tích hợp database với code ứng dụng
 
-Baseline: sáu SQL trong `scripts/database/microservices/` giữ nguyên nội dung trên `arch/database-schema` tại `69d4da2` (schema commit `d0bbca6`). Code ứng dụng và các overlay tích hợp dùng baseline này, đối chiếu nghiệp vụ với `docs/01-requirements/srs/smartpark-srs-v0.9.md`, solution architecture và database architecture trong cùng thư mục.
+Tài liệu này mô tả **profile đang triển khai** trên branch `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` hiện tại `58df087`). Nguồn runtime là 7 base DDL + 8 overlay + `compose.schema-integration.yml` + `scripts/apply-workflow-migrations.ps1` + `setup.ps1`, không phải checkout arch.
 
-## Hai nhánh phối hợp
+## 1. Baseline và quan hệ với nhánh arch
 
-`develop` giữ code ứng dụng, adapters HTTP, FE, tests và scripts chạy/khôi phục. `arch/database-schema` giữ schema chính, overlay SQL, compose database và tài liệu database. Không merge code ứng dụng vào nhánh database để triển khai bản tích hợp này. Mỗi phần có commit và push riêng; thay đổi schema phải được áp dụng trước khi chạy code cần schema đó.
+- **Runtime canonical:** branch `feature/db-hybrid-srs-v1`. SQL nằm trong `scripts/database/microservices/` (7 file) và `scripts/database/overlay/` (8 file).
+- **Design baseline:** `arch/database-schema` @ `9a13499` (SRS v1.0 RC3, commit `6165024`). Arch vẫn là nguồn đối chiếu thiết kế, nhưng **không dựng trực tiếp** để chạy BE (xem §2).
+- **SRS:** `docs/01-requirements/srs/smartpark-srs-v1.0.md`.
+- Các quyết định D1–D7/Q1–Q6 đã được phê tại cổng T4; bằng chứng nằm trong `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md`.
 
-Dùng `compose.schema-integration.yml` trong checkout `arch/database-schema` để dựng các database riêng. API trên `develop` kết nối PostgreSQL qua ConnectionStrings, không kết nối trực tiếp một nhánh Git. Biến `SMARTPARK_SCHEMA_ROOT` chỉ giúp tests và công cụ recovery tìm đúng checkout chứa SQL/compose. `scripts/database/docker-compose-smartpark.yml` là sandbox PostgreSQL cũ, không tự dựng topology ba database của bản tích hợp.
+## 2. Vì sao không chạy trực tiếp arch
 
-## Phạm vi và ownership
+Arch chỉ có 6 file base, không có `03a`/`03b`, không có overlay, và compose arch dùng một DB `smartpark_db`. Nếu chạy arch trực tiếp:
 
-| Phần đã nối | Database/API chịu trách nhiệm | Hành vi |
-|---|---|---|
-| Login/logout, Driver đăng ký OTP | User | Users, accounts, roles, sessions, OTP và trạng thái hiện tại; access token 24 giờ, refresh 7 ngày |
-| Owner đăng ký và Admin duyệt | User → Parking API | Pending approval không được login; approve tạo tenant với ID cố định bằng application ID, rồi kích hoạt Owner account; retry không tạo tenant trùng |
-| Admin quản lý users | User | Tìm kiếm, khóa/mở khóa; session đã revoke không hồi sinh khi mở khóa |
-| Owner quản lý bãi/cấu trúc | Parking → User API + Reservation API | Xác thực Owner hiện tại, tenant và resource scope; CRUD layout, enum và trạng thái theo schema |
-| Owner tạo Operator | User → Parking API | Mỗi site có account SITE_OPERATOR và grant riêng; chỉ site active thuộc tenant được cấp; permission check đọc grant hiện tại |
-| Operator đăng nhập | User | `/api/operators/me` trả từng site và permissions còn hiệu lực; FE hiển thị assignment thật |
+1. `setup.ps1`/`apply-workflow-migrations.ps1` fail vì thiếu `03a`/`03b` và overlay.
+2. Overlay `parking-slot-constraints.sql` fail `42703` vì arch `parking_slots` không có `reservation_state`.
+3. BE fail khi đọc/ghi `parking_slots.supported_vehicle_type`, `reservation_state`, `structure_backup_policies.unit_id/count`, và role `BUSINESS_OWNER`/`SITE_OPERATOR`/`PLATFORM_ADMIN`.
+4. `tenants`, `structure_synchronizations`, `site_capacity_pools`, `structure_edit_holds`… không tồn tại ở DB đích.
 
-Production service không tham chiếu persistence/domain của service khác, không join DB khác. Các project references xuyên service trong integration tests chỉ phục vụ chạy các host thật cùng test process.
+Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base + overlay đã được điều chỉnh (D1–D7).
 
-Không áp dụng SQL monolith `05.*` hoặc seed cũ lên các DB này. Seed trong nhánh database có password placeholder, thiếu role mapping và capacity insert thiếu vehicle type, nên không dùng làm nguồn kiểm chứng login. Admin phát triển được tạo bằng BCrypt qua opt-in configuration, rồi đăng ký/duyệt Owner và tạo site qua API thật.
+## 3. Topology 6 DB
 
-## Schema bổ sung
+| DB vật lý | Port | Base DDL | Overlay | Service dùng |
+|---|---|---|---|---|
+| `smartpark_user` | 5441 | `01-user-access-service-db.sql` | — | UserService |
+| `smartpark_parking` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | ParkingService |
+| `smartpark_reservation` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | ReservationService |
+| `smartpark_payment` | 5444 | `04-payment-pricing-service-db.sql` | — | PaymentService |
+| `smartpark_notification` | 5445 | `05-notification-audit-service-db.sql` | — | NotificationService |
+| `smartpark_iot` | 5446 | `06-iot-recognition-service-db.sql` | — | IoTService |
 
-Chạy baseline một lần trên DB mới, rồi overlay đúng service:
+`03` là **một logical Operations service** nhưng tách 03a/03b theo DB đích (D1). Không có FK vật lý xuyên database; các tham chiếu là Logical ID.
 
-- User: `integration/01-user-service-alignment.sql` thêm `PENDING_VERIFICATION`, `REJECTED` cho users và bảo đảm role dictionary. Accounts dùng status có sẵn; rejection account là INACTIVE. Account context được xác định bằng account_roles, không có account_type/membership_tier/loyalty_points.
-- Parking: `integration/02-parking-service-alignment.sql` thêm tọa độ layout JSON, bảo vệ slot đã xóa và uniqueness code theo site. `physical_state` và `reservation_state` tách biệt; occupied/unknown/reserved/protected/backup không được xóa hay chuyển tùy ý.
-- Reservation: `integration/03-reservation-structure-safety.sql` tạo durable fence và projection trạng thái site/resource đã xóa. Trigger chỉ tác động DB Reservation. Booking/allocation/session/pool writers phải đi qua fence này; không disable trigger trong các service tương lai.
+## 4. Thứ tự áp dụng schema
 
-Overlay chạy lặp lại được. Baseline SQL của thành viên nhóm là CREATE TABLE, không phải migration cho database đã có dữ liệu. Không chạy baseline lên volume/DB cũ và không dùng EF EnsureCreated để thay thế baseline. Nếu đã có dữ liệu production, cần migration/backfill riêng sau khi kiểm kê dữ liệu; hướng dẫn dưới đây tạo môi trường phát triển độc lập.
+`compose.schema-integration.yml` mount theo thứ tự số trong `docker-entrypoint-initdb.d`:
 
-## Chạy local trên Windows PowerShell
+**Parking DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`.
 
-Yêu cầu Docker Desktop đang chạy, .NET 10 SDK và dependency FE đã cài. Compose này có project/volumes/ports riêng, không sửa container `smartparking_db` cũ.
+**Reservation DB:** `01-base` (03b) → `02-overlay-capacity-pools` → `03-overlay-structure-safety` → `04-overlay-receipts` → `05-overlay-confirmation`.
 
-Giữ hai checkout riêng để không phải đổi branch khi đang chạy. Trong terminal tại checkout code `develop`, tạo worktree database và đặt cấu hình local (không commit giá trị thật):
+`reservation-site-capacity-pools.sql` phải chạy trước `reservation-structure-safety.sql` vì guard trigger tham chiếu `site_capacity_pools`.
 
-```powershell
-$codeRoot = (Get-Location).Path
-$schemaRoot = Join-Path (Split-Path $codeRoot -Parent) 'SmartParking-Database'
-git worktree add $schemaRoot arch/database-schema
-$env:SMARTPARK_SCHEMA_ROOT = $schemaRoot
-$env:SMARTPARK_DEV_PASSWORD = 'local-db-password'
-$env:SMARTPARK_SERVICE_KEY = 'local-internal-service-key-at-least-32-characters'
-$env:SMARTPARK_ADMIN_PASSWORD = 'Password@123'
-docker compose -f "$schemaRoot/compose.schema-integration.yml" up -d --wait
-dotnet restore SmartParking.slnx
-```
+Overlay dùng `CREATE TABLE IF NOT EXISTS` / `IF NOT EXISTS` / `NOT VALID` để chạy lại được trên DB dev. Base DDL là `CREATE TABLE`, không phải migration cho DB đã có dữ liệu: **không chạy base lên volume cũ**, không dùng EF `EnsureCreated` thay thế.
 
-Mở ba terminal tại checkout code `develop`, đặt các biến trên (SMARTPARK_SCHEMA_ROOT là đường dẫn tuyệt đối tới checkout database) trong mỗi terminal, chạy mỗi service riêng. Scripts dưới đây nằm trên `develop`:
+## 5. Chạy local
+
+Yêu cầu: Docker Desktop, .NET 10 SDK, Node dependencies cho FE.
 
 ```powershell
-./scripts/run-schema-service.ps1 -Service Reservation
-./scripts/run-schema-service.ps1 -Service Parking
-./scripts/run-schema-service.ps1 -Service User
+# Lần đầu hoặc khi đổi schema layout: xoá volume và tạo lại 6 DB (destructive)
+.\setup.ps1 -RecreateDb
+
+# Các lần sau
+.\setup.ps1
 ```
 
-Ports: User 5035 → DB 5441; Parking 5045 → DB 5442; Reservation 5055 → DB 5443. `ConnectionStrings:User/Parking/Reservation` chỉ cấp cho host tương ứng. User vẫn đọc `DefaultConnection` để tương thích cấu hình cũ, nhưng phải trỏ vào User DB riêng. Services:Key giống nhau ở ba host; internal endpoints không nhận bearer người dùng để thay thế service credential.
+Các flag hữu ích: `-SkipDatabase` (không đụng Docker), `-SkipRestore`, `-SkipUserSecrets`, `-SkipSonarQube` (SonarQube mặc định chạy), `-WithAiCamera`, `-NonInteractive`, `-CredentialMode Team`.
 
-Nếu FE đã có server đang chạy thì dùng server đó. Nếu chưa có, terminal FE dùng `npm run dev`. `FE/.env.schema.example` cho biết hai API URL; sao chép thành `.env.local` khi cần, không ghi đè cấu hình local hiện có. Nếu dùng port khác 5173 cần bổ sung CORS origin trong host tương ứng.
+`setup.ps1` thực hiện: validate `.env`/port → (tuỳ chọn) recreate volume → `docker compose -f compose.schema-integration.yml up -d` → chạy `scripts/apply-workflow-migrations.ps1` cho 6 service → probe bảng bắt buộc → tạo user-secrets `ConnectionStrings:User/Parking/Reservation` → build/restore → (tuỳ chọn) SonarQube/AI.
 
-Admin local: `admin@smartpark.local`, password lấy từ SMARTPARK_ADMIN_PASSWORD. Bootstrap chỉ hoạt động trong Development; không thay password của Admin đã tồn tại và không nâng quyền user thường trùng email. Driver đăng ký bằng OTP: Development bật log code; không dùng chế độ này ngoài local. RSA Development tự sinh key khi restart nên session cũ phải đăng nhập lại. Production cần Jwt:PrivateKeyPem và cấu hình OTP delivery thật.
-
-## Luồng xác nhận
-
-1. Đăng ký Owner, xác nhận chưa thể login; Admin duyệt đơn.
-2. Owner login, tạo bãi, floor/zone/block, slot CAR/MOTORCYCLE/OVERSIZED, sửa profile và refresh để kiểm tra persisted state.
-3. Tạo Operator với site và permissions; đăng nhập tài khoản mới, kiểm tra assignment theo từng site. Site/tenant khác bị từ chối.
-4. Khóa user từ Admin; token đã cấp bị từ chối ở User và Parking. Mở khóa cần login lại.
-5. Booking/session/allocation live, physical OCCUPIED/UNKNOWN hoặc reservation_state ngăn mutation ảnh hưởng quyền đã nhận. Không tự đẩy xe ra khỏi bãi.
-
-Owner FE hiện nối list/create/update profile, activate/deactivate, create/remove units/slots và create/list Operators. Rename/capacity/move/configure slot/access paths có API backend nhưng chưa có editor FE hoàn chỉnh. Legacy dashboard Driver và các nghiệp vụ gate/payment/device chưa nằm trong tích hợp này.
-
-Public Parking API: GET/POST `/api/parking-lots`; GET `/{id}/structure`; POST `/{id}/units`, `/{id}/slots`, `/{id}/paths`; PATCH `/{id}/structure`. PATCH action: profile, active, renameUnit, capacity, removeUnit, removeSlot, moveSlot, configureSlot, removePath. DTO và validation là nguồn chi tiết tại Parking API Program và ParkingStructure domain. Scope Owner lấy từ bearer hiện tại qua User, không nhận ownerId tùy ý từ FE.
-
-## Fence và phục hồi lỗi
-
-Parking mutation lấy hold tại Reservation, commit transaction Parking, rồi publish site state, tombstones và capacity snapshot trước khi release. Capacity pools có counter bằng 0 không được coi là accepted commitment chỉ vì total_capacity dương. Các pool đã tồn tại được cập nhật theo số slot vật lý CAR/MOTORCYCLE của site/unit subtree; giảm quota bằng min(quota cũ, capacity mới), không tự tăng quota. Site inactive bị chặn nhận commitment mới bằng projection active=false; configured capacity/quota được giữ để mở lại không mất quota. Không tự tạo pool/quota thương mại mới. Reservation baseline chưa hỗ trợ OVERSIZED bookings; Parking vẫn hỗ trợ layout OVERSIZED đúng baseline.
-
-Nếu timeout/restart xảy ra sau acquire hoặc trong commit/release, hold được giữ nguyên. Các request mới có thể nhận 409/503 và Reservation write nhận 55P03. Không tự hết hạn hoặc xóa hold vì transaction Parking có thể đã commit. Phục hồi local bằng script có đối chiếu authoritative Parking:
-
-1. Dừng **tất cả** Parking API instances; giữ Reservation API và các DB chạy. Không cho writer khác sửa Parking DB trong suốt recovery.
-2. Inspect: `./scripts/recover-structure-hold.ps1 -SiteId '<uuid>' -ParkingStopped`. Script từ chối nếu DB Parking còn connection khác; đọc token của hold, tenant và trạng thái/soft-deleted resources/capacity trực tiếp từ Parking.
-3. Đối chiếu snapshot được in ra. Nếu tenant đúng và state phản ánh kết quả đã commit, chạy lại thêm `-Apply`. Script publish outcome đầy đủ qua Reservation API cùng token; capacity/projections/release commit atomically trong Reservation DB.
-4. Chỉ restart Parking sau khi script báo đã release. Nếu SQL/projection lỗi hoặc tenant sai, giữ hold và điều tra; không gọi release outcome=null hay DELETE thủ công. Release không outcome chỉ dành cho request chưa bắt đầu commit.
-
-Script recovery nằm trên `develop`, mặc định inspect-only và tìm compose qua SMARTPARK_SCHEMA_ROOT hoặc tham số -SchemaRoot. Deployment khác cần công cụ vận hành tương đương: quiesce mọi Parking writer, kiểm tra hết transaction, snapshot authoritative rồi publish cùng hold token. Đây chưa phải distributed transaction/outbox tự phục hồi. Reservation API mới chỉ là adapter đảm bảo an toàn cấu trúc, chưa triển khai toàn bộ booking/check-in/payment.
-
-## Giới hạn so với toàn bộ SRS
-
-- Password login hiện hữu chưa có OTP login và TOTP MFA của §3.1.4. OTP đăng ký Driver không thay thế OTP authentication.
-- FR-LOT-04 hiện ngăn mutation khi có cam kết đang hoạt động. Reallocation theo priority, reason/audit nghiệp vụ, unfulfillable/refund workflow vẫn cần Reservation/Payment tasks tương ứng; không mô tả chúng là đã hoàn thành.
-- Cấu hình giờ mở/đóng, pricing, bản đồ frontend và các nghiệp vụ vận hành khác cần contract/API riêng. Imported database docs là baseline thiết kế; RLS không được bật tự động chỉ vì tài liệu mô tả nó.
-
-## Kiểm tra đã thực hiện
-
-Integration tests dùng baseline SQL thật và overlay, không tự sinh schema: User/Owner/Operator/Admin regression, ba API + ba DB riêng, current-state authorization/revocation và Parking + Reservation concurrency/rollback/tombstone/capacity. Chạy DB tests với SMARTPARK_AUTH_TEST_CONNECTION trỏ server PostgreSQL test có quyền tạo/xóa **database test UUID riêng**. Không dùng production credential.
+Sau khi setup, chạy 3 service tích hợp:
 
 ```powershell
-$env:SMARTPARK_SCHEMA_ROOT = $schemaRoot
-$env:SMARTPARK_AUTH_TEST_CONNECTION = 'Host=127.0.0.1;Port=65433;Database=postgres;Username=auth_test;Password=auth_test'
-dotnet test SmartParking.slnx --no-restore
-# terminal FE
-npm run build
+./scripts/run-schema-service.ps1 -Service User        # API 5035 → DB 5441
+./scripts/run-schema-service.ps1 -Service Parking     # API 5045 → DB 5442
+./scripts/run-schema-service.ps1 -Service Reservation # API 5055 → DB 5443
 ```
 
-Kết quả ngày 2026-10-07:
+`run-schema-service.ps1` đọc `.env`, đặt `ConnectionStrings__<Service>` đúng DB/port và `Services__Key`. Payment/Notification/IoT chưa có runner tương ứng trong phạm vi tích hợp này.
 
-- Backend: 74/74 pass (63 User, 11 Parking), 0 skip; có PostgreSQL thật trong lần chạy cuối.
-- FE: `npm run build` pass; Vite còn cảnh báo bundle lớn. Chưa thực hiện QA giao diện trong browser.
-- Compose config + ba DB init/healthcheck pass; cả ba script service khởi động được.
-- Smoke qua HTTP localhost: Admin bootstrap/login, Owner register/approve/login, create site/unit/slot persisted.
-- Recovery từ chối khi Parking còn connection; inspect và apply thành công sau khi dừng Parking.
-- `git diff --check` pass. Môi trường DB/API test do tác vụ dựng đã dọn, database cũ không bị migration.
+## 6. Demo data và role
 
-Agent review độc lập đã đối chiếu SRS, kiến trúc và baseline SQL. Mapping Account, FE edit profile/stale parent, capacity pools, quota giữ qua đóng/mở, bootstrap validation và recovery runbook/tool được chỉnh theo review. Kết luận review cuối: không còn finding P1/P2 chưa xử lý trong phạm vi tích hợp; các giới hạn SRS phía trên vẫn còn.
+`setup.ps1` tạo Admin qua `DevelopmentAdmin` (BCrypt, chỉ Development). Các role seed trong `01` gồm 7 mã: 4 mã actor SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) + 3 mã runtime (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng. Dev có thể seed demo Owner/Operator qua `DevelopmentOwner`/`DevelopmentOperator`; production phải có seed/role migration tương ứng trước khi dùng các luồng đó.
 
-SQL baseline và các tài liệu database chính của thành viên giữ nguyên. Các kết quả kiểm tra trên áp dụng cho code tích hợp và schema phối hợp; sau khi tách hai nhánh, kiểm tra lại code trên develop đọc SQL từ checkout arch/database-schema bằng SMARTPARK_SCHEMA_ROOT. Không tạo lịch sử merge code vào nhánh database trong cặp commit bàn giao.
+## 7. Fence và phục hồi lỗi
+
+Parking mutation lấy hold tại Reservation, commit transaction Parking, rồi publish site state/tombstones/capacity snapshot trước khi release. Capacity pool có counter 0 không được coi là commitment chỉ vì `total_capacity > 0`. Site inactive chặn commitment mới; quota giữ nguyên khi đóng/mở.
+
+Nếu timeout/restart sau acquire hoặc trong commit/release: giữ hold, không tự xóa. Dừng **tất cả** Parking API, giữ Reservation API + DB chạy, dùng `scripts/recover-structure-hold.ps1` (inspect-only mặc định, `-Apply` khi snapshot khớp) rồi mới restart Parking. Đây chưa phải distributed transaction/outbox tự phục hồi.
+
+## 8. Deviations D1–D7
+
+| Mã | Nội dung |
+|---|---|
+| D1 | 6 DB BE-first; tách 03a/03b |
+| D2 | Giữ `uq_active_vehicle_plate`; BE map `23505` → 409 |
+| D3/D6 | Operator tables + BE-shape `support_tickets` trong parking overlay |
+| D4 | 7 role seeds; 2 cột `parking_slots`; rename `unit_id`/`count` |
+| D5 | `tenants` canonical ở `01`, bản copy ở parking |
+| D7 | Recreate `site_capacity_pools` ở reservation overlay |
+
+Chi tiết: report 01 và report 10 trong `docs/04-testing/reports/refactor-Docker Setup & Function Test/`.
+
+## 9. Kiểm chứng
+
+- `docker compose -f compose.schema-integration.yml config` — validate 6 service/15 mount.
+- `scripts/apply-workflow-migrations.ps1` — pre-check bảng theo DB, block-list script legacy `05.1–05.9`/`integration/01–03`.
+- `setup.ps1 -RecreateDb` + probe 6 DB — đường chạy T6; xem report 07 và checklist T6 (chưa có evidence chạy đầy đủ trong repo).
+- BE tests: `dotnet test SmartParking.slnx` (DB tests cần `SMARTPARK_AUTH_TEST_CONNECTION` trỏ PostgreSQL test có quyền tạo/xóa database test UUID riêng).
+- FE: `npm run build`.
+
+Kết quả/evidence mới nhất nằm trong report 07, 08, 09 và 10; không dùng lại con số 74/74 của baseline 2026-10-07 cho profile 6-DB hiện tại.
+
+## 10. Giới hạn
+
+- RLS chưa bật; chỉ denormalize `tenant_id` và validate ở application.
+- Payment/Notification/IoT chưa có runner local đầy đủ trong tài liệu này.
+- `support_tickets` BE-shape ở parking là technical debt có chủ đích (D6).
+- Các script legacy `05.1–05.9` và `integration/01–03` bị chặn; không mount lại.
