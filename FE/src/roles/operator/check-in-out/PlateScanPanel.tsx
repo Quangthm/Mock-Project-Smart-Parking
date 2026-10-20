@@ -276,7 +276,7 @@ export function PlateScanPanel({
     <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 max-w-3xl">
-          <h3 className="text-base font-bold text-[var(--fg)]">AI Plate Scanner</h3>
+          <h3 className="text-base font-bold text-[var(--fg)]">{mode === "check-in" ? "Camera Check-In" : "Camera Check-Out"}</h3>
           <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
             {mode === "check-in"
               ? "Open the camera to continuously detect new plates. Check-in happens automatically at 90% confidence; lower confidence needs operator review."

@@ -512,3 +512,355 @@ select:not([multiple]):not([size]) {
     color: #111827 !important;
   }
 }
+
+/* Driver parking workspace: the information rail and map controls have separate areas. */
+.find-parking { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 12px; min-width: 0; height: max(590px, calc(100dvh - 116px)); }
+.find-parking-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }
+.find-parking-search { flex: none; padding: 18px; border-bottom: 1px solid var(--border); }
+.find-parking-search-heading { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
+.find-parking-search-heading h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
+.find-parking-search-heading p { margin: 5px 0 0; color: var(--muted); font-size: .78rem; }
+.find-parking-location { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); cursor: pointer; }
+.find-parking-location:hover { border-color: var(--primary); color: var(--primary); }
+.find-parking-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.find-parking-filters button, .find-parking-filters select { min-height: 33px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--fg); font: inherit; font-size: .74rem; cursor: pointer; }
+.find-parking-filters button.is-active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--bg)); color: var(--primary); }
+.find-parking-filters select { padding-right: 26px; }
+.find-parking-results { min-height: 0; flex: 1; overflow: auto; }
+.find-parking-sheet-handle { display: none; }
+.find-parking-chevron-up { transform: rotate(180deg); }
+.find-parking-result-list { padding: 8px; }
+.find-parking-result { display: block; width: 100%; padding: 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; }
+.find-parking-result:hover, .find-parking-result:focus-visible { background: var(--card); }
+.find-parking-result-top, .find-parking-result-bottom { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.find-parking-result-top strong { font-size: .84rem; line-height: 1.4; }
+.find-parking-result-top > span { flex: none; color: var(--primary); font-size: .73rem; font-weight: 700; }
+.find-parking-address { display: block; margin: 5px 0 10px; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.find-parking-result-bottom { color: var(--muted); font-size: .72rem; }
+.find-parking-result-bottom .is-available { color: #15803d; font-weight: 600; }
+.find-parking-result-bottom .is-full { color: #dc2626; font-weight: 600; }
+.dark .find-parking-result-bottom .is-available { color: #4ade80; }
+.find-parking-empty { padding: 12px; color: var(--muted); font-size: .82rem; }
+.find-parking-detail { padding: 16px; }
+.find-parking-back { padding: 0; border: 0; background: transparent; color: var(--primary); font-size: .78rem; cursor: pointer; }
+.find-parking-detail-title { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-top: 15px; }
+.find-parking-detail-title h2 { margin: 0; font-size: 1.12rem; line-height: 1.3; }
+.find-parking-detail-title button { border: 0; background: transparent; color: var(--muted); font-size: 1.25rem; cursor: pointer; }
+.find-parking-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 8px; padding: 16px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.find-parking-detail-grid div { display: grid; gap: 3px; }
+.find-parking-detail-grid span { color: var(--muted); font-size: .72rem; }
+.find-parking-detail-grid strong { color: var(--fg); font-size: .83rem; }
+.find-parking-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.find-parking-detail-actions .btn-primary { flex: 1; justify-content: center; }
+.find-parking-detail-actions .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.find-parking-detail-actions .btn-outline { font-size: .8rem; }
+.find-parking-map { position: relative; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #dce7ef; }
+.find-parking-map-canvas { position: absolute; inset: 0; }
+.find-parking-map-style { position: absolute; z-index: 4; top: 12px; right: 12px; display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--fg); box-shadow: 0 2px 10px #0002; font-size: .73rem; font-weight: 600; }
+.find-parking-map-style select { max-width: 110px; padding: 5px 26px 5px 7px; border: 1px solid var(--border); border-radius: 5px; background-color: var(--card); color: var(--fg); font: inherit; cursor: pointer; }
+.find-parking-map .maplibregl-ctrl-top-right { top: 52px; right: 3px; }
+.find-parking-map-status { position: absolute; z-index: 3; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 22px; background: var(--card); color: var(--fg); text-align: center; }
+.find-parking-map-status strong { margin-top: 10px; }
+.find-parking-map-status p { max-width: 330px; color: var(--muted); font-size: .8rem; }
+.find-parking-distance-note { position: absolute; z-index: 3; bottom: 12px; left: 12px; padding: 6px 9px; border-radius: 6px; background: var(--bg); color: var(--fg); font-size: .7rem; }
+.find-parking-map .is-selected-parking-marker { z-index: 2; filter: drop-shadow(0 0 5px white); transform-origin: center bottom; }
+.find-parking-map .is-selected-parking-marker svg { transform: scale(1.22); }
+
+/* Keep chat below the map's top control area; mobile sheets move its launcher upward. */
+.smartparking-chat-launcher { position: fixed; z-index: 40; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom)); display: grid; width: 52px; height: 52px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 70%, white); border-radius: 50%; background: var(--primary); color: var(--primary-fg); box-shadow: 0 7px 22px #0003 !important; cursor: pointer; transition: transform 180ms ease, box-shadow 180ms ease; }
+.smartparking-chat-launcher:not(.is-open) svg { animation: smartparking-chat-breathe 4s ease-in-out infinite; }
+.smartparking-chat-launcher:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 11px 26px #0004 !important; }
+.smartparking-chat-launcher:active { transform: scale(.95); }
+.smartparking-chat-window { position: fixed; z-index: 40; right: 24px; bottom: calc(88px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; width: min(380px, calc(100vw - 32px)); height: min(480px, calc(100dvh - 430px)); min-height: 180px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--fg); box-shadow: 0 16px 42px #0003; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(9px) scale(.98); transform-origin: bottom right; transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 240ms; }
+.smartparking-chat-window.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0) scale(1); transition: opacity 240ms ease, transform 240ms ease, visibility 0s; }
+.smartparking-chat-window .smartparking-chat-message { animation: smartparking-message-in 200ms ease-out both; }
+@keyframes smartparking-chat-breathe { 50% { transform: scale(1.08); } }
+@keyframes smartparking-message-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 1100px) {
+  .find-parking { grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); }
+  .find-parking-search { padding: 13px; }
+}
+@media (max-width: 1024px) {
+  .find-parking { position: relative; display: block; height: max(540px, calc(100dvh - 110px)); }
+  .find-parking-panel { display: contents; }
+  .find-parking-map { position: absolute; inset: 0; border-radius: 8px; }
+  .find-parking-search { position: absolute; z-index: 6; top: 10px; left: 10px; right: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 4px 18px #0002; }
+  .find-parking-search-heading { margin-bottom: 7px; }
+  .find-parking-search-heading h1 { font-size: 1rem; }
+  .find-parking-search-heading p { display: none; }
+  .find-parking-filters { margin-top: 7px; }
+  .find-parking-map-style { top: 151px; right: 10px; }
+  .find-parking-map .maplibregl-ctrl-top-right { top: 140px; right: auto; left: 3px; display: flex; align-items: flex-start; gap: 4px; }
+  .find-parking-map .maplibregl-ctrl-top-right .maplibregl-ctrl { float: none; clear: none; margin: 10px 0 0 7px; }
+  .find-parking-results { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; height: 56px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px 12px 0 0; background: var(--bg); box-shadow: 0 -5px 20px #0002; transition: height 240ms ease; }
+  .find-parking-results > :not(.find-parking-sheet-handle) { visibility: hidden; }
+  .find-parking.is-sheet-expanded .find-parking-results { height: min(46dvh, 370px); overflow-y: auto; }
+  .find-parking.is-sheet-expanded .find-parking-results > :not(.find-parking-sheet-handle) { visibility: visible; }
+  .find-parking-sheet-handle { display: flex; width: 100%; height: 56px; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 16px; border: 0; background: var(--bg); color: var(--fg); font-size: .82rem; font-weight: 600; text-align: left; cursor: pointer; }
+  .find-parking-handle-bar { position: absolute; top: 5px; left: calc(50% - 17px); width: 34px; height: 4px; border-radius: 4px; background: var(--border); }
+  .find-parking-detail { padding-top: 4px; }
+  .smartparking-chat-launcher.is-parking { right: 18px; bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .smartparking-chat-launcher.is-parking.is-sheet-open { bottom: calc(min(46dvh, 370px) + 36px + env(safe-area-inset-bottom)); }
+  .smartparking-chat-window.is-parking { right: 16px; bottom: calc(152px + env(safe-area-inset-bottom)); width: calc(100vw - 32px); height: min(340px, calc(100dvh - 470px)); min-height: 180px; }
+}
+@media (max-width: 420px) {
+  .find-parking-filters button, .find-parking-filters select { font-size: .7rem; padding-left: 7px; padding-right: 7px; }
+  .find-parking-filters select { padding-right: 23px; }
+  .find-parking-map-style { top: 150px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .find-parking-results, .smartparking-chat-window, .smartparking-chat-launcher { transition: none; }
+  .smartparking-chat-launcher svg, .smartparking-chat-message { animation: none !important; }
+}
+
+.driver-map-main { height: calc(100dvh - 60px); min-height: 560px; overflow: hidden; }
+.driver-map-main > .animate-in, .driver-map-main .find-parking { height: 100%; }
+.find-parking { position: relative; display: block; min-height: 0; }
+.find-parking-map { position: absolute; inset: 0; border: 0; border-radius: 0; }
+.find-parking-panel { position: absolute; z-index: 6; top: 16px; left: 16px; display: flex; width: min(360px, calc(100% - 32px)); max-height: calc(100% - 32px); box-shadow: 0 8px 30px #0002; }
+.find-parking-search { padding: 14px; }
+.find-parking-search-heading { margin-bottom: 10px; }
+.find-parking-results { overflow-y: auto; }
+.find-parking-map-style { top: 16px; right: 16px; }
+.find-parking-map .maplibregl-ctrl-top-right { top: 56px; }
+.find-parking-directions { padding: 12px 0 0; color: var(--fg); font-size: .79rem; line-height: 1.45; }
+.find-parking-directions small { display: block; color: var(--muted); font-size: .67rem; }
+.find-parking-route-error { color: #b45309; }
+.find-parking-route-error button { margin-left: 4px; border: 0; background: transparent; color: var(--primary); text-decoration: underline; cursor: pointer; }
+.dark .find-parking-route-error { color: #fbbf24; }
+.find-parking-filters button, .find-parking-filters select { min-height: 38px; }
+.find-parking-filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 3px; }
+.find-parking-filters button, .find-parking-filters select { flex: none; white-space: nowrap; }
+.find-parking-booking-note { margin: 9px 0 0; color: var(--muted); font-size: .75rem; }
+.find-parking-result.is-selected { background: color-mix(in srgb, var(--primary) 8%, var(--bg)); box-shadow: inset 3px 0 var(--primary); }
+.find-parking-result-count { padding: 10px 14px 2px; color: var(--muted); font-size: .72rem; font-weight: 600; }
+
+@media (max-width: 1024px) {
+  .driver-map-main { min-height: 520px; }
+  .find-parking-panel { display: contents; }
+  .find-parking-search { top: 10px; left: 10px; right: 10px; }
+  .find-parking-results { max-height: none; }
+  .find-parking-map-style { top: 158px; right: 10px; }
+  .find-parking-map .maplibregl-ctrl-top-right { top: 148px; }
+}
+
+.smartparking-chat-launcher, .smartparking-chat-launcher.is-parking {
+  position: fixed; z-index: 40; width: 56px; height: 56px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--primary); color: var(--primary-fg);
+  cursor: grab; user-select: none;
+}
+.smartparking-chat-launcher:active { cursor: grabbing; }
+.smartparking-chat-launcher:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.smartparking-chat-window, .smartparking-chat-window.is-parking {
+  position: fixed; z-index: 40; min-height: 0; border-radius: 50%;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: scale(.12);
+  transition: transform 300ms cubic-bezier(.2,.8,.2,1), opacity 180ms ease, border-radius 300ms ease, visibility 0s linear 300ms;
+}
+.smartparking-chat-window.is-open, .smartparking-chat-window.is-parking.is-open {
+  border-radius: 16px; opacity: 1; visibility: visible; pointer-events: auto;
+  transform: scale(1);
+  transition: transform 300ms cubic-bezier(.2,.8,.2,1), opacity 180ms ease, border-radius 300ms ease, visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .smartparking-chat-window, .smartparking-chat-window.is-parking,
+  .smartparking-chat-window.is-open, .smartparking-chat-window.is-parking.is-open { transition: none; }
+}
+
+/* Find Parking keeps the map full-size beneath two independent panels. */
+.find-parking-panel {
+  top: 16px; bottom: 16px; left: 16px; height: auto; max-height: none;
+  width: clamp(280px, 24vw, 390px); border-radius: 14px;
+  box-shadow: 0 10px 32px #0002; transition: opacity 220ms ease, transform 220ms ease;
+}
+.find-parking-panel[hidden] { display: none; }
+.find-parking-search { position: static; top: auto; left: auto; right: auto; border-top: 0; border-left: 0; border-right: 0; box-shadow: none; }
+.find-parking-search-tools { display: flex; gap: 6px; }
+.find-parking-collapse-icon { display: inline-flex; transform: rotate(90deg); }
+.find-parking-results { position: static; flex: 1; min-height: 0; height: auto; border: 0; border-radius: 0; box-shadow: none; }
+.find-parking-results > :not(.find-parking-sheet-handle) { visibility: visible; }
+.find-parking-reopen {
+  position: absolute; z-index: 7; top: 16px; left: 16px;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
+  padding: 0 13px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg); color: var(--fg); box-shadow: 0 4px 18px #0002;
+  font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
+}
+.find-parking-view { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; color: var(--primary); font-size: .75rem; font-weight: 700; }
+.find-parking-details-wrap {
+  position: absolute; z-index: 6; top: 16px; right: 16px; bottom: 16px;
+  width: clamp(300px, 28vw, 420px); min-height: 0;
+}
+.find-parking-details-panel {
+  display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;
+  overflow: hidden; border: 1px solid var(--border); border-radius: 14px;
+  background: var(--bg); color: var(--fg); box-shadow: 0 10px 32px #0002;
+}
+.find-parking-details-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 20px 14px; border-bottom: 1px solid var(--border); }
+.find-parking-eyebrow { color: var(--primary); font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.find-parking-details-header h2 { margin: 5px 0 0; font-size: 1.22rem; line-height: 1.3; }
+.find-parking-icon-button { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); cursor: pointer; }
+.find-parking-details-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 16px 20px 20px; }
+.find-parking-details-address { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.find-parking-details-address svg { flex: none; margin-top: 2px; }
+.find-parking-status { display: inline-flex; align-items: center; padding: 5px 9px; border-radius: 7px; font-size: .75rem; font-weight: 700; }
+.find-parking-status.is-available { background: #dcfce7; color: #166534; }
+.find-parking-status.is-full { background: #fee2e2; color: #991b1b; }
+.find-parking-status.is-unknown { background: var(--card); color: var(--muted); }
+.dark .find-parking-status.is-available { background: #123121; color: #86efac; }
+.dark .find-parking-status.is-full { background: #3f1d1d; color: #fca5a5; }
+.find-parking-details-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.find-parking-details-section h3 { margin: 0 0 12px; font-size: .86rem; }
+.find-parking-details-list { display: grid; gap: 11px; margin: 0; }
+.find-parking-details-list > div { display: flex; justify-content: space-between; gap: 15px; font-size: .79rem; line-height: 1.4; }
+.find-parking-details-list dt { color: var(--muted); }
+.find-parking-details-list dd { margin: 0; text-align: right; font-weight: 600; }
+.find-parking-data-note { margin: 12px 0 0; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.find-parking-feedback { margin: 14px 0 0; font-size: .78rem; }
+.find-parking-feedback.is-error { color: #b45309; }
+.find-parking-details-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 14px 20px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
+.find-parking-details-actions .btn-primary, .find-parking-details-actions .btn-outline { min-height: 44px; justify-content: center; gap: 6px; white-space: nowrap; }
+.find-parking-details-actions p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: .72rem; }
+.find-parking.has-details .find-parking-map-style { right: calc(clamp(300px, 28vw, 420px) + 32px); }
+.find-parking.has-details .find-parking-map .maplibregl-ctrl-top-right { right: calc(clamp(300px, 28vw, 420px) + 18px); }
+
+@media (max-width: 900px) {
+  .find-parking-panel { display: flex; top: 10px; left: 10px; right: auto; bottom: auto; width: min(350px, calc(100% - 20px)); height: min(52dvh, 420px); max-height: none; border-radius: 10px; }
+  .find-parking-search { position: static; box-shadow: none; border: 0; border-bottom: 1px solid var(--border); }
+  .find-parking-results { position: static; height: auto; overflow-y: auto; border: 0; border-radius: 0; box-shadow: none; }
+  .find-parking-results > :not(.find-parking-sheet-handle) { visibility: visible; }
+  .find-parking-sheet-handle { display: none; }
+  .find-parking-reopen { top: 10px; left: 10px; }
+  .find-parking-details-wrap { top: auto; right: 0; bottom: 0; left: 0; width: 100%; height: min(46dvh, 380px); }
+  .find-parking-details-panel { border-radius: 14px 14px 0 0; }
+  .find-parking-map-style, .find-parking.has-details .find-parking-map-style { top: 16px; right: 12px; }
+  .find-parking:not(.is-search-collapsed) .find-parking-map-style { top: 160px; }
+  .find-parking-map .maplibregl-ctrl-top-right, .find-parking.has-details .find-parking-map .maplibregl-ctrl-top-right { top: 60px; right: 4px; left: auto; display: block; }
+  .find-parking:not(.is-search-collapsed) .find-parking-map .maplibregl-ctrl-top-right { top: 205px; }
+}
+@media (max-width: 640px) {
+  .find-parking-panel { width: calc(100% - 20px); height: min(45dvh, 340px); }
+  .find-parking-search { padding: 10px; }
+  .find-parking-details-wrap { height: min(49dvh, 380px); }
+  .find-parking-details-header { padding: 14px 16px 11px; }
+  .find-parking-details-scroll { padding: 12px 16px; }
+  .find-parking-details-actions { padding: 11px 16px calc(12px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .find-parking-panel { transition: none; }
+}
+
+.driver-parking-suspended { display: none; }
+.booking-flow-stage-grid { display: grid; grid-template-columns: minmax(0, 3.4fr) minmax(260px, 1fr); align-items: start; gap: 16px; }
+.booking-slot-layout { display: contents; }
+.booking-model-panel { grid-column: 1; grid-row: 1; min-width: 0; }
+.booking-stage-right, .booking-summary-panel { grid-column: 2; grid-row: 1; min-width: 0; }
+.booking-summary-panel { position: sticky; top: 76px; min-width: 0; padding: 20px; }
+.booking-summary-panel h3 { margin: 6px 0 5px; color: var(--fg); font-size: 1.1rem; }
+.booking-summary-address { margin: 0 0 18px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.booking-selected-slot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); }
+.booking-selected-slot-name { display: flex; align-items: baseline; gap: 5px; min-width: 0; white-space: nowrap; }
+.booking-selected-slot-name strong { overflow: hidden; color: var(--fg); font-size: .84rem; text-overflow: ellipsis; }
+.booking-selected-slot-name small { flex: none; color: var(--muted); font-size: .7rem; }
+.booking-selected-slot-status { display: inline-flex; flex: none; align-items: center; gap: 5px; color: #15803d; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+.booking-selected-slot-status > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.dark .booking-selected-slot-status { color: #86efac; }
+.booking-summary-list { display: grid; gap: 12px; margin: 0 0 18px; padding: 16px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.booking-summary-list > div { display: flex; justify-content: space-between; gap: 12px; font-size: .79rem; line-height: 1.4; }
+.booking-summary-list dt { color: var(--muted); }
+.booking-summary-list dd { margin: 0; max-width: 58%; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+.booking-summary-empty { margin: 0 0 16px; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+@media (max-width: 1050px) {
+  .booking-flow-stage-grid { grid-template-columns: minmax(0, 1fr); }
+  .booking-model-panel { grid-column: 1; grid-row: 1; }
+  .booking-stage-right, .booking-summary-panel { grid-column: 1; grid-row: 2; }
+  .booking-summary-panel { position: static; }
+}
+
+.booking-time-vehicle-stage { grid-column: 1 / -1; grid-row: 1; }
+.booking-flow-stage-grid.is-form-stage { display: block; }
+.booking-flow-stage-grid.is-form-stage > .booking-stage-right:not(.booking-time-vehicle-stage) { max-width: 680px; margin: 0 auto; }
+.booking-time-vehicle-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 20px; margin-bottom: 20px; }
+.booking-time-card, .booking-vehicle-card { min-width: 0; }
+.booking-time-card h4, .booking-vehicle-card h4 { margin: 0 0 12px; color: var(--fg); font-size: .9rem; }
+.booking-vehicle-card { padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.booking-vehicle-card > .label { display: grid; gap: 7px; margin-bottom: 14px; }
+.booking-time-error { margin: 0 0 14px; color: #dc2626; font-size: .82rem; }
+.booking-datetime-picker { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.booking-datetime-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px; border-bottom: 1px solid var(--border); }
+.booking-datetime-field { min-width: 0; min-height: 64px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--fg); text-align: left; cursor: pointer; }
+.booking-datetime-field.is-active { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.booking-datetime-field:disabled { opacity: .55; cursor: not-allowed; }
+.booking-datetime-field span { display: block; margin-bottom: 5px; color: var(--muted); font-size: .72rem; }
+.booking-datetime-field strong { display: block; overflow: hidden; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.booking-datetime-body { display: grid; grid-template-columns: minmax(0, 1fr) 124px; min-height: 312px; }
+.booking-calendar { min-width: 0; padding: 15px; }
+.booking-calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 13px; font-size: .83rem; }
+.booking-calendar-heading > div { display: flex; gap: 4px; }
+.booking-calendar-heading button { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--fg); cursor: pointer; font-size: 1.1rem; }
+.booking-calendar-heading button:disabled { opacity: .4; cursor: not-allowed; }
+.booking-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; text-align: center; }
+.booking-calendar-weekday { display: grid; height: 28px; place-items: center; color: var(--muted); font-size: .68rem; }
+.booking-calendar-grid button { display: grid; width: 100%; min-height: 36px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer; font: inherit; font-size: .78rem; }
+.booking-calendar-grid button:hover:not(:disabled), .booking-time-list button:hover:not(:disabled) { background: var(--card); }
+.booking-calendar-grid button.is-today { box-shadow: inset 0 0 0 1px var(--primary); }
+.booking-calendar-grid button.is-selected, .booking-calendar-grid button.is-selected:hover:not(:disabled) { background: var(--primary); color: var(--primary-fg); }
+.booking-calendar-grid button:disabled { color: var(--muted); opacity: .4; cursor: not-allowed; }
+.booking-time-list { display: flex; min-height: 0; flex-direction: column; border-left: 1px solid var(--border); }
+.booking-time-list > strong { padding: 17px 12px 12px; font-size: .8rem; }
+.booking-time-list small { color: var(--muted); font-weight: 400; }
+.booking-time-list > div { display: grid; align-content: start; gap: 3px; max-height: 265px; overflow-y: auto; padding: 0 8px 10px; }
+.booking-time-list button { min-height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer; font: inherit; font-size: .78rem; }
+.booking-time-list button.is-selected, .booking-time-list button.is-selected:hover:not(:disabled) { background: var(--primary); color: var(--primary-fg); }
+.booking-time-list button:disabled { color: var(--muted); opacity: .4; cursor: not-allowed; }
+.booking-time-list p { margin: 5px; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+.booking-datetime-hint { margin: 0; padding: 10px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .73rem; line-height: 1.45; }
+.booking-datetime-picker button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 1100px) { .booking-time-vehicle-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) {
+  .booking-datetime-body { grid-template-columns: minmax(0, 1fr); }
+  .booking-calendar { padding: 10px; }
+  .booking-calendar-grid button { min-height: 40px; }
+  .booking-time-list { border-top: 1px solid var(--border); border-left: 0; }
+  .booking-time-list > div { grid-template-columns: repeat(4, minmax(0, 1fr)); max-height: 160px; }
+  .booking-time-list button { min-height: 44px; }
+  .booking-datetime-fields { gap: 6px; padding: 10px; }
+  .booking-datetime-field { padding: 8px; }
+}
+
+/* One floating surface grows from the launcher into the conversation. */
+.smartparking-chat-shell {
+  position: fixed; z-index: 40; overflow: hidden; border: 1px solid var(--border);
+  border-radius: 50%; background: var(--bg); color: var(--fg);
+  box-shadow: 0 10px 32px #0003;
+  transition: left 300ms cubic-bezier(.2,.8,.2,1), top 300ms cubic-bezier(.2,.8,.2,1), width 300ms cubic-bezier(.2,.8,.2,1), height 300ms cubic-bezier(.2,.8,.2,1), border-radius 300ms ease;
+}
+.smartparking-chat-shell.is-open { border-radius: 16px; }
+.smartparking-chat-shell .smartparking-chat-window {
+  position: static; display: flex; width: 100%; height: 100%; min-height: 0;
+  border: 0; border-radius: 0; box-shadow: none; opacity: 0;
+  visibility: hidden; pointer-events: none; transform: none;
+  transition: opacity 120ms ease, visibility 0s linear 120ms;
+}
+.smartparking-chat-shell.is-open .smartparking-chat-window {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: opacity 150ms ease 135ms, visibility 0s;
+}
+.smartparking-chat-shell .smartparking-chat-launcher {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
+  border: 0; box-shadow: none !important; opacity: 1; visibility: visible;
+  transition: opacity 100ms ease, visibility 0s;
+}
+.smartparking-chat-shell .smartparking-chat-launcher:hover { transform: none; box-shadow: none !important; }
+.smartparking-chat-shell.is-open .smartparking-chat-launcher {
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 100ms ease, visibility 0s linear 100ms;
+}
+.smartparking-chat-shell.is-open .smartparking-chat-launcher svg { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .smartparking-chat-shell, .smartparking-chat-shell .smartparking-chat-window,
+  .smartparking-chat-shell.is-open .smartparking-chat-window,
+  .smartparking-chat-shell .smartparking-chat-launcher { transition: none; }
+}

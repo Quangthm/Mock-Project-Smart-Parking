@@ -14,6 +14,7 @@ import type {
 import { PAYMENT_OPTIONS } from "../data/paymentOptions"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { BookingDateTimePicker } from "./BookingDateTimePicker"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
 import {
@@ -147,6 +148,11 @@ export function BookingFlow({
         )
       : 0
 
+  const startTimestamp = startTime ? new Date(startTime).getTime() : NaN
+  const endTimestamp = endTime ? new Date(endTime).getTime() : NaN
+  const validTimeWindow = Number.isFinite(startTimestamp) && Number.isFinite(endTimestamp) &&
+    startTimestamp > Date.now() && endTimestamp > startTimestamp
+
   const amount = Math.ceil(hours) * lot.hourlyRate
 
   const selectedVehicle = vehicles.find(
@@ -256,7 +262,7 @@ export function BookingFlow({
   }
 
   return (
-    <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+    <div className="driver-booking-flow" style={{ maxWidth: 1440, margin: "0 auto" }}>
       <div
         style={{
           display: "flex",
@@ -302,7 +308,7 @@ export function BookingFlow({
             }}
             style={{ padding: "0.4rem 0.7rem", fontSize: "0.78rem" }}
           >
-            Back to parking
+            ← Back to Parking
           </button>
         </div>
       </div>
@@ -336,8 +342,9 @@ export function BookingFlow({
         })}
       </div>
 
-      {step === "slot" && (
-        <section className="card">
+      <div className={`booking-flow-stage-grid${step === "slot" ? "" : " is-form-stage"}`}>
+      {step === "slot" && <section className="booking-slot-layout">
+          <div className="card booking-model-panel">
           <div
             style={{
               display: "flex",
@@ -441,9 +448,9 @@ export function BookingFlow({
                 modelUrl={lotSnapshot.modelUrl}
                 slots={lotSnapshot.slots}
                 selectedSlotId={selectedSlot?.id}
-                onSelectSlot={chooseSlot}
-                height={550}
-                interactive={true}
+                onSelectSlot={step === "slot" ? chooseSlot : undefined}
+                height="min(70vh, 700px)"
+                interactive={step === "slot"}
               />
             </div>
           )}
@@ -554,6 +561,7 @@ export function BookingFlow({
                               locked ? ", reserved" : ""
                             }`}
                             aria-pressed={selectedSlot?.id === slot.id}
+                            disabled={step !== "slot"}
                             onClick={() => chooseSlot(slot)}
                             style={{
                               height: 36,
@@ -586,39 +594,24 @@ export function BookingFlow({
             </div>
           )}
 
-          {selectedSlot && (
-            <div
-              style={{
-                margin: "0.6rem 0",
-                padding: "0.6rem 0.85rem",
-                background: "var(--primary)12",
-                border: "1px solid var(--primary)30",
-                borderRadius: "var(--radius)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span style={{ fontSize: "0.84rem", color: "var(--fg)" }}>
-                Selected slot:{" "}
-                <strong
-                  style={{ color: "var(--primary)", fontSize: "0.95rem" }}
-                >
-                  Slot {selectedSlot.number}
-                </strong>{" "}
-                (Floor {selectedSlot.floor})
-              </span>
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  color: "#22c55e",
-                  fontWeight: 600,
-                }}
-              >
-                ● Available
-              </span>
-            </div>
-          )}
+          </div>
+          {step === "slot" && <aside className="card booking-summary-panel" aria-label="Selected slot and booking information">
+            <span className="find-parking-eyebrow">Your booking</span>
+            <h3>{lotSnapshot.name}</h3>
+            <p className="booking-summary-address">{lotSnapshot.address}</p>
+            {selectedSlot && (
+              <div className="booking-selected-slot" aria-label={`Selected slot ${selectedSlot.number}, floor ${selectedSlot.floor}, available`}>
+                <span className="booking-selected-slot-name"><strong>Slot {selectedSlot.number}</strong><small>Floor {selectedSlot.floor}</small></span>
+                <span className="booking-selected-slot-status"><span aria-hidden="true" />Available</span>
+              </div>
+            )}
+            <dl className="booking-summary-list">
+              <div><dt>Vehicle</dt><dd>{selectedVehicle ? `${selectedVehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} · ${formatVietnamesePlate(selectedVehicle)}` : vehicleLoading ? "Loading vehicles…" : "Choose in the next step"}</dd></div>
+              <div><dt>Arrival</dt><dd>{startTime ? new Date(startTime).toLocaleString("vi-VN") : "Choose in the next step"}</dd></div>
+              <div><dt>Duration</dt><dd>{hours > 0 ? `${hours.toFixed(1)} hours` : "Choose in the next step"}</dd></div>
+              <div><dt>Estimated price</dt><dd>{hours > 0 ? `${amount.toLocaleString("vi-VN")} VND` : "Available after choosing time"}</dd></div>
+            </dl>
+            {!selectedSlot && <p className="booking-summary-empty">Select an available space in the model or grid to continue.</p>}
           {message && (
             <p
               role="alert"
@@ -644,11 +637,11 @@ export function BookingFlow({
           >
             Continue with Slot {selectedSlot?.number || ""}
           </button>
-        </section>
-      )}
+          </aside>}
+        </section>}
 
       {step === "details" && (
-        <section className="card">
+        <section className="card booking-stage-right booking-time-vehicle-stage">
           <h3
             style={{
               margin: "0 0 0.9rem",
@@ -658,35 +651,14 @@ export function BookingFlow({
           >
             Slot {selectedSlot?.number} · Choose time and vehicle
           </h3>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: "0.75rem",
-              marginBottom: "1rem",
-            }}
-          >
+          <div className="booking-time-vehicle-grid">
+            <div className="booking-time-card">
+              <h4>Parking time</h4>
+              <BookingDateTimePicker start={startTime} end={endTime} onStartChange={setStartTime} onEndChange={setEndTime} />
+            </div>
+            <div className="booking-vehicle-card">
+              <h4>Your vehicle</h4>
             <label className="label">
-              Start Time
-              <input
-                className="input"
-                type="datetime-local"
-                value={startTime}
-                min={new Date().toISOString().slice(0, 16)}
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-            </label>
-            <label className="label">
-              End Time
-              <input
-                className="input"
-                type="datetime-local"
-                value={endTime}
-                min={startTime || new Date().toISOString().slice(0, 16)}
-                onChange={(event) => setEndTime(event.target.value)}
-              />
-            </label>
-            <label className="label" style={{ gridColumn: "1 / -1" }}>
               Vehicle
               {vehicleLoading && <span className="text-sm text-[var(--muted)]">Loading vehicles…</span>}
               {!vehicleLoading && vehicles.length > 0 && (
@@ -704,7 +676,6 @@ export function BookingFlow({
                 </select>
               )}
             </label>
-          </div>
           {vehicleError && (
             <div role="alert" className="mb-3 text-sm text-red-600">
               {vehicleError}{" "}
@@ -822,6 +793,9 @@ export function BookingFlow({
               </button>
             </form>
           )}
+            </div>
+          </div>
+          {startTime && endTime && !validTimeWindow && <p className="booking-time-error" role="alert">Departure must be after arrival, and arrival must be in the future.</p>}
           {hours > 0 && (
             <p
               style={{
@@ -856,9 +830,7 @@ export function BookingFlow({
                 vehicleLoading ||
                 vehicleSaving ||
                 !selectedVehicle ||
-                !startTime ||
-                !endTime ||
-                new Date(endTime) <= new Date(startTime)
+                !validTimeWindow
               }
               onClick={holdSlotAndContinue}
               style={{ flex: 1, justifyContent: "center" }}
@@ -870,7 +842,7 @@ export function BookingFlow({
       )}
 
       {step === "payment" && (
-        <section className="card">
+        <section className="card booking-stage-right">
           <h3
             style={{
               margin: "0 0 0.9rem",
@@ -1019,7 +991,7 @@ export function BookingFlow({
       )}
 
       {step === "qr" && (
-        <section className="card" style={{ textAlign: "center" }}>
+        <section className="card booking-stage-right" style={{ textAlign: "center" }}>
           <h3
             style={{
               margin: "0 0 0.5rem",
@@ -1056,6 +1028,8 @@ export function BookingFlow({
           </div>
         </section>
       )}
+
+      </div>
 
       {showPolicyModal && (
         <LotPolicyModal

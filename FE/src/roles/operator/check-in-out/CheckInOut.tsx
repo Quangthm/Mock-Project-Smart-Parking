@@ -267,8 +267,6 @@ export function CheckInOut({
   // Filtered Bookings for the Table
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
-      if (mode === "check-in" && b.status !== "confirmed") return false
-      if (mode === "check-out" && b.status !== "checked-in") return false
       if (statusFilter !== "all" && b.status !== statusFilter) return false
       if (vehicleTypeFilter !== "all") {
         const slot = lot?.slots.find((item) => item.id === b.slotId)
@@ -278,19 +276,16 @@ export function CheckInOut({
         if (vehicleTypeFilter === "car" && isMoto) return false
       }
       if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase()
-        const matchesPlate = b.licensePlate.toLowerCase().includes(q)
-        const matchesId = b.id.toLowerCase().includes(q)
-        const matchesSlot = slotLabel(b).toLowerCase().includes(q)
-        const matchesDriver = b.driverId.toLowerCase().includes(q)
-        if (!matchesPlate && !matchesId && !matchesSlot && !matchesDriver) return false
+        const q = searchQuery.replace(/[^a-z0-9]/gi, "").toUpperCase()
+        if (q && !b.licensePlate.replace(/[^a-z0-9]/gi, "").toUpperCase().includes(q)) return false
       }
       return true
     })
-  }, [bookings, lot, mode, statusFilter, vehicleTypeFilter, searchQuery])
+  }, [bookings, lot, statusFilter, vehicleTypeFilter, searchQuery])
 
   // Pagination calculation
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / itemsPerPage))
+  useEffect(() => setCurrentPage((page) => Math.min(page, totalPages)), [totalPages])
   const paginatedBookings = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
     return filteredBookings.slice(start, start + itemsPerPage)
@@ -362,52 +357,6 @@ export function CheckInOut({
         </div>
       )}
 
-      {/* Gate terminal for this direction */}
-      <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="rounded-lg bg-[var(--primary)]/10 p-2 text-[var(--primary)]">
-              <UntitledIcon name="car" size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-[var(--fg)]">
-                {mode === "check-in" ? "Check-In Terminal" : "Check-Out Terminal"}
-              </h2>
-              <p className="text-xs text-[var(--muted)]">
-                {mode === "check-in"
-                  ? "Scan or enter the vehicle's plate to start a parking session."
-                  : "Scan or enter the plate to find an active session and compare its check-in photo."}
-              </p>
-            </div>
-          </div>
-          <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">Gate Mode: Active</span>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-          <div className="relative min-w-0 flex-1">
-            <label htmlFor="gate-plate-input" className="sr-only">Enter vehicle license plate manually</label>
-            <input
-              id="gate-plate-input"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--primary)] uppercase font-mono tracking-wider"
-              value={quickInput}
-              onChange={(e) => {
-                setQuickInput(e.target.value)
-                if (!latestImageIsUpload) setLatestScanImage("")
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleQuickSearch()}
-              placeholder={mode === "check-in" ? "AI unavailable? Enter the license plate" : "AI unavailable? Enter the license plate to check out"}
-            />
-          </div>
-          <button
-            type="button"
-            className="btn-primary justify-center px-6 py-2.5 text-sm sm:shrink-0"
-            onClick={() => handleQuickSearch()}
-          >
-            <UntitledIcon name="search" size={16} /> {mode === "check-in" ? "Find Check-In" : "Find Check-Out"}
-          </button>
-        </div>
-      </div>
-
       <PlateScanPanel
         siteId={lot.id}
         tenantId={lot.tenantId}
@@ -432,6 +381,51 @@ export function CheckInOut({
           )
         }}
       />
+
+      {/* Manual entry follows the camera workflow in both directions. */}
+      <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="rounded-lg bg-[var(--primary)]/10 p-2 text-[var(--primary)]">
+              <UntitledIcon name="car" size={20} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-[var(--fg)]">
+                {mode === "check-in" ? "Manual Check-In" : "Manual Check-Out"}
+              </h2>
+              <p className="text-xs text-[var(--muted)]">
+                {mode === "check-in"
+                  ? "Enter a license plate when you need to check in a vehicle manually."
+                  : "Enter a license plate to find and confirm its check-out manually."}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+          <div className="relative min-w-0 flex-1">
+            <label htmlFor="gate-plate-input" className="sr-only">Enter vehicle license plate manually</label>
+            <input
+              id="gate-plate-input"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--primary)] uppercase font-mono tracking-wider"
+              value={quickInput}
+              onChange={(e) => {
+                setQuickInput(e.target.value)
+                if (!latestImageIsUpload) setLatestScanImage("")
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleQuickSearch()}
+              placeholder="Enter license plate"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn-primary justify-center px-6 py-2.5 text-sm sm:shrink-0"
+            onClick={() => handleQuickSearch()}
+          >
+            <UntitledIcon name="search" size={16} /> {mode === "check-in" ? "Find Check-In" : "Find Check-Out"}
+          </button>
+        </div>
+      </div>
 
       {quickError && (
         <div role="alert" className="flex items-center gap-1.5 text-xs font-medium text-red-600">
@@ -571,12 +565,15 @@ export function CheckInOut({
             </p>
           </div>
 
-          {/* Search & Filter Bar */}
+          {/* Parking history filters */}
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-auto">
+              <label htmlFor="parking-history-plate-search" className="sr-only">Search parking history by license plate</label>
               <input
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] sm:w-48"
-                placeholder="Search plate, id, slot..."
+                id="parking-history-plate-search"
+                type="search"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--primary)] sm:w-56"
+                placeholder="Search license plate"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value)
@@ -643,7 +640,7 @@ export function CheckInOut({
               {paginatedBookings.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted)]">
-                    No bookings found matching the selected filter criteria.
+                    {searchQuery.trim() ? "No parking history matches that license plate." : "No bookings found matching the selected filters."}
                   </td>
                 </tr>
               ) : (

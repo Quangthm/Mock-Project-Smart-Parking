@@ -23,6 +23,7 @@ import { PaymentHistory } from "../payments/PaymentHistory"
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { FloatingChatbot } from "../../../components/chat/FloatingChatbot"
 
 type Tab = "home" | "subscriptions" | "support" | "payments"
 
@@ -42,6 +43,8 @@ export function DriverDashboard() {
   const [homePanel, setHomePanel] = useState<HomePanel>("find")
 
   const [bookingLot, setBookingLot] = useState<ParkingLot | null>(null)
+  const [parkingDetailsOpen, setParkingDetailsOpen] = useState(false)
+  const findingParking = tab === "home" && homePanel === "find" && !bookingLot
 
   const [profileSection, setProfileSection] = useState<ProfileSection | null>(
     null,
@@ -203,7 +206,7 @@ export function DriverDashboard() {
 
   return (
     <DashboardSidebar groups={navGroups}>
-      <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+      <main className={`min-w-0 overflow-y-auto ${findingParking ? "driver-map-main" : "p-4 sm:p-7"}`}>
         {profileSection && (
           <div
             role="presentation"
@@ -444,6 +447,15 @@ export function DriverDashboard() {
             </section>
           </div>
         )}
+        {tab === "home" && homePanel === "find" && (
+          <div className={bookingLot ? "driver-parking-suspended" : "animate-in"} aria-hidden={!!bookingLot} inert={!!bookingLot}>
+            <FindParking
+              visible={!bookingLot}
+              onDetailsOpenChange={setParkingDetailsOpen}
+              onBook={(lot) => setBookingLot(lot)}
+            />
+          </div>
+        )}
         {bookingLot ? (
           <BookingFlow
             lot={bookingLot}
@@ -452,20 +464,14 @@ export function DriverDashboard() {
 
               setTab("home")
 
-              setHomePanel("bookings")
+              setHomePanel("find")
             }}
           />
         ) : (
           <>
-            {tab === "home" && (
+            {tab === "home" && homePanel !== "find" && (
               <div className="animate-in">
-                {homePanel === "find" ? (
-                  <FindParking
-                    onBook={(lot) => {
-                      setBookingLot(lot)
-                    }}
-                  />
-                ) : homePanel === "bookings" ? (
+                {homePanel === "bookings" ? (
                   <section>
                     <h3
                       style={{
@@ -512,6 +518,13 @@ export function DriverDashboard() {
           </>
         )}
       </main>
+      {user && (
+        <FloatingChatbot
+          role={user.role}
+          parkingMode={findingParking}
+          parkingDetailsOpen={findingParking && parkingDetailsOpen}
+        />
+      )}
     </DashboardSidebar>
   )
 }

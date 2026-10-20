@@ -8,6 +8,7 @@ import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibi
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { authApi, AuthApiError, request } from "../../../lib/authApi"
 import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
+import { isValidAccountEmail } from "../../../lib/signInContact"
 
 export function SignIn() {
   const { setUser, setView } = useApp()
@@ -49,14 +50,15 @@ export function SignIn() {
     e.preventDefault()
     if (submitting) return
     setError("")
+
+    if (mode === "password" && !isValidAccountEmail(email)) {
+      setError("Please enter a valid email address.")
+      return
+    }
+
     setSubmitting(true)
 
     try {
-      if (mode === "otp" && !challenge) {
-        setChallenge(await authApi.requestOtp(email))
-        return
-      }
-
       const user =
         mode === "otp"
           ? await authApi.loginOtp(
@@ -170,6 +172,34 @@ export function SignIn() {
       } else {
         setError(msg)
       }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function requestEmailOtp() {
+    if (submitting) return
+    if (!isValidAccountEmail(email)) {
+      setError("Please enter a valid email address.")
+      return
+    }
+
+    setError("")
+    setSubmitting(true)
+    try {
+      setChallenge(await authApi.requestOtp(email.trim()))
+      setMode("otp")
+      setCode("")
+      setTotp("")
+      setPassword("")
+      setRequireTotp(false)
+      setTotpCode("")
+    } catch (otpError) {
+      setError(
+        otpError instanceof Error
+          ? otpError.message
+          : "Unable to send a sign-in code. Please try again.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -302,39 +332,22 @@ export function SignIn() {
           className="card auth-form-background"
           style={{ display: "flex", flexDirection: "column", gap: "1.125rem" }}
         >
-          <label className="label">
-            Sign-in method
-            <select
-              className="input"
-              value={mode}
-              disabled={submitting}
-              onChange={(e) => {
-                setMode(e.target.value as "otp" | "password")
-                setChallenge(null)
-                setCode("")
-                setTotp("")
-                setError("")
-                setRequireTotp(false)
-                setTotpCode("")
-              }}
-            >
-              <option value="otp">Email / SMS code</option>
-              <option value="password">Password</option>
-            </select>
-          </label>
-
           <div>
-            <label className="label" style={{ fontSize: "0.925rem" }}>
-              Email or Phone Number
+            <label className="label" htmlFor="sign-in-email" style={{ fontSize: "0.925rem" }}>
+              Email
             </label>
             <input
+              id="sign-in-email"
               className="input"
-              type="text"
+              type="email"
               autoComplete="username"
               value={email}
               disabled={submitting || !!challenge}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com or phone number"
+              onChange={(e) => {
+                setEmail(e.target.value)
+                setError("")
+              }}
+              placeholder="you@example.com"
               required
               autoFocus
               style={{ fontSize: "1rem" }}
@@ -353,6 +366,7 @@ export function SignIn() {
               >
                 <label
                   className="label"
+                  htmlFor="sign-in-password"
                   style={{ fontSize: "0.925rem", margin: 0 }}
                 >
                   Password
@@ -375,8 +389,10 @@ export function SignIn() {
               </div>
               <div style={{ position: "relative" }}>
                 <input
+                  id="sign-in-password"
                   className="input"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
@@ -452,7 +468,7 @@ export function SignIn() {
                   color: "var(--muted)",
                 }}
               >
-                Code queued. Expires in 5 minutes.
+                Check {email} for your code. Expires in 5 minutes.
               </p>
               <label className="label text-center">
                 Verification code
@@ -480,10 +496,7 @@ export function SignIn() {
                 className="btn-outline justify-center"
                 type="button"
                 disabled={submitting}
-                onClick={() => {
-                  setChallenge(null)
-                  setCode("")
-                }}
+                onClick={requestEmailOtp}
               >
                 Request another code
               </button>
@@ -492,6 +505,7 @@ export function SignIn() {
 
           {error && (
             <div
+              role="alert"
               style={{
                 background: "#fee2e2",
                 border: "1px solid #fca5a5",
@@ -516,32 +530,18 @@ export function SignIn() {
               padding: "0.75rem",
             }}
           >
-            {submitting
-              ? "Please wait…"
-              : mode === "otp" && !challenge
-                ? "Send sign-in code"
-                : "Sign In"}
+            {submitting ? "Please wait…" : "Sign-In"}
           </button>
 
-          {/* Additional helper for OTP mode to also reset password */}
-          {mode === "otp" && !challenge && (
-            <div style={{ textAlign: "center" }}>
-              <button
-                type="button"
-                onClick={handleOpenForgotPassword}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--primary)",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  padding: 0,
-                }}
-              >
-                Forgot your password?
-              </button>
-            </div>
+          {mode === "password" && (
+            <button
+              type="button"
+              disabled={submitting}
+              className="btn-outline justify-center"
+              onClick={requestEmailOtp}
+            >
+              Sign in with email OTP
+            </button>
           )}
 
           <p
