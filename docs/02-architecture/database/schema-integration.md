@@ -73,7 +73,7 @@ Sau khi setup, chạy 3 service tích hợp:
 
 ## 6. Demo data và role
 
-`setup.ps1` tạo Admin qua `DevelopmentAdmin` (BCrypt, chỉ Development). Các role seed trong `01` gồm 7 mã: 4 mã actor SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) + 3 mã runtime (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng. Dev có thể seed demo Owner/Operator qua `DevelopmentOwner`/`DevelopmentOperator`; production phải có seed/role migration tương ứng trước khi dùng các luồng đó.
+`setup.ps1` tạo Admin qua `DevelopmentAdmin` (BCrypt, chỉ Development). Các role seed trong `01` gồm 7 mã: 4 mã actor SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) + 3 mã runtime (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng. Dev có thể seed demo Owner/Operator qua `DevelopmentOwner`/`DevelopmentOperator`; sau khi UserService chạy lần đầu, `scripts/seed-demo-site.ps1` tạo tenant/site/slot/grant demo idempotent để test ngay. Production phải có seed/role migration tương ứng trước khi dùng các luồng đó.
 
 ## 7. Fence và phục hồi lỗi
 

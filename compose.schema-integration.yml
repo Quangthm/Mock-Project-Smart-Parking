@@ -19,6 +19,7 @@ services:
       timeout: 3s
       retries: 10
   parking-db:
+    container_name: facility-db-1
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: smartpark_parking
@@ -40,6 +41,7 @@ services:
       timeout: 3s
       retries: 10
   reservation-db:
+    container_name: operation-db-1
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: smartpark_reservation

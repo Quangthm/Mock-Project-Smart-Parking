@@ -15,7 +15,7 @@ Mặc định `Local`: dùng lại credential trong `.env`/user-secrets; chỉ s
 .\setup.ps1 -CredentialMode Team -TeamEnvPath '<file-env-riêng-của-team>'
 ```
 
-File Team phải có `SMARTPARK_DEV_PASSWORD`, `SMARTPARK_SERVICE_KEY` (ít nhất 32 ký tự), `SMARTPARK_ADMIN_PASSWORD` (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt). Có thể kèm `SONAR_DB_PASSWORD`, `VITE_MAPTILER_API_KEY` và `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_PARKING_URL`, `SMARTPARK_SERVICE_RESERVATION_URL`. File Team không thay thế cả `.env`: port, SMTP và cấu hình riêng trên máy vẫn giữ nguyên. Không commit file Team hoặc secret thật; lưu ngoài repo.
+File Team phải có `SMARTPARK_DEV_PASSWORD`, `SMARTPARK_SERVICE_KEY` (ít nhất 32 ký tự), `SMARTPARK_ADMIN_PASSWORD` (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt). Có thể kèm `SONAR_DB_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`, `VITE_MAPTILER_API_KEY` và `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_PARKING_URL`, `SMARTPARK_SERVICE_RESERVATION_URL`. File Team không thay thế cả `.env`: port, SMTP và cấu hình riêng trên máy vẫn giữ nguyên. Không commit file Team hoặc secret thật; lưu ngoài repo.
 
 Setup dừng nếu credential Team khác cấu hình local đã có (`Team/local conflict`). Ngược lại, `[5/7]` luôn đồng bộ user-secrets theo `.env` (ghi đè giá trị lệch, xóa khóa optional không còn trong `.env`) — muốn giữ user-secrets cũ thì dùng `-SkipUserSecrets` + runner, không chạy trực tiếp từ Visual Studio:
 
@@ -26,6 +26,14 @@ Setup dừng nếu credential Team khác cấu hình local đã có (`Team/local
 ```
 
 Nếu DB volume cũ đã có password khác, cần khôi phục password gốc; đổi `.env` không đổi password trong PostgreSQL. Admin/owner/operator đã seed cũng không được đổi password chỉ bằng setup. UserService seed ba tài khoản khi service khởi động lần đầu: admin (`admin@smartpark.local`), owner (`owner@smartpark.local`) và operator (`operator@smartpark.local`); password tương ứng trong `.env` (`SMARTPARK_ADMIN_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`). Tài khoản driver demo (`driver@gmail.com / Password@123`) được DataSeeder tạo trong code.
+
+Sau khi UserService đã chạy lần đầu, seed site demo để test owner/operator mà không qua đăng ký/approval:
+
+```powershell
+.\scripts\seed-demo-site.ps1
+```
+
+Script tạo `DEMO-HQ` (1 floor, 1 zone, 6 slot CAR + 2 slot MOTORCYCLE), gán operator vào site, cấp 5 quyền vận hành và cấu hình capacity. Chạy lại an toàn; script không in password. Nếu báo thiếu owner/operator, chạy `.\scripts\run-schema-service.ps1 -Service User` một lần rồi seed lại.
 
 SonarQube tự khởi động cùng `.\setup.ps1` (bỏ qua bằng `-SkipSonarQube`; `-SkipDatabase` không khởi động container). `SONAR_DB_PASSWORD` được sinh tự động khi thiếu và giữ nguyên giá trị đã cấu hình; UI mặc định http://localhost:9000. Compose Sonar riêng giữ dữ liệu trong named volumes; không tự tiếp quản container Sonar cũ. Cấu hình dựa trên [ví dụ chính thức SonarSource](https://github.com/SonarSource/docker-sonarqube/blob/master/example-compose-files/sq-with-postgres/docker-compose.yml). Pin `SONAR_IMAGE` theo version team duyệt nếu cần môi trường cố định. Lần đầu đăng nhập admin/admin và đổi password trên UI.
 
@@ -63,10 +71,10 @@ Port mặc định: User/Parking/Reservation API 5035/5045/5055; User/Parking/Re
 | Progress line | Giai đoạn | Lỗi thường gặp → Cách xử lý |
 | --- | --- | --- |
 | `[1/7]` Checking prerequisites | .NET SDK 10, đọc `.env` | Chưa cài .NET SDK 10 → cài đúng major 10. `.env` đã tồn tại → hiện prompt `[O]verwrite / [K]eep / [A]bort` (Enter = Keep; Overwrite backup ra `.env.bak` rồi sinh lại từ `.env.example`). Prompt bị bỏ qua khi chạy tự động bằng `-NonInteractive`. |
-| `[2/7]` Resolving credentials | Sinh/dùng lại password, service key, admin password | `Existing database volumes found` → volume cũ cần lại password gốc trong `.env` (setup không tự xóa data); hoặc chạy `-RecreateDb` nếu chấp nhận mất data dev. `Existing service keys differ` → user-secrets 3 service lệch nhau, sửa tay. |
-| `[3/7]` Validating configuration | Check key ≥32 ký tự, policy admin password, 6 port | `Invalid port` → port var không phải số 1–65535. |
+| `[2/7]` Resolving credentials | Sinh/dùng lại password, service key, admin/owner/operator password | `Existing database volumes found` → volume cũ cần lại password gốc trong `.env` (setup không tự xóa data); hoặc chạy `-RecreateDb` nếu chấp nhận mất data dev. `Existing service keys differ` → user-secrets 3 service lệch nhau, sửa tay. |
+| `[3/7]` Validating configuration | Check key ≥32 ký tự, policy password, 6 port | `Invalid port` → port var không phải số 1–65535. |
 | `[4/7]` Initializing databases | Compose config → (drop volume nếu `-RecreateDb`) → `up --wait` 6 DB → probe auth → migration | Treo lâu ở `Starting database containers` → Docker Desktop chưa chạy / cổng 5441–5446 bị chiếm (`docker compose -f compose.schema-integration.yml ps` + `logs <tên-db>`). `authentication failed` → password trong `.env` khác password đã init volume (chỉ fix bằng `-RecreateDb` hoặc khôi phục password cũ). Lỗi SQL khi init → `docker logs <tên-db-container>`, dòng log chỉ đúng file `.sql` bị lỗi. Dòng con `[n/6]` cho biết DB service nào (User→Iot) đang fail. Lỗi `relation "..." already exists` ở dòng con `[n/6]` → xem Nhật ký lỗi đã biết bên dưới. |
-| `[5/7]` Configuring user-secrets | Ghi/đồng bộ toàn bộ connection string, URL, admin credentials vào user-secrets theo `.env`; xóa khóa optional (JWT PEM, SMTP) không còn trong `.env` | `Cannot configure ... user-secrets` → thư mục UserSecrets bị khóa/đầy; chạy lại bằng `-SkipUserSecrets` rồi dùng runner. |
+| `[5/7]` Configuring user-secrets | Ghi/đồng bộ toàn bộ connection string, URL, admin/owner/operator credentials vào user-secrets theo `.env`; xóa khóa optional (JWT PEM, SMTP) không còn trong `.env` | `Cannot configure ... user-secrets` → thư mục UserSecrets bị khóa/đầy; chạy lại bằng `-SkipUserSecrets` rồi dùng runner. |
 | `[6/7]` Preparing frontend environment | Copy `FE/.env`, MapTiler key, AI endpoints; khởi động SonarQube (bỏ qua với `-SkipSonarQube`); nếu `-WithAiCamera`: build image AI, `docker compose -p smartpark-ai -f compose.ai.yml up --wait` | `Configure MapTiler key directly in FE/.env` → key chứa ký tự đặc biệt, sửa tay trong `FE/.env`. `SonarQube startup failed` → volume Sonar cũ lệch `SONAR_DB_PASSWORD`, khôi phục password gốc vào `.env`. |
 | `[7/7]` Restoring dependencies | `dotnet restore` | Restore fail → kiểm tra mạng/proxy NuGet; hoặc bỏ qua với `-SkipRestore`. |
 
