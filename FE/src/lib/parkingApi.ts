@@ -223,4 +223,8 @@ export const operatorsApi = {
   async remove(operatorId: string) {
     await request<void>(`/${operatorId}`, "DELETE", undefined, "/api/operators")
   },
+
+  async reassignSite(_operatorId: string, _siteIds: string[]): Promise<Operator> {
+    throw new Error("Operator reassignment is not yet supported by the backend.")
+  },
 }

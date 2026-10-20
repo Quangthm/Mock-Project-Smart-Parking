@@ -144,6 +144,12 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
       await action()
       setNotice(success)
       setReload((value) => value + 1)
+      try {
+        const fresh = await parkingApi.structure(siteId)
+        setStructure(fresh)
+      } catch {
+        // Handled on next effect reload
+      }
       onChanged?.()
       return true
     } catch (cause) {
@@ -155,7 +161,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     }
   }
 
-  function addUnit(event: FormEvent) {
+  async function addUnit(event: FormEvent) {
     event.preventDefault()
     const name = unitForm.name.trim()
     const capacity = Number(unitForm.capacity)
@@ -168,23 +174,31 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
       setError("Select a parent floor or zone for the block.")
       return
     }
-    void mutate(
+    const saved = await mutate(
       () => parkingApi.unit(siteId, { type: unitForm.type, name, parentId, capacity }),
       "Unit created.",
-    ).then((saved) => { if (saved) { setUnitForm((form) => ({ ...form, name: "" })); setCreateModal(null) } })
+    )
+    if (saved) {
+      setUnitForm((form) => ({ ...form, name: "" }))
+      setCreateModal(null)
+    }
   }
 
-  function addSlot(event: FormEvent) {
+  async function addSlot(event: FormEvent) {
     event.preventDefault()
     const code = slotForm.code.trim()
     if (!slotForm.unitId || !code) {
       setError("Select a location and enter a slot code.")
       return
     }
-    void mutate(
+    const saved = await mutate(
       () => parkingApi.slot(siteId, { ...slotForm, code }),
       "Slot created.",
-    ).then((saved) => { if (saved) { setSlotForm((form) => ({ ...form, code: "" })); setCreateModal(null) } })
+    )
+    if (saved) {
+      setSlotForm((form) => ({ ...form, code: "" }))
+      setCreateModal(null)
+    }
   }
 
   return (

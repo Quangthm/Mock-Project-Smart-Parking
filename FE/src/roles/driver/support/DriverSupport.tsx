@@ -59,10 +59,7 @@ export function DriverSupport() {
           style={{ marginTop: "1rem" }}
           onClick={() => {
             setSent(false)
-
             setForm({ subject: "", message: "" })
-
-            setBookingId("")
           }}
         >
           New Ticket

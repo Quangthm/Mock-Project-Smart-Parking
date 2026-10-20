@@ -49,6 +49,7 @@ function fixture() {
       if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
       if (name === '../lib/authApi') return { authApi: api, authExpiredEvent: 'sp-auth-expired' };
       if (name === '../lib/store') return { store };
+      if (name === '../roles/authentications/Sign Up/DriverOtpForm') return { restoreDriverRegistration: () => null };
       throw new Error(`Unexpected import: ${name}`);
     },
     localStorage: { getItem: () => null },

@@ -48,6 +48,7 @@ function fixture(mode, fail = false) {
     '../../operator/data/roleRoutes': { getUserHomePath: () => '/' },
     '../../../components/brand/BrandLogo': { BrandLogo: 'brand' },
     '../../../components/forms/PasswordVisibilityIcon': { PasswordVisibilityIcon: 'password-icon' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
     '../../../lib/authApi': { authApi: api }, '../../../lib/signInContact': contact,
   }).SignIn;
   const render = () => { cursor = 0; return component(); };

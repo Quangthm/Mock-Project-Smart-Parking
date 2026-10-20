@@ -7,6 +7,7 @@ import { BrandLogo } from "../../../components/brand/BrandLogo"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { authApi } from "../../../lib/authApi"
+import { isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
 
 export function SignIn() {
   const { setUser, setView } = useApp()
@@ -48,6 +49,10 @@ export function SignIn() {
     e.preventDefault()
     if (submitting) return
     setError("")
+    if (!isValidSignInContact(email)) {
+      setError(signInContactMessage)
+      return
+    }
     setSubmitting(true)
 
     try {
@@ -281,6 +286,7 @@ export function SignIn() {
             <input
               className="input"
               type="text"
+              maxLength={255}
               autoComplete="username"
               value={email}
               disabled={submitting || !!challenge}
@@ -443,6 +449,7 @@ export function SignIn() {
 
           {error && (
             <div
+              role="alert"
               style={{
                 background: "#fee2e2",
                 border: "1px solid #fca5a5",

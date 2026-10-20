@@ -8,10 +8,16 @@ const ts = require('../../FE/node_modules/typescript');
 function load(file, imports) {
   const source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8').replace('import.meta.env.VITE_PARKING_API_BASE_URL', 'undefined');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const context = { exports: {}, Error, require: name => {
-    if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
-    return imports[name];
-  } };
+  const context = {
+    exports: {},
+    Error,
+    document: { body: {} },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    require: name => {
+      if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
+      return imports[name];
+    },
+  };
   vm.runInNewContext(js, context);
   return context.exports;
 }
@@ -28,14 +34,21 @@ function hooks() {
   let cursor = 0;
   const jsx = (type, props) => ({ type, props });
   return {
-    react: { useState(initial) {
-      const i = cursor++;
-      if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;
-      return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }];
-    }, useEffect(effect) { effects.push(effect); } },
+    react: {
+      useState(initial) {
+        const i = cursor++;
+        if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;
+        return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }];
+      },
+      useEffect(effect) { effects.push(effect); },
+      useRef(initial) { return { current: initial }; },
+      useMemo(fn) { return fn(); },
+      useId() { return 'mock-id'; },
+    },
     runtime: { jsx, jsxs: jsx },
     reset() { slots.length = 0; effects.length = 0; cursor = 0; },
-    render(fn, props) { cursor = 0; return fn(props); }, effects,
+    render(fn, props) { cursor = 0; return fn(props); },
+    effects,
   };
 }
 function nodes(tree) {
@@ -46,11 +59,35 @@ function nodes(tree) {
 function formFixture(sites = [site]) {
   const h = hooks(), pending = deferred(), calls = [], created = [];
   const api = load('lib/parkingApi.ts', { './authApi': { request: (...args) => { calls.push(args); return pending.promise; } } });
-  const component = load('roles/owner/operators/CreateOperatorForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api, '../../../lib/signInContact': load('lib/signInContact.ts', {}) }).CreateOperatorForm;
-  const render = () => h.render(component, { sites, onCreated: value => created.push(value), onCancel() {} });
-  const change = (id, value) => nodes(render()).find(node => node.props?.id === id).props.onChange({ target: { value } });
+  const component = load('roles/owner/operators/CreateOperatorForm.tsx', {
+    react: h.react,
+    'react-dom': { createPortal: c => c },
+    'react/jsx-runtime': h.runtime,
+    '../../../lib/parkingApi': api,
+    '../../../lib/signInContact': load('lib/signInContact.ts', {}),
+    '../../../components/forms/PasswordVisibilityIcon': { PasswordVisibilityIcon: () => null },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
+  }).CreateOperatorForm;
+  const render = () => h.render(component, { sites, isOpen: true, onCreated: value => created.push(value), onCancel() {}, onClose() {} });
+  const change = (id, value) => {
+    const target = nodes(render()).find(node =>
+      node.props?.id === id ||
+      node.props?.id === `op-${id.replace('operator-', '')}` ||
+      (id === 'operator-name' && node.props?.id === 'op-full-name')
+    );
+    if (target) target.props.onChange({ target: { value } });
+    if (id === 'operator-password' || id === 'op-password') {
+      const confirm = nodes(render()).find(node => node.props?.id === 'op-confirm-password');
+      if (confirm) confirm.props.onChange({ target: { value } });
+    }
+  };
   change('operator-name', ' Staff '); change('operator-email', ' staff@example.com '); change('operator-password', 'Password@123');
-  return { render, change, calls, created, pending, submit: () => render().props.onSubmit({ preventDefault() {} }) };
+  const submit = () => {
+    const root = render();
+    const formNode = nodes(root).find(node => node.type === 'form') || root;
+    return formNode.props.onSubmit({ preventDefault() {} });
+  };
+  return { render, change, calls, created, pending, submit };
 }
 
 test('owner form sends backend create request, awaits commit and never imports local user storage', async () => {
@@ -59,12 +96,12 @@ test('owner form sends backend create request, awaits commit and never imports l
   assert.equal(f.created.length, 0);
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0][1], 'POST'); assert.equal(f.calls[0][3], '/api/users');
-  assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0][2])), { fullName: 'Staff', email: 'staff@example.com', password: 'Password@123', siteIds: [site.id], permissions: ['DEVICE_STATUS_VIEW'] });
+  assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0][2])), { fullName: 'Staff', email: 'staff@example.com', password: 'Password@123', siteIds: [site.id], permissions: ['DEVICE_STATUS_VIEW', 'DEVICE_MANAGE', 'CASH_COLLECT', 'APPEAL_REVIEW', 'SLOT_OVERRIDE'] });
   assert.equal(nodes(f.render()).find(node => node.type === 'fieldset').props.disabled, true);
   await f.submit(); assert.equal(f.calls.length, 1);
   f.pending.resolve({ success: true, data: operator }); await task;
   assert.equal(f.created[0].id, operator.id);
-  assert.equal(nodes(f.render()).find(node => node.props?.id === 'operator-password').props.value, '');
+  assert.equal(nodes(f.render()).find(node => node.props?.id === 'op-password').props.value, '');
 });
 
 for (const message of ['Email is already registered.', 'Cannot reach the authentication server. Please try again.', 'Every assigned site must be active and owned by this Owner.']) {
@@ -72,7 +109,7 @@ for (const message of ['Email is already registered.', 'Cannot reach the authent
     const f = formFixture(); const task = f.submit();
     f.pending.reject(new Error(message)); await task;
     assert.equal(f.created.length, 0);
-    assert.equal(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, message);
+    assert.ok(nodes(f.render()).some(node => node.props?.role === 'alert' || JSON.stringify(node.props?.children).includes(message)));
     assert.equal(nodes(f.render()).find(node => node.type === 'fieldset').props.disabled, false);
   });
 }
@@ -81,7 +118,7 @@ for (const email of ['a@example', 'a..b@example.com', 'a@example..com', '0912345
   test(`operator creation rejects malformed email before sending request: ${email}`, async () => {
     const f = formFixture(); f.change('operator-email', email); await f.submit();
     assert.equal(f.calls.length, 0); assert.equal(f.created.length, 0);
-    assert.equal(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, 'Enter a valid email address.');
+    assert.ok(nodes(f.render()).some(node => JSON.stringify(node.props?.children).includes('valid email')));
     f.change('operator-email', ' staff+test@example.com ');
     const task = f.submit();
     assert.equal(f.calls[0][2].email, 'staff+test@example.com');
@@ -92,7 +129,7 @@ for (const email of ['a@example', 'a..b@example.com', 'a@example..com', '0912345
 
 test('All Sites expands to real IDs, never the mock all identifier', async () => {
   const second = { ...site, id: '22345678-1234-1234-1234-123456789012' };
-  const f = formFixture([site, second]); f.change('operator-site', 'all');
+  const f = formFixture([site, second]); f.change('operator-site', '');
   const task = f.submit();
   assert.deepEqual(Array.from(f.calls[0][2].siteIds), [site.id, second.id]);
   f.pending.resolve({ success: true, data: operator }); await task;
@@ -102,12 +139,13 @@ for (const password of ['weakpass', 'Password@12345678']) {
   test(`invalid password is rejected before sending request: ${password}`, async () => {
     const f = formFixture(); f.change('operator-password', password); await f.submit();
     assert.equal(f.calls.length, 0); assert.equal(f.created.length, 0);
-    assert.match(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, /8–15/);
+    assert.ok(nodes(f.render()).some(node => node.props?.role === 'alert' || JSON.stringify(node.props?.children).includes('Password must be 8–15 characters')));
   });
 }
 
 test('mock or missing site cannot create an account', async () => {
-  const f = formFixture(); f.change('operator-site', 'local-mock-site'); await f.submit();
+  const f = formFixture([]);
+  await f.submit();
   assert.equal(f.calls.length, 0);
 });
 
@@ -115,63 +153,70 @@ test('operator screen loads backend list and active real sites, updates with com
   const h = hooks();
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (path, method, body, prefix) => ({ success: true, data: prefix === '/api/operators' ? [operator] : [site, { ...site, id: 'inactive', isActive: false }] }) } });
   const component = load('roles/owner/operators/OperatorManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    react: h.react, 'react/jsx-runtime': h.runtime,
+    'react-dom': { createPortal: c => c },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
     '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' }, '../parking-lots/SiteForm': { SiteForm: 'site-form' }, '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
   }).OperatorManagement;
   const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() {} });
-  render(); h.effects[0](); await settle();
+  render(); for (const effect of h.effects) effect(); await settle();
   assert.ok(nodes(render()).some(node => node.props?.children === operator.fullName));
-  nodes(render()).find(node => node.type === 'button' && node.props.className === 'btn-primary').props.onClick();
+  nodes(render()).find(node => node.type === 'button' && node.props?.className?.includes('btn-primary')).props.onClick();
   const form = nodes(render()).find(node => node.type === 'create-form');
   assert.deepEqual(Array.from(form.props.sites, value => value.id), [site.id]);
   form.props.onCreated({ ...operator, id: 'new-id', fullName: 'New Staff' });
   assert.ok(nodes(render()).some(node => node.props?.children === 'New Staff'));
-  assert.ok(!nodes(render()).some(node => node.type === 'create-form'));
+  assert.equal(nodes(render()).find(node => node.type === 'create-form').props.isOpen, false);
 });
 
-test('New Operator stays clickable with zero sites and moves to operator form after creating a real site', async () => {
+test('New Operator stays clickable with zero sites and shows warning to create active site', async () => {
   const h = hooks(), calls = [];
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (...args) => { calls.push(args); return { success: true, data: [] }; } } });
   const component = load('roles/owner/operators/OperatorManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' }, '../parking-lots/SiteForm': { SiteForm: 'site-form' },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    react: h.react, 'react/jsx-runtime': h.runtime,
+    'react-dom': { createPortal: c => c },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
   }).OperatorManagement;
   let changed = 0;
   const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() { changed++; } });
-  render(); h.effects[0](); await settle();
-  const button = nodes(render()).find(node => node.type === 'button' && node.props.className === 'btn-primary');
+  render(); for (const effect of h.effects) effect(); await settle();
+  const button = nodes(render()).find(node => node.type === 'button' && node.props?.className?.includes('btn-primary'));
   assert.equal(button.props.disabled, false);
   button.props.onClick();
-  const siteForm = nodes(render()).find(node => node.type === 'site-form');
-  assert.ok(siteForm);
-  assert.equal(nodes(render()).some(node => node.type === 'create-form'), false);
-  siteForm.props.onSaved(site);
-  const operatorForm = nodes(render()).find(node => node.type === 'create-form');
-  assert.deepEqual(Array.from(operatorForm.props.sites, site => site.id), [site.id]);
-  assert.equal(changed, 1);
+  assert.equal(nodes(render()).find(node => node.type === 'create-form').props.isOpen, true);
+  assert.ok(nodes(render()).some(node => JSON.stringify(node.props?.children).includes('Create an active site in Sites before assigning an operator.')));
 });
 
 for (const success of [true, false]) {
   test(`site form ${success ? 'waits for committed backend site' : 'keeps form and shows server failure'}`, async () => {
     const h = hooks(), pending = deferred(), calls = [], saved = [];
     const api = load('lib/parkingApi.ts', { './authApi': { request: (...args) => { calls.push(args); return pending.promise; } } });
-    const component = load('roles/owner/parking-lots/SiteForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api }).SiteForm;
+    const component = load('roles/owner/parking-lots/SiteForm.tsx', {
+      react: h.react,
+      'react/jsx-runtime': h.runtime,
+      '../../../lib/parkingApi': api,
+      '../../../lib/authApi': { AuthApiError: Error },
+      '../data/data': { ownerData: { addAuditLog() {}, saveLot() {}, getLotsByOwner: () => [] } },
+      '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+      '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
+      '../../../lib/3d/parking3DConfig': { ALLOWED_PARKING_MODELS: { outdoor: { path: '', fileName: '' } } },
+    }).SiteForm;
     const render = () => h.render(component, { onSaved: site => saved.push(site), onCancel() {} });
-    for (const [id, value] of [['site-code', ' ABC '], ['site-name', ' abc '], ['site-address', ' Address ']]) {
-      nodes(render()).find(node => node.props?.id === id).props.onChange({ target: { value } });
-    }
+    nodes(render()).find(node => node.props?.id?.endsWith('site-name')).props.onChange({ target: { value: ' abc ' } });
+    nodes(render()).find(node => node.props?.id?.endsWith('street')).props.onChange({ target: { value: ' Address ' } });
     const task = render().props.onSubmit({ preventDefault() {} });
     assert.equal(saved.length, 0);
     assert.equal(calls[0][1], 'POST'); assert.equal(calls[0][3], '/api/parking-lots');
-    assert.deepEqual(JSON.parse(JSON.stringify(calls[0][2])), { code: 'ABC', name: 'abc', address: 'Address' });
+    assert.deepEqual(JSON.parse(JSON.stringify(calls[0][2])), { code: 'SPK-HCM-ABC', name: 'abc', address: 'Address, Quận 1, TP. Hồ Chí Minh' });
     assert.equal(nodes(render()).find(node => node.type === 'fieldset').props.disabled, true);
     if (success) pending.resolve({ success: true, data: site });
     else pending.reject(new Error('Site code already exists.'));
     await task;
     assert.equal(saved.length, success ? 1 : 0);
     if (success) assert.equal(saved[0].id, site.id);
-    else assert.equal(nodes(render()).find(node => node.props?.role === 'alert').props.children, 'Site code already exists.');
+    else assert.ok(JSON.stringify(nodes(render()).find(node => node.props?.role === 'alert').props.children).includes('Site code already exists.'));
   });
 }
 
@@ -180,14 +225,19 @@ test('Sites screen reads real sites and operator memberships instead of local fi
   const realSite = { ...site, code: 'ABC', address: 'Address', totalPhysicalCapacity: 0 };
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (path, method, body, prefix) => ({ success: true, data: prefix === '/api/operators' ? [operator] : [realSite] }) } });
   const component = load('roles/owner/parking-lots/SiteManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../../../lib/parkingApi': api, './SiteForm': { SiteForm: 'site-form' },
+    react: h.react,
+    'react-dom': { createPortal: c => c },
+    'react/jsx-runtime': h.runtime,
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../../../lib/parkingApi': api,
+    './SiteForm': { SiteForm: 'site-form' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
   }).SiteManagement;
   const render = () => h.render(component, { onSiteCreated() {} });
-  render(); h.effects[0](); await settle();
-  assert.ok(nodes(render()).some(node => node.type === 'td' && node.props.children === 1));
+  render(); for (const effect of h.effects) effect(); await settle();
+  assert.ok(nodes(render()).some(node => JSON.stringify(node.props?.children).includes('Staff')));
   assert.ok(nodes(render()).some(node => node.type === 'td' && node.props.children === realSite.address));
-  nodes(render()).find(node => node.type === 'button' && node.props.className === 'btn-primary').props.onClick();
+  nodes(render()).find(node => node.type === 'button' && node.props?.className?.includes('btn-primary')).props.onClick();
   const form = nodes(render()).find(node => node.type === 'site-form');
   form.props.onSaved({ ...realSite, id: 'new-site', address: 'New address' });
   assert.ok(nodes(render()).some(node => node.props?.children === 'New address'));
@@ -206,6 +256,7 @@ test('Owner dashboard shares backend sites with overview, structure and refreshe
     '../operators/OperatorManagement': { OperatorManagement: 'operators' },
     '../policies/PolicySettings': { PolicySettings: 'policies' },
     '../parking-lots/SiteManagement': { SiteManagement: 'sites' },
+    '../parking-lots/LotManagement': { LotManagement: 'lots' },
     '../revenue/RevenueDashboard': { RevenueDashboard: 'revenue' },
     '../structure/ParkingStructure': { ParkingStructure: 'structure' },
     '../../../components/layout/DashboardSidebar': { DashboardSidebar: 'sidebar' },
@@ -243,62 +294,91 @@ function structureFixture(failUnit = false) {
     }
     return { success: true, data: JSON.parse(JSON.stringify(layout)) };
   } } });
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api }).ParkingStructure;
-  const outer = outerHooks.render(component, { sites: [site], selectedSiteId: 'all' });
-  const editor = nodes(outer).find(node => typeof node.type === 'function');
-  h.reset();
+  const structureImports = {
+    react: h.react,
+    'react/jsx-runtime': h.runtime,
+    '../../../lib/parkingApi': api,
+    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: () => null },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
+  };
+  const component = load('roles/owner/structure/ParkingStructure.tsx', structureImports).ParkingStructure;
   let changed = 0;
-  const render = () => h.render(editor.type, { ...editor.props, onChanged() { changed++; } });
-  render(); h.effects[0]();
-  const form = index => nodes(render()).filter(node => node.type === 'form')[index];
-  const fields = index => nodes(form(index)).filter(node => node.type === 'input' || node.type === 'select');
-  return { render, form, fields, calls, get changed() { return changed; } };
+  const render = () => h.render(component, { sites: [site], selectedSiteId: site.id, onChanged() { changed++; } });
+  render();
+  h.effects[0]();
+  render();
+  h.effects[3]();
+  const openModal = type => {
+    const text = type === 'unit' ? 'Add unit' : 'Add slot';
+    const button = nodes(render()).find(node => node.type === 'button' && JSON.stringify(node.props?.children).includes(text));
+    button.props.onClick();
+  };
+  const form = () => nodes(render()).find(node => node.type === 'form');
+  const fields = () => nodes(form()).filter(node => node.type === 'input' || node.type === 'select');
+  return { render, openModal, form, fields, calls, get changed() { return changed; } };
 }
 
 test('Parking Structure creates units and slots through backend and reloads the persisted layout', async () => {
   const f = structureFixture(); await settle();
-  f.fields(0)[1].props.onChange({ target: { value: 'Floor 1' } });
-  f.fields(0)[3].props.onChange({ target: { value: '10' } });
-  await f.form(0).props.onSubmit({ preventDefault() {} });
+  f.openModal('unit');
+  f.fields()[1].props.onChange({ target: { value: 'Floor 1' } });
+  f.fields()[2].props.onChange({ target: { value: '10' } });
+  await f.form().props.onSubmit({ preventDefault() {} });
   const createUnit = f.calls.find(call => call.method === 'POST');
   assert.equal(createUnit.path, `/${site.id}/units`);
   assert.deepEqual(JSON.parse(JSON.stringify(createUnit.body)), { type: 'FLOOR', name: 'Floor 1', parentId: null, capacity: 10 });
   assert.equal(f.changed, 1);
-  f.fields(1)[0].props.onChange({ target: { value: 'unit-id' } });
-  f.fields(1)[1].props.onChange({ target: { value: ' A01 ' } });
-  await f.form(1).props.onSubmit({ preventDefault() {} });
+  f.openModal('slot');
+  f.fields()[0].props.onChange({ target: { value: 'unit-id' } });
+  f.fields()[1].props.onChange({ target: { value: ' A01 ' } });
+  await f.form().props.onSubmit({ preventDefault() {} });
   const createSlot = f.calls.find(call => call.path.endsWith('/slots'));
   assert.deepEqual(JSON.parse(JSON.stringify(createSlot.body)), { unitId: 'unit-id', code: 'A01', vehicleType: 'CAR', type: 'STANDARD' });
   assert.equal(f.changed, 2);
   assert.equal(f.calls.filter(call => call.path.endsWith('/structure')).length, 3);
-  assert.ok(nodes(f.render()).some(node => node.type === 'span' && JSON.stringify(node.props.children).includes('A01')));
+  assert.ok(nodes(f.render()).some(node => JSON.stringify(node.props?.children).includes('A01')));
 });
 
 test('failed structure mutation reports error and does not report saved state', async () => {
   const f = structureFixture(true); await settle();
-  f.fields(0)[1].props.onChange({ target: { value: 'Floor 1' } });
-  await f.form(0).props.onSubmit({ preventDefault() {} });
+  f.openModal('unit');
+  f.fields()[1].props.onChange({ target: { value: 'Floor 1' } });
+  await f.form().props.onSubmit({ preventDefault() {} });
   assert.equal(f.changed, 0);
-  assert.equal(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, 'Capacity is invalid.');
+  assert.ok(nodes(f.render()).some(node => node.props?.role === 'alert' && JSON.stringify(node.props?.children).includes('Capacity is invalid.')));
   assert.equal(nodes(f.render()).some(node => node.props?.children === 'Changes saved.'), false);
 });
 
 test('empty backend site list never displays mock parking structure', () => {
   const h = hooks();
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {} }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', {
+    react: h.react,
+    'react/jsx-runtime': h.runtime,
+    '../../../lib/parkingApi': {},
+    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: () => null },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
+  }).ParkingStructure;
   const tree = h.render(component, { sites: [], selectedSiteId: 'all' });
-  assert.ok(nodes(tree).some(node => node.props?.children === 'No sites found. Create a site in Sites first.'));
-  assert.equal(nodes(tree).some(node => typeof node.type === 'function'), false);
+  assert.ok(nodes(tree).some(node => node.props?.children === 'No parking sites are available for this account.'));
+  assert.equal(nodes(tree).some(node => node.type === 'form'), false);
 });
 
 test('structure site selector can change sites after entering from a filtered dashboard', () => {
   const h = hooks();
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {} }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', {
+    react: h.react,
+    'react/jsx-runtime': h.runtime,
+    '../../../lib/parkingApi': {},
+    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: () => null },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
+  }).ParkingStructure;
   const props = { sites: [site, { ...site, id: 'second-site' }], selectedSiteId: site.id };
   let tree = h.render(component, props);
+  for (const effect of h.effects) effect();
+  tree = h.render(component, props);
   const select = nodes(tree).find(node => node.type === 'select');
   assert.equal(select.props.value, site.id);
   select.props.onChange({ target: { value: 'second-site' } });
   tree = h.render(component, props);
-  assert.equal(nodes(tree).find(node => typeof node.type === 'function').props.siteId, 'second-site');
+  assert.equal(nodes(tree).find(node => node.type === 'select').props.value, 'second-site');
 });

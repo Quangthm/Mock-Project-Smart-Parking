@@ -23,7 +23,7 @@ export function GroupedNumberInput({
 
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return
-    if (document.activeElement === inputRef.current) {
+    if (document.activeElement === inputRef.current && inputRef.current) {
       inputRef.current.setSelectionRange(pendingCaret.current, pendingCaret.current)
     }
     pendingCaret.current = null

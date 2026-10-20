@@ -7,7 +7,7 @@ const ts = require('../../FE/node_modules/typescript');
 
 // Exercise the actual browser module with isolated storage and HTTP responses, without a DOM framework.
 const source = fs.readFileSync(path.join(__dirname, '../../FE/src/lib/authApi.ts'), 'utf8')
-  .replace("import { store } from './store';", 'const store = { findUserById: () => undefined };')
+  .replace(/import\s*\{\s*store\s*\}\s*from\s*['"].\/store['"];?/, 'const store = { findUserById: () => undefined };')
   .replace('import.meta.env.VITE_API_BASE_URL', 'undefined');
 const javascript = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

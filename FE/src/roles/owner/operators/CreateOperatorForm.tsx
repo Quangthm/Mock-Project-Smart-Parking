@@ -13,7 +13,7 @@ interface CreateOperatorFormProps {
   onClose: () => void
 }
 
-const DEFAULT_OPERATOR_PERMISSIONS = [
+export const DEFAULT_OPERATOR_PERMISSIONS = [
   "DEVICE_STATUS_VIEW",
   "DEVICE_MANAGE",
   "CASH_COLLECT",
@@ -116,7 +116,7 @@ export function CreateOperatorForm({
     }
 
     if (!isValidAccountEmail(normalizedEmail)) {
-      setEmailError("Enter a valid email address format.")
+      setEmailError("Enter a valid email address.")
       return
     }
 
@@ -143,7 +143,10 @@ export function CreateOperatorForm({
     }
 
     // 4. Sites check
-    const siteIds = sites.filter((s) => s.id === form.siteId).map((s) => s.id)
+    const siteIds =
+      form.siteId === "" || form.siteId === "all"
+        ? sites.map((s) => s.id)
+        : sites.filter((s) => s.id === form.siteId).map((s) => s.id)
 
     if (!siteIds.length) {
       setGeneralError("Please select an active site.")
@@ -173,10 +176,7 @@ export function CreateOperatorForm({
       const message =
         err instanceof Error ? err.message : "Operator creation failed."
 
-      if (
-        message.toLowerCase().includes("email_exists") ||
-        message.toLowerCase().includes("email is already registered")
-      ) {
+      if (message.toLowerCase().includes("email_exists")) {
         setEmailError("This email is already registered in the system.")
       } else {
         setGeneralError(message)
@@ -225,6 +225,7 @@ export function CreateOperatorForm({
 
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4.5">
+          <fieldset disabled={busy} className="contents space-y-4.5" style={{ border: 0, padding: 0, margin: 0 }}>
           {generalError && (
             <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
               <span className="mt-0.5 shrink-0">
@@ -396,6 +397,7 @@ export function CreateOperatorForm({
               <option value="" disabled>
                 Select a site
               </option>
+              <option value="all">All active sites</option>
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.name} ({site.totalPhysicalCapacity} slots)
@@ -434,6 +436,7 @@ export function CreateOperatorForm({
               {busy ? "Creating Operator…" : "Create Operator"}
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>,
