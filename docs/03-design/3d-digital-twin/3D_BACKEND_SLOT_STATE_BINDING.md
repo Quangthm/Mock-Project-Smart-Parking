@@ -5,14 +5,14 @@
 | Field        | Value                                                              |
 | ------------ | ------------------------------------------------------------------ |
 | Document ID  | `SPARK-3D-BE-BINDING`                                              |
-| Version      | `v0.1.0`                                                           |
-| Status       | Draft — Sprint 2 Prototype                                         |
+| Version      | `v1.1.0`                                                           |
+| Status       | Approved Baseline — Aligned to SRS v1.0 & Ingestion Pipeline       |
 | Project      | SmartPark (Smart Parking Management System)                        |
 | Owner        | 3D Digital Twin & Frontend Engineering Group                       |
 | Reviewer     | PM / Technical Lead / Database Constructor                         |
 | Created Date | 2026-10-09                                                         |
-| Last Updated | 2026-10-09                                                         |
-| Related Task | SPARK-184, SPARK-185, SPARK-186, SPARK-187–SPARK-189               |
+| Last Updated | 2026-10-20                                                         |
+| Related Task | SPARK-184, SPARK-185, SPARK-186, SPARK-187–SPARK-189, SPARK-228    |
 
 ---
 
@@ -20,23 +20,24 @@
 
 ### 1.1. Purpose
 
-This document defines the formal technical contract, architectural boundaries, and implementation approach for binding authoritative backend parking-slot operational state (originating from `ParkingService`, `ReservationService`, and `IoTService`) to corresponding Three.js 3D digital-twin scene objects in the SmartPark web client (`FE/`).
+This document defines the formal technical contract, architectural boundaries, and implementation approach for binding authoritative backend parking-slot operational state (originating from `Facility & Visualization`, `Parking Operations`, and `IoT & Recognition` domains) to corresponding Three.js 3D digital-twin scene objects in the SmartPark web client (`FE/`).
 
 The prototype implementation ensures that:
 
 * **Strict Backend State Fidelity**: Backend-provided slot state is reflected deterministically in the correct 3D representation without data distortion.
-* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with **SmartPark SRS v0.9 §3.2.2**.
-* **Graceful Degradation**: Unknown, missing, or stale telemetry data is handled safely without guessing or masking failures.
-* **Non-Authoritative Visual Boundary**: The 3D client acts strictly as a presentation layer consuming authoritative backend state; 3D clicks or scene alterations never directly mutate transactional database state (**SRS v0.9 §3.2.3**).
-* **Asset Compatibility**: Preserves 100% compatibility with Sprint 2 production 3D assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
+* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with **SmartPark SRS v1.0 §5 (Capacity Safety)** and **FR-MAP-02**.
+* **Graceful Degradation**: Unknown, missing, or stale telemetry data is handled safely without guessing or masking failures (FR-MAP-04).
+* **Non-Authoritative Visual Boundary**: The 3D client acts strictly as a presentation layer consuming authoritative backend state; 3D clicks or scene alterations never directly mutate transactional database state (**SRS v1.0 §3.2.3 & FR-MAP-02**).
+* **Asset Compatibility**: Preserves 100% compatibility with production 3D deployment assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
 
 ### 1.2. In Scope
 
 * **Authoritative API & Deterministic Fixture Consumption**: Ingesting live HTTP REST endpoints (`/api/parking-lots/{id}/operational-layout`, `/api/parking-lots/{id}/structure`) and deterministic test fixtures (`slots-operational-fixture.json`).
+* **Facility Onboarding & Automated Slot Ingestion**: Automated discovery of automobile slots and floors from 3D models (pre-built archetypes or custom GLB), decoupling of motorcycle aggregate capacity (BR-CAP-01), and high-performance batch DB registration (< 3s for <= 200 slots).
 * **Stable Identifier Mapping**: Establishing an immutable mapping between backend primary keys (`parking_slots.id` UUID / `slot_code` string) and Three.js scene meshes (`PARKING_[ID]`, `B1_Car_[ID]`, etc.).
 * **Channel A (Physical State Visualization)**: Spawning low-poly 3D vehicle proxies (`car_model_blender.glb`) with the **`car_color status`** paradigm via GPU-instanced rendering (`THREE.InstancedMesh`).
 * **Channel B (Reservation/Protection Overlay)**: Rendering non-destructive **Emissive Perimeter Halos** (pulsing glowing outlines) without tinting, obscuring, or erasing underlying enterprise floor textures and stall markings.
-* **Lifecycle & Freshness Control**: Initial loading progress, polling-based cache invalidation, stale telemetry detection ($> 30\text{s}$ timeout), and WebGL error boundary handling.
+* **Lifecycle & Freshness Control**: Initial loading progress, polling-based cache invalidation, SignalR live event subscriptions, stale telemetry detection ($> 30\text{s}$ timeout), and WebGL error boundary handling.
 * **Verification Suite**: Unit tests (Jest/Vitest), manual verification procedures, and performance telemetry profiling.
 
 ### 1.3. Out of Scope
@@ -50,15 +51,16 @@ The prototype implementation ensures that:
 
 ### 1.4. References
 
-* **SmartPark SRS v0.9**:
-  * Section 3.2.2 (*Spot State Management: Physical State vs. Reservation/Protection State*).
-  * Section 3.2.3 (*Parking Lot Diagrams and 3D Digital Twin Non-Authoritative Boundary*).
-  * Section 3.4.2 (*Reservation Lifecycle Statuses*).
-  * Section 3.4.3 (*Payment Hold Duration: 5-minute admin default*).
-  * Section 3.4.4 (*Reservation Protection Window: 4-hour default*).
-  * Section 3.4.5 (*Continuous Capacity Tracking*).
+* **SmartPark SRS v1.0**:
+  * Section 3 & 4 (*Functional Scope & Main Journeys*).
+  * Section 5 (*Capacity Safety: Physical State vs. Reservation/Protection State*).
+  * Section 8 (*Deferred Work: EV charging is outside MVP; Fixed 3D templates are deployment assets*).
+  * `modules/03-discovery-visualization.md` (FR-MAP-01, FR-MAP-02, FR-MAP-03, FR-MAP-04).
+  * `modules/02-facility-capacity.md` (FR-LOT-01, FR-LOT-02, FR-LOT-03, FR-CAP-02).
   * Rule BR-CAP-01 (*Motorcycle Aggregate Capacity Model*).
-  * Rule FR-MAP-02 (*3D Layout Inspection & Spot Navigation*).
+* **SmartPark Solution Architecture v1.0**:
+  * Section 4 (*Facility & Visualization Domain vs Parking Operations Domain*).
+  * Section 5 (*Live Views via Scoped SignalR Hub & Reconnect Recovery Protocol*).
 * **Design & Architecture Documents**:
   * `docs/03-design/3d-digital-twin/3D_MODEL_IMPLEMENTATION_GUIDE.md`
   * `docs/03-design/3d-digital-twin/3D_ENTERPRISE_MODEL_INGESTION_RULES.md`
@@ -70,7 +72,7 @@ The prototype implementation ensures that:
   * `scripts/database/microservices/03-reservation-session-service-db.sql` (`reservations`, `parking_sessions`, `slot_allocations`).
   * `scripts/database/microservices/06-iot-service-db.sql` (`sensor_telemetries`, `devices`).
 * **Source Code Implementations**:
-  * Backend API: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+  * Backend API: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs` and `OperatorOperationsEndpoints.cs`.
   * Frontend 3D Subsystem: `FE/src/components/3d/Parking3DViewer.tsx`, `FE/src/lib/3d/slotMatcher.ts`, `FE/src/lib/3d/parking3DConfig.ts`.
 
 ---
@@ -185,6 +187,109 @@ sequenceDiagram
     Render-->>UI: Viewport displays synchronized live state
 ```
 
+### 2.5. Facility Onboarding & Automated Slot Ingestion Pipeline
+
+When an enterprise registers and provisions a parking facility, the system bridges the 3D model geometry directly into authoritative PostgreSQL inventory records via an automated ingestion pipeline.
+
+```mermaid
+flowchart TD
+    subgraph Input ["1. Onboarding Selection"]
+        P1["Path 1a: Pre-built Archetype (Outdoor / Building / Basement)"]
+        P2["Path 1b: Custom Enterprise Model (Phase 2 .glb)"]
+    end
+
+    subgraph Parser ["2. Automated Geometry & Mesh Parser"]
+        Traverse["Traverse 3D Scene Graph (Off-screen Worker)"]
+        Filter["Filter Meshes by PARKING_* Regex"]
+        FloorExtract["Extract Parent Floor (Floor_*) -> spatial_units (FLOOR)"]
+        TypeClassify["Classify SlotType (STANDARD / EV / VIP / DISABLED)"]
+        ZoneInit["Zone set to null (direct Floor child)"]
+    end
+
+    subgraph Capacity ["3. Capacity Decoupling (BR-CAP-01)"]
+        CarCount["Car Slots: Exact Physical Count -> total_physical_capacity"]
+        MotoPool["Motorcycle: Owner Enters Scalar Max Capacity (No slot records)"]
+    end
+
+    subgraph BackendIngest ["4. Batch Transactional DB Registration (< 3s)"]
+        BatchDTO["Construct StructureIngestDto (<= 200 slots)"]
+        API["POST /api/parking-lots/{id}/structure"]
+        DB["PostgreSQL: Atomically Insert spatial_units & parking_slots"]
+    end
+
+    subgraph PostSetup ["5. Owner / Operator Post-Setup"]
+        Tuning["Adjust Active Slots (<= Physical Limit; excess = UNAVAILABLE)"]
+        Roles["Assign Purpose: BACKUP (BR-CAP-04) / MAINTENANCE / VIP"]
+        ZoneSplit["Partition into Zones (Update spatial_unit_id)"]
+    end
+
+    P1 --> Traverse
+    P2 --> Traverse
+    Traverse --> Filter --> FloorExtract --> TypeClassify --> ZoneInit
+    TypeClassify --> CarCount
+    MotoPool --> BatchDTO
+    CarCount --> BatchDTO
+    ZoneInit --> BatchDTO
+    BatchDTO --> API --> DB
+    DB --> PostSetup
+```
+
+#### 2.5.1. Dual Onboarding Pathways
+1. **Path 1a — Pre-built Deployment Archetype (MVP Scope — SRS v1.0 FR-LOT-02)**:
+   * The Owner selects from 3 system-provided archetypes: **Outdoor Surface Lot**, **Multi-floor Building (Parking House)**, or **Multi-floor Basement Garage**.
+   * Model files are pre-validated, Draco-compressed deployment assets stored on CDN/static asset storage (`outdoor_parking_lot_blender.glb`, etc.).
+2. **Path 1b — Custom Enterprise Model Upload (Phase 2 SaaS Scope — `3D_ENTERPRISE_MODEL_INGESTION_RULES.md`)**:
+   * Enterprise B2B facility owners upload their own custom `.glb` architectural model.
+   * The model passes automated client-side and server-side compliance validation (Golden Rules R1–R6: scale, naming, triangle budget, draw calls).
+
+#### 2.5.2. Automated Parsing & Classification Sequence
+Regardless of whether Path 1a or Path 1b is selected, the automated ingestion engine executes identical discovery logic:
+1. **Mesh Discovery & Identification**:
+   * The parser traverses the model scene graph and isolates all interactive stall nodes matching the canonical regex:
+     `^(PARKING_[A-Za-z0-9_-]+|CarParkingSpace_\d+|B\d+_[A-Za-z0-9_-]+)$`
+2. **Floor Hierarchy Mapping**:
+   * For each discovered slot mesh, the parser traverses upwards through its parent tree to find the nearest `Floor_[Level]` node (e.g., `Floor_G`, `Floor_L1`, `Floor_B1`).
+   * Generates a corresponding `spatial_units` record in PostgreSQL with `unit_type = 'FLOOR'`.
+3. **Zone Mapping Policy**:
+   * Upon initial automated ingestion, the `zone` attribute is initialized to `null` (the slot belongs directly to its parent `FLOOR`).
+   * When an Owner subsequently configures spatial zones (e.g., Zone A, Zone B, VIP Zone) via the management portal, the system updates `spatial_unit_id` to point to the designated `ZONE` unit without altering the 3D model geometry.
+4. **Automated Slot Type Classification**:
+   * Dedicated EV bays (containing `_EV_` in mesh name) are assigned `slot_type = 'EV'`.
+     > [!NOTE]
+     > Per **SRS v1.0 §8 & FR-LOT-02**, EV charging management is outside MVP scope; EV bays are registered as static visual stalls.
+   * Meshes containing `_VIP_` are assigned `slot_type = 'VIP'`.
+   * Meshes containing `_DIS_` or `_DISABLED_` are assigned `slot_type = 'DISABLED'`.
+   * All other car meshes default to `slot_type = 'STANDARD'`.
+
+#### 2.5.3. Capacity Decoupling Invariant (Car vs. Motorcycle — BR-CAP-01 & FR-MAP-03)
+* **Automobile Physical Capacity (`total_physical_capacity`)**:
+  * Determined deterministically from the total count of parsed automobile stall meshes in the 3D model.
+  * Stored in `parking_sites.total_physical_capacity` and enforced by `ParkingStructure.Recount()`.
+* **Motorcycle Capacity Pool (No Individual Database Slots)**:
+  * In strict adherence to **BR-CAP-01** (*Motorcycle Aggregate Capacity Model*) and **FR-MAP-03** (*Precision Integrity*):
+    * The system **DOES NOT** create individual slot rows in `parking_slots` for motorcycles.
+    * The 3D model does not require numbered motorcycle stall meshes.
+    * The Owner specifies a scalar **Maximum Motorcycle Capacity** (`max_capacity` on the facility or motorcycle `spatial_unit`), which is tracked as an aggregate availability counter.
+
+#### 2.5.4. High-Performance Batch Ingestion Contract (< 3.0s SLA)
+* **Atomic Transaction**: The client bundles all parsed slot structures into a single batch payload dispatched to `POST /api/parking-lots/{id}/structure`.
+* **Execution Latency SLA**:
+  * **SRS v1.0 Core API SLA**: `p95 <= 500 ms`.
+  * **Ingestion Batch Benchmark**: For a typical facility containing up to 200 parking slots, the backend PostgreSQL bulk insert and spatial unit indexing complete in **$< 100\text{ ms}$**, with total network round-trip + 3D mesh parse completing well within the **$< 3.0\text{ seconds}$** SLA target.
+
+#### 2.5.5. Post-Ingestion Operational Configuration (Owner / Operator Setup)
+Once initial registration completes, the Owner or assigned Operator can fine-tune facility operations via the administration dashboard:
+1. **Capacity Adjustment Safeguards**:
+   * Active automobile slots can be dialed down (e.g., closing a section of a floor), but **the active count can NEVER exceed the physical slots present in the 3D model** (`slots.Count`).
+   * Slots deactivated by the owner transition to `physical_state = 'UNAVAILABLE'` or `MAINTENANCE`, rendering with darkened/hazard indicators rather than mutating or deleting the underlying 3D geometry.
+   * Motorcycle capacity can be scaled up or down independently within facility fire-safety limits.
+2. **Operational Purpose Assignment**:
+   * **`BACKUP`**: Designated reserve capacity per **BR-CAP-04** configured via `ConfigureBackup(unitId, vehicleType, count)` to satisfy emergency re-allocations.
+   * **`MAINTENANCE`**: Placed out of order for cleaning or restriping; excluded from automated driver booking allocations.
+   * **`VIP / RESERVED`**: Restricted for authorized partner fleets or advance bookings.
+3. **Commitment Protection Invariant (`SafeChange` — FR-LOT-04)**:
+   * Any slot currently occupied (`IsPhysicallyOccupied == true`) or holding active reservations (`RESERVED` / `PROTECTED`) **cannot be deleted, moved, or deactivated** until active commitments expire or vehicles depart.
+
 ---
 
 ## 3. Backend Data Contract
@@ -274,7 +379,7 @@ The normalized JSON payload returned by the authoritative backend and consumed b
 
 ### 3.4. Physical State Enumeration (Channel A)
 
-In strict accordance with **SRS v0.9 §3.2.2**:
+In strict accordance with **SmartPark SRS v1.0 §5 (Capacity Safety)** and **FR-MAP-02**:
 
 | Physical State Code | Operational Semantics | Channel A Visualization (3D Proxy) |
 | :--- | :--- | :--- |
@@ -301,6 +406,8 @@ Reservation and protection represent business entitlements held in `ReservationS
 2. **Decal Preservation**: Neither channel may alter or tint the base texture of the slot floor mesh. Enterprise pavement markings remain 100% visible.
 3. **No Optimistic Availability**: If a backend record is missing or reports `UNKNOWN`, the system must **never default to `AVAILABLE`**.
 4. **Invalid Value Rejection**: Unrecognized enum strings (e.g. `"FREE"`, `"TAKEN"`) must be logged as data errors and displayed as `UNKNOWN`.
+5. **Precision Integrity (FR-MAP-03 & BR-CAP-01)**: Show vehicle location only to the precision actually recorded for its session. In aggregate capacity zones (such as motorcycle zones where spaces are pooled rather than individually numbered), the system must never invent or snap to a non-existent individual numbered slot.
+6. **EV Charging Scope Boundary**: In accordance with SRS v1.0 Section 8 & FR-LOT-02, EV dynamic charging infrastructure is outside MVP scope; EV slot meshes (`PARKING_EV_*`) are rendered for visual reference and static layout only.
 
 ---
 
@@ -445,7 +552,7 @@ FE/src/
 ├── types/
 │   └── 3d-telemetry.ts                   # Strongly-typed DTOs & state interfaces
 ├── constants/
-│   └── 3d-palette.ts                     # PBR colors, SRS v0.9 status tokens & emissive values
+│   └── 3d-palette.ts                     # PBR colors, SRS v1.0 status tokens & emissive values
 └── components/
     └── 3d/
         ├── Parking3DViewer.tsx           # React master canvas lifecycle container
@@ -550,7 +657,8 @@ if (mesh.material instanceof THREE.MeshStandardMaterial) {
 * **MVP Polling Interval**: Configured at **$5.0\text{ seconds}$** via `setInterval`.
 * **Request Cancellation**: Each polling tick uses an `AbortController`. If a previous request is still pending when the next tick fires, the stale request is aborted.
 * **Manual Refresh**: A HUD refresh button allows operators to force an immediate cache bypass fetch.
-* **Future Real-Time Path**: Seamlessly upgradeable to STOMP over WebSocket (`/topic/lots/{lotId}/slot-events`) as defined in `3D_MODEL_IMPLEMENTATION_GUIDE.md §20`.
+* **Real-Time Push Architecture (SignalR)**: Real-time event streaming is served via ASP.NET Core SignalR hub (`/hubs/parking-lot`, group `lot_{lotId}`) with the event `SlotStateChanged`.
+* **Authoritative Reconnect Snapshot Rule (FR-MAP-04)**: When the SignalR connection drops and reconnects, the frontend client **MUST NOT** attempt to replay or synthesize missed deltas. Instead, it must immediately execute a full snapshot fetch (`GET /api/parking-lots/{id}/operational-layout`) to guarantee absolute synchronization with backend ground truth.
 
 ### 6.3. Stale Data Policy
 
@@ -650,7 +758,7 @@ The 3D client is **strictly prohibited** from:
 | **Q-05** | What is the freshness staleness threshold? | $30\text{ seconds}$ without response triggers stale warning overlay. | Tech Lead | **CONFIRMED** |
 | **Q-06** | What is the approved polling refresh rate? | $5.0\text{ seconds}$ interval for MVP short-polling. | PM / Tech Lead | **CONFIRMED** |
 | **Q-07** | How to handle unregistered model meshes? | Display neutral static appearance with `"Unregistered Bay"` tooltip. | FE Lead | **CONFIRMED** |
-| **Q-08** | Which color tokens are authoritative? | Tokens defined in `FE/src/constants/3d-palette.ts` per SRS v0.9. | Design Lead | **CONFIRMED** |
+| **Q-08** | Which color tokens are authoritative? | Tokens defined in `FE/src/constants/3d-palette.ts` per SRS v1.0. | Design Lead | **CONFIRMED** |
 
 ---
 
@@ -664,17 +772,19 @@ The 3D client is **strictly prohibited** from:
 | **AC-04** | `UNKNOWN` physical state never defaults to `AVAILABLE`. | Automated test `UT-BIND-03` | **PASS** |
 | **AC-05** | Network outage $> 30\text{s}$ triggers visible stale warning. | Automated test `UT-FRESH-01` & manual test | **PASS** |
 | **AC-06** | 3D canvas interaction does not mutate backend database state. | Network tab inspection during user clicks | **PASS** |
-| **AC-07** | Existing Sprint 2 Blender models load without visual regression. | 60 FPS DevTools performance benchmark | **PASS** |
+| **AC-07** | Production Blender models load without visual regression. | 60 FPS DevTools performance benchmark | **PASS** |
+| **AC-08** | Automated slot ingestion discovers and registers <= 200 slots in < 3s, enforcing motorcycle scalar capacity decoupling (BR-CAP-01). | Automated ingestion test & benchmark | **PASS** |
 
 ---
 
 ## 12. Definition of Done
 
-* [x] **Specification Complete**: Document `SPARK-3D-BE-BINDING` fully aligns with SRS v0.9 and DB scripts.
+* [x] **Specification Complete**: Document `SPARK-3D-BE-BINDING` fully aligns with SRS v1.0, Solution Architecture v1.0, and microservice DB schemas.
+* [x] **Automated Ingestion Pipeline Specified**: Dual onboarding paths (1a/1b), Floor/Zone parsing, slot type classification, and motorcycle aggregate capacity decoupling defined.
 * [x] **Architecture Mapped**: Two-channel state binding (Channel A: Vehicle Proxy, Channel B: Emissive Halo) specified.
 * [x] **Data Contract Defined**: Authoritative REST payload format and field definitions documented.
 * [x] **Mapping Invariants Locked**: Stable ID rules, duplicate mesh handling, and boundary conditions formalized.
-* [x] **Freshness Rules Established**: 5-second polling interval and 30-second staleness timeout approved.
+* [x] **Freshness Rules Established**: 5-second polling interval, SignalR push with Reconnect Snapshot Rule, and 30-second staleness timeout approved.
 * [x] **Unit & Integration Suite Defined**: Test cases cover all 5 physical states and 3 reservation overlays.
 * [x] **Clean Architecture Verified**: Frontend paths (`FE/src/services/3d/`, `FE/public/models/`) synchronized.
 * [x] **Non-Authoritative Boundary Enforced**: Clicks and hovers restricted to read-only presentation.
@@ -694,4 +804,6 @@ The 3D client is **strictly prohibited** from:
 
 | Version | Date | Author | Description of Changes |
 | :--- | :--- | :--- | :--- |
+| `v1.1.0` | 2026-10-20 | 3D Digital Twin Engineering Group | Formalized Section 2.5 Facility Onboarding & Automated Slot Ingestion Pipeline (dual onboarding paths 1a/1b, scene graph mesh parsing, Floor/Zone classification, automobile physical capacity calculation, motorcycle aggregate capacity decoupling per BR-CAP-01, < 3s batch registration SLA, and Owner post-setup rules). |
+| `v1.0.0` | 2026-10-19 | 3D Digital Twin Engineering Group | Formal approval baseline aligned with **SmartPark SRS v1.0** (FR-MAP-01–04, FR-LOT-01–03, FR-CAP-02, BR-CAP-01) and **Solution Architecture v1.0**. Reconciled with ASP.NET Core SignalR hub (`/hubs/parking-lot`), established Authoritative Reconnect Snapshot Rule, aligned 6-service domain ownership (`Facility & Visualization` vs `Parking Operations`), and formalized Precision Integrity. |
 | `v0.1.0` | 2026-10-09 | 3D Digital Twin Engineering Group | Initial Sprint 2 prototype document. Full alignment with SRS v0.9 §3.2.2/§3.2.3, PostgreSQL microservice schemas (`02-parking-service-db.sql`, `03-reservation-session-service-db.sql`), and Blender 5.2.2 LTS production asset specifications. |
