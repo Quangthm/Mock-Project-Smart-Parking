@@ -101,51 +101,53 @@ export function SignIn() {
       setUser(signedInUser)
       setView(user.role)
       navigate(getUserHomePath(user), { replace: true })
+
     } catch (error) {
       const msg =
         error instanceof Error
           ? error.message
           : "Sign in failed. Please try again."
 
-      if (error instanceof AuthApiError &&
-          ["MFA_CHALLENGE_INVALID", "CHALLENGE_CLOSED"].includes(error.code ?? "")) {
+      if (
+        error instanceof AuthApiError &&
+        ["MFA_CHALLENGE_INVALID", "CHALLENGE_CLOSED"].includes(
+          error.code ?? ""
+        )
+      ) {
         setMfaChallenge(null)
         setMfaValue("")
       }
 
-      // MFA accounts must complete the OTP challenge endpoint. The password endpoint
-      // deliberately returns MFA_REQUIRED and cannot accept a TOTP on retry.
       if (
         mode === "password" &&
-        msg.toLowerCase().includes("use otp sign-in") &&
-        !requireTotp
+        msg.toLowerCase().includes("use otp sign-in")
       ) {
         try {
           const nextChallenge = await authApi.requestOtp(email)
+
           setMode("otp")
           setChallenge(nextChallenge)
           setCode("")
-          setTotp("")
-          setRequireTotp(false)
-          setTotpCode("")
+          setMfaValue("")
+          setUseRecoveryCode(false)
+
           setError(
-            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code.",
+            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code."
           )
         } catch (otpError) {
           setError(
             otpError instanceof Error
               ? otpError.message
-              : "Unable to start OTP sign-in. Please try again.",
+              : "Unable to start OTP sign-in. Please try again."
           )
         }
       } else {
         setError(msg)
       }
-      }
-      setError(msg)
     } finally {
       setSubmitting(false)
     }
+
   }
 
   // Forgot Password Handlers
