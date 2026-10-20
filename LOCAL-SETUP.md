@@ -10,7 +10,7 @@ git branch --show-current
 
 Nhánh làm việc mặc định là `develop` (kiểm tra bằng `git branch --show-current`). Cần .NET SDK 10 và Docker Desktop đang chạy (Docker Compose hỗ trợ `up --wait`). Node.js/npm cần cho frontend. Script `setup.ps1` được lưu trong Git và không chứa mật khẩu cố định. Lệnh cũ `.\scripts\setup-local.ps1` vẫn chuyển tiếp đến script này.
 
-Setup tạo `.env` từ `.env.example`, sinh giá trị local còn thiếu cho password PostgreSQL, service key và password Admin. Script giữ nguyên `.env` đã cấu hình; user-secrets được đồng bộ theo `.env` mỗi lần chạy `[5/7]` (ghi đè giá trị lệch, xóa khóa optional JWT/SMTP không còn trong `.env`), không in mật khẩu ra terminal. Cấu hình `.cache/qa-local.json` cũ được giữ nguyên nhưng runner hiện tại đọc `.env`. Không commit `.env`, user-secrets hoặc thư mục workflow keys.
+Setup tạo `.env` từ `.env.example`, sinh giá trị local còn thiếu cho password PostgreSQL, service key, password Admin, owner và operator. Script giữ nguyên `.env` đã cấu hình; user-secrets được đồng bộ theo `.env` mỗi lần chạy `[5/7]` (ghi đè giá trị lệch, xóa khóa optional JWT/SMTP không còn trong `.env`), không in mật khẩu ra terminal. Cấu hình `.cache/qa-local.json` cũ được giữ nguyên nhưng runner hiện tại đọc `.env`. Không commit `.env`, user-secrets hoặc thư mục workflow keys.
 
 Setup dựng sáu PostgreSQL database riêng theo `compose.schema-integration.yml`, kiểm tra xác thực ba database chính, áp dụng workflow migration và restore solution. Không tự chạy API hoặc frontend. SonarQube được dựng tự động cùng setup, bỏ qua bằng `-SkipSonarQube` (`-SkipDatabase` chỉ dựng credential, không khởi động container).
 
@@ -64,11 +64,21 @@ Mở ba terminal PowerShell riêng tại repo:
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
 
-Runner dùng `.env` cho connection strings, shared service key, Admin và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port 5035/5045/5055.
+Runner dùng `.env` cho connection strings, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port 5035/5045/5055.
 
 ## Schema và dữ liệu có sẵn
 
 Database mới chạy SQL baseline trong `scripts/database/microservices` (01–06 theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`. Runner chỉ áp bộ file này; script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn. `docker-compose.yml` là compose monolith cũ (port 5433), không được setup hiện tại sử dụng.
+
+### Seed dữ liệu demo (owner/operator + site)
+
+Sau khi UserService đã khởi động lần đầu (owner/operator được seed), chạy:
+
+```powershell
+.\scripts\seed-demo-site.ps1
+```
+
+Script tạo tenant `DEMO-OWNER`, site `DEMO-HQ`, 1 floor, 1 zone, 8 slot (6 CAR + 2 MOTORCYCLE), operator grant và capacity pools. Chạy lại an toàn (idempotent). Nếu báo thiếu owner/operator, chạy `.\scripts\run-schema-service.ps1 -Service User` một lần rồi seed lại. Script không in password.
 
 PostgreSQL chỉ chạy init SQL khi volume mới hoàn toàn. Với volume đã tồn tại, `scripts/apply-workflow-migrations.ps1` probe trạng thái DB trước khi áp script: schema đã đúng (sentinel có mặt) → bỏ qua và chỉ kiểm tra bảng bắt buộc; DB trống → áp trọn bộ canonical; schema cũ (có bảng cũ nhưng thiếu sentinel) → dừng và yêu cầu `.\setup.ps1 -RecreateDb`. Runner không reset volume và không chạy lại CREATE TABLE trên dữ liệu đang dùng.
 

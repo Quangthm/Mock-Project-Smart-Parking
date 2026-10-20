@@ -23,6 +23,13 @@ function New-LocalSecret([int]$Bytes = 32) {
     [Convert]::ToBase64String($buffer)
 }
 
+function Assert-DevelopmentPassword([string]$Name, [string]$Value) {
+    if ([string]::IsNullOrEmpty($Value) -or $Value.Length -lt 8 -or $Value.Length -gt 15 -or
+        $Value -cnotmatch '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$') {
+        throw "$Name requires 8-15 characters, uppercase, lowercase, digit and special character."
+    }
+}
+
 # Parse Password from a secrets connection string. DbConnectionStringBuilder can fail to
 # tokenize some raw values (it collapses them into a single "ConnectionString" key), so
 # fall back to explicit Password= regex matching.
@@ -81,7 +88,7 @@ if ($CredentialMode -eq 'Team') {
     foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { throw "Team file must configure $name." }
     }
-    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL')) {
+    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { continue }
         if ($settings[$name] -and $settings[$name] -notlike 'replace-with-*' -and $settings[$name] -cne $team[$name]) {
             throw "Team/local conflict for $name. Existing configuration was preserved; reconcile it explicitly before retrying."
@@ -92,15 +99,21 @@ if ($CredentialMode -eq 'Team') {
         }
     }
 }
-foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
+foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
     if (!$settings[$name] -or $settings[$name] -like 'replace-with-*') {
         $value = $null
         if ($name -eq 'SMARTPARK_SERVICE_KEY') {
             $keys = @($existingByService.Values | ForEach-Object { $_['Services:Key'] } | Where-Object { $_ } | Select-Object -Unique)
             if ($keys.Count -gt 1) { throw 'Existing service keys differ. Reconcile Services:Key before setup.' }
             if ($keys.Count -eq 1) { $value = $keys[0] }
-        } elseif ($name -eq 'SMARTPARK_ADMIN_PASSWORD') {
-            $value = $existingByService['User']['DevelopmentAdmin:Password']
+        } elseif ($name -in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+            if ($name -eq 'SMARTPARK_ADMIN_PASSWORD') {
+                $value = $existingByService['User']['DevelopmentAdmin:Password']
+            }
+            if (!$value) {
+                # 4 fixed chars + 8 base64 chars = 12 chars; always has upper/lower/digit/special.
+                $value = 'Aa1!' + (New-LocalSecret 6)
+            }
         } else {
             # Reuse an existing local PostgreSQL password when configuring an old volume.
             $passwords = @()
@@ -126,11 +139,20 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
             }
         }
         if (!$value) {
-            $value = if ($name -eq 'SMARTPARK_ADMIN_PASSWORD') { 'Aa1!' + (New-LocalSecret 6) } else { New-LocalSecret }
+            $value = if ($name -in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) { 'Aa1!' + (New-LocalSecret 6) } else { New-LocalSecret }
         }
         if ($value -match "[\r\n']") { throw "Set $name directly in .env; its existing value cannot be safely represented automatically." }
         $settings[$name] = $value
         $generated[$name] = $value
+    }
+}
+foreach ($pair in @(
+    @{ Name = 'SMARTPARK_OWNER_EMAIL'; Default = 'owner@smartpark.local' },
+    @{ Name = 'SMARTPARK_OPERATOR_EMAIL'; Default = 'operator@smartpark.local' }
+)) {
+    if ([string]::IsNullOrWhiteSpace($settings[$pair.Name])) {
+        $settings[$pair.Name] = $pair.Default
+        $generated[$pair.Name] = $pair.Default
     }
 }
 if ($sonarEnabled) {
@@ -147,8 +169,8 @@ foreach ($name in $generated.Keys) {
     if ($generated[$name] -match "[\r\n']") { throw "Configure $name manually; its value cannot be safely written automatically." }
 }
 if ($settings['SMARTPARK_SERVICE_KEY'].Length -lt 32) { throw 'SMARTPARK_SERVICE_KEY must contain at least 32 characters.' }
-if ($settings['SMARTPARK_ADMIN_PASSWORD'] -cnotmatch '^(?=.{8,15}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$') {
-    throw 'SMARTPARK_ADMIN_PASSWORD requires 8-15 characters, uppercase, lowercase, digit and special character.'
+foreach ($name in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+    Assert-DevelopmentPassword $name $settings[$name]
 }
 foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
     $port = 0
@@ -184,10 +206,8 @@ if (!$envExists -or $generated.Count) {
 }
 $settings = & (Join-Path $taskRoot 'scripts/load-env.ps1') -EnvPath $envFile
 if ($settings['SMARTPARK_SERVICE_KEY'].Length -lt 32) { throw 'SMARTPARK_SERVICE_KEY must contain at least 32 characters.' }
-$adminPassword = $settings['SMARTPARK_ADMIN_PASSWORD']
-if ($adminPassword.Length -lt 8 -or $adminPassword.Length -gt 15 -or
-    $adminPassword -cnotmatch '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$') {
-    throw 'SMARTPARK_ADMIN_PASSWORD requires 8-15 characters, uppercase, lowercase, digit and special character.'
+foreach ($name in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+    Assert-DevelopmentPassword $name $settings[$name]
 }
 foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
     $port = 0
@@ -249,7 +269,11 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
     }
     if ($service -eq 'User') {
         $desired['DevelopmentAdmin:Email'] = $settings['SMARTPARK_ADMIN_EMAIL']
-        $desired['DevelopmentAdmin:Password'] = $adminPassword
+        $desired['DevelopmentAdmin:Password'] = $settings['SMARTPARK_ADMIN_PASSWORD']
+        $desired['DevelopmentOwner:Email'] = $settings['SMARTPARK_OWNER_EMAIL']
+        $desired['DevelopmentOwner:Password'] = $settings['SMARTPARK_OWNER_PASSWORD']
+        $desired['DevelopmentOperator:Email'] = $settings['SMARTPARK_OPERATOR_EMAIL']
+        $desired['DevelopmentOperator:Password'] = $settings['SMARTPARK_OPERATOR_PASSWORD']
         $keyDirectory = $settings['SMARTPARK_WORKFLOW_KEY_DIRECTORY']
         if (!$keyDirectory) { $keyDirectory = '.cache/workflow-keys' }
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
