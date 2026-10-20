@@ -1,5 +1,7 @@
 # Workflow upgrades — 08/10/2026
 
+> **Historical arch workflow — not part of the deployed 6-DB profile.** The current runner blocks legacy `05.1–05.9` and `integration/01–03`; equivalent behavior now lives in base `01`/`02`/`03a`/`03b` plus the 8 overlays. Do not follow the commands below on `feature/db-hybrid-srs-v1`; see `README.md` and `schema-integration.md`.
+
 Companion code release on `develop`: `feat(workflows): complete auth, vehicle and parking flows with QA handoff`.
 
 Apply these service-specific upgrades after the canonical microservice baseline and `integration/01`, `02`, `03` overlays. They are not the legacy monolith migrations despite the `05.*` filename prefix.

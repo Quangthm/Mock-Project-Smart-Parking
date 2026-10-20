@@ -16,8 +16,11 @@ COPY requirements.txt ./
 # Tăng timeout và ưu tiên bản PyTorch CPU siêu nhẹ tránh lỗi timeout mạng
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Pre-download PaddleOCR model weights during image build so container starts instantly
-RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(lang='en', use_angle_cls=False, use_gpu=False, show_log=False)"
+# Pre-download PaddleOCR model weights during image build so container starts instantly.
+# Preload scipy/skimage C extensions BEFORE paddle: paddlepaddle's libpaddle.so interposes
+# zlib symbols process-wide, corrupting decompression for any .so loaded after it
+# (zlib.error: Error -2 ... inconsistent stream state on import pyclipper).
+RUN python -c "import scipy._lib._ccallback; import skimage.morphology; from paddleocr import PaddleOCR; PaddleOCR(lang='en', use_angle_cls=False, use_gpu=False, show_log=False)"
 
 # Copy source code and AI models
 COPY . .

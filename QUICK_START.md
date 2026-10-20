@@ -17,7 +17,7 @@ Mặc định `Local`: dùng lại credential trong `.env`/user-secrets; chỉ s
 
 File Team phải có `SMARTPARK_DEV_PASSWORD`, `SMARTPARK_SERVICE_KEY` (ít nhất 32 ký tự), `SMARTPARK_ADMIN_PASSWORD` (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt). Có thể kèm `SONAR_DB_PASSWORD`, `VITE_MAPTILER_API_KEY` và `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_PARKING_URL`, `SMARTPARK_SERVICE_RESERVATION_URL`. File Team không thay thế cả `.env`: port, SMTP và cấu hình riêng trên máy vẫn giữ nguyên. Không commit file Team hoặc secret thật; lưu ngoài repo.
 
-Setup dừng nếu credential Team khác cấu hình local đã có, hoặc `.env` khác credential user-secrets. Nó không tự ghi đè/reset. Nếu muốn giữ user-secrets cũ và chạy API hoàn toàn bằng `.env`, dùng `-SkipUserSecrets` rồi dùng runner, không chạy trực tiếp từ Visual Studio:
+Setup dừng nếu credential Team khác cấu hình local đã có (`Team/local conflict`). Ngược lại, `[5/7]` luôn đồng bộ user-secrets theo `.env` (ghi đè giá trị lệch, xóa khóa optional không còn trong `.env`) — muốn giữ user-secrets cũ thì dùng `-SkipUserSecrets` + runner, không chạy trực tiếp từ Visual Studio:
 
 ```powershell
 .\setup.ps1 -SkipUserSecrets
@@ -25,9 +25,13 @@ Setup dừng nếu credential Team khác cấu hình local đã có, hoặc `.en
 # Hai terminal khác: -Service Parking và -Service Reservation
 ```
 
-Nếu DB volume cũ đã có password khác, cần khôi phục password gốc; đổi `.env` không đổi password trong PostgreSQL. Admin đã seed cũng không được đổi password chỉ bằng setup.
+Nếu DB volume cũ đã có password khác, cần khôi phục password gốc; đổi `.env` không đổi password trong PostgreSQL. Admin/owner/operator đã seed cũng không được đổi password chỉ bằng setup. UserService seed ba tài khoản khi service khởi động lần đầu: admin (`admin@smartpark.local`), owner (`owner@smartpark.local`) và operator (`operator@smartpark.local`); password tương ứng trong `.env` (`SMARTPARK_ADMIN_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`). Tài khoản driver demo (`driver@gmail.com / Password@123`) được DataSeeder tạo trong code.
 
-SonarQube bật bằng `-WithSonarQube` sau khi cấu hình `SONAR_DB_PASSWORD`; UI mặc định http://localhost:9000. Compose Sonar riêng giữ dữ liệu trong named volumes; không tự tiếp quản container Sonar cũ. Cấu hình dựa trên [ví dụ chính thức SonarSource](https://github.com/SonarSource/docker-sonarqube/blob/master/example-compose-files/sq-with-postgres/docker-compose.yml). Pin `SONAR_IMAGE` theo version team duyệt nếu cần môi trường cố định. Lần đầu đăng nhập admin/admin và đổi password trên UI.
+SonarQube tự khởi động cùng `.\setup.ps1` (bỏ qua bằng `-SkipSonarQube`; `-SkipDatabase` không khởi động container). `SONAR_DB_PASSWORD` được sinh tự động khi thiếu và giữ nguyên giá trị đã cấu hình; UI mặc định http://localhost:9000. Compose Sonar riêng giữ dữ liệu trong named volumes; không tự tiếp quản container Sonar cũ. Cấu hình dựa trên [ví dụ chính thức SonarSource](https://github.com/SonarSource/docker-sonarqube/blob/master/example-compose-files/sq-with-postgres/docker-compose.yml). Pin `SONAR_IMAGE` theo version team duyệt nếu cần môi trường cố định. Lần đầu đăng nhập admin/admin và đổi password trên UI.
+
+AI camera là tùy chọn riêng: `.\setup.ps1 -WithAiCamera` build và dựng 2 container từ `compose.ai.yml` (project `smartpark-ai`): `ai-rest` là REST API tại http://localhost:5001, `ai-live` là luồng nhận diện trực tiếp tại http://localhost:5002, gắn vào mạng ngoài `smartpark-schema_default`. Không thêm flag thì không build/chạy gì thuộc AI — hành vi giữ nguyên như trước. Flag chỉ hợp lệ khi chạy full setup: cần schema DBs đang chạy (không dùng chung `-SkipDatabase`) và `SMARTPARK_DEV_PASSWORD` đã cấu hình trong `.env`. Lần build đầu mất ~5–10 phút (PyTorch CPU wheels + PaddleOCR warm-up) và tốn RAM; các lần sau dùng cache.
+
+
 
 MapTiler: điền `VITE_MAPTILER_API_KEY` trong root `.env` hoặc file Team; setup chỉ bổ sung nếu key trong `FE/.env` còn trống. Key FE đã có được giữ nguyên. Để chạy frontend:
 
@@ -37,8 +41,55 @@ npm install
 npm run dev
 ```
 
-Port mặc định: User/Parking/Reservation API 5035/5045/5055; User/Parking/Reservation DB 5441/5442/5443; Payment/Notification/IoT DB 5444/5445/5446; FE 5173. DB bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng.
+Port mặc định: User/Parking/Reservation API 5035/5045/5055; User/Parking/Reservation DB 5441/5442/5443; Payment/Notification/IoT DB 5444/5445/5446; ai-rest/ai-live 5001/5002 (chỉ build + chạy bằng `.\setup.ps1 -WithAiCamera`); FE 5173. DB bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng.
 
-Gặp warning `relation "structure_synchronizations" does not exist` (hoặc bảng khác bị thiếu) trên volume cũ: áp migration bằng `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .`; chi tiết ở [LOCAL-SETUP.md](LOCAL-SETUP.md).
+### Tóm tắt các flag
+
+| Flag | Ý nghĩa |
+| --- | --- |
+| `-SkipDatabase` | Bỏ qua bước [4/7]: không init DB, không migrate. Vẫn dựng credential. |
+| `-SkipRestore` | Bỏ qua bước [7/7]: không `dotnet restore`. |
+| `-SkipUserSecrets` | Bỏ qua bước [5/7]: giữ nguyên user-secrets cũ. |
+| `-RecreateDb` | Xóa schema volumes rồi init lại 6 DB (mất dữ liệu dev). |
+| `-CredentialMode Team -TeamEnvPath <file>` | Dùng credential từ file team thay vì sinh local. |
+| `-SkipSonarQube` | Không khởi động SonarQube (mặc định SonarQube chạy cùng setup). |
+| `-NonInteractive` | Bỏ qua prompt `.env` overwrite; tự động Keep nếu `.env` đã tồn tại. |
+| `-WithAiCamera` | Build + chạy 2 container AI (ai-rest :5001, ai-live :5002). Yêu cầu schema DBs đang chạy. |
+
+## Progress lines `[n/7]` và cách debug khi setup fail
+
+`setup.ps1` in ra các mốc `[n/7]` trước khi vào từng giai đoạn; giai đoạn DB còn có dòng con `    - ...`. Màu hiển thị: header `[n/7]` = cyan, dòng con `    - ...` = xám nhạt, trạng thái hoàn tất mỗi bước = xanh lá, prompt/warning = vàng. **Dòng progress cuối cùng trên màn hình = bước đang chạy khi lỗi xảy ra** — dùng nó để xác định nhanh nguyên nhân:
+
+| Progress line | Giai đoạn | Lỗi thường gặp → Cách xử lý |
+| --- | --- | --- |
+| `[1/7]` Checking prerequisites | .NET SDK 10, đọc `.env` | Chưa cài .NET SDK 10 → cài đúng major 10. `.env` đã tồn tại → hiện prompt `[O]verwrite / [K]eep / [A]bort` (Enter = Keep; Overwrite backup ra `.env.bak` rồi sinh lại từ `.env.example`). Prompt bị bỏ qua khi chạy tự động bằng `-NonInteractive`. |
+| `[2/7]` Resolving credentials | Sinh/dùng lại password, service key, admin password | `Existing database volumes found` → volume cũ cần lại password gốc trong `.env` (setup không tự xóa data); hoặc chạy `-RecreateDb` nếu chấp nhận mất data dev. `Existing service keys differ` → user-secrets 3 service lệch nhau, sửa tay. |
+| `[3/7]` Validating configuration | Check key ≥32 ký tự, policy admin password, 6 port | `Invalid port` → port var không phải số 1–65535. |
+| `[4/7]` Initializing databases | Compose config → (drop volume nếu `-RecreateDb`) → `up --wait` 6 DB → probe auth → migration | Treo lâu ở `Starting database containers` → Docker Desktop chưa chạy / cổng 5441–5446 bị chiếm (`docker compose -f compose.schema-integration.yml ps` + `logs <tên-db>`). `authentication failed` → password trong `.env` khác password đã init volume (chỉ fix bằng `-RecreateDb` hoặc khôi phục password cũ). Lỗi SQL khi init → `docker logs <tên-db-container>`, dòng log chỉ đúng file `.sql` bị lỗi. Dòng con `[n/6]` cho biết DB service nào (User→Iot) đang fail. Lỗi `relation "..." already exists` ở dòng con `[n/6]` → xem Nhật ký lỗi đã biết bên dưới. |
+| `[5/7]` Configuring user-secrets | Ghi/đồng bộ toàn bộ connection string, URL, admin credentials vào user-secrets theo `.env`; xóa khóa optional (JWT PEM, SMTP) không còn trong `.env` | `Cannot configure ... user-secrets` → thư mục UserSecrets bị khóa/đầy; chạy lại bằng `-SkipUserSecrets` rồi dùng runner. |
+| `[6/7]` Preparing frontend environment | Copy `FE/.env`, MapTiler key, AI endpoints; khởi động SonarQube (bỏ qua với `-SkipSonarQube`); nếu `-WithAiCamera`: build image AI, `docker compose -p smartpark-ai -f compose.ai.yml up --wait` | `Configure MapTiler key directly in FE/.env` → key chứa ký tự đặc biệt, sửa tay trong `FE/.env`. `SonarQube startup failed` → volume Sonar cũ lệch `SONAR_DB_PASSWORD`, khôi phục password gốc vào `.env`. |
+| `[7/7]` Restoring dependencies | `dotnet restore` | Restore fail → kiểm tra mạng/proxy NuGet; hoặc bỏ qua với `-SkipRestore`. |
+
+Khi gặp lỗi mới: **note lại dòng `[n/7]` (hoặc `[n/6]` con) + thông báo lỗi** vào mục bên dưới để dev sau tra cứu nhanh.
+
+### Nhật ký lỗi đã biết
+
+*(Ghi theo mẫu: **[n/7]** — triệu chứng — nguyên nhân — cách fix.)*
+
+**[4/7]** — lỗi `ERROR: relation "users" already exists` (hoặc bảng base khác) ngay dòng con `    - [n/6] Probing...` — docker init đã chạy đủ script SQL trên volume mới, nhưng runner applied lại cùng các file base — đã fix: `apply-workflow-migrations.ps1` probe sentinel trước khi áp; schema hiện tại → skip + verify, DB trống → apply, schema cũ → báo chạy `-RecreateDb`.
+
+**[5/7]** (bug 28P01) — lỗi `password authentication failed for user "smartpark_user"` khi chạy BE trực tiếp từ Visual Studio/`dotnet run` (đường chạy qua runner `run-schema-service.ps1` không bị) — user-secrets đã lưu connection string chứa password cũ, lệch với password mà volume PostgreSQL đã init; `DbConnectionStringBuilder` không tokenize được giá trị legacy nên `[2/7]` không đọc lại được password, và `[5/7]` cũ chỉ ghi key thiếu nên không bao giờ sửa giá trị lệch — đã fix: `[5/7]` ghi đè mọi giá trị user-secrets lệch theo `.env` mỗi lần chạy (và xóa khóa optional không còn trong `.env`), `[2/7]` parse password bằng regex fallback khi tokenizer fail, các conflict throw `... differs from .env` ở `[3/7]` bị bỏ.
+
+**[6/7] (ai-rest/ai-live)** — lỗi `Docker network smartpark-schema_default not found` — network này chỉ tồn tại sau khi schema DBs được dựng; chạy setup **không** `-SkipDatabase` trước, rồi chạy lại với `-WithAiCamera`.
+
+**[6/7] (ai-rest/ai-live)** — build lần đầu chậm (~5–10 phút) — bình thường do PyTorch CPU wheels + PaddleOCR warm-up; các lần sau dùng cache, nhanh hơn.
+
+**[6/7] (ai-rest/ai-live)** — container báo unhealthy — xem log: `docker compose -p smartpark-ai -f compose.ai.yml logs`.
+
+**[6/7] (ai-rest/ai-live)** — kết nối DB trong container dùng biến môi trường rời (`IOT_DATABASE_HOST=iot-db`, port 5432) — không dùng DSN URL vì password có thể chứa ký tự `@`.
+
+
+
+Volume cũ (schema cũ hơn baseline hiện tại): chạy `.\setup.ps1 -RecreateDb` để build lại 6 DB theo schema canonical; runner tự phân biệt DB trống / schema hiện tại / schema cũ và chỉ áp script khi cần. Chi tiết ở [LOCAL-SETUP.md](LOCAL-SETUP.md).
 
 Chi tiết về volume, migrations và chuyển từ script cũ: [LOCAL-SETUP.md](LOCAL-SETUP.md). Hướng dẫn sửa script: [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md).
