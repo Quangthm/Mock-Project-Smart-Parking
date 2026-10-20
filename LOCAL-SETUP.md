@@ -58,8 +58,8 @@ Mở ba terminal PowerShell riêng tại repo:
 | Service | HTTP API | PostgreSQL host port | Database |
 | --- | --- | --- | --- |
 | User | http://localhost:5035 | 5441 | smartpark_user |
-| Parking | http://localhost:5045 | 5442 | smartpark_parking |
-| Reservation | http://localhost:5055 | 5443 | smartpark_reservation |
+| Parking | http://localhost:5045 | 5442 | smartpark_facility |
+| Reservation | http://localhost:5055 | 5443 | smartpark_operations |
 | Payment | — | 5444 | smartpark_payment |
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
@@ -95,8 +95,8 @@ Volume tạo trước baseline mới nằm ở trạng thái legacy — thiếu 
 Kiểm tra bảng trên volume hiện có:
 
 ```powershell
-docker compose --env-file .env -f compose.schema-integration.yml exec -T parking-db psql -U smartpark_parking -d smartpark_parking -At -c "SELECT to_regclass('structure_synchronizations') IS NOT NULL;"
-docker compose --env-file .env -f compose.schema-integration.yml exec -T reservation-db psql -U smartpark_reservation -d smartpark_reservation -At -c "SELECT to_regclass('structure_release_receipts') IS NOT NULL;"
+docker compose --env-file .env -f compose.schema-integration.yml exec -T facility-db psql -U smartpark_facility -d smartpark_facility -At -c "SELECT to_regclass('structure_synchronizations') IS NOT NULL;"
+docker compose --env-file .env -f compose.schema-integration.yml exec -T operations-db psql -U smartpark_operations -d smartpark_operations -At -c "SELECT to_regclass('structure_release_receipts') IS NOT NULL;"
 ```
 
 Kết quả `t` nghĩa là bảng đã có; volume legacy chưa có bảng → dùng `-RecreateDb` thay vì áp tay. Với service khác, thay `-Service` và container/database tương ứng.
@@ -113,7 +113,7 @@ docker compose --env-file .env -f compose.schema-integration.yml down
 
 ```powershell
 docker compose --env-file .env -f compose.schema-integration.yml ps
-docker compose --env-file .env -f compose.schema-integration.yml logs user-db parking-db reservation-db
+docker compose --env-file .env -f compose.schema-integration.yml logs user-db facility-db operations-db
 ```
 
 ## Frontend và email OTP

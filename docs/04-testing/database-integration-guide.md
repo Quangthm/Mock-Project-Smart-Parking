@@ -56,8 +56,8 @@ mỗi terminal và chạy mỗi service riêng:
 | Service trên develop | API port | PostgreSQL từ nhánh database | Connection string |
 |---|---|---|---|
 | User | 5035 | 5441 / smartpark_user | ConnectionStrings:User |
-| Parking | 5045 | 5442 / smartpark_parking | ConnectionStrings:Parking |
-| Reservation safety adapter | 5055 | 5443 / smartpark_reservation | ConnectionStrings:Reservation |
+| Parking | 5045 | 5442 / smartpark_facility | ConnectionStrings:Parking |
+| Reservation safety adapter | 5055 | 5443 / smartpark_operations | ConnectionStrings:Reservation |
 
 SMARTPARK_SCHEMA_ROOT dùng cho test fixtures và recovery tìm checkout schema.
 API không đọc Git/SQL branch lúc xử lý request và không tự tạo schema thay cho

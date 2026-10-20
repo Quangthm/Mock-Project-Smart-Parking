@@ -218,7 +218,7 @@ if ($SkipDatabase) {
     Write-Host '[4/7] Skipping database initialization (-SkipDatabase).' -ForegroundColor Cyan
 }
 if (!$SkipDatabase) {
-    Write-Host '[4/7] Initializing databases (user, parking, reservation, payment, notification, iot)...' -ForegroundColor Cyan
+    Write-Host '[4/7] Initializing databases (user, facility, operations, payment, notification, iot)...' -ForegroundColor Cyan
     & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile config --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Docker Compose configuration is invalid.' }
     if ($RecreateDb) {
@@ -234,7 +234,7 @@ if (!$SkipDatabase) {
     foreach ($service in @('User','Parking','Reservation','Payment','Notification','Iot')) {
         $migrationIndex++
         Write-Host "    - [$migrationIndex/6] Probing authentication and applying migrations for $service..." -ForegroundColor DarkGray
-        $container = $service.ToLowerInvariant() + '-db'
+        $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$service]
         # Container env is used internally; credentials never become command arguments.
         # Send shell code through stdin: PowerShell 5.1 strips native argument quotes.
         # The trailing comment also consumes its Windows CRLF line terminator.
@@ -253,7 +253,7 @@ if (!$SkipDatabase) {
 
 Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation...' -ForegroundColor Cyan
 if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation')) {
-    $database = 'smartpark_' + $service.ToLowerInvariant()
+    $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
     $password = $settings['SMARTPARK_DEV_PASSWORD'].Replace('"','""')
     $desired = [ordered]@{

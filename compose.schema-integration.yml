@@ -15,16 +15,16 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-  parking-db:
+  facility-db:
     container_name: facility-db-1
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: smartpark_parking
-      POSTGRES_USER: smartpark_parking
+      POSTGRES_DB: smartpark_facility
+      POSTGRES_USER: smartpark_facility
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
     ports: ["127.0.0.1:${SMARTPARK_DB_PARKING_PORT:-5442}:5432"]
     volumes:
-      - parking-schema-data:/var/lib/postgresql/data
+      - facility-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/microservices/03a-parking-structure-ops-service-db.sql:/docker-entrypoint-initdb.d/02-base.sql:ro
       - ./scripts/database/overlay/parking-tenants.sql:/docker-entrypoint-initdb.d/03-overlay-tenants.sql:ro
@@ -32,27 +32,27 @@ services:
       - ./scripts/database/overlay/parking-operator-tables.sql:/docker-entrypoint-initdb.d/05-overlay-operator.sql:ro
       - ./scripts/database/overlay/parking-slot-constraints.sql:/docker-entrypoint-initdb.d/06-overlay-slot-constraints.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smartpark_parking -d smartpark_parking"]
+      test: ["CMD-SHELL", "pg_isready -U smartpark_facility -d smartpark_facility"]
       interval: 5s
       timeout: 3s
       retries: 10
-  reservation-db:
-    container_name: operation-db-1
+  operations-db:
+    container_name: operations-db-1
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: smartpark_reservation
-      POSTGRES_USER: smartpark_reservation
+      POSTGRES_DB: smartpark_operations
+      POSTGRES_USER: smartpark_operations
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
     ports: ["127.0.0.1:${SMARTPARK_DB_RESERVATION_PORT:-5443}:5432"]
     volumes:
-      - reservation-schema-data:/var/lib/postgresql/data
+      - operations-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/03b-reservation-operations-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/overlay/reservation-site-capacity-pools.sql:/docker-entrypoint-initdb.d/02-overlay-capacity-pools.sql:ro
       - ./scripts/database/overlay/reservation-structure-safety.sql:/docker-entrypoint-initdb.d/03-overlay-structure-safety.sql:ro
       - ./scripts/database/overlay/reservation-structure-receipts.sql:/docker-entrypoint-initdb.d/04-overlay-receipts.sql:ro
       - ./scripts/database/overlay/reservation-confirmation-time.sql:/docker-entrypoint-initdb.d/05-overlay-confirmation.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smartpark_reservation -d smartpark_reservation"]
+      test: ["CMD-SHELL", "pg_isready -U smartpark_operations -d smartpark_operations"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -103,8 +103,8 @@ services:
       retries: 10
 volumes:
   user-schema-data:
-  parking-schema-data:
-  reservation-schema-data:
+  facility-schema-data:
+  operations-schema-data:
   payment-schema-data:
   notification-schema-data:
   iot-schema-data:
