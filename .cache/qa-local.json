@@ -1,0 +1,12 @@
+﻿{
+    "SMARTPARK_DEV_PASSWORD":  "F8vcxwR+AAENHp1Yv/mnG8X7T3SDtK2Ot0+m9xncYlk=",
+    "SMARTPARK_SERVICE_KEY":  "q1SrKOOkT9YpRyYc5kU+dir6v565vLSxvPmRXk7Qzh0=",
+    "SMARTPARK_SCHEMA_ROOT":  "C:\\Users\\Acer\\ojt-parking",
+    "SMARTPARK_ADMIN_PASSWORD":  "Aa1!z639HweO",
+    "Workflow:KeyDirectory":  "C:\\Users\\Acer\\ojt-parking\\.cache\\workflow-keys",
+"Otp:Smtp:Host": "smtp.gmail.com",
+  "Otp:Smtp:Port": "587",
+  "Otp:Smtp:Username": "qtang889706@gmail.com",
+  "Otp:Smtp:Password": "bounxtbvemkptmcd",
+  "Otp:Smtp:From": "qtang889706@gmail.com"
+}

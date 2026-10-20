@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=5001, help='Port chạy Flask AI Service')
 default_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 parser.add_argument('--device', type=str, default=default_device, help='Thiết bị chạy mô hình: cpu hoặc cuda')
-parser.add_argument('--vehicle_weight', type=str, default='./models/yolov8n.pt', help='Mô hình nhận diện xe')
+parser.add_argument('--vehicle_weight', type=str, default='./models/yolov8s.pt', help='Mô hình nhận diện xe')
 parser.add_argument('--plate_weight', type=str, default='./models/license_plate_detector.pt', help='Mô hình nhận diện biển số')
 args = parser.parse_args()
 
@@ -738,10 +738,14 @@ def recognize_multi():
             os.makedirs('./debug_output', exist_ok=True)
 
         # ── Bước 1: Phát hiện TẤT CẢ xe trong khung hình (không chỉ lấy 1 xe tốt nhất) ──
+        frame_area = frame_h * frame_w
         detected_vehicles = []
-        for det in coco_model(frame, verbose=False)[0].boxes.data.tolist():
+        for det in coco_model(frame, conf=0.5, verbose=False)[0].boxes.data.tolist():
             x1, y1, x2, y2, score, class_id = det
             if int(class_id) in VEHICLE_CLASSES:
+                box_area = max(0, x2 - x1) * max(0, y2 - y1)
+                if box_area < frame_area * 0.01:
+                    continue
                 v_name = VEHICLE_CLASS_NAMES.get(int(class_id), 'Vehicle')
                 detected_vehicles.append((x1, y1, x2, y2, score, v_name))
 
@@ -787,9 +791,7 @@ def recognize_multi():
                 if lp_crop is not None and lp_crop.size > 0:
                     cv2.imwrite(f'./debug_output/vehicle_{len(results)}_plate_raw.jpg', lp_crop)
 
-            # ── Bước 3: OCR — thử ảnh MÀU GỐC (chưa qua grayscale/CLAHE) trước tiên ──
-            # EasyOCR là model deep learning hiện đại, tự xử lý ảnh khá tốt; grayscale+CLAHE+blur
-            # đôi khi làm mất chi tiết hữu ích thay vì giúp ích, nhất là với ảnh vốn đã đủ rõ.
+            # ── Bước 3: OCR — thử ảnh MÀU GỐC (raw) trước, processed làm dự phòng ──
             plate_text, ocr_score = None, 0.0
 
             raw_ocr, confs = read_license_plate_segments(lp_crop) if lp_crop is not None and lp_crop.size > 0 else ([], [])
@@ -799,7 +801,6 @@ def recognize_multi():
             if debug and processed is not None and processed.size > 0:
                 cv2.imwrite(f'./debug_output/vehicle_{len(results)}_plate_processed.jpg', processed)
 
-            # Nếu đọc trên ảnh màu gốc thất bại, thử tiếp trên ảnh đã xử lý (phương án dự phòng)
             if post_res["status"] != "success" and processed is not None and processed.size > 0:
                 raw_ocr2, confs2 = read_license_plate_segments(processed)
                 post_res2 = post_process_vietnamese_plate(raw_ocr2, confs2)
