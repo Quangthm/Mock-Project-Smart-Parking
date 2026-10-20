@@ -14,8 +14,10 @@ Thư mục bằng chứng (PM evidence) cho đợt chuẩn hoá DB Hybrid theo S
 | 06 | `06-apply-workflow-migrations.md` | `scripts/apply-workflow-migrations.ps1`: `ValidateSet` 6 service, mảng script theo DB khớp compose, block-list guard `05.1–05.9` + `integration/01–03`, pre-check bảng theo DB. | Infra |
 | 07 | `07-setup-ps1-recreatedb.md` | `setup.ps1`: `-RecreateDb` + `down -v`, vòng validate 6 port, vòng migration/probe 6 service, password guard downgrade thành warning khi `-RecreateDb`, user-secrets vẫn 3 service. | Infra |
 | 08 | `08-vehicle-registration-plate-409.md` | `VehicleRegistrationService.cs`: bắt `DbException` `SqlState 23505` → `AuthException("PLATE_EXISTS", …, 409)` cho plate active trùng (D2a). | BE-handler |
+| 09 | `09-setup-ps1-sonarqube-ai-dev.md` | `setup.ps1`: SonarQube mặc định, AI Camera opt-in, dev container, seed user OWNER/OPERATOR và các fix runtime P0. | Infra |
+| 10 | `10-db-docs-deployment-alignment.md` | Đối chiếu docs DB arch vs profile 6-DB đang triển khai; phương án đã chọn (giữ branch runtime canonical, cập nhật docs) + evidence PM. | Docs |
 
-> **01–04** do lane SQL viết (không thuộc lane tài liệu này); tên file chính xác do lane SQL sở hữu. Report 05–08 do lane infra/BE-handler thực hiện và được ghi nhận tại đây.
+> **01–04** do lane SQL viết (không thuộc lane tài liệu này); tên file chính xác do lane SQL sở hữu. Report 05–09 do lane infra/BE-handler thực hiện; report 10 do lane Docs thực hiện và được ghi nhận tại đây.
 
 ## Timeline T1–T6
 - **T1** — Tạo branch `feature/db-hybrid-srs-v1` từ `develop` @ `0c8a6fb` (commit đầu = y nguyên develop).
