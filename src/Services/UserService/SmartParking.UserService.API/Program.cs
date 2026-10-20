@@ -85,6 +85,20 @@ public static class UserHost
             using var scope = app.Services.CreateScope();
             await scope.ServiceProvider.GetRequiredService<DataSeeder>().SeedAdminAsync(builder.Configuration["DevelopmentAdmin:Email"]!, password);
         }
+        if (app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(builder.Configuration["DevelopmentOwner:Email"]))
+        {
+            var password = builder.Configuration["DevelopmentOwner:Password"];
+            if (string.IsNullOrWhiteSpace(password)) throw new InvalidOperationException("Configure DevelopmentOwner:Password explicitly.");
+            using var scope = app.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DataSeeder>().SeedRoleUserAsync(builder.Configuration["DevelopmentOwner:Email"]!, password, "Demo Owner", "BUSINESS_OWNER", "Business Owner");
+        }
+        if (app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(builder.Configuration["DevelopmentOperator:Email"]))
+        {
+            var password = builder.Configuration["DevelopmentOperator:Password"];
+            if (string.IsNullOrWhiteSpace(password)) throw new InvalidOperationException("Configure DevelopmentOperator:Password explicitly.");
+            using var scope = app.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DataSeeder>().SeedRoleUserAsync(builder.Configuration["DevelopmentOperator:Email"]!, password, "Demo Operator", "SITE_OPERATOR", "Site Operator");
+        }
 
         // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())

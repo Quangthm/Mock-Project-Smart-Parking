@@ -29,7 +29,7 @@ internal static class ServiceSchema
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir is not null && !File.Exists(Path.Combine(dir.FullName,"SmartParking.slnx"))) dir=dir.Parent;
             var root = dir?.FullName ?? throw new InvalidOperationException("Repository root missing.");
-            if (!File.Exists(Path.Combine(root,"scripts/database/microservices/01-user-service-db.sql")))
+            if (!File.Exists(Path.Combine(root,"scripts/database/microservices/01-user-access-service-db.sql")))
                 throw new InvalidOperationException("Set SMARTPARK_SCHEMA_ROOT to the arch/database-schema checkout before running database tests.");
             return root;
         }
@@ -37,7 +37,7 @@ internal static class ServiceSchema
     public static async Task InitializeAsync(AppDbContext db)
     {
         await db.Database.OpenConnectionAsync();
-        foreach(var path in new[] {"microservices/01-user-service-db.sql", "integration/01-user-service-alignment.sql", "integration/01-user-service-alignment.sql"})
+        foreach(var path in new[] {"microservices/01-user-access-service-db.sql"})
         {
             await using var cmd=new NpgsqlCommand(await File.ReadAllTextAsync(Path.Combine(Root,"scripts/database",path)),(NpgsqlConnection)db.Database.GetDbConnection());
             await cmd.ExecuteNonQueryAsync();
@@ -55,7 +55,7 @@ internal static class ServiceSchema
     public static async Task ApplyFeaturesAsync(AppDbContext db)
     {
         await db.Database.OpenConnectionAsync();
-        foreach (var file in new[] { "05.8-Account-Workflow-Vehicles.sql", "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
+        foreach (var file in new[] { "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
         {
             var sql = await File.ReadAllTextAsync(FeaturePath(file));
             await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());

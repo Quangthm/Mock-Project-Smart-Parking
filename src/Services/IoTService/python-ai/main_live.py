@@ -21,7 +21,11 @@ from recognition_store import (
     validate_store_configuration,
 )
 
-load_dotenv(Path(__file__).resolve().parents[4] / ".env")
+# Container at /app has only 2 parents, no repo-root .env → rely on process env
+try:
+    load_dotenv(Path(__file__).resolve().parents[4] / ".env")
+except (IndexError, OSError):
+    pass
 if __name__ == '__main__':
     validate_store_configuration()
 
@@ -596,6 +600,12 @@ def clean_plate_string(raw_text):
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
 CORS(app)
+
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
+
 
 @app.route('/api/v1/post_process', methods=['POST'])
 def post_process_endpoint():

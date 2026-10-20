@@ -9,11 +9,10 @@ services:
     ports: ["127.0.0.1:${SMARTPARK_DB_USER_PORT:-5441}:5432"]
     volumes:
       - user-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/01-user-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
-      - ./scripts/database/integration/01-user-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
-      - ./scripts/database/05.8-Account-Workflow-Vehicles.sql:/docker-entrypoint-initdb.d/03-workflows.sql:ro
-      - ./scripts/database/05.13-Mfa-Lifecycle.sql:/docker-entrypoint-initdb.d/04-mfa.sql:ro
-      - ./scripts/database/05.14-Identity-Access-Hardening.sql:/docker-entrypoint-initdb.d/05-identity-access.sql:ro
+      - ./scripts/database/microservices/01-user-access-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/05.13-Mfa-Lifecycle.sql:/docker-entrypoint-initdb.d/02-feature.sql:ro
+      - ./scripts/database/05.14-Identity-Access-Hardening.sql:/docker-entrypoint-initdb.d/03-feature.sql:ro
+      - ./scripts/database/05.15-Owner-Onboarding.sql:/docker-entrypoint-initdb.d/04-feature.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_user -d smartpark_user"]
       interval: 5s
@@ -28,10 +27,13 @@ services:
     ports: ["127.0.0.1:${SMARTPARK_DB_PARKING_PORT:-5442}:5432"]
     volumes:
       - parking-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/02-parking-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
-      - ./scripts/database/integration/02-parking-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
-      - ./scripts/database/05.9-Parking-Backup-Operations.sql:/docker-entrypoint-initdb.d/03-workflows.sql:ro
-      - ./scripts/database/05.11-Parking-Structure-Synchronization.sql:/docker-entrypoint-initdb.d/04-synchronization.sql:ro
+      - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/microservices/03a-parking-structure-ops-service-db.sql:/docker-entrypoint-initdb.d/02-base.sql:ro
+      - ./scripts/database/overlay/parking-tenants.sql:/docker-entrypoint-initdb.d/03-overlay-tenants.sql:ro
+      - ./scripts/database/overlay/parking-structure-synchronizations.sql:/docker-entrypoint-initdb.d/04-overlay-synchronizations.sql:ro
+      - ./scripts/database/overlay/parking-operator-tables.sql:/docker-entrypoint-initdb.d/05-overlay-operator.sql:ro
+      - ./scripts/database/overlay/parking-slot-constraints.sql:/docker-entrypoint-initdb.d/06-overlay-slot-constraints.sql:ro
+      - ./scripts/database/05.16-Parking-Owner-Onboarding.sql:/docker-entrypoint-initdb.d/07-owner-onboarding.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_parking -d smartpark_parking"]
       interval: 5s
@@ -46,10 +48,11 @@ services:
     ports: ["127.0.0.1:${SMARTPARK_DB_RESERVATION_PORT:-5443}:5432"]
     volumes:
       - reservation-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/03-reservation-session-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
-      - ./scripts/database/integration/03-reservation-structure-safety.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
-      - ./scripts/database/05.10-Reservation-Confirmation-Time.sql:/docker-entrypoint-initdb.d/03-workflows.sql:ro
-      - ./scripts/database/05.12-Reservation-Structure-Receipts.sql:/docker-entrypoint-initdb.d/04-receipts.sql:ro
+      - ./scripts/database/microservices/03b-reservation-operations-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/overlay/reservation-site-capacity-pools.sql:/docker-entrypoint-initdb.d/02-overlay-capacity-pools.sql:ro
+      - ./scripts/database/overlay/reservation-structure-safety.sql:/docker-entrypoint-initdb.d/03-overlay-structure-safety.sql:ro
+      - ./scripts/database/overlay/reservation-structure-receipts.sql:/docker-entrypoint-initdb.d/04-overlay-receipts.sql:ro
+      - ./scripts/database/overlay/reservation-confirmation-time.sql:/docker-entrypoint-initdb.d/05-overlay-confirmation.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_reservation -d smartpark_reservation"]
       interval: 5s
@@ -64,7 +67,7 @@ services:
     ports: ["127.0.0.1:${SMARTPARK_DB_PAYMENT_PORT:-5444}:5432"]
     volumes:
       - payment-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/04-payment-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/microservices/04-payment-pricing-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_payment -d smartpark_payment"]
       interval: 5s
@@ -79,7 +82,7 @@ services:
     ports: ["127.0.0.1:${SMARTPARK_DB_NOTIFICATION_PORT:-5445}:5432"]
     volumes:
       - notification-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/05-notification-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/microservices/05-notification-audit-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_notification -d smartpark_notification"]
       interval: 5s
@@ -94,7 +97,7 @@ services:
     ports: ["127.0.0.1:${SMARTPARK_DB_IOT_PORT:-5446}:5432"]
     volumes:
       - iot-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/06-iot-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/microservices/06-iot-recognition-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_iot -d smartpark_iot"]
       interval: 5s

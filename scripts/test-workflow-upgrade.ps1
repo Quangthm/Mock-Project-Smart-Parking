@@ -8,21 +8,11 @@ $composeFile = Join-Path $fixtureRoot 'compose.schema-integration.yml'
 $envFile = Join-Path $fixtureRoot '.env'
 [IO.File]::WriteAllText($envFile, "SMARTPARK_DEV_PASSWORD=isolated-upgrade-test-password`n")
 $compose = @("name: $projectName", 'services:')
-$schemas = @{
-    User = @('microservices/01-user-service-db.sql','integration/01-user-service-alignment.sql','05.8-Account-Workflow-Vehicles.sql')
-    Parking = @('microservices/02-parking-service-db.sql','integration/02-parking-service-alignment.sql','05.9-Parking-Backup-Operations.sql')
-    Reservation = @('microservices/03-reservation-session-service-db.sql','integration/03-reservation-structure-safety.sql','05.10-Reservation-Confirmation-Time.sql')
-}
+# Empty fixture databases: the runner must apply the full canonical set on the
+# first run, then detect the already-current schema and skip on the second run.
 foreach ($service in @('User','Parking','Reservation')) {
     $name = $service.ToLowerInvariant()
-    $compose += @("  ${name}-db:", '    image: postgres:16-alpine', '    environment:', "      POSTGRES_USER: smartpark_$name", "      POSTGRES_DB: smartpark_$name", '      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?missing}', '    volumes:', "      - ${name}-data:/var/lib/postgresql/data")
-    $index = 0
-    foreach ($schema in $schemas[$service]) {
-        $path = (Join-Path $repoRoot "scripts/database/$schema").Replace('\','/')
-        $compose += "      - '${path}:/docker-entrypoint-initdb.d/0$index.sql:ro'"
-        $index++
-    }
-    $compose += @('    healthcheck:', "      test: [CMD-SHELL, 'pg_isready -U smartpark_$name -d smartpark_$name']", '      interval: 1s', '      timeout: 3s', '      retries: 60')
+    $compose += @("  ${name}-db:", '    image: postgres:16-alpine', '    environment:', "      POSTGRES_USER: smartpark_$name", "      POSTGRES_DB: smartpark_$name", '      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?missing}', '    volumes:', "      - ${name}-data:/var/lib/postgresql/data", '    healthcheck:', "      test: [CMD-SHELL, 'pg_isready -U smartpark_$name -d smartpark_$name']", '      interval: 1s', '      timeout: 3s', '      retries: 60')
 }
 $compose += @('volumes:', '  user-data:', '  parking-data:', '  reservation-data:')
 [IO.File]::WriteAllLines($composeFile, $compose, (New-Object Text.UTF8Encoding($false)))
@@ -39,10 +29,9 @@ function Query-TestDatabase($service, $sql) {
 try {
     Invoke-TestCompose @('up','-d','--wait')
     foreach ($service in @('User','Parking','Reservation')) {
-        $null = Query-TestDatabase $service 'CREATE TABLE setup_upgrade_sentinel (id integer PRIMARY KEY); INSERT INTO setup_upgrade_sentinel VALUES (42);'
+        if ((Query-TestDatabase $service "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'") -ne '0') { throw 'Fixture database is not empty.' }
     }
-    if ((Query-TestDatabase Parking "SELECT to_regclass('structure_synchronizations') IS NULL") -ne 't') { throw 'Fixture did not represent pre-05.11 state.' }
-    if ((Query-TestDatabase Reservation "SELECT to_regclass('structure_release_receipts') IS NULL") -ne 't') { throw 'Fixture did not represent pre-05.12 state.' }
+    # First run applies the canonical scripts; second run must skip (already current).
     # Deliberately run from another working directory to prove explicit EnvPath resolution.
     Push-Location $env:TEMP
     try {
@@ -52,14 +41,23 @@ try {
             }
         }
     } finally { Pop-Location }
+    foreach ($service in @('User','Parking','Reservation')) {
+        $null = Query-TestDatabase $service 'CREATE TABLE setup_upgrade_sentinel (id integer PRIMARY KEY); INSERT INTO setup_upgrade_sentinel VALUES (42);'
+    }
     Invoke-TestCompose @('down')
     Invoke-TestCompose @('up','-d','--wait')
     foreach ($service in @('User','Parking','Reservation')) {
-        if ((Query-TestDatabase $service 'SELECT count(*) FROM setup_upgrade_sentinel WHERE id=42') -ne '1') { throw 'Upgrade/restart lost existing data.' }
+        if ((Query-TestDatabase $service 'SELECT count(*) FROM setup_upgrade_sentinel WHERE id=42') -ne '1') { throw 'Restart lost existing data.' }
     }
-    if ((Query-TestDatabase Parking "SELECT to_regclass('structure_synchronizations') IS NOT NULL") -ne 't') { throw '05.11 missing after restart.' }
-    if ((Query-TestDatabase Reservation "SELECT to_regclass('structure_release_receipts') IS NOT NULL") -ne 't') { throw '05.12 missing after restart.' }
-    Write-Output 'PASS: pre-05.11/05.12 upgrade, repeated migrations, explicit env from another cwd, preserved data and existing-volume restart.'
+    if ((Query-TestDatabase User "SELECT to_regclass('uq_active_vehicle_plate') IS NOT NULL") -ne 't') { throw 'User canonical schema missing after restart.' }
+    if ((Query-TestDatabase User "SELECT to_regclass('mfa_recovery_codes') IS NOT NULL AND to_regclass('rotated_session_proofs') IS NOT NULL") -ne 't') { throw 'MFA or identity feature tables missing.' }
+    if ((Query-TestDatabase User "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND ((table_name='mfa_credentials' AND column_name IN ('pending_protected_secret','pending_expires_at')) OR (table_name='users' AND column_name IN ('access_version','onboarding_complete')) OR (table_name='owner_applications' AND column_name='lot_setup'))") -ne '5') { throw 'MFA, access or onboarding feature columns missing.' }
+    if ((Query-TestDatabase Parking "SELECT to_regclass('owner_onboarding_provisions') IS NOT NULL") -ne 't') { throw 'Parking onboarding feature table missing.' }
+    if ((Query-TestDatabase Parking "SELECT to_regclass('structure_synchronizations') IS NOT NULL") -ne 't') { throw 'Parking overlay tables missing after restart.' }
+    if ((Query-TestDatabase Parking "SELECT to_regclass('tenants') IS NOT NULL") -ne 't') { throw 'Parking tenants overlay missing after restart.' }
+    if ((Query-TestDatabase Reservation "SELECT to_regclass('structure_release_receipts') IS NOT NULL") -ne 't') { throw 'Reservation overlay tables missing after restart.' }
+    if ((Query-TestDatabase Reservation "SELECT to_regclass('site_capacity_pools') IS NOT NULL") -ne 't') { throw 'Reservation capacity pools overlay missing after restart.' }
+    Write-Output 'PASS: empty-fixture canonical apply, second-run skip, explicit env from another cwd, preserved data across existing-volume restart.'
 } finally {
     # Delete only the uniquely named test Compose project/volumes created by this script.
     if ($projectName -notmatch '^smartpark-upgrade-test-[0-9a-f]{32}$' -or

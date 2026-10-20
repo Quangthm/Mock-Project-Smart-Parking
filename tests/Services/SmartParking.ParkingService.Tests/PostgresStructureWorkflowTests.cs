@@ -309,17 +309,20 @@ public sealed class PostgresStructureWorkflowTests
             {
                 var root = FindRepositoryRoot();
                 await fixture.ApplyAsync(fixture.Parking, root,
-                    "scripts/database/microservices/02-parking-service-db.sql",
-                    "scripts/database/integration/02-parking-service-alignment.sql",
-                    "scripts/database/05.9-Parking-Backup-Operations.sql",
-                    "scripts/database/05.11-Parking-Structure-Synchronization.sql",
+                    "scripts/database/microservices/02-facility-service-db.sql",
+                    "scripts/database/microservices/03a-parking-structure-ops-service-db.sql",
+                    "scripts/database/overlay/parking-tenants.sql",
+                    "scripts/database/overlay/parking-structure-synchronizations.sql",
+                    "scripts/database/overlay/parking-operator-tables.sql",
+                    "scripts/database/overlay/parking-slot-constraints.sql",
                     "scripts/database/05.16-Parking-Owner-Onboarding.sql",
                     "scripts/database/05.16-Parking-Owner-Onboarding.sql");
                 await fixture.ApplyAsync(fixture.Reservation, root,
-                    "scripts/database/microservices/03-reservation-session-service-db.sql",
-                    "scripts/database/integration/03-reservation-structure-safety.sql",
-                    "scripts/database/05.10-Reservation-Confirmation-Time.sql",
-                    "scripts/database/05.12-Reservation-Structure-Receipts.sql");
+                    "scripts/database/microservices/03b-reservation-operations-service-db.sql",
+                    "scripts/database/overlay/reservation-site-capacity-pools.sql",
+                    "scripts/database/overlay/reservation-structure-safety.sql",
+                    "scripts/database/overlay/reservation-structure-receipts.sql",
+                    "scripts/database/overlay/reservation-confirmation-time.sql");
                 await fixture.ExecuteAsync(fixture.Parking, $"""
                     INSERT INTO tenants(id,code,name,contact_email,contact_phone)
                     VALUES ('{fixture.Owner.TenantId}','TEST','Test','test@example.com','0000000000')
