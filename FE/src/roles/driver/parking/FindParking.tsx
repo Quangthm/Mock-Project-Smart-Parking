@@ -225,7 +225,7 @@ export function FindParking({
                     color: #666;
                     margin-top: 4px;
                   ">
-                    ${(lot.hourlyRate / 1000).toFixed(0)}K₫/hr
+                    ${lot.hourlyRate.toLocaleString("vi-VN")} VND/hr
                   </div>
                 </div>
               `),
@@ -621,7 +621,7 @@ export function FindParking({
                       color: "var(--muted)",
                     }}
                   >
-                    {(lot.hourlyRate / 1000).toFixed(0)}K₫/hr
+                    {lot.hourlyRate.toLocaleString("vi-VN")} VND/hr
                   </span>
                 </div>
 
@@ -658,7 +658,7 @@ export function FindParking({
                   <button
                     type="button"
                     className="btn-outline"
-                    title="Xem quy định & chính sách bãi đỗ xe (PDF)"
+                    title="View parking rules and policies (PDF)"
                     onClick={(event) => {
                       event.stopPropagation()
 
@@ -683,7 +683,7 @@ export function FindParking({
                     }}
                   >
                     <UntitledIcon name="file" size={13} />
-                    Chính sách
+                    Policies
                   </button>
                 </div>
               </article>

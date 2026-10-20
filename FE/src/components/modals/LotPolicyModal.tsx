@@ -40,8 +40,8 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
           `Type: ${lot.type}\n` +
           `Updated: ${new Date(policyPdf?.uploadedAt || lot.createdAt).toLocaleDateString("en-US")}\n\n` +
           `1. OPERATING HOURS AND RATES:\n` +
-          `- Daytime rate: ${lot.hourlyRate.toLocaleString("en-US")} VND/hour\n` +
-          `- Nighttime rate: ${lot.nightRate.toLocaleString("en-US")} VND/hour\n` +
+          `- Daytime rate: ${lot.hourlyRate.toLocaleString("vi-VN")} VND/hour\n` +
+          `- Nighttime rate: ${lot.nightRate.toLocaleString("vi-VN")} VND/hour\n` +
           `- Free grace period: First ${lot.gracePeriodMinutes || 15} minutes after entry\n\n` +
           `2. RESERVATION PROTECTION (SRS v0.9):\n` +
           `- Reservation protection window: 60 minutes from the scheduled arrival time\n` +
@@ -331,11 +331,11 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                       - Open 24/7 for vehicles registered through SmartPark.
                       <br />- Daytime rate (06:00 - 22:00):{" "}
                       <strong>
-                        {lot.hourlyRate.toLocaleString("en-US")} VND/hour
+                        {lot.hourlyRate.toLocaleString("vi-VN")} VND/hour
                       </strong>
                       .<br />- Nighttime rate (22:00 - 06:00 the next day):{" "}
                       <strong>
-                        {lot.nightRate.toLocaleString("en-US")} VND/hour
+                        {lot.nightRate.toLocaleString("vi-VN")} VND/hour
                       </strong>
                       .<br />- Grace period: The first{" "}
                       <strong>{lot.gracePeriodMinutes || 15} minutes</strong> are
@@ -439,7 +439,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  {lot.hourlyRate.toLocaleString("en-US")} ₫/h
+                  {lot.hourlyRate.toLocaleString("vi-VN")} VND/h
                 </div>
                 <div
                   style={{
@@ -476,7 +476,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  {lot.nightRate.toLocaleString("en-US")} ₫/h
+                  {lot.nightRate.toLocaleString("vi-VN")} VND/h
                 </div>
                 <div
                   style={{

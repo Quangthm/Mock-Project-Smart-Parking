@@ -274,13 +274,13 @@ export function BookingFlow({
             color: "var(--fg)",
           }}
         >
-          Đặt Chỗ Tại {lotSnapshot.name}
+          Book a Spot at {lotSnapshot.name}
         </h2>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <button
             type="button"
             className="btn-outline"
-            title="Xem quy định & chính sách bãi đỗ xe (PDF)"
+            title="View parking rules and policies (PDF)"
             onClick={() => setShowPolicyModal(true)}
             style={{
               padding: "0.4rem 0.75rem",
@@ -291,7 +291,7 @@ export function BookingFlow({
             }}
           >
             <UntitledIcon name="file" size={13} />
-            Chính sách bãi đỗ
+            Parking policies
           </button>
           <button
             type="button"
@@ -358,12 +358,12 @@ export function BookingFlow({
                   fontFamily: "Outfit",
                 }}
               >
-                Chọn Vị Trí Đỗ Xe (Parking Slot)
+                Select a Parking Slot
               </h3>
               <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
                 {viewMode === "3d"
-                  ? "Click trực tiếp vào ô đỗ trong không gian 3D để chọn vị trí mong muốn"
-                  : "Bấm vào ô số bên dưới để chọn"}
+                  ? "Click a parking slot in the 3D view to select it"
+                  : "Click a numbered slot below to select it"}
               </span>
             </div>
 
@@ -402,7 +402,7 @@ export function BookingFlow({
                   transition: "all 0.2s",
                 }}
               >
-                🎮 Mô Hình 3D Lớn
+                🎮 3D View
               </button>
               <button
                 type="button"
@@ -428,7 +428,7 @@ export function BookingFlow({
                   transition: "all 0.2s",
                 }}
               >
-                ▦ Sơ Đồ Lưới
+                ▦ Grid View
               </button>
             </div>
           </div>
@@ -600,13 +600,13 @@ export function BookingFlow({
               }}
             >
               <span style={{ fontSize: "0.84rem", color: "var(--fg)" }}>
-                Vị trí đang chọn:{" "}
+                Selected slot:{" "}
                 <strong
                   style={{ color: "var(--primary)", fontSize: "0.95rem" }}
                 >
                   Slot {selectedSlot.number}
                 </strong>{" "}
-                (Tầng {selectedSlot.floor})
+                (Floor {selectedSlot.floor})
               </span>
               <span
                 style={{
@@ -615,7 +615,7 @@ export function BookingFlow({
                   fontWeight: 600,
                 }}
               >
-                ● Hợp lệ
+                ● Available
               </span>
             </div>
           )}
@@ -832,7 +832,7 @@ export function BookingFlow({
             >
               Estimated total:{" "}
               <strong style={{ color: "var(--fg)" }}>
-                {amount.toLocaleString("vi-VN")}₫
+                {amount.toLocaleString("vi-VN")} VND
               </strong>
             </p>
           )}
@@ -910,13 +910,13 @@ export function BookingFlow({
             >
               Total due:{" "}
               <strong style={{ color: "var(--fg)" }}>
-                {(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")}₫
+                {(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")} VND
               </strong>
             </p>
             <button
               type="button"
               className="btn-outline"
-              title="Xem chính sách hoàn hủy & quy định bãi xe"
+              title="View cancellation policies and parking rules"
               onClick={() => setShowPolicyModal(true)}
               style={{
                 fontSize: "0.75rem",
@@ -927,7 +927,7 @@ export function BookingFlow({
               }}
             >
               <UntitledIcon name="file" size={12} />
-              Chính sách bãi đỗ
+              Parking policies
             </button>
           </div>
           <div

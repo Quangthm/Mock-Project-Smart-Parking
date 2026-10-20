@@ -13,7 +13,7 @@ import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
 
-export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
+export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "parking-lot-setup" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
 
 interface AppCtx {
   user: User | null

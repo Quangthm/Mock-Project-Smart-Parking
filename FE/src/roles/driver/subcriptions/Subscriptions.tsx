@@ -951,7 +951,7 @@ export function Subscriptions() {
                               color: "var(--primary)",
                             }}
                           >
-                            {lot.subscriptionMonthly.toLocaleString("vi-VN")}₫
+                            {lot.subscriptionMonthly.toLocaleString("vi-VN")} VND
                           </strong>
                           <span
                             style={{
@@ -1152,7 +1152,7 @@ export function Subscriptions() {
                       <div>
                         Amount:{" "}
                         <strong style={{ color: "var(--fg)" }}>
-                          {pass.amount.toLocaleString("vi-VN")}₫
+                          {pass.amount.toLocaleString("vi-VN")} VND
                         </strong>
                       </div>
                     </div>
@@ -1311,7 +1311,7 @@ export function Subscriptions() {
                         color: "var(--primary)",
                       }}
                     >
-                      {order.amount.toLocaleString("vi-VN")}₫
+                      {order.amount.toLocaleString("vi-VN")} VND
                     </strong>
                     <span
                       style={{
@@ -1670,7 +1670,7 @@ export function Subscriptions() {
                         {selectedLotForDetail.subscriptionMonthly.toLocaleString(
                           "vi-VN",
                         )}
-                        ₫
+                        {" "}VND
                         <span
                           style={{
                             fontSize: "0.75rem",
@@ -1791,7 +1791,7 @@ export function Subscriptions() {
                         {selectedLotForDetail.subscriptionYearly.toLocaleString(
                           "vi-VN",
                         )}
-                        ₫
+                        {" "}VND
                         <span
                           style={{
                             fontSize: "0.75rem",
@@ -1986,7 +1986,7 @@ export function Subscriptions() {
                             ? selectedLotForDetail.subscriptionMonthly
                             : selectedLotForDetail.subscriptionYearly
                           ).toLocaleString("vi-VN")}
-                          ₫
+                          {" "}VND
                         </strong>
                       </div>
 

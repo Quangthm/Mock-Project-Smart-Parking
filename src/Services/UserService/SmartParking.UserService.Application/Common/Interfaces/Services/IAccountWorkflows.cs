@@ -16,8 +16,3 @@ public interface IAccountWorkflows
     Task<Guid> QueueAsync(Guid userId,Guid actorId,string kind,WorkflowMessage message,CancellationToken ct,Guid? challengeId=null);
     Task DeliverOneAsync(IWorkflowTransport transport,CancellationToken ct);
 }
-public interface IVehicleRegistration
-{
-    Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid actor,CancellationToken ct);
-    Task<RegisteredVehicle> SaveAsync(Guid actor,Guid? id,VehicleDto body,CancellationToken ct);
-}

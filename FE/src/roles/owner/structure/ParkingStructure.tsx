@@ -38,8 +38,8 @@ function slotAppearance(slot: Slot) {
   if (slot.isPhysicallyOccupied) return { label: "Occupied", color: "#dc2626", bg: "rgba(239,68,68,.10)", border: "rgba(239,68,68,.4)" }
   if (slot.reservationState === "PROTECTED") return { label: "Protected", color: "#4f46e5", bg: "rgba(99,102,241,.10)", border: "rgba(99,102,241,.4)" }
   if (slot.reservationState === "PENDING_PAYMENT") return { label: "Pending payment", color: "#d97706", bg: "rgba(245,158,11,.10)", border: "rgba(245,158,11,.4)" }
-  if (slot.reservationState && slot.reservationState !== "NONE") return { label: slot.reservationState.replaceAll("_", " "), color: "#2563eb", bg: "rgba(37,99,235,.10)", border: "rgba(37,99,235,.4)" }
-  if (slot.operationalStatus !== "ACTIVE" && slot.operationalStatus !== "AVAILABLE") return { label: slot.operationalStatus.replaceAll("_", " "), color: "#9333ea", bg: "rgba(147,51,234,.10)", border: "rgba(147,51,234,.4)" }
+  if (slot.reservationState && slot.reservationState !== "NONE") return { label: slot.reservationState.replace(/_/g, " "), color: "#2563eb", bg: "rgba(37,99,235,.10)", border: "rgba(37,99,235,.4)" }
+  if (slot.operationalStatus !== "ACTIVE" && slot.operationalStatus !== "AVAILABLE") return { label: slot.operationalStatus.replace(/_/g, " "), color: "#9333ea", bg: "rgba(147,51,234,.10)", border: "rgba(147,51,234,.4)" }
   return { label: slot.operationalStatus, color: "#16a34a", bg: "rgba(34,197,94,.10)", border: "rgba(34,197,94,.4)" }
 }
 
@@ -210,6 +210,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
       {structure && !loading && (
         <>
+          {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No backend parking slots are configured for this site yet. Add a unit, then add slots here for operators to use.</p>}
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="Physical slots" value={slots.length} tone="available" />
             <Metric label="Available" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? total("available") : "—"} tone="available" />
@@ -263,7 +264,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
                 <input className="min-w-0 flex-1 bg-transparent text-xs text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by slot code…" />
               </label>
               <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><select className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
+                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><select className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}</select></label>
                 <span className="whitespace-nowrap text-[11px] text-[var(--muted)]">Showing <strong className="text-[var(--fg)]">{shownSlots.length}</strong> / {slots.length}</span>
               </div>
             </div>

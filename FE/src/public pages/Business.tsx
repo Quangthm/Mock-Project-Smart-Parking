@@ -98,15 +98,15 @@ function Calculator() {
       result.current.innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1rem">
           <div style="text-align:center;padding:1rem;background:var(--primary)10;border-radius:8px;border:1px solid var(--primary)30">
-            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:var(--primary)">${yearly.toLocaleString("vi-VN")}₫</div>
+            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:var(--primary)">${yearly.toLocaleString("vi-VN")} VND</div>
             <div style="font-size:0.78rem;color:var(--muted)">Gross Revenue/Year</div>
           </div>
           <div style="text-align:center;padding:1rem;background:#22c55e10;border-radius:8px;border:1px solid #22c55e30">
-            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:#22c55e">${yourShare.toLocaleString("vi-VN")}₫</div>
+            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:#22c55e">${yourShare.toLocaleString("vi-VN")} VND</div>
             <div style="font-size:0.78rem;color:var(--muted)">Your Share (85%)</div>
           </div>
           <div style="text-align:center;padding:1rem;background:var(--card);border-radius:8px;border:1px solid var(--border)">
-            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:var(--muted)">${platform.toLocaleString("vi-VN")}₫</div>
+            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:var(--muted)">${platform.toLocaleString("vi-VN")} VND</div>
             <div style="font-size:0.78rem;color:var(--muted)">Platform Fee (15%)</div>
           </div>
         </div>
@@ -155,9 +155,9 @@ function Calculator() {
 
           {
             ref: rate,
-            label: "Hourly Rate (₫)",
+            label: "Hourly Rate (VND)",
             placeholder: "15000",
-            unit: "₫/hr",
+            unit: "VND/hr",
           },
 
           {

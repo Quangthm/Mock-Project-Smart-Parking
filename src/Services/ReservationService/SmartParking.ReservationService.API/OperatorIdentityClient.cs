@@ -37,7 +37,7 @@ public sealed class OperatorIdentityClient(HttpClient client, IHttpContextAccess
         {
             throw;
         }
-        catch (Exception error) when (error is HttpRequestException or JsonException)
+        catch (Exception error) when (error is HttpRequestException or JsonException || error is OperationCanceledException && !ct.IsCancellationRequested)
         {
             throw new ReservationGateException(503, "IDENTITY_UNAVAILABLE", "Operator authority is unavailable.");
         }

@@ -1,3 +1,4 @@
+using SmartParking.ParkingService.Application;
 using SmartParking.ParkingService.Domain;
 
 namespace SmartParking.ParkingService.Tests;
@@ -64,6 +65,31 @@ public sealed class StructureTests
         guarded.AddSlot(other, "02", VehicleType.MOTORCYCLE);
         Assert.Equal(2, guarded.Site.TotalPhysicalCapacity);
     }
+
+    [Fact]
+    public void OutcomeArraysAreCanonicallyOrderedForStableJsonbComparison()
+    {
+        var site = Site();
+        var zoneA = site.AddUnit(UnitType.ZONE, "A");
+        var zoneB = site.AddUnit(UnitType.ZONE, "B");
+        var zoneC = site.AddUnit(UnitType.ZONE, "C");
+        var slotA = site.AddSlot(zoneA, "A01", VehicleType.CAR);
+        var slotB = site.AddSlot(zoneB, "B01", VehicleType.CAR);
+        var slotC = site.AddSlot(zoneC, "C01", VehicleType.MOTORCYCLE);
+
+        // Caller-supplied "original" sets are unordered; the builder must still emit a stable order
+        // because Reservation compares the persisted receipt with `outcome=$4::jsonb`.
+        var outcome = StructureOutcomeBuilder.Build(
+            site,
+            new HashSet<Guid> { slotC, slotA, slotB },
+            new HashSet<Guid> { zoneC, zoneA, zoneB });
+
+        Assert.Equal(outcome.RemovedSlots, outcome.RemovedSlots.OrderBy(id => id).ToArray());
+        Assert.Equal(outcome.RemovedUnits, outcome.RemovedUnits.OrderBy(id => id).ToArray());
+        Assert.Equal(outcome.Capacities,
+            outcome.Capacities.OrderBy(c => c.UnitId).ThenBy(c => c.VehicleType, StringComparer.Ordinal).ToArray());
+    }
+
     [Fact]
     public void EmptyUnitRemovalPreservesReferencesAndSlotMovePreservesIdentity()
     {

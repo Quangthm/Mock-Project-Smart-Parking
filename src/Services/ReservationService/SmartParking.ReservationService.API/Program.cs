@@ -1,7 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartParking.ReservationService.Persistence;
+using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Domain;
 
 namespace SmartParking.ReservationService.API;
 
@@ -14,13 +17,14 @@ public static class ReservationHost
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Reservation") ?? throw new InvalidOperationException("Configure ConnectionStrings:Reservation.")));
+        builder.Services.TryAddScoped<IStructureSafetyStore, StructureSafetyStore>();
+        builder.Services.AddScoped<StructureSafetyService>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddHttpClient<OperatorIdentityClient>(client =>
         {
             client.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
-        builder.Services.AddScoped<StructureSafetyStore>();
         builder.Services.AddScoped<ReservationGateStore>();
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
             .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
@@ -31,18 +35,20 @@ public static class ReservationHost
         app.Use(async (context, next) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            if (context.Request.Path.StartsWithSegments("/internal") &&
-                !CryptographicOperations.FixedTimeEquals(
-                    Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()),
-                    Encoding.UTF8.GetBytes(key)))
+            if (context.Request.Path.StartsWithSegments("/internal") && !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
+            { context.Response.StatusCode = 401; return; }
+            try { await next(context); }
+            catch (PostgresException error) when (
+                (context.Request.Path.StartsWithSegments("/api/reservations") || context.Request.Path.StartsWithSegments("/api/parking-sessions")) &&
+                (error.SqlState is PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn))
             {
-                context.Response.StatusCode = 401;
-                return;
+                context.Response.StatusCode = 503;
+                await context.Response.WriteAsJsonAsync(new { success = false, code = "PROTOTYPE_SCHEMA_NOT_READY", message = "Reservation data is unavailable until database reconciliation is complete." });
             }
-
-            try
+            catch (InvalidStructureEditException error)
             {
-                await next(context);
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsJsonAsync(new { code = "INVALID_STRUCTURE", message = error.Message });
             }
             catch (ReservationGateException error)
             {
@@ -54,24 +60,25 @@ public static class ReservationHost
                     message = error.Message
                 });
             }
-            catch (HoldConflictException)
+            catch (HoldConflictException) { context.Response.StatusCode = 409; await context.Response.WriteAsJsonAsync(new { code = "STRUCTURE_BUSY" }); }
+        });
+
+        app.MapPut("/internal/structure/{siteId:guid}/{token:guid}",
+            async (Guid siteId, Guid token, HoldRequest body, StructureSafetyService service, CancellationToken ct) =>
+                Results.Ok(await service.PrepareAsync(body.TenantId, siteId, token, ct)));
+
+        app.MapPost("/internal/structure/{siteId:guid}/impact",
+            async (Guid siteId, HoldRequest body, StructureSafetyService service, CancellationToken ct) =>
+                Results.Ok(await service.ImpactAsync(body.TenantId, siteId, ct)));
+
+        app.MapPost("/internal/structure/{siteId:guid}/{token:guid}/release",
+            async (Guid siteId, Guid token, ReleaseRequest body, StructureSafetyService service, CancellationToken ct) =>
             {
-                context.Response.StatusCode = 409;
-                await context.Response.WriteAsJsonAsync(new { code = "STRUCTURE_BUSY" });
-            }
-        });
-        app.MapPut("/internal/structure/{siteId:guid}/{token:guid}", async (Guid siteId, Guid token, HoldRequest body, StructureSafetyStore store, CancellationToken ct) =>
-            body.TenantId == Guid.Empty || siteId == Guid.Empty || token == Guid.Empty ? Results.BadRequest() : Results.Ok(await store.AcquireAsync(body.TenantId, siteId, token, ct)));
-        app.MapPost("/internal/structure/{siteId:guid}/snapshot", async (Guid siteId, HoldRequest body, StructureSafetyStore store, CancellationToken ct) =>
-            body.TenantId == Guid.Empty || siteId == Guid.Empty ? Results.BadRequest() : Results.Ok(await store.ReadSnapshotAsync(body.TenantId, siteId, ct)));
-        app.MapPost("/internal/structure/{siteId:guid}/impact",async(Guid siteId,HoldRequest body,StructureSafetyStore store,CancellationToken ct)=>body.TenantId==Guid.Empty || siteId==Guid.Empty?Results.BadRequest():Results.Ok(await store.ImpactAsync(body.TenantId,siteId,ct)));
-        app.MapPost("/internal/structure/{siteId:guid}/{token:guid}/release", async (Guid siteId, Guid token, ReleaseRequest body, StructureSafetyStore store, CancellationToken ct) =>
-        {
-            if (body.TenantId == Guid.Empty || siteId == Guid.Empty || token == Guid.Empty ||
-                body.Outcome is { RemovedSlots: null } or { RemovedUnits: null } or { Capacities: null } ||
-                body.Outcome?.Capacities.Any(c => c.Capacity < 0 || c.Backup<0 || c.Backup>c.Capacity || c.VehicleType is not ("CAR" or "MOTORCYCLE")) == true) return Results.BadRequest();
-            await store.ReleaseAsync(body.TenantId, siteId, token, body.Outcome, ct); return Results.NoContent();
-        });
+                await service.CompleteAsync(body.TenantId, siteId, token, body.Outcome, ct);
+                return Results.NoContent();
+            });
+        app.MapPost("/internal/structure/{siteId:guid}/snapshot", async (Guid siteId, HoldRequest body, StructureSafetyService service, CancellationToken ct) =>
+            Results.Ok(await service.ReadSnapshotAsync(body.TenantId, siteId, ct)));
         app.MapGet("/api/reservations", async (
             Guid siteId,
             OperatorIdentityClient identity,
@@ -187,7 +194,6 @@ public static class ReservationHost
         });
         return app;
     }
-
     private static string? NormalizeVehicleType(string? value) =>
         value?.Trim().ToUpperInvariant() switch
         {

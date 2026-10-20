@@ -29,8 +29,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<AccountWorkflowService>();
         services.AddScoped<IAccountWorkflows>(sp=>sp.GetRequiredService<AccountWorkflowService>());
         services.AddScoped<IMfaPolicy>(sp=>sp.GetRequiredService<AccountWorkflowService>());
-        services.AddScoped<VehicleRegistrationService>();
-        services.AddScoped<IVehicleRegistration>(sp=>sp.GetRequiredService<VehicleRegistrationService>());
+        services.AddScoped<IVehicleRepository, VehicleRepository>();
 
         return services;
     }

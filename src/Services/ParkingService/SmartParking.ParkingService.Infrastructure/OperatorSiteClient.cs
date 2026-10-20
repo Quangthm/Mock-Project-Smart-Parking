@@ -7,7 +7,7 @@ using SmartParking.ParkingService.Domain;
 
 namespace SmartParking.ParkingService.Infrastructure;
 
-public sealed class OperatorSiteClient(HttpClient client, IHttpContextAccessor context)
+public sealed class OperatorSiteClient(HttpClient client, IHttpContextAccessor context) : IOperatorSiteAuthorizer
 {
     public async Task<OwnerScope> ScopeAsync(Guid siteId, CancellationToken ct)
     {
@@ -39,7 +39,7 @@ public sealed class OperatorSiteClient(HttpClient client, IHttpContextAccessor c
         {
             throw;
         }
-        catch (Exception error) when (error is HttpRequestException or JsonException)
+        catch (Exception error) when (error is HttpRequestException or JsonException || error is OperationCanceledException && !ct.IsCancellationRequested)
         {
             throw new StructureException("IDENTITY_UNAVAILABLE", "Operator authority is unavailable.");
         }

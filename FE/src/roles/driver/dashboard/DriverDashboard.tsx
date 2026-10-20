@@ -163,7 +163,7 @@ export function DriverDashboard() {
         {
           id: "payments",
           label: "Payment history",
-          icon: "₫",
+          icon: "banknote",
           active: tab === "payments",
           onClick: () => {
             setTab("payments")

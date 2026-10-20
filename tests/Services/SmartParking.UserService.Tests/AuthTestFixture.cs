@@ -58,7 +58,7 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork
 
 internal sealed class TestClock : TimeProvider
 {
-    public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset Now { get; set; } = new(DateTimeOffset.UtcNow.Ticks / 10 * 10, TimeSpan.Zero);
     public override DateTimeOffset GetUtcNow() => Now;
 }
 

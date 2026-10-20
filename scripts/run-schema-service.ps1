@@ -24,6 +24,10 @@ $env:Services__Key = $env:SMARTPARK_SERVICE_KEY
 $env:Services__User = 'http://localhost:5035/'
 $env:Services__Parking = 'http://localhost:5045/'
 $env:Services__Reservation = 'http://localhost:5055/'
+foreach ($remoteService in @('User','Parking','Reservation')) {
+    $url = [Environment]::GetEnvironmentVariable('SMARTPARK_SERVICE_' + $remoteService.ToUpperInvariant() + '_URL')
+    if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
+}
 
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT' }
 $defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443' }
@@ -44,7 +48,30 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     $env:DevelopmentAdmin__Email = $adminEmail
     $env:DevelopmentAdmin__Password = $env:SMARTPARK_ADMIN_PASSWORD
 }
+if ($Service -eq 'User') {
+    if ($env:SMARTPARK_OWNER_EMAIL -and $env:SMARTPARK_OWNER_PASSWORD) {
+        $env:DevelopmentOwner__Email = $env:SMARTPARK_OWNER_EMAIL
+        $env:DevelopmentOwner__Password = $env:SMARTPARK_OWNER_PASSWORD
+    }
+    if ($env:SMARTPARK_OPERATOR_EMAIL -and $env:SMARTPARK_OPERATOR_PASSWORD) {
+        $env:DevelopmentOperator__Email = $env:SMARTPARK_OPERATOR_EMAIL
+        $env:DevelopmentOperator__Password = $env:SMARTPARK_OPERATOR_PASSWORD
+    }
+}
 
+# Optional .env settings override saved user-secrets only for this runner process.
+if ($Service -eq 'User') {
+    foreach ($field in @('Host','Port','Username','Password','From')) {
+        $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
+        if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
+    }
+    if ($env:SMARTPARK_JWT_PRIVATE_KEY_PEM) { $env:Jwt__PrivateKeyPem = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM }
+    if ($env:SMARTPARK_WORKFLOW_KEY_DIRECTORY) {
+        $keyDirectory = $env:SMARTPARK_WORKFLOW_KEY_DIRECTORY
+        if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
+        $env:Workflow__KeyDirectory = $keyDirectory
+    }
+}
 $projectDir = Join-Path $taskRoot "src/Services/${Service}Service/SmartParking.${Service}Service.API"
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
 if ($LASTEXITCODE -ne 0) { throw "${Service}Service exited with code $LASTEXITCODE" }

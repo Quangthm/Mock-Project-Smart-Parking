@@ -1,46 +1,128 @@
-# SPARK-188 — Parking Structure backend core
+# SPARK-188 — Luồng sửa cấu trúc bãi và ranh giới microservice
 
-Implemented 2026-10-06 from SRS v0.9 §3.2, FR-LOT-01/02/03 and the existing PostgreSQL schema. The referenced task is **Parking Structure Management (BE)**. This deliverable implements domain, application service and PostgreSQL persistence without assuming an unapproved frontend HTTP contract.
+Cập nhật 12/10/2026 trên nhánh develop-fix-application. Tài liệu này mô tả implementation hiện tại, thay cho hướng dẫn core dùng chung DB trước đây.
 
-## Ownership and usage
+## Trách nhiệm từng tầng
 
-`src/Services/ParkingService` contains three .NET 10 projects: Domain, Application and Persistence. It does not depend on UserService assemblies. Identity is checked against the shared database's existing IAM tables as an interim adapter; a future service deployment can replace this adapter with an agreed identity contract.
+- **Parking API:** xác thực và lấy scope qua UserService, chuyển DTO sang StructureEdit, gọi Application.
+- **Parking Application:** kiểm tra quyền, giữ gate theo bãi, chuẩn bị operation/token, gọi Reservation, gọi Domain, yêu cầu lưu trong transaction và đồng bộ kết quả.
+- **Parking Domain:** quy tắc cấu trúc, xóa/move slot, occupancy và capacity.
+- **Parking Persistence:** SQL và transaction Parking DB, khóa các dòng, audit, operation và journal đồng bộ. Không gọi HTTP.
+- **Parking Infrastructure:** HTTP adapters và hosted worker gọi use case phục hồi.
+- **Reservation API:** xác thực service và gọi StructureSafetyService trong Application.
+- **Reservation Domain:** xác thực scope/outcome, capacity và backup hợp lệ.
+- **Reservation Persistence:** hold, snapshot, projection, capacity và receipt trong Reservation DB.
 
-Create one `NpgsqlDataSource` for the configured connection string, register `IParkingStructureRepository` as scoped with `PostgresParkingStructureRepository`, and register `ParkingStructureService` as scoped. The HTTP adapter must derive `OwnerScope.UserId` from validated authentication, never from an owner ID in a request. The repository verifies current user, tenant, account and `BUSINESS_OWNER` role on every operation. Only an ACTIVE, non-deleted user with ACTIVE BUSINESS_OPERATOR membership in an ACTIVE tenant may proceed. Approval currently does not provision a tenant; provisioning is required before this service can be used.
+SQL trigger guard_structure_edit vẫn được giữ để bảo vệ các đường ghi reservation/allocation/session/capacity hiện có. Chưa chuyển toàn bộ quy tắc lifecycle của Reservation từ trigger sang Domain; không được bỏ trigger trước khi mọi đường ghi có bảo vệ tương đương.
 
-Application operations:
+## Đọc code theo luồng
 
-- `CreateAsync`, `ListAsync`, `GetAsync`: create/read tenant-scoped sites, including inactive sites.
-- `AddUnitAsync`: BUILDING/FLOOR/ZONE/ROW/SECTION hierarchy. Root zones support outdoor lots with no artificial floor.
-- `AddSlotAsync`: physical slots with explicit MOTORBIKE/SEDAN/SUV/VAN/TRUCK and STANDARD/VIP/EV_CHARGING/HANDICAPPED categories.
-- `AddAccessPathAsync`: site-local optional entry/exit endpoints and JSON map data.
-- `ChangeAsync`: trusted server-side domain action for UpdateProfile, SetActive, RenameUnit, SetUnitCapacity, RemoveUnit, MoveSlot, ConfigureSlot, RemoveSlot and RemoveAccessPath. This delegate is an internal transaction boundary, not a payload or script exposed to clients.
+1. ParkingStructureService.EditAsync: điều phối use case.
+2. IParkingStructureEdit: contract của transaction cục bộ.
+3. PostgresParkingStructureRepository.BeginEditAsync và ParkingStructureEdit.CommitAsync: row lock, lưu cấu trúc/audit/kết quả đồng bộ, commit.
+4. StructureOutcomeBuilder: chuyển aggregate đã được Domain kiểm tra thành kết quả gửi Reservation.
+5. StructureSynchronizationService: gửi lại kết quả và nhận acknowledgement.
+6. StructureSafetyService → StructureSafetyStore.ReleaseAsync: kiểm tra Domain, cập nhật projection/capacity/receipt và bỏ hold trong một transaction Reservation.
 
-Example internal call:
+~~~text
+Parking Application: kiểm tra quyền + gate theo bãi
+    → phục hồi operation trước đó nếu còn pending
+    → lưu token với state preparing trong Parking DB
+    → HTTP: Reservation lấy advisory lock, ghi hold và trả snapshot
+    → mở transaction Parking, khóa cấu trúc
+    → Domain kiểm tra và thực hiện thay đổi
+    → lưu cấu trúc + audit + outcome, chuyển journal sang ready
+    → commit và dispose transaction Parking
+    → HTTP: Reservation cập nhật projection/capacity + receipt + bỏ hold
+    → Parking đánh dấu journal và operation hoàn tất
+~~~
 
-```csharp
-var site = await service.CreateAsync(owner, "SITE-01", "Central", "Address", ct: ct);
-var zone = await service.AddUnitAsync(owner, site.Id, UnitType.ZONE, "Outdoor", capacity: 100, ct: ct);
-await service.AddSlotAsync(owner, site.Id, zone, "M-01", VehicleType.MOTORBIKE, ct: ct);
-await service.ChangeAsync(owner, site.Id, s => s.UpdateProfile("SITE-01", "Central Parking", "Address", 10.77m, 106.69m), ct);
-```
+Không có transaction Parking mở trong lúc chờ HTTP. Gate theo bãi là advisory lock theo **session**, dùng một connection riêng từ pool gate tách biệt với query pool; gate không phải distributed transaction. Hai service vẫn commit độc lập.
 
-## Storage and invariants
+Pool gate có giới hạn mặc định 16 connection, chỉnh qua Services:ParkingGateLimit (tối thiểu 2). Admission và việc lấy advisory lock đều không chờ khi đang bận; API trả STRUCTURE_BUSY để caller retry. Operation cần một operation gate và một site gate. Cần tính tổng giới hạn connection của các service khi cấu hình PostgreSQL.
 
-Apply `scripts/database/05.6-Parking-Structure.sql` after baseline `05.1-Database-Scripts.sql`. The upgrade is transactional and re-runnable. It adds `parking_access_paths`, case-insensitive active identifiers, a check against occupancy of deleted slots, and commitment triggers. Case-insensitive duplicate legacy identifiers must be resolved before applying the unique indexes; the migration intentionally fails rather than rename data silently. The occupancy check is NOT VALID for existing history but enforced for new writes. No production/project database was migrated in this task.
+Pool gate nhận connection string gốc từ cấu hình; không lấy lại từ NpgsqlDataSource.ConnectionString vì property này có thể che password.
 
-Existing parking_sites, spatial_units and parking_slots are used without renaming fields. Paths contain stable UUIDs; renaming units does not rewrite descendant paths. Parent-child ordering is BUILDING → FLOOR → ZONE → ROW → SECTION, allowing skipped levels. Unit capacity 0 means no configured layout limit, as in the existing schema default. Positive limits cover all descendant physical slots. Site total_physical_capacity is derived from non-deleted slots; client-provided totals cannot override it. Commercial capacity pools remain separate and are not inferred from layout counts.
+## Phục hồi và idempotency
 
-Slot codes are unique within a spatial unit, unit names among siblings, site codes within a tenant and path codes within a site. Moves keep the slot UUID. Cross-site unit/path references and invalid enums, coordinates or JSON are rejected. ConfigureSlot updates vehicle compatibility, slot category and JSON map/features without writing occupancy. Map JSON is stored as supplied, limited to 65,536 characters, pending an agreed visualization schema. Legacy sites whose declared physical capacity differs from active slot count are readable but edits fail with STRUCTURE_CONFLICT until the layout is reconciled; profile edits must not silently reduce an existing declared capacity.
+Bảng structure_synchronizations thuộc Parking DB:
 
-All changes use one transaction and a site row lock. Slot rows are locked before checking physical occupancy. Operational status OPERATIONAL + occupied flag expresses physical available/occupied; UNKNOWN, MAINTENANCE and BLOCKED correspond to unknown, maintenance and unavailable. Reservation/protection are not folded into that status. This task provides no operational-status override endpoint.
+| Trạng thái | Ý nghĩa |
+|---|---|
+| preparing | Token đã được lưu, chưa có physical commit được xác nhận trong journal |
+| aborting | Phục hồi đã chặn request cũ commit; gửi abort tới Reservation |
+| ready | Cấu trúc và exact outcome đã commit atomically trong Parking DB |
+| completed | Reservation đã xác nhận; Parking đã lưu acknowledgement |
 
-Deletion is soft and preserves historical allocations and sessions. Units must be empty and unreferenced by access paths before removal. Removal, movement, compatibility/map changes and deactivation reject occupied, unknown or actively allocated resources. Live sessions, active/future reservations (including unbounded periods), and configured positive capacity pools conservatively block destructive layout changes for the entire site. Adding capacity and changing profile/name are allowed. Automatic reallocation/refund is deliberately not emulated: until that workflow exists, resolve commitments first. This is a conservative restriction, not the complete SRS capacity-reduction workflow.
+Worker chạy mỗi 10 giây. Worker và request dùng cùng site gate, nên worker bỏ qua request đang xử lý. Nếu connection giữ gate bị mất, transition preparing → aborting vẫn bảo vệ race với physical commit: transaction sửa cấu trúc chỉ được commit nếu nó chuyển được đúng journal từ preparing → ready.
 
-The upgrade's BEFORE INSERT/UPDATE triggers lock the affected site for reservations, allocations, sessions and capacity pools, then reject new live commitments to inactive/deleted sites or deleted/cross-site targets. Updates cannot transfer a commitment to another site. Historical/released references remain valid. Future multi-site reservation/allocation workflows should acquire site locks in a consistent order and retry PostgreSQL deadlock/serialization failures at their transaction boundary. Raw layout writes that bypass this repository are not supported.
+Khi physical commit thắng race, recovery đọc payload ready và gửi kết quả, không gửi abort. Khi recovery thắng, cập nhật journal của request thất bại và toàn bộ thay đổi vật lý phải rollback.
 
-## HTTP handoff still required
+Bảng structure_release_receipts thuộc Reservation DB lưu token, scope và exact outcome. Gửi lại cùng payload được chấp nhận kể cả khi một hold mới đã tồn tại; payload khác bị từ chối. Token đã release không thể tạo hold mới. Receipt được lưu cùng transaction với projection/capacity và việc bỏ hold.
 
-This core is buildable and tested but has no API host/controller, endpoint URLs, transport DTOs, API error mapping, FE integration, or OpenAPI specification. These remain necessary for an integrated SPARK-188 completion. Agree method/path, DTO casing, hierarchy representation, pagination, error/status mapping and revision/concurrency semantics with FE before implementing that adapter. Domain `StructureException.Code` values are internal and are not yet a public API contract. This task does not change frontend mocks, owner onboarding, tariffs, devices, operational overrides or reservation allocation.
+Giữ ba bảng structure_edit_holds, structure_site_state, structure_removed_resources. Các bảng này không tạo join hoặc foreign key xuyên DB.
 
-Review and executed validation: [SPARK-188 review](../../04-testing/spark-188-parking-structure-review-2026-10-06.md).
+Các hold cũ không có journal phải phục hồi bằng scripts/recover-structure-hold.ps1 sau khi dừng toàn bộ Parking instances. Script ưu tiên exact payload nếu đã có journal; chỉ dựng authoritative snapshot cho legacy hold.
+
+## Migration và rollout
+
+Dừng các phiên bản service cũ trước khi rollout để chúng không bỏ qua gate/journal mới. Áp dụng baseline/overlay của đúng service, rồi chạy:
+
+~~~powershell
+./scripts/apply-workflow-migrations.ps1 -Service Parking -SchemaRoot <schema-checkout>
+./scripts/apply-workflow-migrations.ps1 -Service Reservation -SchemaRoot <schema-checkout>
+~~~
+
+Script chạy migration cũ trước, rồi migration mới tương ứng:
+
+- Parking DB: 05.11-Parking-Structure-Synchronization.sql.
+- Reservation DB: 05.12-Reservation-Structure-Receipts.sql.
+
+Mỗi file chỉ chạy trên DB của service được ghi trong tên file. Chạy service mới sau khi cả hai migration đã được áp dụng. Task refactor không tự sửa DB đang sử dụng.
+
+## Kiểm thử và giới hạn
+
+~~~powershell
+dotnet test SmartParking.slnx
+~~~
+
+ApplicationWorkflowTests kiểm tra authorization, thứ tự HTTP/transaction, Domain rejection, lost response, recovery sau restart, gate đang được giữ và commit thắng race với recovery. Các test Domain cũ vẫn giữ nguyên. Test mới kiểm tra Operator bị thu hồi quyền trong lúc lấy hold không được commit. GateAuthenticationTests dùng một protocol peer local với password giả để kiểm chứng forwarding credential mà không cần PostgreSQL cài trên máy.
+
+StructureHttpContractTests dùng API TestServer và HTTP adapter thật, chỉ thay boundary Persistence bằng fake. Các case kiểm tra JSON/token/outcome, idempotent release, 400 khi outcome không hợp lệ, 409 khi hold xung đột và 401 khi thiếu service key.
+
+PostgresStructureWorkflowTests tạo hai DB test riêng, áp dụng SQL của repository rồi kiểm tra:
+
+- Physical commit + lost acknowledgement + replay từ instance mới.
+- Trigger chặn ghi capacity khi có hold.
+- Retry receipt không giải phóng hold mới, token đã abort không được dùng lại.
+- Physical commit thắng race với recovery.
+- Recovery thắng race khiến physical writes rollback.
+- Capacity/quota/tombstone/receipt được đồng bộ khi replay.
+- Projection thất bại rollback đồng thời receipt, trạng thái, tombstone và việc bỏ hold.
+- Giữ hai gate không chiếm connector của query pool có giới hạn 2.
+- Foreground cập nhật lỗi muộn trả operation completed thay vì chuyển trạng thái lùi.
+
+Case race chờ pg_stat_activity xác nhận recovery đang bị row lock chặn trước khi commit. PostgreSQL test connection cần MaxPoolSize tối thiểu 3 cho transaction, recovery và connection quan sát; mẫu bên dưới dùng giới hạn mặc định.
+
+Chạy trên PostgreSQL test riêng, với quyền CREATE DATABASE:
+
+~~~powershell
+$env:SMARTPARK_STRUCTURE_TEST_CONNECTION = 'Host=127.0.0.1;Port=<port>;Database=postgres;Username=<test-user>;Password=<test-password>'
+dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj
+~~~
+
+Không có biến môi trường này thì các test PostgreSQL được báo **skipped**, không phải passed. Kiểm thử bằng fake không thay thế kiểm thử khóa/transaction thực tế.
+
+Phạm vi còn giữ nguyên: chưa triển khai automatic reallocation/refund khi giảm cấu trúc đang có cam kết; Domain tiếp tục chặn thay đổi đó. Chưa thêm Message Broker và chưa chuyển toàn bộ reservation writers sang Application. Journal/receipt được giữ để replay; cần chính sách lưu trữ/dọn lịch sử khi đưa lên môi trường vận hành lâu dài.
+
+## Review chéo sau refactor
+
+Ba agent ở reasoning medium review độc lập theo các mảng kiến trúc/quyền, transaction/phục hồi và migration/API/kiểm thử. Các lỗi đã được sửa và review lại:
+
+- Khôi phục kiểm tra quyền Operator sau HTTP acquire, trước transaction sửa cấu trúc.
+- Tách pool session gates khỏi query pool và giới hạn admission để tránh starvation.
+- Conditional update gặp operation đã completed trả đúng trạng thái cuối cùng, vẫn giữ tenant/actor scope.
+- Giữ password của pool gate bằng connection string gốc.
+- Tăng coverage capacity/rollback/lock wait/HTTP và credential forwarding.
+
+Review source và các test chạy được không thay thế xác nhận PostgreSQL integration trong môi trường thật.

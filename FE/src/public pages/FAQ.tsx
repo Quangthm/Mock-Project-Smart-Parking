@@ -38,7 +38,7 @@ const FAQS = [
 
   {
     q: "Can I get a monthly subscription?",
-    a: "Yes. Monthly passes start from 800,000₫/month and annual subscriptions offer up to 2 months free. Available for select partner lots.",
+    a: "Yes. Monthly passes start from 800.000 VND/month and annual subscriptions offer up to 2 months free. Available for select partner lots.",
   },
 ]
 
