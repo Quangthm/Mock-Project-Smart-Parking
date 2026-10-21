@@ -14,9 +14,9 @@ Setup tạo `.env` từ `.env.example`, sinh giá trị local còn thiếu cho p
 
 Setup dựng sáu PostgreSQL database riêng theo `compose.schema-integration.yml`, kiểm tra xác thực ba database chính, áp dụng workflow migration và restore solution. Không tự chạy API hoặc frontend. SonarQube được dựng tự động cùng setup, bỏ qua bằng `-SkipSonarQube` (`-SkipDatabase` chỉ dựng credential, không khởi động container).
 
-AI camera là tùy chọn riêng: chạy `.\setup.ps1 -WithAiCamera` để build và start 2 container từ `compose.ai.yml` (project `smartpark-ai`): `ai-rest` REST API tại http://localhost:5001, `ai-live` luồng nhận diện trực tiếp tại http://localhost:5002, gắn vào mạng ngoài `smartpark-schema_default`. Không thêm flag thì không build/chạy gì thuộc AI. Flag chỉ hợp lệ khi chạy full setup (cần schema DBs đang chạy, không dùng chung với `-SkipDatabase`) và cần `SMARTPARK_DEV_PASSWORD` đã cấu hình trong `.env`. Build lần đầu ~5–10 phút (PyTorch CPU wheels + PaddleOCR warm-up), tốn RAM; các lần sau dùng cache.
+AI camera là tùy chọn riêng: chạy `.\setup.ps1 -WithAiCamera` để kiểm tra 7 model file trong `src/Services/IoTService/python-ai/models` và network `smartpark-schema_default`, rồi dựng 2 container từ `compose.ai.yml` (project `smartpark-ai`): `ai-rest` REST API tại http://localhost:5001, `ai-live` luồng nhận diện trực tiếp tại http://localhost:5002. Không thêm flag thì không build/chạy gì thuộc AI. Flag chỉ hợp lệ khi chạy full setup (cần schema DBs đang chạy, không dùng chung với `-SkipDatabase`) và cần `SMARTPARK_DEV_PASSWORD` đã cấu hình trong `.env`.
 
-
+Setup chỉ build khi image `smartpark-ai:local` chưa có (lần đầu ~5–10 phút do PyTorch CPU wheels + PaddleOCR warm-up, tốn RAM). Nếu image và container đã có, setup bỏ qua build và chỉ `up -d --wait --no-build`; container dùng image ID cũ được cảnh báo và recreate bằng `--force-recreate --no-build` (không tự rebuild). Nếu image có nhưng chưa có container, setup in playbook A–E, probe thư viện một lần rồi hỏi `[S] Start / [R] Rebuild / [C] Clean rebuild / [K] Skip AI / [A] Abort`; `-NonInteractive` mặc định Start. Container unhealthy không bị rebuild tự động — setup in log và hướng dẫn. `-RebuildAi` (chỉ dùng cùng `-WithAiCamera`) buộc build lại có cache. "Skip" chỉ bỏ build, container vẫn được đảm bảo chạy; chọn `K` mới bỏ toàn bộ AI.
 
 Nếu chỉ muốn cấu hình và restore backend mà chưa dựng database:
 
@@ -37,7 +37,8 @@ Nếu chỉ muốn cấu hình và restore backend mà chưa dựng database:
 | `-CredentialMode Team -TeamEnvPath <file>` | Dùng credential team file |
 | `-SkipSonarQube` | Không khởi động SonarQube (mặc định chạy cùng setup) |
 | `-NonInteractive` | Bỏ qua prompt, tự động Keep `.env` cũ |
-| `-WithAiCamera` | Build + chạy 2 container AI (ai-rest :5001, ai-live :5002) |
+| `-WithAiCamera` | Kiểm tra model/network, dựng 2 container AI (ai-rest :5001, ai-live :5002); chỉ build khi image thiếu hoặc có `-RebuildAi` |
+| `-RebuildAi` | Cùng `-WithAiCamera`: buộc build lại image AI có cache rồi start |
 
 ## Chạy backend
 
@@ -65,6 +66,28 @@ Mở ba terminal PowerShell riêng tại repo:
 | IoT | — | 5446 | smartpark_iot |
 
 Runner dùng `.env` cho connection strings, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port 5035/5045/5055.
+
+## Docker app stack (BE + FE)
+
+Cách này chạy BE/FE trong container, không cần cài .NET/Node trên máy sau lần build đầu. Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-schema_default` tồn tại).
+
+```powershell
+.\scripts\run-app-service.ps1 -Service User
+.\scripts\run-app-service.ps1 -Service Parking
+.\scripts\run-app-service.ps1 -Service Reservation
+.\scripts\run-app-service.ps1 -Service Frontend
+```
+
+Mỗi lệnh build image nếu cần, chạy đúng một service và mở một cửa sổ CMD theo dõi log. Dùng `-NoBuild` để chạy nhanh khi image đã có, `-NoLogWindow` cho CI/automation. `-Service All` chạy cả 4 container. Các file `scripts\run-*.cmd` cho phép double-click; `scripts\stop-app-service.ps1 -Service All` dừng stack nhưng giữ volume.
+
+| Container | Host URL | Ghi chú |
+| --- | --- | --- |
+| `smartpark-app-user-service-1` | http://localhost:5035 | `/health`; seed admin/owner/operator khi start |
+| `smartpark-app-parking-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
+| `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
+| `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
+
+Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`ParkingService`/`ReservationService`). Không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose vì sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu cổng 5035/5045/5055 đang bị runner host chiếm, dừng runner host trước khi chạy container. Log từng service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
 
 ## Schema và dữ liệu có sẵn
 
@@ -127,6 +150,29 @@ npm run dev
 ```
 
 Vite chạy mặc định trên http://localhost:5173. Điền `SMARTPARK_SMTP_HOST`, `PORT`, `USERNAME`, `PASSWORD`, `FROM` vào root `.env` để gửi OTP email, rồi khởi động lại UserService. Runner chuyển các giá trị này sang cấu hình `Otp:Smtp`. Không tự điền credential SMTP hoặc MapTiler của người khác.
+
+## AI camera (tùy chọn)
+
+`.\setup.ps1 -WithAiCamera` dò trạng thái image `smartpark-ai:local` và container của project `smartpark-ai` trước khi build:
+
+| Trạng thái | Hành vi |
+| --- | --- |
+| Image chưa có | Build + `up -d --wait` (lần đầu) |
+| Image có, chưa có container | In playbook A–E, probe thư viện một lần, hỏi `[S] Start / [R] Rebuild / [C] Clean rebuild / [K] Skip AI / [A] Abort`; `-NonInteractive` mặc định Start |
+| Image + container đã có | Bỏ qua build, `up -d --wait --no-build` |
+| Container dùng image ID cũ | Cảnh báo, recreate bằng `--force-recreate --no-build`, không tự build |
+| Container unhealthy | Không tự rebuild, in `logs --tail 200` và hướng dẫn |
+
+`-RebuildAi` chỉ dùng cùng `-WithAiCamera` để buộc build lại có cache. "Skip" chỉ bỏ build; setup vẫn gọi `up --no-build` để đảm bảo container chạy (chọn `K` mới bỏ toàn bộ AI). Nếu probe thư viện fail, setup cảnh báo và không tự rebuild; chọn `R`/`C` hoặc chạy lại với `-RebuildAi` sau khi xác nhận. Thiếu model file thì setup dừng trước khi build/chạy AI và liệt kê file thiếu; thiếu network `smartpark-schema_default` thì chạy setup không `-SkipDatabase` trước.
+
+Kiểm tra nhanh:
+
+```powershell
+docker image inspect smartpark-ai:local --format '{{.Id}}|{{.Created}}|{{.Size}}'
+docker compose -p smartpark-ai --env-file .env -f compose.ai.yml ps --all
+docker compose -p smartpark-ai --env-file .env -f compose.ai.yml logs --tail 200
+docker run --rm --entrypoint python smartpark-ai:local -c "import cv2,numpy,scipy,torch,paddleocr,ultralytics,psycopg,flask; print('AI_IMAGE_OK')"
+```
 
 Lỗi thường gặp: Docker Desktop chưa chạy; cổng database/API bị chiếm; password không khớp volume cũ; .NET SDK chưa đúng phiên bản; dependency chưa restore. Thông báo setup chỉ ra bước lỗi và không xóa dữ liệu để khắc phục. Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết đúng bước đang fail; bảng bước ↔ lỗi ↔ cách fix ở [QUICK_START.md](QUICK_START.md). Xem thêm [schema integration](docs/02-architecture/database/schema-integration.md) và [workflow migrations](docs/02-architecture/database/workflow-upgrades-2026-10-08.md).
 
