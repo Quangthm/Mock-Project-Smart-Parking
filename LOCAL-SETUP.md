@@ -1,24 +1,68 @@
 # Chạy SmartParking local trên Windows
 
-Mở PowerShell tại đúng checkout và kiểm tra nhánh trước khi chạy:
+Tài liệu onboarding chi tiết cho môi trường local. Happy path nằm ở [TL;DR](#tldr-happy-path) và các mục 1–4; phần nâng cao (volume, migration, AI camera, Team credential) ở mục 5–7. Không sửa `setup.ps1`/script khi chỉ muốn chạy local.
+
+## TL;DR happy path
 
 ```powershell
 # Mở terminal tại root checkout vừa clone
-git branch --show-current
+git branch --show-current          # nhánh làm việc mặc định: develop
+.\setup.ps1                        # dựng DB + credential + SonarQube + restore
+.\scripts\run-app-service.ps1 -Service All   # chạy 4 container BE + FE
+# Mở http://localhost:5173
+```
+
+## 1. Prerequisites
+
+Checklist trước khi setup:
+
+- [ ] **Windows PowerShell 5.1+**, **.NET SDK 10** (`dotnet --version` trả major 10).
+- [ ] **Docker Desktop đang chạy**, Docker Compose hỗ trợ `up --wait` (v2.17+).
+- [ ] **Node.js + npm** nếu chạy frontend trực tiếp trên host. Docker app stack dùng Node 22 trong image, không cần cài Node trên host.
+- [ ] **Git** và đúng branch: `git branch --show-current` (mặc định `develop`).
+- [ ] **Port rảnh:** API `5035/5045/5055`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
+
+`setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Lệnh cũ `.\scripts\setup-local.ps1` vẫn dùng được: script shim này in warning rồi forward toàn bộ tham số sang `setup.ps1` ở repo root.
+
+### Thuật ngữ nhanh
+
+| Thuật ngữ | Nghĩa ngắn gọn |
+| --- | --- |
+| **Schema volume** | Named volume Docker giữ dữ liệu PostgreSQL. Xóa volume = mất dữ liệu dev. |
+| **Runner** | `scripts/run-schema-service.ps1` chạy một API với biến môi trường nạp từ `.env`. |
+| **user-secrets** | Kho secret .NET cho Visual Studio/`dotnet run`; setup đồng bộ từ `.env` ở `[5/7]`. |
+| **Canonical script** | SQL baseline trong `scripts/database/microservices` + overlay, được mount theo thứ tự của compose. |
+| **Sentinel** | Bảng/cột đánh dấu schema đã đúng để runner biết có cần áp migration hay không. |
+| **Block-list** | Danh sách script legacy bị runner chặn, không được áp lại. |
+
+## 2. First-time Setup
+
+```powershell
 .\setup.ps1
 ```
 
-Nhánh làm việc mặc định là `develop` (kiểm tra bằng `git branch --show-current`). Cần .NET SDK 10 và Docker Desktop đang chạy (Docker Compose hỗ trợ `up --wait`). Node.js/npm cần cho frontend. Script `setup.ps1` được lưu trong Git và không chứa mật khẩu cố định. Lệnh cũ `.\scripts\setup-local.ps1` vẫn chuyển tiếp đến script này.
+`setup.ps1` làm các việc sau:
 
-Setup tạo `.env` từ `.env.example`, sinh giá trị local còn thiếu cho password PostgreSQL, service key, password Admin, owner và operator. Script giữ nguyên `.env` đã cấu hình; user-secrets được đồng bộ theo `.env` mỗi lần chạy `[5/7]` (ghi đè giá trị lệch, xóa khóa optional JWT/SMTP không còn trong `.env`), không in mật khẩu ra terminal. Cấu hình `.cache/qa-local.json` cũ được giữ nguyên nhưng runner hiện tại đọc `.env`. Không commit `.env`, user-secrets hoặc thư mục workflow keys.
+1. Tạo `.env` từ `.env.example`; **giữ nguyên** giá trị đã cấu hình, chỉ sinh phần còn thiếu (password PostgreSQL, service key, password Admin/owner/operator).
+2. Dựng **6 PostgreSQL DB** theo `compose.schema-integration.yml` (`user`, `facility`, `operations`, `payment`, `notification`, `iot`).
+3. Probe authentication từng DB và áp workflow migration đúng trạng thái schema.
+4. Đồng bộ user-secrets cho User/Parking/Reservation theo `.env` ở `[5/7]`.
+5. Dựng SonarQube (mặc định) và restore solution ở `[7/7]`.
+6. **Không tự chạy API hoặc frontend** — sau setup mới chuyển sang [mục 3](#3-run-application).
 
-Setup dựng sáu PostgreSQL database riêng theo `compose.schema-integration.yml`, kiểm tra xác thực ba database chính, áp dụng workflow migration và restore solution. Không tự chạy API hoặc frontend. SonarQube được dựng tự động cùng setup, bỏ qua bằng `-SkipSonarQube` (`-SkipDatabase` chỉ dựng credential, không khởi động container).
+### Cảnh báo ghi đè và mất dữ liệu
 
-AI camera là tùy chọn riêng: chạy `.\setup.ps1 -WithAiCamera` để kiểm tra 7 model file trong `src/Services/IoTService/python-ai/models` và network `smartpark-schema_default`, rồi dựng 2 container từ `compose.ai.yml` (project `smartpark-ai`): `ai-rest` REST API tại http://localhost:5001, `ai-live` luồng nhận diện trực tiếp tại http://localhost:5002. Không thêm flag thì không build/chạy gì thuộc AI. Flag chỉ hợp lệ khi chạy full setup (cần schema DBs đang chạy, không dùng chung với `-SkipDatabase`) và cần `SMARTPARK_DEV_PASSWORD` đã cấu hình trong `.env`.
+Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**Enter = Keep**).
 
-Setup chỉ build khi image `smartpark-ai:local` chưa có (lần đầu ~5–10 phút do PyTorch CPU wheels + PaddleOCR warm-up, tốn RAM). Nếu image và container đã có, setup bỏ qua build và chỉ `up -d --wait --no-build`; container dùng image ID cũ được cảnh báo và recreate bằng `--force-recreate --no-build` (không tự rebuild). Nếu image có nhưng chưa có container, setup in playbook A–E, probe thư viện một lần rồi hỏi `[S] Start / [R] Rebuild / [C] Clean rebuild / [K] Skip AI / [A] Abort`; `-NonInteractive` mặc định Start. Container unhealthy không bị rebuild tự động — setup in log và hướng dẫn. `-RebuildAi` (chỉ dùng cùng `-WithAiCamera`) buộc build lại có cache. "Skip" chỉ bỏ build, container vẫn được đảm bảo chạy; chọn `K` mới bỏ toàn bộ AI.
+> **CẢNH BÁO — ghi đè cấu hình:** chọn `O` sẽ backup `.env` hiện tại ra `.env.bak` rồi sinh lại `.env` từ `.env.example`. Password/key đang dùng có thể bị thay; chỉ chọn `O` khi chấp nhận cấu hình lại. `-NonInteractive` tự động Keep.
 
-Nếu chỉ muốn cấu hình và restore backend mà chưa dựng database:
+> **CẢNH BÁO — ghi đè user-secrets:** `[5/7]` ghi đè giá trị user-secrets lệch theo `.env` và xóa khóa optional (JWT PEM, SMTP) không còn trong `.env` mỗi lần chạy setup. Muốn giữ user-secrets cũ: dùng `-SkipUserSecrets` + runner, **không** chạy trực tiếp từ Visual Studio.
+
+> **CẢNH BÁO — mất dữ liệu:** **không chạy `-RecreateDb` ở lần setup đầu.** Flag này xóa schema volume và init lại 6 DB, làm mất dữ liệu dev. Chi tiết ở mục 7.3.
+
+Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner hiện tại đọc `.env` (`import-local-config.ps1` chỉ còn là tiện ích cho config dạng flat string). Không commit `.env`, user-secrets hoặc thư mục workflow keys.
+
+### Chỉ cấu hình backend, chưa dựng database
 
 ```powershell
 .\setup.ps1 -SkipDatabase
@@ -26,21 +70,49 @@ Nếu chỉ muốn cấu hình và restore backend mà chưa dựng database:
 .\setup.ps1 -SkipDatabase -SkipRestore
 ```
 
-`-SkipDatabase` không tạo hay cập nhật schema. Chạy lại setup bình thường trước khi chạy API nếu database chưa sẵn sàng. Với lần cài đặt đầu tiên, mở `.env` để xem mật khẩu Admin được tạo; mặc định email là `admin@smartpark.local`. UserService còn seed thêm tài khoản owner (`owner@smartpark.local`) và operator (`operator@smartpark.local`) khi service khởi động — password tương ứng được tạo/gán trong `.env` (`SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`). UserService chỉ tạo các tài khoản này lần đầu và không thay mật khẩu đã có. Ngoài ra còn có tài khoản driver demo (`driver@gmail.com / Password@123`) do `DataSeeder` tạo trong code.
+`-SkipDatabase` không tạo hay cập nhật schema. Chạy lại setup bình thường trước khi chạy API nếu database chưa sẵn sàng.
 
-| Flag | Ý nghĩa |
-| --- | --- |
-| `-SkipDatabase` | Bỏ qua init DB (vẫn dựng credential) |
-| `-SkipRestore` | Bỏ qua `dotnet restore` |
-| `-SkipUserSecrets` | Giữ nguyên user-secrets cũ |
-| `-RecreateDb` | Xóa schema volumes + init lại 6 DB |
-| `-CredentialMode Team -TeamEnvPath <file>` | Dùng credential team file |
-| `-SkipSonarQube` | Không khởi động SonarQube (mặc định chạy cùng setup) |
-| `-NonInteractive` | Bỏ qua prompt, tự động Keep `.env` cũ |
-| `-WithAiCamera` | Kiểm tra model/network, dựng 2 container AI (ai-rest :5001, ai-live :5002); chỉ build khi image thiếu hoặc có `-RebuildAi` |
-| `-RebuildAi` | Cùng `-WithAiCamera`: buộc build lại image AI có cache rồi start |
+### Tài khoản được seed
 
-## Chạy backend
+- Admin: xem `SMARTPARK_ADMIN_PASSWORD` trong `.env`; email mặc định `admin@smartpark.local`.
+- Owner/operator: UserService seed thêm `owner@smartpark.local` và `operator@smartpark.local` khi service khởi động; password từ `.env` (`SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`).
+- UserService **chỉ tạo lần đầu** và không thay mật khẩu tài khoản đã có.
+- Driver demo: `driver@gmail.com / Password@123` do `DataSeeder` tạo trong code.
+
+## 3. Run Application
+
+Chọn **một** trong hai cách; không chạy đồng thời vì cùng dùng port `5035/5045/5055`.
+
+### 3.1 Docker app stack (BE + FE)
+
+Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-schema_default` tồn tại). Không cần cài .NET/Node trên host sau lần build đầu.
+
+```powershell
+.\scripts\run-app-service.ps1 -Service User
+.\scripts\run-app-service.ps1 -Service Parking
+.\scripts\run-app-service.ps1 -Service Reservation
+.\scripts\run-app-service.ps1 -Service Frontend
+.\scripts\run-app-service.ps1 -Service All        # cả 4 container
+```
+
+| Container | Host URL | Ghi chú |
+| --- | --- | --- |
+| `smartpark-app-user-service-1` | http://localhost:5035 | `/health`; seed admin/owner/operator khi start |
+| `smartpark-app-parking-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
+| `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
+| `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
+
+- Mỗi lệnh build image nếu cần, chạy đúng một service và mở một cửa sổ CMD theo dõi log.
+- `-NoBuild` chạy nhanh khi image đã có; `-NoLogWindow` cho CI/automation.
+- Double-click được: `scripts\run-*.cmd` hoặc `scripts\run-all-apps.cmd`.
+- Dừng stack (giữ volume): `.\scripts\stop-app-service.ps1 -Service All`.
+- Log một service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
+
+Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`ParkingService`/`ReservationService`).
+
+> **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055` đang bị runner host chiếm, dừng runner host trước khi chạy container.
+
+### 3.2 Runner trên host (Visual Studio / `dotnet run`)
 
 Mở ba terminal PowerShell riêng tại repo:
 
@@ -56,6 +128,8 @@ Mở ba terminal PowerShell riêng tại repo:
 .\scripts\run-schema-service.ps1 -Service Reservation
 ```
 
+Runner dùng `.env` cho connection string, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port `5035/5045/5055`.
+
 | Service | HTTP API | PostgreSQL host port | Database |
 | --- | --- | --- | --- |
 | User | http://localhost:5035 | 5441 | smartpark_user |
@@ -65,83 +139,7 @@ Mở ba terminal PowerShell riêng tại repo:
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
 
-Runner dùng `.env` cho connection strings, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port 5035/5045/5055.
-
-## Docker app stack (BE + FE)
-
-Cách này chạy BE/FE trong container, không cần cài .NET/Node trên máy sau lần build đầu. Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-schema_default` tồn tại).
-
-```powershell
-.\scripts\run-app-service.ps1 -Service User
-.\scripts\run-app-service.ps1 -Service Parking
-.\scripts\run-app-service.ps1 -Service Reservation
-.\scripts\run-app-service.ps1 -Service Frontend
-```
-
-Mỗi lệnh build image nếu cần, chạy đúng một service và mở một cửa sổ CMD theo dõi log. Dùng `-NoBuild` để chạy nhanh khi image đã có, `-NoLogWindow` cho CI/automation. `-Service All` chạy cả 4 container. Các file `scripts\run-*.cmd` cho phép double-click; `scripts\stop-app-service.ps1 -Service All` dừng stack nhưng giữ volume.
-
-| Container | Host URL | Ghi chú |
-| --- | --- | --- |
-| `smartpark-app-user-service-1` | http://localhost:5035 | `/health`; seed admin/owner/operator khi start |
-| `smartpark-app-parking-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
-| `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
-| `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
-
-Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`ParkingService`/`ReservationService`). Không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose vì sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu cổng 5035/5045/5055 đang bị runner host chiếm, dừng runner host trước khi chạy container. Log từng service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
-
-## Schema và dữ liệu có sẵn
-
-Database mới chạy SQL baseline trong `scripts/database/microservices` (01–06 theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`. Runner chỉ áp bộ file này; script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn. `docker-compose.yml` là compose monolith cũ (port 5433), không được setup hiện tại sử dụng.
-
-### Seed dữ liệu demo (owner/operator + site)
-
-Sau khi UserService đã khởi động lần đầu (owner/operator được seed), chạy:
-
-```powershell
-.\scripts\seed-demo-site.ps1
-```
-
-Script tạo tenant `DEMO-OWNER`, site `DEMO-HQ`, 1 floor, 1 zone, 8 slot (6 CAR + 2 MOTORCYCLE), operator grant và capacity pools. Chạy lại an toàn (idempotent). Nếu báo thiếu owner/operator, chạy `.\scripts\run-schema-service.ps1 -Service User` một lần rồi seed lại. Script không in password.
-
-PostgreSQL chỉ chạy init SQL khi volume mới hoàn toàn. Với volume đã tồn tại, `scripts/apply-workflow-migrations.ps1` probe trạng thái DB trước khi áp script: schema đã đúng (sentinel có mặt) → bỏ qua và chỉ kiểm tra bảng bắt buộc; DB trống → áp trọn bộ canonical; schema cũ (có bảng cũ nhưng thiếu sentinel) → dừng và yêu cầu `.\setup.ps1 -RecreateDb`. Runner không reset volume và không chạy lại CREATE TABLE trên dữ liệu đang dùng.
-
-### Volume cũ (thiếu bảng `structure_synchronizations`, `structure_release_receipts`, `tenants`, …)
-
-Volume tạo trước baseline mới nằm ở trạng thái legacy — thiếu bảng overlay và runner dừng, yêu cầu dựng lại:
-
-```powershell
-.\setup.ps1 -RecreateDb
-```
-
-`-RecreateDb` xóa schema volumes và init lại cả 6 DB từ script canonical — mất dữ liệu dev trong volume đó; sao lưu trước nếu cần giữ. Volume đã init theo baseline mới không cần bước này: chạy lại `.\setup.ps1` là an toàn (migration skip và chỉ verify).
-
-Kiểm tra bảng trên volume hiện có:
-
-```powershell
-docker compose --env-file .env -f compose.schema-integration.yml exec -T facility-db psql -U smartpark_facility -d smartpark_facility -At -c "SELECT to_regclass('structure_synchronizations') IS NOT NULL;"
-docker compose --env-file .env -f compose.schema-integration.yml exec -T operations-db psql -U smartpark_operations -d smartpark_operations -At -c "SELECT to_regclass('structure_release_receipts') IS NOT NULL;"
-```
-
-Kết quả `t` nghĩa là bảng đã có; volume legacy chưa có bảng → dùng `-RecreateDb` thay vì áp tay. Với service khác, thay `-Service` và container/database tương ứng.
-
-Không có thao tác xóa/reset volume trong setup (ngoại trừ khi bạn chủ động chạy `-RecreateDb`). Nếu có volume cũ mà không có password local, khôi phục `SMARTPARK_DEV_PASSWORD` gốc vào `.env`. Đổi environment variable không đổi password bên trong PostgreSQL. Sao lưu database trước khi chỉnh dữ liệu hoặc schema quan trọng.
-
-Để dừng container và giữ nguyên dữ liệu:
-
-```powershell
-docker compose --env-file .env -f compose.schema-integration.yml down
-```
-
-Để kiểm tra SQL bootstrap khi service không lên:
-
-```powershell
-docker compose --env-file .env -f compose.schema-integration.yml ps
-docker compose --env-file .env -f compose.schema-integration.yml logs user-db facility-db operations-db
-```
-
-## Frontend và email OTP
-
-Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có, giữ nguyên file đã cấu hình. Điền MapTiler key của bạn nếu giao diện cần bản đồ. Sau đó:
+### 3.3 Frontend trên host
 
 ```powershell
 cd FE
@@ -149,15 +147,48 @@ npm install
 npm run dev
 ```
 
-Vite chạy mặc định trên http://localhost:5173. Điền `SMARTPARK_SMTP_HOST`, `PORT`, `USERNAME`, `PASSWORD`, `FROM` vào root `.env` để gửi OTP email, rồi khởi động lại UserService. Runner chuyển các giá trị này sang cấu hình `Otp:Smtp`. Không tự điền credential SMTP hoặc MapTiler của người khác.
+Vite chạy mặc định tại http://localhost:5173. Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có và **giữ nguyên file đã cấu hình**. Điền MapTiler key của bạn nếu giao diện cần bản đồ (xem mục 5.2).
 
-## AI camera (tùy chọn)
+## 4. Verify Setup
 
-`.\setup.ps1 -WithAiCamera` dò trạng thái image `smartpark-ai:local` và container của project `smartpark-ai` trước khi build:
+Checklist sau khi setup và chạy app:
+
+- [ ] **6 DB container chạy:**
+
+  ```powershell
+  docker compose --env-file .env -f compose.schema-integration.yml ps
+  ```
+
+- [ ] **3 API health 200** (khi runner/container đã chạy):
+
+  ```powershell
+  Invoke-WebRequest http://localhost:5035/health -UseBasicParsing
+  Invoke-WebRequest http://localhost:5045/health -UseBasicParsing
+  Invoke-WebRequest http://localhost:5055/health -UseBasicParsing
+  ```
+
+- [ ] **FE mở được** tại http://localhost:5173.
+- [ ] **Đăng nhập được admin/owner/operator** (password trong `.env`) và driver demo `driver@gmail.com / Password@123`.
+- [ ] **Seed demo site** sau khi UserService đã khởi động lần đầu:
+
+  ```powershell
+  .\scripts\seed-demo-site.ps1
+  ```
+
+  Script tạo tenant `DEMO-OWNER`, site `DEMO-HQ`, 1 floor, 1 zone, 8 slot (6 `CAR` + 2 `MOTORCYCLE`), operator grant và capacity pools. Chạy lại an toàn (idempotent). Nếu báo thiếu owner/operator, chạy `.\scripts\run-schema-service.ps1 -Service User` một lần rồi seed lại. Script không in password.
+- [ ] **SonarQube** mở được tại http://localhost:9000 (xem [mục 5.3](#53-sonarqube)).
+
+## 5. Optional Features
+
+### 5.1 AI camera
+
+`.\setup.ps1 -WithAiCamera` kiểm tra 7 model file trong `src/Services/IoTService/python-ai/models` và network `smartpark-schema_default`, rồi dựng 2 container từ `compose.ai.yml` (project `smartpark-ai`): `ai-rest` tại http://localhost:5001, `ai-live` tại http://localhost:5002. **Không thêm flag thì không build/chạy gì thuộc AI.** Flag chỉ hợp lệ khi chạy full setup (cần schema DBs đang chạy, không dùng chung `-SkipDatabase`) và cần `SMARTPARK_DEV_PASSWORD` trong `.env`.
+
+Setup chỉ build khi cần:
 
 | Trạng thái | Hành vi |
 | --- | --- |
-| Image chưa có | Build + `up -d --wait` (lần đầu) |
+| Image `smartpark-ai:local` chưa có | Build + `up -d --wait` (lần đầu ~5–10 phút do PyTorch CPU wheels + PaddleOCR warm-up, tốn RAM) |
 | Image có, chưa có container | In playbook A–E, probe thư viện một lần, hỏi `[S] Start / [R] Rebuild / [C] Clean rebuild / [K] Skip AI / [A] Abort`; `-NonInteractive` mặc định Start |
 | Image + container đã có | Bỏ qua build, `up -d --wait --no-build` |
 | Container dùng image ID cũ | Cảnh báo, recreate bằng `--force-recreate --no-build`, không tự build |
@@ -174,8 +205,131 @@ docker compose -p smartpark-ai --env-file .env -f compose.ai.yml logs --tail 200
 docker run --rm --entrypoint python smartpark-ai:local -c "import cv2,numpy,scipy,torch,paddleocr,ultralytics,psycopg,flask; print('AI_IMAGE_OK')"
 ```
 
-Lỗi thường gặp: Docker Desktop chưa chạy; cổng database/API bị chiếm; password không khớp volume cũ; .NET SDK chưa đúng phiên bản; dependency chưa restore. Thông báo setup chỉ ra bước lỗi và không xóa dữ liệu để khắc phục. Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết đúng bước đang fail; bảng bước ↔ lỗi ↔ cách fix ở [QUICK_START.md](QUICK_START.md). Xem thêm [schema integration](docs/02-architecture/database/schema-integration.md) và [workflow migrations](docs/02-architecture/database/workflow-upgrades-2026-10-08.md).
+### 5.2 Frontend `.env`, email OTP và MapTiler
 
-## Credential Team và công cụ tùy chọn
+- Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có; giá trị đã cấu hình được giữ nguyên, chỉ điền khi trống.
+- Điền `VITE_MAPTILER_API_KEY` trong root `.env` hoặc file Team, hoặc trực tiếp trong `FE/.env`.
+- Bật OTP email: điền `SMARTPARK_SMTP_HOST`, `SMARTPARK_SMTP_PORT`, `SMARTPARK_SMTP_USERNAME`, `SMARTPARK_SMTP_PASSWORD`, `SMARTPARK_SMTP_FROM` vào root `.env`, rồi khởi động lại UserService. Runner chuyển các giá trị này sang cấu hình `Otp:Smtp`.
+- Không tự điền credential SMTP hoặc MapTiler của người khác.
 
-Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvPath <file>`, `-SkipUserSecrets`, URL service xuyên máy, MapTiler và `-SkipSonarQube`. Xem [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) để backup script local trước khi chuyển sang setup tracked. Setup không thay password của Admin đã có trong DB.
+### 5.3 SonarQube
+
+SonarQube được dựng tự động cùng setup; bỏ qua bằng `-SkipSonarQube`. `-SkipDatabase` chỉ dựng credential, không khởi động container. UI mặc định http://localhost:9000 — lần đầu đăng nhập `admin/admin` và đổi password trên UI. `SONAR_DB_PASSWORD` được sinh khi thiếu và giữ nguyên giá trị đã cấu hình. Compose riêng `compose.sonar.yml` giữ dữ liệu trong named volumes; setup không tự tiếp quản container Sonar cũ.
+
+### 5.4 Credential Team và URL xuyên máy
+
+Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvPath <file>`, `-SkipUserSecrets`, URL service xuyên máy (`SMARTPARK_SERVICE_*_URL`) và MapTiler. Xem [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) để backup script local trước khi chuyển sang setup tracked. Setup **không thay password Admin đã có trong DB**.
+
+## 6. Troubleshooting
+
+### 6.1 Lỗi thường gặp — Triệu chứng → Nguyên nhân → Cách xử lý
+
+**Setup dừng ngay ở `[1/7]`/Docker command lỗi**
+
+- **Nguyên nhân:** Docker Desktop chưa chạy hoặc Compose không hỗ trợ `up --wait`.
+- **Cách xử lý:** mở Docker Desktop, chờ engine ready; nâng Docker Desktop/Compose nếu `up` báo thiếu `--wait`.
+
+**Lỗi `Invalid port` ở `[3/7]` hoặc DB/API không lên**
+
+- **Nguyên nhân:** port `5441–5446`, `5035/5045/5055` bị chiếm.
+- **Cách xử lý:** kiểm tra process đang giữ port; đổi port DB bằng `SMARTPARK_DB_*_PORT` trong `.env` (ba API giữ `5035/5045/5055`).
+
+**`authentication failed` khi probe DB hoặc chạy API**
+
+- **Nguyên nhân:** password trong `.env` khác password volume PostgreSQL đã init. Đổi environment variable **không** đổi password bên trong PostgreSQL.
+- **Cách xử lý:** khôi phục `SMARTPARK_DEV_PASSWORD` gốc vào `.env`; nếu không còn password và chấp nhận mất data dev thì dùng `.\setup.ps1 -RecreateDb`.
+
+**Chạy Visual Studio/`dotnet run` báo 28P01, runner không bị**
+
+- **Nguyên nhân:** user-secrets còn connection string password cũ.
+- **Cách xử lý:** chạy lại `.\setup.ps1` để `[5/7]` đồng bộ lại user-secrets, hoặc dùng runner.
+
+**`dotnet restore` fail ở `[7/7]`**
+
+- **Nguyên nhân:** mạng/proxy NuGet hoặc .NET SDK sai major.
+- **Cách xử lý:** kiểm tra `dotnet --version` phải là major 10 và kết nối NuGet; có thể bỏ qua bằng `-SkipRestore` nếu đã restore trước đó.
+
+**Service không lên, nghi lỗi SQL bootstrap**
+
+- **Cách xử lý:** xem trạng thái và log DB:
+
+  ```powershell
+  docker compose --env-file .env -f compose.schema-integration.yml ps
+  docker compose --env-file .env -f compose.schema-integration.yml logs user-db facility-db operations-db
+  ```
+
+### 6.2 Xác định bước lỗi bằng progress line
+
+Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết đúng bước đang fail; bảng bước ↔ lỗi ↔ cách fix ở [QUICK_START.md](QUICK_START.md). Thông báo setup chỉ ra bước lỗi và **không xóa dữ liệu** để khắc phục.
+
+## 7. Advanced Options
+
+### 7.1 Flags của `setup.ps1`
+
+| Flag | Ý nghĩa |
+| --- | --- |
+| `-SkipDatabase` | Bỏ qua init DB (vẫn dựng credential) |
+| `-SkipRestore` | Bỏ qua `dotnet restore` |
+| `-SkipUserSecrets` | Giữ nguyên user-secrets cũ |
+| `-RecreateDb` | **Phá hủy:** xóa schema volumes + init lại 6 DB (mất dữ liệu dev) |
+| `-CredentialMode Team -TeamEnvPath <file>` | Dùng credential team file |
+| `-SkipSonarQube` | Không khởi động SonarQube (mặc định chạy cùng setup) |
+| `-NonInteractive` | Bỏ qua prompt, tự động Keep `.env` cũ |
+| `-WithAiCamera` | Kiểm tra model/network, dựng 2 container AI (`ai-rest` :5001, `ai-live` :5002); chỉ build khi image thiếu hoặc có `-RebuildAi` |
+| `-RebuildAi` | Cùng `-WithAiCamera`: buộc build lại image AI có cache rồi start |
+| `-WithSonarQube` | **Deprecated:** SonarQube đã chạy mặc định; flag vẫn được nhận nhưng không còn tác dụng |
+
+> **CẢNH BÁO — trước khi chạy `-RecreateDb`:** flag này xóa schema volume và làm mất toàn bộ dữ liệu dev trong 6 DB. Sao lưu trước nếu cần giữ dữ liệu.
+
+### 7.2 Schema baseline, overlay và script legacy
+
+- Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`.
+- Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
+- `docker-compose.yml` là compose monolith cũ (port `5433`, container `smartparking_db`), **không** được setup hiện tại sử dụng.
+
+### 7.3 Volume và migration
+
+PostgreSQL chỉ chạy init SQL khi volume **mới hoàn toàn**. Với volume đã tồn tại, `scripts/apply-workflow-migrations.ps1` probe trạng thái DB trước khi áp script:
+
+| Trạng thái | Hành vi |
+| --- | --- |
+| Schema đã đúng (sentinel có mặt) | Bỏ qua, chỉ kiểm tra bảng bắt buộc |
+| DB trống | Áp trọn bộ canonical |
+| Schema cũ (có bảng cũ nhưng thiếu sentinel) | Dừng và yêu cầu `.\setup.ps1 -RecreateDb` |
+
+Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ liệu đang dùng. Volume đã init theo baseline mới chạy lại `.\setup.ps1` là an toàn (migration skip và chỉ verify).
+
+#### Volume cũ thiếu bảng overlay
+
+Volume tạo trước baseline mới ở trạng thái legacy — thiếu các bảng như `structure_synchronizations`, `structure_release_receipts`, `tenants`, … Runner sẽ dừng và yêu cầu dựng lại:
+
+> **CẢNH BÁO — mất dữ liệu:** lệnh dưới đây xóa schema volumes và init lại cả 6 DB từ script canonical. Toàn bộ dữ liệu dev trong volume đó sẽ mất; sao lưu trước nếu cần giữ.
+
+```powershell
+.\setup.ps1 -RecreateDb
+```
+
+Kiểm tra bảng trên volume hiện có:
+
+```powershell
+docker compose --env-file .env -f compose.schema-integration.yml exec -T facility-db psql -U smartpark_facility -d smartpark_facility -At -c "SELECT to_regclass('structure_synchronizations') IS NOT NULL;"
+docker compose --env-file .env -f compose.schema-integration.yml exec -T operations-db psql -U smartpark_operations -d smartpark_operations -At -c "SELECT to_regclass('structure_release_receipts') IS NOT NULL;"
+```
+
+Kết quả `t` nghĩa là bảng đã có; volume legacy chưa có bảng → dùng `-RecreateDb` thay vì áp tay. Với service khác, thay container/database tương ứng.
+
+Không có thao tác xóa/reset volume trong setup (ngoại trừ khi bạn chủ động chạy `-RecreateDb`). Nếu có volume cũ mà không có password local, khôi phục `SMARTPARK_DEV_PASSWORD` gốc vào `.env`. Đổi environment variable không đổi password bên trong PostgreSQL. Sao lưu database trước khi chỉnh dữ liệu hoặc schema quan trọng.
+
+Để dừng container và **giữ nguyên dữ liệu** (`down` không xóa volume):
+
+```powershell
+docker compose --env-file .env -f compose.schema-integration.yml down
+```
+
+### 7.4 Tài liệu liên quan
+
+- [QUICK_START.md](QUICK_START.md) — happy path, progress lines, known errors, flags và ports.
+- [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) — cấu trúc `setup.ps1`, runner app và cách backup script local.
+- [schema-integration.md](docs/02-architecture/database/schema-integration.md) — cấu trúc DB, seed demo, naming container/DB.
+- [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
+- [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
