@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using FluentValidation;
 using SmartParking.PaymentService.Domain.Pricing;
+using SmartParking.PaymentService.Domain.Exceptions;
 
 namespace SmartParking.PaymentService.API.Middleware;
 
@@ -52,6 +53,28 @@ public sealed class ExceptionHandlingMiddleware
                         field = err.PropertyName,
                         code = err.ErrorCode,
                         message = err.ErrorMessage
+                    });
+                }
+                break;
+
+            case PaymentDomainException paymentEx:
+                statusCode = paymentEx.Code switch
+                {
+                    "ORDER_NOT_FOUND" or "TRANSACTION_NOT_FOUND" => (int)HttpStatusCode.NotFound,
+                    "ORDER_ALREADY_PAID" or "IDEMPOTENCY_CONFLICT" or "PAYMENT_RETRY_LIMIT_EXCEEDED" => (int)HttpStatusCode.Conflict,
+                    "ORDER_EXPIRED" => (int)HttpStatusCode.UnprocessableEntity,
+                    "INVALID_WEBHOOK_SIGNATURE" => (int)HttpStatusCode.BadRequest,
+                    "GATEWAY_TIMEOUT" => (int)HttpStatusCode.GatewayTimeout,
+                    _ => (int)HttpStatusCode.BadRequest
+                };
+                errorCode = paymentEx.Code;
+                message = paymentEx.Message;
+                if (!string.IsNullOrEmpty(paymentEx.Field))
+                {
+                    errors.Add(new
+                    {
+                        field = paymentEx.Field,
+                        message = paymentEx.Message
                     });
                 }
                 break;
