@@ -1,7 +1,7 @@
 # Parking Operations Service — Database Documentation
 
 > **Service**: Parking Operations Service (`OperationsDb` — logical, triển khai trên 2 DB vật lý)  
-> **Database files**: [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) → `smartpark_parking`; [`03b-reservation-operations-service-db.sql`](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) → `smartpark_reservation`  
+> **Database files**: [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) → `smartpark_facility`; [`03b-reservation-operations-service-db.sql`](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) → `smartpark_operations`<br>
 > **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và audit (`audit_logs`).
@@ -12,7 +12,7 @@
 
 | Hạng mục | Giá trị |
 |---|---|
-| Database vật lý | `smartpark_parking` (03a, port `5442`) + `smartpark_reservation` (03b, port `5443`) |
+| Database vật lý | `smartpark_facility` (03a, port `5442`) + `smartpark_operations` (03b, port `5443`) |
 | Base DDL | `03a-parking-structure-ops-service-db.sql` + `03b-reservation-operations-service-db.sql` |
 | Overlays | Parking: `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints`; Reservation: `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` |
 | Deployment status | Tách 03 theo D1; 03a dùng `unit_id`/`count` (D4/P2); 03b khớp arch |
@@ -22,14 +22,14 @@
 
 ## 1. Tổng quan kiến trúc & Thuật toán Sức chứa v1.0
 
-Parking Operations Service là **trái tim vận hành động** của SmartPark. Service logic là một bounded context, nhưng profile triển khai tách thành hai DB vật lý theo quyết định **D1**: 03a nằm trong `smartpark_parking`, 03b nằm trong `smartpark_reservation`.
+Parking Operations Service là **trái tim vận hành động** của SmartPark. Service logic là một bounded context, nhưng profile triển khai tách thành hai DB vật lý theo quyết định **D1**: 03a nằm trong `smartpark_facility`, 03b nằm trong `smartpark_operations`.
 
 ```text
 Driver / Operator / IoT Entry → API Gateway
                                     ↓
         ┌───────────────────────────┴───────────────────────────┐
         ↓                                                       ↓
-smartpark_parking (03a)                              smartpark_reservation (03b)
+smartpark_facility (03a)                              smartpark_operations (03b)
 ┌──────────────────────────────┐                     ┌──────────────────────────────┐
 │ structure_backup_policies    │                     │ operational_capacity_configs │
 │ operator_incident_events     │                     │ operational_policies         │
@@ -63,8 +63,8 @@ $$\text{Available}(t) = \text{Total} - |\text{Unavailable}(t)|$$
 
 | Mảng | DB vật lý | Bảng |
 |---|---|---|
-| Structure backup + operator incidents | `smartpark_parking` | `structure_backup_policies`, `operator_incident_events` |
-| Reservations, sessions, allocations, access, passes, incidents, search, audit | `smartpark_reservation` | 10 bảng còn lại |
+| Structure backup + operator incidents | `smartpark_facility` | `structure_backup_policies`, `operator_incident_events` |
+| Reservations, sessions, allocations, access, passes, incidents, search, audit | `smartpark_operations` | 10 bảng còn lại |
 
 Hai DB không có FK vật lý xuyên database; `tenant_id`, `site_id`, `slot_id`, `account_id` là Logical ID. Overlay của mỗi DB được mount riêng bởi `compose.schema-integration.yml`.
 
@@ -118,7 +118,7 @@ Unique `(tenant_id, site_id)`; index theo `site_id`.
 
 ### 4.1 Mục đích nghiệp vụ
 
-Quản lý số lượng chỗ đỗ cần bảo lưu làm dự phòng cho sự cố hoặc trường hợp khẩn cấp (`count`), tiếp nhận từ FacilityDb sang OperationsDb. Bảng nằm trong `smartpark_parking` (03a).
+Quản lý số lượng chỗ đỗ cần bảo lưu làm dự phòng cho sự cố hoặc trường hợp khẩn cấp (`count`), tiếp nhận từ FacilityDb sang OperationsDb. Bảng nằm trong `smartpark_facility` (03a).
 
 ### 4.2 Bảng thuộc tính chi tiết
 
@@ -250,13 +250,13 @@ Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái 
 | `reservation_id` | Payment Service | Operations (`reservations.id`) | Phục vụ thanh toán giữ chỗ |
 | `parking_session_id` | Payment Service | Operations (`parking_sessions.id`) | Phục vụ thanh toán checkout |
 
-03a (`smartpark_parking`) và 03b (`smartpark_reservation`) là hai DB vật lý riêng; mọi tham chiếu giữa chúng và tới Facility/User đều là Logical ID, không có FK vật lý.
+03a (`smartpark_facility`) và 03b (`smartpark_operations`) là hai DB vật lý riêng; mọi tham chiếu giữa chúng và tới Facility/User đều là Logical ID, không có FK vật lý.
 
 ---
 
 ## 14. Deployment overlays
 
-### 14.1 `smartpark_parking` (03a)
+### 14.1 `smartpark_facility` (03a)
 
 - `parking-tenants.sql` — `tenants` local copy (D5).
 - `parking-structure-synchronizations.sql` — `structure_synchronizations` (D1/Q2).
@@ -265,7 +265,7 @@ Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái 
 
 `operator_incident_events` nằm trong base 03a, không lặp lại trong overlay.
 
-### 14.2 `smartpark_reservation` (03b)
+### 14.2 `smartpark_operations` (03b)
 
 - `reservation-site-capacity-pools.sql` — tạo `site_capacity_pools` đúng shape BE (D7); phải chạy trước safety overlay.
 - `reservation-structure-safety.sql` — `structure_edit_holds`, `structure_site_state`, `structure_removed_resources` + guard trigger trên `reservations`, `parking_sessions`, `slot_allocations`, `site_capacity_pools`.
