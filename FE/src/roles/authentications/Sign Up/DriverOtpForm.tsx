@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { authApi, type DriverRegistration } from "../../../lib/authApi"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export const pendingDriverKey = "sp_pending_driver_registration"
 
@@ -106,12 +107,7 @@ export function DriverOtpForm({
       onSubmit={verify}
       style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
     >
-      <h2 style={{ margin: 0 }}>Verify your account</h2>
-      <p style={{ margin: 0 }}>
-        Enter the 6-digit code delivered by{" "}
-        {registration.channel === "email" ? "email" : "SMS"}. Delivery may take
-        a moment. The code is valid for 5 minutes.
-      </p>
+      <PageHeader title="Verify your account" variant="compact" align="center" description={<>Enter the 6-digit code delivered by {registration.channel === "email" ? "email" : "SMS"}. Delivery may take a moment. The code is valid for 5 minutes.</>} />
       <p style={{ margin: 0, fontWeight: 600, overflowWrap: "anywhere" }}>
         {registration.contact}
       </p>

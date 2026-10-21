@@ -1,28 +1,10 @@
+import { PageHeader } from "../../components/ui/PageHeader"
 export function TermsOfService() {
   return (
     <div
       style={{ maxWidth: "800px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1
-        style={{
-          fontFamily: "Inter, sans-serif",
-          fontWeight: 800,
-          fontSize: "1.75rem",
-          color: "var(--fg)",
-          marginBottom: "0.5rem",
-        }}
-      >
-        Điều Khoản Sử Dụng Dịch Vụ
-      </h1>
-      <p
-        style={{
-          color: "var(--muted)",
-          fontSize: "0.875rem",
-          marginBottom: "2rem",
-        }}
-      >
-        Cập nhật lần cuối: 01/01/2026 | Effective Date: January 1, 2026
-      </p>
+      <PageHeader variant="compact" align="start" title={<>Điều Khoản Sử Dụng Dịch Vụ</>} description={<>Cập nhật lần cuối: 01/01/2026 | Effective Date: January 1, 2026</>} />
 
       <PolicySection title="1. Giới thiệu">
         <p>

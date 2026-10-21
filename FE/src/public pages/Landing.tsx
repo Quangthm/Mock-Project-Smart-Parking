@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useState, useEffect, useRef } from "react"
 
 import { useApp } from "../context/AppContext"
@@ -328,43 +329,12 @@ export function Landing() {
         }}
       >
         <div className="animate-in">
-          <h1
-            style={{
-              fontFamily: "Outfit",
-
-              fontWeight: 800,
-
-              fontSize: "clamp(2rem, 4vw, 3rem)",
-
-              lineHeight: 1.15,
-
-              color: "var(--fg)",
-
-              marginBottom: "1.25rem",
-            }}
-          >
-            Park Smart.
+          <PageHeader variant="hero" align="start" title={<>Park Smart.
             <br />
             <span style={{ color: "var(--primary)" }}>Book Easy.</span>
             <br />
-            Manage Better.
-          </h1>
-          <p
-            style={{
-              color: "var(--muted)",
-
-              fontSize: "1.05rem",
-
-              lineHeight: 1.7,
-
-              marginBottom: "2rem",
-
-              maxWidth: "480px",
-            }}
-          >
-            Find, book, and pay for parking in seconds. For lot owners —
-            automate operations and maximize revenue with real-time analytics.
-          </p>
+            Manage Better.</>} description={<>Find, book, and pay for parking in seconds. For lot owners —
+            automate operations and maximize revenue with real-time analytics.</>} />
           <div style={{ display: "flex", gap: "0.875rem", flexWrap: "wrap" }}>
             <button
               className="btn-primary"

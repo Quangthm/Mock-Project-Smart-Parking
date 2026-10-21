@@ -31,6 +31,11 @@
   --pending: #eab308;
   --protected: #6366f1;
   --backup: #8b5cf6;
+  --badge-primary-fg: #2563eb;
+  --badge-success-fg: #16a34a;
+  --badge-warning-fg: #d97706;
+  --badge-danger-strong: #dc2626;
+  --badge-purple-fg: #7c3aed;
   --radius: 0.5rem;
 }
 
@@ -518,8 +523,6 @@ select:not([multiple]):not([size]) {
 .find-parking-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }
 .find-parking-search { flex: none; padding: 18px; border-bottom: 1px solid var(--border); }
 .find-parking-search-heading { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
-.find-parking-search-heading h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
-.find-parking-search-heading p { margin: 5px 0 0; color: var(--muted); font-size: .78rem; }
 .find-parking-location { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); cursor: pointer; }
 .find-parking-location:hover { border-color: var(--primary); color: var(--primary); }
 .find-parking-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -587,8 +590,6 @@ select:not([multiple]):not([size]) {
   .find-parking-map { position: absolute; inset: 0; border-radius: 8px; }
   .find-parking-search { position: absolute; z-index: 6; top: 10px; left: 10px; right: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 4px 18px #0002; }
   .find-parking-search-heading { margin-bottom: 7px; }
-  .find-parking-search-heading h1 { font-size: 1rem; }
-  .find-parking-search-heading p { display: none; }
   .find-parking-filters { margin-top: 7px; }
   .find-parking-map-style { top: 151px; right: 10px; }
   .find-parking-map .maplibregl-ctrl-top-right { top: 140px; right: auto; left: 3px; display: flex; align-items: flex-start; gap: 4px; }

@@ -4,6 +4,7 @@ import { authData as store } from "../data/data"
 import { useNavigate } from "react-router-dom"
 import { getUserHomePath } from "../../operator/data/roleRoutes"
 import { BrandLogo } from "../../../components/brand/BrandLogo"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { authApi, AuthApiError, request } from "../../../lib/authApi"
@@ -311,20 +312,7 @@ export function SignIn() {
       <div style={{ width: "100%", maxWidth: "420px" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <BrandLogo height={100} style={{ margin: "0 auto 1rem" }} />
-          <h1
-            style={{
-              fontFamily: "Outfit",
-              fontWeight: 800,
-              fontSize: "1.75rem",
-              color: "var(--fg)",
-              margin: "0 0 0.375rem",
-            }}
-          >
-            Sign In
-          </h1>
-          <p style={{ color: "var(--muted)", fontSize: "0.925rem" }}>
-            Welcome back to SmartParking
-          </p>
+          <PageHeader title="Sign In" variant="compact" align="center" description="Welcome back to SmartParking" />
         </div>
 
         <form

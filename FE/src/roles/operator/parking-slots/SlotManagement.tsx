@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
 import { parkingApi } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface SlotManagementProps {
@@ -154,22 +155,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-purple-500/10 px-2 py-0.5 text-xs font-semibold text-purple-600">
-            SRS 3.4.5 Capacity Management
-          </span>
-          <span className="text-xs text-[var(--muted)]">·</span>
-          <span className="text-xs text-[var(--muted)]">{lot.name}</span>
-        </div>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Backup Slot & Capacity Operations
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow.
-        </p>
-      </div>
+      <PageHeader title="Backup Slot & Capacity Operations" eyebrow={<>SRS 3.4.5 Capacity Management · {lot.name}</>} description="Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow." />
 
       {/* Permission Alert if missing */}
       {!hasOverridePermission && (

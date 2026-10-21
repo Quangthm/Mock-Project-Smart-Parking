@@ -21,6 +21,7 @@ import { DriverSupport } from "../support/DriverSupport"
 import { PaymentHistory } from "../payments/PaymentHistory"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { FloatingChatbot } from "../../../components/chat/FloatingChatbot"
@@ -473,28 +474,11 @@ export function DriverDashboard() {
               <div className="animate-in">
                 {homePanel === "bookings" ? (
                   <section>
-                    <h3
-                      style={{
-                        fontFamily: "Outfit",
-                        margin: "0 0 0.75rem",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      Bookings
-                    </h3>
+                    <PageHeader title="Bookings" variant="compact" />
                     <ActiveBookings />
                   </section>
                 ) : (
                   <section>
-                    <h3
-                      style={{
-                        fontFamily: "Outfit",
-                        margin: "0 0 0.75rem",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      Booking History
-                    </h3>
                     <BookingHistory />
                   </section>
                 )}

@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useState } from "react"
 
 import { useApp } from "../context/AppContext"
@@ -45,12 +46,7 @@ export function Support() {
     <div
       style={{ maxWidth: "900px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1 className="section-title" style={{ marginBottom: "0.5rem" }}>
-        Help & Support
-      </h1>
-      <p className="section-sub" style={{ marginBottom: "3rem" }}>
-        Contact our team for help with your parking experience.
-      </p>
+      <PageHeader variant="default" align="start" title={<>Help & Support</>} description={<>Contact our team for help with your parking experience.</>} />
       {/* Contact form */}
       <section>
         <h2

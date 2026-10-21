@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { request } from "../../../lib/authApi"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import type { OwnerApplicationRecord } from "../../../lib/ownerApi"
 
@@ -93,11 +94,7 @@ export function OwnerVerification({
 
   return (
     <form className="card text-center" onSubmit={verify}>
-      <h2>Verify email</h2>
-      <p>
-        Your parking lot setup is saved. Enter the code sent to your email to
-        submit your application for Admin review.
-      </p>
+      <PageHeader title="Verify email" variant="compact" align="center" description="Your parking lot setup is saved. Enter the code sent to your email to submit your application for Admin review." />
       <p style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{application.email}</p>
       <label className="label" htmlFor="owner-code">
         Verification code

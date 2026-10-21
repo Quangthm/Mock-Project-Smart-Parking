@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { UntitledIcon } from "../components/icon/UntitledIcon"
 
 export function About() {
@@ -47,32 +48,7 @@ export function About() {
           }}
         >
           <div>
-            <h1
-              style={{
-                fontFamily: "Outfit",
-
-                fontWeight: 800,
-
-                fontSize: "2rem",
-
-                color: "#fff",
-
-                margin: "0 0 0.5rem",
-              }}
-            >
-              About SmartParking
-            </h1>
-            <p
-              style={{
-                color: "rgba(255,255,255,0.78)",
-
-                fontSize: "0.95rem",
-
-                margin: 0,
-              }}
-            >
-              Redefining urban parking in Vietnam since 2024.
-            </p>
+            <PageHeader variant="promo" align="start" title={<>About SmartParking</>} description={<>Redefining urban parking in Vietnam since 2024.</>} />
           </div>
         </div>
       </div>

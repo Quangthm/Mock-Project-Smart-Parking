@@ -4,6 +4,7 @@ import "@maptiler/sdk/dist/maptiler-sdk.css"
 import { driverData as store } from "../data/data"
 import type { LotType, ParkingLot } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { getDrivingRoute, type DrivingRoute } from "../../../lib/routingApi"
 import { ParkingDetailsPanel, type VehicleCapacityInfo } from "./ParkingDetailsPanel"
 
@@ -300,7 +301,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       <aside ref={searchPanelRef} className="find-parking-panel" aria-label="Search parking" hidden={searchCollapsed}>
         <div className="find-parking-search">
           <div className="find-parking-search-heading">
-            <div><h1>Search parking</h1><p>Find a space near you</p></div>
+            <PageHeader title="Search parking" variant="panel" description="Find a space near you" />
             <div className="find-parking-search-tools">
               <button type="button" className="find-parking-location" onClick={findMyLocation} aria-label="Use my location" title="Use my location"><UntitledIcon name="map-pin" size={18} /></button>
               <button type="button" className="find-parking-location" onClick={() => setSearchCollapsed(true)} aria-label="Collapse parking search" title="Collapse parking search"><span className="find-parking-collapse-icon"><UntitledIcon name="chevron-down" size={18} /></span></button>

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
 import { AuthApiError } from "../../../lib/authApi"
 import { reservationApi, type OperatorSite, type WalkInParkingSession } from "../../../lib/operatorApi"
@@ -318,17 +319,7 @@ export function CheckInOut({
 
   return (
     <div className="min-w-0 space-y-5">
-      {/* Page Title */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-          {mode === "check-in" ? "Gate Check-In" : "Gate Check-Out"}
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          {mode === "check-in"
-            ? `Register incoming vehicles for ${lot.name}.`
-            : `Verify outgoing vehicles and compare their entry image for ${lot.name}.`}
-        </p>
-      </div>
+      <PageHeader title={mode === "check-in" ? "Gate Check-In" : "Gate Check-Out"} description={mode === "check-in" ? `Register incoming vehicles for ${lot.name}.` : `Verify outgoing vehicles and compare their entry image for ${lot.name}.`} />
 
       {/* Action Feedback Banner */}
       {actionFeedback && (

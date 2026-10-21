@@ -6,6 +6,7 @@ import { EmergencyPanel } from "../emergency/EmergencyPanel"
 import { SlotManagement } from "../parking-slots/SlotManagement"
 import { TicketManagement } from "../tickets/TicketManagement"
 import { OperatorAssignments } from "./OperatorAssignments"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { OperatorOverview } from "./OperatorOverview"
 import type { OperatorAccessRole, SupportTicket, AppNotification } from "../../../lib/types"
 import { DashboardSidebar, type DashboardNavGroup } from "../../../components/layout/DashboardSidebar"
@@ -440,19 +441,7 @@ export function OperatorDashboard({
           {/* TAB 8: FINANCIAL REPORTS */}
           {accessRole === "financial" && tab === "finance" && (
             <section className="mx-auto w-full max-w-5xl space-y-6">
-              <header>
-                <p className="text-sm font-medium text-[var(--primary)]">
-                  {user?.role === "owner" || user?.operatorSiteId === "all"
-                    ? "All Assigned Sites"
-                    : (selectedLot?.name ?? "Assigned parking lot")}
-                </p>
-                <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">
-                  Financial Reports & Reconciliation
-                </h1>
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  Completed booking revenue, collection channels, and reconciliation registry.
-                </p>
-              </header>
+              <PageHeader eyebrow={user?.role === "owner" || user?.operatorSiteId === "all" ? "All Assigned Sites" : (selectedLot?.name ?? "Assigned parking lot")} title="Financial Reports & Reconciliation" description="Completed booking revenue, collection channels, and reconciliation registry." />
 
               {!sitesLoading && !sitesError && reportSiteIds.length === 0 && (
                 <p className="text-sm text-[var(--muted)]">No assigned parking sites are available.</p>
@@ -607,13 +596,7 @@ function CashierPOS({
   return (
     <Container className={readOnly ? "mx-auto flex w-full max-w-xl items-start py-4 sm:py-8" : "mx-auto flex min-h-[calc(100vh-60px)] w-full max-w-xl items-center px-5 py-10"}>
       <section className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-wider text-[var(--primary)]">{lot?.name ?? "No assigned site"}</p>
-        <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">
-          {readOnly ? "Cashier View" : "Cashier POS Terminal"}
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          {readOnly ? "Look up the active parking session and view its recorded payment details." : "Look up the active parking session and confirm its checkout. Payment collection is not simulated."}
-        </p>
+        <PageHeader eyebrow={lot?.name ?? "No assigned site"} title={readOnly ? "Cashier View" : "Cashier POS Terminal"} description={readOnly ? "Look up the active parking session and view its recorded payment details." : "Look up the active parking session and confirm its checkout. Payment collection is not simulated."} />
 
         {sitesLoading && (
           <p role="status" className="mt-4 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>

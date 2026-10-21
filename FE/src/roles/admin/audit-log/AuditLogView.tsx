@@ -3,6 +3,7 @@ import { useState } from "react"
 import { adminData as store } from "../data/data"
 
 import type { AuditLog } from "../../../lib/types"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export function AuditLogView() {
   const [logs] = useState<AuditLog[]>(store.getAuditLogs)
@@ -26,33 +27,12 @@ export function AuditLogView() {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1.25rem",
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: "Outfit",
-            fontWeight: 700,
-            fontSize: "1.3rem",
-            color: "var(--fg)",
-            margin: 0,
-          }}
-        >
-          Audit Log
-        </h2>
-        <input
-          className="input"
-          style={{ maxWidth: "260px" }}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Search by action or user..."
-        />
-      </div>
+      <PageHeader title="Audit Log" variant="compact" actions={<input
+        className="input max-w-[260px]"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Search by action or user..."
+      />} />
       <div style={{ overflowX: "auto" }}>
         <table
           style={{

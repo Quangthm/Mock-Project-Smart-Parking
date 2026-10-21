@@ -1,3 +1,4 @@
+import { PageHeader } from "../../components/ui/PageHeader"
 import { UntitledIcon } from "../../components/icon/UntitledIcon"
 
 export function PaymentRefund() {
@@ -5,33 +6,8 @@ export function PaymentRefund() {
     <div
       style={{ maxWidth: "800px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1
-        style={{
-          fontFamily: "Inter, sans-serif",
-
-          fontWeight: 800,
-
-          fontSize: "1.75rem",
-
-          color: "var(--fg)",
-
-          marginBottom: "0.5rem",
-        }}
-      >
-        Chính Sách Thanh Toán và Hoàn Tiền
-      </h1>
-      <p
-        style={{
-          color: "var(--muted)",
-
-          fontSize: "0.875rem",
-
-          marginBottom: "2rem",
-        }}
-      >
-        Cập nhật lần cuối: 01/01/2026 | Tuân thủ Luật Bảo vệ người tiêu dùng
-        2023 và các quy định thanh toán điện tử Việt Nam
-      </p>
+      <PageHeader variant="compact" align="start" title={<>Chính Sách Thanh Toán và Hoàn Tiền</>} description={<>Cập nhật lần cuối: 01/01/2026 | Tuân thủ Luật Bảo vệ người tiêu dùng
+        2023 và các quy định thanh toán điện tử Việt Nam</>} />
 
       <div
         style={{

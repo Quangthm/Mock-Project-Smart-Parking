@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
 
@@ -263,26 +264,7 @@ export function BookingFlow({
 
   return (
     <div className="driver-booking-flow" style={{ maxWidth: 1440, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "0.65rem",
-        }}
-      >
-        <h2
-          style={{
-            margin: 0,
-            fontSize: "1.25rem",
-            fontFamily: "Outfit",
-            fontWeight: 700,
-            color: "var(--fg)",
-          }}
-        >
-          Book a Spot at {lotSnapshot.name}
-        </h2>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+      <PageHeader title={<>Book a Spot at {lotSnapshot.name}</>} variant="compact" actions={<div className="flex items-center gap-2">
           <button
             type="button"
             className="btn-outline"
@@ -310,8 +292,7 @@ export function BookingFlow({
           >
             ← Back to Parking
           </button>
-        </div>
-      </div>
+        </div>} />
       <div style={{ display: "flex", gap: "0.3rem", marginBottom: "1.5rem" }}>
         {["Select Slot", "Time & Vehicle", "Payment"].map((label, index) => {
           const currentIndex = step === "slot" ? 0 : step === "details" ? 1 : 2

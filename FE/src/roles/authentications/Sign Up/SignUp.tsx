@@ -1,6 +1,7 @@
 import { useState, useRef } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
@@ -571,20 +572,7 @@ export function SignUp() {
       <div style={{ width: "100%", maxWidth: "480px" }}>
         <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
           <BrandLogo height={100} style={{ margin: "0 auto 1rem" }} />
-          <h1
-            style={{
-              fontFamily: "Outfit",
-              fontWeight: 800,
-              fontSize: "1.75rem",
-              color: "var(--fg)",
-              margin: "0 0 0.375rem",
-            }}
-          >
-            Create Account
-          </h1>
-          <p style={{ color: "var(--muted)", fontSize: "0.925rem" }}>
-            Join SmartParking today
-          </p>
+          <PageHeader title="Create Account" variant="compact" align="center" description="Join SmartParking today" />
         </div>
 
         {!registration && (!ownerRegistration || ownerRegistration.lotSetupComplete === false) && (

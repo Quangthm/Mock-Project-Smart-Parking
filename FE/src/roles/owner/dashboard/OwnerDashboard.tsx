@@ -54,9 +54,7 @@ export function OwnerDashboard() {
     return () => window.removeEventListener('sp:dashboard-nav', onNavigate);
   }, []);
 
-  if (!loading && sitesLoaded && !user?.onboardingComplete && sites.length === 0) {
-    return <div style={{ minHeight: 'calc(100vh - 60px)', background: 'var(--bg)' }}><OnboardingWizard onComplete={(lot) => { setSetupSiteId(lot.id); setSelectedSiteId(lot.id); setTab('structure'); setSiteRefresh(value => value + 1); }} /></div>;
-  }
+  const showOnboarding = !loading && sitesLoaded && !user?.onboardingComplete && sites.length === 0 && tab === 'dashboard';
 
   return (
     <DashboardSidebar groups={[
@@ -72,7 +70,13 @@ export function OwnerDashboard() {
         { id: 'policy', label: 'Policies', icon: '⚖', active: tab === 'policy', onClick: () => setTab('policy') },
       ] },
     ]}>
-      <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+      <main className={`min-w-0 overflow-y-auto${showOnboarding ? '' : ' p-4 sm:p-7'}`}>
+        {showOnboarding ? (
+          <div className="min-h-[calc(100vh-60px)] bg-[var(--bg)]">
+            <OnboardingWizard onComplete={(lot) => { setSetupSiteId(lot.id); setSelectedSiteId(lot.id); setTab('structure'); setSiteRefresh(value => value + 1); }} />
+          </div>
+        ) : (
+          <>
         {loading && <p role="status">Loading owner sites…</p>}
         {error && <div role="alert" className="text-red-600">{error} <button className="btn-outline" onClick={() => setSiteRefresh(value => value + 1)}>Retry</button></div>}
         {(tab === 'dashboard' || tab === 'finance') && (
@@ -92,6 +96,8 @@ export function OwnerDashboard() {
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}
         </div>
+          </>
+        )}
       </main>
     </DashboardSidebar>
   );

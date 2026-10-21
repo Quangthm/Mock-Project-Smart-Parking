@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { UntitledIcon } from "../components/icon/UntitledIcon"
 
 const JOBS = [
@@ -70,29 +71,8 @@ export function Careers() {
       style={{ maxWidth: "900px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
       <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-        <h1
-          style={{
-            fontFamily: "Outfit",
-            fontWeight: 800,
-            fontSize: "2rem",
-            color: "var(--fg)",
-            marginBottom: "0.75rem",
-          }}
-        >
-          Careers at SmartParking
-        </h1>
-        <p
-          style={{
-            color: "var(--muted)",
-            fontSize: "1rem",
-            maxWidth: "500px",
-            margin: "0 auto",
-            lineHeight: 1.7,
-          }}
-        >
-          Join our mission to make urban parking smarter. We're a fast-growing
-          team building technology that impacts millions of daily journeys.
-        </p>
+        <PageHeader variant="default" align="center" title={<>Careers at SmartParking</>} description={<>Join our mission to make urban parking smarter. We're a fast-growing
+          team building technology that impacts millions of daily journeys.</>} />
       </div>
 
       <div

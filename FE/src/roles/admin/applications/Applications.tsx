@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { request } from "../../../lib/authApi"
 
@@ -81,17 +82,7 @@ export function Applications() {
 
   return (
     <div>
-      <h2
-        style={{
-          fontFamily: "Outfit",
-          fontWeight: 700,
-          fontSize: "1.3rem",
-          marginBottom: "1.5rem",
-          color: "var(--fg)",
-        }}
-      >
-        Owner Partnership Applications
-      </h2>
+      <PageHeader title="Owner Partnership Applications" variant="compact" />
       <button
         className="btn-secondary"
         disabled={loading || !!busy}
