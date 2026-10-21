@@ -1,229 +1,211 @@
-# rule.md — Quy tắc quản lý session và checkpoint
+# rule.md — Quy tắc vận hành Agent & Hệ thống 5 Skills cốt lõi
 
-**Mục đích:** Đảm bảo nếu session bị crash, hết context, mất kết nối, đổi máy, hoặc bất cứ biến cố nào, **session sau vẫn resume được nhanh chóng** mà không mất tiến độ đáng kể.
-
-**Áp dụng cho:** Mọi AI coding agent làm việc trên bất kỳ repository nào sử dụng quy tắc này.
-
-**Canonical paths:**
-
-- Live snapshot: `ai/activity-log/_CURRENT_SESSION.md`
-- Handoff đã đóng: `ai/handoffs/NN_Session_YYYY-MM-DD_<topic>_Handoff.md` (NN = số thứ tự kế tiếp)
-- Activity log tháng: `ai/activity-log/`
-- Decision records: `ai/decisions/`
-- Task records: `ai/tasks/active/` → `ai/tasks/completed/`
-- Templates: `ai/templates/`
+**Mục đích:** Quy chuẩn hóa toàn bộ kỹ năng thực thi (Execution Skills), điểm kiểm soát checkpoint và quy trình quản lý tiến độ cho AI Coding Agent trên repository SmartPark. Đảm bảo tính nhất quán về commit, pull request, ghi nhật ký session, cấu hình môi trường và kiến trúc code.
 
 ---
 
-## 1. Nguyên tắc cốt lõi
+## Danh mục 5 Core Skills bắt buộc tuân thủ
 
-1. **Một file live duy nhất** cho session đang chạy: `ai/activity-log/_CURRENT_SESSION.md`.
-2. **Checkpoint-driven, không micro-log.** Ghi tại 4 checkpoint bắt buộc (§2), không ghi sau từng file edit hay tool call vụn vặt.
-3. **Append-only trong session.** Không xoá history cũ; sai thì gạch ngang + ghi lại.
-4. **Đóng session = rename** `_CURRENT_SESSION.md` → `ai/handoffs/NN_Session_YYYY-MM-DD_<topic>_Handoff.md`.
-5. **Timestamp ISO 8601** (`2026-10-12T09:30Z`) cho mọi entry. Tránh "vừa nãy" / "lúc trước".
-6. **Không tin trí nhớ.** Verify bằng tool trước khi ghi "đã làm X". Chưa verify → đánh dấu `[UNVERIFIED]`.
-
----
-
-## 2. Bốn Checkpoint bắt buộc
-
-### Checkpoint 1 — Session Init & Plan Lock
-
-Trước khi bắt đầu implementation đáng kể:
-
-1. Đọc `_CURRENT_SESSION.md` (nếu tồn tại).
-2. Chạy `git status --short --branch` + các lệnh verify cần thiết.
-3. Xác định mục tiêu, constraints, và context đã load.
-4. Định nghĩa plan ngắn, có thứ tự (nếu task đủ nhỏ → plan tương xứng, không tạo ceremony thừa).
-5. Ghi initial snapshot và exact next action vào `_CURRENT_SESSION.md`.
-
-### Checkpoint 2 — Milestone Completed
-
-Sau khi hoàn thành một milestone có ý nghĩa VÀ đã chạy build/test liên quan:
-
-1. Ghi outcome của milestone.
-2. Ghi files changed.
-3. Ghi verification commands + actual results.
-4. Ghi quyết định hoặc deviations quan trọng.
-5. Update exact resume pointer.
-
-**NEVER** đánh dấu milestone "verified" nếu chưa chạy check thành công. Nếu check không áp dụng → giải thích lý do.
-
-### Checkpoint 3 — Blocker, Direction Change, hoặc Risk
-
-Flush state khi:
-
-- Fix giống nhau fail hơn 2 lần liên tiếp.
-- User thay đổi scope / requirements / priorities.
-- Một assumption quan trọng bị invalidate.
-- Sắp thực hiện destructive hoặc high-risk operation.
-- External dependency / environment / design decision chặn tiến độ.
-
-Trước lệnh rủi ro, ghi **pre-flight checkpoint** khi khả thi:
-
-- Intended action.
-- Expected impact.
-- Backup / recovery strategy (nếu applicable).
-- Unresolved risks.
-
-> Pre-flight checkpoint **KHÔNG** phải là authorization. KHÔNG thực hiện lệnh bị cấm chỉ vì đã ghi checkpoint.
-
-### Checkpoint 4 — Turn End / Session Close
-
-Cuối mỗi response mà đã thay đổi code/config/tests/docs → update `_CURRENT_SESSION.md` đủ để agent khác resume.
-
-Khi đóng session hoàn toàn:
-
-1. Ghi final verified state.
-2. Ghi incomplete work + outstanding risks.
-3. Ghi exact next step (nếu còn việc).
-4. Tạo handoff record khi work spans sessions.
-5. Update activity log tháng nếu project workflow yêu cầu.
-
-**Không** ghi entry trùng nếu checkpoint gần nhất đã capture đúng state.
+| Quy tắc | Skill | Tài liệu đặc tả / Hướng dẫn chi tiết |
+|---|---|---|
+| **Rule 1** | **Commit Skill** | [`docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md) |
+| **Rule 2** | **Pull Request Skill** | [`docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md) |
+| **Rule 3** | **Session Skill** | [`docs/07-skills/SmartParking_Session_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Session_SKILL_v1.0.md) |
+| **Rule 4** | **.env Config Skill** | [`docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) |
+| **Rule 5** | **Coding Skill** | [`ai/architecture-reference.md`](architecture-reference.md) |
 
 ---
 
-## 3. Cấu trúc bắt buộc của `_CURRENT_SESSION.md`
+## Chi tiết từng Rule
+
+### Rule 1. Commit Skill (Quy chuẩn Git Commit)
+- **Tài liệu tham chiếu:** [`docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md).
+- **Yêu cầu cốt lõi:**
+  1. Áp dụng chuẩn **Conventional Commits 1.0.0** kết hợp Jira Issue Key:
+     `<type>(<scope>): <description> [SPARK-<number>]`
+     *Ví dụ:* `feat(reservation): implement slot conflict checks [SPARK-81]`
+  2. Mỗi commit phải đại diện cho **1 thay đổi logic duy nhất** (One logical change per commit). Tách biệt giữa commit tính năng (`feat`), sửa lỗi (`fix`), tài liệu (`docs`) và kiểm thử (`test`).
+  3. Tuyệt đối không commit các file nhạy cảm, secret, thông tin credentials hoặc generated code tạm thời.
+
+---
+
+### Rule 2. Pull Request Skill (Quy chuẩn tạo Pull Request)
+- **Tài liệu tham chiếu:** [`docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md).
+- **Yêu cầu cốt lõi:**
+  1. **Tiêu đề PR:** Tuân thủ format `<type>(<scope>): <description> [SPARK-<number>]`.
+  2. **Target Branch:** Mặc định trỏ về `develop` trong chu kỳ phát triển.
+  3. **PR Description:** Bắt buộc áp dụng template tiêu chuẩn sau:
 
 ```markdown
-# _CURRENT_SESSION — <topic ngắn>
+## Summary
+<!-- Briefly explain the purpose of this PR. -->
 
-## 1. Quick Facts (Live Snapshot)
-```
-Task:          <mục tiêu 1-2 dòng>
-Status:        IN_PROGRESS | PAUSED | CLOSING
-Started:       <ISO 8601>
-Agent:         <tên tool> (<model>)
-Branch:        <branch> @ <short-sha>, <clean|N uncommitted>
-Last verified: <milestone cuối đã verify, hoặc "none">
-Build:         <PASS|FAIL|NOT RUN>
-Tests:         <N/M passed|NOT RUN>
-```
+## Related Issue
+- Closes #<issue-number>
 
-## 2. Context Loaded
-- [x] <file đã đọc> (read <timestamp>)
-- [ ] <file skip — lý do>
+## Changes
+- [ ] Added ...
+- [ ] Updated ...
+- [ ] Removed ...
 
-## 3. Plan
-1. [x] <bước hoàn thành>
-2. [ ] **<bước đang làm>** ← ACTIVE
-3. [ ] <bước chờ>
-   - BLOCKED: <lý do> (nếu bị chặn)
+## Implementation Details
+<!-- Explain important technical decisions or architectural changes. -->
 
-## 4. Milestone Progress Log (append-only, newest cuối)
+## Testing
+- [ ] Build succeeds
+- [ ] Unit tests pass
+- [ ] Integration tests pass (if applicable)
+- [ ] Manual testing completed (if applicable)
 
-### <timestamp> — <milestone title>
-- **Outcome:** <kết quả>
-- **Files changed:** `<path>` — <mô tả ngắn>
-- **Verification:** `<command>` → <actual result>
-- **Decisions/deviations:** <nếu có>
-- **Commit:** <hash> (nếu có)
+**Test results:**
+<!-- Describe the commands executed and their results. -->
 
-## 5. Decisions & Open Questions / Risks
-- **D-<id>:** <quyết định confirmed> — by <ai/user> at <timestamp>
-- **Q:** <câu hỏi chưa trả lời>
-- **R:** <rủi ro chưa mitigate>
+## Screenshots / Evidence
+<!-- Attach screenshots, logs, or API responses if relevant. -->
 
-## 6. Exact Resume Pointer (Next Step)
-- **File/module:** `<exact path or module>`
-- **Action:** <hành động cụ thể tiếp theo>
-- **Prerequisite:** <điều kiện cần, nếu có>
-- **Next verify:** `<command>`
+## Breaking Changes
+- [ ] No breaking changes
+- [ ] Breaking changes described below
+
+<!-- Describe any breaking changes, configuration changes, or migration requirements. -->
+
+## Reviewer Notes
+<!-- Highlight files, logic, or risks that need special attention. -->
 ```
 
-> Snapshot hỗ trợ resume nhanh mà không cần đọc toàn bộ history. Section 1 phải đủ để biết task gì, ở đâu, status ra sao.
-
 ---
 
-## 4. Liên kết với các record khác trong `ai/`
+### Rule 3. Session Skill (Quản lý tiến độ task & Khôi phục sự cố)
+- **Tài liệu tham chiếu:** [`docs/07-skills/SmartParking_Session_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Session_SKILL_v1.0.md).
+- **Tác dụng của file Session:**
+  - Lưu trữ toàn diện thông tin làm việc của 1 task chính (thường gắn với một task Jira `SPARK-<number>`).
+  - Đảm bảo tính liên tục (Context Continuity): khi agent crash, reset context window hoặc đổi máy, phiên tiếp theo resume được ngay lập tức trong < 5 phút.
+  - Ghi nhận quyết định kỹ thuật, file đã chỉnh sửa, lệnh kiểm chứng và rủi ro còn tồn đọng.
+- **Vị trí lưu trữ & Phân loại:**
+  - File session được tạo và quản lý tại thư mục: `ai/tasks/`.
+  - **`ai/tasks/active/`**: Chứa file session của task đang trong quá trình thực hiện (`In Progress`).
+  - **`ai/tasks/completed/`**: Khi task hoàn thành và kiểm thử pass, di chuyển file session sang thư mục này.
+  - Đặt tên file: `TASK-<JiraKey>-SESSION-YYYYMMDD.md` (hoặc `SESSION-YYYYMMDD-<topic>.md`).
 
-- **Activity log tháng:** khi đóng session, thêm 1 entry ngắn vào `ai/activity-log/` (theo `ai/templates/activity-log-template.md`).
-- **Handoff:** file đã đóng ở `ai/handoffs/` dùng cấu trúc `ai/templates/handoff-template.md`.
-- **Decision record:** quyết định quan trọng → tạo record riêng trong `ai/decisions/` (theo `ai/templates/decision-record-template.md`).
-- **Task record:** task AI-assisted → `ai/tasks/active/` → `ai/tasks/completed/` sau khi human review.
+#### Checkpoint Triggers & Crash Recovery Protocol
 
-Không duplicate full content của historical records bên trong `_CURRENT_SESSION.md`. Snapshot là live pointer, không phải thay thế cho activity history.
+Trong quá trình thực hiện task, Agent bắt buộc phải cập nhật session snapshot tại **4 Checkpoints cốt lõi**:
 
----
+1. **Checkpoint 1 — Session Initialization and Reconciliation (Khởi tạo & Đối soát):**
+   - Kiểm tra `git status --short --branch` và xác định task mới hay tiếp tục task cũ.
+   - Nếu có session đang active, đọc mục tiêu, tiến độ, blockers và handoff notes.
+   - So sánh trạng thái file thực tế với session log để đối soát thận trọng.
+   - **Cấm tự ý xóa/revert:** Không được tự ý revert hay nhận vơ thay đổi chưa giải thích trong working tree (có thể là thay đổi của user).
+   - Nếu bắt đầu task phức tạp mới: tạo file session trong `ai/tasks/active/`.
 
-## 5. Quy tắc mở session mới
+2. **Checkpoint 2 — Milestone Completion and Progress Recording (Ghi nhận mốc hoàn thành):**
+   - Sau khi hoàn thành một khối logic rõ ràng, cập nhật công việc đã làm, danh sách file thay đổi, quyết định kỹ thuật.
+   - Ghi nhận lệnh kiểm thử đã chạy kèm kết quả thực tế.
+   - **Không đợi test pass mới ghi:** Nếu build/test lỗi, vẫn ghi rõ lỗi, lệnh đã chạy và rủi ro còn lại.
+   - Phân định rõ ràng: *Implemented & Validated*, *Implemented but not validated*, *Partially implemented*, *Blocked*, *Proposed*. Đánh dấu `[UNVERIFIED]` cho phần chưa xác thực.
 
-Trước khi gõ lệnh code đầu tiên:
+3. **Checkpoint 3 — Blocker, Direction Change, or Risk (Điểm nghẽn, đổi hướng hoặc rủi ro):**
+   - Cập nhật session ngay khi:
+     - Thử sửa cùng một lỗi quá 2 lần liên tiếp mà vẫn thất bại.
+     - User thay đổi yêu cầu hoặc phạm vi task.
+     - Xuất hiện quyết định kiến trúc quan trọng.
+     - Phát hiện rủi ro bảo mật, toàn vẹn dữ liệu, hoặc sắp chạy thao tác có rủi ro cao.
+     - Phát hiện lệch trạng thái nghiêm trọng giữa git working tree và session log.
+   - Ghi rõ bằng chứng, các phương án đã thử, câu hỏi chưa có lời giải và hành động an toàn tiếp theo.
 
-1. Kiểm tra `ai/activity-log/_CURRENT_SESSION.md` có tồn tại không.
-2. Liệt kê `ai/handoffs/` → tìm file số lớn nhất.
-3. Đọc handoff/snapshot mới nhất + context files phù hợp task (theo routing table trong `ai/AGENTS.md`).
-4. Tạo `_CURRENT_SESSION.md` mới (template §3).
-5. Chạy verify (git status / build / test nếu phù hợp) → ghi vào Quick Facts.
-6. Nếu verify FAIL: **dừng**, báo user trước khi sửa state. KHÔNG tự ý migrate lùi / drop data.
+4. **Checkpoint 4 — Turn End, Task Completion, and Recovery Handoff (Kết thúc lượt, đóng task & bàn giao):**
+   - Ở cuối mỗi phản hồi có thay đổi code/doc/config: rà soát `git status`, đảm bảo diff không chứa file thừa, cập nhật session với trạng thái thực tế và bước tiếp theo (Next actionable step).
+   - Khi task hoàn tất toàn bộ yêu cầu và validation pass: cập nhật trạng thái session sang `Completed`, di chuyển file từ `ai/tasks/active/` sang `ai/tasks/completed/`.
 
----
-
-## 6. Quy tắc đóng session
-
-Khi user nói "đóng session" / "kết thúc" / "tạm dừng dài hạn":
-
-1. Set `Status: CLOSING`.
-2. Re-verify state hiện tại → cập nhật Quick Facts.
-3. Đảm bảo Section 6 "Exact Resume Pointer" cụ thể, paste-and-run được.
-4. Rename `ai/activity-log/_CURRENT_SESSION.md` → `ai/handoffs/NN_Session_YYYY-MM-DD_<topic>_Handoff.md`.
-5. Thêm 1 entry ngắn vào activity log tháng.
-6. Nếu có quyết định quan trọng → tạo/cập nhật record trong `ai/decisions/`.
-7. Commit khi user yêu cầu. **KHÔNG** auto-push trừ khi user yêu cầu.
-
----
-
-## 7. Crash recovery (POST-CRASH RECONCILE)
-
-> Không có crash recovery 100%: unflushed changes, machine failure, storage failure có thể gây mất dữ liệu. Quy tắc dưới đây tối đa hóa khả năng phục hồi.
-
-Nếu mở `_CURRENT_SESSION.md` và thấy `Status: IN_PROGRESS` (session trước crash):
-
-1. Đọc `ai/rule.md` (file này).
-2. Đọc `ai/activity-log/_CURRENT_SESSION.md`.
-3. Chạy `git status --short --branch`.
-4. Kiểm tra staged, unstaged, untracked changes.
-5. So sánh working tree với checkpoint cuối (Quick Facts + Milestone Progress Log cuối).
-6. Xác định work đã hoàn thành nhưng chưa ghi.
-7. Chạy lại **chỉ** verification checks cần thiết.
-8. Cập nhật snapshot với reconciled facts, đánh marker `### <ts> — POST-CRASH RECONCILE`.
-9. Resume từ exact next safe action.
-
-**NEVER** assume snapshot khớp hoàn toàn với working tree.
-**NEVER** discard uncommitted work chỉ vì nó không có trong checkpoint cuối.
-**KHÔNG** rename file thành handoff cho tới khi session kết thúc bình thường.
-
-Khi đóng session, progress log sẽ có cả phần pre-crash + post-crash → giữ nguyên, đó là đúng lịch sử.
-
----
-
-## 8. Anti-patterns (cấm)
-
-- ❌ Viết tiến độ vào chat reply mà không ghi file (mất khi context reset).
-- ❌ Sửa file handoff cũ đã đóng (history must be immutable). Sai thì viết file đính chính mới.
-- ❌ "Done" mà không có evidence (command output / file diff / test result).
-- ❌ Dùng từ mơ hồ: "gần xong", "ổn rồi", "hình như pass". Phải có số / status cụ thể.
-- ❌ Tạo file handoff không theo thứ tự `NN_` hoặc đặt ngoài `ai/handoffs/`.
-- ❌ Xoá `_CURRENT_SESSION.md` mà chưa rename thành handoff.
-- ❌ Micro-log từng file edit hoặc từng tool call vụn vặt thay vì checkpoint theo milestone.
-
----
-
-## 9. Ví dụ tối thiểu của 1 milestone entry tốt
+- **Template Session chuẩn 10 mục:**
 
 ```markdown
-### 2026-10-12T11:20Z — <SERVICE_OR_MODULE> build PASS
-- **Outcome:** Thêm null check trong `<SOURCE_FILE>:18`
-- **Files changed:** `<SOURCE_FILE>` — added null guard
-- **Verification:** `<BUILD_COMMAND>` → 0 err, 0 warn; `<TEST_COMMAND>` → 42/42 passed
-- **Decisions/deviations:** none
-- **Next:** verify endpoint bằng smoke script
-```
+# Session Review — YYYY-MM-DD
 
-Ngắn, có evidence, có next pointer. Đủ để session sau đọc 1 entry là biết mình đang ở đâu.
+## 1. Session Information
+- **Session ID:** SESSION-YYYYMMDD-001
+- **Date:** YYYY-MM-DD
+- **Agent:** Main Agent / Sub-Agent
+- **Branch:** feature/your-branch
+- **Related Task:** [Task ID or description]
+- **Status:** In Progress / Completed / Blocked
+
+## 2. Objectives
+- [ ] Objective 1
+- [ ] Objective 2
+
+## 3. Work Completed
+- [x] Task or change completed
+- [x] Files created or modified
+- [x] Tests or validations performed
+
+## 4. Technical Decisions
+- **Decision:** What was decided?
+- **Reason:** Why was this approach selected?
+- **Alternatives:** Other approaches considered
+- **Impact:** Affected components or services
+
+## 5. Files Changed
+| File | Change | Reason |
+|---|---|---|
+| path/to/file | Modified | Explain why |
+| path/to/new-file | Created | Explain why |
+
+## 6. Issues and Blockers
+- **Issue:** Description
+- **Root Cause:** Known cause or Unknown
+- **Resolution:** Fix applied or Pending
+- **Remaining Risk:** Any unresolved concern
+
+## 7. Validation Results
+- **Build:** Pass / Fail / Not Run
+- **Tests:** Pass / Fail / Not Run
+- **Lint/Analysis:** Pass / Fail / Not Run
+- **Manual Verification:** Results
+
+## 8. Git Status
+- **Branch:** feature/your-branch
+- **Commit:** Commit hash or Not Committed
+- **Working Tree:** Clean / Modified / Untracked
+- **Uncommitted Changes:** List relevant changes
+
+## 9. Handoff / Next Steps
+- [ ] Next task
+- [ ] Remaining issue
+- [ ] Required information or dependency
+
+## 10. Context for Next Session
+- Current implementation state
+- Important constraints and conventions
+- Files or documentation to read first
+- Commands required to reproduce or verify
+- Known risks and assumptions
+```
 
 ---
 
-**END.** Rule này là live document — nếu pattern thay đổi, sửa file này + ghi entry vào `_CURRENT_SESSION.md` giải thích lý do.
+### Rule 4. .env File Skill (Quy chuẩn cấu hình môi trường & Secret)
+- **Tài liệu tham chiếu:** [`docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md).
+- **Yêu cầu cốt lõi:**
+  1. `.env` là file local cá nhân (được `.gitignore`). Mọi cấu hình chung mới phải khai báo mẫu tại `.env.example` và `FE/.env.example`.
+  2. Biết chính xác script cần chạy lại sau khi sửa `.env` (ví dụ: `scripts/run-app-service.ps1 -Service <X> -NoBuild` cho container, hoặc `setup.ps1 -SkipDatabase -SkipRestore` để đồng bộ user-secrets).
+  3. Tuyệt đối không commit mật khẩu, khóa bí mật JWT, connection string lên git hoặc in ra log.
+
+---
+
+### Rule 5. Coding Skill (Quy chuẩn kiến trúc & Triển khai mã nguồn)
+- **Tài liệu tham chiếu:** [`ai/architecture-reference.md`](architecture-reference.md) và [`ai/context/architecture-guardrails.md`](context/architecture-guardrails.md).
+- **Yêu cầu cốt lõi khi lập trình:**
+  1. **Clean Architecture (5 layers):** Tuân thủ hướng phụ thuộc `Domain ← Application ← Infrastructure/Persistence ← API`.
+     - *Domain:* Chứa Entity, Value Object, Invariants; không phụ thuộc bất kỳ layer nào.
+     - *Application:* Chứa Commands, Queries, MediatR Handlers, DTOs, FluentValidation rules.
+     - *API:* Chỉ tiếp nhận HTTP request, map DTO và dispatch qua `ISender` / MediatR. Controllers tuyệt đối **không** inject trực tiếp `DbContext`, Repository hoặc PostgreSQL connection.
+     *(Lưu ý: Không suy diễn mọi service đều triển khai 5 layer giống hệt nhau; cần đối chiếu `ai/architecture-reference.md` với từng service cụ thể).*
+  2. **CQRS & MediatR Pattern:** Tách biệt rõ ràng luồng Command (ghi/thay đổi trạng thái) và Query (đọc dữ liệu).
+  3. **Ranh giới dữ liệu dịch vụ (Database per Service):** Mỗi microservice sở hữu schema độc lập. Không truy vấn chéo database giữa các dịch vụ.
+  4. **Frontend Architecture:** React 19 + TypeScript + Tailwind CSS v4 + Three.js (xem thêm [`FE/AGENTS.md`](../FE/AGENTS.md)). Không sử dụng Material UI (MUI).
+  5. **Definition of Done (DoD):** Sau khi code xong phải chạy lệnh xác thực `dotnet build SmartParking.slnx` (0 error) và unit tests trước khi hoàn tất task. Báo cáo kết quả trung thực, đánh dấu `[UNVERIFIED]` cho những mục chưa chạy kiểm thử.
+
+---
+
+**END.** Mọi AI Agent khi làm việc trên repository SmartPark bắt buộc phải đối chiếu và tuân thủ 5 rules trên.

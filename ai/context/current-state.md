@@ -1,61 +1,43 @@
 # SmartPark AI Development Current State
 
 **Status:** WORKING
-**Snapshot Date:** 2026-10-12
+**Snapshot Date:** 2026-10-21 (Updated for Sprint 3 & SRS v1.0 Baseline)
 
 ## Current phase
 
-The architecture foundation is established and the first services are implemented. The team is now building features on top of the working baseline.
+The architecture foundation is established, core services are active, and Sprint 3 database integration and application services are operational.
 
-**Verified implementation state (2026-10-12):**
+**Verified implementation state (2026-10-21):**
 
-- **UserService** — full 5-layer Clean Architecture; CQRS/MediatR, FluentValidation, AutoMapper, EF Core + PostgreSQL, JWT auth, BCrypt. This is the reference/template service.
-- **ParkingService** — 5-layer structure; Minimal APIs; raw Npgsql (no EF Core).
-- **ReservationService** — only API + Persistence layers; raw Npgsql.
-- **Frontend** — React 19 + Vite + Tailwind v4 + Three.js; auth and operator-provisioning flows wired to the backend.
-- **Tests** — xUnit backend tests (`tests/Services/*`), node:test frontend tests (`tests/frontend/*`).
-- **Docker** — `docker-compose.yml` present (PostgreSQL + services).
+- **UserService** — full 5-layer Clean Architecture; CQRS/MediatR, FluentValidation, AutoMapper, EF Core + PostgreSQL, JWT auth, BCrypt. Reference/template service.
+- **ParkingService** — 5-layer structure (`API`, `Application`, `Domain`, `Infrastructure`, `Persistence`); Minimal APIs; raw Npgsql + PostgreSQL. Implements operational layout, gate synchronization, and slot state endpoints (`SPARK-188`).
+- **ReservationService** — 4 projects (`API`, `Application`, `Domain`, `Persistence`); raw Npgsql; reservation safety and gate claim models.
+- **IoTService** — Python AI service (`src/Services/IoTService/python-ai/`) implementing CCTV/camera stream ingestion and license plate recognition (LPR).
+- **Frontend (`FE/`)** — React 19 + Vite 8 + Tailwind v4 + Three.js 0.186.1 + MapTiler 4.1.0; complete role-based dashboards (Admin, Owner, Operator, Driver) with live backend API integrations.
+- **Database & Migration Stacks** — 6 microservice databases (`compose.schema-integration.yml`, `scripts/apply-workflow-migrations.ps1`, `scripts/database/`); automated setup and seed via `setup.ps1` and `scripts/seed-demo-site.ps1`.
+- **Application Orchestration** — `compose.app.yml` containerized multi-app runner, `scripts/run-app-service.ps1`, and host schema runners.
+- **Tests** — xUnit backend tests (`tests/Services/*` for UserService and ParkingService), node:test frontend tests (`tests/frontend/*`).
 
-No longer deferred (previously listed as deferred): CQRS/MediatR, validation pipeline, EF Core/PostgreSQL implementation, Docker implementation.
+**Implemented / Active:**
+- Clean Architecture, CQRS/MediatR, EF Core (UserService), raw Npgsql (ParkingService, ReservationService), PostgreSQL schema-per-service.
+- Docker compose stacks (`compose.schema-integration.yml`, `compose.app.yml`, `compose.sonar.yml`, `compose.ai.yml`).
+- 5 Core Skills for AI Agents (`ai/rule.md`, `docs/07-skills/`).
 
-Still not implemented: messaging broker (RabbitMQ planned), API Gateway, SignalR/MQTT/Redis, payment/LPR/AI integrations, GitHub CI/CD (GitLab CI present but uses a mismatched SDK image).
+**Still planned / not implemented (do not assume these exist):**
+- Asynchronous message broker (RabbitMQ/MassTransit planned, only stub constant exists).
+- Kafka (not used, deferred).
+- API Gateway (Ocelot/YARP planned, direct service calls in dev).
+- MQTT / SignalR real-time push (polling / REST fallback in place; SignalR hub planned).
+- Real payment gateway integration (mocked / PayOS integration guide ready).
+- Commercial Cloudflare Turnstile integration.
 
 ## Parallel workstreams
 
-Current work may proceed in parallel against the working baseline:
+- Business Rules and Policy reconciliation against SRS v1.0.
+- API Contract refinement and OpenAPI schema generation.
+- 3D Digital Twin visual telemetry and Three.js operational layout binding.
+- Architecture alignment and outbox/event-driven message broker onboarding.
 
-- Business Rules
-- API Contract
-- AI Chatbox foundation
-- Architecture alignment
-- Testing/review
+## Canonical Reference Rule
 
-## AI Chatbox status
-
-The AI team may build the conversational/tooling foundation without waiting for every future reservation business-rule value to be finalized.
-
-The AI foundation should preserve provisional contracts where BA decisions are still open.
-
-## Known AI cleanup backlog
-
-The current SRS contains legacy AI sections that need reconciliation with the newer Chatbox architecture. Review the older chatbot use cases, refund/dispute language, recommendation scope, implementation phases, accuracy/performance requirements, and any assumption that AI can directly execute actions.
-
-This cleanup is a deferred AI-specific task, not a reason to block the foundation work.
-
-## Known architecture alignment backlog
-
-- Validate User Service boundary and auth ownership.
-- Validate Parking Service ownership.
-- Validate Reservation Service ownership of allocation/conflict logic.
-- Determine Pricing ownership.
-- Determine Search/Recommendation boundary.
-- Determine LPR/camera/sensor ownership.
-- Determine AI/Chatbox service boundary.
-- Validate event publisher/consumer ownership.
-- Validate Gateway vs service-level authorization.
-- Review synchronous vs asynchronous communication for critical reservation/payment workflows.
-- Review consistency, idempotency, retry, outbox, and compensation strategy.
-
-## Rule
-
-Before changing code or requirements, read this file together with `project-context.md` and `architecture-guardrails.md`, then locate the canonical source document relevant to the task.
+Before changing code or requirements, refer to `ai/AGENTS.md` and `ai/architecture-reference.md`. Canonical requirements are governed by **SRS v1.0** (`docs/01-requirements/srs/smartpark-srs-v1.0.md`).

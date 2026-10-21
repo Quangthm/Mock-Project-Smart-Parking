@@ -172,19 +172,14 @@ Before reporting a change complete:
 
 ---
 
-## 9. Canonical sources
+## 9. Canonical sources & Precedence
 
-| Topic | Canonical source |
-|---|---|
-| Requirements | `docs/01-requirements/srs/smartpark-srs-v0.9.md` |
-| Use cases | `docs/01-requirements/use-cases/smartpark-use-cases-v0.9.md` |
-| Business rules | `docs/01-requirements/business-rules/smartpark-business-rules-v0.8.5.md` |
-| Solution architecture | `docs/02-architecture/solution-architecture/SmartPark_Solution_Architecture_v0.9.md` |
-| Service boundaries | `docs/02-architecture/service-boundaries/` |
-| Database | `docs/02-architecture/database/` |
-| Git / commit convention | `docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md` |
+Canonical source definitions, document hierarchy, and precedence rules are maintained centrally in [ai/AGENTS.md](AGENTS.md) (§ Source of truth).
 
-Precedence: The SRS is authoritative. Context, handoff, and decision records explain how to interpret it; they do not replace it. When a question is unanswered, mark it `OPEN`, `DEFERRED`, or `PROPOSED`. Do not invent values.
+**Core Precedence Principle:**
+- The SRS is authoritative for requirements. Context files, handoffs, and decision records interpret it; they do not replace it.
+- If code and documentation disagree, consult §8 (Conflict Register) above for verified repository reality.
+- When an architectural question is unanswered in canonical documents, classify it as `OPEN`, `DEFERRED`, or `PROPOSED` rather than inventing an assumption.
 
 ---
 

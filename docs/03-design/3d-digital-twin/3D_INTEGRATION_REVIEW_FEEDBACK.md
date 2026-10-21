@@ -33,7 +33,7 @@ Sau khi rà soát và đối chiếu chéo với **SmartPark SRS v0.9**, **Solut
 * **Nhận xét của AI PM (Mục 1, 2, 9, 10, 28):**
   > *"The target six-service baseline supersedes the old service boundary: Facility & Visualization → resource/configuration/layout, Parking Operations → accepted operation/claims/availability... Rewrite backend slot-binding document around O-authoritative state → F visualization projection → FE... The current ParkingService endpoint should be treated as transitional."*
 * **Thực tế kiến trúc và mã nguồn dự án:**
-  1. **Quy hoạch 6 microservices chính thức của SmartPark** (theo `SmartPark_Solution_Architecture_v0.9.md` §3.4) bao gồm:
+  1. **Quy hoạch 6 microservices chính thức của SmartPark** (theo `SmartPark_Solution_Architecture_v0.9.md (l�u tr? t?i docs/archive/ v� ��?c k? th?a t?i smartpark-solution-architecture-v1.0.md)` §3.4) bao gồm:
      - **`UserService`** *(Đã có code)*: Quản trị tài khoản, quyền hạn, phương tiện đã đăng ký.
      - **`ParkingService`** *(Đã có code)*: Quản trị toàn bộ hạ tầng vật lý bãi đỗ (`parking_sites`, `spatial_units`), vị trí đỗ (`parking_slots`), và **trạng thái vận hành vật lý của slot** (`physical_state`).
      - **`ReservationService`** *(Đã có code)*: Quản trị đặt chỗ, vòng đời giữ chỗ, ưu tiên phân bổ và rào cản bảo vệ.
