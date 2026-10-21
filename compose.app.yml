@@ -38,6 +38,8 @@ services:
       Otp__Smtp__Username: ${SMARTPARK_SMTP_USERNAME:-}
       Otp__Smtp__Password: ${SMARTPARK_SMTP_PASSWORD:-}
       Otp__Smtp__From: ${SMARTPARK_SMTP_FROM:-}
+      # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
+      Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
     ports:
       - "127.0.0.1:5035:8080"
