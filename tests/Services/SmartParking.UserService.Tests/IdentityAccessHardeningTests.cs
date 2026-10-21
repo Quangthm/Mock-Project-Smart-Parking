@@ -69,6 +69,7 @@ public sealed class IdentityAccessHardeningTests
         var clock = new TestClock();
         var owner = NewUser("owner-hardening@example.com", "BUSINESS_OWNER", clock);
         var tenantA = Guid.NewGuid(); var tenantB = Guid.NewGuid();
+        await fixture.SeedTenantsAsync(tenantA, tenantB);
         owner.Accounts.Single().TenantId = tenantA;
         owner.Accounts.Single().Permissions = ["OPERATOR_MANAGE", "PARKING_MANAGE"];
         var denied = new Account { Id = Guid.NewGuid(), User = owner, UserId = owner.Id!.Value,

@@ -15,6 +15,7 @@ public sealed class IdentityMigrationTests
         var verifiedAt = new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
         var phoneVerified = Operator("phone-verified@example.com", "+84912345678", verifiedAt);
         var unverified = Operator("unverified@example.com", "+84912345679", null);
+        await fixture.SeedTenantsAsync(phoneVerified.Accounts.Single().TenantId!.Value, unverified.Accounts.Single().TenantId!.Value);
         await using (var db = fixture.Open())
         {
             db.Users.AddRange(phoneVerified, unverified);

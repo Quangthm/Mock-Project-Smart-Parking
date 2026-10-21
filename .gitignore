@@ -123,6 +123,7 @@ coverage*.xml
 # Test result artifacts
 TestResults/
 *.trx
+*.local.runsettings
 # =========================
 # Python / IoT AI
 # =========================

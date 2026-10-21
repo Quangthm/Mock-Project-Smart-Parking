@@ -30,6 +30,7 @@ public sealed class IdentityMessagingTests
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
         var tenant=Guid.NewGuid();
+        await fixture.SeedTenantsAsync(tenant);
         var owner=new User {Id=Guid.NewGuid(),Email="owner-live@example.com",EmailVerifiedAt=DateTimeOffset.UtcNow,
             FullName="Live Owner",Status=UserStatus.Active,PasswordHash=new BcryptPasswordService().Hash("Password@123")};
         var account=new Account {Id=Guid.NewGuid(),User=owner,UserId=owner.Id.Value,TenantId=tenant,Status="ACTIVE",Permissions=["OPERATOR_MANAGE"]};

@@ -28,6 +28,20 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
     }
     public AppDbContext Open() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
 
+    // Explicit fixture data for tests of existing owners/operators, not onboarding.
+    public async Task SeedTenantsAsync(params Guid[] ids)
+    {
+        await using var db = Open();
+        foreach (var id in ids.Distinct())
+        {
+            var code = "TEST-" + id.ToString("N");
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO tenants(id,code,name,contact_email,contact_phone)
+                VALUES ({id},{code},'Fixture tenant','tenant@example.test','0900000000')
+                """);
+        }
+    }
+
     public static async Task<UserServiceDatabaseFixture> CreateAsync()
     {
         var fixture = new UserServiceDatabaseFixture(Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")

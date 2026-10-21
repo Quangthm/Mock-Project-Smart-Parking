@@ -157,7 +157,6 @@ public sealed class UserManagementTests
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, new BcryptPasswordService()).SeedAsync();
                 driverId = (await db.Users.SingleAsync()).Id!.Value;
-                db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.AddRange(new User { Id = adminId, FullName = "Admin", Status = UserStatus.Active,
                     Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] },
                     new User { Id = pendingId, FullName = "Pending", Status = UserStatus.PendingApproval },

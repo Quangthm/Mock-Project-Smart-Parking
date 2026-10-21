@@ -76,6 +76,7 @@ public sealed class IdentityRegressionTests
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();var clock=new TestClock();
         var owner=User("defaults@example.com","BUSINESS_OWNER",clock);var tenant=Guid.NewGuid();
         owner.Accounts.Single().TenantId=tenant;
+        await fixture.SeedTenantsAsync(tenant);
         await using var db=fixture.Open();db.Users.Add(owner);await db.SaveChangesAsync();
         var repository=new IdentityAccessRepository(db);
         Assert.Equal(new[]{tenant},await repository.OwnerTenantsAsync(owner.Id!.Value,"OPERATOR_MANAGE",default));
