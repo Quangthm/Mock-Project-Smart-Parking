@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+ARG DOTNET_VERSION=10.0
+
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+ARG SERVICE
+WORKDIR /src
+
+# Restore only the target service so package layers stay cacheable.
+COPY src/Services/${SERVICE}/ ./src/Services/${SERVICE}/
+RUN dotnet restore \
+    "src/Services/${SERVICE}/SmartParking.${SERVICE}.API/SmartParking.${SERVICE}.API.csproj"
+
+# Project references live inside each service folder. Copying all source keeps
+# the build context deterministic for the publish stage.
+COPY src/ ./src/
+RUN dotnet publish \
+    "src/Services/${SERVICE}/SmartParking.${SERVICE}.API/SmartParking.${SERVICE}.API.csproj" \
+    -c Release -o /app/publish --no-restore /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}
+ARG SERVICE
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /app/publish .
+ENV ASPNETCORE_URLS=http://+:8080
+ENV SERVICE_NAME=${SERVICE}
+EXPOSE 8080
+ENTRYPOINT ["sh", "-c", "exec dotnet \"SmartParking.${SERVICE_NAME}.API.dll\""]

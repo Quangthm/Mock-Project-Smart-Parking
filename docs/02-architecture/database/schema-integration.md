@@ -25,8 +25,8 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 | DB vật lý | Port | Base DDL | Overlay | Service dùng |
 |---|---|---|---|---|
 | `smartpark_user` | 5441 | `01-user-access-service-db.sql` | — | UserService |
-| `smartpark_parking` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | ParkingService |
-| `smartpark_reservation` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | ReservationService |
+| `smartpark_facility` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | ParkingService |
+| `smartpark_operations` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | ReservationService |
 | `smartpark_payment` | 5444 | `04-payment-pricing-service-db.sql` | — | PaymentService |
 | `smartpark_notification` | 5445 | `05-notification-audit-service-db.sql` | — | NotificationService |
 | `smartpark_iot` | 5446 | `06-iot-recognition-service-db.sql` | — | IoTService |
@@ -37,9 +37,9 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 
 `compose.schema-integration.yml` mount theo thứ tự số trong `docker-entrypoint-initdb.d`:
 
-**Parking DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`.
+**Facility DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`.
 
-**Reservation DB:** `01-base` (03b) → `02-overlay-capacity-pools` → `03-overlay-structure-safety` → `04-overlay-receipts` → `05-overlay-confirmation`.
+**Operations DB:** `01-base` (03b) → `02-overlay-capacity-pools` → `03-overlay-structure-safety` → `04-overlay-receipts` → `05-overlay-confirmation`.
 
 `reservation-site-capacity-pools.sql` phải chạy trước `reservation-structure-safety.sql` vì guard trigger tham chiếu `site_capacity_pools`.
 

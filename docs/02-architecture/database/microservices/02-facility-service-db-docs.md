@@ -10,7 +10,7 @@
 
 | Hạng mục | Giá trị |
 |---|---|
-| Database vật lý | `smartpark_parking` (PostgreSQL 16, port `5442`) |
+| Database vật lý | `smartpark_facility` (PostgreSQL 16, port `5442`) |
 | Base DDL | [`02-facility-service-db.sql`](../../../../scripts/database/microservices/02-facility-service-db.sql) + [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) |
 | Overlays | `parking-tenants.sql`, `parking-structure-synchronizations.sql`, `parking-operator-tables.sql`, `parking-slot-constraints.sql` |
 | Deployment status | Base `02` khớp arch `9a13499` + 2 cột runtime D4/P1; 4 overlay bổ sung cho runtime |
@@ -319,7 +319,7 @@ structure_operations (1) ──── (0..N) structure_change_audit [operation_i
 
 ---
 
-## 12. Deployment overlays cho `smartpark_parking`
+## 12. Deployment overlays cho `smartpark_facility`
 
 Bốn overlay được mount sau base `02` + `03a` (thứ tự trong `compose.schema-integration.yml`):
 

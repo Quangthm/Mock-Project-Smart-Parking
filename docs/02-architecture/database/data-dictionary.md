@@ -33,7 +33,7 @@ Base: `01-user-access-service-db.sql`; no overlays.
 
 Runtime role mapping: `PLATFORM_ADMIN`/`ADMIN` → admin; `BUSINESS_OWNER`/`OWNER` → owner; `SITE_OPERATOR`/`OPERATOR` → operator; `DRIVER` → driver.
 
-## 3. Facility & Parking DB (`smartpark_parking`)
+## 3. Facility & Parking DB (`smartpark_facility`)
 
 Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 
@@ -53,7 +53,7 @@ Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 
 Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4).
 
-## 4. Reservation & Operations DB (`smartpark_reservation`)
+## 4. Reservation & Operations DB (`smartpark_operations`)
 
 Base: `03b-reservation-operations-service-db.sql`.
 
@@ -78,7 +78,7 @@ Base: `04-payment-pricing-service-db.sql`; 7 tables: `tariffs`, `policy_revision
 
 ## 6. Notification & Audit DB (`smartpark_notification`)
 
-Base: `05-notification-audit-service-db.sql`; 6 tables: `notification_templates`, `push_device_tokens`, `durable_notifications`, `support_tickets`, `support_ticket_messages`, `central_audit_projections`. `support_tickets` here is the SRS shape; the BE-shape copy in `smartpark_parking` is temporary D6 debt.
+Base: `05-notification-audit-service-db.sql`; 6 tables: `notification_templates`, `push_device_tokens`, `durable_notifications`, `support_tickets`, `support_ticket_messages`, `central_audit_projections`. `support_tickets` here is the SRS shape; the BE-shape copy in `smartpark_facility` is temporary D6 debt.
 
 ## 7. IoT & Recognition DB (`smartpark_iot`)
 
@@ -88,7 +88,7 @@ Base: `06-iot-recognition-service-db.sql`; 6 tables: `devices`, `lpr_events`, `s
 
 | Mã | Delta |
 |---|---|
-| D1 | `03a` → `smartpark_parking`; `03b` → `smartpark_reservation` |
+| D1 | `03a` → `smartpark_facility`; `03b` → `smartpark_operations` |
 | D4 | 7 role seeds; 2 `parking_slots` runtime columns; `unit_id`/`count` renames |
 | D5 | `tenants` canonical in User DB, local copy in parking |
 | D6 | BE-shape `support_tickets` in parking overlay (temporary) |

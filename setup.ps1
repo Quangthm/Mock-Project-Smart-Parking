@@ -1,13 +1,14 @@
-param(
+﻿param(
     [switch]$SkipDatabase, [switch]$SkipRestore, [switch]$SkipUserSecrets, [switch]$RecreateDb,
     [ValidateSet('Local','Team')][string]$CredentialMode = 'Local',
     [string]$TeamEnvPath, [switch]$SkipSonarQube, [switch]$NonInteractive,
-    [switch]$WithAiCamera,
+    [switch]$WithAiCamera, [switch]$RebuildAi,
     # Deprecated: SonarQube now starts by default; kept so older commands still parse.
     [switch]$WithSonarQube
 )
 # -RecreateDb: DROP schema volumes and re-initialize all 6 DBs from SQL init scripts. Destructive — wipes dev data. Required when DB schema layout changes (e.g., SRS v1.0 hybrid migration).
 $ErrorActionPreference = 'Stop'
+if ($RebuildAi -and !$WithAiCamera) { throw '-RebuildAi requires -WithAiCamera.' }
 # SonarQube credentials are always prepared (like the database passwords); the
 # stack starts on a full run. -SkipSonarQube disables both; -SkipDatabase still
 # prepares credentials but starts no containers (it must stay Docker-free).
@@ -15,6 +16,13 @@ $sonarEnabled = !$SkipSonarQube
 $taskRoot = $PSScriptRoot
 $composeFile = Join-Path $taskRoot 'compose.schema-integration.yml'
 $envFile = Join-Path $taskRoot '.env'
+$aiModelRoot = 'src/Services/IoTService/python-ai/models'
+$aiModelFiles = @(
+    'EDSR_x2.pb', 'ESPCN_x2.pb', 'FSRCNN_x2.pb',
+    'license_plate_detector.pt', 'license_plate_detector_live.pt',
+    'yolov8n.pt', 'yolov8s.pt'
+)
+$script:AiCameraSkipped = $false
 
 function New-LocalSecret([int]$Bytes = 32) {
     $buffer = New-Object byte[] $Bytes
@@ -43,6 +51,404 @@ function Get-SecretConnectionStringPassword([string]$ConnectionString) {
     if ($ConnectionString -match 'Password="([^"]*)"') { return $Matches[1] }
     if ($ConnectionString -match 'Password=([^;]+)') { return $Matches[1] }
     return $null
+}
+
+function Test-AiModelAssets {
+    param([string]$Root = $taskRoot)
+    $missing = @()
+    foreach ($name in $aiModelFiles) {
+        $relative = "$aiModelRoot/$name"
+        if (!(Test-Path -LiteralPath (Join-Path $Root $relative) -PathType Leaf)) { $missing += $relative }
+    }
+    return $missing
+}
+
+function Assert-AiModelAssets {
+    $missing = @(Test-AiModelAssets)
+    if ($missing.Count -gt 0) {
+        $list = ($missing | ForEach-Object { "  - $_" }) -join [Environment]::NewLine
+        throw ("AI model assets are missing:`n$list`nRestore the tracked files under $aiModelRoot before using -WithAiCamera.")
+    }
+    Write-Host '    - AI model assets verified (7 files).' -ForegroundColor DarkGray
+}
+
+# Run a Docker query while capturing stderr for diagnostics. Native command stderr is
+# redirected only with ErrorActionPreference=Continue so expected "not found" output
+# cannot terminate setup under the script-wide Stop preference.
+function Invoke-DockerQuery {
+    param([string[]]$Arguments)
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& docker @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output   = $output
+        Text     = (@($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine)
+    }
+}
+
+function Get-AiImageState {
+    $result = Invoke-DockerQuery -Arguments @('image','inspect','smartpark-ai:local','--format','{{.Id}}|{{.Created}}|{{.Size}}')
+    if ($result.ExitCode -ne 0) {
+        if ($result.Text -match 'No such image|No such object|not found') { return $null }
+        throw "Cannot inspect AI image smartpark-ai:local: $($result.Text.Trim())"
+    }
+    $line = @($result.Output | ForEach-Object { [string]$_ } | Where-Object { $_.Trim() } | Select-Object -First 1)
+    if (!$line -or !$line[0]) { throw 'Cannot read AI image metadata from docker image inspect.' }
+    $parts = ([string]$line[0]).Split('|')
+    if ($parts.Count -lt 3 -or !$parts[0]) { throw "Unexpected docker image inspect output: $($line[0])" }
+    $sizeBytes = 0L
+    if (![long]::TryParse($parts[2], [ref]$sizeBytes)) { throw "Unexpected AI image size: $($parts[2])" }
+    $shortId = $parts[0]
+    if ($shortId.StartsWith('sha256:')) { $shortId = $shortId.Substring(7) }
+    if ($shortId.Length -gt 12) { $shortId = $shortId.Substring(0, 12) }
+    return [pscustomobject]@{
+        Id        = $parts[0]
+        Created   = $parts[1]
+        SizeBytes = $sizeBytes
+        SizeGb    = [Math]::Round($sizeBytes / 1e9, 2)
+        ShortId   = $shortId
+    }
+}
+
+function Test-AiImageLibraries {
+    param([int]$TimeoutSeconds = 60)
+    $probe = "import cv2,numpy,scipy,torch,paddleocr,ultralytics,psycopg,flask; print('AI_IMAGE_OK')"
+    $process = $null
+    try {
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = 'docker'
+        $startInfo.Arguments = 'run --rm --entrypoint python smartpark-ai:local -c "' + $probe + '"'
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.CreateNoWindow = $true
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        if (!$process.Start()) { throw 'Process.Start returned false.' }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (!$process.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $process.Kill() } catch { }
+            Write-Warning "AI image library probe timed out after $TimeoutSeconds seconds. Treating the image as suspect."
+            return $false
+        }
+        $process.WaitForExit()
+        $output = $stdoutTask.Result
+        $errorText = $stderrTask.Result
+        if ($process.ExitCode -ne 0) {
+            $detail = if ($errorText) { ": $($errorText.Trim())" } else { '.' }
+            Write-Warning "AI image library probe failed (exit $($process.ExitCode))$detail"
+            return $false
+        }
+        if ($output -notmatch 'AI_IMAGE_OK') {
+            Write-Warning "AI image library probe did not print AI_IMAGE_OK. Output: $(([string]$output).Trim())"
+            return $false
+        }
+        Write-Host '    - AI image libraries verified (cv2, numpy, scipy, torch, paddleocr, ultralytics, psycopg, flask).' -ForegroundColor DarkGray
+        return $true
+    } catch {
+        Write-Warning "Cannot run the AI image library probe: $($_.Exception.Message)"
+        return $false
+    } finally {
+        if ($process) { $process.Dispose() }
+    }
+}
+
+function ConvertFrom-AiComposeJson {
+    param([string]$Text)
+    $trimmed = $Text.Trim()
+    if (!$trimmed) { return @() }
+    # Compose emits an array on some versions and one JSON object per line (NDJSON) on others.
+    if ($trimmed.StartsWith('[')) { return @($trimmed | ConvertFrom-Json) }
+    $items = @()
+    foreach ($line in ($trimmed -split "`r?`n")) {
+        if (!$line.Trim()) { continue }
+        $items += @($line | ConvertFrom-Json)
+    }
+    return $items
+}
+
+function Get-AiStackState {
+    param([string]$EnvFile)
+    $composePath = Join-Path $taskRoot 'compose.ai.yml'
+    $result = Invoke-DockerQuery -Arguments @('compose','-p','smartpark-ai','--env-file',$EnvFile,'-f',$composePath,'ps','--all','--format','json')
+    $names = @()
+    $fromCompose = $false
+    if ($result.ExitCode -eq 0) {
+        try {
+            foreach ($item in @(ConvertFrom-AiComposeJson -Text $result.Text)) {
+                $name = [string]$item.Name
+                if (!$name) { $name = [string]$item.Names }
+                if ($name) { $names += $name }
+            }
+            $fromCompose = $true
+        } catch {
+            Write-Warning "Cannot parse 'docker compose ps --format json'; falling back to docker ps labels. $($_.Exception.Message)"
+        }
+    } else {
+        Write-Warning "docker compose ps failed; falling back to docker ps labels. $($result.Text.Trim())"
+    }
+    if (!$fromCompose) {
+        $fallback = Invoke-DockerQuery -Arguments @('ps','--all','--filter','label=com.docker.compose.project=smartpark-ai','--format','{{.Names}}')
+        if ($fallback.ExitCode -ne 0) { throw "Cannot list AI containers: $($fallback.Text.Trim())" }
+        $names = @($fallback.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    }
+
+    $containers = @()
+    foreach ($name in ($names | Select-Object -Unique)) {
+        $inspect = Invoke-DockerQuery -Arguments @('inspect',$name)
+        if ($inspect.ExitCode -ne 0) {
+            Write-Warning "Cannot inspect AI container $name; it may have been removed. $($inspect.Text.Trim())"
+            continue
+        }
+        $data = @($inspect.Text | ConvertFrom-Json)
+        if (!$data.Count) { continue }
+        $container = $data[0]
+        $labels = $container.Config.Labels
+        $project = if ($labels) { [string]$labels.'com.docker.compose.project' } else { '' }
+        if ($project -ne 'smartpark-ai') { continue }
+        $service = if ($labels) { [string]$labels.'com.docker.compose.service' } else { '' }
+        $composeImage = if ($labels) { [string]$labels.'com.docker.compose.image' } else { '' }
+        $health = 'none'
+        if ($container.State.Health -and $container.State.Health.Status) { $health = [string]$container.State.Health.Status }
+        $containers += [pscustomobject]@{
+            Name           = ([string]$container.Name).TrimStart('/')
+            Service        = $service
+            State          = [string]$container.State.Status
+            Health         = $health
+            ImageId        = [string]$container.Image
+            ComposeImageId = $composeImage
+        }
+    }
+    return $containers
+}
+
+function Test-AiContainerImageStale {
+    param($Container, $Image)
+    if (!$Image) { return $false }
+    # Prefer the image ID the container is actually running. Compose's
+    # com.docker.compose.image label is creation-time metadata and can remain stale
+    # even after --force-recreate has recreated the container from the current tag.
+    $actualImageId = if ($Container.ImageId) { [string]$Container.ImageId } else { [string]$Container.ComposeImageId }
+    return ($actualImageId -and $actualImageId -ne [string]$Image.Id)
+}
+
+function Show-AiDockerLogs {
+    param([string[]]$ComposeArgs)
+    Write-Host '    - Recent AI container logs (tail 200):' -ForegroundColor Yellow
+    & docker @ComposeArgs logs --tail 200
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Could not read AI container logs; run the logs command manually.' }
+}
+
+function Assert-AiContainersRunning {
+    param([string]$EnvFile)
+    $after = @(Get-AiStackState -EnvFile $EnvFile)
+    $notRunning = @($after | Where-Object { $_.State -ne 'running' })
+    if ($after.Count -lt 2 -or $notRunning.Count -gt 0) {
+        $states = if ($after.Count -gt 0) { ($after | ForEach-Object { "$($_.Service)=$($_.State)" }) -join ', ' } else { 'no containers found' }
+        return "AI camera containers are not running ($states). Check logs and retry."
+    }
+    return $null
+}
+
+function Invoke-AiComposeBuild {
+    param([string[]]$ComposeArgs, [switch]$NoCache)
+    $buildArgs = @('build')
+    if ($NoCache) { $buildArgs += '--no-cache' }
+    $allArgs = @($ComposeArgs) + $buildArgs
+    & docker @allArgs
+    if ($LASTEXITCODE -ne 0) { throw 'AI image build failed. The previous image is unchanged unless the build completed; check Docker Desktop resources and retry.' }
+}
+
+function Start-AiComposeContainers {
+    param(
+        [string[]]$ComposeArgs, [string]$EnvFile,
+        [switch]$NoBuild, [switch]$ForceRecreate
+    )
+    $upArgs = @('up','-d','--wait')
+    if ($NoBuild) { $upArgs += '--no-build' }
+    if ($ForceRecreate) { $upArgs += '--force-recreate' }
+    $allArgs = @($ComposeArgs) + $upArgs
+    & docker @allArgs
+    if ($LASTEXITCODE -ne 0) {
+        Show-AiDockerLogs -ComposeArgs $ComposeArgs
+        throw 'AI camera containers failed to become healthy. Check: docker compose -p smartpark-ai -f compose.ai.yml logs --tail 200'
+    }
+    $problem = Assert-AiContainersRunning -EnvFile $EnvFile
+    if ($problem) {
+        Show-AiDockerLogs -ComposeArgs $ComposeArgs
+        throw $problem
+    }
+    Write-Host '    - AI containers ready: REST http://localhost:5001 · Live http://localhost:5002.' -ForegroundColor Green
+}
+
+function Show-AiResolutionPlaybook {
+    Write-Host ''
+    Write-Host '    AI image đã tồn tại nhưng chưa có container. Chọn một phương án:' -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host '      [A] Dùng image sẵn có, không rebuild (nhanh, khuyến nghị):' -ForegroundColor DarkGray
+    Write-Host '          docker compose -p smartpark-ai --env-file .env -f compose.ai.yml up -d --wait --no-build' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '      [B] Rebuild có cache rồi start:' -ForegroundColor DarkGray
+    Write-Host '          docker compose -p smartpark-ai --env-file .env -f compose.ai.yml build' -ForegroundColor DarkGray
+    Write-Host '          docker compose -p smartpark-ai --env-file .env -f compose.ai.yml up -d --wait' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '      [C] Rebuild sạch (khi image nghi hỏng):' -ForegroundColor DarkGray
+    Write-Host '          docker compose -p smartpark-ai --env-file .env -f compose.ai.yml build --no-cache' -ForegroundColor DarkGray
+    Write-Host '          docker compose -p smartpark-ai --env-file .env -f compose.ai.yml up -d --wait' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '      [D] Kiểm tra thư viện trong image:' -ForegroundColor DarkGray
+    Write-Host '          docker run --rm --entrypoint python smartpark-ai:local -c "import cv2,numpy,scipy,torch,paddleocr,ultralytics,psycopg,flask; print(''AI_IMAGE_OK'')"' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '      [E] Xoá image và để setup build lại:' -ForegroundColor DarkGray
+    Write-Host '          docker image rm smartpark-ai:local' -ForegroundColor DarkGray
+    Write-Host '          .\setup.ps1 -WithAiCamera -RebuildAi' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '      Xem log:' -ForegroundColor DarkGray
+    Write-Host '          docker compose -p smartpark-ai --env-file .env -f compose.ai.yml logs --tail 200' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '    "Skip" chỉ bỏ qua build; setup vẫn chạy up -d --wait --no-build để đảm bảo container AI đang chạy.' -ForegroundColor DarkGray
+    Write-Host '    Các chữ cái trong prompt bên dưới là thao tác, không ánh xạ 1-1 tới A–E ở trên.' -ForegroundColor DarkGray
+}
+
+function Read-AiResolutionChoice {
+    if ($NonInteractive -or [Console]::IsInputRedirected) {
+        Write-Host '    - Non-interactive: starting the existing AI image (no rebuild).' -ForegroundColor DarkGray
+        return 'S'
+    }
+    while ($true) {
+        $answer = Read-Host '    [S] Start / [R] Rebuild / [C] Clean rebuild / [K] Skip AI / [A] Abort (Enter = S)'
+        $normalized = ([string]$answer).Trim().ToUpperInvariant()
+        if (!$normalized) { return 'S' }
+        if ($normalized -in @('S','R','C','K','A')) { return $normalized }
+        Write-Host '    Enter S, R, C, K or A.' -ForegroundColor Yellow
+    }
+}
+
+function Invoke-AiCameraSetup {
+    param([hashtable]$Settings, [string]$EnvFile, [switch]$Rebuild)
+    $script:AiCameraSkipped = $false
+    $compose = @('compose','-p','smartpark-ai','--env-file',$EnvFile,'-f',(Join-Path $taskRoot 'compose.ai.yml'))
+
+    Assert-AiModelAssets
+
+    if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not found. Install and start Docker Desktop before -WithAiCamera.' }
+    $network = Invoke-DockerQuery -Arguments @('network','inspect','smartpark-schema_default')
+    if ($network.ExitCode -ne 0) {
+        if ($network.Text -match 'Cannot connect|error during connect|Is the docker daemon running|dockerDesktopLinuxEngine|open //./pipe/docker') {
+            throw 'Docker Desktop is not running or not reachable. Start Docker Desktop and retry -WithAiCamera.'
+        }
+        throw 'Docker network smartpark-schema_default not found. Run setup.ps1 without -SkipDatabase first so the schema DBs are up.'
+    }
+
+    $configArgs = $compose + @('config','--quiet')
+    $composeConfig = Invoke-DockerQuery -Arguments $configArgs
+    if ($composeConfig.ExitCode -ne 0) { throw "AI Compose configuration is invalid: $($composeConfig.Text.Trim())" }
+
+    $image = Get-AiImageState
+    $containers = @(Get-AiStackState -EnvFile $EnvFile)
+
+    if (!$image) {
+        if ($containers.Count -gt 0) {
+            Write-Host '    - AI image not found but old containers exist -> building, then recreating them...' -ForegroundColor DarkGray
+        } else {
+            Write-Host '    - AI image not found -> building (first run ~5-10 min)...' -ForegroundColor DarkGray
+        }
+        Invoke-AiComposeBuild -ComposeArgs $compose
+        if ($containers.Count -gt 0) {
+            Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -ForceRecreate
+        } else {
+            Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile
+        }
+        return
+    }
+
+    if ($Rebuild) {
+        Write-Host "    - -RebuildAi requested -> rebuilding AI image (cached layers reused; current $($image.SizeGb) GB image is kept until the build succeeds)..." -ForegroundColor DarkGray
+        Invoke-AiComposeBuild -ComposeArgs $compose
+        if ($containers.Count -gt 0) {
+            Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -ForceRecreate
+        } else {
+            Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile
+        }
+        return
+    }
+
+    if ($containers.Count -eq 0) {
+        $probeOk = Test-AiImageLibraries
+        if (!$probeOk) {
+            Write-Warning 'AI image exists but the library probe failed. The image may be broken or missing Python packages. No automatic rebuild will run; choose R/C or rerun with -RebuildAi after confirming.'
+        }
+        Show-AiResolutionPlaybook
+        $choice = Read-AiResolutionChoice
+        switch ($choice) {
+            'S' {
+                if (!$probeOk) { Write-Warning 'Starting the existing AI image after a failed probe (explicit Start). If containers exit, rerun with -RebuildAi.' }
+                Write-Host '    - Starting containers from the existing AI image (no rebuild)...' -ForegroundColor DarkGray
+                Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -NoBuild
+            }
+            'R' {
+                Write-Host '    - Rebuilding AI image with cache, then starting...' -ForegroundColor DarkGray
+                Invoke-AiComposeBuild -ComposeArgs $compose
+                Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile
+            }
+            'C' {
+                Write-Host '    - Rebuilding AI image without cache (clean rebuild), then starting...' -ForegroundColor DarkGray
+                Invoke-AiComposeBuild -ComposeArgs $compose -NoCache
+                Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile
+            }
+            'K' {
+                Write-Host '    - AI setup skipped; continuing with the rest of setup.' -ForegroundColor Yellow
+                $script:AiCameraSkipped = $true
+            }
+            'A' {
+                Write-Host 'Aborted by user.' -ForegroundColor Red
+                exit 1
+            }
+            default { throw "Unexpected AI setup choice: $choice" }
+        }
+        return
+    }
+
+    $unhealthy = @($containers | Where-Object { $_.State -eq 'running' -and $_.Health -eq 'unhealthy' })
+    $stopped = @($containers | Where-Object { $_.State -ne 'running' })
+    $staleContainers = @($containers | Where-Object { Test-AiContainerImageStale -Container $_ -Image $image })
+
+    Write-Host "    - AI image found ($($image.SizeGb) GB); $($containers.Count) container(s) already exist -> skip build." -ForegroundColor DarkGray
+
+    if ($staleContainers.Count -gt 0) {
+        $staleServices = ($staleContainers | ForEach-Object { if ($_.Service) { $_.Service } else { $_.Name } }) -join ', '
+        $staleIds = ($staleContainers | ForEach-Object { if ($_.ComposeImageId) { $_.ComposeImageId } else { $_.ImageId } } | Select-Object -Unique) -join ', '
+        Write-Warning "AI container(s) $staleServices reference an older image ($staleIds); current smartpark-ai:local is $($image.ShortId). No automatic rebuild will run."
+        Write-Host '    - Recreating from the current image with --force-recreate --no-build (no rebuild)...' -ForegroundColor DarkGray
+        Write-Host '    - Follow-up: rerun with -RebuildAi only if the current image is incomplete or broken.' -ForegroundColor DarkGray
+        Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -NoBuild -ForceRecreate
+        return
+    }
+
+    if ($unhealthy.Count -gt 0) {
+        $unhealthyServices = ($unhealthy | ForEach-Object { $_.Service }) -join ', '
+        Write-Warning "AI container(s) $unhealthyServices are unhealthy. No automatic rebuild will run."
+        Write-Host '    - Inspect the logs below; rerun with -RebuildAi only if the image itself is suspected broken.' -ForegroundColor DarkGray
+        Show-AiDockerLogs -ComposeArgs $compose
+        Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -NoBuild
+        return
+    }
+
+    if ($stopped.Count -gt 0) {
+        Write-Host '    - AI containers are stopped/exited -> starting them without rebuild...' -ForegroundColor DarkGray
+        Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -NoBuild
+        return
+    }
+
+    Write-Host '    - AI containers already running; ensuring they stay healthy (no build)...' -ForegroundColor DarkGray
+    Start-AiComposeContainers -ComposeArgs $compose -EnvFile $EnvFile -NoBuild
 }
 
 # Read existing secrets without printing their values or invoking `list`.
@@ -218,7 +624,7 @@ if ($SkipDatabase) {
     Write-Host '[4/7] Skipping database initialization (-SkipDatabase).' -ForegroundColor Cyan
 }
 if (!$SkipDatabase) {
-    Write-Host '[4/7] Initializing databases (user, parking, reservation, payment, notification, iot)...' -ForegroundColor Cyan
+    Write-Host '[4/7] Initializing databases (user, facility, operations, payment, notification, iot)...' -ForegroundColor Cyan
     & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile config --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Docker Compose configuration is invalid.' }
     if ($RecreateDb) {
@@ -234,7 +640,7 @@ if (!$SkipDatabase) {
     foreach ($service in @('User','Parking','Reservation','Payment','Notification','Iot')) {
         $migrationIndex++
         Write-Host "    - [$migrationIndex/6] Probing authentication and applying migrations for $service..." -ForegroundColor DarkGray
-        $container = $service.ToLowerInvariant() + '-db'
+        $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$service]
         # Container env is used internally; credentials never become command arguments.
         # Send shell code through stdin: PowerShell 5.1 strips native argument quotes.
         # The trailing comment also consumes its Windows CRLF line terminator.
@@ -253,7 +659,7 @@ if (!$SkipDatabase) {
 
 Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation...' -ForegroundColor Cyan
 if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation')) {
-    $database = 'smartpark_' + $service.ToLowerInvariant()
+    $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
     $password = $settings['SMARTPARK_DEV_PASSWORD'].Replace('"','""')
     $desired = [ordered]@{
@@ -368,16 +774,7 @@ if ($WithAiCamera) {
     if (!$settings['SMARTPARK_DEV_PASSWORD'] -or $settings['SMARTPARK_DEV_PASSWORD'] -like 'replace-with-*') {
         throw 'Configure SMARTPARK_DEV_PASSWORD before using -WithAiCamera.'
     }
-    & docker network inspect smartpark-schema_default *> $null
-    if ($LASTEXITCODE -ne 0) { throw 'Docker network smartpark-schema_default not found. Run setup.ps1 without -SkipDatabase first so the schema DBs are up.' }
-    $aiCompose = Join-Path $taskRoot 'compose.ai.yml'
-    & docker compose --project-name smartpark-ai --env-file $envFile -f $aiCompose config --quiet
-    if ($LASTEXITCODE -ne 0) { throw 'AI Compose configuration is invalid.' }
-    Write-Host '    - Building AI images (first run takes ~5-10 min)...' -ForegroundColor DarkGray
-    & docker compose --project-name smartpark-ai --env-file $envFile -f $aiCompose build
-    if ($LASTEXITCODE -ne 0) { throw 'AI image build failed. Check: docker compose -p smartpark-ai -f compose.ai.yml logs' }
-    & docker compose --project-name smartpark-ai --env-file $envFile -f $aiCompose up -d --wait
-    if ($LASTEXITCODE -ne 0) { throw 'AI camera containers failed to become healthy. Check: docker compose -p smartpark-ai -f compose.ai.yml logs' }
+    Invoke-AiCameraSetup -Settings $settings -EnvFile $envFile -Rebuild:$RebuildAi
 }
 Write-Host '[7/7] Restoring .NET dependencies...' -ForegroundColor Cyan
 if (!$SkipRestore) {
@@ -386,5 +783,5 @@ if (!$SkipRestore) {
 }
 $setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Parking and Reservation.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
-if ($WithAiCamera) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
+if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

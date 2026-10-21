@@ -4,7 +4,7 @@ Thư mục này là tài liệu database của **profile đang triển khai** tr
 
 ## Baseline
 
-- **6 DB vật lý:** `smartpark_user`, `smartpark_parking`, `smartpark_reservation`, `smartpark_payment`, `smartpark_notification`, `smartpark_iot`.
+- **6 DB vật lý:** `smartpark_user`, `smartpark_facility`, `smartpark_operations`, `smartpark_payment`, `smartpark_notification`, `smartpark_iot`.
 - **7 base DDL + 8 overlay:** `scripts/database/microservices/*.sql` + `scripts/database/overlay/*.sql`.
 - **Runtime truth:** `compose.schema-integration.yml`, `scripts/apply-workflow-migrations.ps1`, `setup.ps1`.
 - **Design baseline:** `arch/database-schema` @ `9a13499`; các deviation D1–D7 được ghi rõ trong tài liệu service và report 10.
