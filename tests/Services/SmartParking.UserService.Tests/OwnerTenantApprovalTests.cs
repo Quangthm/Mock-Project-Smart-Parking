@@ -14,6 +14,61 @@ namespace SmartParking.UserService.Tests;
 public sealed class OwnerTenantApprovalTests
 {
     [PostgresFact]
+    public async Task DecisionSmtpFailureAndManualRetryPreserveApprovalAndSendOriginalMessage()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        var (admin, application) = await SeedAsync(fixture);
+        var clock = new TestClock();
+        Guid deliveryId;
+        await using (var db = fixture.Open())
+        {
+            var result = await Service(db, new TestParkingDirectory()).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
+            deliveryId = result.DeliveryId!.Value;
+        }
+        var transport = new DecisionTransport();
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            await using var db = fixture.Open();
+            var workflow = WorkflowTestSupport.Create(db, clock);
+            if (attempt > 1) await workflow.DeliveryAsync(admin, deliveryId, true, default);
+            transport.Fail = attempt < 3;
+            await workflow.DeliverOneAsync(transport, default);
+            var delivery = await db.WorkflowDeliveries.SingleAsync(d => d.Id == deliveryId);
+            Assert.Equal(attempt, delivery.Attempts);
+            Assert.Equal(attempt < 3 ? "failed" : "sent", delivery.Status);
+            Assert.Equal(attempt == 3, delivery.SentAt.HasValue);
+            Assert.Equal(attempt == 3, string.IsNullOrEmpty(delivery.ProtectedPayload));
+            Assert.Equal("approved", (await db.OwnerApplications.SingleAsync()).Status);
+            Assert.Equal(UserStatus.Active, (await db.Users.SingleAsync(u => u.Id == application.UserId)).Status);
+        }
+        Assert.Equal(3, transport.Messages.Count);
+        Assert.Single(transport.Messages.Distinct());
+        var message = transport.Messages[0];
+        Assert.Equal(application.User.Email, message.Destination);
+        Assert.Equal("Your application is approved.", message.Body);
+        Assert.Null(message.OtpCode);
+        await using (var db = fixture.Open())
+        {
+            var workflow = WorkflowTestSupport.Create(db, clock);
+            await workflow.DeliveryAsync(admin, deliveryId, true, default);
+            await workflow.DeliverOneAsync(transport, default);
+        }
+        Assert.Equal(3, transport.Messages.Count);
+    }
+
+    private sealed class DecisionTransport : global::UserService.Application.Common.Interfaces.Services.IWorkflowTransport
+    {
+        public bool Fail;
+        public List<global::UserService.Application.Common.Interfaces.Services.WorkflowMessage> Messages = [];
+        public Task SendAsync(global::UserService.Application.Common.Interfaces.Services.WorkflowMessage message, Guid deliveryId, CancellationToken ct)
+        {
+            Messages.Add(message);
+            if (Fail) throw new System.Net.Mail.SmtpException(System.Net.Mail.SmtpStatusCode.ServiceNotAvailable, "Simulated provider failure");
+            return Task.CompletedTask;
+        }
+    }
+
+    [PostgresFact]
     public async Task FailedFinalizeRollsBackTenantAndRetryActivatesExactlyOnce()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using UserService.Application.Common.Interfaces.Services;
 namespace UserService.Infrastructure.Services;
 public sealed class WorkflowProtector(IDataProtectionProvider provider):IWorkflowProtector
@@ -12,7 +13,8 @@ public sealed class WorkflowProtector(IDataProtectionProvider provider):IWorkflo
     public string Protect(string value)=>protector.Protect(value);
     public string Unprotect(string value)=>protector.Unprotect(value);
 }
-public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory clients,IHostEnvironment environment):IWorkflowTransport
+public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory clients,IHostEnvironment environment,
+    ILogger<WorkflowTransport>? logger = null):IWorkflowTransport
 {
     public async Task SendAsync(WorkflowMessage message,Guid deliveryId,CancellationToken ct)
     {
@@ -32,7 +34,16 @@ public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory c
             using var mail=message.OtpCode is null
                 ? new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body)
                 : OtpEmailTemplate.Create(config["Otp:Smtp:From"]!,message);
-            mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());await smtp.SendMailAsync(mail,ct);return;
+            mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());
+            try { await smtp.SendMailAsync(mail,ct); }
+            catch (SmtpException error)
+            {
+                // Provider messages may contain recipient addresses; log only safe diagnostics.
+                logger?.LogWarning("SMTP delivery {DeliveryId} failed: StatusCode={SmtpStatusCode} ({SmtpStatus}), FailureType={FailureType}, InnerType={InnerType}",
+                    deliveryId, (int)error.StatusCode, error.StatusCode, error.GetType().Name, error.InnerException?.GetType().Name ?? "none");
+                throw;
+            }
+            return;
         }
         if(message.Channel=="sms" && Uri.TryCreate(config["Otp:Sms:Url"],UriKind.Absolute,out var url) && url.Scheme=="https")
         {
