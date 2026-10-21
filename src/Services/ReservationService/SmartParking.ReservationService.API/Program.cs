@@ -31,6 +31,7 @@ public static class ReservationHost
             .AllowAnyHeader()
             .AllowAnyMethod()));
         var app = builder.Build();
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.UseCors();
         app.Use(async (context, next) =>
         {
