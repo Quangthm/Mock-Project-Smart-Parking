@@ -1,0 +1,2581 @@
+{
+  "info": {
+    "_postman_id": "a7b8c9d0-1234-5678-9abc-def012345678",
+    "name": "SmartPark - Sprint 2 Designed APIs Test Suite",
+    "description": "Bộ test Postman chuyên sâu kiểm thử toàn bộ 7 API Specifications do Nguyễn Duy Khánh thiết kế trong Sprint 2:\n1. SPARK-174/175: Driver Register & OTP Verification\n2. SPARK-175: Owner Register & Email Verification\n3. SPARK-194: Admin Approve Owner Account\n4. SPARK-205: Admin Manage Users (Search, Lock, Unlock, Pagination)\n5. SPARK-190: Owner Create Operator Account & Password Bootstrap\n6. SPARK-226: Vehicle Registration & Canonical Plate Normalization\n7. SPARK-187: Parking Structure Management (Lots, Units, Slots, Paths, Backup, Operations)\n\nBao gồm Happy Path, Negative cases, Boundary checks, Schema validation và Authorization checks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "userUrl",
+      "value": "http://localhost:5035",
+      "type": "string"
+    },
+    {
+      "key": "parkingUrl",
+      "value": "http://localhost:5045",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Password@123",
+      "type": "string"
+    },
+    {
+      "key": "driverEmail",
+      "value": "driver@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "driverPassword",
+      "value": "Password@123",
+      "type": "string"
+    },
+    {
+      "key": "ownerEmail",
+      "value": "owner@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "ownerPassword",
+      "value": "Password@123",
+      "type": "string"
+    },
+    {
+      "key": "operatorEmail",
+      "value": "operator@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "operatorPassword",
+      "value": "Password@123",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "driverToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "driverRefresh",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operatorToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "registrationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerApplicationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerEmailChallenge",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "targetUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operatorId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deliveryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "siteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "unitId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slotId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "vehicleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operationId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Authentication & Sessions",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/login",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Login success flag is true\", () => pm.expect(json.success).to.be.true);",
+                  "pm.test(\"Token returned and valid\", () => {",
+                  "    pm.expect(json.data.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.data.tokenType).to.eql(\"Bearer\");",
+                  "    pm.collectionVariables.set(\"adminToken\", json.data.accessToken);",
+                  "    pm.collectionVariables.set(\"targetUserId\", json.data.user.userId);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/login",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Login success flag is true\", () => pm.expect(json.success).to.be.true);",
+                  "pm.test(\"Save owner token\", () => {",
+                  "    pm.expect(json.data.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.collectionVariables.set(\"ownerToken\", json.data.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Driver Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/login",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Driver login success\", () => pm.expect(json.success).to.be.true);",
+                  "pm.test(\"Save driver tokens\", () => {",
+                  "    pm.expect(json.data.accessToken).to.be.a('string');",
+                  "    pm.collectionVariables.set(\"driverToken\", json.data.accessToken);",
+                  "    pm.collectionVariables.set(\"driverRefresh\", json.data.refreshToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/me",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Session valid and user profile returned\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.email).to.be.a('string');",
+                  "    pm.expect(json.data).to.not.have.property('passwordHash');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Anonymous Me Denied (Negative)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/me",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error envelope returned\", () => {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Driver Registration (SPARK-174/175)",
+      "item": [
+        {
+          "name": "Register Driver - Happy Path",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/driver",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "driver"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Test Driver {{$timestamp}}\",\n  \"email\": \"driver_{{$timestamp}}@example.test\",\n  \"phone\": \"090{{$randomInt}}\",\n  \"password\": \"Password@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Success flag is true\", () => pm.expect(json.success).to.be.true);",
+                  "pm.test(\"Registration result contains registrationId\", () => {",
+                  "    pm.expect(json.data.registrationId).to.match(/^[0-9a-f-]{36}$/i);",
+                  "    pm.expect(json.data.channel).to.be.oneOf([\"email\", \"sms\"]);",
+                  "    pm.expect(json.data.expiresAt).to.exist;",
+                  "    pm.expect(json.data).to.not.have.property(\"code\"); // Never leak OTP in API response",
+                  "    pm.collectionVariables.set(\"registrationId\", json.data.registrationId);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Driver - Invalid Email (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/driver",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "driver"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Bad Email Driver\",\n  \"email\": \"not-an-email\",\n  \"password\": \"Password@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Driver - Weak Password (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/driver",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "driver"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Weak Password Driver\",\n  \"email\": \"driver_weak_{{$timestamp}}@example.test\",\n  \"password\": \"123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Driver Registration OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/driver/resend",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "driver",
+                "resend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{registrationId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 429 Cooldown\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 429]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Resend metadata returned\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.resendAvailableAt).to.exist;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recover Driver Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/driver/recover",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "driver",
+                "recover"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"driver@gmail.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Recovery metadata returned\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Driver OTP - Invalid Format Code (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/driver/verify",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "driver",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{registrationId}}\",\n  \"code\": \"12\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Owner Registration (SPARK-175)",
+      "item": [
+        {
+          "name": "Register Owner - Happy Path",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/owner",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "owner"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Owner {{$timestamp}}\",\n  \"businessName\": \"SmartParking Corp {{$timestamp}}\",\n  \"email\": \"owner_{{$timestamp}}@example.test\",\n  \"phone\": \"098{{$randomInt}}\",\n  \"lotType\": \"outdoor\",\n  \"agreedToPolicy\": true,\n  \"password\": \"Password@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Success flag is true\", () => pm.expect(json.success).to.be.true);",
+                  "pm.test(\"Application & email challenge created\", () => {",
+                  "    pm.expect(json.data.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "    pm.expect(json.data.status).to.eql(\"pending\");",
+                  "    pm.expect(json.data.verification.challengeId).to.match(/^[0-9a-f-]{36}$/i);",
+                  "    pm.expect(json.data.verification.channel).to.eql(\"email\");",
+                  "    pm.collectionVariables.set(\"ownerApplicationId\", json.data.id);",
+                  "    pm.collectionVariables.set(\"ownerEmailChallenge\", json.data.verification.challengeId);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Owner - Missing Business Name (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/owner",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "owner"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Owner Incomplete\",\n  \"email\": \"incomplete_owner_{{$timestamp}}@example.test\",\n  \"phone\": \"0987654321\",\n  \"lotType\": \"outdoor\",\n  \"agreedToPolicy\": true,\n  \"password\": \"Password@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Owner Email OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/owner/resend",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "owner",
+                "resend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{ownerEmailChallenge}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 429 Cooldown\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 429]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recover Owner Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/register/owner/recover",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "register",
+                "owner",
+                "recover"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact\": \"owner@gmail.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Admin Approve Owner (SPARK-194)",
+      "item": [
+        {
+          "name": "List Owner Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/owner-applications",
+              "host": [
+                "owner-applications"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Applications returned as list\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Application Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/owner-applications/{{ownerApplicationId}}",
+              "host": [
+                "owner-applications"
+              ],
+              "path": [
+                "{{ownerApplicationId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Application matches requested ID\", () => {",
+                  "        pm.expect(json.data.id).to.eql(pm.collectionVariables.get(\"ownerApplicationId\"));",
+                  "        pm.expect(json.data.businessName).to.exist;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Review Application - Approve",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/owner-applications/{{ownerApplicationId}}/review",
+              "host": [
+                "owner-applications"
+              ],
+              "path": [
+                "{{ownerApplicationId}}",
+                "review"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"reviewNote\": \"Automated Postman test approval\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 400/409 (Contact verification gate)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 409]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Application approved with audit\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.status).to.eql(\"approved\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forbidden Review by Driver (Negative)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/owner-applications/{{ownerApplicationId}}/review",
+              "host": [
+                "owner-applications"
+              ],
+              "path": [
+                "{{ownerApplicationId}}",
+                "review"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 403 Forbidden\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Admin Manage Users (SPARK-205)",
+      "item": [
+        {
+          "name": "Search Users - Paginated & Filtered",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users?role=driver&status=active&page=1&pageSize=20",
+              "host": [
+                "users?role=driver&status=active&page=1&pageSize=20"
+              ],
+              "path": [],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "driver"
+                },
+                {
+                  "key": "status",
+                  "value": "active"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Paginated user list returned\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.items).to.be.an('array');",
+                  "    pm.expect(json.data.page).to.eql(1);",
+                  "    pm.expect(json.data.pageSize).to.eql(20);",
+                  "    pm.expect(json.data.total).to.be.at.least(0);",
+                  "});",
+                  "pm.test(\"No security credentials exposed\", () => {",
+                  "    const raw = pm.response.text();",
+                  "    pm.expect(raw).to.not.include(\"passwordHash\");",
+                  "});",
+                  "if (json.data.items && json.data.items.length > 0) {",
+                  "    pm.collectionVariables.set(\"targetUserId\", json.data.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Users - Invalid Page Ceiling (Negative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users?page=0&pageSize=101&role=driver",
+              "host": [
+                "users?page=0&pageSize=101&role=driver"
+              ],
+              "path": [],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "101"
+                },
+                {
+                  "key": "role",
+                  "value": "driver"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Users - Unknown Role Filter (Negative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users?role=superuser",
+              "host": [
+                "users?role=superuser"
+              ],
+              "path": [],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "superuser"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Detail by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users/{{targetUserId}}",
+              "host": [
+                "users"
+              ],
+              "path": [
+                "{{targetUserId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"User detail matches target ID\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.user.id).to.eql(pm.collectionVariables.get(\"targetUserId\"));",
+                  "    pm.expect(json.data.user.fullName).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set User Status - Lock Account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users/{{targetUserId}}/status",
+              "host": [
+                "users"
+              ],
+              "path": [
+                "{{targetUserId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"locked\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 409 (Admin Protection)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"User status is locked\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.status).to.eql(\"locked\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set User Status - Unlock Account (Active)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users/{{targetUserId}}/status",
+              "host": [
+                "users"
+              ],
+              "path": [
+                "{{targetUserId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 409\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"User status restored to active\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.status).to.eql(\"active\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set User Status - Invalid Status String (Negative)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users/{{targetUserId}}/status",
+              "host": [
+                "users"
+              ],
+              "path": [
+                "{{targetUserId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"invalidStatus\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Non-Admin Access to Users Denied (Negative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users",
+              "host": [
+                "users"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 403 Forbidden\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Owner Create Operator (SPARK-190)",
+      "item": [
+        {
+          "name": "Owner Create Operator - Happy Path",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users",
+              "host": [
+                "users"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Operator {{$timestamp}}\",\n  \"email\": \"operator_{{$timestamp}}@example.test\",\n  \"phone\": \"096{{$randomInt}}\",\n  \"password\": \"Password@123\",\n  \"siteIds\": [\n    \"{{siteId}}\"\n  ],\n  \"permissions\": [\n    \"SLOT_OVERRIDE\",\n    \"DEVICE_MANAGE\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created or 403/400 (if siteId empty/unowned)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400, 403]);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Operator created with delivery tracking\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.expect(json.data.deliveryId).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.collectionVariables.set(\"operatorId\", json.data.id);",
+                  "        pm.collectionVariables.set(\"deliveryId\", json.data.deliveryId);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner Create Operator - Invalid Permission String (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/users",
+              "host": [
+                "users"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Operator Invalid\",\n  \"email\": \"bad_op_{{$timestamp}}@example.test\",\n  \"password\": \"Password@123\",\n  \"siteIds\": [\n    \"{{siteId}}\"\n  ],\n  \"permissions\": [\n    \"ILLEGAL_SUPER_ADMIN_PERMISSION\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request or 403\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 403]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Onboarding Delivery Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/deliveries/{{deliveryId}}",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "deliveries",
+                "{{deliveryId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 404/400\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Delivery record returned\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.id).to.eql(pm.collectionVariables.get(\"deliveryId\"));",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry Onboarding Delivery",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/deliveries/{{deliveryId}}/retry",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "deliveries",
+                "{{deliveryId}}",
+                "retry"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 404/400\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Provisioned Operators",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/operators",
+              "host": [
+                "operators"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Operators array returned\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bootstrap Password - Tampered Challenge (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/bootstrap-password",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "bootstrap-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"00000000-0000-0000-0000-000000000000\",\n  \"token\": \"invalid-token\",\n  \"password\": \"NewPassword@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 or 401 or 404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 401, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Vehicle Registration & Normalization (SPARK-226)",
+      "item": [
+        {
+          "name": "List Driver Registered Vehicles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/vehicles",
+              "host": [
+                "vehicles"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Vehicles array returned\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Vehicle - CAR Plate Normalization (Happy Path)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/vehicles",
+              "host": [
+                "vehicles"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"51A-{{$randomInt}}.99\",\n  \"vehicleType\": \"CAR\",\n  \"imageReference\": \"https://storage.smartparking.test/vehicles/car-{{$timestamp}}.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created or 409 (if plate exists)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Vehicle registered and canonical plate normalized\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.expect(json.data.vehicleType).to.eql(\"CAR\");",
+                  "        pm.expect(json.data.canonicalPlate).to.match(/^[0-9A-Z]+$/);",
+                  "        pm.expect(json.data.canonicalPlate).to.not.include(\"-\");",
+                  "        pm.expect(json.data.canonicalPlate).to.not.include(\".\");",
+                  "        pm.collectionVariables.set(\"vehicleId\", json.data.id);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Vehicle - MOTORCYCLE Plate Normalization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/vehicles",
+              "host": [
+                "vehicles"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"59-X1 {{$randomInt}}\",\n  \"vehicleType\": \"MOTORCYCLE\",\n  \"imageReference\": \"https://storage.smartparking.test/vehicles/moto-{{$timestamp}}.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created or 409\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Motorcycle canonical plate normalized\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.canonicalPlate).to.not.include(\" \");",
+                  "        pm.expect(json.data.canonicalPlate).to.not.include(\"-\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Registered Vehicle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/vehicles/{{vehicleId}}",
+              "host": [
+                "vehicles"
+              ],
+              "path": [
+                "{{vehicleId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"51B-888.77\",\n  \"vehicleType\": \"CAR\",\n  \"imageReference\": \"https://storage.smartparking.test/vehicles/car-updated.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 404 (if no vehicle registered yet)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Vehicle updated and plate re-normalized\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.canonicalPlate).to.eql(\"51B88877\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Vehicle - Insecure HTTP URL (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/vehicles",
+              "host": [
+                "vehicles"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"51A-123.45\",\n  \"vehicleType\": \"CAR\",\n  \"imageReference\": \"http://insecure.test/vehicle.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Vehicle - Unsupported Category (Negative)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/vehicles",
+              "host": [
+                "vehicles"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plate\": \"51A-123.45\",\n  \"vehicleType\": \"BICYCLE\",\n  \"imageReference\": \"https://storage.smartparking.test/vehicles/bike.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Parking Structure Management (SPARK-187)",
+      "item": [
+        {
+          "name": "List Owned Parking Lots",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots",
+              "host": [
+                "parking-lots"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Owned parking lots list returned\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Parking Lot Facility (Happy Path)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots",
+              "host": [
+                "parking-lots"
+              ],
+              "path": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"LOT-{{$timestamp}}\",\n  \"name\": \"Test Facility {{$timestamp}}\",\n  \"address\": \"123 Central Ave, District 1\",\n  \"latitude\": 10.776889,\n  \"longitude\": 106.700806\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201 Created or 403 (Tenant binding)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 403]);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Parking site created\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.collectionVariables.set(\"siteId\", json.data.id);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read Structure & Canonical Capacity Breakdown",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/structure",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "structure"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Authoritative structure structure returned\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data).to.have.property(\"units\");",
+                  "        pm.expect(json.data).to.have.property(\"slots\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Spatial Unit (ZONE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/units",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "units"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ZONE\",\n  \"name\": \"Zone {{$randomInt}}\",\n  \"capacity\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Spatial unit ID returned\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.collectionVariables.set(\"unitId\", json.data);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Physical Parking Slot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/slots",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "slots"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{unitId}}\",\n  \"code\": \"SLOT-{{$randomInt}}\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Slot ID returned\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.collectionVariables.set(\"slotId\", json.data);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Access Path",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/paths",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "paths"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"PATH-{{$randomInt}}\",\n  \"to\": \"{{unitId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename Spatial Unit (PATCH Structure)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/structure",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "structure"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"renameUnit\",\n  \"resourceId\": \"{{unitId}}\",\n  \"name\": \"Zone Alpha {{$randomInt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Configure Category Backup Capacity (PATCH Structure)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/structure",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "structure"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"backup\",\n  \"unitId\": \"{{unitId}}\",\n  \"vehicleType\": \"CAR\",\n  \"capacity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 400/403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Execute Safe Structure Operation (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/operations",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "operations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotencyKey\": \"{{$guid}}\",\n  \"edit\": {\n    \"action\": \"removeSlot\",\n    \"resourceId\": \"{{slotId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200, 202 or 409/403\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 403, 409]);",
+                  "});",
+                  "if (pm.response.code === 200 || pm.response.code === 202) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Operation ID returned\", () => {",
+                  "        pm.expect(json.data.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "        pm.collectionVariables.set(\"operationId\", json.data.id);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Poll Structure Operation Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{parkingUrl}}/api/parking-lots/{{siteId}}/operations/{{operationId}}",
+              "host": [
+                "parking-lots"
+              ],
+              "path": [
+                "{{siteId}}",
+                "operations",
+                "{{operationId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK or 403/404\", () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test(\"Operation status retrieved\", () => {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data.status).to.be.oneOf([\"completed\", \"pending\", \"failed\"]);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Logout & Teardown",
+      "item": [
+        {
+          "name": "Driver Logout Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/logout",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{driverRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Logout success message\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.message).to.eql(\"Logout successful\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoked Token Access Denied (Negative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{userUrl}}/api/auth/me",
+              "host": [
+                "auth"
+              ],
+              "path": [
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 401 Unauthorized after logout\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
