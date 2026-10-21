@@ -42,6 +42,8 @@ public interface IIdentityWorkflowStore
     Task<WorkflowDelivery[]> ReadOwnerDecisionDeliveriesAsync(CancellationToken ct);
     Task LockOwnerAccountsAsync(Guid userId, CancellationToken ct);
     Task<bool> HasPendingOwnerAccountAsync(Guid userId, CancellationToken ct);
+    // Must run in the approval transaction so tenant creation rolls back with activation.
+    Task EnsureOwnerTenantAsync(Guid id, string name, string email, string phone, CancellationToken ct);
     Task<List<UserLoginActivity>> ReadLoginActivityAsync(Guid id, CancellationToken ct);
     Task<User?> LockOptionalUserAsync(Guid id, CancellationToken ct);
     Task<int> RevokeActiveSessionsAsync(Guid id, CancellationToken ct);

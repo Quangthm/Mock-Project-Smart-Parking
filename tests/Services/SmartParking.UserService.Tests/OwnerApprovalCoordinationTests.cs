@@ -25,6 +25,7 @@ public sealed class OwnerApprovalCoordinationTests
         Assert.Equal(1, f.RemoteCalls);
         Assert.Single(f.Store.Deliveries);
         Assert.False(f.Store.InTransaction);
+        Assert.True(f.Store.TenantExists);
     }
 
     [Fact]
@@ -52,8 +53,10 @@ public sealed class OwnerApprovalCoordinationTests
         Assert.Equal("pending", f.Store.Application.Status);
         Assert.NotNull(f.Store.Application.ApprovalRequestedBy);
         Assert.Empty(f.Store.Deliveries);
+        Assert.False(f.Store.TenantExists);
         f.Store.FailFinalizeCommit = false;
         Assert.Equal("approved", (await f.Approve()).Status);
+        Assert.True(f.Store.TenantExists);
         Assert.Single(f.OperationIds.Distinct());
         Assert.Single(f.Store.Deliveries);
     }
@@ -111,7 +114,7 @@ public sealed class OwnerApprovalCoordinationTests
         };
         public User User;
         public readonly List<WorkflowDelivery> Deliveries = [];
-        public bool InTransaction, FailFinalizeCommit, AdminAllowed = true;
+        public bool InTransaction, FailFinalizeCommit, TenantExists, AdminAllowed = true;
         public StoreProxy()
         {
             User = new() { Id = Application.UserId, FullName = "Owner", Email = "owner@example.com", Phone = "0901234567", EmailVerifiedAt = DateTimeOffset.UtcNow, Status = UserStatus.PendingApproval };
@@ -128,6 +131,7 @@ public sealed class OwnerApprovalCoordinationTests
             "LockUserAsync" => Task.FromResult(User),
             "LockOwnerAccountsAsync" => Task.CompletedTask,
             "HasPendingOwnerAccountAsync" => Task.FromResult(true),
+            "EnsureOwnerTenantAsync" => EnsureTenant(args!),
             "SaveChangesAsync" => Task.FromResult(1),
             "ReadOwnerDecisionDeliveriesAsync" => Task.FromResult(Deliveries.ToArray()),
             "ResetTracking" => null,
@@ -135,6 +139,14 @@ public sealed class OwnerApprovalCoordinationTests
             _ => throw new NotSupportedException(method.Name)
         };
         private object? Stage(object value) { Deliveries.Add(Assert.IsType<WorkflowDelivery>(value)); return null; }
+        private Task EnsureTenant(object?[] args)
+        {
+            Assert.True(InTransaction);
+            Assert.Equal(Application.Id, (Guid)args[0]!);
+            Assert.Equal("pending", Application.Status);
+            TenantExists = true;
+            return Task.CompletedTask;
+        }
         private Task<IUnitOfWorkTransaction> Begin()
         {
             Assert.False(InTransaction);
@@ -148,6 +160,7 @@ public sealed class OwnerApprovalCoordinationTests
             private readonly UserStatus userStatus = owner.User.Status;
             private readonly string accountStatus = owner.User.Accounts.Single().Status;
             private readonly int deliveryCount = owner.Deliveries.Count;
+            private readonly bool tenantExists = owner.TenantExists;
             private bool committed;
             public Task CommitAsync(CancellationToken ct)
             {
@@ -163,6 +176,7 @@ public sealed class OwnerApprovalCoordinationTests
                     owner.Application.ApprovalRequestedBy = intent;
                     owner.User.Status = userStatus;
                     owner.User.Accounts.Single().Status = accountStatus;
+                    owner.TenantExists = tenantExists;
                     owner.Deliveries.RemoveRange(deliveryCount, owner.Deliveries.Count - deliveryCount);
                 }
                 owner.InTransaction = false;

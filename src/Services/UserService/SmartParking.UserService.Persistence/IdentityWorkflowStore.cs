@@ -101,6 +101,25 @@ public partial class AppDbContext : IIdentityWorkflowStore
         db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={userId} ORDER BY id FOR UPDATE").Include(a=>a.AccountRoles).LoadAsync(ct);
     Task<bool> IIdentityWorkflowStore.HasPendingOwnerAccountAsync(Guid userId, CancellationToken ct) =>
         db.Accounts.AnyAsync(a => a.UserId == userId && a.DeletedOn == null && a.Status == "PENDING_APPROVAL" && a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"), ct);
+    async Task IIdentityWorkflowStore.EnsureOwnerTenantAsync(Guid id, string name, string email, string phone, CancellationToken ct)
+    {
+        if (Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Owner tenant creation requires the approval transaction.");
+        var code = "T-" + id.ToString("N");
+        await Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO tenants(id,code,name,contact_email,contact_phone)
+            VALUES ({id},{code},{name},{email},{phone}) ON CONFLICT DO NOTHING
+            """, ct);
+        // Protect an existing tenant from concurrent changes until activation commits.
+        // A retry may reuse matching data, but must never overwrite or reactivate it.
+        var matches = await Database.SqlQuery<bool>($"""
+            SELECT (name={name} AND contact_email={email} AND contact_phone={phone}
+                AND status='ACTIVE' AND deleted_at IS NULL) AS "Value"
+            FROM tenants WHERE id={id} FOR UPDATE
+            """).ToListAsync(ct);
+        if (matches.Count != 1 || !matches[0])
+            throw new AuthException("APPROVAL_CONFLICT", "Tenant provisioning conflicts with an existing tenant.", 409);
+    }
     Task<List<UserLoginActivity>> IIdentityWorkflowStore.ReadLoginActivityAsync(Guid id, CancellationToken ct) =>
         db.AuthSessions.AsNoTracking().Where(s => s.UserId == id).OrderByDescending(s => s.CreatedAt)
             .Take(50).Select(s => new UserLoginActivity(s.CreatedAt, s.ExpiresAt, s.IsRevoked)).ToListAsync(ct);

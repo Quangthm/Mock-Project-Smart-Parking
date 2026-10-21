@@ -148,6 +148,8 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "PENDING_APPROVAL" &&
             a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"));
         if (account is null) throw Error("APPLICATION_CLOSED", "Owner account is no longer eligible for review.", 409);
+        if (body.Status == "approved")
+            await db.EnsureOwnerTenantAsync(application.Id, application.BusinessName, user.Email!, user.Phone!, ct);
         application.User = user;
         application.Status = body.Status;
         application.ReviewedBy = application.ApprovalRequestedBy ?? adminId;
