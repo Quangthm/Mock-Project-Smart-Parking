@@ -44,7 +44,7 @@ Goals:
 
 | Change | Re-run | Notes |
 |---|---|---|
-| Value used by the Docker app stack (`SMARTPARK_SERVICE_KEY`, `SMARTPARK_ADMIN/OWNER/OPERATOR_*`) | `.\scripts\run-app-service.ps1 -Service <X\|All> -NoBuild` | Containers read env at creation; Compose recreates services whose config changed. No image rebuild needed. |
+| Value used by the Docker app stack (`SMARTPARK_SERVICE_KEY`, `SMARTPARK_ADMIN/OWNER/OPERATOR_*`, `SMARTPARK_SMTP_*`) | `.\scripts\run-app-service.ps1 -Service <X\|All> -NoBuild` | Containers read env at creation; Compose recreates services whose config changed. No image rebuild needed. |
 | Any value used by the host runner | restart `.\scripts\run-schema-service.ps1 -Service X` | The runner reads `.env` on every start. |
 | Visual Studio / direct `dotnet run` (user-secrets) | `.\setup.ps1 -SkipDatabase -SkipRestore` | Step `[5/7]` overwrites differing user-secrets. |
 | DB ports `SMARTPARK_DB_*_PORT` | `.\setup.ps1 -SkipRestore`, then restart runners | DB containers are recreated with the new port mapping. |
@@ -58,7 +58,7 @@ Rules that always apply:
 - Start app containers through `scripts/run-app-service.ps1` (or the `.cmd` wrappers). Docker Desktop "Start" / `docker start` reuse the previous image and environment — they do **not** rebuild or recreate.
 - `-NoBuild` skips only the image build; Compose still recreates containers whose config changed.
 - Full `setup.ps1` is needed only for: fresh volumes, `-RecreateDb`, or when the repo updates the setup scripts — not for ordinary `.env` edits.
-- `Otp__Smtp__*` and `Jwt:*` are **not** passed to containers by default; wire them in `compose.app.yml` if containers must use them.
+- `Otp__Smtp__*` **is** passed to the `user-service` container by the app stack (`compose.app.yml`); `Jwt:*`, `Otp:Sms:*`, and `Onboarding:PublicOrigin` are **not** — add them to `compose.app.yml` if containers must use them.
 
 ---
 

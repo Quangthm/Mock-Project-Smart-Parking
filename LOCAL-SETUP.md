@@ -209,7 +209,7 @@ docker run --rm --entrypoint python smartpark-ai:local -c "import cv2,numpy,scip
 
 - Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có; giá trị đã cấu hình được giữ nguyên, chỉ điền khi trống.
 - Điền `VITE_MAPTILER_API_KEY` trong root `.env` hoặc file Team, hoặc trực tiếp trong `FE/.env`.
-- Bật OTP email: điền `SMARTPARK_SMTP_HOST`, `SMARTPARK_SMTP_PORT`, `SMARTPARK_SMTP_USERNAME`, `SMARTPARK_SMTP_PASSWORD`, `SMARTPARK_SMTP_FROM` vào root `.env`, rồi khởi động lại UserService. Runner chuyển các giá trị này sang cấu hình `Otp:Smtp`.
+- Bật OTP email: điền `SMARTPARK_SMTP_HOST`, `SMARTPARK_SMTP_PORT`, `SMARTPARK_SMTP_USERNAME`, `SMARTPARK_SMTP_PASSWORD`, `SMARTPARK_SMTP_FROM` vào root `.env`, rồi khởi động lại UserService. Runner host và container app stack (`compose.app.yml`) đều chuyển các giá trị này sang cấu hình `Otp:Smtp`; với container, chạy lại `run-app-service.ps1 -Service User -NoBuild` để nạp env mới.
 - Không tự điền credential SMTP hoặc MapTiler của người khác.
 
 ### 5.3 SonarQube

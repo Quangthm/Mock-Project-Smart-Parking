@@ -32,6 +32,12 @@ services:
       DevelopmentOwner__Password: ${SMARTPARK_OWNER_PASSWORD:?Set SMARTPARK_OWNER_PASSWORD}
       DevelopmentOperator__Email: ${SMARTPARK_OPERATOR_EMAIL:-operator@smartpark.local}
       DevelopmentOperator__Password: ${SMARTPARK_OPERATOR_PASSWORD:?Set SMARTPARK_OPERATOR_PASSWORD}
+      # Optional OTP email delivery (Otp:Smtp). Empty values keep SMTP disabled.
+      Otp__Smtp__Host: ${SMARTPARK_SMTP_HOST:-}
+      Otp__Smtp__Port: ${SMARTPARK_SMTP_PORT:-587}
+      Otp__Smtp__Username: ${SMARTPARK_SMTP_USERNAME:-}
+      Otp__Smtp__Password: ${SMARTPARK_SMTP_PASSWORD:-}
+      Otp__Smtp__From: ${SMARTPARK_SMTP_FROM:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
     ports:
       - "127.0.0.1:5035:8080"
