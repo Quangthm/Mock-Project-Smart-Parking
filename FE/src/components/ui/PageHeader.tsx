@@ -15,7 +15,7 @@ export function PageHeader({ id, title, description, eyebrow, badge, actions, va
   const titleStyle = {
     default: "text-2xl font-bold",
     compact: "text-xl font-bold",
-    hero: "text-4xl font-extrabold sm:text-5xl",
+    hero: "text-4xl font-extrabold leading-[1.12] sm:text-5xl",
     promo: "text-[1.75rem] font-extrabold",
     panel: "text-base font-bold leading-tight sm:text-[1.35rem]",
   }[variant]
@@ -28,7 +28,7 @@ export function PageHeader({ id, title, description, eyebrow, badge, actions, va
           <h1 id={id} className={`font-['Outfit'] tracking-tight ${inverse ? "text-white" : "text-[var(--fg)]"} ${titleStyle}`}>{title}</h1>
           {badge}
         </div>
-        {description && <p className={`mt-1 ${variant === "panel" ? "hidden text-xs sm:block" : "text-sm"} ${inverse ? "text-slate-200" : "text-[var(--muted)]"} ${centered ? "mx-auto max-w-2xl" : ""}`}>{description}</p>}
+        {description && <p className={`${variant === "hero" ? "mt-6 max-w-xl text-base leading-7 sm:text-lg sm:leading-8" : `mt-1 ${variant === "panel" ? "hidden text-xs sm:block" : "text-sm"}`} ${inverse ? "text-slate-200" : "text-[var(--muted)]"} ${centered ? "mx-auto max-w-2xl" : ""}`}>{description}</p>}
       </div>
       {actions}
     </header>

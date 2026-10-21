@@ -335,7 +335,7 @@ export function Landing() {
             <br />
             Manage Better.</>} description={<>Find, book, and pay for parking in seconds. For lot owners —
             automate operations and maximize revenue with real-time analytics.</>} />
-          <div style={{ display: "flex", gap: "0.875rem", flexWrap: "wrap" }}>
+          <div className="mt-8 flex flex-wrap gap-4 sm:gap-5">
             <button
               className="btn-primary"
               style={{ fontSize: "1rem", padding: "0.75rem 1.75rem" }}
