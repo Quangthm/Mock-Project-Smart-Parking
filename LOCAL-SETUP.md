@@ -326,10 +326,43 @@ Không có thao tác xóa/reset volume trong setup (ngoại trừ khi bạn ch�
 docker compose --env-file .env -f compose.schema-integration.yml down
 ```
 
-### 7.4 Tài liệu liên quan
+### 7.4 Cập nhật `.env` — chạy lại script gì
+
+Đổi giá trị trong `.env` không cần chạy full setup; chạy đúng đích theo bảng:
+
+| Thay đổi | Chạy lại | Ghi chú |
+| --- | --- | --- |
+| Giá trị container dùng (`SMARTPARK_SERVICE_KEY`, password admin/owner/operator) | `.\scripts\run-app-service.ps1 -Service <X\|All> -NoBuild` | Container chỉ đọc env lúc tạo; Compose tự recreate service đổi config — không cần build image |
+| Giá trị runner host dùng (mọi key) | Restart `.\scripts\run-schema-service.ps1 -Service X` | Runner đọc `.env` mỗi lần start |
+| Visual Studio/`dotnet run` (user-secrets) | `.\setup.ps1 -SkipDatabase -SkipRestore` | Bước `[5/7]` ghi đè user-secrets lệch theo `.env` |
+| Port DB `SMARTPARK_DB_*_PORT` | `.\setup.ps1 -SkipRestore` rồi restart runner | Recreate container DB với mapping port mới |
+| MapTiler / AI endpoint cho FE | Sửa trực tiếp `FE/.env`, restart Vite | Setup không ghi đè `FE/.env` đã có giá trị |
+| `VITE_*` FE container / port trong compose | Sửa `compose.app.yml` rồi `run-app-service.ps1 -NoBuild` | Root `.env` không được container đọc |
+
+> **Ngoại lệ — password gắn với volume:** `SMARTPARK_DEV_PASSWORD` và password tài khoản seed chỉ áp dụng khi DB/seed được tạo lần đầu. Đổi sau đó trong `.env` không đổi giá trị trong PostgreSQL: khôi phục giá trị gốc, dùng `.\setup.ps1 -RecreateDb` (mất dữ liệu dev), hoặc `ALTER ROLE`/sửa trong DB. Container sẽ fail health; setup báo `authentication failed`.
+
+Không chạy full `setup.ps1` cho các trường hợp trên; full setup chỉ cần khi: volume mới, `-RecreateDb`, hoặc sau khi pull code cập nhật script. Luôn start container qua `run-app-service.ps1`/`.cmd` — Docker Desktop Start / `docker start` dùng lại image và env cũ.
+
+### 7.5 Thêm key mới vào `.env.example` và `.env`
+
+Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md); tóm tắt:
+
+1. Thêm key vào `.env.example` (commit) với placeholder — không chứa secret thật.
+2. Thêm giá trị thật vào `.env` local — setup **không** tự copy key mới vào `.env` đã tồn tại.
+3. Wire theo consumer:
+   - BE container: `environment:` trong `compose.app.yml` dạng `NewKey: ${NEW_KEY:?...}`.
+   - BE host runner: tên theo chuẩn ASP.NET `Section__Key` dùng được ngay (runner export toàn bộ `.env`); tên `SMARTPARK_*` cần thêm mapping trong `run-schema-service.ps1`.
+   - VS/user-secrets: thêm vào `$desired` bước `[5/7]` của `setup.ps1`; key optional thêm cả vào `$removable`.
+   - Sinh/validate tự động: bổ sung bước `[2/7]`/`[3/7]`.
+   - FE host: `FE/.env.example` (+ bước `[6/7]` nếu muốn auto-fill); FE container: `environment:` service `frontend` trong compose.
+4. Kiểm chứng: PS 5.1 parse, `docker compose config --quiet`, `.\scripts\test-setup.ps1`.
+5. Áp dụng theo bảng mục 7.4 và cập nhật docs khi key ảnh hưởng dev khác.
+
+### 7.6 Tài liệu liên quan
 
 - [QUICK_START.md](QUICK_START.md) — happy path, progress lines, known errors, flags và ports.
 - [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) — cấu trúc `setup.ps1`, runner app và cách backup script local.
 - [schema-integration.md](docs/02-architecture/database/schema-integration.md) — cấu trúc DB, seed demo, naming container/DB.
 - [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
+- [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.

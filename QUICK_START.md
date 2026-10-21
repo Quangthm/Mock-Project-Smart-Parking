@@ -326,10 +326,40 @@ DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập �
 - Runner migration probe trạng thái: DB trống → áp canonical; schema hiện tại → skip + verify; schema cũ → báo chạy `-RecreateDb`.
 - Chuyển từ script setup cũ: xem [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md).
 
-### 7.5 Tài liệu liên quan
+### 7.5 Cập nhật `.env` — chạy lại script gì
+
+Đổi giá trị trong `.env` không cần chạy full setup; chạy đúng đích theo bảng:
+
+| Đổi giá trị | Chạy lại |
+| --- | --- |
+| Giá trị container dùng (`SMARTPARK_SERVICE_KEY`, password admin/owner/operator) | `.\scripts\run-app-service.ps1 -Service All -NoBuild` — recreate container với env mới, không cần build image |
+| Giá trị runner host dùng (mọi key trong `.env`) | Restart `.\scripts\run-schema-service.ps1 -Service X` (runner đọc `.env` mỗi lần start) |
+| Chạy Visual Studio/`dotnet run` (user-secrets) | `.\setup.ps1 -SkipDatabase -SkipRestore` — bước `[5/7]` ghi đè user-secrets lệch |
+| Port DB `SMARTPARK_DB_*_PORT` | `.\setup.ps1 -SkipRestore` rồi restart runner |
+| MapTiler / AI key cho FE | Sửa trực tiếp `FE/.env` + restart Vite — setup không ghi đè file đã có giá trị |
+| `VITE_*` của FE container / port trong compose | Sửa `compose.app.yml` rồi chạy lại runner |
+
+> **Ngoại lệ — password gắn với DB volume:** đổi `SMARTPARK_DEV_PASSWORD` (hoặc password tài khoản seed) khi volume đã init không áp dụng vào PostgreSQL — phải khôi phục giá trị gốc, `-RecreateDb` (mất dữ liệu), hoặc đổi trong DB. Container sẽ unhealthy; setup báo `authentication failed`.
+
+Luôn start container qua `run-app-service.ps1` (hoặc `.cmd`) — nút Start trong Docker Desktop / `docker start` chạy lại image và env cũ, không build/recreate.
+
+### 7.6 Thêm key mới vào `.env.example` và `.env`
+
+Thêm key vào `.env.example` chưa đủ — phải wire theo consumer và tự thêm giá trị vào `.env` local (setup không copy key lạ vào `.env` đã tồn tại):
+
+- BE container → thêm `environment:` trong `compose.app.yml` dạng `NewKey: ${NEW_KEY:?...}`.
+- BE host runner → key đặt tên `Section__Key` dùng được ngay; tên `SMARTPARK_*` cần thêm dòng mapping trong `run-schema-service.ps1`.
+- VS/user-secrets → thêm vào `$desired` bước `[5/7]` của `setup.ps1` (optional key: thêm cả `$removable`).
+- Sinh/validate tự động → bổ sung bước `[2/7]`/`[3/7]`.
+- FE host → `FE/.env.example` (+ bước `[6/7]` nếu muốn auto-fill); FE container → `environment:` của service `frontend`.
+
+Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md).
+
+### 7.7 Tài liệu liên quan
 
 - [LOCAL-SETUP.md](LOCAL-SETUP.md) — setup local, Docker app stack, volume, AI camera và credential chi tiết.
 - [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) — cấu trúc `setup.ps1`, runner app và cách sửa script.
 - [schema-integration.md](docs/02-architecture/database/schema-integration.md) — cấu trúc DB, seed demo và naming.
 - [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
+- [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
