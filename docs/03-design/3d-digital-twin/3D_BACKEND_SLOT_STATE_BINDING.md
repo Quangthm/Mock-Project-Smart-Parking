@@ -129,17 +129,22 @@ The prototype implementation ensures that:
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2. Component Responsibilities
+### 2.2. Component Responsibilities & 6-Service Microservice Alignment
 
-| Component | Architecture Scope | Technical Responsibility |
+The SmartPark platform follows a planned **6-microservice architecture** (3 currently implemented with active codebases in `src/Services/` and 3 planned services in roadmap):
+
+| Microservice | Implementation Status | Technical Responsibility |
 | :--- | :--- | :--- |
-| **`ParkingService` Backend** | .NET 8 / PostgreSQL | Owns the physical parking inventory (`parking_slots`), spatial hierarchy (`spatial_units`), and exposes layout endpoints. Enforces multi-tenant data isolation. |
-| **`ReservationService` Backend** | .NET 8 / PostgreSQL | Owns active customer holds, booking lifecycles, and parking sessions. Provides commitment fences preventing double allocations. |
-| **`IoTService` Backend** | .NET 8 / PostgreSQL | Ingests raw telemetry events from camera LPRs and bay sensors (`sensor_telemetries`), converting hardware signals into `is_occupied` booleans. |
-| **Slot State Data Adapter** | TypeScript (`FE/`) | Fetches REST payload or test fixture, validates network envelope, and normalizes disparate data types into strongly-typed `SlotVisualState` objects. |
-| **State & Freshness Validator** | TypeScript (`FE/`) | Verifies timestamp freshness ($< 30\text{s}$), ensures required fields exist, and halts processing for corrupted or unknown enum values without guessing. |
-| **Slot Mapping Registry** | TypeScript (`FE/`) | Traverses the loaded 3D scene once, indexes slot meshes by normalized `slotCode`, and maintains an $O(1)$ lookup table to eliminate per-frame scene traversal. |
-| **Digital Twin Binding Service** | TypeScript (`FE/`) | Coordinates updates across visual channels. Determines whether to spawn/despawn vehicle proxies (Channel A) and modulates non-destructive emissive outlines (Channel B). |
+| **`ParkingService`** | **IMPLEMENTED** (`src/Services/ParkingService`) | Canonical owner of facility hierarchy (`parking_sites`, `spatial_units`), slot inventory (`parking_slots`), coordinates, and **operational physical state** (`AVAILABLE`, `OCCUPIED`, `UNKNOWN`, `MAINTENANCE`, `UNAVAILABLE`). Exposes the consolidated operational read projection `GET /api/parking-lots/{id}/operational-layout`. |
+| **`ReservationService`**| **IMPLEMENTED** (`src/Services/ReservationService`) | Canonical owner of reservation lifecycle, customer payment-holds, commitment fences, allocation priority, and protection rules. |
+| **`UserService`** | **IMPLEMENTED** (`src/Services/UserService`) | Canonical owner of user identities, roles, driver vehicle profiles, and authentication security. |
+| **`IoTService`** | **UPCOMING (Roadmap)** | Ingests sensor telemetries (ultrasonic/camera LPR) from physical edge devices, publishing reconciled occupancy events to `ParkingService`. |
+| **`PaymentService`** | **UPCOMING (Roadmap)** | Manages financial transactions, gateway clearance (VNPay/MoMo/ZaloPay), and fee calculations. |
+| **`NotificationService`**| **UPCOMING (Roadmap)** | Manages real-time alerts, push notifications, and customer messaging. |
+| **Slot State Data Adapter** | TypeScript (`FE/`) | Fetches REST projection or fixture, validates network envelope, and normalizes into strongly-typed `SlotVisualState` objects. |
+| **State & Freshness Validator** | TypeScript (`FE/`) | Verifies timestamp freshness ($< 30\text{s}$), ensures required fields exist, and halts processing for corrupted values without guessing. |
+| **Slot Mapping Registry** | TypeScript (`FE/`) | Traverses 3D scene once upon load, indexes meshes by normalized `slotCode`, and maintains an $O(1)$ lookup table. |
+| **Digital Twin Binding Service** | TypeScript (`FE/`) | Coordinates updates across visual channels (Channel A for physical vehicle proxy; Channel B for non-destructive emissive outline). |
 | **Three.js Viewport Engine** | WebGL 2 / Three.js | Executes the 60 FPS requestAnimationFrame loop, maintains OrbitControls constraints, and manages GPU VRAM buffers. |
 | **User Interaction Layer** | React Overlay HUD | Provides hover tooltips, click selection, camera focusing, and floor pagination without altering backend authoritative state. |
 
@@ -652,13 +657,15 @@ if (mesh.material instanceof THREE.MeshStandardMaterial) {
 6. State is bound to meshes before the loading screen dismisses (ensuring the user never observes a flash of uninitialized gray stalls).
 7. If the initial API fetch fails, fallback to deterministic local fixture with a prominent warning notification.
 
-### 6.2. Refresh Polling Strategy
+### 6.2. Refresh Strategy & SignalR Real-Time Path
 
 * **MVP Polling Interval**: Configured at **$5.0\text{ seconds}$** via `setInterval`.
 * **Request Cancellation**: Each polling tick uses an `AbortController`. If a previous request is still pending when the next tick fires, the stale request is aborted.
 * **Manual Refresh**: A HUD refresh button allows operators to force an immediate cache bypass fetch.
 * **Real-Time Push Architecture (SignalR)**: Real-time event streaming is served via ASP.NET Core SignalR hub (`/hubs/parking-lot`, group `lot_{lotId}`) with the event `SlotStateChanged`.
-* **Authoritative Reconnect Snapshot Rule (FR-MAP-04)**: When the SignalR connection drops and reconnects, the frontend client **MUST NOT** attempt to replay or synthesize missed deltas. Instead, it must immediately execute a full snapshot fetch (`GET /api/parking-lots/{id}/operational-layout`) to guarantee absolute synchronization with backend ground truth.
+* **Authoritative Reconnect Snapshot Rule (FR-MAP-04)**:
+  > [!IMPORTANT]
+  > When the SignalR connection drops and reconnects (e.g. Wi-Fi drop or tab sleep), the frontend client **MUST NOT** attempt to replay or synthesize missed deltas. Instead, it must immediately execute a full snapshot fetch (`GET /api/parking-lots/{id}/operational-layout`) to guarantee absolute synchronization with backend ground truth.
 
 ### 6.3. Stale Data Policy
 

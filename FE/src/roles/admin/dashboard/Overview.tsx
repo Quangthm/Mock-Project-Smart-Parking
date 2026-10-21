@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 
 import { adminData as store } from "../data/data"
 import { usersApi } from "../../../lib/usersApi"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import {
   AreaChart,
@@ -130,6 +131,7 @@ export function Overview() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <PageHeader title="Admin Overview" />
       {/* Top KPI row - Enterprise cards without aggressive gradients */}
       <div
         style={{

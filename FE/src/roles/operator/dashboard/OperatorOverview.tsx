@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import type { Booking, SupportTicket, AppNotification } from "../../../lib/types"
 import type { OperatorSite } from "../../../lib/operatorApi"
 
@@ -57,26 +58,7 @@ export function OperatorOverview({
 
   return (
     <div className="space-y-6">
-      {/* Site Header & Selector */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
-              <UntitledIcon name="building" size={13} />
-              {lot.code}
-            </span>
-            <span className="text-xs text-[var(--muted)]">·</span>
-            <span className="text-xs text-[var(--muted)]">{lot.address}</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--fg)]">
-            {lot.name}
-          </h1>
-          <p className="text-sm text-[var(--muted)]">
-            Live operational dashboard, parking occupancy, and gate controls.
-          </p>
-        </div>
-
-        {allLots.length > 1 && (
+      <PageHeader title={lot.name} eyebrow={<>{lot.code} · {lot.address}</>} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5">
             <span className="text-xs font-medium text-[var(--muted)] pl-2">Site:</span>
             <select
@@ -91,8 +73,7 @@ export function OperatorOverview({
               ))}
             </select>
           </div>
-        )}
-      </div>
+        )} />
 
       {/* Primary KPI Grid (clickable cards) */}
       <div className="pointer-events-none grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Parking site summary">

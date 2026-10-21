@@ -3,6 +3,7 @@ import { useState } from "react"
 import { useApp } from "../../../context/AppContext"
 
 import { adminData as store } from "../data/data"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export function AdminSettings() {
   const { user, setUser } = useApp()
@@ -73,17 +74,7 @@ export function AdminSettings() {
 
   return (
     <div style={{ maxWidth: "500px" }}>
-      <h2
-        style={{
-          fontFamily: "Outfit",
-          fontWeight: 700,
-          fontSize: "1.3rem",
-          marginBottom: "1.5rem",
-          color: "var(--fg)",
-        }}
-      >
-        Admin Settings
-      </h2>
+      <PageHeader title="Admin Settings" variant="compact" />
       <form
         onSubmit={saveProfile}
         className="card"

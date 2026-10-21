@@ -19,6 +19,13 @@ if ([string]::IsNullOrWhiteSpace($env:SMARTPARK_SERVICE_KEY) -or $env:SMARTPARK_
     throw 'SMARTPARK_SERVICE_KEY must exist in .env and be at least 32 characters. Run setup.ps1 first.'
 }
 
+function Assert-DevPassword([string]$Name, [string]$Value) {
+    if ([string]::IsNullOrEmpty($Value) -or $Value.Length -lt 8 -or $Value.Length -gt 15 -or
+        $Value -cnotmatch '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$') {
+        throw "$Name requires 8-15 characters, uppercase, lowercase, digit and special character."
+    }
+}
+
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:Services__Key = $env:SMARTPARK_SERVICE_KEY
 $env:Services__User = 'http://localhost:5035/'
@@ -47,6 +54,22 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     if ([string]::IsNullOrWhiteSpace($adminEmail)) { $adminEmail = 'admin@smartpark.local' }
     $env:DevelopmentAdmin__Email = $adminEmail
     $env:DevelopmentAdmin__Password = $env:SMARTPARK_ADMIN_PASSWORD
+}
+if ($Service -eq 'User') {
+    if ($env:SMARTPARK_OWNER_PASSWORD) {
+        Assert-DevPassword 'SMARTPARK_OWNER_PASSWORD' $env:SMARTPARK_OWNER_PASSWORD
+        if ($env:SMARTPARK_OWNER_EMAIL) {
+            $env:DevelopmentOwner__Email = $env:SMARTPARK_OWNER_EMAIL
+        }
+        $env:DevelopmentOwner__Password = $env:SMARTPARK_OWNER_PASSWORD
+    }
+    if ($env:SMARTPARK_OPERATOR_PASSWORD) {
+        Assert-DevPassword 'SMARTPARK_OPERATOR_PASSWORD' $env:SMARTPARK_OPERATOR_PASSWORD
+        if ($env:SMARTPARK_OPERATOR_EMAIL) {
+            $env:DevelopmentOperator__Email = $env:SMARTPARK_OPERATOR_EMAIL
+        }
+        $env:DevelopmentOperator__Password = $env:SMARTPARK_OPERATOR_PASSWORD
+    }
 }
 
 # Optional .env settings override saved user-secrets only for this runner process.

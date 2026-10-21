@@ -152,7 +152,7 @@ function AppContent() {
           </div>
         )}
       </main>
-      {authReady && user && usesDashboardNavbar && (
+      {authReady && user && usesDashboardNavbar && view !== "driver" && (
         <FloatingChatbot key={user.id} role={user.role} />
       )}
       {!isDashboard && <Footer />}

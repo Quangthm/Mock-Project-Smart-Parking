@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useRef } from "react"
 
 import { useApp } from "../context/AppContext"
@@ -273,33 +274,10 @@ export function Business() {
               Business
             </span>
           </div>
-          <h1
-            style={{
-              fontFamily: "Outfit",
-              fontWeight: 800,
-              fontSize: "clamp(2rem, 4vw, 3rem)",
-              color: "#fff",
-              lineHeight: 1.15,
-              marginBottom: "1.25rem",
-            }}
-          >
-            The Smart Way to Run
+          <PageHeader variant="promo" align="center" title={<>The Smart Way to Run
             <br />
-            Your Parking Business
-          </h1>
-          <p
-            style={{
-              color: "rgba(255,255,255,0.82)",
-              fontSize: "1.1rem",
-              lineHeight: 1.7,
-              marginBottom: "2rem",
-              maxWidth: "560px",
-              margin: "0 auto 2rem",
-            }}
-          >
-            Join 50+ parking operators who've increased revenue, cut costs, and
-            simplified operations with SmartParking's business platform.
-          </p>
+            Your Parking Business</>} description={<>Join 50+ parking operators who've increased revenue, cut costs, and
+            simplified operations with SmartParking's business platform.</>} />
           <div
             style={{
               display: "flex",

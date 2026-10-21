@@ -1,6 +1,7 @@
 import { useState, useRef } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
@@ -18,6 +19,7 @@ import {
   DriverOtpForm,
   pendingDriverKey,
   restoreDriverRegistration,
+  type PendingDriverRegistration,
 } from "./DriverOtpForm"
 
 import { OwnerVerification } from "./OwnerVerification"
@@ -321,7 +323,7 @@ export function SignUp() {
 
   const [registering, setRegistering] = useState(false)
 
-  const [registration, setRegistration] = useState<DriverRegistration | null>(
+  const [registration, setRegistration] = useState<PendingDriverRegistration | null>(
     restoreDriverRegistration,
   )
 
@@ -335,7 +337,10 @@ export function SignUp() {
               localStorage.getItem("sp_pending_owner_registration") ?? "null",
           )
           return typeof value?.email === "string" &&
-            (value?.verification || (value?.id && value?.setupToken))
+            ((typeof value?.verification?.challengeId === "string" &&
+              Number.isFinite(Date.parse(value.verification.expiresAt)) &&
+              Number.isFinite(Date.parse(value.verification.resendAt))) ||
+              (typeof value?.id === "string" && typeof value?.setupToken === "string"))
             ? { ...value, lotSetupComplete: value.lotSetupComplete === true }
             : null
         } catch {
@@ -364,13 +369,14 @@ export function SignUp() {
     }
   }
 
-  function saveRegistration(value: DriverRegistration) {
-    setRegistration(value)
+  function saveRegistration(value: DriverRegistration, contact: string) {
+    const pending = { ...value, contact }
+    setRegistration(pending)
 
     // Store only the opaque challenge and timing; never store the password or OTP.
 
     try {
-      localStorage.setItem(pendingDriverKey, JSON.stringify(value))
+      sessionStorage.setItem(pendingDriverKey, JSON.stringify(pending))
     } catch {
       /* Current tab can still verify. */
     }
@@ -433,6 +439,7 @@ export function SignUp() {
           phone: driverForm.phone.trim() || undefined,
           password: driverForm.password || undefined,
         }),
+        driverForm.email.trim() || driverForm.phone.trim(),
       )
 
       setDriverForm((f) => ({ ...f, password: "", confirmPassword: "" }))
@@ -442,6 +449,7 @@ export function SignUp() {
           await authApi.recoverDriver(
             driverForm.email.trim() || driverForm.phone.trim(),
           ),
+          driverForm.email.trim() || driverForm.phone.trim(),
         )
         setDriverForm((f) => ({ ...f, password: "", confirmPassword: "" }))
       } catch {
@@ -564,20 +572,7 @@ export function SignUp() {
       <div style={{ width: "100%", maxWidth: "480px" }}>
         <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
           <BrandLogo height={100} style={{ margin: "0 auto 1rem" }} />
-          <h1
-            style={{
-              fontFamily: "Outfit",
-              fontWeight: 800,
-              fontSize: "1.75rem",
-              color: "var(--fg)",
-              margin: "0 0 0.375rem",
-            }}
-          >
-            Create Account
-          </h1>
-          <p style={{ color: "var(--muted)", fontSize: "0.925rem" }}>
-            Join SmartParking today
-          </p>
+          <PageHeader title="Create Account" variant="compact" align="center" description="Join SmartParking today" />
         </div>
 
         {!registration && (!ownerRegistration || ownerRegistration.lotSetupComplete === false) && (
@@ -613,6 +608,15 @@ export function SignUp() {
         ) : ownerRegistration?.lotSetupComplete ? (
           <OwnerVerification
             application={ownerRegistration}
+            onUpdate={(verification) =>
+              saveOwnerRegistration({ ...ownerRegistration, verification })
+            }
+            onBack={() => {
+              sessionStorage.removeItem("sp_pending_owner_registration")
+              localStorage.removeItem("sp_pending_owner_registration")
+              setOwnerRegistration(null)
+              setView("sign-in")
+            }}
             onVerified={() => {
               try {
                 localStorage.removeItem("sp_pending_owner_registration")
@@ -628,10 +632,15 @@ export function SignUp() {
         ) : registration ? (
           <DriverOtpForm
             registration={registration}
-            onUpdate={saveRegistration}
-            onBack={() => setView("sign-in")}
+            onUpdate={(value) => saveRegistration(value, value.contact)}
+            onBack={() => {
+              sessionStorage.removeItem(pendingDriverKey)
+              setRegistration(null)
+              setView("sign-in")
+            }}
             onDifferentContact={() => {
               try {
+                sessionStorage.removeItem(pendingDriverKey)
                 localStorage.removeItem(pendingDriverKey)
               } catch {
                 /* No persistent storage. */
@@ -640,6 +649,7 @@ export function SignUp() {
             }}
             onVerified={() => {
               try {
+                sessionStorage.removeItem(pendingDriverKey)
                 localStorage.removeItem(pendingDriverKey)
               } catch {
                 /* No persistent storage. */
