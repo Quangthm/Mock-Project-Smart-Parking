@@ -12,6 +12,6 @@ The v1.1 target retains the approved RC3 architecture and uses six domain-owned 
 - [API documents](api/README.md)
 - [Architecture decision workspace](architecture-decisions/README.md)
 
-[Solution Architecture v0.9](../archive/SmartPark_Solution_Architecture_v0.9.md) is retained as a historical reference. Its earlier Kafka, service-split, security, payment and quality assumptions must not override current requirements or the linked current contracts. Existing schemas/API designs require alignment rather than automatic promotion to business authority.
+[Solution Architecture v0.9](../archive/SmartPark_Solution_Architecture_v0.9.md) is retained as a historical reference in `docs/archive/`. Its earlier Kafka, service-split, security, payment and quality assumptions must not override current requirements or the linked v1.0 contracts. Existing schemas/API designs require alignment rather than automatic promotion to business authority.
 
 This is a target architecture and review candidate, not evidence of completed implementation or passed acceptance.
