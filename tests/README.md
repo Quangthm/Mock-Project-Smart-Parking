@@ -8,7 +8,7 @@ Các test tích hợp cần PostgreSQL thật để kiểm tra khóa ngoại, tr
 ## Chuẩn bị một lần trên mỗi máy
 
 1. Cài .NET 10 SDK; chuẩn bị `.env` và PostgreSQL theo setup của project.
-2. Khởi động `user-db` và `parking-db` trong `compose.schema-integration.yml`.
+2. Khởi động `user-db` và `facility-db` trong `compose.schema-integration.yml`.
 3. Tại thư mục gốc repo, chạy:
 
    ```powershell
@@ -21,6 +21,7 @@ Script đọc `.env` của máy hiện tại, lấy `SMARTPARK_DEV_PASSWORD` và
 rồi tạo `smartpark.local.runsettings`. Không cần thêm biến hệ thống hoặc tự nhập lại mật khẩu.
 File sinh ra chứa thông tin kết nối: được Git ignore, mỗi thành viên tự tạo trên máy mình.
 Chạy lại script nếu đổi mật khẩu hoặc port.
+Database mặc định cho test cấu trúc là `smartpark_facility`; khóa port vẫn là `SMARTPARK_DB_PARKING_PORT` để tương thích cấu hình hiện có.
 
 `compose.tests.yml` khởi động RabbitMQ riêng cho test trên `127.0.0.1:5679`,
 với tài khoản test khớp `IdentityMessagingTests`. Script luôn cấu hình

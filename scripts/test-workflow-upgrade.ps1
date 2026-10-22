@@ -8,20 +8,21 @@ $composeFile = Join-Path $fixtureRoot 'compose.schema-integration.yml'
 $envFile = Join-Path $fixtureRoot '.env'
 [IO.File]::WriteAllText($envFile, "SMARTPARK_DEV_PASSWORD=isolated-upgrade-test-password`n")
 $compose = @("name: $projectName", 'services:')
+$fixtureNames = @{ User='user'; Parking='facility'; Reservation='operations' }
 # Empty fixture databases: the runner must apply the full canonical set on the
 # first run, then detect the already-current schema and skip on the second run.
 foreach ($service in @('User','Parking','Reservation')) {
-    $name = $service.ToLowerInvariant()
+    $name = $fixtureNames[$service]
     $compose += @("  ${name}-db:", '    image: postgres:16-alpine', '    environment:', "      POSTGRES_USER: smartpark_$name", "      POSTGRES_DB: smartpark_$name", '      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?missing}', '    volumes:', "      - ${name}-data:/var/lib/postgresql/data", '    healthcheck:', "      test: [CMD-SHELL, 'pg_isready -U smartpark_$name -d smartpark_$name']", '      interval: 1s', '      timeout: 3s', '      retries: 60')
 }
-$compose += @('volumes:', '  user-data:', '  parking-data:', '  reservation-data:')
+$compose += @('volumes:', '  user-data:', '  facility-data:', '  operations-data:')
 [IO.File]::WriteAllLines($composeFile, $compose, (New-Object Text.UTF8Encoding($false)))
 function Invoke-TestCompose([string[]]$arguments) {
     & docker compose --project-name $projectName --env-file $envFile -f $composeFile @arguments
     if ($LASTEXITCODE -ne 0) { throw 'Isolated Compose command failed.' }
 }
 function Query-TestDatabase($service, $sql) {
-    $name = $service.ToLowerInvariant()
+    $name = $fixtureNames[$service]
     $result = & docker compose --project-name $projectName --env-file $envFile -f $composeFile exec -T "${name}-db" psql -U "smartpark_$name" -d "smartpark_$name" -v ON_ERROR_STOP=1 -At -c $sql
     if ($LASTEXITCODE -ne 0) { throw 'Isolated database query failed.' }
     return ($result -join '').Trim()

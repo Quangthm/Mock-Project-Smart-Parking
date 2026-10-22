@@ -74,6 +74,8 @@ Assert-Setup ([Convert]::ToBase64String($localBytes) -eq [Convert]::ToBase64Stri
 Assert-Setup ($global:setupTestSecretWrites -eq $writes) 'Rerun rewrote existing secrets.'
 $key = $global:setupTestSecretMaps['User']['Services:Key']
 Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key']) 'Local service keys differ.'
+Assert-Setup ($global:setupTestSecretMaps['Parking']['ConnectionStrings:Parking'] -match 'Database=smartpark_facility;Username=smartpark_facility;') 'Facility database mapping differs from compose.'
+Assert-Setup ($global:setupTestSecretMaps['Reservation']['ConnectionStrings:Reservation'] -match 'Database=smartpark_operations;Username=smartpark_operations;') 'Operations database mapping differs from compose.'
 $global:setupTestSecretMaps = @{}
 $teamFile = Join-Path $testRoot 'team-private.env'
 [IO.File]::WriteAllText($teamFile, "SMARTPARK_DEV_PASSWORD=review-team-password`nSMARTPARK_SERVICE_KEY=review-team-service-key-at-least-32-characters`nSMARTPARK_ADMIN_PASSWORD=Review@123`nVITE_MAPTILER_API_KEY=review-map-key`nSMARTPARK_SERVICE_PARKING_URL=http://parking.example.test:5045/`n")

@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { UntitledIcon } from "../components/icon/UntitledIcon"
 
 export function Affiliates() {
@@ -5,26 +6,7 @@ export function Affiliates() {
     <div
       style={{ maxWidth: "900px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1
-        style={{
-          fontFamily: "Outfit",
-          fontWeight: 800,
-          fontSize: "2rem",
-          color: "var(--fg)",
-          marginBottom: "0.5rem",
-        }}
-      >
-        Affiliate Program
-      </h1>
-      <p
-        style={{
-          color: "var(--muted)",
-          fontSize: "1rem",
-          marginBottom: "3rem",
-        }}
-      >
-        Earn by referring businesses and drivers to SmartParking.
-      </p>
+      <PageHeader variant="default" align="start" title={<>Affiliate Program</>} description={<>Earn by referring businesses and drivers to SmartParking.</>} />
 
       <div
         style={{

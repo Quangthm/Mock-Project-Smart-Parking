@@ -16,6 +16,7 @@ import { driverData as store } from "../data/data"
 import { PAYMENT_OPTIONS } from "../data/paymentOptions"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
 import { formatVietnamesePlate, vehiclesApi, type RegisteredVehicle } from "../../../lib/vehiclesApi"
@@ -222,50 +223,7 @@ export function Subscriptions() {
         }}
       >
         <div style={{ position: "relative", zIndex: 2, maxWidth: "780px" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.45rem",
-              background: "rgba(59, 130, 246, 0.25)",
-              border: "1px solid rgba(96, 165, 250, 0.4)",
-              padding: "0.2rem 0.65rem",
-              borderRadius: "999px",
-              fontSize: "0.75rem",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              color: "#93c5fd",
-              marginBottom: "0.75rem",
-            }}
-          >
-            <UntitledIcon name="shopping-bag" size={14} /> SMART PARKING PASS
-            STORE
-          </div>
-          <h2
-            style={{
-              fontFamily: "Outfit",
-              fontWeight: 800,
-              fontSize: "1.75rem",
-              margin: "0 0 0.5rem",
-              color: "#ffffff",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            Unlimited Commuter Passes & Memberships
-          </h2>
-          <p
-            style={{
-              margin: "0 0 1.25rem",
-              color: "#cbd5e1",
-              fontSize: "0.92rem",
-              lineHeight: 1.5,
-            }}
-          >
-            Subscribe to monthly or annual passes directly from top real-estate
-            enterprises. Enjoy guaranteed reserved spots, 24/7 unlimited access,
-            and up to 40% savings.
-          </p>
+          <PageHeader variant="promo" eyebrow={<><UntitledIcon name="shopping-bag" size={14} /> SMART PARKING PASS STORE</>} title="Unlimited Commuter Passes & Memberships" description="Subscribe to monthly or annual passes directly from top real-estate enterprises. Enjoy guaranteed reserved spots, 24/7 unlimited access, and up to 40% savings." />
 
           {/* STORE VALUE PROPOSITION PILLS */}
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>

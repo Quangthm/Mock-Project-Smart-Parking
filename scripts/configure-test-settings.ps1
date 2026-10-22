@@ -17,7 +17,7 @@ function Get-TestConnection([string]$Key, [string]$Service, [int]$DefaultPort) {
         throw "Invalid PostgreSQL port for $Service."
     }
     $password = $testConfig['SMARTPARK_DEV_PASSWORD'].Replace('"', '""')
-    $database = 'smartpark_' + $Service.ToLowerInvariant()
+    $database = @{ User='smartpark_user'; Parking='smartpark_facility' }[$Service]
     return 'Host=127.0.0.1;Port=' + $port + ';Database=' + $database + ';Username=' + $database + ';Password="' + $password + '"'
 }
 

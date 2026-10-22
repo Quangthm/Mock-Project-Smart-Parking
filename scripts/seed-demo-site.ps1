@@ -52,12 +52,12 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Cannot inspect schema containers. Start Docker Desktop, then run setup.ps1.'
 }
 $running = @($running | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
-foreach ($service in @('user-db','parking-db','reservation-db')) {
+foreach ($service in @('user-db','facility-db','operations-db')) {
     if ($running -notcontains $service) {
         throw "Container for service '$service' is not running. Run setup.ps1 first."
     }
 }
-Write-Host '      OK (user-db, parking-db, reservation-db)' -ForegroundColor DarkGray
+Write-Host '      OK (user-db, facility-db, operations-db)' -ForegroundColor DarkGray
 
 Write-Host '[2/6] Resolving demo accounts...' -ForegroundColor Cyan
 Write-Host "      owner=$ownerEmail operator=$operatorEmail" -ForegroundColor DarkGray
@@ -196,8 +196,8 @@ Assert-Counts -Label 'identity' -Actual $identityCounts -Expected @('1','1','1')
 Write-Host '      OK (tenant + 2 accounts + 1 grant)' -ForegroundColor DarkGray
 
 Write-Host '[4/6] Seeding facility DB...' -ForegroundColor Cyan
-Invoke-SeedFile -Service 'parking-db' -DatabaseUser 'smartpark_parking' -DatabaseName 'smartpark_parking' -Path (Join-Path $demoDir '02-facility.sql')
-$facilityCounts = Get-SeedCounts -Service 'parking-db' -DatabaseUser 'smartpark_parking' -DatabaseName 'smartpark_parking' -Sql @'
+Invoke-SeedFile -Service 'facility-db' -DatabaseUser 'smartpark_facility' -DatabaseName 'smartpark_facility' -Path (Join-Path $demoDir '02-facility.sql')
+$facilityCounts = Get-SeedCounts -Service 'facility-db' -DatabaseUser 'smartpark_facility' -DatabaseName 'smartpark_facility' -Sql @'
 SELECT
   (SELECT count(*) FROM parking_sites WHERE id = :'site_id'::uuid)::text || '|' ||
   (SELECT count(*) FROM spatial_units WHERE site_id = :'site_id'::uuid AND deleted_at IS NULL)::text || '|' ||
@@ -209,8 +209,8 @@ Assert-Counts -Label 'facility' -Actual $facilityCounts -Expected @('1','2','8',
 Write-Host '      OK (1 site, 2 units, 8 slots)' -ForegroundColor DarkGray
 
 Write-Host '[5/6] Seeding reservation DB...' -ForegroundColor Cyan
-Invoke-SeedFile -Service 'reservation-db' -DatabaseUser 'smartpark_reservation' -DatabaseName 'smartpark_reservation' -Path (Join-Path $demoDir '03-reservation.sql')
-$reservationCounts = Get-SeedCounts -Service 'reservation-db' -DatabaseUser 'smartpark_reservation' -DatabaseName 'smartpark_reservation' -Sql @'
+Invoke-SeedFile -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Path (Join-Path $demoDir '03-reservation.sql')
+$reservationCounts = Get-SeedCounts -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Sql @'
 SELECT
   (SELECT count(*) FROM site_capacity_pools
     WHERE tenant_id = :'tenant_id'::uuid AND site_id = :'site_id'::uuid)::text || '|' ||

@@ -51,6 +51,7 @@ public static class FacilityHost
         builder.Services.AddScoped<IOperatorGateSlotStore, OperatorGateSlotStore>();
         builder.Services.AddScoped<OperatorGateSlotService>();
         var app = builder.Build();
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.UseCors();
         app.Use(async (context, next) =>
         {

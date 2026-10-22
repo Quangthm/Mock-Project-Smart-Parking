@@ -71,6 +71,7 @@ public static class UserHost
         var app = builder.Build();
         // Fail early when the signing key is missing or invalid.
         _ = app.Services.GetRequiredService<JwtKeyProvider>();
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
         if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("SeedDemoUser"))
         {

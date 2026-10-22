@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext"
 import type { User } from "../../../lib/types"
 
 import { adminData as store } from "../data/data"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 function accountStatus(driver: User) {
   if (driver.accountStatus === "suspended") return "Suspended"
@@ -148,24 +149,7 @@ export function DriverAccounts() {
 
   return (
     <section style={{ maxWidth: 1200, margin: "0 auto" }}>
-      <header style={{ marginBottom: "1rem" }}>
-        <p
-          style={{
-            color: "var(--primary)",
-            fontSize: "0.85rem",
-            marginBottom: 4,
-          }}
-        >
-          Account administration
-        </p>
-        <h1 style={{ fontFamily: "Outfit", margin: 0, color: "var(--fg)" }}>
-          Driver Account Management
-        </h1>
-        <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-          Review account status, activity, bookings, payments, and reported
-          issues.
-        </p>
-      </header>
+      <PageHeader eyebrow="Account administration" title="Driver Account Management" description="Review account status, activity, bookings, payments, and reported issues." />
       <div
         className="driver-accounts-grid"
         style={{ display: "grid", gap: "1rem", alignItems: "start" }}

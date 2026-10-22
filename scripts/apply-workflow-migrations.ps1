@@ -43,8 +43,8 @@ $scripts = @{
         'microservices/06-iot-recognition-service-db.sql'
     )
 }[$Service]
-$database = @{ User='smartpark_user'; Parking='smartpark_parking'; Reservation='smartpark_reservation'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$Service]
-$container = @{ User='user-db'; Parking='parking-db'; Reservation='reservation-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
+$database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$Service]
+$container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
     Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs')

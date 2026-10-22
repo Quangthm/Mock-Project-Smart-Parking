@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { request } from "../../lib/authApi"
+import { PageHeader } from "../../components/ui/PageHeader"
 
 export function BootstrapPassword() {
   const [password, setPassword] = useState("")
@@ -31,8 +32,7 @@ export function BootstrapPassword() {
 
   return (
     <main className="card" style={{ maxWidth: 440, margin: "4rem auto" }}>
-      <h1>Activate your Operator account</h1>
-      <p>Verify your email by choosing your own password. You can sign in after activation.</p>
+      <PageHeader title="Activate your Operator account" variant="compact" description="Verify your email by choosing your own password. You can sign in after activation." />
       <form onSubmit={submit}>
         <label className="label" htmlFor="bootstrap-password">
           New password (8–15 characters, uppercase, lowercase, digit and special

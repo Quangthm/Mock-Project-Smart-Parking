@@ -14,7 +14,7 @@
 | Base DDL | [`05-notification-audit-service-db.sql`](../../../../scripts/database/microservices/05-notification-audit-service-db.sql) |
 | Overlay | Không |
 | Deployment status | Khớp arch `9a13499`; `support_tickets` ở DB này là shape SRS |
-| Runtime note | `smartpark_parking` có bản `support_tickets` shape BE tạm thời (D6); xem §5 |
+| Runtime note | `smartpark_facility` có bản `support_tickets` shape BE tạm thời (D6); xem §5 |
 
 ---
 
@@ -66,7 +66,7 @@ Quản lý toàn bộ tiến trình gửi tin từ hàng đợi: `originating_ev
 
 ## 5. Bảng `support_tickets` — Tiếp nhận hỗ trợ & Account Recovery
 
-> **Deployment note (D6):** `smartpark_parking` có bảng `support_tickets` shape BE (`user_id`, `message`, `status` open/in-progress/resolved) do overlay `parking-operator-tables.sql` tạo, phục vụ các endpoint `/api/operator/*`. Bảng trong tài liệu này là shape SRS canonical ở `smartpark_notification`; hai bảng nằm ở hai DB khác nhau, không xung đột vật lý. Khi BE migrate sang shape SRS, bỏ bản parking.
+> **Deployment note (D6):** `smartpark_facility` có bảng `support_tickets` shape BE (`user_id`, `message`, `status` open/in-progress/resolved) do overlay `parking-operator-tables.sql` tạo, phục vụ các endpoint `/api/operator/*`. Bảng trong tài liệu này là shape SRS canonical ở `smartpark_notification`; hai bảng nằm ở hai DB khác nhau, không xung đột vật lý. Khi BE migrate sang shape SRS, bỏ bản parking.
 
 Tiếp nhận các yêu cầu hỗ trợ người dùng theo các danh mục: `GENERAL_INQUIRY`, `PAYMENT_DISPUTE`, `ACCOUNT_RECOVERY`, `FACILITY_COMPLAINT`, `SYSTEM_BUG`. Quản lý trạng thái từ `OPEN` -> `IN_PROGRESS` -> `RESOLVED` -> `CLOSED`.
 

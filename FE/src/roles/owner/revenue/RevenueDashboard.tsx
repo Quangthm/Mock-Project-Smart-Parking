@@ -5,6 +5,7 @@ import type { Booking, ParkingLot } from '../../../lib/types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
 import { PaymentMethodLogo } from '../../../components/payment/PaymentMethodLogo';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 function buildRevenueData(bookings: Booking[]) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -62,15 +63,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <header>
-        <p className="text-sm font-medium text-[var(--primary)]">
-          {selectedSiteId === 'all' ? `All Sites (${lots.length})` : (lots[0]?.name ?? 'Selected Site')}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Financial & Revenue Center</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Comprehensive revenue reconciliation, platform settlements, and booking audit for your parking assets.
-        </p>
-      </header>
+      <PageHeader eyebrow={selectedSiteId === 'all' ? `All Sites (${lots.length})` : (lots[0]?.name ?? 'Selected Site')} title="Financial & Revenue Center" description="Comprehensive revenue reconciliation, platform settlements, and booking audit for your parking assets." />
 
       {/* KPI METRIC CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>

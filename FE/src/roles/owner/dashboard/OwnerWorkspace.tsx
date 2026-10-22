@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useApp } from "../../../context/AppContext"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import {
   operatorsApi,
@@ -210,16 +211,13 @@ export function OwnerWorkspace() {
       ]}
     >
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
-        <h1 style={{ fontFamily: "Outfit", color: "var(--fg)" }}>
-          Owner workspace
-        </h1>
-        <button
+        <PageHeader title="Owner workspace" actions={<button
           className="btn-outline"
           disabled={busy}
           onClick={() => setReload((value) => value + 1)}
         >
           Refresh
-        </button>
+        </button>} />
         {loading && <p role="status">Loading sites and staff…</p>}
         {error && (
           <p role="alert" style={{ color: "#dc2626" }}>

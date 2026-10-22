@@ -4,11 +4,13 @@ import { authData as store } from "../data/data"
 import { useNavigate } from "react-router-dom"
 import { getUserHomePath } from "../../operator/data/roleRoutes"
 import { BrandLogo } from "../../../components/brand/BrandLogo"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { authApi, AuthApiError, type MfaLoginChallenge } from "../../../lib/authApi"
+import { authApi, AuthApiError, request, type MfaLoginChallenge } from "../../../lib/authApi"
+import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
 import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
-import { isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
+import { isValidAccountEmail, isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
 
 export function SignIn() {
   const { setUser, setView } = useApp()
@@ -50,6 +52,10 @@ export function SignIn() {
     e.preventDefault()
     if (submitting) return
     setError("")
+    if (mode === "password" && !isValidAccountEmail(email)) {
+      setError("Please enter a valid email address.")
+      return
+    }
     if (!isValidSignInContact(email)) {
       setError(signInContactMessage)
       return
@@ -95,6 +101,8 @@ export function SignIn() {
         "You have successfully logged in.",
       )
 
+      sessionStorage.removeItem(pendingDriverKey)
+      sessionStorage.removeItem("sp_pending_owner_registration")
       setPassword("")
       setMfaValue("")
       setMfaChallenge(null)
@@ -103,6 +111,52 @@ export function SignIn() {
       navigate(getUserHomePath(user), { replace: true })
 
     } catch (error) {
+      if (
+        mode === "password" &&
+        error instanceof AuthApiError &&
+        error.code === "ACCOUNT_PENDING_VERIFICATION"
+      ) {
+        try {
+          const contact = email.trim()
+          try {
+            const registration = await authApi.recoverDriver(contact)
+            sessionStorage.setItem(
+              pendingDriverKey,
+              JSON.stringify({ ...registration, contact }),
+            )
+            sessionStorage.removeItem("sp_pending_owner_registration")
+            localStorage.removeItem("sp_pending_owner_registration")
+          } catch (driverError) {
+            if (!(driverError instanceof AuthApiError) || driverError.code !== "REGISTRATION_NOT_FOUND")
+              throw driverError
+
+            const recovered = await request<{
+              success: boolean
+              data: {
+                verification?: { challengeId: string; expiresAt: string; resendAt: string }
+                emailVerified: boolean
+              }
+            }>("/register/owner/recover", "POST", { contact })
+            if (!recovered.success || recovered.data.emailVerified || !recovered.data.verification?.challengeId)
+              throw new Error("Email verification is not available yet. Please contact support.")
+            sessionStorage.setItem(
+              "sp_pending_owner_registration",
+              JSON.stringify({ email: contact, lotSetupComplete: true, verification: recovered.data.verification }),
+            )
+            sessionStorage.removeItem(pendingDriverKey)
+          }
+          setPassword("")
+          setView("sign-up")
+          return
+        } catch (recoveryError) {
+          setError(
+            recoveryError instanceof Error
+              ? recoveryError.message
+              : "Unable to resume verification. Please try again.",
+          )
+          return
+        }
+      }
       const msg =
         error instanceof Error
           ? error.message
@@ -148,6 +202,34 @@ export function SignIn() {
       setSubmitting(false)
     }
 
+  }
+
+  async function requestSignInOtp() {
+    if (submitting) return
+    if (!isValidSignInContact(email)) {
+      setError(signInContactMessage)
+      return
+    }
+
+    setError("")
+    setSubmitting(true)
+    try {
+      setChallenge(await authApi.requestOtp(email.trim()))
+      setMode("otp")
+      setCode("")
+      setMfaValue("")
+      setPassword("")
+      setUseRecoveryCode(false)
+      setMfaChallenge(null)
+    } catch (otpError) {
+      setError(
+        otpError instanceof Error
+          ? otpError.message
+          : "Unable to send a sign-in code. Please try again.",
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // Forgot Password Handlers
@@ -256,20 +338,7 @@ export function SignIn() {
       <div style={{ width: "100%", maxWidth: "420px" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <BrandLogo height={100} style={{ margin: "0 auto 1rem" }} />
-          <h1
-            style={{
-              fontFamily: "Outfit",
-              fontWeight: 800,
-              fontSize: "1.75rem",
-              color: "var(--fg)",
-              margin: "0 0 0.375rem",
-            }}
-          >
-            Sign In
-          </h1>
-          <p style={{ color: "var(--muted)", fontSize: "0.925rem" }}>
-            Welcome back to SmartParking
-          </p>
+          <PageHeader title="Sign In" variant="compact" align="center" description="Welcome back to SmartParking" />
         </div>
 
         <form
@@ -277,33 +346,12 @@ export function SignIn() {
           className="card auth-form-background"
           style={{ display: "flex", flexDirection: "column", gap: "1.125rem" }}
         >
-          <label className="label">
-            Sign-in method
-            <select
-              className="input"
-              value={mode}
-              disabled={submitting}
-              onChange={(e) => {
-                setMode(e.target.value as "otp" | "password")
-                setChallenge(null)
-                setCode("")
-                setMfaValue("")
-                setUseRecoveryCode(false)
-                setError("")
-                setMfaChallenge(null)
-                setPassword("")
-              }}
-            >
-              <option value="otp">Email / SMS code</option>
-              <option value="password">Password</option>
-            </select>
-          </label>
-
           <div>
-            <label className="label" style={{ fontSize: "0.925rem" }}>
+            <label className="label" htmlFor="sign-in-email" style={{ fontSize: "0.925rem" }}>
               Email or Phone Number
             </label>
             <input
+              id="sign-in-email"
               className="input"
               type="text"
               autoComplete="username"
@@ -329,6 +377,7 @@ export function SignIn() {
               >
                 <label
                   className="label"
+                  htmlFor="sign-in-password"
                   style={{ fontSize: "0.925rem", margin: 0 }}
                 >
                   Password
@@ -351,8 +400,10 @@ export function SignIn() {
               </div>
               <div style={{ position: "relative" }}>
                 <input
+                  id="sign-in-password"
                   className="input"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
@@ -415,7 +466,7 @@ export function SignIn() {
                   color: "var(--muted)",
                 }}
               >
-                Code queued. Expires in 5 minutes.
+                Check {email} for your code. Expires in 5 minutes.
               </p>
               <label className="label text-center">
                 Verification code
@@ -442,12 +493,25 @@ export function SignIn() {
                 className="btn-outline justify-center"
                 type="button"
                 disabled={submitting}
-                onClick={() => {
-                  setChallenge(null)
-                  setCode("")
-                }}
+                onClick={requestSignInOtp}
               >
                 Request another code
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  setMode("password")
+                  setChallenge(null)
+                  setCode("")
+                  setMfaValue("")
+                  setMfaChallenge(null)
+                  setUseRecoveryCode(false)
+                  setError("")
+                }}
+              >
+                Back to password sign-in
               </button>
             </>
           )}
@@ -479,32 +543,18 @@ export function SignIn() {
               padding: "0.75rem",
             }}
           >
-            {submitting
-              ? "Please wait…"
-              : mode === "otp" && !challenge
-                ? "Send sign-in code"
-                : "Sign In"}
+            {submitting ? "Please wait…" : "Sign-In"}
           </button>
 
-          {/* Additional helper for OTP mode to also reset password */}
-          {mode === "otp" && !challenge && (
-            <div style={{ textAlign: "center" }}>
-              <button
-                type="button"
-                onClick={handleOpenForgotPassword}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--primary)",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  padding: 0,
-                }}
-              >
-                Forgot your password?
-              </button>
-            </div>
+          {mode === "password" && !mfaChallenge && (
+            <button
+              type="button"
+              disabled={submitting}
+              className="btn-outline justify-center"
+              onClick={requestSignInOtp}
+            >
+              Sign in with email / SMS code
+            </button>
           )}
 
           <p

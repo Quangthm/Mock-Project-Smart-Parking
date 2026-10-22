@@ -7,8 +7,8 @@ SmartPark uses a **Database-per-Service** architecture. The deployed profile has
 | Database | Service | Base DDL | Deployment overlays | Port |
 |---|---|---|---|---|
 | `smartpark_user` | User & Access | `01-user-access-service-db.sql` | — | 5441 |
-| `smartpark_parking` | Facility + Parking Operations (03a) | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | 5442 |
-| `smartpark_reservation` | Reservation Operations (03b) | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | 5443 |
+| `smartpark_facility` | Facility + Parking Operations (03a) | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | 5442 |
+| `smartpark_operations` | Reservation Operations (03b) | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | 5443 |
 | `smartpark_payment` | Payment & Pricing | `04-payment-pricing-service-db.sql` | — | 5444 |
 | `smartpark_notification` | Notification & Audit | `05-notification-audit-service-db.sql` | — | 5445 |
 | `smartpark_iot` | IoT & Recognition | `06-iot-recognition-service-db.sql` | — | 5446 |
@@ -34,7 +34,7 @@ parking_sites -> spatial_units -> parking_slots
 - `path TEXT` stores a materialized path for subtree queries; it is maintained by the application.
 - Active-name uniqueness is enforced by `uq_active_unit_name_ci` on `(site_id, parent_id, lower(name)) WHERE deleted_at IS NULL`.
 - Active-slot uniqueness is enforced by `uq_active_slot_code_ci` on `(spatial_unit_id, upper(slot_code)) WHERE deleted_at IS NULL`; the parking overlay adds `uq_site_slot_code_ci` on `(tenant_id, site_id, upper(slot_code))` so identifiers stay reserved after soft delete.
-- Static capacity lives in `spatial_unit_capacities` (`max_capacity` only). Dynamic counters live in `site_capacity_pools` in the Reservation database.
+- Static capacity lives in `spatial_unit_capacities` (`max_capacity` only). Dynamic counters live in `site_capacity_pools` in the Operations database.
 
 ## 4. Hard invariants & concurrency
 

@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext"
 import { driverData as store } from "../data/data"
 
 import { TopUpModal } from "./TopUpModal"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export function WalletView() {
   const { user, setUser } = useApp()
@@ -67,11 +68,7 @@ export function WalletView() {
           color: "#fff",
         }}
       >
-        <div
-          style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: "0.25rem" }}
-        >
-          SmartParking Wallet
-        </div>
+        <PageHeader title="SmartParking Wallet" variant="promo" />
         <div
           style={{
             fontFamily: "Outfit",

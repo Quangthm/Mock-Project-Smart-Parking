@@ -147,20 +147,19 @@ export function DashboardNavbar() {
     <>
       <nav className="dashboard-topbar">
         <div className="dashboard-topbar-left">
-          {user?.operatorRole !== "cashier" &&
-            !(user?.role === "owner" && !user.onboardingComplete) && (
-              <button
-                type="button"
-                className="icon-button menu-toggle"
-                aria-label={
-                  dashboardMenuOpen ? "Close navigation" : "Open navigation"
-                }
-                aria-expanded={dashboardMenuOpen}
-                onClick={toggleNavigation}
-              >
-                <UntitledIcon name="menu" />
-              </button>
-            )}
+          {user?.operatorRole !== "cashier" && (
+            <button
+              type="button"
+              className="icon-button menu-toggle"
+              aria-label={
+                dashboardMenuOpen ? "Close navigation" : "Open navigation"
+              }
+              aria-expanded={dashboardMenuOpen}
+              onClick={toggleNavigation}
+            >
+              <UntitledIcon name="menu" />
+            </button>
+          )}
           <button
             type="button"
             className="dashboard-brand"
