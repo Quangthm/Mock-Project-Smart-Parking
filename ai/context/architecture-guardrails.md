@@ -38,7 +38,7 @@ Controllers should normally interact with the Application layer through MediatR/
 - Each microservice owns its persistence boundary.
 - Do not share a database context across microservices.
 - Do not directly query another service's database.
-- Cross-service communication uses synchronous APIs when an immediate response is required and Kafka when asynchronous processing/loose coupling provides a meaningful benefit.
+- Cross-service communication uses synchronous APIs when an immediate response is required and RabbitMQ (via MassTransit with Outbox/Inbox pattern) when asynchronous processing/loose coupling provides a meaningful benefit.
 
 ## CQRS direction
 
@@ -66,16 +66,16 @@ Persistence / Infrastructure implementation
 
 Do not add deferred infrastructure merely to make a milestone appear larger.
 
-## Kafka rule
+## Message Broker rule
 
-Kafka is not automatically required for every operation.
+RabbitMQ / MassTransit is not automatically required for every operation.
 
 For any proposed event-driven interaction, record:
 
 1. Why asynchronous communication is needed.
 2. Which service owns the event.
 3. Which services consume it.
-4. Failure behavior when Kafka or a consumer is unavailable.
+4. Failure behavior when RabbitMQ or a consumer is unavailable.
 5. Whether eventual consistency is acceptable.
 6. Whether a simpler synchronous interaction is sufficient for the MVP.
 

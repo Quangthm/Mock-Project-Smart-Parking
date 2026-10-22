@@ -1,15 +1,15 @@
 # SmartPark AI Development Current State
 
 **Status:** WORKING
-**Snapshot Date:** 2026-10-01
+**Snapshot Date:** 2026-10-15
 
 ## Current phase
 
-The team is establishing the architecture foundation before implementing the full CQRS/application pipeline.
+The team has completed the architecture foundation and is implementing feature slices across microservices using the established CQRS/MediatR pipeline.
 
-The first template microservice is User Service.
+The first template microservice was User Service. Payment Service, Parking Service, and Reservation Service are under active development.
 
-The current foundation intentionally defers CQRS/MediatR, validation pipeline, global exception handling, EF Core/PostgreSQL implementation, Kafka implementation, Docker implementation, and GitHub CI/CD until the relevant milestone.
+The current codebase already includes: CQRS/MediatR pipeline, FluentValidation, EF Core/PostgreSQL, global exception handling middleware. Currently deferred: RabbitMQ/MassTransit integration (Outbox/Inbox), Docker orchestration, and GitHub CI/CD until the relevant milestone.
 
 ## Parallel workstreams
 
