@@ -2,9 +2,13 @@
 
 > **Service**: User & Access Service (`UserDb`)  
 > **Database file**: [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql)  
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); v1.1 target gaps: [DB25–DB27, DB30–DB33](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). No new deployed columns are claimed.
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý định danh con người (`users`), tổ chức/doanh nghiệp (`tenants`), tài khoản theo ngữ cảnh (`accounts`), phân quyền RBAC (`roles`, `account_roles`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), phân quyền vận hành bãi (`operator_grants`), xác thực nâng cao (`auth_challenges`, `workflow_deliveries`), và MFA/TOTP (`mfa_credentials`).
+
+## v1.1 simulated identity target (DB26)
+
+The [21 October V11-06 clarification](../../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md) requires the fake VNeID API to return a GUID substitute and User & Access to persist the returned identifier linked to the user. This is a simulated user identifier, not a real government identity number, credential or authentication token. Mandatory consent/completion and the sole seeded Admin exemption remain unchanged. The concrete table/column/wire field, linkage constraints, retry consistency and retention mapping are design-pending under DB26/V11-DES-02. No existing column below is claimed to implement this new field direction, and no SQL/seed change is included. Acceptance: AC-113, NOT RUN.
 
 ## 0. Deployment profile
 
@@ -67,7 +71,7 @@ Lưu trữ **thông tin định danh vật lý của một con người** trong 
 | **FR-AUTH-05** | C | Admin duyệt Owner registration sau khi có đủ company name, email, phone |
 | **BR-AUTH-01–03** | — | Scoped roles; confirmed profile-edit/contact/password boundaries |
 | **§3.1.1** | — | OTP valid 5 phút; sau 3 lần nhập sai → khóa 15 phút |
-| **§3.1.4** | — | Session token hết hạn 24h; refresh token 7 ngày |
+| **§3.1.4** | — | Access token 15 phút; refresh session tuyệt đối 7 ngày, inactivity 24 giờ; rotation không kéo dài tuyệt đối |
 | **§4.3** | NFR | bcrypt cost factor 12; AES-256 at rest; JWT RS256; lockout 15 phút / 3 lần thất bại |
 | **US-D08** | US | "Là Driver, tôi muốn đăng ký và đăng nhập vào hệ thống" |
 | **US-A01** | US | "Là Admin, tôi muốn quản lý tài khoản người dùng" |
@@ -82,7 +86,7 @@ Lưu trữ **thông tin định danh vật lý của một con người** trong 
 | `password_hash` | `VARCHAR(255) NOT NULL` | Giá trị băm của mật khẩu người dùng. **Không bao giờ lưu plain-text.** | Băm bằng **bcrypt** với cost factor 12 (§4.3) tại lớp Application trước khi INSERT | §4.3 (Security) |
 | `full_name` | `VARCHAR(255) NOT NULL` | Tên hiển thị của người dùng; được phép sửa qua profile-edit flow thông thường | Do người dùng nhập khi đăng ký hoặc cập nhật; không cần re-verification | FR-AUTH-03 |
 | `company_name` | `VARCHAR(255) NULL` | Tên công ty/doanh nghiệp, **bắt buộc với Owner** khi đăng ký; `NULL` với Driver và Operator | Do Owner nhập trong quá trình đăng ký. Admin kiểm tra trường này trước khi approve (FR-AUTH-05) | FR-AUTH-05; §3.1.1 |
-| `avatar_url` | `TEXT NULL` | URL ảnh đại diện của người dùng; được phép sửa qua profile-edit flow thông thường | URL do frontend upload lên storage (S3/CDN), sau đó lưu URL vào đây | FR-AUTH-03 |
+| `avatar_url` | `TEXT NULL` | URL ảnh đại diện của người dùng; được phép sửa qua profile-edit flow thông thường | Legacy URL column; target is authorized User-owned upload/asset reference per media contract (DB18/DB25) | FR-AUTH-03 |
 | `failed_login_attempts` | `INT NOT NULL DEFAULT 0` | Đếm số lần nhập sai thông tin đăng nhập **liên tiếp**. Khi đạt ngưỡng 3, tài khoản bị khóa tạm thời. Reset về 0 sau mỗi lần đăng nhập thành công | Tăng 1 mỗi khi authentication thất bại; reset khi thành công | FR-AUTH-02; §3.1.1; §4.3 (lockout 3 lần) |
 | `locked_until` | `TIMESTAMPTZ NULL` | Thời điểm kết thúc khóa tạm thời do brute-force. `NULL` khi tài khoản không bị khóa tạm. Sau thời điểm này, tài khoản tự động cho phép đăng nhập lại mà không cần Admin can thiệp | Gán = `NOW() + INTERVAL '15 minutes'` tại lớp Application khi `failed_login_attempts` đạt ngưỡng (§4.3) | FR-AUTH-02; §3.1.1; §4.3 |
 | `email_verified_at` | `TIMESTAMPTZ NULL` | Thời điểm email được xác thực thành công qua mã OTP | Application gán = `NOW()` khi xác thực thành công | FR-AUTH-03 |
@@ -206,7 +210,7 @@ Lưu định nghĩa chuẩn (master data) các vai trò trong hệ thống. Đâ
 | Owner | `OWNER`, `BUSINESS_OWNER` | `BUSINESS_OWNER` do `OwnerRegistrationService` gán |
 | Admin | `ADMIN`, `PLATFORM_ADMIN` | `PLATFORM_ADMIN` dùng trong UserManagement/AccessToken |
 
-Tách vai trò thành bảng riêng cho phép mở rộng hệ thống phân quyền mà không cần sửa code.
+The recorded role table and aliases remain schema facts. D05 excludes MVP role management; assignment is fixed by approved registration/activation, with no elevation/demotion endpoint. Exactly one seeded Admin is protected (DB26).
 
 ### 4.2 Traceability Mapping
 
@@ -241,8 +245,8 @@ Bảng junction thực hiện quan hệ nhiều-nhiều giữa `accounts` và `r
 |---|---|---|
 | **FR-AUTH-06** | C | Kiểm tra `account_roles` tại mỗi request để lấy danh sách role hiện tại của account |
 | **FR-AUTH-04** | R | Owner gán role OPERATOR cho account mới tạo |
-| **FR-AUTH-05** | C | Admin gán role OWNER sau khi approve `owner_applications` |
-| **§2.3.1** | — | Role changes remain audited — `created_at` ghi nhận thời điểm gán role |
+| **FR-AUTH-05** | C | Existing Owner role may be bound to a pending account immediately; normal Owner access requires combined approval and successful provisioning (DB25–DB27) |
+| **§2.3.1** | — | Fixed role assignment remains audited — `created_at` records assignment; no MVP role-management feature |
 
 ### 5.3 Bảng thuộc tính chi tiết
 
@@ -250,7 +254,7 @@ Bảng junction thực hiện quan hệ nhiều-nhiều giữa `accounts` và `r
 |---|---|---|---|---|
 | `account_id` | `UUID NOT NULL` | FK đến account được gán role | Gán bằng `accounts.id` tương ứng | FR-AUTH-06 |
 | `role_code` | `VARCHAR(50) NOT NULL` | FK đến mã vai trò | Gán bằng `roles.code` tương ứng | FR-AUTH-06 |
-| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm gán role cho account; phục vụ audit trail theo yêu cầu "role changes remain audited" | Tự sinh bởi database tại INSERT | §2.3.1; §4.3 (Audit log 7 năm) |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm gán role cho account; phục vụ audit trail cho fixed assignment; no role-management authorization | Tự sinh bởi database tại INSERT | §2.3.1; §4.3 (Audit log 7 năm) |
 
 **Primary Key**: `(account_id, role_code)` — một account không thể có cùng một role hai lần.
 
@@ -297,7 +301,7 @@ Lưu ý: Phương tiện không có biển số (xe không biển) **không** t�
 | `original_plate` | `VARCHAR(30) NOT NULL` | Biển số xe **đúng như người dùng nhập**, bao gồm dấu cách, ký tự hoa/thường. Lưu trữ cho mục đích hiển thị và audit. Không dùng để matching | Do Driver nhập, được validate format theo Thông tư 79/2024/TT-BCA trước khi lưu | FR-VEH-01; §3.1.3; §5.1 |
 | `normalized_plate` | `VARCHAR(20) NOT NULL` | Biển số xe **đã chuẩn hóa** (canonical form): loại bỏ dấu cách, chuyển hoa, chuẩn hóa format. Đây là giá trị dùng để **khớp với LPR** và kiểm tra trùng lặp (`EXCLUDE` constraint tại `reservations`, `monthly_passes`) | Sinh từ `original_plate` bởi lớp Application (normalization logic theo Thông tư 79/2024/TT-BCA) trước khi INSERT | FR-VEH-01; §3.1.3; BR-VEH-01 |
 | `vehicle_type` | `VARCHAR(50) NOT NULL DEFAULT 'CAR'` | Loại phương tiện; quyết định tính tương thích với slot khi đặt chỗ. Motorcycle được hỗ trợ trong MVP. EV charging không phải function của hệ thống | Do Driver chọn khi đăng ký xe | FR-VEH-04; §3.1.3; FR-VEH-03 |
-| `image_url` | `TEXT NULL` | URL ảnh phương tiện (mặt trước, thấy rõ biển số). Dùng cho mục đích nhận diện thủ công và LPR (§6.2) | URL do frontend upload lên storage (S3/CDN); `NULL` nếu chưa có ảnh | §3.1.3; §6.2 |
+| `image_url` | `TEXT NULL` | URL ảnh phương tiện (mặt trước, thấy rõ biển số). Dùng cho mục đích nhận diện thủ công và LPR (§6.2) | Legacy URL column; target is authorized User-owned upload/asset reference, not arbitrary remote URL; `NULL` nếu chưa có ảnh | §3.1.3; §6.2 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm đăng ký phương tiện | Tự sinh bởi database | FR-VEH-01 |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật lần cuối | Application cập nhật tại mỗi UPDATE | — |
 | `deleted_at` | `TIMESTAMPTZ NULL` | Soft-delete phương tiện. Driver có thể "xóa" xe khỏi danh sách nhưng dữ liệu phải được giữ để tham chiếu từ lịch sử parking session | Application gán = `NOW()` thay vì DELETE vật lý | §5.1; FR-VEH-01 |
@@ -313,6 +317,9 @@ Lưu ý: Phương tiện không có biển số (xe không biển) **không** t�
 
 ### 6.5 Ghi chú Cross-service
 
+D12 target: removal is soft only, retains vehicle/account binding history and rejects invalidation while active dependencies remain unresolved. Existing `deleted_at`, active-plate uniqueness and `ON DELETE SET NULL` are not proof of the full guard/history workflow. Removal is not transfer approval; hard cleanup follows approved retention (DB30).
+
+
 `normalized_plate` là **khóa đối sánh** quan trọng nhất giữa User Service và các service khác:
 - **Reservation Service** (`reservations.normalized_plate`, `monthly_passes.normalized_plate`): được cache tại bảng reservation để tránh query ngược về User Service tại mỗi EXCLUDE constraint check.
 - **IoT Service** (`lpr_events`): LPR trả về plate text, Reservation Service dùng để tra cứu phương tiện.
@@ -325,8 +332,8 @@ Lưu ý: Phương tiện không có biển số (xe không biển) **không** t�
 ### 7.1 Mục đích nghiệp vụ
 
 Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) theo yêu cầu §3.1.4:
-- Access Token: hết hạn sau **24 giờ**.
-- Refresh Token: hết hạn sau **7 ngày**.
+- Access Token target: **15 phút**; no DDL type/default change is implied.
+- Refresh session target: **7 ngày tuyệt đối**, inactivity **24 giờ**; rotation does not extend the absolute deadline (DB26).
 - Hỗ trợ revocation: khi logout, `is_revoked = true` để invalidate token ngay lập tức mà không cần đợi hết hạn.
 - Liên kết device/IP để phát hiện đăng nhập bất thường.
 
@@ -336,7 +343,7 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 |---|---|---|
 | **FR-AUTH-02** | C | Logout phải terminate session/renewal; revoked token không được authorize subsequent request |
 | **FR-AUTH-06** | C | Token hợp lệ không đủ nếu account bị lock — cần kiểm tra `is_revoked` + `users.status` + `accounts.status` |
-| **§3.1.4** | — | Session token 24h, refresh 7 ngày; MFA TOTP optional |
+| **§3.1.4** | — | Access 15 phút; refresh absolute 7 ngày/inactivity 24 giờ; MFA TOTP optional |
 | **§4.3** | NFR | JWT RS256; token expiry values |
 
 ### 7.3 Bảng thuộc tính chi tiết
@@ -348,9 +355,9 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 | `token_hash` | `VARCHAR(255) NOT NULL` | Giá trị băm của Refresh Token (plain-text Refresh Token **không** được lưu) | Sinh bởi Application: `SHA-256(raw_refresh_token)` | §4.3 (Security) |
 | `device_info` | `VARCHAR(255) NULL` | Thông tin thiết bị (user-agent string, tên thiết bị). Dùng để hiển thị danh sách session | Trích xuất từ HTTP `User-Agent` header | §4.3 (Security monitoring) |
 | `ip_address` | `VARCHAR(45) NULL` | IP của client tại thời điểm đăng nhập | Trích xuất từ request tại API Gateway / Application | §4.3 |
-| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Refresh Token hết hạn | Tính bởi Application = `NOW() + INTERVAL '7 days'` | §3.1.4; §4.3 |
+| `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Refresh Token hết hạn | Target: absolute session-start + 7 days; enforce 24-hour inactivity separately; mapping pending DB26 | §3.1.4; §4.3 |
 | `access_token_id` | `UUID NOT NULL` | Định danh duy nhất của Access Token tương ứng (JWT claim `jti`) | Sinh bởi Application khi tạo JWT; gán vào JWT claim `jti` | FR-AUTH-02; §3.1.4 |
-| `access_expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Access Token hết hạn | Tính bởi Application = `NOW() + INTERVAL '24 hours'` | §3.1.4; §4.3 |
+| `access_expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Access Token hết hạn | Target: issuance + 15 minutes; DB26 alignment pending | §3.1.4; §4.3 |
 | `is_revoked` | `BOOLEAN NOT NULL DEFAULT false` | Cờ revocation: `true` khi token bị vô hiệu hóa trước hạn | Application set = `true` tại logout hoặc force-revoke | FR-AUTH-02; FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cấp token (login time) | Tự sinh bởi database | — |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật (thường là khi revoke) | Application cập nhật khi `is_revoked` thay đổi | — |
@@ -371,6 +378,9 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 ## 9. Bảng `driver_registrations` — Đăng ký OTP cho Driver
 
 ### 8.1 Mục đích nghiệp vụ
+
+V11-06/D06 target: mandatory consented simulated VNeID is part of Driver registration; OTP verification does not auto-login. Shared login/current-state/MFA gates remain required (DB26).
+
 
 Quản lý luồng xác minh OTP trong quá trình đăng ký tài khoản Driver. Bảng này lưu trạng thái của OTP hiện tại, bao gồm: mã băm, kênh gửi, thời hạn, số lần thất bại, và khóa chống gửi lại quá nhanh. Một user chỉ có **một** bản ghi đăng ký tại một thời điểm (`UNIQUE user_id`).
 
@@ -412,7 +422,7 @@ Quản lý luồng xác minh OTP trong quá trình đăng ký tài khoản Drive
 
 ### 9A.1 Mục đích nghiệp vụ
 
-Quản lý các phiên bản điều khoản dịch vụ và thỏa thuận pháp lý của hệ thống SmartPark (như chính sách đăng ký Owner, quy định mở Site mới). Bảng này lưu URL tài liệu (PDF/Doc) trên Cloud Storage và trạng thái hiệu lực (`is_active`), bảo đảm tính pháp lý và cơ chế versioning khi các điều khoản thay đổi theo thời gian.
+Quản lý các phiên bản điều khoản dịch vụ và thỏa thuận pháp lý của hệ thống SmartPark (như chính sách đăng ký Owner, quy định mở Site mới). Bảng này ghi nhận `document_url` và trạng thái `is_active`; these columns alone do not prove protected upload/version evidence or legal acceptance. V11-02 requires User-owned original/replacement document assets and approval-version concurrency (DB25); external agreement must not be fabricated as in-app re-acceptance.
 
 ### 9A.2 Traceability Mapping
 
@@ -429,7 +439,7 @@ Quản lý các phiên bản điều khoản dịch vụ và thỏa thuận phá
 | `term_code` | `VARCHAR(50) NOT NULL` | Mã loại điều khoản (VD: `'OWNER_ONBOARDING'`, `'NEW_SITE_POLICY'`) | Do Quản trị viên/Hệ thống quy định | System Governance |
 | `version` | `VARCHAR(20) NOT NULL` | Phiên bản điều khoản (VD: `'v1.0'`, `'v1.1'`) | Quản trị viên chỉ định khi ban hành văn bản mới | System Governance |
 | `title` | `VARCHAR(255) NOT NULL` | Tiêu đề văn bản thỏa thuận / điều khoản | Quản trị viên nhập khi cấu hình | System Governance |
-| `document_url` | `TEXT NOT NULL` | Đường dẫn URL tải file PDF/Doc trên Cloud Storage | Storage Service / CDN upload | System Governance |
+| `document_url` | `TEXT NOT NULL` | Đường dẫn URL tải file PDF/Doc trên Cloud Storage | Legacy storage locator; protected User-owned media mapping pending DB25 | System Governance |
 | `is_active` | `BOOLEAN NOT NULL DEFAULT TRUE` | Trạng thái hiệu lực hiện hành của điều khoản | Quản trị viên bật/tắt | System Governance |
 | `effective_from` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm bắt đầu có hiệu lực pháp lý | Quản trị viên chọn hoặc mặc định thời điểm tạo | System Governance |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo bản ghi | Tự sinh bởi database | — |
@@ -446,7 +456,7 @@ Quản lý các phiên bản điều khoản dịch vụ và thỏa thuận phá
 
 ### 9B.1 Mục đích nghiệp vụ
 
-Quản lý quy trình duyệt đơn đăng ký làm Owner. Theo §3.1.1, FR-AUTH-05 và quy trình nâng cấp Onboarding, Owner registration phải trải qua các bước: điền thông tin cơ bản, thiết lập cấu trúc bãi dự kiến (`draft_structure`), xác nhận đồng thuận với điều khoản (`terms_id`, `agreed_at`, `agreed_ip`), và phải có Admin approval trước khi tài khoản được kích hoạt cho các hoạt động Owner.
+Partner Registration retains the Owner role and persists a pending User/Account/application immediately. The combined first-lot setup and consented mandatory VNeID simulation precede email OTP; verified email precedes combined Admin approval/rejection. Approval and successful provisioning precede normal Owner login; lot opening stays separate. Existing `draft_structure`/terms columns are recorded evidence, not proof of document upload/versioning, simulation or provisioning. DB25–DB27 track those gaps. Additional lots require independent proposal identities; the existing one-per-user constraint must not be misrepresented as supporting that flow.
 
 ### 9B.2 Traceability Mapping
 
@@ -471,13 +481,16 @@ Quản lý quy trình duyệt đơn đăng ký làm Owner. Theo §3.1.1, FR-AUTH
 | `tenant_id` | `UUID NULL` | FK liên kết đến `tenants.id` được tạo ra sau khi Admin duyệt đơn (`ON DELETE SET NULL`) | Gán bằng ID của tenant mới tạo khi duyệt đơn | FR-AUTH-05 |
 | `site_id` | `UUID NULL` | Logical ID của bãi xe được khởi tạo ở trạng thái `PENDING_APPROVAL` bên Facility & Visualization Service | Application sinh trước hoặc lấy từ Facility Service | FR-LOT-01 |
 | `draft_structure` | `JSONB NULL` | Snapshot cấu hình bãi dự kiến (Zone, Floor, Capacity) lúc đăng ký | Frontend gửi lên dưới dạng JSON | §3.2.3 |
-| `status` | `VARCHAR(20) NOT NULL DEFAULT 'pending'` | Trạng thái xử lý đơn. `pending`: chờ Admin xem xét. `approved`: được chấp thuận → system kích hoạt role OWNER cho account. `rejected`: bị từ chối | `'pending'` khi tạo; Admin cập nhật thành `'approved'` hoặc `'rejected'` | FR-AUTH-05 |
+| `status` | `VARCHAR(20) NOT NULL DEFAULT 'pending'` | Trạng thái xử lý đơn. `pending`: chờ Admin xem xét. `approved`: final review approval, distinct from provisioning and operational opening (DB27). `rejected`: bị từ chối | `'pending'` khi tạo; Admin cập nhật thành `'approved'` hoặc `'rejected'` | FR-AUTH-05 |
 | `submitted_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm nộp đơn chính thức | Do Application gán = `NOW()` khi user submit | FR-AUTH-05 |
 | `reviewed_at` | `TIMESTAMPTZ NULL` | Thời điểm Admin xem xét và ra quyết định. `NULL` khi `status = 'pending'` | Do Application gán = `NOW()` khi Admin cập nhật `status` | FR-AUTH-05 |
 | `reviewed_by` | `UUID NULL` | FK đến `users.id` của Admin đã xem xét đơn. `NULL` khi `status = 'pending'` | Gán bằng `users.id` của Admin đang thực hiện review | FR-AUTH-05; §2.3.1 |
 | `review_note` | `VARCHAR(2000) NULL` | Ghi chú của Admin khi duyệt hoặc từ chối | Do Admin nhập khi review | FR-AUTH-05 |
 
 ### 9B.4 Constraints & Indexes
+
+V11-02/D09 target: only initial pending uploaded documents may be Admin-replaced with actor/time/reason and preserved versions; final approved/rejected records are immutable. Initial rejected email cannot register again; re-enable cannot reverse rejection. Additional-lot Draft as new creates a distinct proposal, identical content allowed and retry-safe. Existing terms consent columns do not establish an applicant re-acceptance workflow (DB25).
+
 
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
@@ -587,6 +600,8 @@ Lưu trữ các mã xác thực (như OTP qua SMS/Email) được hệ thống g
 
 Lưu vết (audit log) các tác vụ gửi tin nhắn, email chứa OTP. Đóng vai trò như một Outbox Pattern để theo dõi trạng thái gửi thành công/thất bại, hỗ trợ retry gửi lại khi có lỗi mạng từ Notification Provider.
 
+D10 target: preserve committed account/application/review/provisioning results when delivery fails. Retry delivery without rerunning those mutations; `sent` is not proof of delivered. DB33 tracks delivery receipts/attempts and approval-with-modifications messaging.
+
 ### 12.2 Traceability Mapping
 
 | Mã yêu cầu | Loại | Nội dung liên quan |
@@ -685,7 +700,7 @@ owner_applications.reviewed_by ──── users.id [audit FK]
 | Cột | Bảng | Trỏ đến Service | Cơ chế đồng bộ |
 |---|---|---|---|
 | `site_id` | `accounts` | Facility & Visualization (`FacilityDb.parking_sites.id`) | Logical ID phạm vi gán Operator; đồng bộ trạng thái qua RabbitMQ |
-| `site_id` | `owner_applications` | Facility & Visualization (`FacilityDb.parking_sites.id`) | Logical ID bãi xe khởi tạo ở trạng thái `PENDING_APPROVAL`, active sau khi duyệt |
+| `site_id` | `owner_applications` | Facility & Visualization (`FacilityDb.parking_sites.id`) | Logical site ID; review/provisioning/activation/opening must be separately represented (DB27) |
 | `normalized_plate` | `vehicles` | Operations, IoT & Recognition | RabbitMQ event `VehicleRegistered` / `VehiclePlateUpdated`; consumer cache plate |
 | `account_id` | `vehicles` | Operations, Payment & Pricing | Logical ID; consumer services gọi User & Access API để resolve thông tin đầy đủ khi cần |
 

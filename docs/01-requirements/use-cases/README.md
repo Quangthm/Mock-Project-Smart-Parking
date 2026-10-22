@@ -1,9 +1,9 @@
-# Use cases — RC1
+# Use cases — v1.1 documentation review candidate
 
 [User stories](user-stories/catalogue.md) · [SRS](../srs/README.md)
 
 - [UC-AUTH-01 — Register, authenticate and manage own profile](uc-auth-01.md) — CONFIRMED — implementation pending / not assessed
-- [UC-AUTH-02 — Approve Owner registration and administer accounts](uc-auth-02.md) — CONFIRMED — implementation pending / not assessed
+- [UC-AUTH-02 — Review Partner Registration and administer permitted account access](uc-auth-02.md) — CONFIRMED — implementation pending / not assessed
 - [UC-AUTH-03 — Provision Operators and lot-scoped access](uc-auth-03.md) — CONFIRMED — implementation pending / not assessed
 - [UC-VEH-01 — Register and maintain vehicles](uc-veh-01.md) — CONFIRMED — implementation pending / not assessed
 - [UC-VEH-02 — Review disputed plate binding](uc-veh-02.md) — CONFIRMED — implementation pending / not assessed
@@ -32,11 +32,11 @@
 - [UC-AI-01 — Ask general help, search and explain prices/ranking](uc-ai-01.md) — CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0
 - [UC-AI-02 — Read own records and prepare a confirmed reservation action](uc-ai-02.md) — CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0
 - [UC-AI-03 — Escalate conversation to human support](uc-ai-03.md) — CONFIRMED DIRECTION — detailed integration/evaluation POST-v1.0
-- [UC-MON-01 — Configure and offer monthly plans](uc-mon-01.md) — CONFIRMED — implementation pending / not assessed
-- [UC-MON-02 — Buy a monthly pass and activate verified rights](uc-mon-02.md) — CONFIRMED — implementation pending / not assessed
-- [UC-MON-03 — Renew, expire or repurchase a monthly pass](uc-mon-03.md) — CONFIRMED — implementation pending / not assessed
-- [UC-MON-04 — Validate monthly visits and bill uncovered use](uc-mon-04.md) — CONFIRMED — implementation pending / not assessed
-- [UC-MON-05 — Cancel a monthly plan and reconcile refund](uc-mon-05.md) — CONFIRMED — implementation pending / not assessed
+- [UC-MON-01 — Configure and offer monthly/yearly plans](uc-mon-01.md) — CONFIRMED — implementation pending / not assessed
+- [UC-MON-02 — Buy a monthly/yearly pass and activate verified rights](uc-mon-02.md) — CONFIRMED — implementation pending / not assessed
+- [UC-MON-03 — Renew, expire or repurchase a monthly/yearly pass](uc-mon-03.md) — CONFIRMED — implementation pending / not assessed
+- [UC-MON-04 — Validate monthly/yearly visits and bill uncovered use](uc-mon-04.md) — CONFIRMED — implementation pending / not assessed
+- [UC-MON-05 — Cancel a monthly/yearly plan and reconcile refund](uc-mon-05.md) — CONFIRMED — implementation pending / not assessed
 - [UC-FUT-01 — Detect per-slot occupancy and violation candidates](uc-fut-01.md) — FUTURE — outside MVP
 - [UC-FUT-02 — Provide personalized model recommendations](uc-fut-02.md) — FUTURE — outside MVP
 - [UC-FUT-03 — Forecast capacity and investigate anomalies](uc-fut-03.md) — FUTURE — outside MVP

@@ -1,6 +1,6 @@
 > **RC2 scope update:** any TOTP-FUTURE wording inside reproduced older source tables is superseded by SEC-01/SEC-02. Other deferrals are unchanged.
 
-# Deferred and implementation register — RC1
+# Deferred and implementation register — v1.1 review candidate
 
 **Status separation:** IMPLEMENTATION PENDING = confirmed MVP behavior needs code/schema/tests. POST-v1.0 DETAIL = confirmed AI/LPR direction retained, detailed integration/evaluation intentionally later. FUTURE = feature outside selected MVP. Historical alternatives in the source tables are not active requirements.
 
@@ -62,6 +62,27 @@
 | AI-DEP-08 | General direction retained; detailed integration/evaluation POST-v1.0 | AI module and retained detail |
 | AI-DEP-09 | General direction retained; detailed integration/evaluation POST-v1.0 | AI module and retained detail |
 | AI-DEP-10 | General direction retained; detailed integration/evaluation POST-v1.0 | AI module and retained detail |
+
+## v1.1 design and implementation actions
+
+All V11-01–12 and D01–D12 business choices in the [approved register](2026-10-20-approved-v1.1-changes.md) are settled. These technical actions are **DESIGN/IMPLEMENTATION PENDING**, not permission to change those choices. Role owners below are accountable workstreams; PM-02 must assign named people, sprint and dates. No implementation commit or runtime evidence is claimed by SPARK-296.
+
+| Work ID | Owner/action | Completion evidence |
+|---|---|---|
+| V11-DES-01 | User + media/backend security: agree agreement upload/download contracts, allowed formats/limits, protected references, retention classification, version binding and concurrency controls | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
+| V11-DES-02 | User + FE/security: specify the fake VNeID API returned GUID substitute and its persisted User binding, other mock fields, explicit consent, failure/completion evidence and retention | Every non-exempt role covered; Operator email activation; sole seeded Admin exemption; no real government assurance |
+| V11-DES-03 | User/security + FE: agree scoped setup/resend/verification credential expiry, storage, renewal, secure recovery and safe login error envelope | Application ID alone cannot authorize; no normal Owner login before review and successful provisioning; no token/profile overexposure |
+| V11-DES-04 | User/Facility/Operations/Payment architects: specify durable provisioning keys, outcome lookup, event versions, retries and readiness mapping | One tenant/site per accepted proposal; pending/failed/unknown outcome visible; approval and notification cannot imply opening |
+| V11-DES-05 | Operations + Payment + QA: specify separate yearly policy keys, defaults/bounds, financial examples and calendar boundaries | Twelve calendar months; at most one yearly period ahead; unchanged monthly maximum three prepaid periods; no invented yearly refund rate/renewal default |
+| V11-DES-06 | User + QA: consistent email normalization and immutable initial rejection enforcement | No repeated initial Partner registration using rejected email; re-enable cannot reverse rejection; additional-lot Draft as new unaffected |
+| V11-DES-07 | User + Notification/Audit: agree revision-bound review/notification payload and delivery reconciliation | Approval with modifications message; delivery retries retain committed result and do not repeat provisioning |
+| V11-DES-08 | Operations discovery + Facility + Payment + FE: settle request parameters, source/freshness and interval estimate contracts | MapTiler geographical discovery, manual/current origin, filters, current tariffs vs interval totals, external directions; unsourced ETA deferred |
+| V11-DES-09 | Facility + Operations + FE: implement same-lot batch deactivation validation/version guards | Explicit descendants/dependencies, all-or-nothing mutation and per-item errors; FE multi-select |
+| V11-DES-10 | User + Operations + retention owners: coordinate vehicle soft removal and active-dependency checks | Retained binding/visit history; removal is not transfer approval; retention controls cleanup |
+| V11-DES-11 | User/security + deployment maintainer: enforce sole seeded Admin protections and fixed role assignments | No Admin registration/role-management endpoint, self administrative lock/disable/delete denied, auth lockouts preserved; controlled maintainer recovery |
+| V11-DES-12 | PM + database teammate + service owners: plan development reset **only after docs review approval and schema/seed/application alignment** | Target environment/database names, responsible named teammate, reviewed reset/seed script paths/versions and execution date all **TBD before execution**; no reset authorized/executed by this task |
+
+Track implementation commit/build and QA evidence against the [decision matrix](../../01-requirements/requirements-traceability/v1.1-decision-coverage.md). Jira is unchanged. The selected development transition replaces migration/grandfathering of invalid development applications; secure runtime credential recovery remains required independently.
 
 ## Future exclusions explicitly preserved
 

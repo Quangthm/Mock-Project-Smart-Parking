@@ -2,9 +2,13 @@
 
 > **Service**: Notification & Audit Service (`NotificationAuditDb`)  
 > **Database file**: [`05-notification-audit-service-db.sql`](../../../../scripts/database/microservices/05-notification-audit-service-db.sql)  
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB26/DB33 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý động cơ chuyển phát thông báo bền vững (`durable_notifications`), mẫu nội dung (`notification_templates`), token thiết bị (`push_device_tokens`), module hỗ trợ chung và tiếp nhận yêu cầu khôi phục tài khoản (`support_tickets`, `support_ticket_messages`), và hồ chiếu dữ liệu kiểm toán tập trung (`central_audit_projections`).
+
+## v1.1 target alignment (DB26/DB33)
+
+Pending/failed delivery must preserve committed account/application/review/provisioning outcomes. Retry notification only, with semantic dedupe and attempt evidence; queued/provider-accepted is not delivered. Approval after initial pending agreement replacement sends “Your application was approved with some modifications”, still approval. Approval email distinguishes review outcome from readiness to sign in; rejection explanations stay safe. The sole seeded Admin uses controlled maintainer recovery; support records never grant credentials or privileges. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 

@@ -1,6 +1,6 @@
-# Traceability — RC1
+# Traceability — v1.1 documentation review candidate
 
-[CSV matrix](matrix.csv) · [Trace edit log](trace-edit-log.md)
+[FR CSV matrix](matrix.csv) · [v1.1 decision coverage](v1.1-decision-coverage.md) · [Decision CSV](v1.1-decision-coverage.csv) · [Trace edit log](trace-edit-log.md)
 
 - [01-identity-access](01-identity-access.md)
 - [02-facility-capacity](02-facility-capacity.md)
@@ -17,4 +17,11 @@ Each original FR/BR/UC/US ID is retained; current status is separate from source
 
 ## RC2 additions
 
-Current inventory:135 FRs,57 BRs+9 monthly rules,41 use cases and46 stories. Security trace changes are in the identity module, CSV and trace-edit-log. Product tests remain NOT RUN.
+The RC2 amendment added security IDs. Current definition inventories are maintained in the SRS modules, business-rule files, use-case index and story catalogue; the [v1.1 manifest](../srs/baselines/v1.1/manifest.md) records verified counts. Product tests remain NOT RUN.
+
+
+## Source namespaces and implementation evidence
+
+The v1.1 decision CSV/Markdown pair maps all V11-01–12 and D01–D12 from the dated 20 October 2026 register. Earlier RC1 D IDs are a different dated namespace (for example original D01 concerns deposits); they remain historical authority for unchanged behavior. Requirement, BR, UC, story and AC identifiers remain unique within their canonical catalogues. Repeated references in views are not duplicate definitions.
+
+Each v1.1 row links canonical requirements → API/architecture → acceptance and named owner workstream/action. Implementation commit/build and execution evidence are **PENDING/NOT RUN** for every new decision; a documentation diff is not an implementation commit.
