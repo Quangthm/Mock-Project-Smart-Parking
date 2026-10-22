@@ -499,7 +499,7 @@ reservationState
 
 This is useful implementation groundwork.
 
-However, documentation should **not claim that the current ParkingService endpoint represents the final microservice authority design**.
+However, documentation should **not claim that the current FacilityService endpoint represents the final microservice authority design**.
 
 The target six-service baseline supersedes the old service boundary:
 

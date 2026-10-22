@@ -49,7 +49,7 @@ parking_sites -> spatial_units -> parking_slots
 ## 5. State lifecycles
 
 - **Physical state:** `parking_slots.physical_state` is one of `AVAILABLE`, `OCCUPIED`, `UNKNOWN`, `MAINTENANCE`, `UNAVAILABLE`.
-- **Reservation projection:** the deployed `parking_slots` also carries `supported_vehicle_type` and `reservation_state` (`PROTECTED`, `RESERVED`, `BACKUP`, or `NULL`). These are T4-approved runtime columns (**D4/P1**) read and written by ParkingService; Operations/Reservation remain authoritative for reservation state. When the projection and Operations disagree, Operations wins.
+- **Reservation projection:** the deployed `parking_slots` also carries `supported_vehicle_type` and `reservation_state` (`PROTECTED`, `RESERVED`, `BACKUP`, or `NULL`). These are T4-approved runtime columns (**D4/P1**) read and written by FacilityService; Operations/Reservation remain authoritative for reservation state. When the projection and Operations disagree, Operations wins.
 - **Confirmation time:** `reservations.confirmed_at` exists in base `03b`; the `reservation-confirmation-time` overlay adds the trigger that stamps it.
 - **Soft delete:** identities and physical resources use `deleted_at`; audit records are retained.
 
@@ -70,7 +70,7 @@ The design baseline is `arch/database-schema` @ `9a13499`. The deployed branch d
 | D2 | Keep `uq_active_vehicle_plate`; BE maps `23505` to HTTP 409 | SRS invariant + correct API behavior |
 | D3/D6 | Operator tables and a BE-shape `support_tickets` in parking overlay | `/api/operator/*` works on a fresh DB |
 | D4 | 7 role seeds; 2 `parking_slots` runtime columns; `unit_id`/`count` renames | Live BE reads/writes these names |
-| D5 | `tenants` canonical in `01`, local copy in parking | ParkingService joins in one transaction |
+| D5 | `tenants` canonical in `01`, local copy in parking | FacilityService joins in one transaction |
 | D7 | Recreate `site_capacity_pools` in reservation overlay | Shape was lost in the arch split |
 
 Full evidence: `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md` and `10-db-docs-deployment-alignment.md`.

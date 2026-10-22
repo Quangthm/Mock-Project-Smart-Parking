@@ -75,7 +75,7 @@ public sealed class LayerBoundaryTests
                 (p.Contains(".Application" + Path.DirectorySeparatorChar) || p.Contains(".Domain" + Path.DirectorySeparatorChar))))
         {
             var source = File.ReadAllText(path);
-            Assert.False(Regex.IsMatch(source, @"\b(using|namespace)\s+[^;\r\n]*(EntityFramework|Npgsql|AspNetCore|IdentityModel|(?:UserService|ParkingService|ReservationService|IoTService)\.(?:Persistence|Infrastructure))"), path);
+            Assert.False(Regex.IsMatch(source, @"\b(using|namespace)\s+[^;\r\n]*(EntityFramework|Npgsql|AspNetCore|IdentityModel|(?:UserService|FacilityService|ReservationService|IoTService)\.(?:Persistence|Infrastructure))"), path);
             Assert.False(HasHttpDependency(source), path);
             Assert.DoesNotContain("FromSql", source);
             Assert.DoesNotContain("ExecuteUpdateAsync", source);

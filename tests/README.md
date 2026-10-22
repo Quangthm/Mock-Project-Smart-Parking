@@ -2,7 +2,7 @@
 
 Các test tích hợp cần PostgreSQL thật để kiểm tra khóa ngoại, transaction và rollback.
 `SMARTPARK_AUTH_TEST_CONNECTION` là chuỗi kết nối cho test UserService;
-`SMARTPARK_STRUCTURE_TEST_CONNECTION` dành cho test ParkingService.
+`SMARTPARK_STRUCTURE_TEST_CONNECTION` dành cho test FacilityService.
 Đây là cấu hình của tiến trình test, không phải API key. Thiếu biến thì test tự **Skipped** (biểu tượng vàng).
 
 ## Chuẩn bị một lần trên mỗi máy

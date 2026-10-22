@@ -48,7 +48,7 @@ Mở ba terminal PowerShell riêng tại repo:
 ```
 
 ```powershell
-.\scripts\run-schema-service.ps1 -Service Parking
+.\scripts\run-schema-service.ps1 -Service Facility
 ```
 
 ```powershell
@@ -58,17 +58,19 @@ Mở ba terminal PowerShell riêng tại repo:
 | Service | HTTP API | PostgreSQL host port | Database |
 | --- | --- | --- | --- |
 | User | http://localhost:5035 | 5441 | smartpark_user |
-| Parking | http://localhost:5045 | 5442 | smartpark_parking |
+| Facility | http://localhost:5045 | 5442 | smartpark_parking |
 | Reservation | http://localhost:5055 | 5443 | smartpark_reservation |
 | Payment | — | 5444 | smartpark_payment |
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
 
+`FacilityService` là tên mới của `ParkingService`. Runner vẫn nhận `-Service Parking` để tương thích lệnh cũ. Các khóa `ConnectionStrings:Parking`, `Services:Parking`, biến môi trường `SMARTPARK_*PARKING*`, database `smartpark_parking` và UserSecretsId cũ được giữ nguyên để tiếp tục dùng cấu hình local hiện có; API routes và port không thay đổi.
+
 Runner dùng `.env` cho connection strings, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port 5035/5045/5055.
 
 ## Schema và dữ liệu có sẵn
 
-Database mới chạy SQL baseline trong `scripts/database/microservices` (01–06 theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`. Sau baseline/overlay, cả Compose init và runner áp thêm `05.13`–`05.15` cho UserService (2FA, identity access, owner onboarding) và `05.16` cho ParkingService. Các migration bổ sung này chạy lại an toàn trên schema canonical hiện có; script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn. `docker-compose.yml` là compose monolith cũ (port 5433), không được setup hiện tại sử dụng.
+Database mới chạy SQL baseline trong `scripts/database/microservices` (01–06 theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`. Sau baseline/overlay, cả Compose init và runner áp thêm `05.13`–`05.15` cho UserService (2FA, identity access, owner onboarding) và `05.16` cho FacilityService. Các migration bổ sung này chạy lại an toàn trên schema canonical hiện có; script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn. `docker-compose.yml` là compose monolith cũ (port 5433), không được setup hiện tại sử dụng.
 
 ### Seed dữ liệu demo (owner/operator + site)
 

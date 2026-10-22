@@ -1,6 +1,6 @@
 namespace UserService.Application.Common.Interfaces.Services;
 
-// Transport contract only. UserService never reads ParkingService persistence.
+// Transport contract only. UserService never reads FacilityService persistence.
 public sealed record DirectorySite(Guid Id, Guid TenantId);
 public interface IParkingDirectory
 {

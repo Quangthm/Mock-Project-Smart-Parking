@@ -1,4 +1,4 @@
--- ParkingService database; apply before deploying the new binaries. Re-runnable.
+-- FacilityService database; apply before deploying the new binaries. Re-runnable.
 BEGIN;
 CREATE TABLE IF NOT EXISTS owner_onboarding_provisions (
     application_id uuid PRIMARY KEY,

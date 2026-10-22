@@ -23,7 +23,7 @@
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Persistence\SmartParking.UserService.Persistence.csproj" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Infrastructure\SmartParking.UserService.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.API\SmartParking.UserService.API.csproj" />
-    <ProjectReference Include="../../../src/Services/ParkingService/SmartParking.ParkingService.API/SmartParking.ParkingService.API.csproj" />
+    <ProjectReference Include="../../../src/Services/FacilityService/SmartParking.FacilityService.API/SmartParking.FacilityService.API.csproj" />
     <ProjectReference Include="../../../src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
   </ItemGroup>
 

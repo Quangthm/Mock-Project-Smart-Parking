@@ -20,7 +20,7 @@
 
 ### 1.1. Purpose
 
-This document defines the formal technical contract, architectural boundaries, and implementation approach for binding authoritative backend parking-slot operational state (originating from `ParkingService`, `ReservationService`, and `IoTService`) to corresponding Three.js 3D digital-twin scene objects in the SmartPark web client (`FE/`).
+This document defines the formal technical contract, architectural boundaries, and implementation approach for binding authoritative backend parking-slot operational state (originating from `FacilityService`, `ReservationService`, and `IoTService`) to corresponding Three.js 3D digital-twin scene objects in the SmartPark web client (`FE/`).
 
 The prototype implementation ensures that:
 
@@ -70,7 +70,7 @@ The prototype implementation ensures that:
   * `scripts/database/microservices/03-reservation-session-service-db.sql` (`reservations`, `parking_sessions`, `slot_allocations`).
   * `scripts/database/microservices/06-iot-service-db.sql` (`sensor_telemetries`, `devices`).
 * **Source Code Implementations**:
-  * Backend API: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+  * Backend API: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
   * Frontend 3D Subsystem: `FE/src/components/3d/Parking3DViewer.tsx`, `FE/src/lib/3d/slotMatcher.ts`, `FE/src/lib/3d/parking3DConfig.ts`.
 
 ---
@@ -83,7 +83,7 @@ The prototype implementation ensures that:
 ┌────────────────────────────────────────────────────────────────────────┐
 │                      Authoritative Backend Layer                       │
 │                                                                        │
-│   [IoTService]             [ReservationService]       [ParkingService] │
+│   [IoTService]             [ReservationService]       [FacilityService] │
 │   (Ultrasonic Sensors)     (Bookings & Sessions)      (Slot Hierarchy) │
 │            │                        │                        │         │
 │            ▼                        ▼                        ▼         │
@@ -133,10 +133,10 @@ The SmartPark platform follows a planned **6-microservice architecture** (3 curr
 
 | Microservice | Implementation Status | Technical Responsibility |
 | :--- | :--- | :--- |
-| **`ParkingService`** | **IMPLEMENTED** (`src/Services/ParkingService`) | Canonical owner of facility hierarchy (`parking_sites`, `spatial_units`), slot inventory (`parking_slots`), coordinates, and **operational physical state** (`AVAILABLE`, `OCCUPIED`, `UNKNOWN`, `MAINTENANCE`, `UNAVAILABLE`). Exposes the consolidated operational read projection `GET /api/parking-lots/{id}/operational-layout`. |
+| **`FacilityService`** | **IMPLEMENTED** (`src/Services/FacilityService`) | Canonical owner of facility hierarchy (`parking_sites`, `spatial_units`), slot inventory (`parking_slots`), coordinates, and **operational physical state** (`AVAILABLE`, `OCCUPIED`, `UNKNOWN`, `MAINTENANCE`, `UNAVAILABLE`). Exposes the consolidated operational read projection `GET /api/parking-lots/{id}/operational-layout`. |
 | **`ReservationService`**| **IMPLEMENTED** (`src/Services/ReservationService`) | Canonical owner of reservation lifecycle, customer payment-holds, commitment fences, allocation priority, and protection rules. |
 | **`UserService`** | **IMPLEMENTED** (`src/Services/UserService`) | Canonical owner of user identities, roles, driver vehicle profiles, and authentication security. |
-| **`IoTService`** | **UPCOMING (Roadmap)** | Ingests sensor telemetries (ultrasonic/camera LPR) from physical edge devices, publishing reconciled occupancy events to `ParkingService`. |
+| **`IoTService`** | **UPCOMING (Roadmap)** | Ingests sensor telemetries (ultrasonic/camera LPR) from physical edge devices, publishing reconciled occupancy events to `FacilityService`. |
 | **`PaymentService`** | **UPCOMING (Roadmap)** | Manages financial transactions, gateway clearance (VNPay/MoMo/ZaloPay), and fee calculations. |
 | **`NotificationService`**| **UPCOMING (Roadmap)** | Manages real-time alerts, push notifications, and customer messaging. |
 | **Slot State Data Adapter** | TypeScript (`FE/`) | Fetches REST projection or fixture, validates network envelope, and normalizes into strongly-typed `SlotVisualState` objects. |
@@ -148,7 +148,7 @@ The SmartPark platform follows a planned **6-microservice architecture** (3 curr
 
 ### 2.3. Source of Truth
 
-* **Strict Invariant**: The PostgreSQL databases managed by `ParkingService` and `ReservationService` are the **sole authoritative sources of truth** for spot occupancy, reservations, fees, and allocation.
+* **Strict Invariant**: The PostgreSQL databases managed by `FacilityService` and `ReservationService` are the **sole authoritative sources of truth** for spot occupancy, reservations, fees, and allocation.
 * **Client Presentation Role**: The Three.js canvas is purely an interactive read-only display.
 * **Prohibited Behavior**: Selecting a bay, rotating the camera, hovering over an object, or executing a client-side animation must **never** create or mutate a database record.
 
@@ -161,7 +161,7 @@ sequenceDiagram
     participant GLTF as Three.js Scene Loader
     participant Reg as SlotMappingRegistry
     participant Adapt as SlotStateAdapter
-    participant API as ParkingService API
+    participant API as FacilityService API
     participant Bind as StateBindingEngine
     participant Render as Three.js Canvas
 
@@ -651,7 +651,7 @@ The 3D client is **strictly prohibited** from:
 
 | ID | Topic / Question | Current Project Baseline | Resolution Owner | Status |
 | :--- | :--- | :--- | :--- | :---: |
-| **Q-01** | Which endpoint serves operational layout? | `GET /api/parking-lots/{id}/operational-layout` in `ParkingService.API` | Backend Team | **RESOLVED** |
+| **Q-01** | Which endpoint serves operational layout? | `GET /api/parking-lots/{id}/operational-layout` in `FacilityService.API` | Backend Team | **RESOLVED** |
 | **Q-02** | Is `slotId` or `slotCode` the primary mapping key? | `slotCode` matches 3D mesh names; `slotId` UUID tracks DB transactions. | FE & DB Lead | **RESOLVED** |
 | **Q-03** | How are reservation states formatted? | `reservation_state` enum column (`RESERVED`, `PROTECTED`, `BACKUP`) in DB. | DB Lead | **RESOLVED** |
 | **Q-04** | Can multiple overlays coexist? | Mutually exclusive in MVP; single highest priority halo displayed. | PM / UI Lead | **CONFIRMED** |

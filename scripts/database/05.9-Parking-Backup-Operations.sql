@@ -1,4 +1,4 @@
--- ParkingService only; apply after the Parking alignment overlay.
+-- FacilityService only; apply after the Parking alignment overlay.
 BEGIN;
 CREATE TABLE IF NOT EXISTS structure_backup_policies (
  id UUID PRIMARY KEY, site_id UUID NOT NULL REFERENCES parking_sites(id), unit_id UUID REFERENCES spatial_units(id),
