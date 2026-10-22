@@ -1,4 +1,4 @@
-# Facility Capacity — business rules RC1
+# Facility Capacity — business rules v1.1
 
 [Rule index](README.md) · [SRS module](../srs/modules/02-facility-capacity.md)
 
@@ -8,7 +8,13 @@
 
 Capacity is reported and validated separately by supported vehicle type, including motorcycle. Unused motorcycle capacity does not demonstrate automobile capacity.
 
-**Trace:** FR-CAP-02, FR-VEH-04; UC-VEH-01, UC-LOT-01, UC-SEARCH-01
+Initial first-lot setup is saved within Partner Registration before email verification and combined Admin review (FR-AUTH-01/05). An approved Owner submits each additional lot as a separate application for Admin approval/rejection. Rejection leaves the Owner and other approved lots unaffected. Rejected applications remain immutable; Draft as new lot application creates a distinct proposal and review identity, including identical content. Submission/provisioning retries are idempotent; absence of content-deduplication does not permit duplicate applications/sites. Admin document replacement is confined to the initial pending Partner application.
+
+Approval authorizes the lot; successful provisioning/activation and operational opening remain separate. Facility owns configuration/readiness; Operations validates accepted occupancy/claims and admission readiness, with required Payment terms before sales. Pending/failed/unknown provisioning is visible and recoverable without duplicate sites. Normal initial Owner login waits for successful provisioning. Open only after required configuration and operational readiness checks under existing permissions; approval never automatically opens for parking. Owner updates/deactivates owned facility profile, address, coordinates, supported categories and operating/open-state configuration while preserving accepted rights and actual occupation.
+
+Spatial deactivation never silently cascades to descendants. Explicitly select/handle affected floors/zones/rows/spaces and resolve operational dependencies before acceptance. FE supports multiselect. A batch is confined to one lot and is all-or-nothing: validate authorization, versions, descendants and dependencies for every item; return per-item errors and mutate none when any fails. Recheck dependencies at commit; planned restriction/recovery coordination and emergency physical-closure safeguards remain applicable.
+
+**Trace:** FR-CAP-02, FR-VEH-04, FR-LOT-01/04; UC-VEH-01, UC-LOT-01, UC-SEARCH-01
 
 ## BR-CAP-02
 

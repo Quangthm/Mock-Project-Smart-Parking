@@ -1,6 +1,6 @@
 # Database Documentation
 
-Thư mục này là tài liệu database của **profile đang triển khai** trên branch `feature/db-hybrid-srs-v1` (runtime canonical), không chỉ là bản thiết kế arch.
+Thư mục này là tài liệu database của **profile triển khai đã ghi nhận** trên branch `feature/db-hybrid-srs-v1` (bằng chứng schema, không phải kiểm chứng runtime mới của SPARK-296), không chỉ là bản thiết kế arch.
 
 ## Baseline
 
@@ -19,15 +19,14 @@ Thư mục này là tài liệu database của **profile đang triển khai** tr
 | `microservices/` | Tài liệu chi tiết 01–06; `03` tách 03a/03b |
 | `db-update-log/` | Workflow/template change log database (arch copy) |
 | `workflow-upgrades-2026-10-08.md` | Historical arch workflow `05.8–05.10`; superseded by base + overlay, không chạy trên branch này |
-| `alignment-backlog.md` | Backlog lịch sử DB01–DB24 (không phải trạng thái hiện tại) |
+| [alignment-backlog.md](alignment-backlog.md) | DB25–DB33: v1.1 target work; DB01–DB24: retained historical findings |
 | `drawdb-schema.sql` | Snapshot lịch sử cho drawDB, **không phải runtime schema** |
 
-## Chạy nhanh
+## v1.1 reset and alignment gate
 
-```powershell
-.\setup.ps1 -RecreateDb   # lần đầu / đổi schema (destructive)
-.\setup.ps1               # các lần sau
-```
+The schema facts below remain the recorded deployment profile; v1.1 requirements are in [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending), not fabricated deployed columns. Partner review/document versions, simulation, provisioning, yearly products, discovery, same-lot batch deactivation and vehicle-binding history need schema/seed design.
+
+Development database reset is a **future task after the documentation update is approved** (V11-08), replacing migration/grandfathering of invalid development records. Target development environments, responsible teammate, reviewed reset/seed scripts and execution date are TBD under DB31. Existing setup commands are described in [schema integration](schema-integration.md) as implementation evidence; no setup/reset is executed or authorized by this documentation task.
 
 ## Evidence
 

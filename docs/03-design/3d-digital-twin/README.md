@@ -2,9 +2,19 @@
 
 Welcome to the **SmartPark 3D Digital Twin** architectural and design documentation hub. This directory contains all technical specifications, asset documentation, WebGL implementation guidelines, enterprise onboarding rules, and exported 3D models.
 
-In strict compliance with **SmartPark SRS v0.9 (§3.2.3)**, the 3D Digital Twin is a **non-authoritative visualization engine** that consumes authoritative state from the SmartPark backend.
+Under the [current discovery/visualization requirements](../../01-requirements/srs/modules/03-discovery-visualization.md), the 3D Digital Twin is a **non-authoritative visualization engine**. The v1.1 documentation review candidate preserves fixed model assets and the independent physical/protection state model. [Backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) is the current integration contract: Operations owns accepted occupancy/claims/availability; Facility owns configuration/model identity; IoT supplies raw observations.
 
 ---
+
+## MapTiler discovery to internal 2D/3D booking (V11-12)
+
+MapTiler provides the geographic discovery page; this hub governs the separate internal lot models. Discovery uses consented GPS or manual origin, 5 km default/expansion, Haversine ordering, independent vehicle category and outdoor/basement/multi-storey filters, and backend-confirmed availability/pricing. Full lots remain labelled unless intentionally filtered out.
+
+No interval means current-time availability and the current tariff with billing unit, without invented duration/total or comparison of unlike units. A selected interval means interval availability and estimated total for price filtering/comparison. Selecting a lot shows details and a button to its internal model page; preserve lot/vehicle/interval context and recheck backend capacity on booking. Neither a geographic marker nor a selected model slot reserves anything.
+
+Keep requested location distinct from allocated location and render recorded vehicle location only at its known precision. Preserve independent physical/protection state, stale/disconnected warnings and authorized snapshot refresh on reconnect. Directions open an external map; embedded routing/turn-by-turn is excluded. Omit/defer travel estimates without an actual source; straight-line distance is not road distance or ETA. Exact filter/DTO/freshness contracts remain design work (DB32).
+
+Asset specifications and past render claims below remain their original engineering evidence, not v1.1 product acceptance. The dated [review handoff](3D_INTEGRATION_REVIEW_HANDOFF.md) and [feedback](3D_INTEGRATION_REVIEW_FEEDBACK.md) are historical review records; their implementation observations and conflicting v0.9 ownership conclusions do not override the current binding contract.
 
 ## 🧭 DEVELOPER QUICK NAVIGATION & KEY IMPLEMENTATION MAP
 
@@ -14,12 +24,12 @@ For developers and technical leads picking up implementation tasks, use this ref
 | :--- | :--- | :--- |
 | **SaaS Roadmap & 0-Code Design Contract** | [`GUIDE §2.3, §2.4`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#23-architectural-roadmap-phase-1-mvp-vs-phase-2-commercial-saas) | Explains the two-phase roadmap (MVP Catalog vs. SaaS Self-Service) and the 5-pillar design contract that enables dynamic model ingestion without modifying frontend code. |
 | **Enterprise Model Rules & Remediation** | [`RULES DOC`](./3D_ENTERPRISE_MODEL_INGESTION_RULES.md) | Official compliance rulebook for Phase 2 B2B clients and 3D artists. Includes naming regex, hierarchy, Draco budgets, error codes, and a step-by-step model remediation playbook. |
-| **Project & Directory Layout** | [`GUIDE §8`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#8-project--file-structure) | Clean Next.js/React folder structure (`components/3d/`, `services/3d/`, `constants/3d-palette.ts`). |
-| **Draco Optimization & SLA < 3s** | [`GUIDE §9, §25`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#9-asset-preparation--draco-compression) | Exact `gltf-pipeline` CLI commands for compression, measured Chrome DevTools benchmarks, and 60 FPS / <250 draw call budget caps. |
+| **Project & Directory Layout** | [`GUIDE §8`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#8-project--file-structure-clean-architecture-alignment) | Clean Next.js/React folder structure (`components/3d/`, `services/3d/`, `constants/3d-palette.ts`). |
+| **Draco Optimization & SLA < 3s** | [`GUIDE §9.2, §25`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#92-executing-draco-compression) | Exact `gltf-pipeline` CLI commands for compression, measured Chrome DevTools benchmarks, and 60 FPS / <250 draw call budget caps. |
 | **Dual-Track PBR Pipeline (Preserving Textures)** | [`GUIDE §16`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#16-material-and-color-management-dual-track-pbr-pipeline) | Dual-Track engine: preserves native enterprise image textures/PBR shaders while applying fallback auto-styling to untextured clay imports. |
-| **Orthogonal 2-Axis State Model** | [`GUIDE §16.3, §21`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#21-runtime-state-visualization) | Decouples Physical State (`AVAILABLE` / `OCCUPIED` / `MAINTENANCE`) and Reservation Protection State (`UNRESERVED` / `RESERVED` / `PROTECTED`) per SRS v0.9 §3.2.2. |
-| **Node Mapping & WebSocket Telemetry** | [`GUIDE §17, §18, §20`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#17-object-identification-and-mapping) | Regex categorization (`PARKING_*`, `_EV_`, `Vinfast_`) and real-time WebSocket state binding strictly within the SRS v0.9 §3.2.3 non-authoritative boundary. |
-| **Vehicle Instancing & `car_color status`** | [`GUIDE §19`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#19-vehicle-integration-sedans--motorcycles-with-car_color-status) | Dynamic vehicle spawning using `car_color status` (Navy, Cyan, Amber, Purple, Red) to show session types without overwriting slot floor textures. |
+| **Orthogonal 2-Axis State Model** | [`GUIDE §16.3, §21`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#21-runtime-state-visualization-orthogonal-2-axis-model) | Decouples Physical State (`AVAILABLE` / `OCCUPIED` / `MAINTENANCE`) and Reservation Protection State (`UNRESERVED` / `RESERVED` / `PROTECTED`) per the current facility/discovery requirements. |
+| **Node Mapping & WebSocket Telemetry** | [`GUIDE §17, §18, §20`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#17-object-identification-and-mapping) | Regex categorization (`PARKING_*`, `_EV_`, `Vinfast_`) and real-time WebSocket state binding strictly within the current non-authoritative boundary. |
+| **Vehicle Instancing & `car_color status`** | [`GUIDE §19`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#19-vehicle-integration--status-determination-car_color-status-paradigm) | Dynamic vehicle spawning using `car_color status` (Navy, Cyan, Amber, Purple, Red) to show session types without overwriting slot floor textures. |
 | **Floor Culling & "Find My Spot" Navigation** | [`GUIDE §23`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#23-camera--navigation-controls--floor-pagination) | `FloorPaginationController` (isolates active levels, turns off matrix auto updates) and GSAP camera flight focusing on the user's reserved stall. |
 | **Pre-PR Developer Checklist** | [`GUIDE §32`](./3D_MODEL_IMPLEMENTATION_GUIDE.md#32-implementation-checklist) | 10-point self-audit quality checklist to verify before opening a pull request. |
 

@@ -15,14 +15,14 @@ Current authorized facility/session view.
 
 ## Main flow
 
-1. Render supported versioned outdoor/building/basement layout.
+1. From selected MapTiler lot details, use the internal-model button with lot/category/interval context; render supported versioned outdoor/building/basement layout on its separate page.
 2. Display backend physical/protection states separately and requested versus allocated resource.
 3. Show vehicle location only to recorded precision.
 4. On disconnect mark stale; reconnect reloads authorized current state.
 
 ## Alternatives and failures
 
-Frontend never grants allocation or clears occupancy; no invented slot from zone-only evidence.
+Frontend never grants allocation or clears occupancy; no invented slot from zone-only evidence. Revalidate reservation through the backend; model selection does not reserve. Geographic directions remain external only.
 
 ## Postconditions
 

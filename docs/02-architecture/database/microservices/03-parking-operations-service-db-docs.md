@@ -2,11 +2,15 @@
 
 > **Service**: Parking Operations Service (`OperationsDb` — logical, triển khai trên 2 DB vật lý)  
 > **Database files**: [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) → `smartpark_facility`; [`03b-reservation-operations-service-db.sql`](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) → `smartpark_operations`<br>
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB27–DB30/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và audit (`audit_logs`).
 
 ---
+
+## v1.1 target alignment (DB27–DB30/DB32)
+
+Operations remains authoritative for accepted occupancy, claims, discovery and monthly/yearly Driver plan/coverage. Facility/3D projections and IoT observations do not grant capacity. Yearly coverage requires 12 calendar months and at most one yearly period in advance; monthly maximum three prepaid periods is unchanged. Explicit per-lot enablement is separate from Payment price. Existing `monthly_passes` does not prove yearly implementation. Discovery defaults to now with current availability and unit-labelled tariff; selected intervals require interval availability and estimated total. Same-lot deactivation and vehicle removal coordinate active dependency guards. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 
@@ -228,7 +232,7 @@ Index: `(site_id, created_at DESC)`.
 
 ## 11. Bảng `search_facility_projections` — Module Tìm kiếm & Khám phá
 
-Bảng chiếu dữ liệu phục vụ tìm kiếm bãi xe theo tọa độ GPS bán kính, trạng thái mở cửa, và số chỗ trống gần nhất mà không query xuyên database. Index `(latitude, longitude)` và `(operational_status, is_open)`.
+Bảng chiếu dữ liệu phục vụ tìm kiếm bãi xe theo tọa độ GPS bán kính, trạng thái mở cửa, và số chỗ trống gần nhất mà không query xuyên database. V11-12 requires consented/manual origin, default 5 km with expansion, independent vehicle/lot-type filters, Haversine ordering, source/freshness and current-tariff versus interval-total semantics; these capabilities are pending DB32, not demonstrated by the existing projection. Index `(latitude, longitude)` và `(operational_status, is_open)`.
 
 ---
 

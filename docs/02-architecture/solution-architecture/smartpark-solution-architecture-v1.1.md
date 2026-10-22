@@ -1,7 +1,7 @@
-# SmartPark — Solution Architecture v1.0
+# SmartPark — Solution Architecture v1.1 review candidate
 
-**Main architecture overview · 14 October 2026 · Aligned to v1.0 RC3**  
-Source: `docs` branch at [923e9c7](https://github.com/Quangthm/Mock-Project-Smart-Parking/commit/923e9c783c77f1feb75440cbc79d8422c0b03c16). This describes the approved target and known implementation work, not a claim that the repository already implements every boundary. Requirements release remains a review candidate and product acceptance remains NOT RUN.
+**Main architecture overview · 21 October 2026 · v1.1 documentation review candidate based on approved decisions**
+Stable `v1.0` filename retained as a compatibility entry; this is the current v1.1 overview. Original source: `docs` branch at [923e9c7](https://github.com/Quangthm/Mock-Project-Smart-Parking/commit/923e9c783c77f1feb75440cbc79d8422c0b03c16). This describes the approved target and known implementation work, not a claim that the repository already implements every boundary. Requirements release remains a review candidate and product acceptance remains NOT RUN.
 
 ## 1. Purpose and governing decisions
 
@@ -9,7 +9,7 @@ Use this document for **how the solution is organized and why each responsibilit
 
 The current direction is six domain-owned services with Clean Architecture, PostgreSQL persistence, synchronous APIs for immediate decisions, and RabbitMQ/MassTransit for durable asynchronous outcomes. Search belongs inside Operations; Assistant belongs inside IoT & Recognition; General Support belongs inside Notification & Audit. Their presence does not require new deployable services.
 
-This v1.0 overview supersedes the *overview direction* of the retained v0.9 architecture where it conflicts: Kafka is deferred, the old independent Reservation/Search split is not the selected target, tariffs belong to Payment, accepted occupancy belongs to Operations, and RC2/RC3 security/payment amendments apply. Older API/schema/design documents remain useful implementation references only where consistent with the current contracts.
+This current overview supersedes the *overview direction* of the retained v0.9 architecture where it conflicts: Kafka is deferred, the old independent Reservation/Search split is not the selected target, tariffs belong to Payment, accepted occupancy belongs to Operations, and RC2/RC3 security/payment amendments apply. Older API/schema/design documents remain useful implementation references only where consistent with the current contracts.
 
 ## 2. Architecture drivers
 
@@ -43,14 +43,14 @@ The diagram shows the synchronous entry path, persistence ownership, durable eve
 
 | Service | Owns | Key boundary |
 |---|---|---|
-| User & Access | Accounts, credentials, sessions, roles/current grants, organization membership, Operator scopes, profiles and registered-vehicle binding. | Facility validates referenced site existence; resource services still authorize current access. |
+| User & Access | Accounts, credentials, sessions, roles/current grants, organization membership, Partner applications/review/document versions, Operator scopes, profiles and registered-vehicle binding history. | Facility validates referenced site existence; resource services still authorize current access. |
 | Facility & Visualization | Sites/floors/zones/slots, paths, categories, configured capacity, layout, maintenance/closure configuration and fixed 3D asset references. | Defines resources; does not own accepted occupancy or reservation availability. |
-| Parking Operations | Reservations, claims, allocations, accepted occupancy/uncertainty, admission, visits, checkout/departure, tickets/QR/cards, incidents/appeals, monthly rights/plan definitions and Search. | Owns compatible fulfillment and business availability. |
-| Payment & Pricing | Tariffs, financial snapshots, orders/attempts, online adapters/cash records, verification/reconciliation, refunds, invoices and monthly paid financial periods. | Payment success is not proof that Operations committed a right. |
+| Parking Operations | Reservations, claims, allocations, accepted occupancy/uncertainty, admission, visits, checkout/departure, tickets/QR/cards, incidents/appeals, monthly/yearly Driver rights/plan definitions and Search. | Owns compatible fulfillment and business availability. |
+| Payment & Pricing | Tariffs, financial snapshots, orders/attempts, online adapters/cash records, verification/reconciliation, refunds, invoices and monthly/yearly paid financial periods. | Payment success is not proof that Operations committed a right. |
 | IoT & Recognition | Devices/readers, raw observations, recognition/evidence; separate Assistant module and conversations/tool history. | Supplies observations/help; never grants entry, payment clearance or domain rights. Real hardware is deferred. |
 | Notification & Audit | Delivery attempts, audit projections and a separate General Support module, including ACCOUNT_RECOVERY cases. | Source services retain authoritative facts. Support case approval is not a credential reset. |
 
-Each domain owns its reports; cross-domain screens compose authorized APIs/projections. No shared Policy or Media database is introduced. Monthly coverage is split deliberately: Operations owns entitlement and admission; Payment owns price, collected money and refunds.
+Each domain owns its reports; cross-domain screens compose authorized APIs/projections. No shared Policy or Media database is introduced. Monthly/yearly coverage is split deliberately: Operations owns entitlement and admission; Payment owns price, collected money and refunds.
 
 See [full ownership/event matrix](../service-boundaries/ownership-and-events.md) and [action-by-role permissions](../../01-requirements/srs/permissions.md).
 
@@ -59,7 +59,7 @@ See [full ownership/event matrix](../service-boundaries/ownership-and-events.md)
 | Component | Current direction | Scope qualifier |
 |---|---|---|
 | Backend | ASP.NET Core / .NET 10; per-service Clean Architecture | `net10.0` is present in the inspected UserService project. No claim of a full code audit. |
-| Frontend | React, Tailwind CSS, Material UI; three.js for digital twin | UI reads backend facts; specific state-management/map library remains a technical choice. |
+| Frontend | React, Tailwind CSS, Material UI; three.js for digital twin | UI reads backend facts; MapTiler provides geographic discovery, separate from internal 2D/3D booking visualization. |
 | Entry/API | API Gateway and authenticated HTTP/OpenAPI contracts | Routing/edge checks do not replace owning-service authorization. |
 | Persistence | PostgreSQL; service-owned databases/credentials | One server may host the separate local databases. |
 | Durable events | RabbitMQ + MassTransit | Kafka is deferred. |
@@ -102,9 +102,11 @@ Details: [command/event contract matrix](../service-boundaries/ownership-and-eve
 | Workflow | Coordinator and handoff | Recovery invariant |
 |---|---|---|
 | Reserve and pay | Operations guards compatible claim; Payment creates/verifies money; Operations confirms/fulfills. | Late ordinary money reacquires compatible capacity if available, otherwise refund/reconciliation; no displacement. |
-| Monthly purchase/renewal | Operations validates coverage; Payment settles full amount; Operations commits entitlement. | Full verification plus entitlement commit strictly before hold expiry; late money cannot be backdated into activation. |
+| Monthly/yearly purchase/renewal | Operations validates coverage; Payment settles full amount; Operations commits entitlement. | Full verification plus entitlement commit strictly before hold expiry; late money cannot be backdated into activation. |
 | Checkout and departure | Operations records accepted cutoff; Payment calculates/settles; Operations records actual departure. | Money coverage, gate action and physical release remain distinct; UNKNOWN blocks blind unpaid recovery. |
-| Planned capacity reduction | Facility proposes structural change; Operations commits restriction/recovery before planned reduction completes. | Emergency physical closure is recorded promptly and safe admission restrictions preserve occupants and rights. |
+| Partner approval/provisioning | User & Access commits combined review, coordinates organization/membership and Facility first-site provisioning through durable service contracts. | Pending/failed/unknown provisioning blocks normal Owner login; reconcile/retry the same operation without duplicate tenants/sites. Approval email is not readiness/opening. |
+| Additional-lot application | User & Access owns proposal/review; Facility owns authorized configuration. | Immutable rejection leaves Owner/other lots unaffected; Draft as new creates a distinct proposal; identical content allowed, retries deduplicated. |
+| Planned capacity reduction | Facility proposes structural change; Operations commits restriction/recovery before planned reduction completes. | Emergency physical closure is recorded promptly and safe admission restrictions preserve occupants and rights. Explicit descendant/dependency handling and same-lot all-or-nothing batches return per-item validation errors. |
 | Refund | Authorized case or automatic surplus obligation feeds Payment. | Reserve eligible balance including pending/UNKNOWN refunds; completion needs payout evidence. |
 | Account recovery | Support owns case history; authorized Admin review leads to User & Access credential workflow. | Current security/session version invalidates prior access; no self-approved Admin recovery or support-database credential writes. |
 
@@ -112,11 +114,19 @@ A lost response is not evidence of failure. Lookup/reconcile the same logical op
 
 Full detail: [states, money/capacity races and unknown outcomes](../../01-requirements/srs/state-transitions.md) · [payOS adapter](../payment-integration/payos.md) · [authentication/recovery contract](../../01-requirements/srs/authentication-recovery.md).
 
+Partner Registration uses the existing Owner role. Persist the pending identity/account and combined first-lot application immediately. Save setup and mandatory consented simulated VNeID before email OTP; verified email precedes combined review. The [21 October V11-06 clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md) requires the fake VNeID API to return a GUID substitute that User & Access persists linked to the user; field/schema and retry consistency remain pending, and the identifier is neither government verification nor an auth token. The sole seeded Admin is exempt from simulation; Operators complete it during verified email activation with optional password. Driver verification never automatically logs in. Admin may replace only uploaded initial pending agreement/policy documents with versioned evidence and concurrent-review protection. Final approval/rejection is immutable; initial rejected email cannot register again. See [coordination contract](../service-boundaries/ownership-and-events.md#partner-review-and-provisioning-coordination).
+
+Activation/authorization and operational opening remain separate. Owner email must be verified for approval; supplied phone must be separately verified before phone OTP login. Restricted onboarding credentials never grant a normal Owner session. Normal successful login returns necessary tokens, with separate profile retrieval, safe failures and MFA challenge preserved.
+
+Monthly/yearly products are Driver parking coverage enabled explicitly by Owner per lot, independent of price. A yearly period is 12 calendar months, at most one period in advance; unchanged monthly limits and applicable when-space-available coverage remain. Operations defines coverage; Payment defines financial/refund terms with a separate yearly policy set (values pending). No capacity guarantee or new renewal default is implied.
+
+MapTiler discovery uses backend facts from Operations/Facility/Payment, a consented current or manual origin, 5 km default/expansion, Haversine ordering and independent vehicle/lot-type filters. Default-now search displays current availability and unit-labelled tariff without inventing duration/total; selected intervals use interval availability and estimated total. Details hand context to internal 2D/3D booking and backend capacity confirmation. External directions only; omit unsourced travel estimates. Source/freshness and stale/unavailable states remain visible.
+
 ## 9. Security, media and live projections
 
 User & Access owns passwords, primary OTP, optional TOTP, backup codes, sessions and current grants. Enabled TOTP gates normal login after primary proof. Each consuming service checks current resource authority, including private cached results and SignalR subscriptions. Gateway checks alone are insufficient. Turnstile is an abuse-control component, not authentication or authorization.
 
-ACCOUNT_RECOVERY is a reviewed, restricted workflow. Admin authorizes a user-chosen password reset; a TOTP reset requires replacement enrollment rather than silently restoring unrestricted access. Different Admin review is required for Admin targets; the exceptional last-Admin route follows the controlled maintainer runbook. Neither workflow grants business privileges.
+ACCOUNT_RECOVERY is a reviewed, restricted workflow. Admin authorizes a user-chosen password reset; a TOTP reset requires replacement enrollment rather than silently restoring unrestricted access. MVP has one protected seeded Admin, no Admin registration and no role-management feature. Application-level lock/disable/delete/role changes targeting that account are prohibited; ordinary own profile/security actions and authentication lockouts remain. Admin recovery follows the controlled maintainer runbook. Neither workflow grants business privileges.
 
 Asset bytes sit behind a provider adapter; the business owner stores stable asset IDs, sensitivity, lifecycle and retention/hold metadata. Other services use opaque references and authorized content routes. Upload and database commit are reconciled; evidence is not called preserved until the owner acknowledges a hold. Fixed 3D templates remain deployment assets.
 
@@ -140,7 +150,9 @@ For payment acceptance, use controlled low-value payOS production evidence plus 
 
 Suggested execution sequence, not new sprint commitments: align ownership/contracts and schema; implement current authorization and durable operations; complete capacity/money workflows; integrate projections/providers; then execute boundary, recovery and acceptance tests. Accountable people, dates, technical configuration and concrete capability blockers remain team work. No new coverage percentage, CI gate or production SLA is invented here.
 
-Use [canonical acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md), [payOS execution plan](../../04-testing/payment-integration/payos-test-plan.md) and [full measurement recipe](../../01-requirements/srs/modules/11-quality-deployment.md). All 72 baseline scenarios remain NOT RUN in the source snapshot; existing task-specific test reports do not automatically close those scenarios.
+Use [canonical acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md), [payOS execution plan](../../04-testing/payment-integration/payos-test-plan.md) and [full measurement recipe](../../01-requirements/srs/modules/11-quality-deployment.md). The maintained acceptance catalogue records scenario count/status; all new v1.1 scenarios are NOT RUN. Existing task-specific historical test reports do not automatically close current scenarios.
+
+Development reset is a future implementation task only after documentation update and approval (V11-08), replacing migration/grandfathering of invalid development applications. Schema/seed compatibility must be fixed first. Target environments, accountable teammate, reviewed reset/seed scripts and execution date are TBD in [DB31](../database/alignment-backlog.md#v11-schema-and-seed-alignment-pending); no reset/setup or runtime acceptance was executed by this documentation update.
 
 ## 12. Detailed reading map and change discipline
 

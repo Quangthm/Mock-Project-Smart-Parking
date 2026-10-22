@@ -1,6 +1,6 @@
-﻿# Business rules - RC1
+﻿# Business rules — v1.1 documentation review candidate
 
-Canonical 57 BR and 9 monthly M definitions. Monthly M rules are defined once in the monthly rule file; SRS/UC reference them.
+Canonical rules retain existing IDs. M-01–M-09 define monthly products and the approved yearly extension in the stable monthly filename; SRS/UC reference them. See the maintained catalogues below and [traceability](../requirements-traceability/README.md) for inventory.
 
 - [01-identity-access](01-identity-access.md)
 - [02-facility-capacity](02-facility-capacity.md)
@@ -15,4 +15,4 @@ Canonical 57 BR and 9 monthly M definitions. Monthly M rules are defined once in
 
 ## RC2 security rules
 
-BR-AUTH-04-07 add optional TOTP, backup recovery, reviewed Admin reset and replay/revocation invariants. Current count:57 BRs +9 monthly rules. Original rules and IDs are preserved.
+BR-AUTH-04-07 add optional TOTP, backup recovery, reviewed Admin reset and replay/revocation invariants. Current inventory is maintained in the linked rule files and traceability. Original rules and IDs are preserved.

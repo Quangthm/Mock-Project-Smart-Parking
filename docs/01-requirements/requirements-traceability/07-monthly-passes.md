@@ -18,3 +18,8 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | FR-MON-12 | CONFIRMED — implementation pending / not assessed | 07-monthly-passes | M-05, M-06, M-09 | US-OW06 | UC-MON-01 |
 | FR-MON-13 | CONFIRMED — implementation pending / not assessed | 07-monthly-passes | M-03, M-05 | US-OW06 | UC-MON-01 |
 | FR-MON-14 | CONFIRMED — implementation pending / not assessed | 07-monthly-passes | M-04, M-05, M-07, M-08 | US-D14, US-O07 | UC-MON-03, UC-MON-05 |
+
+
+## v1.1 decision and acceptance links
+
+V11-09–10: [exact changed clauses, API/architecture contracts and acceptance scenarios](v1.1-decision-coverage.md). Existing IDs are retained; these associations describe requirements, not implementation/test completion.

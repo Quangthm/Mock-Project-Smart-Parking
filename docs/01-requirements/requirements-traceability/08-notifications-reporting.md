@@ -11,3 +11,8 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | FR-RPT-04 | CONFIRMED — implementation pending / not assessed | 08-notifications-reporting | BR-PRIV-03 | US-A03 | UC-RPT-02 |
 | FR-RPT-05 | CONFIRMED — implementation pending / not assessed | 08-notifications-reporting | BR-PRIV-01, BR-PRIV-02 | US-A05 | UC-RPT-02 |
 | FR-BAS-07 | CONFIRMED — implementation pending / not assessed | 08-notifications-reporting | BR-AUTH-01, BR-PRIV-01 | US-OW04 | UC-RPT-01 |
+
+
+## v1.1 decision and acceptance links
+
+V11-02–03, V11-07; D09–10: [exact changed clauses, API/architecture contracts and acceptance scenarios](v1.1-decision-coverage.md). Existing IDs are retained; these associations describe requirements, not implementation/test completion.

@@ -1,8 +1,8 @@
-# Pricing Payments — SRS v1.0 RC3
+# Pricing Payments — SRS v1.1
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
-**Status:** review candidate, 13 October 2026; implementation/evidence not assessed. Source review section numbers below refer to the decision review, not this module numbering.
+**Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
 Defaults are versioned per applicable policy; Owner configurability remains within Admin bounds. Approval establishes these exact initial examples as defaults, not unrestricted additional fees or monetary approval thresholds.
 
@@ -14,10 +14,11 @@ Defaults are versioned per applicable policy; Owner configurability remains with
 | No-show | 0% | Applicable enabled policy and authoritative arrival rules still govern classification. |
 | Monthly voluntary cancellation before S | 100% | Eligible prepaid amount for not-started period. |
 | Monthly voluntary cancellation during [S,E) | 50% of unused value | P × ((E−C)/(E−S)) × 0.5, actual timestamps; no fixed 30-day approximation. |
+| Yearly voluntary cancellation | Separate configurable accepted yearly policy; values design-pending | Monthly percentages above are not yearly defaults; preserve A-01 dependencies, collected-money caps and rounding. |
 | Facility failure | 100% of eligible unused value | No voluntary penalty; ordinary fullness is not failure of an available-only capacity guarantee. Temporary closure retains pass with once-only verified unavailable-interval refund; permanent closure cancels remaining coverage (§16.9). |
 | Pricing miscalculation | Correct overcollection / collect shortfall | Not reduced by voluntary-cancellation rate. |
 
-At/after period E, unused-period value is zero. For multiple paid periods, calculate per-period eligible amount using accepted rates, sum unrounded values, round once half up to nearest 1,000 VND, then apply the remaining eligible-collected-money cap. No overlapping/double refund, no automatic offset against unrelated debt, no physical occupancy release merely because a refund/entitlement cancellation was recorded. Operator handles ordinary appeals; Owner escalations/monthly cancellation; Payment executes money. Accepted appeal/approved refund does not mean payout completed.
+At/after period E, unused-period value is zero. For multiple paid periods, calculate per-period eligible amount using accepted rates, sum unrounded values, round once half up to nearest 1,000 VND, then apply the remaining eligible-collected-money cap. No overlapping/double refund, no automatic offset against unrelated debt, no physical occupancy release merely because a refund/entitlement cancellation was recorded. Operator handles ordinary appeals; Owner escalations/monthly or yearly cancellation; Payment executes money. Accepted appeal/approved refund does not mean payout completed.
 
 For a nonnegative total x, conceptual rule: `rounded = 1000 × floor(x / 1000 + 0.5)`. Use exact decimal calculation; do not pre-round segments or convert negative accounting signs into a separate unapproved convention. Refunds are computed as nonnegative magnitudes with ledger direction represented separately.
 
@@ -33,7 +34,7 @@ Assigned, authorized Operator initiates/completes an audited correction **only f
 
 No full-refund/full-recharge route in MVP. No reopening a paid visit for continued parking: actual exit and re-entry are required for a new session. Audited unpaid checkout invalidation remains supported, without a new grace period. Physical departure and capacity release remain separate from payment success/gate opening. Cumulative refunds cannot exceed eligible collected money; the cap has precedence over rounding if legacy/provider balances are not multiples of 1,000.
 
-Positive-price reservation uses a 5-minute payment hold and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
+Positive-price reservation uses a 5-minute payment hold and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
 
 Completed reserved visit owes disclosed minimum plus eligible extras; prepayment credited once. Short visit does not waive booking obligation. Cancellation/no-show applies accepted refund rate only to eligible collected prepayment; no unpaid-balance penalty. Example booked 100,000 / deposit 30,000: completed visit owes remaining 70,000 absent other adjustments, but no-show creates no additional 70,000 debt. Final charge 125,000 / collected 300,000: automatically initiate exactly one 175,000 surplus refund; covered checkout may complete before payout. Unsupported online-route refunds remain pending integration/reconciliation issues, never silently replaced by cash. Fixed high deposit is not an event-pricing engine or damage bond.
 
@@ -87,7 +88,7 @@ Distinguish failed, pending and unknown outcomes. If payment succeeds after the 
 **Actors:** Driver, assigned Operator, Owner, Payment service  
 **Stories:** US-D10, US-O05, US-OW04, US-OW07
 
-Scoped Operator handles ordinary appeals/mispricing; Owner handles escalation and monthly cancellation; Payment executes payouts. Reserve refundable collected balance atomically, including pending/UNKNOWN refunds. Approval is not completion; actual payout proof is required. Automatically initiate excess-deposit refund through original route where supported, or audited cash return for original cash. Covered commercial checkout may complete while surplus payout remains pending. No cancellation penalty on surplus.
+Scoped Operator handles ordinary appeals/mispricing; Owner handles escalation and monthly/yearly cancellation; Payment executes payouts. Reserve refundable collected balance atomically, including pending/UNKNOWN refunds. Approval is not completion; actual payout proof is required. Automatically initiate excess-deposit refund through original route where supported, or audited cash return for original cash. Covered commercial checkout may complete while surplus payout remains pending. No cancellation penalty on surplus.
 
 ### FR-PAY-07
 
