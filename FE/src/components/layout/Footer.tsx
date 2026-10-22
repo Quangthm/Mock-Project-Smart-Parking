@@ -65,8 +65,8 @@ export function Footer() {
                   key={s.label}
                   title={s.label}
                   style={{
-                    width: 30,
-                    height: 30,
+                    width: 44,
+                    height: 44,
                     border: "1px solid var(--border)",
                     borderRadius: "50%",
                     background: "none",
@@ -79,6 +79,7 @@ export function Footer() {
                     cursor: "pointer",
                     transition: "border-color 0.15s, color 0.15s",
                   }}
+                  aria-label={s.label}
                 >
                   {s.icon}
                 </button>
@@ -89,7 +90,7 @@ export function Footer() {
           <div>
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -112,7 +113,7 @@ export function Footer() {
           <div>
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -133,7 +134,7 @@ export function Footer() {
           <div>
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -156,7 +157,7 @@ export function Footer() {
           <div>
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -175,8 +176,8 @@ export function Footer() {
               }}
             >
               <span>
-                <UntitledIcon name="map-pin" size={15} /> Tòa nhà Smart Hub, 17
-                Lê Duẩn, Q.1, TP.HCM
+                <UntitledIcon name="map-pin" size={15} /> Smart Hub Building, 17
+                Le Duan Street, District 1, Ho Chi Minh City
               </span>
               <span>
                 <UntitledIcon name="phone" size={15} /> Driver: 1900-xxxx

@@ -598,8 +598,8 @@ export function CheckInOut({
               }}
             >
               <option value="all">All Vehicles</option>
-              <option value="car">Car (Ô tô)</option>
-              <option value="motorcycle">Motorcycle (Xe máy)</option>
+              <option value="car">Car</option>
+              <option value="motorcycle">Motorcycle</option>
             </select>
           </div>
         </div>

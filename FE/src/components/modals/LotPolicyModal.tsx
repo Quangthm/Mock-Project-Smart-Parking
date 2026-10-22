@@ -121,7 +121,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                 <h3
                   id="policy-modal-title"
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontWeight: 700,
                     fontSize: "1.15rem",
                     margin: 0,
@@ -510,7 +510,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                   style={{
                     fontSize: "1.1rem",
                     fontWeight: 700,
-                    color: "#818cf8",
+                    color: "var(--fg)",
                   }}
                 >
                   60 Minutes

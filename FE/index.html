@@ -1,10 +1,19 @@
 <!doctype html>
-<html lang="<!-- figma:lang -->">
+<html lang="en">
   <head>
     <!-- figma:head-start -->
     <meta charset="UTF-8" />
     <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#F5F7F5" />
+    <script>
+      try {
+        const saved = localStorage.getItem('sp_theme')
+        const dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.querySelector('meta[name="theme-color"]').content = dark ? '#151C1B' : '#F5F7F5'
+      } catch { /* The CSS light theme remains available without storage. */ }
+    </script>
     <title>Smart Parking</title>
     <!-- figma:head-end -->
   </head>

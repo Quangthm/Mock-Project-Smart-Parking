@@ -283,7 +283,7 @@ export function DriverDashboard() {
                     id="driver-profile-title"
                     style={{
                       margin: "0.35rem 0 0",
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontSize: "1.35rem",
                       fontWeight: 700,
                     }}

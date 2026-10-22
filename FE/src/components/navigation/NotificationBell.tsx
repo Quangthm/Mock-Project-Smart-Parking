@@ -172,7 +172,7 @@ export function NotificationBell({ userId }: { userId: string }) {
               borderBottom: "1px solid var(--border)",
             }}
           >
-            <strong style={{ fontFamily: "Outfit" }}>Notifications</strong>
+            <strong style={{ fontFamily: "Be Vietnam Pro" }}>Notifications</strong>
             <button
               type="button"
               disabled={!unread}

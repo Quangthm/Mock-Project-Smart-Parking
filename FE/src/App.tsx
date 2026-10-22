@@ -107,8 +107,9 @@ function AppContent() {
         color: "var(--fg)",
       }}
     >
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
-      <main style={{ flex: 1 }}>
+      <main id="main-content" tabIndex={-1} style={{ flex: 1 }}>
         {authError && (
           <div role="alert" className="p-4 text-center text-red-600">
             {authError}

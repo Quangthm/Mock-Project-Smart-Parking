@@ -142,7 +142,7 @@ export function PaymentDetailModal({
             <span
               id="payment-receipt-title"
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 color: "var(--fg)",
@@ -463,8 +463,8 @@ export function PaymentDetailModal({
                 position: "absolute",
                 top: "2.5rem",
                 right: "2rem",
-                border: "3px solid #7c3aed",
-                color: "#7c3aed",
+                border: "3px solid var(--maintenance)",
+                color: "var(--maintenance)",
                 padding: "0.35rem 0.75rem",
                 borderRadius: "6px",
                 fontWeight: 800,
@@ -935,7 +935,7 @@ export function PaymentDetailModal({
                 fontSize: "1.4rem",
                 fontWeight: 900,
                 color: "#0f172a",
-                fontFamily: "Outfit, sans-serif",
+                fontFamily: "Be Vietnam Pro, sans-serif",
               }}
             >
               {totalAmount.toLocaleString("vi-VN")} VND

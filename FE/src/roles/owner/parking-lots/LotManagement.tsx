@@ -64,10 +64,10 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
           <span className="text-[10px] text-amber-600/70 dark:text-amber-400/70 block">Awaiting checkout</span>
         </div>
 
-        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3.5 space-y-1">
-          <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 block">Backup Buffer</span>
-          <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{summaryValue(totals.totalBackup)}</span>
-          <span className="text-[10px] text-purple-600/70 dark:text-purple-400/70 block">Overflow guarantee</span>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-1">
+          <span className="text-[11px] font-medium text-[var(--muted)] block">Backup Buffer</span>
+          <span className="text-lg font-bold text-[var(--fg)]">{summaryValue(totals.totalBackup)}</span>
+          <span className="text-[10px] text-[var(--muted)] block">Overflow guarantee</span>
         </div>
       </div>
 
@@ -203,7 +203,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                     </td>
 
                     {/* Backup */}
-                    <td className="px-3 py-3.5 text-right font-medium text-purple-600 dark:text-purple-400">
+                    <td className="px-3 py-3.5 text-right font-medium text-[var(--fg)]">
                       {metrics?.backup ?? "—"}
                     </td>
 

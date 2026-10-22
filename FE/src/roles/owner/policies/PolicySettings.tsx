@@ -477,7 +477,7 @@ export function PolicySettings({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--bg)]/50 text-xs uppercase tracking-wide text-[var(--muted)]">
+              <tr className="border-b border-[var(--border)] text-sm text-[var(--muted)]">
                 <th className="px-5 py-3 font-semibold">Policy</th>
                 <th className="px-5 py-3 font-semibold">Enabled</th>
                 <th className="px-5 py-3 font-semibold">Configuration</th>

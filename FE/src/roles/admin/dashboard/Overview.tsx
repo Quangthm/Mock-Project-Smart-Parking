@@ -106,40 +106,34 @@ export function Overview() {
     {
       role: "Drivers",
       count: userStats?.drivers ?? 0,
-      color: "#2563eb",
+      color: "var(--accent)",
     },
 
     {
       role: "Owners",
       count: userStats?.owners ?? 0,
-      color: "#f59e0b",
+      color: "var(--reserved)",
     },
 
     {
       role: "Operators",
       count: userStats?.operators ?? 0,
-      color: "#a855f7",
+      color: "var(--maintenance)",
     },
   ]
 
   const ROLE_COLORS: Record<string, string> = {
-    admin: "#ef4444",
-    owner: "#f59e0b",
-    driver: "#2563eb",
-    operator: "#a855f7",
+    admin: "var(--occupied)",
+    owner: "var(--reserved)",
+    driver: "var(--accent)",
+    operator: "var(--maintenance)",
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       <PageHeader title="Admin Overview" />
       {/* Top KPI row - Enterprise cards without aggressive gradients */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "1rem",
-        }}
-      >
+      <div className="admin-kpi-strip">
         {[
           {
             label: "Platform Revenue",
@@ -184,13 +178,12 @@ export function Overview() {
         ].map((k) => (
           <div
             key={k.label}
-            className="card"
+            className="admin-kpi"
             style={{
               padding: "1.15rem",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
-              borderLeft: k.alert ? "3px solid #dc2626" : undefined,
             }}
           >
             <div
@@ -203,33 +196,29 @@ export function Overview() {
             >
               <span
                 style={{
-                  fontSize: "0.72rem",
-                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  fontWeight: 500,
                   color: "var(--muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
                 }}
               >
                 {k.label}
               </span>
-              <span
+              {k.alert && <span
                 style={{
-                  fontSize: "0.68rem",
+                  fontSize: "0.8rem",
                   padding: "0.15rem 0.5rem",
                   borderRadius: "4px",
-                  background: k.alert
-                    ? "#fee2e2"
-                    : "color-mix(in srgb, var(--primary) 12%, transparent)",
-                  color: k.alert ? "#dc2626" : "var(--primary)",
+                  background: "var(--status-occupied-bg)",
+                  color: "var(--occupied)",
                   fontWeight: 600,
                 }}
               >
                 {k.badge}
-              </span>
+              </span>}
             </div>
             <div
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.65rem",
                 color: "var(--fg)",
@@ -266,9 +255,9 @@ export function Overview() {
 
       {/* Charts row */}
       <div
+        className="admin-overview-charts"
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
           gap: "1.25rem",
         }}
       >
@@ -284,7 +273,7 @@ export function Overview() {
             <div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "0.95rem",
                   color: "var(--fg)",
@@ -338,8 +327,8 @@ export function Overview() {
               <Area
                 type="monotone"
                 dataKey="bookings"
-                stroke="#3b82f6"
-                fill="#3b82f620"
+                stroke="var(--accent)"
+                fill="transparent"
                 strokeWidth={2}
                 name="Bookings"
               />
@@ -359,7 +348,7 @@ export function Overview() {
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "0.95rem",
                 color: "var(--fg)",
@@ -459,9 +448,9 @@ export function Overview() {
 
       {/* Facilities summary + recent activity */}
       <div
+        className="admin-overview-details"
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
           gap: "1.25rem",
         }}
       >
@@ -477,7 +466,7 @@ export function Overview() {
             <div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "0.95rem",
                   color: "var(--fg)",
@@ -535,7 +524,7 @@ export function Overview() {
             <div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "0.95rem",
                   color: "var(--fg)",
@@ -582,14 +571,14 @@ export function Overview() {
                     width: 28,
                     height: 28,
                     borderRadius: "50%",
-                    background: (ROLE_COLORS[log.userRole] || "#64748b") + "20",
+                    background: "var(--raised)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
                     fontSize: "0.68rem",
                     fontWeight: 700,
-                    color: ROLE_COLORS[log.userRole] || "#64748b",
+                    color: ROLE_COLORS[log.userRole] || "var(--muted)",
                   }}
                 >
                   {log.userName.charAt(0)}

@@ -218,7 +218,7 @@ function TermsModal({
         >
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
               fontSize: "1.1rem",
               margin: 0,

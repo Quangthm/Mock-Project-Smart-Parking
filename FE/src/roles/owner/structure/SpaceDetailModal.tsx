@@ -114,9 +114,9 @@ export function SpaceDetailModal({
         return {
           label: "Protected Hold",
           icon: "shield",
-          color: "#6366f1",
-          bg: "#6366f115",
-          border: "#6366f140",
+          color: "var(--reserved)",
+          bg: "var(--status-reserved-bg)",
+          border: "var(--reserved)",
         }
       case "RESERVED":
         return {
@@ -138,9 +138,9 @@ export function SpaceDetailModal({
         return {
           label: "Designated Backup",
           icon: "shield",
-          color: "#7c3aed",
-          bg: "#8b5cf615",
-          border: "#8b5cf640",
+          color: "var(--maintenance)",
+          bg: "var(--status-maintenance-bg)",
+          border: "var(--maintenance)",
         }
       case "NONE":
       default:
@@ -241,7 +241,7 @@ export function SpaceDetailModal({
               <h3
                 id="space-modal-title"
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 800,
                   fontSize: "1.6rem",
                   margin: 0,
@@ -319,8 +319,8 @@ export function SpaceDetailModal({
             style={{
               padding: "0.85rem 1rem",
               borderRadius: "0.75rem",
-              background: "#818cf818",
-              border: "1.5px solid #818cf860",
+              background: "var(--status-reserved-bg)",
+              border: "1.5px solid var(--reserved)",
               marginBottom: "1rem",
             }}
           >
@@ -329,7 +329,7 @@ export function SpaceDetailModal({
                 display: "flex",
                 alignItems: "center",
                 gap: "0.5rem",
-                color: "#6366f1",
+                color: "var(--reserved)",
                 marginBottom: "0.3rem",
               }}
             >
@@ -637,7 +637,7 @@ export function SpaceDetailModal({
                   <span style={{ color: "var(--muted)" }}>
                     Protection Began:
                   </span>{" "}
-                  <span style={{ color: "#6366f1", fontWeight: 600 }}>
+                  <span style={{ color: "var(--reserved)", fontWeight: 600 }}>
                     {new Date(space.protectionStartTime).toLocaleTimeString(
                       [],
                       { hour: "2-digit", minute: "2-digit" },
@@ -810,7 +810,7 @@ export function SpaceDetailModal({
                 style={{
                   fontSize: "0.78rem",
                   padding: "0.35rem 0.75rem",
-                  color: "#7c3aed",
+                  color: "var(--maintenance)",
                 }}
                 onClick={() => {
                   onUpdateStatus(space.id, space.status, undefined, {
@@ -831,7 +831,7 @@ export function SpaceDetailModal({
                 style={{
                   fontSize: "0.78rem",
                   padding: "0.35rem 0.75rem",
-                  color: "#6366f1",
+                  color: "var(--reserved)",
                 }}
                 onClick={() => {
                   onUpdateStatus(

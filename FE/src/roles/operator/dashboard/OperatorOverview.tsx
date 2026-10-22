@@ -76,11 +76,11 @@ export function OperatorOverview({
         )} />
 
       {/* Primary KPI Grid (clickable cards) */}
-      <div className="pointer-events-none grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Parking site summary">
+      <div className="operator-kpi-strip" aria-label="Parking site summary">
         <button
           type="button"
           onClick={() => onNavigateTab("status")}
-          className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left transition hover:border-[var(--primary)]"
+          className="operator-kpi"
         >
           <div className="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
             <span>Total Capacity</span>
@@ -95,14 +95,15 @@ export function OperatorOverview({
         <button
           type="button"
           onClick={() => onNavigateTab("status", "available")}
-          className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left transition hover:border-green-500"
+          className="operator-kpi"
+          data-status="available"
         >
-          <div className="flex items-center justify-between text-xs font-medium text-green-600">
+          <div className="flex items-center justify-between text-sm font-medium">
             <span>Available Vacant</span>
             <UntitledIcon name="check-circle" size={16} />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-green-600">{availableSlots}</div>
+            <div className="text-2xl font-semibold tabular-nums">{availableSlots}</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">Ready for walk-in/booking</div>
           </div>
         </button>
@@ -110,14 +111,15 @@ export function OperatorOverview({
         <button
           type="button"
           onClick={() => onNavigateTab("status", "occupied")}
-          className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left transition hover:border-red-500"
+          className="operator-kpi"
+          data-status="occupied"
         >
-          <div className="flex items-center justify-between text-xs font-medium text-red-600">
+          <div className="flex items-center justify-between text-sm font-medium">
             <span>In Use / Parked</span>
             <UntitledIcon name="car" size={16} />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-red-600">{occupiedSlots}</div>
+            <div className="text-2xl font-semibold tabular-nums">{occupiedSlots}</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">Vehicles physically in lot</div>
           </div>
         </button>
@@ -125,14 +127,15 @@ export function OperatorOverview({
         <button
           type="button"
           onClick={() => onNavigateTab("status", "reserved")}
-          className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left transition hover:border-amber-500"
+          className="operator-kpi"
+          data-status="reserved"
         >
-          <div className="flex items-center justify-between text-xs font-medium text-amber-600">
+          <div className="flex items-center justify-between text-sm font-medium">
             <span>Reserved / Holds</span>
             <UntitledIcon name="clock" size={16} />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-amber-600">{reservedSlots}</div>
+            <div className="text-2xl font-semibold tabular-nums">{reservedSlots}</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">Incoming & payment holds</div>
           </div>
         </button>
@@ -140,14 +143,15 @@ export function OperatorOverview({
         <button
           type="button"
           onClick={() => onNavigateTab("slots")}
-          className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left transition hover:border-purple-500"
+          className="operator-kpi"
+          data-status="backup"
         >
-          <div className="flex items-center justify-between text-xs font-medium text-purple-600">
+          <div className="flex items-center justify-between text-sm font-medium">
             <span>Backup Designated</span>
             <UntitledIcon name="shield" size={16} />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-purple-600">{backupSlots}</div>
+            <div className="text-2xl font-semibold tabular-nums">{backupSlots}</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">Emergency / overflow pool</div>
           </div>
         </button>
@@ -155,7 +159,8 @@ export function OperatorOverview({
         <button
           type="button"
           onClick={() => onNavigateTab("status", "maintenance")}
-          className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left transition hover:border-slate-500"
+          className="operator-kpi"
+          data-status="maintenance"
         >
           <div className="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
             <span>Maintenance / Off</span>
@@ -232,41 +237,45 @@ export function OperatorOverview({
             <div className="h-3.5 w-full overflow-hidden rounded-full bg-[var(--border)] flex">
               <div
                 style={{ width: `${totalSlots ? (occupiedSlots / totalSlots) * 100 : 0}%` }}
-                className="bg-red-500 transition-all duration-500"
+                className="operator-progress-segment"
+                data-status="occupied"
                 title={`Occupied: ${occupiedSlots}`}
               />
               <div
                 style={{ width: `${totalSlots ? (reservedSlots / totalSlots) * 100 : 0}%` }}
-                className="bg-amber-500 transition-all duration-500"
+                className="operator-progress-segment"
+                data-status="reserved"
                 title={`Reserved: ${reservedSlots}`}
               />
               <div
                 style={{ width: `${totalSlots ? (backupSlots / totalSlots) * 100 : 0}%` }}
-                className="bg-purple-500 transition-all duration-500"
+                className="operator-progress-segment"
+                data-status="backup"
                 title={`Backup: ${backupSlots}`}
               />
               <div
                 style={{ width: `${totalSlots ? (maintenanceSlots / totalSlots) * 100 : 0}%` }}
-                className="bg-slate-400 transition-all duration-500"
+                className="operator-progress-segment"
+                data-status="maintenance"
                 title={`Maintenance: ${maintenanceSlots}`}
               />
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--muted)]">
               <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                <span className="operator-legend-dot" data-status="occupied" />
                 <span>Occupied ({occupiedSlots})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                <span className="operator-legend-dot" data-status="reserved" />
                 <span>Reserved ({reservedSlots})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
+                <span className="operator-legend-dot" data-status="backup" />
                 <span>Backup ({backupSlots})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                <span className="operator-legend-dot" data-status="available" />
                 <span>Available ({availableSlots})</span>
               </div>
             </div>

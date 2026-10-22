@@ -619,7 +619,7 @@ export function SignIn() {
                 <h3
                   id="forgot-password-title"
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontWeight: 800,
                     fontSize: "1.4rem",
                     margin: "0.2rem 0 0",
@@ -875,7 +875,7 @@ export function SignIn() {
                 </div>
                 <h4
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontSize: "1.2rem",
                     fontWeight: 700,
                     margin: 0,

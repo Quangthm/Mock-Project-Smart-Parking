@@ -1,5 +1,6 @@
 import { PageHeader } from "../components/ui/PageHeader"
-import { useState, useEffect, useRef } from "react"
+import { Button } from "../components/ui/Button"
+import { useLayoutEffect, useRef, useState } from "react"
 
 import { useApp } from "../context/AppContext"
 
@@ -23,7 +24,7 @@ const STEPS = [
 
     label: "Find a Lot",
 
-    icon: "🔍",
+    icon: "search",
 
     desc: "Search nearby parking lots on the map by your current location.",
   },
@@ -33,7 +34,7 @@ const STEPS = [
 
     label: "Choose a Slot",
 
-    icon: "🅿️",
+    icon: "parking",
 
     desc: "View real-time slot availability and pick the best spot.",
   },
@@ -43,7 +44,7 @@ const STEPS = [
 
     label: "Book",
 
-    icon: "📋",
+    icon: "clipboard",
 
     desc: "Enter your license plate and confirm your booking details.",
   },
@@ -53,7 +54,7 @@ const STEPS = [
 
     label: "Pay",
 
-    icon: "💳",
+    icon: "credit-card",
 
     desc: "Secure payment with OTP verification via SMS or email.",
   },
@@ -63,7 +64,7 @@ const STEPS = [
 
     label: "Check-In",
 
-    icon: "✅",
+    icon: "check-circle",
 
     desc: "Show your booking QR code at the barrier to enter.",
   },
@@ -73,7 +74,7 @@ const STEPS = [
 
     label: "Check-Out",
 
-    icon: "🚗",
+    icon: "car",
 
     desc: "Drive out seamlessly. Invoice sent to your email and SMS.",
   },
@@ -81,7 +82,7 @@ const STEPS = [
 
 const BENEFITS = [
   {
-    icon: "⚡",
+    icon: "zap",
 
     title: "Save Time",
 
@@ -89,7 +90,7 @@ const BENEFITS = [
   },
 
   {
-    icon: "🔒",
+    icon: "lock",
 
     title: "Transparent Payments",
 
@@ -97,7 +98,7 @@ const BENEFITS = [
   },
 
   {
-    icon: "📈",
+    icon: "chart",
 
     title: "Maximize Revenue",
 
@@ -105,7 +106,7 @@ const BENEFITS = [
   },
 
   {
-    icon: "🤖",
+    icon: "settings",
 
     title: "Streamlined Ops",
 
@@ -164,40 +165,15 @@ const CAROUSEL_SLIDES = [
 function HeroCarousel() {
   const [current, setCurrent] = useState(0)
 
-  const [animating, setAnimating] = useState(false)
-
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
   function goTo(idx: number) {
-    if (animating) return
-
-    setAnimating(true)
-
-    setTimeout(() => {
-      setCurrent(idx)
-
-      setAnimating(false)
-    }, 350)
+    setCurrent(idx)
   }
-
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setCurrent((c) => {
-        const next = (c + 1) % CAROUSEL_SLIDES.length
-
-        return next
-      })
-    }, 4000)
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [])
 
   const slide = CAROUSEL_SLIDES[current]
 
   return (
     <div
+      className="hero-carousel"
       style={{
         position: "relative",
 
@@ -214,6 +190,8 @@ function HeroCarousel() {
         key={current}
         src={slide.img}
         alt={slide.title}
+        width={900}
+        height={500}
         style={{
           width: "100%",
 
@@ -221,9 +199,7 @@ function HeroCarousel() {
 
           objectFit: "cover",
 
-          opacity: animating ? 0 : 0.7,
-
-          transition: "opacity 0.35s ease",
+          opacity: 0.7,
         }}
       />
       <div
@@ -246,7 +222,7 @@ function HeroCarousel() {
       >
         <h3
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -256,7 +232,6 @@ function HeroCarousel() {
 
             margin: "0 0 0.375rem",
 
-            textShadow: "0 1px 4px rgba(0,0,0,0.4)",
           }}
         >
           {slide.title}
@@ -274,32 +249,19 @@ function HeroCarousel() {
         >
           {slide.sub}
         </p>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
+        <div className="carousel-controls">
           {CAROUSEL_SLIDES.map((_, i) => (
             <button
               key={i}
+              type="button"
+              className="carousel-control"
+              aria-label={`Show slide ${i + 1}: ${CAROUSEL_SLIDES[i].title}`}
+              aria-current={i === current ? "true" : undefined}
               onClick={() => goTo(i)}
-              style={{
-                height: "4px",
-
-                width: i === current ? "24px" : "8px",
-
-                borderRadius: "2px",
-
-                border: "none",
-
-                cursor: "pointer",
-
-                background:
-                  i === current ? "var(--primary)" : "rgba(255,255,255,0.35)",
-
-                transition: "all 0.3s",
-
-                padding: 0,
-              }}
             />
           ))}
         </div>
+        <a className="hero-photo-credit" href={slide.img} target="_blank" rel="noreferrer">Image source: Unsplash</a>
       </div>
     </div>
   )
@@ -307,62 +269,67 @@ function HeroCarousel() {
 
 export function Landing() {
   const { setView } = useApp()
+  const landingRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const root = landingRef.current
+    if (!root) return
+    const elements = Array.from(root.querySelectorAll<HTMLElement>(".landing-reveal"))
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
+      elements.forEach((element) => element.classList.add("is-visible"))
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible")
+          observer.unobserve(entry.target)
+        }
+      })
+    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" })
+    root.classList.add("landing-motion-ready")
+    elements.forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [])
 
   return (
-    <div>
+    <div ref={landingRef} className="landing-page">
       {/* Hero */}
-      <section
-        style={{
-          maxWidth: "1200px",
-
-          margin: "0 auto",
-
-          padding: "4rem 1.5rem",
-
-          display: "grid",
-
-          gridTemplateColumns: "1fr 1fr",
-
-          gap: "3rem",
-
-          alignItems: "center",
-        }}
-      >
-        <div className="animate-in">
+      <section className="smartparking-hero">
+        <div className="landing-hero-enter">
           <PageHeader variant="hero" align="start" title={<>Park Smart.
             <br />
             <span style={{ color: "var(--primary)" }}>Book Easy.</span>
             <br />
             Manage Better.</>} description={<>Find, book, and pay for parking in seconds. For lot owners —
             automate operations and maximize revenue with real-time analytics.</>} />
-          <div className="mt-8 flex flex-wrap gap-4 sm:gap-5">
-            <button
-              className="btn-primary"
+          <div className="hero-actions">
+            <Button
+              variant="primary"
+              trailingIcon={<UntitledIcon name="arrow-right" size={18} />}
               style={{ fontSize: "1rem", padding: "0.75rem 1.75rem" }}
               onClick={() => setView("sign-in")}
             >
               Book a Spot
-            </button>
-            <button
-              className="btn-accent"
+            </Button>
+            <Button
+              variant="outline"
               style={{ fontSize: "1rem", padding: "0.75rem 1.75rem" }}
               onClick={() => setView("business")}
             >
               Become a Partner
-            </button>
+            </Button>
           </div>
-          <div style={{ display: "flex", gap: "2rem", marginTop: "2rem" }}>
+          <div className="hero-facts">
             {[
-              ["1,200+", "Parking Slots"],
-
-              ["50+", "Partner Lots"],
-
-              ["98%", "Uptime SLA"],
+              ["Find", "Nearby spaces"],
+              ["Book", "Your spot"],
+              ["Go", "QR or plate entry"],
             ].map(([v, l]) => (
               <div key={l}>
                 <div
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
 
                     fontSize: "1.4rem",
 
@@ -380,7 +347,7 @@ export function Landing() {
             ))}
           </div>
         </div>
-        <div className="animate-in">
+        <div className="landing-hero-enter landing-hero-enter-image">
           <HeroCarousel />
         </div>
       </section>
@@ -398,7 +365,7 @@ export function Landing() {
         }}
       >
         <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <div className="landing-reveal" data-motion="rise" style={{ textAlign: "center", marginBottom: "3rem" }}>
             <h2 className="section-title">Why SmartParking?</h2>
             <p
               className="section-sub"
@@ -417,10 +384,11 @@ export function Landing() {
               gap: "1.5rem",
             }}
           >
-            {BENEFITS.map((b) => (
+            {BENEFITS.map((b, index) => (
               <div
                 key={b.title}
-                className="card"
+                className={`card landing-reveal landing-reveal-delay-${index % 4}`}
+                data-motion="rise"
                 style={{ border: "1px solid var(--border)" }}
               >
                 <div
@@ -430,7 +398,7 @@ export function Landing() {
                 </div>
                 <h3
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
 
                     fontWeight: 600,
 
@@ -464,7 +432,7 @@ export function Landing() {
       <section
         style={{ maxWidth: "1200px", margin: "0 auto", padding: "4rem 1.5rem" }}
       >
-        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+        <div className="landing-reveal" data-motion="rise" style={{ textAlign: "center", marginBottom: "3rem" }}>
           <h2 className="section-title">How It Works</h2>
           <p className="section-sub">
             Six simple steps from search to checkout.
@@ -479,35 +447,35 @@ export function Landing() {
             gap: "1rem",
           }}
         >
-          {STEPS.map((step) => (
+          {STEPS.map((step, index) => (
             <div
               key={step.num}
-              className="card"
+              className={`card landing-reveal landing-reveal-delay-${index % 3}`}
+              data-motion="rise"
               style={{ textAlign: "center", padding: "1.5rem 1rem" }}
             >
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
 
-                  fontSize: "0.72rem",
+                  fontSize: "0.875rem",
 
                   fontWeight: 700,
 
                   color: "var(--primary)",
 
-                  letterSpacing: "1px",
 
                   marginBottom: "0.75rem",
                 }}
               >
-                STEP {step.num}
+                Step {Number(step.num)}
               </div>
               <div style={{ color: "var(--primary)", marginBottom: "0.5rem" }}>
                 <UntitledIcon name={step.icon} size={24} />
               </div>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
 
                   fontWeight: 600,
 
@@ -549,6 +517,8 @@ export function Landing() {
         }}
       >
         <div
+          className="landing-reveal"
+          data-motion="rise"
           style={{ maxWidth: "900px", margin: "0 auto", textAlign: "center" }}
         >
           <h2 className="section-title" style={{ marginBottom: "0.75rem" }}>
@@ -570,10 +540,11 @@ export function Landing() {
               margin: "0 auto 1.5rem",
             }}
           >
-            {PAYMENT_METHODS.map((pm) => (
+            {PAYMENT_METHODS.map((pm, index) => (
               <div
                 key={pm.name}
-                className="card"
+                className={`card landing-reveal landing-reveal-delay-${index % 3}`}
+                data-motion="scale"
                 style={{
                   display: "flex",
 
@@ -622,6 +593,8 @@ export function Landing() {
 
       {/* CTA */}
       <section
+        className="landing-reveal"
+        data-motion="rise"
         style={{
           maxWidth: "800px",
 
@@ -649,20 +622,21 @@ export function Landing() {
             flexWrap: "wrap",
           }}
         >
-          <button
-            className="btn-primary"
+          <Button
+            variant="primary"
+            trailingIcon={<UntitledIcon name="arrow-right" size={18} />}
             style={{ fontSize: "1rem", padding: "0.875rem 2rem" }}
             onClick={() => setView("sign-up")}
           >
             Get Started
-          </button>
-          <button
-            className="btn-outline"
+          </Button>
+          <Button
+            variant="outline"
             style={{ fontSize: "1rem", padding: "0.875rem 2rem" }}
             onClick={() => setView("pricing")}
           >
             View Pricing
-          </button>
+          </Button>
         </div>
       </section>
     </div>

@@ -7,6 +7,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 
 import type { LotType, ParkingSlot } from "../../lib/types"
+import { UntitledIcon } from "../icon/UntitledIcon"
+import { ParkingStatus } from "../ui/ParkingStatus"
 
 import {
   ALLOWED_PARKING_MODELS,
@@ -765,8 +767,8 @@ export function Parking3DViewer({
       )}
 
       {/* Top Bar: Model Badge & Info */}
-      <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2 z-10 pointer-events-none">
-        <div className="px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-white/10 text-[11px] text-white font-medium flex items-center gap-1.5 shadow-sm">
+      <div className="absolute top-3 left-3 right-[4.25rem] flex flex-wrap items-center gap-2 z-10 pointer-events-none">
+        <div className="min-w-0 max-w-full px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-white/10 text-[11px] text-white font-medium flex items-center gap-1.5 shadow-sm">
           <span
             className={`w-2 h-2 rounded-full ${
               modelSourceInfo.isCustomGlb
@@ -774,10 +776,10 @@ export function Parking3DViewer({
                 : "bg-blue-400"
             }`}
           />
-          <span className="font-mono text-sky-300">
+          <span className="min-w-0 truncate font-mono text-sky-300">
             {modelSourceInfo.fileName}
           </span>
-          <span className="text-slate-400 font-normal">
+          <span className="shrink-0 whitespace-nowrap text-slate-400 font-normal">
             ({detectedCount} slots)
           </span>
         </div>
@@ -790,15 +792,17 @@ export function Parking3DViewer({
             type="button"
             onClick={handleResetCamera}
             title="Reset camera view"
-            className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-xs transition-all active:scale-95 cursor-pointer"
+            aria-label="Reset camera view"
+            className="w-11 h-11 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-xs transition-colors cursor-pointer"
           >
-            🎯
+            <UntitledIcon name="target" size={18} />
           </button>
           <button
             type="button"
             onClick={() => handleZoom(1)}
             title="Zoom in"
-            className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-sm font-bold transition-all active:scale-95 cursor-pointer"
+            aria-label="Zoom in"
+            className="w-11 h-11 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
           >
             +
           </button>
@@ -806,7 +810,8 @@ export function Parking3DViewer({
             type="button"
             onClick={() => handleZoom(-1)}
             title="Zoom out"
-            className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-sm font-bold transition-all active:scale-95 cursor-pointer"
+            aria-label="Zoom out"
+            className="w-11 h-11 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
           >
             −
           </button>
@@ -814,9 +819,10 @@ export function Parking3DViewer({
             type="button"
             onClick={handleToggleFullscreen}
             title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            className="w-8 h-8 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-xs transition-all active:scale-95 cursor-pointer"
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            className="min-w-11 h-11 px-2 rounded-lg bg-black/75 hover:bg-black/95 text-white/90 border border-white/15 flex items-center justify-center text-xs transition-colors cursor-pointer"
           >
-            {isFullscreen ? "⤦" : "⛶"}
+            {isFullscreen ? "Exit" : "Full"}
           </button>
         </div>
       )}
@@ -824,7 +830,7 @@ export function Parking3DViewer({
       {/* Hover Tooltip */}
       {hoveredSlot && (
         <div
-          className="absolute pointer-events-none z-20 px-2.5 py-1.5 rounded-md bg-slate-900/95 text-white text-xs border border-white/20 shadow-xl backdrop-blur-md transform -translate-x-1/2 -translate-y-full -mt-2"
+          className="absolute pointer-events-none z-20 px-2.5 py-1.5 rounded-md bg-[#151c1b] text-white text-xs border border-white/20 shadow-xl transform -translate-x-1/2 -translate-y-full -mt-2"
           style={{ left: hoveredSlot.screenX, top: hoveredSlot.screenY }}
         >
           <div className="font-bold flex items-center gap-1.5">
@@ -863,27 +869,16 @@ export function Parking3DViewer({
       {/* Bottom Legend */}
       {showLegend && (
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between flex-wrap gap-2 pointer-events-none z-10">
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-[11px] text-slate-200">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              Available
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-              Occupied
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-              Reserved
-            </span>
-            <span className="flex items-center gap-1.5 font-semibold text-sky-300">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse inline-block" />
-              Selected
-            </span>
+          <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 rounded-lg bg-[#151c1b] border border-white/10 text-[11px] text-slate-200">
+            <ParkingStatus status="available" compact />
+            <ParkingStatus status="occupied" compact />
+            <ParkingStatus status="reserved" compact />
+            <ParkingStatus status="maintenance" compact />
+            <span className="px-2">Selected</span>
           </div>
 
-          <div className="text-[10px] text-slate-400 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-xs hidden sm:block">
-            🖱️ Left drag: Rotate · Right drag: Pan · Scroll: Zoom
+          <div className="text-xs text-white px-2.5 py-1 rounded-md bg-[#151c1b] hidden sm:block">
+            Drag to rotate · Right drag to pan · Scroll to zoom
           </div>
         </div>
       )}

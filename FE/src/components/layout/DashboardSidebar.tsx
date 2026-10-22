@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, type ReactNode } from "react"
 
 import { useApp } from "../../context/AppContext"
 
@@ -22,7 +22,17 @@ export function DashboardSidebar({
   groups: DashboardNavGroup[]
   children: ReactNode
 }) {
-  const { dashboardMenuOpen, setDashboardMenuOpen } = useApp()
+  const { dashboardMenuOpen, setDashboardMenuOpen, user } = useApp()
+  const navigationVisible = dashboardMenuOpen
+
+  useEffect(() => {
+    if (!dashboardMenuOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDashboardMenuOpen(false)
+    }
+    window.addEventListener("keydown", closeOnEscape)
+    return () => window.removeEventListener("keydown", closeOnEscape)
+  }, [dashboardMenuOpen, setDashboardMenuOpen])
 
   return (
     <div
@@ -31,10 +41,17 @@ export function DashboardSidebar({
       }`}
     >
       <aside
+        id="dashboard-navigation"
         className={`dashboard-sidebar${dashboardMenuOpen ? " is-open" : ""}`}
-        aria-label="Dashboard navigation"
-        aria-hidden={!dashboardMenuOpen}
+        aria-label={`${user?.role ?? "Dashboard"} navigation`}
+        aria-hidden={!navigationVisible}
       >
+        <div className="dashboard-sidebar-heading">
+          <div><strong>Menu</strong><span>{user?.role ? `${user.role.charAt(0).toUpperCase()}${user.role.slice(1)} workspace` : "Workspace"}</span></div>
+          <button type="button" className="btn-ghost dashboard-sidebar-close" aria-label="Close navigation" onClick={() => setDashboardMenuOpen(false)} tabIndex={navigationVisible ? 0 : -1}>
+            <UntitledIcon name="x" size={18} />
+          </button>
+        </div>
         {groups.map((group, index) => (
           <div className="dashboard-nav-group" key={group.label ?? index}>
             {group.label && (
@@ -44,12 +61,13 @@ export function DashboardSidebar({
               <button
                 key={item.id}
                 type="button"
-                className={`dashboard-nav-item${item.active ? " active" : ""}`}
+                className={`btn-ghost dashboard-nav-item${item.active ? " active" : ""}`}
+                aria-current={item.active ? "page" : undefined}
                 onClick={() => {
                   item.onClick()
                   if (!item.keepMenuOpen) setDashboardMenuOpen(false)
                 }}
-                tabIndex={dashboardMenuOpen ? 0 : -1}
+                tabIndex={navigationVisible ? 0 : -1}
               >
                 <span className="dashboard-nav-icon">
                   <UntitledIcon name={item.icon ?? item.label} size={18} />

@@ -138,7 +138,7 @@ export function Applications() {
                   <div>
                     <div
                       style={{
-                        fontFamily: "Outfit",
+                        fontFamily: "Be Vietnam Pro",
                         fontWeight: 700,
                         fontSize: "0.95rem",
                         color: "var(--fg)",

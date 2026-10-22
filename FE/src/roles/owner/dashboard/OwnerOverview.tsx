@@ -39,16 +39,16 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
   }, [selectedSiteId, sites, operators]);
 
   const stats = [
-    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND`, accent: 'text-green-600' },
-    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US'), accent: 'text-blue-600' },
-    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US'), accent: 'text-violet-600' },
+    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND` },
+    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US') },
+    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US') },
   ];
 
   return (
     <section className="space-y-6">
       <PageHeader eyebrow={selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'} title="Owner Overview" description="Combined performance for the selected parking sites." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {stats.map(stat => <article key={stat.label} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"><p className="text-sm text-[var(--muted)]">{stat.label}</p><p className={`mt-2 text-2xl font-bold ${stat.accent}`}>{stat.value}</p></article>)}
+      <div className="owner-kpi-strip">
+        {stats.map(stat => <article key={stat.label} className="owner-kpi"><p className="text-sm text-[var(--muted)]">{stat.label}</p><p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--fg)]">{stat.value}</p></article>)}
       </div>
       <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
         <div className="mb-5">
@@ -61,8 +61,8 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
             <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
             <YAxis tickFormatter={value => value === 0 ? '0' : `${(Number(value) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
             <Tooltip formatter={value => `${Number(value).toLocaleString('vi-VN')} VND`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-            <Area type="monotone" dataKey="revenue" stroke="#2563eb" fill="#2563eb18" strokeWidth={2} name="Revenue" />
-            <Area type="monotone" dataKey="netRevenue" stroke="#22c55e" fill="#22c55e18" strokeWidth={2} name="Net Revenue (85%)" />
+            <Area type="linear" dataKey="revenue" stroke="var(--accent)" fill="transparent" strokeWidth={2} name="Revenue" />
+            <Area type="linear" dataKey="netRevenue" stroke="var(--muted)" fill="transparent" strokeWidth={2} strokeDasharray="5 4" name="Net Revenue (85%)" />
           </AreaChart>
         </ResponsiveContainer>
       </section>

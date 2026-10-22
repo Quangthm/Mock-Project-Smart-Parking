@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { request } from "../../lib/authApi"
+import { UntitledIcon } from "../icon/UntitledIcon"
 
 export function AccountSecurityPanel() {
   const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(
@@ -72,6 +73,7 @@ export function AccountSecurityPanel() {
 
       {!setup && (
         <div
+          className="security-setup-row"
           style={{
             display: "flex",
             alignItems: "center",
@@ -96,7 +98,7 @@ export function AccountSecurityPanel() {
               fontSize: "1.25rem",
             }}
           >
-            🔐
+            <UntitledIcon name="shield" size={20} />
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontWeight: 600, fontSize: "0.9rem" }}>

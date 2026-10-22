@@ -9,13 +9,13 @@ export function Navbar() {
 
   return (
     <nav
+      aria-label="Main navigation"
       style={{
         position: "sticky",
         top: 0,
         zIndex: 100,
-        background: "var(--bg)",
+        background: "var(--sidebar)",
         borderBottom: "1px solid var(--border)",
-        backdropFilter: "blur(8px)",
       }}
     >
       <div
@@ -28,6 +28,8 @@ export function Navbar() {
       >
         {/* Logo */}
         <button
+          type="button"
+          aria-label="SmartParking home"
           onClick={() => setView("landing")}
           style={{
             display: "flex",
@@ -92,13 +94,14 @@ export function Navbar() {
           }}
         >
           <button
+            type="button"
             onClick={toggleTheme}
             style={{
               background: "var(--card)",
               border: "1px solid var(--border)",
               borderRadius: "var(--radius)",
-              width: 36,
-              height: 36,
+              width: 44,
+              height: 44,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -108,6 +111,7 @@ export function Navbar() {
             title={
               theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
             }
+            aria-label={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
             <span style={{ display: "block", width: 20, height: 20 }}>
               <ThemeIcon mode={theme === "dark" ? "light" : "dark"} />
@@ -157,13 +161,15 @@ function NavLink({
 }) {
   return (
     <button
+      type="button"
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
       style={{
         background: "none",
         border: "none",
         cursor: "pointer",
 
-        padding: "0.375rem 0.75rem",
+        padding: "0.625rem 0.75rem",
 
         borderRadius: "var(--radius)",
 
