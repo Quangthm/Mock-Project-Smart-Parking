@@ -1,14 +1,14 @@
-# Notifications Reporting — SRS v1.0 RC1
+# Notifications Reporting — SRS v1.1
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
-**Status:** review candidate, 13 October 2026; implementation/evidence not assessed. Source review section numbers below refer to the decision review, not this module numbering.
+**Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
 Confirmed live views: Operator occupancy/gate and parking slots; 3D; Admin user management/approval; notification bell. Clients fetch current authorized state after reconnect. Missed messages never change authoritative capacity or business rights. Implement scoped subscriptions/revocation and minimal payloads; no cross-lot plate/evidence broadcasting. SignalR handles client updates, RabbitMQ durable inter-service outcomes. Redis scale-out remains optional, not prerequisite for single-instance local MVP. Approved healthy-local-profile freshness target: p95 ≤2 seconds (§16.7); measurement and recovery contracts remain to implement.
 
 Domain owners provide scoped reports: revenue day/week/month/quarter, lot and registered/walk-in segmentation; hourly occupancy, duration, vehicle distribution and peaks; authorized new registrations. Payment-method breakdown, retention/geographic/user-pattern analytics remain FUTURE. No guest-only pricing implication. Export and SignalR enforce the same resource permissions.
 
-Notifications include bookings/cancellation/expiry, payment and invoice/refund, appeal, overstay, monthly expiry 7 / 1 days, account provisioning, policy updates and opted-in availability alerts. In-app bell, local email capture and SMS fixtures have explicit modes. Delivery failure never rolls back the business fact. Store originating event, recipient, template/version, channel, attempt/result; redelivery dedupes logical notification. Unspecified reminder timing has no seeded demo default. Domain-owned reports compose through authorized contracts.
+Notifications include bookings/cancellation/expiry, payment and invoice/refund, appeal, overstay, monthly expiry 7 / 1 days, account provisioning, policy updates and opted-in availability alerts. In-app bell, local email capture and SMS fixtures have explicit modes. Delivery failure never rolls back the business fact. Preserve created pending accounts/applications and committed approval/rejection even when email fails; queued is not delivered. Retry the same logical delivery without repeating review/provisioning or creating records. Store originating event, recipient, template/version, channel, attempt/result; redelivery dedupes logical notification. Unspecified reminder timing has no seeded demo default. Domain-owned reports compose through authorized contracts.
 
 ## Functional requirements
 
@@ -18,7 +18,7 @@ Notifications include bookings/cancellation/expiry, payment and invoice/refund, 
 **Actors:** Driver, Notification Service  
 **Stories:** US-D11
 
-Notification delivery follows authoritative business events/states and supported channels, including expiry, refund and appeal status and overstay notices. Delivery failure is separate from the underlying business outcome and never rolls back a successful business state; record event ID, recipient, channel, template/version, attempt, delivery status and failure reason.
+Notification delivery follows authoritative business events/states and supported channels, including expiry, refund and appeal status, overstay, activation and Partner review. Send approval/rejection email with a safe reason; approval after initial document replacement says “Your application was approved with some modifications”. This is approval, not a third outcome; distinguish approval from provisioning/sign-in readiness. Delivery failure is separate from the underlying business outcome and never rolls back a successful business state; record event ID, recipient, channel, template/version, attempt, delivery status and failure reason.
 
 ### FR-BAS-06
 
@@ -77,3 +77,6 @@ Push/in-app direction: reservation confirmation, payment reminders, opted-in ava
 ## Account recovery notifications and support type
 
 ACCOUNT_RECOVERY is current MVP, handled by Admin through General Support. Pre-login intake is restricted and generic; evidence/case access is scoped. Audit recovery submission/review/authorization and successful/failed credential changes separately. Notify existing verified channels of TOTP enrollment/disable/replacement, backup-code regeneration and Admin reset/password mutation, without including secrets or usable reset tokens in audit/event payloads. Notification failure is visible and retried; it never silently undoes a completed security change or supplies account access. Handler cannot mark a pending credential mutation as successful recovery.
+
+
+Design/implementation owners and exit criteria: [V11-DES-07](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

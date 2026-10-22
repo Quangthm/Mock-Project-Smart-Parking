@@ -1,6 +1,6 @@
 # SPARK-192 — Create Operator
 
-> Updated 15/10/2026 for the R06 CQRS refactor. This contract supersedes the Operator credential/onboarding description in the 08/10 workflow document. Other workflow contracts remain unchanged.
+> Historical implementation evidence, updated 15 October 2026 for the R06 CQRS refactor; non-authoritative for v1.1. Current target: [Operator invitation and activation](../../03-design/api/owner-create-operator-api-design.md) and [shared contracts](v1.1-contracts.md). The body records Fix2FA behavior, not completed v1.1 acceptance.
 
 Implements the Operator creation endpoint in UserService: `POST /api/users`. The 15/10 leader handoff confirms pending onboarding, Operator-selected password at activation, and handler-owned CQRS orchestration.
 
@@ -67,7 +67,7 @@ Business exceptions use the existing `{ success: false, code, message }` middlew
 
 For the service schema, use the canonical baseline and alignment, then workflow 05.8, MFA 05.13 and identity 05.14 through `scripts/apply-workflow-migrations.ps1 -Service User -SchemaRoot .`. Do not apply old monolith 05.7 over the service schema. This CQRS/no-password change adds no migration beyond the existing 05.14; pending credentials use the existing empty-password representation.
 
-The command handler owns creation: current Owner authorization, external Parking site validation, then a local Unit of Work transaction with identity authorization rechecked under shared row locks. It persists identity + pending site accounts/roles/grants + challenge + encrypted delivery + access outbox atomically. Parking resources are validated through an external port; no cross-service database locks or distributed transaction are claimed. Duplicate email races are enforced by the database unique index.
+The command handler owns creation: current Owner authorization, external Facility site validation, then a local Unit of Work transaction with identity authorization rechecked under shared row locks. It persists identity + pending site accounts/roles/grants + challenge + encrypted delivery + access outbox atomically. Facility resources are validated through an external port; no cross-service database locks or distributed transaction are claimed. Duplicate email races are enforced by the database unique index.
 
 The broad `IOperatorProvisioningService` is removed. Dedicated query handlers coordinate current grants and external active sites; `OperatorSlotScopeQuery` checks the matching site's `SLOT_OVERRIDE` permission. JWT `role=operator` alone grants no site access. Operational mutations must additionally follow their own transaction/revocation contract. Standalone assign/revoke mutation APIs are not added in phase 1.
 
@@ -87,3 +87,7 @@ Manual/API acceptance:
 6. Try anonymous, Driver, Operator and Admin credentials; expect 401/403.
 7. Check granted permission at an assigned site; check it at a foreign site and check ungranted/Owner-only permissions; only the first succeeds.
 8. Suspend the Operator account, remove the permission, disable the site or suspend the tenant; a fresh permission check must deny access.
+
+## v1.1 implementation gaps
+
+The implementation below the historical banner requires an Operator-selected password at bootstrap activation and activates the pending identity after invitation proof. The v1.1 target instead requires consented simulated VNeID during activation and optional password setup, preserving OTP login eligibility. These are pending implementation changes, not acceptance evidence. The existing 24-hour invitation lifetime is a runtime fact; final activation credential lifetime/composition remains V11-DES-02/03 design work. The FacilityService rename does not establish completion of the Operations ownership split.

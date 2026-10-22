@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-SmartPark uses a **Database-per-Service** architecture. The deployed profile has **6 physical PostgreSQL databases** and **7 base DDL files**, because the logical Operations service is split across two databases (`03a` → parking, `03b` → reservation) under T4 decision **D1**.
+SmartPark uses a **Database-per-Service** architecture. The recorded deployment profile has **6 physical PostgreSQL databases** and **7 base DDL files**, because the logical Operations service is split across two databases (`03a` → parking, `03b` → reservation) under T4 decision **D1**.
 
 | Database | Service | Base DDL | Deployment overlays | Port |
 |---|---|---|---|---|
@@ -13,7 +13,7 @@ SmartPark uses a **Database-per-Service** architecture. The deployed profile has
 | `smartpark_notification` | Notification & Audit | `05-notification-audit-service-db.sql` | — | 5445 |
 | `smartpark_iot` | IoT & Recognition | `06-iot-recognition-service-db.sql` | — | 5446 |
 
-Each service owns its persistence boundary. Cross-service references are **logical UUIDs**; there is no physical foreign key across databases. The overlays are deployment composition for the live BE, not additional services.
+This recorded physical topology includes deliberate compatibility debt; it is not a new ownership decision. The v1.1 target retains [service ownership](../service-boundaries/ownership-and-events.md) and [DB25–DB33 alignment work](alignment-backlog.md#v11-schema-and-seed-alignment-pending). User owns tenant identity/review, Facility configuration, Operations accepted occupancy/claims/discovery/coverage, Payment tariffs/financial terms and IoT raw observations. Cross-service references are **logical UUIDs**; there is no physical foreign key across databases. The overlays are deployment composition for the live BE, not additional services.
 
 ## 2. Multi-tenancy & security boundary
 
@@ -51,7 +51,7 @@ parking_sites -> spatial_units -> parking_slots
 - **Physical state:** `parking_slots.physical_state` is one of `AVAILABLE`, `OCCUPIED`, `UNKNOWN`, `MAINTENANCE`, `UNAVAILABLE`.
 - **Reservation projection:** the deployed `parking_slots` also carries `supported_vehicle_type` and `reservation_state` (`PROTECTED`, `RESERVED`, `BACKUP`, or `NULL`). These are T4-approved runtime columns (**D4/P1**) read and written by FacilityService; Operations/Reservation remain authoritative for reservation state. When the projection and Operations disagree, Operations wins.
 - **Confirmation time:** `reservations.confirmed_at` exists in base `03b`; the `reservation-confirmation-time` overlay adds the trigger that stamps it.
-- **Soft delete:** identities and physical resources use `deleted_at`; audit records are retained.
+- **Soft delete:** identities and physical resources use `deleted_at`; audit records are retained. D11/D12 additionally require explicit dependency handling, atomic same-lot deactivation and retained vehicle-binding history; existing cascades/columns are schema evidence, not proof of those behaviors (DB29/DB30).
 
 ## 6. Deployment artifacts & deviations
 
@@ -74,3 +74,7 @@ The design baseline is `arch/database-schema` @ `9a13499`. The deployed branch d
 | D7 | Recreate `site_capacity_pools` in reservation overlay | Shape was lost in the arch split |
 
 Full evidence: `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md` and `10-db-docs-deployment-alignment.md`.
+
+## 7. v1.1 implementation boundary
+
+Preserve the documented columns/defaults until separately approved schema work. `ACTIVE` is not proof of approval, completed provisioning or operational opening; yearly support cannot be inferred from a monthly table. DB25–DB33 define the target gaps. Development reset/seed waits for documentation approval and compatible implementation, with environment/owner/scripts/date TBD under DB31; no execution occurs here.

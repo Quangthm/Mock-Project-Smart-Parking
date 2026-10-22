@@ -1,4 +1,4 @@
-# UC-MON-01 — Configure and offer monthly plans
+# UC-MON-01 — Configure and offer monthly/yearly plans
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Owner
@@ -7,7 +7,7 @@
 
 ## Goal
 
-Configure and offer monthly plans.
+Configure and offer monthly/yearly plans.
 
 ## Preconditions
 
@@ -15,8 +15,8 @@ Owned-lot plan configuration with required Payment terms.
 
 ## Main flow
 
-1. Define available-only plan scope and full calendar-period price.
-2. Validate required commercial config and approved locked defaults.
+1. Enable monthly and/or yearly Driver parking products separately from price; define available-only scope and full-period Payment terms.
+2. Validate product-specific commercial configuration: yearly covers 12 calendar months and at most one period purchased in advance; monthly maximum remains three. Yearly policy fields/rates/defaults require Q05 completion; do not copy monthly defaults.
 3. Publish versioned plan/financial terms for future purchases.
 4. Preserve already-paid periods on edits/sales closure.
 

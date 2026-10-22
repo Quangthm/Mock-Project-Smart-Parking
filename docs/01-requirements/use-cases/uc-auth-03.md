@@ -15,10 +15,10 @@ Owner is approved and controls the target organization/lots.
 
 ## Main flow
 
-1. Owner creates Operator account in their organization.
-2. Verify contact and activate through the supported identity flow; no Admin approval per hire.
-3. Owner assigns/revokes owned-lot permissions; record effective grants and audit.
-4. Subsequent commands, cached private-result access and subscriptions recheck current grants.
+1. Approved, successfully provisioned Owner creates a pending Operator in the owned organization; persist the invitation even if email delivery fails.
+2. Operator follows email activation, verifies contact and completes mandatory consented VNeID simulation. The fake API returns a GUID substitute bound to that user and persisted in the User & Access database; the GUID is not a government identity number or an authentication token. Password setup is optional; an eligible verified channel supports OTP login.
+3. Owner assigns/revokes owned-lot permissions; no Admin approval per hire, immediate active account or cross-owner grant.
+4. Subsequent normal login completes current account/MFA checks; commands, private replays and subscriptions recheck current grants.
 
 ## Alternatives and failures
 
