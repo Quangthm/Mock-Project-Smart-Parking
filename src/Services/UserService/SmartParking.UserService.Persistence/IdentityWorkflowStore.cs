@@ -20,6 +20,10 @@ public partial class AppDbContext : IIdentityWorkflowStore
         db.OwnerApplications.AsNoTracking().SingleOrDefaultAsync(a => a.UserId == userId, ct);
     Task<AuthChallenge?> IIdentityWorkflowStore.FindOwnerContactAsync(Guid? userId, CancellationToken ct) =>
         db.AuthChallenges.SingleOrDefaultAsync(c => c.UserId == userId && c.Purpose == "OWNER_CONTACT" && c.Channel == "email", ct);
+    Task<OwnerApplication?> IIdentityWorkflowStore.FindOwnerApplicationByEmailAsync(string email, CancellationToken ct) =>
+        db.OwnerApplications.AsNoTracking().SingleOrDefaultAsync(a => a.User.Email == email && a.User.DeletedOn == null, ct);
+    Task<AuthChallenge?> IIdentityWorkflowStore.FindOwnerSetupRecoveryChallengeAsync(Guid userId, CancellationToken ct) =>
+        db.AuthChallenges.SingleOrDefaultAsync(c => c.UserId == userId && c.Purpose == "OWNER_SETUP_RECOVERY", ct);
     Task<bool> IIdentityWorkflowStore.HasOwnerSetupAsync(Guid userId, CancellationToken ct) =>
         db.OwnerApplications.AsNoTracking().AnyAsync(a => a.UserId == userId && a.LotSetupJson != null, ct);
     Task<User?> IIdentityWorkflowStore.LockLoginUserByContactAsync(string contact, CancellationToken ct) =>

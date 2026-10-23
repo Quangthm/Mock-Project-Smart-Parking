@@ -63,7 +63,7 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         var application = await db.LockOwnerApplicationAsync(body.RegistrationId, ct);
         if (application?.SetupTokenHash is null || application.SetupTokenExpiresAt is null || application.SetupTokenExpiresAt <= clock.GetUtcNow() ||
             !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(application.SetupTokenHash), Encoding.UTF8.GetBytes(Hash(body.SetupToken))))
-            throw Error("SETUP_TOKEN_INVALID", "Setup credential is invalid or expired. Resume in the original browser session or contact support.", 401);
+            throw Error("SETUP_TOKEN_INVALID", "Setup credential is invalid or expired. Verify your registered email to restore setup access.", 401);
         var user = await db.LockUserAsync(application.UserId, ct);
         application.User = user;
         if (application.Status != "pending" || application.ApprovalRequestedBy is not null || user.DeletedOn is not null || user.Status != UserStatus.PendingVerification)

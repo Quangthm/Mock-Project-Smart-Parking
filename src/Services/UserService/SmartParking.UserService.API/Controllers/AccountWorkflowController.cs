@@ -22,6 +22,12 @@ public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSe
     public async Task<IActionResult> Resend(ResendDriverOtpDto body,CancellationToken ct)=>Ok(new{success=true,data=await workflows.ResendOwnerAsync(body.RegistrationId,ct)});
     [AllowAnonymous,HttpPost("register/owner/recover"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> RecoverOwner(OtpLoginDto body,CancellationToken ct)=>Ok(new{success=true,data=await workflows.RecoverOwnerAsync(body.Contact,ct)});
+    [AllowAnonymous,HttpPost("register/owner/setup-recovery/request"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> RequestOwnerSetupRecovery(OtpLoginDto body,CancellationToken ct)=>
+        Ok(new{success=true,data=await workflows.RequestOwnerSetupRecoveryAsync(body.Contact,ct)});
+    [AllowAnonymous,HttpPost("register/owner/setup-recovery/complete"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> CompleteOwnerSetupRecovery(CompleteOtpLoginDto body,CancellationToken ct)=>
+        Ok(new{success=true,data=await workflows.CompleteOwnerSetupRecoveryAsync(body,ct)});
     [AllowAnonymous,HttpPost("bootstrap-password"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> ChangePassword(ChangeBootstrapPasswordDto body,[FromServices] ISender sender,CancellationToken ct)
     {await sender.Send(new ActivateOperatorCommand(body),ct);return Ok(new{success=true});}

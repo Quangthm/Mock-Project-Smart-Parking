@@ -7,7 +7,8 @@ import { BrandLogo } from "../../../components/brand/BrandLogo"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { authApi, AuthApiError, request, type MfaLoginChallenge } from "../../../lib/authApi"
+import { authApi, AuthApiError, type MfaLoginChallenge } from "../../../lib/authApi"
+import { resumePendingSignIn } from "../pendingRegistrationSignIn"
 import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
 import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
 import { isValidAccountEmail, isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
@@ -111,51 +112,16 @@ export function SignIn() {
       navigate(getUserHomePath(user), { replace: true })
 
     } catch (error) {
-      if (
-        mode === "password" &&
-        error instanceof AuthApiError &&
-        error.code === "ACCOUNT_PENDING_VERIFICATION"
-      ) {
-        try {
-          const contact = email.trim()
-          try {
-            const registration = await authApi.recoverDriver(contact)
-            sessionStorage.setItem(
-              pendingDriverKey,
-              JSON.stringify({ ...registration, contact }),
-            )
-            sessionStorage.removeItem("sp_pending_owner_registration")
-            localStorage.removeItem("sp_pending_owner_registration")
-          } catch (driverError) {
-            if (!(driverError instanceof AuthApiError) || driverError.code !== "REGISTRATION_NOT_FOUND")
-              throw driverError
-
-            const recovered = await request<{
-              success: boolean
-              data: {
-                verification?: { challengeId: string; expiresAt: string; resendAt: string }
-                emailVerified: boolean
-              }
-            }>("/register/owner/recover", "POST", { contact })
-            if (!recovered.success || recovered.data.emailVerified || !recovered.data.verification?.challengeId)
-              throw new Error("Email verification is not available yet. Please contact support.")
-            sessionStorage.setItem(
-              "sp_pending_owner_registration",
-              JSON.stringify({ email: contact, lotSetupComplete: true, verification: recovered.data.verification }),
-            )
-            sessionStorage.removeItem(pendingDriverKey)
-          }
+      try {
+        const nextView = await resumePendingSignIn(error, email)
+        if (nextView) {
           setPassword("")
-          setView("sign-up")
-          return
-        } catch (recoveryError) {
-          setError(
-            recoveryError instanceof Error
-              ? recoveryError.message
-              : "Unable to resume verification. Please try again.",
-          )
+          setView(nextView)
           return
         }
+      } catch (recoveryError) {
+        setError(recoveryError instanceof Error ? recoveryError.message : "Unable to resume registration. Please try again.")
+        return
       }
       const msg =
         error instanceof Error
@@ -222,6 +188,17 @@ export function SignIn() {
       setUseRecoveryCode(false)
       setMfaChallenge(null)
     } catch (otpError) {
+      try {
+        const nextView = await resumePendingSignIn(otpError, email)
+        if (nextView) {
+          setPassword("")
+          setView(nextView)
+          return
+        }
+      } catch (recoveryError) {
+        setError(recoveryError instanceof Error ? recoveryError.message : "Unable to resume registration. Please try again.")
+        return
+      }
       setError(
         otpError instanceof Error
           ? otpError.message

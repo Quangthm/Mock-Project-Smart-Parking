@@ -9,6 +9,8 @@ public interface IAccountWorkflows
     Task VerifyOwnerAsync(Guid id,string code,CancellationToken ct);
     Task<ChallengeResult> ResendOwnerAsync(Guid id,CancellationToken ct);
     Task<object> RecoverOwnerAsync(string contact,CancellationToken ct);
+    Task<ChallengeResult> RequestOwnerSetupRecoveryAsync(string contact, CancellationToken ct);
+    Task<OwnerApplicationDto> CompleteOwnerSetupRecoveryAsync(CompleteOtpLoginDto body, CancellationToken ct);
     Task<MfaStatusDto> MfaStatusAsync(Guid id, CancellationToken ct);
     Task<MfaSetupDto> SetupMfaAsync(Guid id, MfaVerificationDto body, CancellationToken ct);
     Task<MfaRecoveryCodesDto> EnableMfaAsync(Guid id, string code, CancellationToken ct);

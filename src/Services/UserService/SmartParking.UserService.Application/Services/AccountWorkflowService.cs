@@ -59,7 +59,28 @@ public sealed partial class AccountWorkflowService(IIdentityWorkflowStore db, IP
         return challenge;
     }
     public static ChallengeResult Result(AuthChallenge c)=>new(c.Id,c.ExpiresAt,c.ResendAt);
-    public async Task<ChallengeResult> IssueOwnerAsync(User user,CancellationToken ct) => Result(await IssueAsync(user,"OWNER_CONTACT","email",user.Email!,ct));
+    public async Task<ChallengeResult> IssueOwnerAsync(User user,CancellationToken ct)
+    {
+        // Legacy registrations may already have an email challenge from before lot setup was required.
+        var existing = await db.FindOwnerContactAsync(user.Id, ct);
+        if (existing is null) return Result(await IssueAsync(user,"OWNER_CONTACT","email",user.Email!,ct));
+        var now = clock.GetUtcNow();
+        if (existing.LockedUntil > now) throw Error("OTP_LOCKED", "Try again after the OTP lock expires.", 423);
+        if (existing.ResendAt > now) throw Error("OTP_COOLDOWN", "Wait 60 seconds before requesting another code.", 429);
+        if (existing.LockedUntil is not null) { existing.LockedUntil = null; existing.Attempts = 0; }
+        var code = RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
+        while (!string.IsNullOrEmpty(existing.CodeHash) && passwords.Verify(code, existing.CodeHash))
+            code = RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
+        existing.CodeHash = passwords.Hash(code);
+        existing.ConsumedAt = null;
+        existing.ExpiresAt = now.AddMinutes(5);
+        existing.ResendAt = now.AddMinutes(1);
+        existing.Channel = "email";
+        existing.Destination = user.Email!;
+        await QueueAsync(user.Id!.Value, user.Id.Value, "OWNER_CONTACT",
+            OtpWorkflowMessage.Create("email", user.Email!, code), ct, existing.Id);
+        return Result(existing);
+    }
     public async Task<object> RecoverOwnerAsync(string contact,CancellationToken ct)
     {
         contact=Contact(contact);
@@ -69,7 +90,7 @@ public sealed partial class AccountWorkflowService(IIdentityWorkflowStore db, IP
         var application = await db.FindOwnerApplicationByUserAsync(user.Id, ct)
             ?? throw Error("REGISTRATION_NOT_FOUND", "Pending Owner registration was not found.", 404);
         if (application.LotSetupJson is null)
-            throw Error("SETUP_RECOVERY_REQUIRED", "Resume setup in the original browser session. Secure recovery is not yet available.", 409);
+            throw Error("SETUP_RECOVERY_REQUIRED", "Verify your registered email to restore access to parking lot setup.", 409);
         var challenge = await db.FindOwnerContactAsync(user.Id, ct)
             ?? throw Error("REGISTRATION_NOT_FOUND", "Pending Owner verification was not found.", 404);
         await tx.CommitAsync(ct);

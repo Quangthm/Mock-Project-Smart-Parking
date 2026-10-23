@@ -9,6 +9,8 @@ public interface IIdentityWorkflowStore
     Task<User?> LockPendingOwnerByContactAsync(string contact, CancellationToken ct);
     Task<OwnerApplication?> FindOwnerApplicationByUserAsync(Guid? userId, CancellationToken ct);
     Task<AuthChallenge?> FindOwnerContactAsync(Guid? userId, CancellationToken ct);
+    Task<OwnerApplication?> FindOwnerApplicationByEmailAsync(string email, CancellationToken ct);
+    Task<AuthChallenge?> FindOwnerSetupRecoveryChallengeAsync(Guid userId, CancellationToken ct);
     Task<bool> HasOwnerSetupAsync(Guid userId, CancellationToken ct);
     Task<User?> LockLoginUserByContactAsync(string contact, CancellationToken ct);
     Task<AuthChallenge?> FindOutstandingLoginAsync(Guid? userId, CancellationToken ct);

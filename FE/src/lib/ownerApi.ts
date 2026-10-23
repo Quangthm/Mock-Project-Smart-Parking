@@ -1,6 +1,7 @@
-import { request } from "./authApi"
+import { request, AuthApiError } from "./authApi"
 
 import type { Device, LotType } from "./types"
+import { ownerRegistrationStage, validOwnerChallenge, type PendingOwnerRegistration } from "./ownerRegistration"
 
 export interface OwnerLotSetup {
   name: string
@@ -70,9 +71,46 @@ export const ownerApi = {
       body,
     )
 
-    if (!r.success || !r.data?.id)
+    if (!r.success || !r.data?.id || typeof r.data.email !== "string" ||
+        r.data.email.trim().toLowerCase() !== body.email.trim().toLowerCase())
       throw new Error("Invalid registration response.")
 
+    if (ownerRegistrationStage(r.data) !== "setup")
+      throw new Error("The registration server did not return a valid setup credential. Please contact support.")
+
+    return r.data
+  },
+
+  async recover(email: string): Promise<PendingOwnerRegistration> {
+    try {
+      const r = await request<Response<PendingOwnerRegistration>>(
+        "/register/owner/recover", "POST", { contact: email },
+      )
+      if (!r.success || !r.data || ownerRegistrationStage(r.data) !== "verification")
+        throw new Error("The server did not return a saved parking lot and valid verification challenge.")
+      return { ...r.data, email }
+    } catch (error) {
+      if (error instanceof AuthApiError && error.code === "SETUP_RECOVERY_REQUIRED")
+        return ownerApi.requestSetupRecovery(email)
+      throw error
+    }
+  },
+
+  async requestSetupRecovery(email: string): Promise<PendingOwnerRegistration> {
+    const r = await request<Response<NonNullable<OwnerApplicationRecord["verification"]>>>(
+      "/register/owner/setup-recovery/request", "POST", { contact: email },
+    )
+    if (!r.success || !validOwnerChallenge(r.data)) throw new Error("Invalid setup recovery challenge.")
+    return { email, lotSetupComplete: false, setupRecovery: r.data }
+  },
+
+  async completeSetupRecovery(email: string, challengeId: string, code: string): Promise<PendingOwnerRegistration> {
+    const r = await request<Response<OwnerApplicationRecord>>(
+      "/register/owner/setup-recovery/complete", "POST", { challengeId, code },
+    )
+    if (!r.success || !r.data || ownerRegistrationStage(r.data) !== "setup" ||
+        r.data.email?.toLowerCase() !== email.trim().toLowerCase())
+      throw new Error("The server did not return a valid setup credential.")
     return r.data
   },
 
@@ -82,7 +120,7 @@ export const ownerApi = {
     lot: OwnerLotSetup,
   ): Promise<OwnerApplicationRecord> {
     if (!registrationId || !setupToken) {
-      throw new Error("Parking lot setup is unavailable. Please contact support.")
+      throw new Error("Your setup credential is missing. Resume registration in the original browser tab or contact support.")
     }
 
     const r = await request<Response<OwnerApplicationRecord>>(

@@ -13,6 +13,7 @@ import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
 import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
+import { restoreOwnerRegistration } from "../lib/ownerRegistration"
 
 export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "parking-lot-setup" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
 
@@ -50,19 +51,7 @@ export const useApp = () => useContext(Ctx)
 
 function hasPendingVerification() {
   if (restoreDriverRegistration()) return true
-  try {
-    const owner = JSON.parse(
-      sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
-    )
-    return typeof owner?.email === "string" && (
-      (typeof owner?.verification?.challengeId === "string" &&
-        Number.isFinite(Date.parse(owner.verification.expiresAt)) &&
-        Number.isFinite(Date.parse(owner.verification.resendAt))) ||
-      (typeof owner?.id === "string" && typeof owner?.setupToken === "string")
-    )
-  } catch {
-    return false
-  }
+  return restoreOwnerRegistration() !== null
 }
 
 function initialView(): View {
