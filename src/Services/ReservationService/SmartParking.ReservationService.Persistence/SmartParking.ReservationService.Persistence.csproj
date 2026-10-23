@@ -6,7 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <ProjectReference Include="../SmartParking.ReservationService.Application/SmartParking.ReservationService.Application.csproj" />
   </ItemGroup>
 </Project>
