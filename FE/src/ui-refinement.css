@@ -150,13 +150,19 @@
 /* Keep each footer column together and provide a predictable bottom rhythm. */
 .site-footer { margin-top: 0 !important; }
 .site-footer-inner { padding: clamp(40px, 5vw, 64px) var(--ui-workspace-pad) 24px !important; }
-.site-footer-columns { grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(130px, .7fr)) minmax(210px, 1.15fr) !important; gap: clamp(24px, 3vw, 44px) !important; margin-bottom: 44px !important; }
-.site-footer-group h4 { margin: 4px 0 16px !important; }
-.site-footer-group > div { gap: 11px !important; }
+.site-footer-columns { grid-template-columns: minmax(210px, 1fr) repeat(3, max-content) minmax(220px, 1fr) !important; gap: 28px 24px !important; margin-bottom: 44px !important; }
+.site-footer-group h4 { margin: 0 0 4px !important; }
+.site-footer-group:not(.site-footer-contact) > div { gap: 0 !important; }
 .site-footer-contact span { display: flex; align-items: flex-start; gap: 8px; }
 .site-footer-contact svg { flex: none; margin-top: 3px; }
 .site-footer-bottom { gap: 16px 24px !important; }
 .site-footer-bottom > div { flex-wrap: wrap; gap: 10px 20px !important; }
+.driver-history-tabs { gap: 8px !important; margin-block: 18px 24px !important; }
+.driver-history-tabs > button { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted); font: inherit; font-size: .875rem; font-weight: 650; cursor: pointer; }
+.driver-history-tabs > button:hover { border-color: var(--primary); color: var(--fg); }
+.driver-history-tabs > button.is-active { border-color: var(--primary); background: var(--active); color: var(--fg); }
+.driver-history-tabs > button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.driver-history-tabs > button span { font-variant-numeric: tabular-nums; color: var(--muted); }
 
 /* Auth takes the available page height; the footer begins immediately after it. */
 .auth-route main { display: flex; flex-direction: column; }

@@ -1,16 +1,49 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { ParkingHistory, type ParkingHistoryRecord } from "../../../components/history/ParkingHistory"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
 
 type HistorySection = "bookings" | "tickets"
+const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
+const currency = new Intl.NumberFormat("vi-VN")
 
 export function BookingHistory() {
   const { user } = useApp()
 
   const [section, setSection] = useState<HistorySection>("bookings")
+  const [, setDataRevision] = useState(0)
+
+  useEffect(() => {
+    const refresh = () => setDataRevision(current => current + 1)
+    window.addEventListener("sp-data-change", refresh)
+    return () => window.removeEventListener("sp-data-change", refresh)
+  }, [])
+
+  const bookings = user ? store.getBookingsByDriver(user.id) : []
+  const lots = store.getLots()
+  const historyRecords: ParkingHistoryRecord[] = bookings
+    .filter((booking) => booking.status === "completed" || booking.status === "cancelled")
+    .sort((a, b) => (b.completedAt || b.endTime).localeCompare(a.completedAt || a.endTime))
+    .map((booking) => ({
+      id: booking.id,
+      plate: booking.licensePlate,
+      title: booking.lotName,
+      subtitle: lots.find((lot) => lot.id === booking.lotId)?.address,
+      slot: booking.slotNumber,
+      status: booking.status.toUpperCase(),
+      kind: "Reserved",
+      startedAt: booking.startTime,
+      endedAt: booking.endTime,
+      details: [
+        { label: "Booking ID", value: booking.id },
+        { label: "Payment status", value: booking.paymentStatus || "—" },
+        { label: "Amount", value: `${currency.format(booking.amount)} VND` },
+        { label: "Created at", value: Number.isNaN(new Date(booking.createdAt).getTime()) ? "—" : dateTime.format(new Date(booking.createdAt)) },
+      ],
+    }))
 
   const tickets = store
     .getTickets()
@@ -22,7 +55,9 @@ export function BookingHistory() {
     <div>
       <PageHeader title="Booking History" variant="compact" />
       <div
-        className="booking-history-tabs"
+        className="booking-history-tabs driver-history-tabs"
+        role="group"
+        aria-label="History category"
         style={{
           display: "flex",
           gap: "0.75rem",
@@ -33,21 +68,30 @@ export function BookingHistory() {
       >
         <button
           type="button"
-          className={section === "bookings" ? "btn-primary" : "btn-outline"}
+          aria-pressed={section === "bookings"}
+          className={section === "bookings" ? "is-active" : ""}
           onClick={() => setSection("bookings")}
         >
-          Completed Bookings
+          Past Bookings <span>{historyRecords.length}</span>
         </button>
         <button
           type="button"
-          className={section === "tickets" ? "btn-primary" : "btn-outline"}
+          aria-pressed={section === "tickets"}
+          className={section === "tickets" ? "is-active" : ""}
           onClick={() => setSection("tickets")}
         >
-          Ticket History ({tickets.length})
+          Ticket History <span>{tickets.length}</span>
         </button>
       </div>
       {section === "bookings" ? (
-        <EmptyHistory message="Booking history is not available for your account yet." />
+        <ParkingHistory
+          title="Your Parking History"
+          scope="Completed and cancelled bookings"
+          scopeKey={user?.id ?? ""}
+          records={historyRecords}
+          dateLabel="Booked for"
+          emptyMessage="Your completed or cancelled bookings will appear here."
+        />
       ) : tickets.length ? (
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {tickets.map((ticket) => {
