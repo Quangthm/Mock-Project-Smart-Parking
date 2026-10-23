@@ -1,5 +1,5 @@
 using Npgsql;
-using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using SmartParking.ReservationService.Domain;
 
 namespace SmartParking.ReservationService.Persistence;

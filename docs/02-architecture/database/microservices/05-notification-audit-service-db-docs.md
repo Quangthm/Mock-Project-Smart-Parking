@@ -2,9 +2,13 @@
 
 > **Service**: Notification & Audit Service (`NotificationAuditDb`)  
 > **Database file**: [`05-notification-audit-service-db.sql`](../../../../scripts/database/microservices/05-notification-audit-service-db.sql)  
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB26/DB33 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý động cơ chuyển phát thông báo bền vững (`durable_notifications`), mẫu nội dung (`notification_templates`), token thiết bị (`push_device_tokens`), module hỗ trợ chung và tiếp nhận yêu cầu khôi phục tài khoản (`support_tickets`, `support_ticket_messages`), và hồ chiếu dữ liệu kiểm toán tập trung (`central_audit_projections`).
+
+## v1.1 target alignment (DB26/DB33)
+
+Pending/failed delivery must preserve committed account/application/review/provisioning outcomes. Retry notification only, with semantic dedupe and attempt evidence; queued/provider-accepted is not delivered. Approval after initial pending agreement replacement sends “Your application was approved with some modifications”, still approval. Approval email distinguishes review outcome from readiness to sign in; rejection explanations stay safe. The sole seeded Admin uses controlled maintainer recovery; support records never grant credentials or privileges. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 
@@ -14,7 +18,7 @@
 | Base DDL | [`05-notification-audit-service-db.sql`](../../../../scripts/database/microservices/05-notification-audit-service-db.sql) |
 | Overlay | Không |
 | Deployment status | Khớp arch `9a13499`; `support_tickets` ở DB này là shape SRS |
-| Runtime note | `smartpark_parking` có bản `support_tickets` shape BE tạm thời (D6); xem §5 |
+| Runtime note | `smartpark_facility` có bản `support_tickets` shape BE tạm thời (D6); xem §5 |
 
 ---
 
@@ -66,7 +70,7 @@ Quản lý toàn bộ tiến trình gửi tin từ hàng đợi: `originating_ev
 
 ## 5. Bảng `support_tickets` — Tiếp nhận hỗ trợ & Account Recovery
 
-> **Deployment note (D6):** `smartpark_parking` có bảng `support_tickets` shape BE (`user_id`, `message`, `status` open/in-progress/resolved) do overlay `parking-operator-tables.sql` tạo, phục vụ các endpoint `/api/operator/*`. Bảng trong tài liệu này là shape SRS canonical ở `smartpark_notification`; hai bảng nằm ở hai DB khác nhau, không xung đột vật lý. Khi BE migrate sang shape SRS, bỏ bản parking.
+> **Deployment note (D6):** `smartpark_facility` có bảng `support_tickets` shape BE (`user_id`, `message`, `status` open/in-progress/resolved) do overlay `parking-operator-tables.sql` tạo, phục vụ các endpoint `/api/operator/*`. Bảng trong tài liệu này là shape SRS canonical ở `smartpark_notification`; hai bảng nằm ở hai DB khác nhau, không xung đột vật lý. Khi BE migrate sang shape SRS, bỏ bản parking.
 
 Tiếp nhận các yêu cầu hỗ trợ người dùng theo các danh mục: `GENERAL_INQUIRY`, `PAYMENT_DISPUTE`, `ACCOUNT_RECOVERY`, `FACILITY_COMPLAINT`, `SYSTEM_BUG`. Quản lý trạng thái từ `OPEN` -> `IN_PROGRESS` -> `RESOLVED` -> `CLOSED`.
 

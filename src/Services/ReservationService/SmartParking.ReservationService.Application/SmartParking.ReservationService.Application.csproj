@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="MediatR" Version="14.2.0" />
     <ProjectReference Include="../SmartParking.ReservationService.Domain/SmartParking.ReservationService.Domain.csproj" />
   </ItemGroup>
 </Project>

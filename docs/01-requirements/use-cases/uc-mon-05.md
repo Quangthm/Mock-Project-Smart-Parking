@@ -1,4 +1,4 @@
-# UC-MON-05 — Cancel a monthly plan and reconcile refund
+# UC-MON-05 — Cancel a monthly/yearly plan and reconcile refund
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Owner, Operations, Payment
@@ -7,7 +7,7 @@
 
 ## Goal
 
-Cancel a monthly plan and reconcile refund.
+Cancel a monthly/yearly plan and reconcile refund.
 
 ## Preconditions
 
@@ -18,7 +18,7 @@ Voluntary request or separately verified facility failure.
 1. For voluntary request list all affected future reservations priced using coverage being cancelled.
 2. Require Driver explicitly cancel dependent reservations through ordinary cancellation; no automatic cancellation/repricing/charge.
 3. Recheck dependencies and accepted entitlement version at cancellation commit; Owner handles approval and C is accepted backend cancellation time.
-4. Calculate per-period prestart100% or midperiod50% unused value, sum/round once and cap collected balance; execute refund separately.
+4. For monthly, calculate per-period prestart100% or midperiod50% unused value. For yearly use separately accepted configurable refund terms; no yearly rate is approved here. Sum/round once and cap collected balance; execute refund separately.
 5. For temporary closure retain pass/end date and refund verified unavailable interval once; permanent closure cancels remaining coverage with failure100% and overlap deduction.
 
 ## Alternatives and failures

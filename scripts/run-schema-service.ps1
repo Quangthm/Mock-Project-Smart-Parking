@@ -44,7 +44,7 @@ $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }
 $apiPort = $apiPortByService[$Service]
 
-$dbName = 'smartpark_' + $Service.ToLowerInvariant()
+$dbName = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations' }[$Service]
 # Quote the password for Npgsql syntax so ';' inside a password is safe.
 $quotedPassword = $env:SMARTPARK_DEV_PASSWORD.Replace('"', '""')
 [Environment]::SetEnvironmentVariable('ConnectionStrings__' + $Service, "Host=127.0.0.1;Port=$dbPort;Database=$dbName;Username=$dbName;Password=`"$quotedPassword`"", 'Process')

@@ -9,7 +9,7 @@
 3. Local dùng lại credential hoặc sinh phần thiếu. Validate trước khi ghi cấu hình. Không đổi giá trị đã có.
 4. Dựng DB bằng compose canonical, probe password qua TCP, áp migrations cho từng service với `-EnvPath` tường minh (runner probe trạng thái DB: schema hiện tại → skip, DB trống → apply, schema cũ → báo `-RecreateDb`).
 5. Đồng bộ user-secrets theo `.env` (ghi thiếu, **ghi đè giá trị lệch**, xóa khóa optional JWT/SMTP không còn trong `.env`); `-SkipUserSecrets` bỏ bước này và yêu cầu dùng runner `.env`.
-6. Tạo FE env nếu thiếu, bổ sung MapTiler và URL AI (REST 5001 / live 5002) nếu trống; dựng compose SonarQube (sinh `SONAR_DB_PASSWORD` khi thiếu, bỏ qua với `-SkipSonarQube`); nếu `-WithAiCamera`: build + start container AI (`compose.ai.yml`, project `smartpark-ai`) sau khi DB và SonarQube đã lên; restore solution.
+6. Tạo FE env nếu thiếu, bổ sung MapTiler và URL AI (REST 5001 / live 5002) nếu trống; dựng compose SonarQube (sinh `SONAR_DB_PASSWORD` khi thiếu, bỏ qua với `-SkipSonarQube`); nếu `-WithAiCamera`: kiểm tra model/network, dò image + container AI rồi mới quyết định build/start (`compose.ai.yml`, project `smartpark-ai`) sau khi DB và SonarQube đã lên; restore solution.
 
 | Tham số | Ý nghĩa |
 | --- | --- |
@@ -19,10 +19,21 @@
 | `-SkipRestore` | Không restore NuGet |
 | `-SkipUserSecrets` | Không ghi user-secrets; chạy API qua runner |
 | `-SkipSonarQube` | Không dựng SonarQube (mặc định tự dựng cùng setup và sinh `SONAR_DB_PASSWORD` khi thiếu); `-WithSonarQube` còn nhận nhưng không còn tác dụng |
-| `-WithAiCamera` | Build và start AI camera containers (ai-rest :5001, ai-live :5002) từ `compose.ai.yml` (project `smartpark-ai`); cần schema DBs đang chạy, không tương thích với `-SkipDatabase`; build lần đầu ~5–10' |
+| `-WithAiCamera` | Kiểm tra model/network và dựng AI camera containers (ai-rest :5001, ai-live :5002) từ `compose.ai.yml` (project `smartpark-ai`); chỉ build khi image chưa có; cần schema DBs đang chạy, không tương thích với `-SkipDatabase`; build lần đầu ~5–10' |
+| `-RebuildAi` | Đi cùng `-WithAiCamera`: buộc build lại image `smartpark-ai:local` có cache rồi start; dùng một mình sẽ throw |
 | `-NonInteractive` | Bỏ qua prompt `.env` Overwrite/Keep/Abort (giữ `.env` hiện có); dùng cho CI/test tự động |
 
+AI camera dùng các helper trong `setup.ps1`: `Test-AiModelAssets`/`Assert-AiModelAssets` (7 file model, chạy trước mọi lệnh Docker của AI), `Get-AiImageState` (`docker image inspect --format`), `Test-AiImageLibraries` (probe import, timeout 60s, chỉ ở nhánh image có nhưng chưa có container), `Get-AiStackState` (`compose ps --all --format json`, fallback `docker ps --filter label=com.docker.compose.project=smartpark-ai`), `Show-AiResolutionPlaybook`, `Read-AiResolutionChoice` và `Invoke-AiCameraSetup`. State matrix: image thiếu → build; image + container có → `up -d --wait --no-build`; image có, container không → playbook + prompt (non-interactive chọn Start); container dùng image ID cũ → cảnh báo và `--force-recreate --no-build`; unhealthy → không tự rebuild, in log rồi lỗi nếu `up --wait` fail. `-RebuildAi` chỉ build có cache; không tự clean rebuild.
+
 `load-env.ps1 -NoExport` trả hashtable và không thay process environment. Không có switch thì giữ behavior export hiện có. `apply-workflow-migrations.ps1 -Service <service> -SchemaRoot <checkout> [-EnvPath <env>] [-ProjectName <project>]` luôn dùng đúng env file; mặc định là `.env` của SchemaRoot, không phụ thuộc thư mục terminal. Không reset volume: runner probe state — schema hiện tại → skip, DB trống → áp canonical, schema cũ → báo chạy `-RecreateDb`.
+
+## Docker app runner
+
+`compose.app.yml` chạy 4 container riêng (`user-service`, `parking-service`, `reservation-service`, `frontend`) trong project `smartpark-app`, dùng external network `smartpark-schema_default`. Backend dùng `docker/Dockerfile.backend` với build arg `SERVICE`; FE dùng `FE/Dockerfile` (Node 22, Vite port 5173). Không thêm `container_name` để tránh xung đột nhiều checkout.
+
+`scripts/run-app-service.ps1` nhận `-Service User|Parking|Reservation|Frontend|All`, `-NoBuild`, `-NoLogWindow`. Script kiểm tra `.env`, `compose.app.yml`, network, chạy `up -d`, poll trạng thái tối đa 120 giây, in 100 dòng log và fail nếu container exit/unhealthy. Mỗi target mở một cửa sổ CMD `logs -f` trừ khi có `-NoLogWindow`. `scripts/stop-app-service.ps1` dừng target hoặc `down --remove-orphans` cho `All`, không xóa volume. Các wrapper `.cmd` chỉ gọi lại script PowerShell.
+
+Lưu ý PowerShell 5.1: Docker ghi progress ra stderr; script dùng helper native-command để không biến stderr thành terminating error, và quyết định pass/fail bằng `$LASTEXITCODE`. Khi sửa wrapper, giữ behavior này và parse `docker compose ps --all --format json` cho cả array/NDJSON.
 
 ## Chuyển từ setup local ignored sang tracked
 

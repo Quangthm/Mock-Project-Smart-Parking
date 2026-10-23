@@ -1,42 +1,69 @@
 using System.Data;
 using Npgsql;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
+using SmartParking.ReservationService.Application.DTOs;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 
 namespace SmartParking.ReservationService.Persistence;
 
-public sealed record ReservationGateEntry(
-    Guid Id,
-    Guid AccountId,
-    Guid SiteId,
-    string SiteName,
-    Guid? SlotId,
-    string SlotNumber,
-    string LicensePlate,
-    string Status,
-    string? PaymentStatus,
-    string? PaymentMethod,
-    decimal? Amount,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    DateTimeOffset? EntryTime,
-    DateTimeOffset? ExitTime,
-    string? EntryImageUrl,
-    string? ExitImageUrl,
-    DateTimeOffset CreatedAt);
-
-public sealed record WalkInParkingSession(
-    Guid Id,
-    Guid SiteId,
-    Guid? SlotId,
-    string? SlotNumber,
-    string LicensePlate,
-    string VehicleType,
-    DateTimeOffset EntryTime,
-    DateTimeOffset? ExitTime,
-    string? EntryImageUrl,
-    string? ExitImageUrl);
-
-public sealed class ReservationGateStore(NpgsqlDataSource source)
+public sealed class ReservationGateStore(NpgsqlDataSource source) : IReservationGateStore
 {
+    public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(
+        Guid tenantId,
+        Guid siteId,
+        CancellationToken ct)
+    {
+        await using var db = await source.OpenConnectionAsync(ct);
+        await using var command = new NpgsqlCommand("""
+            SELECT session.id, session.reservation_id, session.tenant_id, session.site_id,
+                   session.access_item_id, session.account_id,
+                   COALESCE(session.current_slot_id, allocation.slot_id),
+                   NULL::text, session.original_plate, session.normalized_plate,
+                   session.vehicle_type, session.ticket_reference,
+                   session.entry_time, session.entry_image_url, session.exit_time,
+                   session.exit_image_url, session.session_status, session.version,
+                   session.created_at
+            FROM parking_sessions session
+            LEFT JOIN LATERAL (
+                SELECT slot_id
+                FROM slot_allocations
+                WHERE parking_session_id = session.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) allocation ON TRUE
+            WHERE session.tenant_id = $1 AND session.site_id = $2
+            ORDER BY session.entry_time DESC, session.created_at DESC
+            """, db);
+        command.Parameters.AddWithValue(tenantId);
+        command.Parameters.AddWithValue(siteId);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var sessions = new List<ParkingSessionHistoryEntry>();
+        while (await reader.ReadAsync(ct))
+        {
+            sessions.Add(new(
+                reader.GetGuid(0),
+                reader.IsDBNull(1) ? null : reader.GetGuid(1),
+                reader.GetGuid(2),
+                reader.GetGuid(3),
+                reader.IsDBNull(4) ? null : reader.GetGuid(4),
+                reader.IsDBNull(5) ? null : reader.GetGuid(5),
+                reader.IsDBNull(6) ? null : reader.GetGuid(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.GetFieldValue<DateTimeOffset>(12),
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetFieldValue<DateTimeOffset>(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.GetString(16),
+                reader.GetInt32(17),
+                reader.GetFieldValue<DateTimeOffset>(18)));
+        }
+        return sessions;
+    }
+
     public async Task<IReadOnlyList<ReservationGateEntry>> ListAsync(
         Guid tenantId,
         Guid siteId,
@@ -626,11 +653,4 @@ public sealed class ReservationGateStore(NpgsqlDataSource source)
 
     private static string NormalizePlate(string value) =>
         string.Concat(value.Where(char.IsLetterOrDigit)).ToUpperInvariant();
-}
-
-public sealed class ReservationGateException(int statusCode, string code, string message)
-    : Exception(message)
-{
-    public int StatusCode { get; } = statusCode;
-    public string Code { get; } = code;
 }

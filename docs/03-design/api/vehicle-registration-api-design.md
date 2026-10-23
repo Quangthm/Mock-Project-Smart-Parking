@@ -1,391 +1,62 @@
-# SmartPark - Vehicle Registration & Canonical Plate Normalization API Design Specification
+# Vehicle registration, binding and soft removal API design
 
-**Issue ID:** SPARK-220 (Vehicle Registration API Design) · SPARK-221 (BE Implementation) · SPARK-222 (FE Integration) · SPARK-223 (API Testing & LPR UAT)  
-**Sprint:** Sprint 2  
-**Estimate:** 1 SP  
-**Author:** Architecture Lead / Team Lead  
-**Status:** Approved Specification Baseline  
-**Date:** 2026-10-13  
-**Target Release:** SmartPark v0.9 Baseline  
+SPARK-220 / SPARK-221 / SPARK-222 / SPARK-223 · SPARK-296 update, 21 October 2026. **v1.1 documentation review candidate based on approved decisions**; API compatibility and implementation pending.
 
----
+Canonical behavior: [FR-VEH-01–04](../../01-requirements/srs/modules/01-identity-access.md), [UC-VEH-01](../../01-requirements/use-cases/uc-veh-01.md), [UC-VEH-02](../../01-requirements/use-cases/uc-veh-02.md), [media requirements](../../01-requirements/srs/modules/09-file-media.md), [service boundaries](../../02-architecture/service-boundaries/ownership-and-events.md). The old statement that FR-VEH-02 remains OPEN is superseded by the existing confirmed binding/dispute requirement; code permitting independent conflicting bindings is evidence of alignment work, not approved behavior.
 
-## 1. Overview & Business Objectives
+## Actor, routes and input/output
 
-### 1.1 Objective
-This document defines the normative REST API specification for **Driver Vehicle Registration** (`/api/vehicles`) and the **Canonical Plate Normalization Engine** for SmartPark Sprint 2. It bridges requirement specifications (SRS v0.9 §3.1.3; FR-VEH-01; FR-VEH-03; FR-AUTH-06; US-D09; BR-VEH-01/03) with the persistence model in PostgreSQL table `vehicles` (`scripts/database/05.1-Database-Scripts.sql` and `05.8-Account-Workflow-Vehicles.sql`) and establishes an unambiguous contract consumed by Backend, Frontend, and LPR (License Plate Recognition) gate services.
+Current Driver account and record ownership are required. Server derives account identity from current authenticated membership. Foreign/missing records return safe not-found/forbidden without disclosing another holder.
 
-### 1.2 Core Scope & Business Rules
+| Method/path | Required contract |
+|---|---|
+| `GET /api/vehicles` | Own active registered vehicles only; raw/canonical plate, category, authorized image reference and record metadata. Historical associations remain retained outside active listing. |
+| `POST /api/vehicles` | Existing `plate`, `vehicleType` and vehicle image requirement; validate raw/canonical form, own asset binding and conflicting active normalized binding. Return created own record. |
+| `PATCH /api/vehicles/{id}` | Validate own record and active dependencies before changing plate/category/image. Existing implementation expects the full field set; partial-update semantics and media-reference transport require V11-DES-10 agreement. |
+| `DELETE /api/vehicles/{id}` | Retained design route for **soft removal only**; current implementation coverage is not claimed. Guard active dependencies/history; final response/error contract V11-DES-10. |
 
-1. **Driver-Owned Plated Vehicle Registration (FR-VEH-01, US-D09):**
-   - Authenticated Drivers can register, list, update, and remove (soft-delete) their personal plated vehicles.
-   - Every operation is strictly scoped to the caller's authenticated identity (`account_id` belonging to an active Driver account).
-   - Cross-account reading, updating, or deleting of vehicles is rejected with `404 Not Found` or `403 Forbidden` (`VEHICLE_NOT_FOUND` / `FORBIDDEN`).
+Retain record identity, raw input, canonical normalized plate, category, image reference, creation/update and nullable removal metadata. Raw plate preserves exact supplied text; normalization derives a separate value. Supported self-service plated categories remain CAR and MOTORCYCLE; non-plated visits use scoped operational session/ticket identity, not a fabricated permanent plate. No EV charging or new oversized self-service product is introduced.
 
-2. **Dual-Plate Representation (Raw vs. Canonical):**
-   - **Original/Raw Plate (`RawPlate` / `original_plate`):** Preserves the exact user input (with formatting, punctuation, and casing, e.g. `"51A-123.45"` or `"29-B1 987.65"`) for faithful frontend display.
-   - **Canonical Normalized Plate (`CanonicalPlate` / `normalized_plate`):** Cleaned, stripped, and uppercase alphanumeric string (e.g. `"51A12345"`, `"29B198765"`) optimized for indexing, search, and automated License Plate Recognition (LPR) camera matching at entry/exit gates.
+## Normalization and media compatibility
 
-3. **Supported Vehicle Categories (BR-VEH-01):**
-   - Supported vehicle types are strictly constrained to:
-     - `CAR`: Automobiles, SUVs, Sedans.
-     - `MOTORCYCLE`: Motorbikes, scooters, two-wheelers.
-   - Commercial oversized vehicles and trailers are handled via manual operator workflows, not customer self-service.
+Existing integration normalizes uppercase and strips whitespace, dots and hyphens. Preserve representative transformations `51a-123.45 → 51A12345` and `59-F1 987.65 → 59F198765`. The historical prototype regex supports CAR two digits + one letter + five digits, and MOTORCYCLE two digits + two series characters + five digits; its motorcycle pattern has nine characters, so the old eight-character accepted example contradicted it. Exact legal/special-series acceptance, underscore handling and shared FE/BE/LPR syntax remain technical format-review work under V11-DES-10. Do not claim a regex proves all legally valid Vietnamese plates or invent legal eligibility.
 
-4. **Image Reference & Security Boundary:**
-   - The API accepts an optional or required vehicle image reference (`imageReference` / `image_url`, max 2048 chars).
-   - **SSRF Defense:** The URL must be an absolute HTTPS URL (`https://...`). The server stores the reference as metadata and **does not fetch or crawl the URL server-side**.
+Vehicle images are required by the canonical SRS: JPEG/PNG/WebP up to 5 MiB, validated through backend uploads. User owns the image lifecycle; use a stable opaque owning-service asset reference and authorized restricted delivery, not an arbitrary client HTTPS URL. The old `imageReference` URL/string shape requires V11-DES-10 compatibility agreement; HTTPS syntax alone is not asset authorization. Preserve media retention and acknowledged holds; do not extend retention merely because an image is referenced by a historical visit.
 
-5. **Exclusion of Non-Plated Vehicles (FR-VEH-03):**
-   - Bicycles, unplated scooters, and unregistered vehicles are **strictly excluded** from permanent vehicle registration.
-   - Non-plated visits utilize the walk-in parking session or temporary paper/RFID ticket workflow (FR-VEH-03) managed at the gate.
+Conceptual input, **not the finalized media wire schema**:
 
-6. **Status of FR-VEH-02 (Duplicate Plates — Explicitly OPEN & Out of Scope):**
-   - Requirement **FR-VEH-02 (Duplicate-plate claim, dispute, and ownership transfer)** remains **OPEN** in SRS v0.9.
-   - As decided in schema migration `05.8-Account-Workflow-Vehicles.sql`, the database unique constraint on plates was replaced by a non-unique lookup index (`ix_active_vehicle_plate ON vehicles(normalized_plate) WHERE deleted_at IS NULL`).
-   - If two drivers register the same license plate, the system allows the entry without collision error, but **does not grant cross-account access or ownership transfer**.
-   - No speculative vehicle-claiming, title-verification (Cavet/GPLX upload), or dispute-resolution workflow is invented in this contract.
-
----
-
-## 2. Endpoint & Permission Matrix
-
-| Endpoint | Method | Required Role | Required Scope / State | Description |
-| :--- | :---: | :---: | :--- | :--- |
-| `/api/vehicles` | `GET` | `driver` | Authenticated Driver (`ACTIVE`) | Lists all active registered vehicles belonging to the caller's Driver account. |
-| `/api/vehicles` | `POST` | `driver` | Authenticated Driver (`ACTIVE`) | Registers a new plated vehicle, normalizing the license plate. |
-| `/api/vehicles/{id}` | `PATCH` | `driver` | Owner of Vehicle (`account_id`) | Updates vehicle profile, vehicle type, plate, or photo URL for an existing vehicle. |
-| `/api/vehicles/{id}` | `DELETE` | `driver` | Owner of Vehicle (`account_id`) | Soft-deletes a registered vehicle record (`deleted_at = NOW()`). |
-
----
-
-## 3. Canonical Plate Normalization Specification
-
-To ensure 100% interoperability between Mobile FE, Web FE, Backend persistence, and LPR camera OCR engines, all components must adhere to the following normalization contract:
-
-### 3.1 Normalization Algorithm
-```text
-1. Input: rawPlate (string), vehicleType (enum: CAR | MOTORCYCLE)
-2. Trim leading and trailing whitespace: rawPlate = rawPlate.Trim()
-3. Convert all characters to uppercase: rawPlate = rawPlate.ToUpperInvariant()
-4. Strip all separators (spaces, dots, hyphens, underscores):
-   canonicalPlate = Regex.Replace(rawPlate, @"[\s.\-_]", "")
-5. Syntax Validation:
-   - If vehicleType == "CAR":
-     Regex: ^[1-9][0-9][A-Z][0-9]{5}$
-     Length: exactly 8 characters.
-     Format: [2-digit province code (10-99)] + [1 series letter (A-Z)] + [5 numeric digits]
-   - If vehicleType == "MOTORCYCLE":
-     Regex: ^[1-9][0-9][A-Z][A-Z0-9][0-9]{5}$
-     Length: 8 or 9 characters.
-     Format: [2-digit province code] + [1 series letter] + [1 optional letter or digit] + [5 numeric digits]
-6. Output: canonicalPlate
+```json
+{
+  "plate": "51a-123.45",
+  "vehicleType": "CAR",
+  "imageReference": {"ownerService":"user-access","assetId":"<authorized-asset-id>"}
+}
 ```
 
-### 3.2 Canonical Transformation Examples
+## Binding and removal guards
 
-| Input Plate (`plate`) | Vehicle Type (`vehicleType`) | Canonical Value (`canonicalPlate`) | Validation Result | Notes |
-| :--- | :---: | :---: | :---: | :--- |
-| `51A-123.45` | `CAR` | `51A12345` | ✅ Valid | Standard car plate with hyphen and dot |
-| `30F - 987.65` | `CAR` | `30F98765` | ✅ Valid | Spaces and punctuation cleanly stripped |
-| `59-F1 987.65` | `MOTORCYCLE` | `59F198765` | ✅ Valid | Motorcycle 2-character sub-series (`F1`) |
-| `29B-12345` | `MOTORCYCLE` | `29B12345` | ✅ Valid | Motorcycle single-letter sub-series |
-| `51a12345` | `CAR` | `51A12345` | ✅ Valid | Lowercase transformed to uppercase |
-| `01A-123.45` | `CAR` | — | ❌ Invalid (`INVALID_PLATE`) | Invalid province code (`01` does not exist) |
-| `51A-1234` | `CAR` | — | ❌ Invalid (`INVALID_PLATE`) | Insufficient digits (requires 5 digits in v0.9 baseline) |
-| `ABC-123` | `CAR` | — | ❌ Invalid (`INVALID_PLATE`) | Non-Vietnamese format |
+Reject conflicting active normalized binding without disclosing the existing account. [UC-VEH-02](../../01-requirements/use-cases/uc-veh-02.md) requires verified contact, relevant registration/transfer evidence, scoped Operator findings, existing-holder notification and a reasoned Admin decision. No transfer on silence, plate image or OTP alone; unresolved cases stay pending/escalated. User commits binding changes with version guard and retained association history. IoT recognition is an observation; Operations controls admission and never queries the User database directly or opens a gate solely from a plate match.
 
----
-
-## 4. State & Sequence Models
-
-### 4.1 Vehicle Lifecycle State Diagram
+D12 removal first checks live reservations, visits, pass coverage and other active dependencies through their owning contracts. Reject removal that would invalidate them until handled by their approved workflows. Recheck dependencies at commit to serialize removal against new claims and binding changes. On success soft-remove the active association/record, retain account/vehicle/plate and historical visit/financial attribution, and exclude it from active listing. Removal is **not transfer approval**. Hard cleanup occurs only under approved retention and holds; no cascade deletion of historical associations.
 
 ```mermaid
-stateDiagram-v2
-    [*] --> REGISTERED : POST /api/vehicles\n(Plate normalized, stored with Driver account)
-    
-    REGISTERED --> ACTIVE : Immediate Activation
-    ACTIVE --> ACTIVE : PATCH /api/vehicles/{id}\n(Plate updated or photo refreshed)
-    
-    ACTIVE --> SOFT_DELETED : DELETE /api/vehicles/{id}\n(deleted_at timestamp set)
-    
-    SOFT_DELETED --> [*] : Preserved for Historical Sessions/Audit
+flowchart TD
+    A[Driver requests removal of own vehicle] --> B[Validate current account, binding and version]
+    B --> C{Active dependency would be invalidated?}
+    C -->|Yes or unresolved| E[Reject without mutation; use dependency workflow]
+    C -->|No| D[Recheck dependencies and commit soft removal with audit]
+    D --> H[Retain binding and visit history; cleanup only under retention]
 ```
 
-### 4.2 Vehicle Registration & Ingress LPR Matching Sequence Diagram
+## Errors, retries and retained decisions
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Driver as Driver (Customer)
-    participant App as Driver Mobile App
-    participant UserAPI as User Service API
-    participant DB as User DB (PostgreSQL)
-    participant LPR as LPR Gate Engine (Entry Lane)
+Preserve `INVALID_PLATE`, validation, authentication, `FORBIDDEN`, `VEHICLE_NOT_FOUND` integration outcomes. Conflicting binding, invalid/unowned media, active dependency and concurrent-change errors must be safe and actionable; final codes/HTTP/envelope and removal repeat behavior are V11-DES-03/V11-DES-10. Retry cannot duplicate removal/history or approve a transfer. No raw exceptions or foreign-account identity are exposed.
 
-    Driver->>App: Enters Plate "51A-123.45", selects "CAR", attaches photo URL
-    App->>UserAPI: POST /api/vehicles (plate="51A-123.45", vehicleType="CAR", imageReference=...)
-    UserAPI->>UserAPI: Normalize Plate -> "51A12345"
-    UserAPI->>DB: INSERT INTO vehicles (account_id, original_plate, normalized_plate, vehicle_type, image_url)
-    UserAPI-->>App: 201 Created (id, rawPlate, canonicalPlate, vehicleType, imageReference)
-    App-->>Driver: Displays registered vehicle in profile
+| Existing reference | v1.1 disposition |
+|---|---|
+| DEC-VEH-01 | Raw/canonical separation retained; exact supported-format compatibility requires review. |
+| DEC-VEH-02 | Confirmed guarded active binding/dispute workflow governs; historical non-unique implementation is not authority. |
+| DEC-VEH-03 | Service-owned restricted media reference replaces arbitrary external URL shortcut. |
+| DEC-VEH-04 | Non-plated visits use session/ticket workflow; no permanent invented plate. |
 
-    Note over Driver, LPR: Later: Driver arrives at Parking Gate
-    Driver->>LPR: Drives up to Entry Barrier Camera
-    LPR->>LPR: Optical Character Recognition (OCR) captures plate image
-    LPR->>LPR: Normalizes OCR text -> "51A12345"
-    LPR->>DB: SELECT * FROM vehicles WHERE normalized_plate = '51A12345' AND deleted_at IS NULL
-    DB-->>LPR: Vehicle record found -> Linked to Driver Account
-    LPR->>LPR: Auto-matches active reservation or creates verified session
-    LPR-->>Driver: Gate Barrier Opens Automatically
-```
-
----
-
-## 5. Requirement ↔ Data Schema ↔ DTO Field Mapping
-
-| Requirement Identifier | API DTO Field Name (camelCase) | Data Type & Nullability | Validation & Business Constraints | DB Table & Column (snake_case) | DB Column Type |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **FR-VEH-01** | `id` | `UUID` (System Generated) | Primary key for registered vehicle. | `vehicles.id` | `UUID PK` |
-| **FR-VEH-01** | `plate` / `rawPlate` | `string` (Required) | Length 1–30 characters. Raw user-provided format. | `vehicles.original_plate` | `VARCHAR(30) NOT NULL` |
-| **FR-VEH-01** | `canonicalPlate` | `string` (System Calculated) | Length 8–9 characters. Alphanumeric uppercase. | `vehicles.normalized_plate` | `VARCHAR(20) NOT NULL` |
-| **BR-VEH-01** | `vehicleType` | `enum` (Required) | Enum: `'CAR'`, `'MOTORCYCLE'`. | `vehicles.vehicle_type` | `VARCHAR(50) NOT NULL` |
-| **FR-VEH-01** | `imageReference` | `string?` (Optional) | Length $\le 2048$. Must be a valid absolute HTTPS URL. | `vehicles.image_url` | `TEXT NULL` |
-| **FR-AUTH-06** | `accountId` | `UUID` (System Assigned) | Foreign key pointing to caller's Driver account. | `vehicles.account_id` | `UUID REFERENCES accounts` |
-| **US-D09** | `createdAt` | `ISO 8601 Timestamp` | Record creation timestamp. | `vehicles.created_at` | `TIMESTAMPTZ NOT NULL` |
-| **US-D09** | `updatedAt` | `ISO 8601 Timestamp` | Record last update timestamp. | `vehicles.updated_at` | `TIMESTAMPTZ NOT NULL` |
-| **US-D09** | `deletedAt` | `ISO 8601 Timestamp?` | Soft delete timestamp (`null` if active). | `vehicles.deleted_at` | `TIMESTAMPTZ NULL` |
-
----
-
-## 6. API Technical Specifications & Contract Payloads
-
-### 6.1 Register Vehicle (`POST /api/vehicles`)
-
-#### Request Headers
-```http
-Authorization: Bearer <driver_jwt_token>
-Content-Type: application/json
-```
-
-#### Request Body Schema
-```json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "required": ["plate", "vehicleType"],
-  "additionalProperties": false,
-  "properties": {
-    "plate": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 30,
-      "example": "51A-123.45"
-    },
-    "vehicleType": {
-      "type": "string",
-      "enum": ["CAR", "MOTORCYCLE"],
-      "example": "CAR"
-    },
-    "imageReference": {
-      "type": "string",
-      "maxLength": 2048,
-      "format": "uri",
-      "pattern": "^https://.+",
-      "example": "https://storage.smartpark.com/vehicles/car-51a12345.jpg"
-    }
-  }
-}
-```
-
-#### Sample Success Response (`201 Created`)
-```json
-{
-  "success": true,
-  "data": {
-    "id": "7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
-    "accountId": "a1b2c3d4-e5f6-7890-abcd-1234567890ab",
-    "rawPlate": "51A-123.45",
-    "canonicalPlate": "51A12345",
-    "vehicleType": "CAR",
-    "imageReference": "https://storage.smartpark.com/vehicles/car-51a12345.jpg",
-    "createdAt": "2026-10-13T10:15:30Z",
-    "updatedAt": "2026-10-13T10:15:30Z"
-  }
-}
-```
-
----
-
-### 6.2 List Driver's Registered Vehicles (`GET /api/vehicles`)
-
-#### Request Headers
-```http
-Authorization: Bearer <driver_jwt_token>
-```
-
-#### Sample Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
-      "accountId": "a1b2c3d4-e5f6-7890-abcd-1234567890ab",
-      "rawPlate": "51A-123.45",
-      "canonicalPlate": "51A12345",
-      "vehicleType": "CAR",
-      "imageReference": "https://storage.smartpark.com/vehicles/car-51a12345.jpg",
-      "createdAt": "2026-10-13T10:15:30Z",
-      "updatedAt": "2026-10-13T10:15:30Z"
-    },
-    {
-      "id": "8c9d0e1f-2a3b-4c5d-6e7f-8a9b0c1d2e3f",
-      "accountId": "a1b2c3d4-e5f6-7890-abcd-1234567890ab",
-      "rawPlate": "59-F1 987.65",
-      "canonicalPlate": "59F198765",
-      "vehicleType": "MOTORCYCLE",
-      "imageReference": null,
-      "createdAt": "2026-10-13T11:00:00Z",
-      "updatedAt": "2026-10-13T11:00:00Z"
-    }
-  ]
-}
-```
-
----
-
-### 6.3 Update Registered Vehicle (`PATCH /api/vehicles/{id}`)
-
-#### Request Body Schema
-```json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "required": ["plate", "vehicleType"],
-  "additionalProperties": false,
-  "properties": {
-    "plate": { "type": "string", "minLength": 1, "maxLength": 30, "example": "51A-123.45" },
-    "vehicleType": { "type": "string", "enum": ["CAR", "MOTORCYCLE"], "example": "CAR" },
-    "imageReference": { "type": "string", "maxLength": 2048, "example": "https://storage.smartpark.com/vehicles/car-new-photo.jpg" }
-  }
-}
-```
-
-#### Sample Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "data": {
-    "id": "7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
-    "accountId": "a1b2c3d4-e5f6-7890-abcd-1234567890ab",
-    "rawPlate": "51A-123.45",
-    "canonicalPlate": "51A12345",
-    "vehicleType": "CAR",
-    "imageReference": "https://storage.smartpark.com/vehicles/car-new-photo.jpg",
-    "createdAt": "2026-10-13T10:15:30Z",
-    "updatedAt": "2026-10-13T11:30:00Z"
-  }
-}
-```
-
----
-
-### 6.4 Soft-Delete Vehicle (`DELETE /api/vehicles/{id}`)
-
-#### Sample Success Response (`200 OK`)
-```json
-{
-  "success": true,
-  "message": "Vehicle removed successfully."
-}
-```
-
----
-
-## 7. Error Catalogue & RFC 7807 Machine-Readable Errors
-
-All error responses strictly follow the SmartPark RFC 7807 problem details specification:
-
-```json
-{
-  "type": "https://api.smartpark.com/errors/INVALID_PLATE",
-  "title": "Invalid License Plate",
-  "status": 400,
-  "code": "INVALID_PLATE",
-  "detail": "Plate 'ABC-123' does not match the supported Vietnamese application format for CAR.",
-  "instance": "/api/vehicles",
-  "timestamp": "2026-10-13T10:15:30Z",
-  "invalidParams": [
-    {
-      "name": "plate",
-      "reason": "Expected 2-digit province code, 1 series letter, and 5 digits (e.g. 51A-123.45)."
-    }
-  ]
-}
-```
-
-### Complete Error Code Inventory Table
-
-| HTTP Status | Error Code | Description / Root Cause | Actionable FE Guidance |
-| :---: | :--- | :--- | :--- |
-| `400` | `INVALID_PLATE` | Plate string fails canonical Vietnamese regex rules. | Highlight plate input; display format guideline tooltip. |
-| `400` | `VALIDATION_FAILED` | `imageReference` is not an absolute HTTPS URL or string exceeds length. | Prompt user with "Please provide a valid secure HTTPS photo link." |
-| `401` | `UNAUTHENTICATED` | Missing, expired, or malformed JWT Bearer token. | Redirect caller to Login screen. |
-| `403` | `FORBIDDEN` | Caller does not hold an active `DRIVER` account role. | Display unauthorized account alert. |
-| `404` | `VEHICLE_NOT_FOUND` | Specified vehicle ID does not exist, is soft-deleted, or belongs to another Driver. | Return 404 and refresh the vehicle list. |
-| `429` | `RATE_LIMIT_EXCEEDED`| Excessive vehicle mutation requests from caller. | Throttling alert with retry countdown. |
-
----
-
-## 8. Edge Case Inventory & Technical Controls
-
-### 8.1 Punctuation, Whitespace & Diacritics
-- Users frequently enter plates with inconsistent punctuation: `"51-A 123.45"`, `"51A.12345"`, `"51A 123 45"`.
-- The normalization regex `[\s.\-_]` ensures all such variations collapse into the identical canonical string `"51A12345"`.
-- Non-alphanumeric unicode or special characters (e.g. accented vowels) fail the regex check and trigger `INVALID_PLATE`.
-
-### 8.2 Cross-Account Isolation
-- Query enforcement:
-  ```sql
-  SELECT * FROM vehicles 
-  WHERE id = @id 
-    AND account_id = ANY(@callerDriverAccountIds) 
-    AND deleted_at IS NULL;
-  ```
-- If a Driver attempts to update or inspect another user's vehicle ID, the query returns zero rows, triggering a safe `404 Not Found` (`VEHICLE_NOT_FOUND`) to prevent ID enumeration.
-
-### 8.3 Unresolved Duplicate Plates (FR-VEH-02 Boundary)
-- If two different drivers register `51A-123.45`:
-  - Both records persist independently in the database with their respective `account_id` values.
-  - Driver A **cannot** see, edit, or delete Driver B's vehicle record.
-  - At the parking gate, LPR queries active reservations by `normalized_plate = '51A12345'`. If an active reservation exists for Driver A, the gate admits Driver A.
-  - Dispute resolution, cavet upload, ownership claiming, and title transfers remain **strictly deferred** to the future FR-VEH-02 specification.
-
-### 8.4 Historical Referential Integrity & Soft Deletion
-- Deleting a vehicle sets `deleted_at = NOW()`.
-- Historical parking sessions (`parking_sessions`), past slot allocations, and financial invoices that reference `vehicle_id` or `account_id` remain intact and valid. Foreign keys are never cascaded or broken.
-
----
-
-## 9. Unresolved Decision & Conflict Log
-
-| Issue Key | Topic | Description & Decision Context | Status |
-| :--- | :--- | :--- | :--- |
-| **DEC-VEH-01** | Plate Normalization Algorithm | **Confirmed (08/10/2026 Baseline):** Normalization strips `[\s.\-_]` and uppercases. CAR format requires 2-digit province + 1 letter + 5 digits. MOTORCYCLE format requires 2-digit province + 2 chars + 5 digits. | **Resolved** |
-| **DEC-VEH-02** | Duplicate Plate Claims (FR-VEH-02) | **Confirmed OPEN & Out of Scope:** Duplicate-plate dispute and ownership transfer workflows are deferred. Database dropped global uniqueness in migration `05.8` to permit independent driver registration without cross-account leakage. | **Deferred / OPEN** |
-| **DEC-VEH-03** | Image Reference Storage | **Confirmed:** Server stores external HTTPS image references without executing server-side downloads, preventing SSRF vulnerabilities. | **Resolved** |
-| **DEC-VEH-04** | Non-Plated Vehicle Support | **Confirmed (FR-VEH-03):** Non-plated vehicles (bicycles, carts) cannot be registered in `/api/vehicles`; they use gate parking session tickets. | **Resolved** |
-
----
-
-## 10. Verification & Acceptance Checklist
-
-- [x] Versioned REST API technical specification documented for all Vehicle endpoints (`GET`, `POST`, `PATCH`, `DELETE /api/vehicles`).
-- [x] Authorization rules constrained to verified Driver identity (`account_id` scoping).
-- [x] Canonical Plate Normalization algorithm and transformation test cases comprehensively defined.
-- [x] Traceability Table mapping SRS v0.9 (FR-VEH-01/03, US-D09) ↔ PostgreSQL schema (`vehicles`) ↔ DTO attributes.
-- [x] Sample payloads for Request, Success Response, and RFC 7807 Machine-Readable Errors included.
-- [x] Duplicate-plate claim workflow (FR-VEH-02) explicitly marked as OPEN and out of scope, avoiding artificial assumptions.
-- [x] Edge-case inventory (punctuation, SSRF defense, cross-account isolation, soft deletion) complete.
+[Pending actions](../../02-architecture/api/v1.1-contracts.md#design-pending-owneraction-register): V11-DES-10. [New acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md) are NOT RUN.

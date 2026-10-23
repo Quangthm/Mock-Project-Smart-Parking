@@ -1,8 +1,8 @@
-# Reservations Allocation — SRS v1.0 RC1
+# Reservations Allocation — SRS v1.1
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
-**Status:** review candidate, 13 October 2026; implementation/evidence not assessed. Source review section numbers below refer to the decision review, not this module numbering.
+**Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
 | Parameter | Confirmed default | Configuration authority | Meaning |
 |---|---|---|---|
@@ -34,7 +34,7 @@
 
 Allocation starts one hour before reservation start; late-created confirmed reservations are evaluated immediately by the same idempotent command. Preserve stable allocations. Ordinary priority is earlier start then confirmation; choose preferred slot, same zone, compatible fallback, nearest configured coordinates/stable resource tie. Exceptional loss after allocation uses physical arrival priority among affected claimants; genuine unresolved ties are logged Operator decisions.
 
-Positive-price reservation uses a 5-minute payment hold and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
+Positive-price reservation uses a 5-minute payment hold and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
 
 Unpaid hold expiry is EXPIRED, distinct from NO_SHOW. Late tolerance is optional: enabled default 15 minutes with Owner range 15–30; disabled retains entitlement until reservation end. Arrival at/before applicable deadline is timely; no-show requires strictly later decision and no authoritative timely evidence.
 
@@ -144,7 +144,7 @@ Apply the baseline allocation/protection behavior together with the Specific Slo
 **Actors:** Driver, Payment Provider  
 **Stories:** US-D01
 
-Positive-price reservation uses a 5-minute payment hold and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
+Positive-price reservation uses a 5-minute payment hold and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
 
 ### FR-RES-05
 
