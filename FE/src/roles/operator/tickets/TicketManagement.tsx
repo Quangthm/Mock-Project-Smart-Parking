@@ -1,15 +1,14 @@
 import { useEffect, useState, useMemo } from "react"
-import { useApp } from "../../../context/AppContext"
-import { operatorData as store } from "../data/data"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import type { SupportTicket, Booking } from "../../../lib/types"
+import { PageHeader } from "../../../components/ui/PageHeader"
+import { operatorOperationsApi } from "../../../lib/operatorApi"
+import type { SupportTicket } from "../../../lib/types"
 
-export function TicketManagement() {
-  const { user } = useApp()
-
-  const [tickets, setTickets] = useState<SupportTicket[]>(() =>
-    store.getTickets().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-  )
+export function TicketManagement({ siteId }: { siteId: string }) {
+  const [tickets, setTickets] = useState<SupportTicket[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+  const [busyTicketId, setBusyTicketId] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "in-progress" | "resolved">("all")
@@ -18,61 +17,49 @@ export function TicketManagement() {
   const [actionFeedback, setActionFeedback] = useState<string | null>(null)
 
   useEffect(() => {
-    const refresh = () =>
-      setTickets(
-        store.getTickets().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-      )
-
-    window.addEventListener("sp-data-change", refresh)
-    window.addEventListener("storage", refresh)
-
-    return () => {
-      window.removeEventListener("sp-data-change", refresh)
-      window.removeEventListener("storage", refresh)
+    if (!siteId) {
+      setTickets([])
+      setLoadError("No assigned parking site is available.")
+      setLoading(false)
+      return
     }
-  }, [])
+    let active = true
+    setLoading(true)
+    setLoadError("")
+    operatorOperationsApi.listTickets(siteId)
+      .then((result) => {
+        if (active) setTickets(result)
+      })
+      .catch((error: unknown) => {
+        if (active) setLoadError(error instanceof Error ? error.message : "Could not load support tickets.")
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [siteId])
 
-  function updateTicket(
+  async function updateTicket(
     ticket: SupportTicket,
     status: SupportTicket["status"],
     note?: string,
   ) {
-    const updated = {
-      ...ticket,
-      status,
-      message: note ? `${ticket.message}\n\n[Operator Resolution Note (${new Date().toLocaleString()})]: ${note}` : ticket.message,
+    if (!siteId || busyTicketId) return
+    setBusyTicketId(ticket.id)
+    setLoadError("")
+    try {
+      const updated = await operatorOperationsApi.updateTicket(siteId, ticket.id, status, note)
+      setTickets((current) => current.map((item) => item.id === ticket.id ? updated : item))
+      if (selectedTicket?.id === ticket.id) setSelectedTicket(updated)
+      setActionFeedback(`Ticket #${ticket.id} updated to ${status.toUpperCase()}.`)
+      setResolutionNote("")
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Could not update the support ticket.")
+    } finally {
+      setBusyTicketId(null)
     }
-
-    store.saveTicket(updated)
-
-    if (status === "resolved" && ticket.status !== "resolved") {
-      store.notifyUser(
-        ticket.userId,
-        "TICKET_RESOLVED",
-        "Ticket Resolved by Operator",
-        `Your support request #${ticket.id} (${ticket.subject}) has been addressed by the facility Operator.`,
-        ticket.id,
-      )
-    }
-
-    store.addAuditLog({
-      userId: user?.id ?? "op",
-      userName: user?.name ?? "Operator",
-      userRole: user?.role ?? "operator",
-      action: "SUPPORT_TICKET_UPDATED",
-      details: `Updated ticket #${ticket.id} to status ${status.toUpperCase()}`,
-    })
-
-    setTickets((current) =>
-      current.map((item) => (item.id === ticket.id ? updated : item)),
-    )
-
-    if (selectedTicket?.id === ticket.id) {
-      setSelectedTicket(updated)
-    }
-
-    setActionFeedback(`Ticket #${ticket.id} successfully updated to ${status.toUpperCase()}.`)
-    setResolutionNote("")
   }
 
   // Filtered tickets
@@ -100,17 +87,19 @@ export function TicketManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Support Ticket Management
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Review, investigate, and resolve support requests submitted by drivers in real-time.
-        </p>
-      </div>
+      <PageHeader title="Support Ticket Management" description="Review, investigate, and resolve support requests submitted by drivers in real-time." />
 
       {/* Feedback Banner */}
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-600">
+          {loadError}
+        </div>
+      )}
+      {loading && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+          Loading support tickets…
+        </div>
+      )}
       {actionFeedback && (
         <div className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-600 font-medium">
           <div className="flex items-center gap-2">
@@ -271,7 +260,8 @@ export function TicketManagement() {
                     <button
                       type="button"
                       className="text-xs font-semibold text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 rounded px-2.5 py-1 transition"
-                      onClick={() => updateTicket(ticket, "in-progress")}
+                      disabled={busyTicketId !== null}
+                      onClick={() => void updateTicket(ticket, "in-progress")}
                     >
                       Start Investigation
                     </button>
@@ -280,6 +270,7 @@ export function TicketManagement() {
                     <button
                       type="button"
                       className="text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded px-3 py-1 transition"
+                      disabled={busyTicketId !== null}
                       onClick={() => setSelectedTicket(ticket)}
                     >
                       Resolve Ticket
@@ -391,7 +382,8 @@ export function TicketManagement() {
                 <button
                   type="button"
                   className="btn-outline text-xs py-1.5 px-3 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-                  onClick={() => updateTicket(selectedTicket, "in-progress", resolutionNote)}
+                  disabled={busyTicketId !== null}
+                  onClick={() => void updateTicket(selectedTicket, "in-progress")}
                 >
                   Mark In Progress
                 </button>
@@ -401,9 +393,10 @@ export function TicketManagement() {
                 <button
                   type="button"
                   className="btn-primary text-xs py-1.5 px-4 bg-green-600 hover:bg-green-700"
-                  onClick={() => updateTicket(selectedTicket, "resolved", resolutionNote)}
+                  disabled={busyTicketId !== null}
+                  onClick={() => void updateTicket(selectedTicket, "resolved", resolutionNote)}
                 >
-                  Resolve & Notify Driver
+                  {busyTicketId === selectedTicket.id ? "Saving…" : "Resolve Ticket"}
                 </button>
               )}
             </div>

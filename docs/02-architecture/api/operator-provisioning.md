@@ -1,6 +1,6 @@
 # SPARK-192 — Create Operator
 
-> Historical contract/review (06/10/2026). See [current workflow contract and mapping, 08/10/2026](workflows-2026-10-08.md) for the implemented changes.
+> Historical contract/review (6 October 2026), non-authoritative for v1.1. Preserve the dated evidence below; use [active v1.1 API contracts](README.md) for current behavior and [historical workflow mapping](../../archive/api/workflows-2026-10-08.md) for the 8 October implementation.
 
 Implements FR-AUTH-04 / UC-AUTH-03 / SRS §3.7.5 in UserService. The endpoint outline from API Design is retained: `POST /api/users`. This document completes the missing body, response and errors. Field/credential policy is an implementation choice for team review, not a new confirmed SRS rule.
 

@@ -1,11 +1,12 @@
 import { useMemo } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import type { ParkingLot, Booking, SupportTicket, AppNotification } from "../../../lib/types"
-import { structureStore } from "../../owner/data/structureStore"
+import { PageHeader } from "../../../components/ui/PageHeader"
+import type { Booking, SupportTicket, AppNotification } from "../../../lib/types"
+import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface OperatorOverviewProps {
-  lot: ParkingLot | null
-  allLots: ParkingLot[]
+  lot: OperatorSite | null
+  allLots: OperatorSite[]
   onSelectLot: (lotId: string) => void
   onNavigateTab: (tab: string, filter?: string) => void
   bookings: Booking[]
@@ -22,22 +23,12 @@ export function OperatorOverview({
   tickets,
   notifications,
 }: OperatorOverviewProps) {
-  // Structure data for current lot to get canonical stats if available
-  const structureStats = useMemo(() => {
-    if (!lot) return null
-    try {
-      return structureStore.getCapacityStats(lot.id)
-    } catch {
-      return null
-    }
-  }, [lot])
-
   const totalSlots = lot?.totalSlots ?? 0
-  const availableSlots = structureStats?.availableCapacity ?? lot?.slots.filter((s) => s.status === "available").length ?? 0
-  const occupiedSlots = structureStats?.occupiedSpaces ?? lot?.slots.filter((s) => s.status === "occupied").length ?? 0
-  const reservedSlots = (structureStats?.reservedSpaces ?? 0) + (structureStats?.pendingPaymentHolds ?? 0) || (lot?.slots.filter((s) => s.status === "reserved").length ?? 0)
-  const backupSlots = structureStats?.backupCapacity ?? 0
-  const maintenanceSlots = (structureStats?.maintenanceSpaces ?? 0) + (structureStats?.disabledSpaces ?? 0) || (lot?.slots.filter((s) => s.status === "maintenance" || s.status === "disabled").length ?? 0)
+  const availableSlots = lot?.slots.filter((slot) => slot.status === "available").length ?? 0
+  const occupiedSlots = lot?.slots.filter((slot) => slot.status === "occupied").length ?? 0
+  const reservedSlots = lot?.slots.filter((slot) => slot.status === "reserved").length ?? 0
+  const backupSlots = lot?.slots.filter((slot) => slot.reservationState?.toUpperCase() === "BACKUP").length ?? 0
+  const maintenanceSlots = lot?.slots.filter((slot) => slot.status === "maintenance" || slot.status === "disabled").length ?? 0
 
   const occupancyRate = totalSlots > 0 ? Math.min(100, Math.round(((occupiedSlots + reservedSlots) / totalSlots) * 100)) : 0
 
@@ -67,26 +58,7 @@ export function OperatorOverview({
 
   return (
     <div className="space-y-6">
-      {/* Site Header & Selector */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
-              <UntitledIcon name="building" size={13} />
-              {lot.type === "outdoor" ? "Outdoor Lot" : lot.type === "basement" ? "Underground Lot" : "Multi-Storey Lot"}
-            </span>
-            <span className="text-xs text-[var(--muted)]">·</span>
-            <span className="text-xs text-[var(--muted)]">{lot.address}</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--fg)]">
-            {lot.name}
-          </h1>
-          <p className="text-sm text-[var(--muted)]">
-            Live operational dashboard, parking occupancy, and gate controls.
-          </p>
-        </div>
-
-        {allLots.length > 1 && (
+      <PageHeader title={lot.name} eyebrow={<>{lot.code} · {lot.address}</>} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5">
             <span className="text-xs font-medium text-[var(--muted)] pl-2">Site:</span>
             <select
@@ -101,11 +73,10 @@ export function OperatorOverview({
               ))}
             </select>
           </div>
-        )}
-      </div>
+        )} />
 
       {/* Primary KPI Grid (clickable cards) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="pointer-events-none grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Parking site summary">
         <button
           type="button"
           onClick={() => onNavigateTab("status")}
@@ -197,6 +168,7 @@ export function OperatorOverview({
         </button>
       </div>
 
+      {false && (<>
       {/* Quick Action Toolbar */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -237,10 +209,12 @@ export function OperatorOverview({
         </div>
       </div>
 
+      </>)}
+
       {/* Main Grid: Occupancy Bar & Active Bookings */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-5">
         {/* Left Column (2 cols): Occupancy Breakdown & Active Queue */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="space-y-5">
           {/* Real-time Occupancy Progress Bar */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
             <div className="flex items-center justify-between mb-3">
@@ -376,6 +350,7 @@ export function OperatorOverview({
           </div>
         </div>
 
+        {false && (<>
         {/* Right Column (1 col): Driver Tickets & Recent Notifications */}
         <div className="space-y-6">
           {/* Driver Support Queue */}
@@ -455,7 +430,7 @@ export function OperatorOverview({
               </div>
             )}
           </div>
-        </div>
+        </div></>)}
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Data.Common;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.ValueObjects;
 using UserService.Application.Common.Interfaces.Persistence;
@@ -67,7 +68,10 @@ public sealed class VehicleRegistrationService(
         vehicle.VehicleType = body.VehicleType;
         vehicle.ImageReference = body.ImageReference;
         vehicle.UpdatedAt = clock.GetUtcNow();
-        await unitOfWork.SaveChangesAsync(ct);
+        try { await unitOfWork.SaveChangesAsync(ct); }
+        // Duplicate active plate hits uq_active_vehicle_plate; surface it as a 409 like the other registration flows.
+        catch (Exception e) when (e.InnerException is DbException { SqlState: "23505" })
+        { throw new AuthException("PLATE_EXISTS", "A vehicle with this plate is already registered.", 409); }
         await transaction.CommitAsync(ct);
         return vehicle;
     }

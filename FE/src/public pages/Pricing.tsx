@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useApp } from "../context/AppContext"
 
 import { UntitledIcon } from "../components/icon/UntitledIcon"
@@ -6,7 +7,7 @@ const PLANS = [
   {
     name: "Driver — Pay as You Go",
 
-    price: "From 15,000₫/hr",
+    price: "From 15.000 VND/hr",
 
     period: "per session",
 
@@ -32,7 +33,7 @@ const PLANS = [
   {
     name: "Driver — Monthly Pass",
 
-    price: "800,000₫",
+    price: "800.000 VND",
 
     period: "per month",
 
@@ -94,13 +95,7 @@ export function Pricing() {
       style={{ maxWidth: "1100px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
       <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-        <h1 className="section-title">Transparent Pricing</h1>
-        <p
-          className="section-sub"
-          style={{ maxWidth: "480px", margin: "0.75rem auto 0" }}
-        >
-          No hidden fees. Clear refund policies. Pay only for what you use.
-        </p>
+        <PageHeader variant="default" align="center" title={<>Transparent Pricing</>} description={<>No hidden fees. Clear refund policies. Pay only for what you use.</>} />
       </div>
       <div
         style={{

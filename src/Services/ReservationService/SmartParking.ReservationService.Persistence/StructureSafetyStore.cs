@@ -94,6 +94,23 @@ public sealed class StructureSafetyStore(NpgsqlDataSource source) : IStructureSa
         await using (var cmd = Cmd(db, tx, "INSERT INTO structure_edit_holds(site_id,tenant_id,token) VALUES ($1,$2,$3) ON CONFLICT(site_id) DO NOTHING", siteId, tenantId, token)) await cmd.ExecuteNonQueryAsync(ct);
         await using (var cmd = Cmd(db, tx, "SELECT token FROM structure_edit_holds WHERE site_id=$1 AND tenant_id=$2", siteId, tenantId))
             if (await cmd.ExecuteScalarAsync(ct) is not Guid current || current != token) throw new HoldConflictException();
+        var snapshot = await ReadSnapshotAsync(db, tx, tenantId, siteId, ct);
+        await tx.CommitAsync(ct);
+        return snapshot;
+    }
+
+    public async Task<HoldSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    {
+        await using var db = await source.OpenConnectionAsync(ct);
+        await using var tx = await db.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
+        var snapshot = await ReadSnapshotAsync(db, tx, tenantId, siteId, ct);
+        await tx.CommitAsync(ct);
+        return snapshot;
+    }
+
+    private static async Task<HoldSnapshot> ReadSnapshotAsync(
+        NpgsqlConnection db, NpgsqlTransaction tx, Guid tenantId, Guid siteId, CancellationToken ct)
+    {
         var protectedIds = new List<Guid>();
         await using (var cmd = Cmd(db, tx, """
             SELECT slot_id FROM slot_allocations WHERE site_id=$1 AND allocation_status IN ('RESERVED','OCCUPIED')
@@ -123,7 +140,6 @@ public sealed class StructureSafetyStore(NpgsqlDataSource source) : IStructureSa
                     reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3)));
             }
         }
-        await tx.CommitAsync(ct);
         return new(protectedIds.ToArray(), live, capacities.ToArray());
     }
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid token, EditOutcome? outcome, CancellationToken ct)

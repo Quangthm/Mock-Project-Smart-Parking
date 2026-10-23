@@ -1,35 +1,11 @@
+import { PageHeader } from "../../components/ui/PageHeader"
 export function PrivacyPolicy() {
   return (
     <div
       style={{ maxWidth: "800px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1
-        style={{
-          fontFamily: "Inter, sans-serif",
-
-          fontWeight: 800,
-
-          fontSize: "1.75rem",
-
-          color: "var(--fg)",
-
-          marginBottom: "0.5rem",
-        }}
-      >
-        Chính Sách Bảo Mật Thông Tin
-      </h1>
-      <p
-        style={{
-          color: "var(--muted)",
-
-          fontSize: "0.875rem",
-
-          marginBottom: "2rem",
-        }}
-      >
-        Cập nhật lần cuối: 01/01/2026 | Tuân thủ Nghị định 13/2023/NĐ-CP về bảo
-        vệ dữ liệu cá nhân
-      </p>
+      <PageHeader variant="compact" align="start" title={<>Chính Sách Bảo Mật Thông Tin</>} description={<>Cập nhật lần cuối: 01/01/2026 | Tuân thủ Nghị định 13/2023/NĐ-CP về bảo
+        vệ dữ liệu cá nhân</>} />
 
       <PolicySection title="1. Dữ liệu chúng tôi thu thập">
         <p>

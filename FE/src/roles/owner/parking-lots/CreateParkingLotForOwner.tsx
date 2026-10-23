@@ -1,6 +1,11 @@
 import { useState, useId } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { parkingApi } from "../../../lib/parkingApi"
+import { ownerApi, type OwnerApplicationRecord, type OwnerLotSetup } from "../../../lib/ownerApi"
+import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+import { PageHeader } from "../../../components/ui/PageHeader"
+import { formatGroupedDigits } from "../../../lib/groupedDigits"
 
 import { ownerData as store } from "../data/data"
 
@@ -92,14 +97,21 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function OnboardingWizard({
   onComplete,
+  registration,
 }: {
-  onComplete: (lot: ParkingLot) => void
+  onComplete?: (lot: ParkingLot) => void
+  registration?: {
+    id: string
+    setupToken?: string
+    lotType: LotType
+    onComplete: (application: OwnerApplicationRecord) => void
+  }
 }) {
   const { user, setUser } = useApp()
 
   const [step, setStep] = useState<OnboardStep>(1)
 
-  const [lotType, setLotType] = useState<LotType>("outdoor")
+  const [lotType, setLotType] = useState<LotType>(registration?.lotType ?? "outdoor")
 
   const [lotConfig, setLotConfig] = useState({
     name: "",
@@ -117,12 +129,12 @@ export function OnboardingWizard({
   })
 
   const [pricing, setPricing] = useState({
-    hourlyRate: 15000,
-    dailyRate: 100000,
-    nightRate: 50000,
+    hourlyRate: "15000",
+    dailyRate: "100000",
+    nightRate: "50000",
     gracePeriodMinutes: 15,
-    subscriptionMonthly: 800000,
-    subscriptionYearly: 8000000,
+    subscriptionMonthly: "800000",
+    subscriptionYearly: "8000000",
   })
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
@@ -190,8 +202,9 @@ export function OnboardingWizard({
     setCustomModelFileName(file.name)
   }
 
-  function handleComplete() {
-    if (!user) {
+  async function handleComplete() {
+    if (isCompleting) return
+    if (!registration && !user) {
       setCompletionError(
         "Please sign in to an Owner account before activating a parking lot.",
       )
@@ -204,18 +217,80 @@ export function OnboardingWizard({
     setIsCompleting(true)
 
     try {
-      const totalSlots = parseInt(String(lotConfig.totalSlots)) || 50
+      const name = lotConfig.name.trim()
+      const address = lotConfig.address.trim()
+      if (!name || !address) {
+        throw new Error("Please enter the parking lot name and address.")
+      }
+
+      const totalSlots = Number(lotConfig.totalSlots)
 
       const floors = LOT_TYPE_INFO[lotType].hasFloors
-        ? parseInt(String(lotConfig.floors)) || 1
+        ? Number(lotConfig.floors)
         : 1
 
-      const lot = store.createLot({
-        ownerId: user.id,
-        name: lotConfig.name,
+      if (!Number.isInteger(totalSlots) || totalSlots < 1 || totalSlots > 2000 ||
+          !Number.isInteger(floors) || floors < 1 || floors > 20) {
+        throw new Error("Enter valid parking slot and floor counts.")
+      }
+
+      const numericPricing = {
+        hourlyRate: Number(pricing.hourlyRate || 0),
+        dailyRate: Number(pricing.dailyRate || 0),
+        nightRate: Number(pricing.nightRate || 0),
+        gracePeriodMinutes: pricing.gracePeriodMinutes,
+        subscriptionMonthly: Number(pricing.subscriptionMonthly || 0),
+        subscriptionYearly: Number(pricing.subscriptionYearly || 0),
+      }
+      if (Object.values(numericPricing).some((value) =>
+        !Number.isSafeInteger(value) || value < 0)) {
+        throw new Error("Enter valid whole-number pricing values.")
+      }
+
+      if (registration) {
+        const setup: OwnerLotSetup = {
+          name,
+          address,
+          lotType,
+          totalSlots,
+          floors,
+          devices: Object.entries(devices)
+            .filter(([, enabled]) => enabled)
+            .map(([type]) => ({
+              type: type as OwnerLotSetup["devices"][number]["type"],
+              label: DEVICE_OPTIONS.find((device) => device.type === type)?.label ?? type,
+              enabled: true,
+            })),
+          modelFileName: activeModelFileName,
+          ...numericPricing,
+          policyAccepted: systemPolicyAccepted,
+        }
+        const application = await ownerApi.submitLotSetup(
+          registration.id,
+          registration.setupToken ?? "",
+          setup,
+        )
+        registration.onComplete(application)
+        return
+      }
+
+      const site = await parkingApi.create({
+        code: `SPK-ONB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        name,
+        address,
+      })
+      if (!site || typeof site.id !== "string" || !site.id.trim()) {
+        throw new Error("The server did not return a valid site ID. Please try again.")
+      }
+
+      const lot: ParkingLot = {
+        id: site.id,
+        createdAt: new Date().toISOString(),
+        ownerId: user!.id,
+        name,
         type: lotType,
 
-        address: lotConfig.address,
+        address,
         totalSlots,
 
         floors,
@@ -224,7 +299,7 @@ export function OnboardingWizard({
 
         modelFileName: activeModelFileName,
 
-        slots: store.generateSlots(totalSlots, floors),
+        slots: [],
 
         devices: Object.entries(devices)
           .filter(([, v]) => v)
@@ -234,15 +309,21 @@ export function OnboardingWizard({
             enabled: true,
           })),
 
-        ...pricing,
+        ...numericPricing,
         status: "active",
 
         lat: 10.77 + Math.random() * 0.1,
         lng: 106.69 + Math.random() * 0.1,
-      })
+      }
+
+      try {
+        store.saveLot(lot)
+      } catch (error) {
+        console.error("Site created, but the local lot could not be saved.", error)
+      }
 
       const updatedUser = {
-        ...user,
+        ...user!,
         onboardingComplete: true,
         policyAccepted: true,
       }
@@ -251,16 +332,14 @@ export function OnboardingWizard({
 
       setUser(updatedUser)
 
-      setIsCompleting(false)
-
-      onComplete(lot)
+      onComplete?.(lot)
 
       // Audit logging is secondary to completing onboarding; it must not strand the owner on this screen.
 
       try {
         store.addAuditLog({
-          userId: user.id,
-          userName: user.name,
+          userId: user!.id,
+          userName: user!.name,
           userRole: "owner",
           action: "ONBOARDING_COMPLETE",
           details: `Lot created: ${lot.name}`,
@@ -272,13 +351,13 @@ export function OnboardingWizard({
         )
       }
     } catch (error) {
-      setIsCompleting(false)
-
       setCompletionError(
         error instanceof Error
           ? error.message
           : "Could not save your parking lot. Please try again.",
       )
+    } finally {
+      setIsCompleting(false)
     }
   }
 
@@ -293,20 +372,14 @@ export function OnboardingWizard({
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1rem" }}>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-        <h2
-          style={{
-            fontFamily: "Outfit",
-            fontWeight: 800,
-            fontSize: "1.5rem",
-            color: "var(--fg)",
-            marginBottom: "0.375rem",
-          }}
-        >
-          Set Up Your Parking Lot
-        </h2>
-        <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-          Complete setup to start accepting bookings.
-        </p>
+        <PageHeader title="Set Up Your Parking Lot" variant="compact" align="center" description={registration
+          ? "Set up your lot before verifying your email and submitting it for Admin review."
+          : "Complete setup to start accepting bookings."} />
+        {registration && !registration.setupToken && (
+          <p role="status" style={{ color: "#b45309", fontSize: "0.85rem", marginTop: "0.75rem" }}>
+            The server has not enabled saving parking lot setup before approval yet.
+          </p>
+        )}
       </div>
 
       {/* Step progress */}
@@ -508,7 +581,7 @@ export function OnboardingWizard({
                   </div>
                 </div>
 
-                <label style={{ cursor: "pointer" }}>
+                {!registration && <label style={{ cursor: "pointer" }}>
                   <span
                     className="btn-outline"
                     style={{
@@ -527,7 +600,7 @@ export function OnboardingWizard({
                     style={{ display: "none" }}
                     onChange={handleModelFileUpload}
                   />
-                </label>
+                </label>}
               </div>
 
               {/* Strict file rule notification */}
@@ -925,33 +998,43 @@ export function OnboardingWizard({
                 marginBottom: "1rem",
               }}
             >
-              {[
-                { label: "Hourly Rate (₫)", key: "hourlyRate" },
+              {([
+                { label: "Hourly Rate (VND)", key: "hourlyRate" },
 
-                { label: "Daily Rate (₫)", key: "dailyRate" },
+                { label: "Daily Rate (VND)", key: "dailyRate" },
 
-                { label: "Night Rate (₫)", key: "nightRate" },
+                { label: "Night Rate (VND)", key: "nightRate" },
 
                 { label: "Grace Period (min)", key: "gracePeriodMinutes" },
 
-                { label: "Monthly Pass (₫)", key: "subscriptionMonthly" },
+                { label: "Monthly Pass (VND)", key: "subscriptionMonthly" },
 
-                { label: "Annual Pass (₫)", key: "subscriptionYearly" },
-              ].map((f) => (
+                { label: "Annual Pass (VND)", key: "subscriptionYearly" },
+              ] as const).map((f) => (
                 <div key={f.key}>
                   <label className="label">{f.label}</label>
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    value={(pricing as any)[f.key]}
-                    onChange={(e) =>
-                      setPricing((p) => ({
-                        ...p,
-                        [f.key]: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                  />
+                  {f.key === "gracePeriodMinutes" ? (
+                    <input
+                      className="input"
+                      type="number"
+                      min={0}
+                      value={pricing.gracePeriodMinutes}
+                      onChange={(e) =>
+                        setPricing((p) => ({
+                          ...p,
+                          gracePeriodMinutes: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <GroupedNumberInput
+                      className="input"
+                      value={pricing[f.key]}
+                      onValueChange={(digits) =>
+                        setPricing((p) => ({ ...p, [f.key]: digits }))
+                      }
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -1010,8 +1093,8 @@ export function OnboardingWizard({
               </label>
             </div>
 
-            {/* Owner policy upload */}
-            <div
+            {/* Owner policy upload is only available after account approval. */}
+            {!registration && <div
               style={{
                 background: "var(--bg)",
                 border: "1px solid var(--border)",
@@ -1088,7 +1171,7 @@ export function OnboardingWizard({
                   </span>
                 )}
               </div>
-            </div>
+            </div>}
 
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button className="btn-outline" onClick={() => setStep(3)}>
@@ -1154,15 +1237,23 @@ export function OnboardingWizard({
               />
               <Row
                 label="Hourly Rate"
-                value={`${pricing.hourlyRate.toLocaleString("en-US")}₫`}
+                value={`${formatGroupedDigits(pricing.hourlyRate || "0")} VND`}
               />
               <Row
                 label="Daily Rate"
-                value={`${pricing.dailyRate.toLocaleString("en-US")}₫`}
+                value={`${formatGroupedDigits(pricing.dailyRate || "0")} VND`}
+              />
+              <Row
+                label="Night Rate"
+                value={`${formatGroupedDigits(pricing.nightRate || "0")} VND`}
               />
               <Row
                 label="Monthly Pass"
-                value={`${pricing.subscriptionMonthly.toLocaleString("en-US")}₫`}
+                value={`${formatGroupedDigits(pricing.subscriptionMonthly || "0")} VND`}
+              />
+              <Row
+                label="Annual Pass"
+                value={`${formatGroupedDigits(pricing.subscriptionYearly || "0")} VND`}
               />
               <Row
                 label="Grace Period"
@@ -1184,15 +1275,20 @@ export function OnboardingWizard({
                 }}
               >
                 {isCompleting ? (
-                  "Activating…"
+                  (registration ? "Saving setup…" : "Activating…")
                 ) : (
                   <>
-                    <UntitledIcon name="sparkles" size={16} /> Activate My
-                    Parking Lot
+                    <UntitledIcon name="sparkles" size={16} />{" "}
+                    {registration ? "Save Lot and Continue to Email Verification" : "Activate My Parking Lot"}
                   </>
                 )}
               </button>
             </div>
+            <p className="mt-3 text-xs text-[var(--muted)]">
+              {registration
+                ? "Your lot will remain inactive until email verification and Admin approval."
+                : "Activation creates your site. Add floors, zones, and parking slots in Parking Structure next; operators will see slots saved there."}
+            </p>
             {completionError && (
               <p
                 role="alert"
@@ -1209,5 +1305,63 @@ export function OnboardingWizard({
         )}
       </div>
     </div>
+  )
+}
+
+export function BusinessLotSetupPage() {
+  const { setView } = useApp()
+  const [registration] = useState<{
+    id: string
+    email: string
+    lotType: LotType
+    setupToken?: string
+  } | null>(() => {
+    try {
+      const pending = JSON.parse(
+        sessionStorage.getItem("sp_pending_owner_registration") ??
+          localStorage.getItem("sp_pending_owner_registration") ?? "null",
+      )
+      return pending?.id && pending?.email && pending?.lotType &&
+        pending?.lotSetupComplete !== true
+        ? pending
+        : null
+    } catch {
+      return null
+    }
+  })
+
+  if (!registration) {
+    return (
+      <div className="card mx-auto my-12 max-w-lg text-center">
+        <PageHeader title="No Business registration in progress" variant="compact" align="center" />
+        <p>Register your Business account before setting up a parking lot.</p>
+        <button className="btn-primary" onClick={() => setView("sign-up")}>
+          Go to Sign Up
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <OnboardingWizard
+      registration={{
+        id: registration.id,
+        setupToken: registration.setupToken,
+        lotType: registration.lotType,
+        onComplete: (application) => {
+          sessionStorage.setItem(
+            "sp_pending_owner_registration",
+            JSON.stringify({
+              id: application.id,
+              email: application.email,
+              lotType: application.lotType,
+              lotSetupComplete: true,
+              verification: application.verification,
+            }),
+          )
+          setView("sign-up")
+        },
+      }}
+    />
   )
 }

@@ -1,3 +1,10 @@
+-- ======================================================================================
+-- HISTORICAL / DRAWDB SNAPSHOT — NOT THE RUNTIME SCHEMA.
+-- Generated before the SRS v1.0 6-DB split; it does not contain 03a/03b, overlays,
+-- or the current table set. Do not use this file to initialize a database.
+-- Runtime source: scripts/database/microservices/*.sql + scripts/database/overlay/*.sql
+-- See docs/02-architecture/database/README.md and report 10.
+-- ======================================================================================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phone VARCHAR(20),

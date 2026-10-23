@@ -1,150 +1,27 @@
-import { useState, useMemo, useEffect } from "react"
-import { operatorData as store } from "../data/data"
-import { structureStore } from "../../owner/data/structureStore"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import type { ParkingLot, ParkingSlot, SlotStatus } from "../../../lib/types"
-import type { ParkingSpaceItem, SpaceStatus, PhysicalState, ReservationProtectionState } from "../../../lib/structureTypes"
+import { PageHeader } from "../../../components/ui/PageHeader"
+import { SlotInspectionModal } from "./SlotInspectionModal"
+import type { OperatorSite } from "../../../lib/operatorApi"
+import { useLotStatus, type SlotStatusFilter } from "./useLotStatus"
 
 interface LotStatusProps {
-  lot: ParkingLot | null
+  lot: OperatorSite | null
   initialSlotCode?: string
+  initialStatusFilter?: SlotStatusFilter
 }
 
-type ViewMode = "3d" | "grid" | "list"
-
-export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("3d")
-  const [selectedFloor, setSelectedFloor] = useState<number>(1)
-  const [selectedZone, setSelectedZone] = useState<string>("all")
-  const [vehicleTypeFilter, setVehicleTypeFilter] = useState<"all" | "car" | "motorcycle">("all")
-  const [statusFilter, setStatusFilter] = useState<"all" | "available" | "occupied" | "reserved" | "backup" | "maintenance">("all")
-  const [searchQuery, setSearchQuery] = useState(initialSlotCode)
-
-  // Selected slot for modal inspection
-  const [inspectedSlot, setInspectedSlot] = useState<ParkingSlot | null>(null)
-  const [threeError, setThreeError] = useState(false)
-
-  // Maintenance note input
-  const [maintReason, setMaintReason] = useState("")
-  const [showMaintForm, setShowMaintForm] = useState(false)
-  const [actionNotice, setActionNotice] = useState("")
-
-  // Read structure from structureStore if available
-  const structure = useMemo(() => {
-    if (!lot) return null
-    try {
-      return structureStore.getStructure(lot.id)
-    } catch {
-      return null
-    }
-  }, [lot])
-
-  const isOutdoor = lot?.type === "outdoor" || (lot?.floors ?? 1) <= 1
-
-  // Extract zones for current filter
-  const availableZones = useMemo(() => {
-    if (!structure?.floors) return []
-    if (isOutdoor) {
-      return structure.floors.flatMap((f) => f.zones)
-    }
-    const currentFloor = structure.floors.find((f) => {
-      const num = parseInt(f.code.replace(/\D/g, "")) || 1
-      return num === selectedFloor
-    }) || structure.floors[0]
-    return currentFloor ? currentFloor.zones : []
-  }, [structure, isOutdoor, selectedFloor])
-
-  // All slots in current lot
-  const allSlots: ParkingSlot[] = useMemo(() => {
-    if (!lot) return []
-    return lot.slots
-  }, [lot])
-
-  // Filter slots by Floor, Zone, Vehicle Type, Status, and Search Query
-  const filteredSlots = useMemo(() => {
-    return allSlots.filter((slot) => {
-      // Floor filter: only if not outdoor and has multiple floors
-      if (!isOutdoor && slot.floor !== selectedFloor) return false
-
-      // Zone filter
-      if (selectedZone !== "all") {
-        if (!slot.number.startsWith(selectedZone)) return false
-      }
-
-      // Vehicle type filter
-      const isMoto = slot.number.startsWith("M")
-      if (vehicleTypeFilter === "car" && isMoto) return false
-      if (vehicleTypeFilter === "motorcycle" && !isMoto) return false
-
-      // Status filter
-      if (statusFilter === "available" && slot.status !== "available") return false
-      if (statusFilter === "occupied" && slot.status !== "occupied") return false
-      if (statusFilter === "reserved" && slot.status !== "reserved") return false
-      if (statusFilter === "maintenance" && slot.status !== "maintenance" && slot.status !== "disabled") return false
-      if (statusFilter === "backup") {
-        // Check if designated backup in structureStore
-        const foundSpace = structure?.floors
-          .flatMap((f) => f.zones)
-          .flatMap((z) => z.spaces)
-          .find((s) => s.code === slot.number || s.id === slot.id)
-        if (!foundSpace?.isBackup && slot.status !== "reserved") return false
-      }
-
-      // Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase()
-        if (!slot.number.toLowerCase().includes(q)) return false
-      }
-
-      return true
-    })
-  }, [allSlots, isOutdoor, selectedFloor, selectedZone, vehicleTypeFilter, statusFilter, searchQuery, structure])
-
-  // Synchronize slot status action
-  function handleUpdateSlot(
-    slotId: string,
-    newStatus: SpaceStatus,
-    note?: string,
-    isBackup?: boolean,
-  ) {
-    if (!lot) return
-    setActionNotice("")
-
-    const updatedSlots = lot.slots.map((s) => {
-      if (s.id === slotId) {
-        return {
-          ...s,
-          status: (newStatus === "maintenance" || newStatus === "disabled" ? "reserved" : newStatus) as SlotStatus,
-        }
-      }
-      return s
-    })
-
-    const updatedLot: ParkingLot = {
-      ...lot,
-      slots: updatedSlots,
-    }
-
-    store.saveLot(updatedLot)
-
-    // Update structureStore if space exists
-    try {
-      structureStore.updateSpaceStatus(lot.id, slotId, newStatus, note, {
-        physicalState: newStatus === "occupied" ? "OCCUPIED" : newStatus === "maintenance" ? "MAINTENANCE" : "AVAILABLE",
-        reservationState: isBackup ? "BACKUP" : newStatus === "reserved" ? "RESERVED" : "NONE",
-        isBackup,
-      })
-    } catch {
-      // Fallback
-    }
-
-    // Refresh inspected slot
-    const freshlyUpdated = updatedSlots.find((s) => s.id === slotId) || null
-    setInspectedSlot(freshlyUpdated)
-    setShowMaintForm(false)
-    setActionNotice(`Slot ${freshlyUpdated?.number} updated to ${newStatus.toUpperCase()}.`)
-  }
+export function LotStatus({
+  lot,
+  initialSlotCode = "",
+  initialStatusFilter = "all",
+}: LotStatusProps) {
+  const {
+    viewMode, setViewMode, selectedFloor, setSelectedFloor, selectedZone, setSelectedZone,
+    vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
+    inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
+    allSlots, filteredSlots, availableCount, occupiedCount, reservedCount, maintenanceCount,
+  } = useLotStatus(lot, initialSlotCode, initialStatusFilter)
 
   if (!lot) {
     return (
@@ -154,33 +31,9 @@ export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
     )
   }
 
-  const availableCount = lot.slots.filter((s) => s.status === "available").length
-  const occupiedCount = lot.slots.filter((s) => s.status === "occupied").length
-  const reservedCount = lot.slots.filter((s) => s.status === "reserved").length
-  const maintenanceCount = lot.slots.filter((s) => s.status === "maintenance" || s.status === "disabled").length
-
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-xs font-semibold text-[var(--primary)]">
-              {isOutdoor ? "Ground / Outdoor Lot" : `Multi-Level Facility (${lot.floors} Floors)`}
-            </span>
-            <span className="text-xs text-[var(--muted)]">·</span>
-            <span className="text-xs text-[var(--muted)]">{lot.totalSlots} total slots</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--fg)]">
-            Parking Structure & Slot Monitoring
-          </h1>
-          <p className="text-sm text-[var(--muted)]">
-            Live digital twin, floor navigation, and real-time physical space supervision.
-          </p>
-        </div>
-
-        {/* View Mode Switcher */}
-        <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
+      <PageHeader title="Parking Structure & Slot Monitoring" eyebrow={<>{isOutdoor ? "Single-Level Facility" : `Multi-Level Facility (${lot.floors} Floors)`} · {lot.totalSlots} total slots</>} description="Live digital twin, floor navigation, and real-time physical space supervision." actions={<div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
           <button
             type="button"
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
@@ -217,8 +70,7 @@ export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
           >
             <UntitledIcon name="clipboard" size={13} /> Slot List
           </button>
-        </div>
-      </div>
+        </div>} />
 
       {/* Mini Stat Summary */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -374,12 +226,11 @@ export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
                 </span>
               </div>
               <Parking3DViewer
-                lotType={lot.type}
                 modelUrl={lot.modelUrl}
                 slots={lot.slots}
                 selectedSlotId={inspectedSlot?.id || inspectedSlot?.number}
                 focusSlotId={searchQuery.trim() ? searchQuery.trim().toUpperCase() : null}
-                onSelectSlot={(slot) => setInspectedSlot(slot)}
+                onSelectSlot={(slot) => setInspectedSlot(allSlots.find((item) => item.id === slot.id) ?? null)}
                 height={420}
                 interactive={true}
               />
@@ -444,7 +295,7 @@ export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
                   >
                     <span>{slot.number}</span>
                     <span className="text-[9px] font-normal opacity-80">
-                      {slot.number.startsWith("M") ? "Moto" : "Car"}
+                      {slot.vehicleType}
                     </span>
                   </button>
                 )
@@ -486,7 +337,7 @@ export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
                         {isOutdoor ? "Ground Area" : `Floor ${slot.floor}`}
                       </td>
                       <td className="px-4 py-3 font-medium">
-                        {slot.number.startsWith("M") ? "Motorcycle" : "Car"}
+                        {slot.vehicleType}
                       </td>
                       <td className="px-4 py-3 font-semibold">
                         <span
@@ -530,170 +381,7 @@ export function LotStatus({ lot, initialSlotCode = "" }: LotStatusProps) {
         </div>
       )}
 
-      {/* MODAL: Full Slot Inspection & Operational Overrides */}
-      {inspectedSlot && (
-        <div
-          role="presentation"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onMouseDown={(e) => e.target === e.currentTarget && setInspectedSlot(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="slot-inspect-title"
-            className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
-          >
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary)]">
-                  Space Telemetry
-                </span>
-                <h3 id="slot-inspect-title" className="text-xl font-bold font-mono text-[var(--fg)]">
-                  Slot {inspectedSlot.number}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInspectedSlot(null)}
-                className="h-8 w-8 rounded-full border border-[var(--border)] bg-[var(--bg)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--fg)]"
-              >
-                <UntitledIcon name="x" size={16} />
-              </button>
-            </div>
-
-            {actionNotice && (
-              <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 p-2.5 text-xs text-green-600 font-medium">
-                {actionNotice}
-              </div>
-            )}
-
-            {/* Status Dimensions Table */}
-            <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 space-y-2.5 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--muted)]">Physical Occupancy:</span>
-                <span
-                  className={`font-bold px-2 py-0.5 rounded text-[11px] uppercase ${
-                    inspectedSlot.status === "occupied"
-                      ? "bg-red-500/15 text-red-600"
-                      : (inspectedSlot.status as string) === "maintenance"
-                        ? "bg-orange-500/15 text-orange-600"
-                        : "bg-green-500/15 text-green-600"
-                  }`}
-                >
-                  {inspectedSlot.status === "occupied" ? "OCCUPIED" : (inspectedSlot.status as string) === "maintenance" ? "UNDER MAINTENANCE" : "VACANT"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--muted)]">Reservation / Hold:</span>
-                <span className="font-semibold text-[var(--fg)]">
-                  {inspectedSlot.status === "reserved" ? "Active Reservation Hold" : "None"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--muted)]">Vehicle Category:</span>
-                <span className="font-medium text-[var(--fg)]">
-                  {inspectedSlot.number.startsWith("M") ? "Motorcycle Only" : "Standard Passenger Car"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--muted)]">Location:</span>
-                <span className="font-medium text-[var(--fg)]">
-                  {isOutdoor ? "Ground Zone" : `Floor Level ${inspectedSlot.floor}`} · {lot.name}
-                </span>
-              </div>
-            </div>
-
-            {/* Maintenance Reason Form */}
-            {showMaintForm ? (
-              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3">
-                <label className="block text-xs font-semibold text-[var(--fg)]">
-                  Reason for Maintenance / Out of Service:
-                  <input
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--fg)] outline-none focus:border-orange-500"
-                    placeholder="e.g. Ultrasonic sensor fault, re-painting line, barrier test"
-                    value={maintReason}
-                    onChange={(e) => setMaintReason(e.target.value)}
-                    autoFocus
-                  />
-                </label>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="btn-outline text-xs py-1 px-2.5"
-                    onClick={() => setShowMaintForm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary text-xs py-1 px-3 bg-orange-600 hover:bg-orange-700"
-                    onClick={() => handleUpdateSlot(inspectedSlot.id, "maintenance", maintReason || "Operational maintenance")}
-                  >
-                    Confirm Maintenance
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Allowed Operator Actions */
-              <div className="mt-5 space-y-2">
-                <span className="text-xs font-semibold text-[var(--muted)] block">
-                  Authorized Operator Actions:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {inspectedSlot.status !== "available" && (
-                    <button
-                      type="button"
-                      className="btn-outline text-xs py-1.5 px-3 text-green-600"
-                      onClick={() => handleUpdateSlot(inspectedSlot.id, "available")}
-                    >
-                      <UntitledIcon name="check-circle" size={13} /> Mark Vacant
-                    </button>
-                  )}
-                  {inspectedSlot.status !== "occupied" && (
-                    <button
-                      type="button"
-                      className="btn-outline text-xs py-1.5 px-3 text-red-600"
-                      onClick={() => handleUpdateSlot(inspectedSlot.id, "occupied")}
-                    >
-                      <UntitledIcon name="car" size={13} /> Mark Occupied
-                    </button>
-                  )}
-                  {(inspectedSlot.status as string) !== "maintenance" ? (
-                    <button
-                      type="button"
-                      className="btn-outline text-xs py-1.5 px-3 text-orange-600"
-                      onClick={() => setShowMaintForm(true)}
-                    >
-                      <UntitledIcon name="wrench" size={13} /> Set Maintenance
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn-outline text-xs py-1.5 px-3 text-green-600"
-                      onClick={() => handleUpdateSlot(inspectedSlot.id, "available")}
-                    >
-                      <UntitledIcon name="check" size={13} /> Clear Maintenance
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end border-t border-[var(--border)] pt-3">
-              <button
-                type="button"
-                className="btn-outline text-xs py-1.5 px-3"
-                onClick={() => setInspectedSlot(null)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SlotInspectionModal lot={lot} inspectedSlot={inspectedSlot} isOutdoor={isOutdoor} onClose={() => setInspectedSlot(null)} />
     </div>
   )
 }

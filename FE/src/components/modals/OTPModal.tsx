@@ -62,7 +62,7 @@ export function OTPModal({ contact, onSuccess, onFailLock, onClose }: Props) {
       }}
     >
       <div
-        className="card"
+        className="card text-center"
         style={{ width: "100%", maxWidth: "400px", margin: "1rem" }}
       >
         <div

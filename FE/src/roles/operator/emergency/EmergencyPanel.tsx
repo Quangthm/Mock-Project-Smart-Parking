@@ -1,40 +1,13 @@
-import { useState } from "react"
-import { operatorData as store } from "../data/data"
-import { useApp } from "../../../context/AppContext"
+import { useEffect, useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
+import { operatorOperationsApi, type OperatorIncident } from "../../../lib/operatorApi"
 
-export function EmergencyPanel() {
-  const { user } = useApp()
-  type IncidentStatus = "open" | "resolved"
-
-  const [incidents, setIncidents] = useState<{
-    id: number
-    type: string
-    plate: string
-    slot: string
-    time: string
-    notes?: string
-    status: IncidentStatus
-  }[]>([
-    {
-      id: 1,
-      type: "wrong-spot",
-      plate: "51A-99999",
-      slot: "A-005",
-      time: "14:23",
-      notes: "Driver parked in wrong numbered slot; reported by lot patrol.",
-      status: "open",
-    },
-    {
-      id: 2,
-      type: "overtime",
-      plate: "51AB-12345",
-      slot: "B-012",
-      time: "13:45",
-      notes: "Session expired over 45 minutes; barrier egress alert triggered.",
-      status: "open",
-    },
-  ])
+export function EmergencyPanel({ siteId }: { siteId: string }) {
+  const [incidents, setIncidents] = useState<OperatorIncident[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
 
   const [form, setForm] = useState({
     plate: "",
@@ -45,70 +18,74 @@ export function EmergencyPanel() {
 
   const [feedback, setFeedback] = useState("")
 
-  function resolve(id: number) {
-    setIncidents((inc) =>
-      inc.map((i) => (i.id === id ? { ...i, status: "resolved" as const } : i)),
-    )
+  useEffect(() => {
+    if (!siteId) {
+      setIncidents([])
+      setError("No assigned parking site is available.")
+      setLoading(false)
+      return
+    }
+    let active = true
+    setLoading(true)
+    setError("")
+    operatorOperationsApi.listIncidents(siteId)
+      .then((items) => {
+        if (active) setIncidents(items)
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : "Could not load incident reports.")
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [siteId])
 
-    store.addAuditLog({
-      userId: user?.id ?? "op",
-      userName: user?.name ?? "Operator",
-      userRole: "operator",
-      action: "INCIDENT_RESOLVED",
-      details: `Emergency incident #${id} marked as resolved`,
-    })
-
-    setFeedback(`Incident #${id} resolved successfully.`)
+  async function resolve(incident: OperatorIncident) {
+    if (!siteId || busy) return
+    setBusy(true)
+    setError("")
+    try {
+      const resolved = await operatorOperationsApi.resolveIncident(siteId, incident.id)
+      setIncidents((items) => items.map((item) => item.id === resolved.id ? resolved : item))
+      setFeedback(`Incident #${incident.id} resolved.`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not resolve this incident.")
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function reportIncident(e: React.FormEvent) {
+  async function reportIncident(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.plate.trim() || !form.slot.trim()) return
-
-    const newId = Date.now()
-    const nowTime = new Date().toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-
-    setIncidents((inc) => [
-      {
-        id: newId,
-        type: form.type,
-        plate: form.plate.trim().toUpperCase(),
-        slot: form.slot.trim().toUpperCase(),
-        time: nowTime,
-        notes: form.notes,
-        status: "open",
-      },
-      ...inc,
-    ])
-
-    store.addAuditLog({
-      userId: user?.id ?? "op",
-      userName: user?.name ?? "Operator",
-      userRole: "operator",
-      action: "INCIDENT_REPORTED",
-      details: `Reported emergency incident (${form.type}) for plate ${form.plate} at slot ${form.slot}`,
-    })
-
-    setFeedback(`New incident reported for plate ${form.plate.toUpperCase()}.`)
-    setForm({ plate: "", slot: "", type: "wrong-spot", notes: "" })
+    if (!siteId || !form.plate.trim() || !form.slot.trim() || busy) return
+    setBusy(true)
+    setError("")
+    try {
+      const details = [
+        `Plate: ${form.plate.trim().toUpperCase()}`,
+        `Slot: ${form.slot.trim().toUpperCase()}`,
+        form.notes.trim() ? `Notes: ${form.notes.trim()}` : "",
+      ].filter(Boolean).join("\n")
+      const incident = await operatorOperationsApi.createIncident(siteId, { type: form.type, details })
+      setIncidents((items) => [incident, ...items])
+      setFeedback("Incident report submitted.")
+      setForm({ plate: "", slot: "", type: "wrong-spot", notes: "" })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not submit the incident report.")
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const openIncidents = incidents.filter((i) => i.status === "open")
+  const openIncidents = incidents.filter((i) => i.status === "reported")
   const resolvedIncidents = incidents.filter((i) => i.status === "resolved")
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Emergency & Incident Dispatch
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Log facility discrepancies, overstay warnings, incorrect parking positions, and vehicle damage.
-        </p>
-      </div>
+      <PageHeader title="Emergency & Incident Dispatch" description="Log facility discrepancies, overstay warnings, incorrect parking positions, and vehicle damage." />
 
       {feedback && (
         <div className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-600 font-medium">
@@ -122,6 +99,18 @@ export function EmergencyPanel() {
         </div>
       )}
 
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-600">
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+          Loading facility incidents…
+        </div>
+      )}
+
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Left: Active Incidents List */}
         <div className="space-y-4">
@@ -130,7 +119,7 @@ export function EmergencyPanel() {
               Active Security Alerts ({openIncidents.length})
             </h2>
             <span className="text-xs text-[var(--muted)]">
-              {resolvedIncidents.length} resolved today
+              {resolvedIncidents.length} resolved
             </span>
           </div>
 
@@ -155,31 +144,19 @@ export function EmergencyPanel() {
                       {inc.type === "wrong-spot" ? "Wrong Spot Alert" : inc.type === "damage" ? "Vehicle Damage" : "Overtime Stay"}
                     </span>
                   </div>
-                  <span className="text-xs text-[var(--muted)]">{inc.time}</span>
+                  <span className="text-xs text-[var(--muted)]">{new Date(inc.createdAt).toLocaleString()}</span>
                 </div>
 
-                <div className="flex items-center gap-3 text-xs">
-                  <div>
-                    <span className="text-[var(--muted)] block">Plate:</span>
-                    <strong className="font-mono text-sm text-[var(--fg)]">{inc.plate}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[var(--muted)] block">Slot:</span>
-                    <strong className="font-mono text-sm text-[var(--primary)]">{inc.slot}</strong>
-                  </div>
-                </div>
-
-                {inc.notes && (
-                  <p className="text-xs text-[var(--muted)] bg-[var(--bg)] p-2 rounded border border-[var(--border)]">
-                    {inc.notes}
-                  </p>
-                )}
+                <p className="whitespace-pre-wrap text-xs text-[var(--muted)] bg-[var(--bg)] p-2 rounded border border-[var(--border)]">
+                  {inc.details}
+                </p>
 
                 <div className="flex justify-end pt-2">
                   <button
                     type="button"
                     className="btn-outline text-xs py-1 px-3 text-green-600 border-green-500/30 hover:bg-green-500/10"
-                    onClick={() => resolve(inc.id)}
+                    disabled={busy}
+                    onClick={() => void resolve(inc)}
                   >
                     <UntitledIcon name="check" size={13} /> Mark Resolved
                   </button>
@@ -191,7 +168,7 @@ export function EmergencyPanel() {
               <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--muted)]">
                 <UntitledIcon name="check-circle" size={24} />
                 <p className="mt-2 font-medium">No open incidents or security alarms.</p>
-                <p className="text-[11px]">All vehicle lots are operating within standard parameters.</p>
+                <p className="text-[11px]">No incidents have been reported for this facility.</p>
               </div>
             )}
           </div>
@@ -214,6 +191,7 @@ export function EmergencyPanel() {
                   className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
                   value={form.type}
                   onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                  disabled={!siteId || busy}
                 >
                   <option value="wrong-spot">Wrong Slot (Red Alert)</option>
                   <option value="overtime">Overstay / Expired Session (Amber Alert)</option>
@@ -230,6 +208,7 @@ export function EmergencyPanel() {
                   onChange={(e) => setForm((f) => ({ ...f, plate: e.target.value }))}
                   placeholder="e.g. 51A-999.99"
                   required
+                  disabled={!siteId || busy}
                 />
               </div>
 
@@ -241,6 +220,7 @@ export function EmergencyPanel() {
                   onChange={(e) => setForm((f) => ({ ...f, slot: e.target.value }))}
                   placeholder="e.g. A-105"
                   required
+                  disabled={!siteId || busy}
                 />
               </div>
 
@@ -252,11 +232,12 @@ export function EmergencyPanel() {
                   value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                   placeholder="Describe location details, physical damage or driver interaction..."
+                  disabled={!siteId || busy}
                 />
               </div>
 
-              <button type="submit" className="btn-primary text-xs py-2 px-4 w-full justify-center">
-                <UntitledIcon name="alert" size={14} /> Submit Incident Dispatch
+              <button type="submit" className="btn-primary text-xs py-2 px-4 w-full justify-center" disabled={!siteId || busy}>
+                <UntitledIcon name="alert" size={14} /> {busy ? "Submitting…" : "Submit Incident Dispatch"}
               </button>
             </form>
           </div>

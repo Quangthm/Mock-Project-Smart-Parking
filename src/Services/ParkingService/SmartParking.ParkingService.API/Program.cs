@@ -37,8 +37,14 @@ public static class ParkingHost
         builder.Services.AddScoped<IStructureOperationStore, StructureOperationStore>();
         builder.Services.AddScoped<StructureOperationService>();
         builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
-        builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173").AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443").AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.AddHttpClient<OperatorSiteClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
+        builder.Services.AddScoped<IOperatorSiteAuthorizer>(s => s.GetRequiredService<OperatorSiteClient>());
+        builder.Services.AddScoped<OperatorLayoutService>();
+        builder.Services.AddScoped<OperatorOperationsStore>();
+        builder.Services.AddScoped<OperatorGateSlotStore>();
         var app = builder.Build();
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.UseCors();
         app.Use(async (context, next) =>
         {
@@ -47,6 +53,13 @@ public static class ParkingHost
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
             try { await next(context); }
+            catch (PostgresException error) when (
+                context.Request.Path.StartsWithSegments("/api/operator") &&
+                (error.SqlState is PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn))
+            {
+                context.Response.StatusCode = 503;
+                await context.Response.WriteAsJsonAsync(new { success = false, code = "PROTOTYPE_SCHEMA_NOT_READY", message = "Operator data is unavailable until database reconciliation is complete." });
+            }
             catch (StructureException e)
             {
                 context.Response.StatusCode = e.Code switch
@@ -55,7 +68,7 @@ public static class ParkingHost
                     "FORBIDDEN" => 403,
                     "SITE_NOT_FOUND" or "UNIT_NOT_FOUND" or "SLOT_NOT_FOUND" => 404,
                     "IDENTITY_UNAVAILABLE" or "COMMITMENTS_UNAVAILABLE" => 503,
-                    "STRUCTURE_BUSY" or "STRUCTURE_IN_USE" or "STRUCTURE_CONFLICT" or "DUPLICATE_IDENTIFIER" => 409,
+                    "STRUCTURE_BUSY" or "STRUCTURE_IN_USE" or "STRUCTURE_CONFLICT" or "DUPLICATE_IDENTIFIER" or "NO_AVAILABLE_SLOT" => 409,
                     _ => 400
                 };
                 await context.Response.WriteAsJsonAsync(new { success = false, code = e.Code, message = e.Message });
@@ -81,6 +94,36 @@ public static class ParkingHost
             var sites = new List<object>(); await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct)) sites.Add(new { id = reader.GetGuid(0), tenantId = reader.GetGuid(1) });
             return Results.Ok(sites);
+        });
+        app.MapPost("/internal/gate-sites/{siteId:guid}/slots/claim", async (
+            Guid siteId,
+            GateSlotClaim body,
+            OperatorGateSlotStore store,
+            CancellationToken ct) =>
+        {
+            if (body.TenantId == Guid.Empty || siteId == Guid.Empty ||
+                body.VehicleType is not ("CAR" or "MOTORCYCLE" or "ANY"))
+                return Results.BadRequest();
+            return Results.Ok(await store.ClaimAvailableAsync(
+                body.TenantId,
+                siteId,
+                body.VehicleType,
+                body.PreferredSlotId,
+                body.TargetUnitId,
+                body.AllowReservedSlot,
+                ct));
+        });
+        app.MapPost("/internal/gate-sites/{siteId:guid}/slots/{slotId:guid}/release", async (
+            Guid siteId,
+            Guid slotId,
+            GateSlotRelease body,
+            OperatorGateSlotStore store,
+            CancellationToken ct) =>
+        {
+            if (body.TenantId == Guid.Empty || siteId == Guid.Empty || slotId == Guid.Empty)
+                return Results.BadRequest();
+            await store.ReleaseAsync(body.TenantId, siteId, slotId, ct);
+            return Results.NoContent();
         });
         async Task<OwnerScope> Scope(OwnerIdentityClient identity, Guid? tenant, CancellationToken ct)
         {
@@ -119,9 +162,19 @@ public static class ParkingHost
             return Results.Ok(new { success = true });
         });
         app.MapPost("/api/parking-lots/{id:guid}/paths", async (Guid id, PathBody body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddAccessPathAsync(await Scope(identity, body.TenantId, ct), id, body.Code, body.From, body.To, body.MapData, ct) }));
+        app.MapGet("/api/parking-lots/{id:guid}/operator-layout", async (Guid id, OperatorLayoutService service, CancellationToken ct) =>
+            Results.Ok(new { success = true, data = await service.ReadAsync(id, ct) }));
+        app.MapDelete("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup", async (Guid id, Guid slot, SlotOperatorClient identity, ParkingStructureService service, CancellationToken ct) =>
+        {
+            await service.SetOperationalBackupAsync(await identity.ScopeAsync(id, ct), id, slot, false, "Backup designation released by operator.", ct);
+            return Results.Ok(new { success = true });
+        });
+        app.MapOperatorOperations();
         return app;
     }
 }
+public sealed record GateSlotClaim(Guid TenantId, string VehicleType, Guid? PreferredSlotId = null, Guid? TargetUnitId = null, bool AllowReservedSlot = false);
+public sealed record GateSlotRelease(Guid TenantId);
 public sealed record TenantBody(string Name, string Email, string Phone);
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BackupMarkBody(string Reason);

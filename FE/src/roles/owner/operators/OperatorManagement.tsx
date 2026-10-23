@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { createPortal } from "react-dom"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { useApp } from "../../../context/AppContext"
 import {
   operatorsApi,
@@ -81,6 +82,21 @@ export function OperatorManagement({
     onOperatorsChanged()
   }
 
+  async function handleDeleteOperator(operator: Operator) {
+    if (!window.confirm(`Delete the operator account for ${operator.fullName}?`)) return
+
+    setError("")
+    setMessage("")
+    try {
+      await operatorsApi.remove(operator.id)
+      setOperators((current) => current.filter((item) => item.id !== operator.id))
+      setMessage(`Operator account ${operator.email} was deleted.`)
+      onOperatorsChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete operator account.")
+    }
+  }
+
   function openTransferModal(op: Operator) {
     setTransferOp(op)
     setTargetSiteId(op.siteIds[0] ?? sites[0]?.id ?? "")
@@ -116,18 +132,7 @@ export function OperatorManagement({
 
   return (
     <div className="space-y-5 text-[var(--fg)]">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[var(--border)] pb-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--fg)]">
-            Operator Management
-          </h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Create login accounts for your operators and assign their work sites.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
+      <PageHeader title="Operator Management" variant="compact" divider description="Create login accounts for your operators and assign their work sites." actions={<div className="flex items-center gap-2.5">
           <button
             type="button"
             className="btn-outline text-xs px-3 py-2"
@@ -145,8 +150,7 @@ export function OperatorManagement({
             <UntitledIcon name="plus" size={14} />
             <span>Create Operator</span>
           </button>
-        </div>
-      </div>
+        </div>} />
 
       {!loading && !error && !sites.length && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] p-3 text-xs">
@@ -209,7 +213,7 @@ export function OperatorManagement({
             <option value="all">All Sites ({operators.length} operators)</option>
             {sites.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.code} - {s.name}
+                {s.name}
               </option>
             ))}
           </select>
@@ -280,6 +284,14 @@ export function OperatorManagement({
                           title="Change assigned parking site for this operator"
                         >
                           Change Site
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400"
+                          onClick={() => void handleDeleteOperator(op)}
+                          title="Delete this operator account"
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>
@@ -376,7 +388,7 @@ export function OperatorManagement({
                   >
                     {sites.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.code} - {s.name}
+                        {s.name}
                       </option>
                     ))}
                   </select>

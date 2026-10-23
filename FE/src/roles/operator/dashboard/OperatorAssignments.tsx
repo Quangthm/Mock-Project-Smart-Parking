@@ -2,10 +2,11 @@ import { useEffect, useState } from "react"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
 import { useApp } from "../../../context/AppContext"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import type { ParkingLot } from "../../../lib/types"
+import { PageHeader } from "../../../components/ui/PageHeader"
+import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface OperatorAssignmentsProps {
-  currentLot?: ParkingLot | null
+  currentLot?: OperatorSite | null
 }
 
 export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
@@ -31,7 +32,7 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           setError(
             err instanceof Error
               ? err.message
-              : "Unable to connect to live assignment service. Showing local operational permissions.",
+              : "Unable to connect to the assignment service.",
           )
         }
       })
@@ -46,24 +47,14 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-            My Operator Assignments & Permissions
-          </h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Operational sites, authority scopes, and facility dispatch roster for {user?.name}.
-          </p>
-        </div>
-        <button
+      <PageHeader title="My Operator Assignments & Permissions" description={<>Operational sites, authority scopes, and facility dispatch roster for {user?.name}.</>} actions={<button
           type="button"
           className="btn-outline text-xs py-2 px-3 self-start sm:self-auto"
           disabled={loading}
           onClick={() => setReload((v) => v + 1)}
         >
           <UntitledIcon name="activity" size={14} /> Refresh Roster
-        </button>
-      </div>
+        </button>} />
 
       {loading && (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
@@ -148,10 +139,10 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 text-xs space-y-2">
             <div className="flex items-center gap-2 text-[var(--fg)] font-semibold">
               <UntitledIcon name="building" size={16} />
-              <span>Current Local Facility Assignment: {currentLot?.name || "Bitexco Financial Tower Outdoor Lot"}</span>
+              <span>Current Facility Assignment: {currentLot?.name || "No site assigned"}</span>
             </div>
             <p className="text-[var(--muted)]">
-              Permissions active: <code className="font-mono font-bold text-[var(--primary)]">CHECK_IN, CHECK_OUT, LIVE_MONITORING, TICKET_HANDLE, SLOT_OVERRIDE</code>
+              No site permissions were returned by the assignment service.
             </p>
           </div>
         )}

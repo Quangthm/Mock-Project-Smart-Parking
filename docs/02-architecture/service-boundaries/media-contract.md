@@ -1,4 +1,4 @@
-# Media ownership and portability — RC1
+# Media ownership and portability — v1.1 review candidate
 
 **Technical design; provider capabilities not yet validated.** Cloudinary is first evaluation adapter; R2 is future migration, not current dual-write scope.
 
@@ -9,6 +9,7 @@ Store bytes in Cloudinary and authoritative asset metadata in the business servi
 | Asset | Proposed owner | Cross-service use |
 |---|---|---|
 | Avatar, registered-vehicle image | User & Access Service | Consumers receive an authorized representation/reference. Personal profiles need not have a parking tenant. |
+| Initial Partner policy/agreement uploads and original/replacement versions | User & Access Service | Restricted applicant/Admin review access through owning-service authorization; immutable evidence after final review. No arbitrary external document URL. |
 | Lot photo, uploaded diagram | Facility & Visualization Service | Search/UI consumes approved public or restricted representation. Fixed 3D models stay deployment assets under D4. |
 | LPR source image and recognition result | Recognition/Evidence module within IoT & Recognition Service | Session/incident stores `{ownerService, assetId}` and a reference to recognition evidence. Store once; recognize again without changing original evidence. |
 | Operator-uploaded incident or session evidence | Parking Operations Service | Appeal references the evidence; retention owner acknowledges holds. Proxy access, acknowledged holds and limits are confirmed under B06/§14.4; implementation mapping remains. |
@@ -43,3 +44,11 @@ An upload and a business-database commit are not one transaction. Use pending/fi
 Portable interface responsibilities: store validated content, read/stream content, issue temporary access only when supported, delete, and obtain metadata. Authorization and retention policy remain in business services. A shared infrastructure package may contain adapters; it should not contain a shared media database or business rules. Avoid making Cloudinary transformation syntax part of the domain contract.
 
 Migration to R2 still requires copying bytes, verifying hashes, switching locators and retaining a recovery window. The interface reduces code coupling; it does not eliminate migration, access-control or egress work. One provider remains active for the initial evaluation; do not add dual writes now.
+
+### 3.4 Partner agreement document versions (V11-02)
+
+Upload actual content through the owning User & Access API and the existing pending/finalized lifecycle. Application ID alone is not authorization: applicant setup credentials must be bound to that application; Admin read/replacement requires current review authority. Other services receive opaque `{ownerService, assetId}` references only when authorized, not reusable provider URLs. Supported formats, maximum sizes, download route, access-grant lifetime and exact wire schema are design-pending (User/API and media leads, DB25).
+
+Only Admin may replace uploaded policy/agreement documents for an **initial pending** Partner application. Do not edit other application fields or documents on pending additional-lot applications. Preserve original bytes and each replacement, content hash/version, application/revision binding, actor, time and reason. Final approval atomically checks the reviewed application/document version; a concurrent replacement must fail the stale review or be excluded by concurrency control, never be silently approved.
+
+Approved/rejected applications and their review evidence are immutable. Replacement is not destructive overwriting; approval after any replacement queues the exact approved-with-modifications notification. External agreement is not an in-app re-acceptance record. Keep restricted evidence/hold/deletion lifecycle under the owning service; do not apply the 30-day operational-image retention automatically to legal agreement evidence. Exact retention-class mapping remains design-pending with User/media lead under existing retention governance; no new duration is approved here.

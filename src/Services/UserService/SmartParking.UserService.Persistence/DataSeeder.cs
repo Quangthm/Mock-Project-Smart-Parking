@@ -70,30 +70,33 @@ public class DataSeeder
         await _dbContext.SaveChangesAsync();
     }
 
-    public async Task SeedAdminAsync(string email, string password)
+    public async Task SeedRoleUserAsync(string email, string password, string fullName, string roleCode, string roleName)
     {
         if (!SignInContact.IsValidEmail(email) ||
             password.Length is < 8 or > 15 || !System.Text.RegularExpressions.Regex.IsMatch(password,
                 @"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$"))
-            throw new InvalidOperationException("DevelopmentAdmin needs a valid email and an 8-15 character password with upper/lowercase, digit and special character.");
+            throw new InvalidOperationException("Development bootstrap needs a valid email and an 8-15 character password with upper/lowercase, digit and special character.");
         email = email.Trim().ToLowerInvariant();
         var existing = await _dbContext.Users.Include(u => u.Accounts).ThenInclude(a => a.AccountRoles).AsSplitQuery()
             .SingleOrDefaultAsync(u => u.Email == email);
         if (existing is not null)
         {
-            if (!existing.Accounts.Any(a => a.Status == "ACTIVE" && a.AccountRoles.Any(r => r.RoleCode == "ADMIN")))
-                throw new InvalidOperationException("Development bootstrap email already belongs to a non-admin user.");
+            if (!existing.Accounts.Any(a => a.Status == "ACTIVE" && a.AccountRoles.Any(r => r.RoleCode == roleCode)))
+                throw new InvalidOperationException("Development bootstrap email already belongs to a user with a different role.");
             return;
         }
-        if (!await _dbContext.Roles.AnyAsync(r => r.Code == "ADMIN"))
-            _dbContext.Roles.Add(new Role { Code = "ADMIN", Name = "Administrator" });
+        if (!await _dbContext.Roles.AnyAsync(r => r.Code == roleCode))
+            _dbContext.Roles.Add(new Role { Code = roleCode, Name = roleName });
         _dbContext.Users.Add(new User {
-            Id = Guid.NewGuid(), Email = email, FullName = "Development Administrator",
+            Id = Guid.NewGuid(), Email = email, FullName = fullName,
             PasswordHash = _passwords.Hash(password), Status = UserStatus.Active,
             CreatedOn = DateTimeOffset.UtcNow, ModifiedOn = DateTimeOffset.UtcNow,
             Accounts = [new Account { Id = Guid.NewGuid(), Status = "ACTIVE", CreatedOn = DateTimeOffset.UtcNow,
-                AccountRoles = [new AccountRole { RoleCode = "ADMIN" }] }]
+                AccountRoles = [new AccountRole { RoleCode = roleCode }] }]
         });
         await _dbContext.SaveChangesAsync();
     }
+
+    public async Task SeedAdminAsync(string email, string password)
+        => await SeedRoleUserAsync(email, password, "Development Administrator", "ADMIN", "Administrator");
 }

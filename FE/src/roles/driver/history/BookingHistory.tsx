@@ -1,10 +1,9 @@
 import { useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
-
-import { BookingCard } from "../booking/BookingCard"
 
 type HistorySection = "bookings" | "tickets"
 
@@ -12,17 +11,6 @@ export function BookingHistory() {
   const { user } = useApp()
 
   const [section, setSection] = useState<HistorySection>("bookings")
-
-  const bookings = store
-    .getBookingsByDriver(user?.id ?? "")
-
-    .filter((booking) => booking.status === "completed")
-
-    .sort((a, b) =>
-      (b.completedAt ?? b.createdAt).localeCompare(
-        a.completedAt ?? a.createdAt,
-      ),
-    )
 
   const tickets = store
     .getTickets()
@@ -32,6 +20,7 @@ export function BookingHistory() {
 
   return (
     <div>
+      <PageHeader title="Booking History" variant="compact" />
       <div
         style={{
           display: "flex",
@@ -45,7 +34,7 @@ export function BookingHistory() {
           className={section === "bookings" ? "btn-primary" : "btn-outline"}
           onClick={() => setSection("bookings")}
         >
-          Completed Bookings ({bookings.length})
+          Completed Bookings
         </button>
         <button
           type="button"
@@ -56,15 +45,7 @@ export function BookingHistory() {
         </button>
       </div>
       {section === "bookings" ? (
-        bookings.length ? (
-          <div style={{ display: "grid", gap: "0.875rem" }}>
-            {bookings.map((booking) => (
-              <BookingCard key={booking.id} booking={booking} />
-            ))}
-          </div>
-        ) : (
-          <EmptyHistory message="No completed bookings yet." />
-        )
+        <EmptyHistory message="Booking history is not available for your account yet." />
       ) : tickets.length ? (
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {tickets.map((ticket) => {

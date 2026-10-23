@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { store } from "../../../lib/store"
 
@@ -9,6 +10,10 @@ import type { LotPolicyPdf, ParkingLot } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
+
+import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+
+import { digitsOnly } from "../../../lib/groupedDigits"
 
 type DepositMode = "percentage" | "fixed"
 
@@ -62,9 +67,16 @@ export function PolicySettings({
 }: PolicySettingsProps = {}) {
   const { user } = useApp()
 
-  const [policy, setPolicy] = useState<PolicyState>(() =>
-    user ? (store.getOwnerPolicy(user.id) ?? initialPolicy) : initialPolicy,
-  )
+  const [policy, setPolicy] = useState<PolicyState>(() => {
+    const stored = user ? store.getOwnerPolicy(user.id) : null
+    return stored
+      ? {
+          ...stored,
+          dayRate: digitsOnly(String(stored.dayRate)),
+          nightRate: digitsOnly(String(stored.nightRate)),
+        }
+      : initialPolicy
+  })
 
   const [dayHours, setDayHours] = useState("8")
 
@@ -313,19 +325,7 @@ export function PolicySettings({
       className="mx-auto w-full max-w-5xl space-y-6"
       aria-labelledby="policy-settings-title"
     >
-      <header>
-        <p className="text-sm font-medium text-[var(--primary)]">Owner tools</p>
-        <h1
-          id="policy-settings-title"
-          className="mt-1 text-2xl font-bold text-[var(--fg)]"
-        >
-          Policy Settings
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Configure pricing, deposit rules, and upload official PDF policy
-          documents for your parking lots.
-        </p>
-      </header>
+      <PageHeader id="policy-settings-title" eyebrow="Owner tools" title="Policy Settings" description="Configure pricing, deposit rules, and upload official PDF policy documents for your parking lots." />
 
       {pdfNotice && (
         <div
@@ -508,28 +508,22 @@ export function PolicySettings({
                   {policy.pricingEnabled ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Day Rate (₫ / hour)
-                        <input
+                        Day Rate (VND / hour)
+                        <GroupedNumberInput
                           className={inputClass}
-                          type="number"
-                          min="0"
-                          step="1000"
                           value={policy.dayRate}
-                          onChange={(event) =>
-                            updatePolicy("dayRate", event.target.value)
+                          onValueChange={(digits) =>
+                            updatePolicy("dayRate", digits)
                           }
                         />
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Night Rate (₫ / hour)
-                        <input
+                        Night Rate (VND / hour)
+                        <GroupedNumberInput
                           className={inputClass}
-                          type="number"
-                          min="0"
-                          step="1000"
                           value={policy.nightRate}
-                          onChange={(event) =>
-                            updatePolicy("nightRate", event.target.value)
+                          onValueChange={(digits) =>
+                            updatePolicy("nightRate", digits)
                           }
                         />
                       </label>
@@ -577,13 +571,13 @@ export function PolicySettings({
                           }
                         >
                           <option value="percentage">Percentage (%)</option>
-                          <option value="fixed">Fixed amount (₫)</option>
+                          <option value="fixed">Fixed amount (VND)</option>
                         </select>
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
                         {policy.depositMode === "percentage"
                           ? "Deposit Percentage (%)"
-                          : "Deposit Amount (₫)"}
+                          : "Deposit Amount (VND)"}
                         <input
                           className={inputClass}
                           type="number"
@@ -713,7 +707,7 @@ function PreviewAmount({
           emphasized ? "text-[var(--primary)]" : "text-[var(--fg)]"
         }`}
       >
-        {Math.round(amount).toLocaleString("en-US")} ₫
+        {Math.round(amount).toLocaleString("vi-VN")} VND
       </p>
     </div>
   )

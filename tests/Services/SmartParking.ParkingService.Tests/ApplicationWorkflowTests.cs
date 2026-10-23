@@ -7,6 +7,40 @@ namespace SmartParking.ParkingService.Tests;
 public sealed class ApplicationWorkflowTests
 {
     [Fact]
+    public async Task AssignedOperatorLayoutReadsWithoutCreatingAnEditHold()
+    {
+        var fixture = new WorkflowFixture();
+        var service = new OperatorLayoutService(fixture, fixture, fixture);
+        var result = await service.ReadAsync(fixture.SiteId, CancellationToken.None);
+        Assert.Same(fixture.Structure, result);
+        Assert.Equal(new[] { "site-scope", "snapshot" }, fixture.Events);
+        Assert.Empty(fixture.Store.Rows);
+    }
+
+    [Fact]
+    public async Task UnassignedOperatorCannotReadSnapshotOrLayout()
+    {
+        var fixture = new WorkflowFixture { Authorized = false };
+        var service = new OperatorLayoutService(fixture, fixture, fixture);
+        var error = await Assert.ThrowsAsync<StructureException>(() => service.ReadAsync(fixture.SiteId, CancellationToken.None));
+        Assert.Equal("FORBIDDEN", error.Code);
+        Assert.Equal(new[] { "site-scope" }, fixture.Events);
+        Assert.Empty(fixture.Store.Rows);
+    }
+
+    [Fact]
+    public async Task BackupReleaseKeepsTheDurableSynchronizationPath()
+    {
+        var fixture = new WorkflowFixture();
+        fixture.Structure.MarkBackup(fixture.SlotId, true);
+        await fixture.Service.SetOperationalBackupAsync(fixture.Owner, fixture.SiteId, fixture.SlotId, false, "Released", CancellationToken.None);
+        Assert.Null(Assert.Single(fixture.Structure.Slots).ReservationState);
+        Assert.Contains("commit", fixture.Events);
+        Assert.Contains("release-outcome", fixture.Events);
+        Assert.Equal("completed", Assert.Single(fixture.Store.Rows).State);
+    }
+
+    [Fact]
     public async Task EditAcquiresBeforeTransactionAndPublishesAfterDisposal()
     {
         var fixture = new WorkflowFixture();
@@ -167,7 +201,7 @@ public sealed class ApplicationWorkflowTests
     }
 
     private sealed class WorkflowFixture :
-        IOwnerAuthorizer, ISlotOperatorAuthorizer, IStructureCommitments, IParkingStructureRepository
+        IOwnerAuthorizer, ISlotOperatorAuthorizer, IOperatorSiteAuthorizer, IStructureCommitments, IParkingStructureRepository
     {
         public List<string> Events { get; } = [];
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
@@ -198,9 +232,22 @@ public sealed class ApplicationWorkflowTests
             Events.Add("authorize");
             return Task.FromResult(Authorized);
         }
+        Task<OwnerScope> IOperatorSiteAuthorizer.ScopeAsync(Guid site, CancellationToken ct)
+        {
+            Events.Add("site-scope");
+            if (!Authorized || site != SiteId) throw new StructureException("FORBIDDEN", "Not assigned.");
+            return Task.FromResult(Owner);
+        }
+
         public Task<OwnerScope> ScopeAsync(Guid site, CancellationToken ct) => Task.FromResult(Owner);
         public Task<bool> IsAuthorizedAsync(OwnerScope actor, Guid site, CancellationToken ct)
             => IsOwnerAsync(actor, ct);
+
+        public Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenant, Guid site, CancellationToken ct)
+        {
+            Events.Add("snapshot");
+            return Task.FromResult(new CommitmentSnapshot([], false));
+        }
 
         public Task<CommitmentSnapshot> AcquireAsync(Guid tenant, Guid site, Guid token, CancellationToken ct)
         {

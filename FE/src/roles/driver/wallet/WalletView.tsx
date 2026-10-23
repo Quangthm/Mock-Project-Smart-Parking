@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext"
 import { driverData as store } from "../data/data"
 
 import { TopUpModal } from "./TopUpModal"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export function WalletView() {
   const { user, setUser } = useApp()
@@ -37,7 +38,7 @@ export function WalletView() {
 
       action: "WALLET_TOPUP",
 
-      details: `Added ${amount.toLocaleString("vi-VN")}₫ to wallet`,
+      details: `Added ${amount.toLocaleString("vi-VN")} VND to wallet`,
     })
 
     setShowTopUp(false)
@@ -67,11 +68,7 @@ export function WalletView() {
           color: "#fff",
         }}
       >
-        <div
-          style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: "0.25rem" }}
-        >
-          SmartParking Wallet
-        </div>
+        <PageHeader title="SmartParking Wallet" variant="promo" />
         <div
           style={{
             fontFamily: "Outfit",
@@ -83,7 +80,7 @@ export function WalletView() {
             marginBottom: "0.25rem",
           }}
         >
-          {balance.toLocaleString("vi-VN")}₫
+          {balance.toLocaleString("vi-VN")} VND
         </div>
         <div style={{ fontSize: "0.78rem", opacity: 0.75 }}>{user?.name}</div>
         <button
@@ -173,7 +170,7 @@ export function WalletView() {
                 }}
               >
                 {t.amount > 0 ? "+" : ""}
-                {t.amount.toLocaleString("vi-VN")}₫
+                {t.amount.toLocaleString("vi-VN")} VND
               </div>
             </div>
           ))}

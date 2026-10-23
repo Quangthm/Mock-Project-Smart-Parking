@@ -19,14 +19,11 @@ export function Navbar() {
       }}
     >
       <div
+        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:px-6 md:py-0"
         style={{
           maxWidth: "1200px",
           margin: "0 auto",
-          padding: "0 1.5rem",
-          display: "flex",
-          alignItems: "center",
-          height: "60px",
-          gap: "1.5rem",
+          minHeight: "60px",
         }}
       >
         {/* Logo */}
@@ -43,19 +40,20 @@ export function Navbar() {
           }}
         >
           <BrandLogo height={60} />
-          <span className="brand-wordmark" style={{ fontSize: "1.1rem" }}>
-            <span className="brand-smart">Smart</span>
-            <span className="brand-parking">Parking</span>
+          <span className="hidden sm:inline-flex">
+            <span className="brand-wordmark" style={{ fontSize: "1.1rem" }}>
+              <span className="brand-smart">Smart</span>
+              <span className="brand-parking">Parking</span>
+            </span>
           </span>
         </button>
 
         {/* Nav links */}
         <div
+          className="col-span-2 row-start-2 flex justify-self-center md:col-span-1 md:col-start-2 md:row-start-1"
           style={{
-            display: "flex",
             alignItems: "center",
             gap: "0.25rem",
-            flex: user ? "0 0 auto" : 1,
           }}
         >
           {!user && (
@@ -87,11 +85,10 @@ export function Navbar() {
 
         {/* Right side */}
         <div
+          className="col-start-2 row-start-1 flex justify-self-end md:col-start-3"
           style={{
-            display: "flex",
             alignItems: "center",
             gap: "0.5rem",
-            marginLeft: user ? "auto" : 0,
           }}
         >
           <button

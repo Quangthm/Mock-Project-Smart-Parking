@@ -5,15 +5,21 @@
 **Baseline Standard**: SmartPark SRS v0.9 (§3.2.3 Non-authoritative Digital Twin, Performance SLA < 3s, BR-CAP-01, BR-VEH-03)  
 **Target Audience**: B2B Enterprise Facility Owners, 3D Artists (Blender / 3ds Max / Spline / Revit), Frontend Engineers, QA / CI/CD DevOps  
 **Language**: English (Official Compliance Standard)  
-**Status**: Active Specification  
-**Version**: `v1.2.0` (SRS v0.9 Canonical Baseline)  
-**Last Updated**: 2026-10-07  
+**Status**: PHASE 2 — PROPOSED SPECIFICATION (Deferred from v1.0 MVP)  
+**Version**: `v1.3.0` (Phase 2 Post-MVP Proposal)  
+**Last Updated**: 2026-10-12  
+
+> [!IMPORTANT]
+> **Phase 2 Scope & Acceptance Notice**:
+> This document describes a **proposed future enterprise / self-service 3D ingestion capability** for SmartPark Phase 2 (Commercial Multi-Tenant SaaS).
+> **SmartPark v1.0 MVP strictly utilizes fixed, versioned deployment 3D models** (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`) bundled directly within the deployment assets.
+> **Nothing in this document shall be interpreted as requiring Owner-uploaded arbitrary 3D models, cloud ingestion pipelines, automated DB synchronization from uploaded GLBs, or Phase 2 ingestion microservices for v1.0 MVP / Sprint 2 acceptance.**
 
 ---
 
 ## 1. EXECUTIVE SUMMARY & PURPOSE
 
-### 1.1. Context: Zero-Code Frontend Ingestion
+### 1.1. Context: Zero-Code Frontend Ingestion (Phase 2 Future Vision)
 In SmartPark Phase 2 (Commercial Multi-Tenant SaaS), commercial facility owners (shopping malls, office towers, airports, convention centers) can onboard their own bespoke parking facilities. 
 
 To eliminate costly custom frontend development for every new client, the SmartPark Web Application utilizes a **Generic Rule-Based Three.js Engine**. This engine does **not** hardcode specific mesh names or facility geometries. Instead, it dynamically traverses, parses, colorizes, paginates, and attaches real-time telemetry to any external 3D model that conforms to this specification.

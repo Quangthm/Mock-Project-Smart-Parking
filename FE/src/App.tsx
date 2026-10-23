@@ -19,6 +19,8 @@ import { RoleRoute } from "./components/navigation/RoleRoute"
 
 import { Footer } from "./components/layout/Footer"
 
+import { FloatingChatbot } from "./components/chat/FloatingChatbot"
+
 import { Landing } from "./public pages/Landing"
 
 import { Pricing } from "./public pages/Pricing"
@@ -30,6 +32,7 @@ import { FAQ } from "./public pages/FAQ"
 import { SignIn } from "./roles/authentications/Sign In/SignIn"
 
 import { SignUp } from "./roles/authentications/Sign Up/SignUp"
+import { BusinessLotSetupPage } from "./roles/owner/parking-lots/CreateParkingLotForOwner"
 
 import { BootstrapPassword } from "./roles/authentications/BootstrapPassword"
 
@@ -149,6 +152,9 @@ function AppContent() {
           </div>
         )}
       </main>
+      {authReady && user && usesDashboardNavbar && view !== "driver" && (
+        <FloatingChatbot key={user.id} role={user.role} />
+      )}
       {!isDashboard && <Footer />}
     </div>
   )
@@ -163,6 +169,7 @@ function LegacyView({ view }: { view: ReturnType<typeof useApp>["view"] }) {
       {view === "faq" && <FAQ />}
       {view === "sign-in" && <SignIn />}
       {view === "sign-up" && <SignUp />}
+      {view === "parking-lot-setup" && <BusinessLotSetupPage />}
       {view === "driver" && <DriverDashboard />}
       {view === "owner" && <OwnerDashboard />}
       {view === "operator" && <OperatorDashboard />}

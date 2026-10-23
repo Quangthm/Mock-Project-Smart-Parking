@@ -6,8 +6,6 @@ import { driverData as store } from "../data/data"
 
 import type { ParkingLot } from "../../../lib/types"
 
-import type { Booking } from "../../../lib/types"
-
 import { FindParking } from "../parking/FindParking"
 
 import { BookingFlow } from "../booking/BookingFlow"
@@ -23,8 +21,10 @@ import { DriverSupport } from "../support/DriverSupport"
 import { PaymentHistory } from "../payments/PaymentHistory"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { FloatingChatbot } from "../../../components/chat/FloatingChatbot"
 
 type Tab = "home" | "subscriptions" | "support" | "payments"
 
@@ -44,8 +44,8 @@ export function DriverDashboard() {
   const [homePanel, setHomePanel] = useState<HomePanel>("find")
 
   const [bookingLot, setBookingLot] = useState<ParkingLot | null>(null)
-
-  const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null)
+  const [parkingDetailsOpen, setParkingDetailsOpen] = useState(false)
+  const findingParking = tab === "home" && homePanel === "find" && !bookingLot
 
   const [profileSection, setProfileSection] = useState<ProfileSection | null>(
     null,
@@ -83,12 +83,6 @@ export function DriverDashboard() {
       window.removeEventListener("sp:driver-profile", onProfile)
     }
   })
-
-  const bookings = store.getBookingsByDriver(user?.id ?? "")
-
-  const active = bookings.filter(
-    (b) => !["completed", "cancelled"].includes(b.status),
-  )
 
   function openProfileSection(section: ProfileSection) {
     setProfileSection(section)
@@ -173,7 +167,7 @@ export function DriverDashboard() {
         {
           id: "payments",
           label: "Payment history",
-          icon: "₫",
+          icon: "banknote",
           active: tab === "payments",
           onClick: () => {
             setTab("payments")
@@ -213,7 +207,7 @@ export function DriverDashboard() {
 
   return (
     <DashboardSidebar groups={navGroups}>
-      <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+      <main className={`min-w-0 overflow-y-auto ${findingParking ? "driver-map-main" : "p-4 sm:p-7"}`}>
         {profileSection && (
           <div
             role="presentation"
@@ -454,65 +448,37 @@ export function DriverDashboard() {
             </section>
           </div>
         )}
+        {tab === "home" && homePanel === "find" && (
+          <div className={bookingLot ? "driver-parking-suspended" : "animate-in"} aria-hidden={!!bookingLot} inert={!!bookingLot}>
+            <FindParking
+              visible={!bookingLot}
+              onDetailsOpenChange={setParkingDetailsOpen}
+              onBook={(lot) => setBookingLot(lot)}
+            />
+          </div>
+        )}
         {bookingLot ? (
           <BookingFlow
             lot={bookingLot}
-            resumeBooking={paymentBooking ?? undefined}
             onDone={() => {
-              setPaymentBooking(null)
-
               setBookingLot(null)
 
               setTab("home")
 
-              setHomePanel("bookings")
+              setHomePanel("find")
             }}
           />
         ) : (
           <>
-            {tab === "home" && (
+            {tab === "home" && homePanel !== "find" && (
               <div className="animate-in">
-                {homePanel === "find" ? (
-                  <FindParking
-                    onBook={(lot) => {
-                      setPaymentBooking(null)
-                      setBookingLot(lot)
-                    }}
-                    onNavigateToBookings={() => setHomePanel("bookings")}
-                  />
-                ) : homePanel === "bookings" ? (
+                {homePanel === "bookings" ? (
                   <section>
-                    <h3
-                      style={{
-                        fontFamily: "Outfit",
-                        margin: "0 0 0.75rem",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      Bookings
-                    </h3>
-                    <ActiveBookings
-                      onPayNow={(booking) => {
-                        setPaymentBooking(booking)
-                        setBookingLot(
-                          store
-                            .getLots()
-                            .find((lot) => lot.id === booking.lotId) ?? null,
-                        )
-                      }}
-                    />
+                    <PageHeader title="Bookings" variant="compact" />
+                    <ActiveBookings />
                   </section>
                 ) : (
                   <section>
-                    <h3
-                      style={{
-                        fontFamily: "Outfit",
-                        margin: "0 0 0.75rem",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      Booking History
-                    </h3>
                     <BookingHistory />
                   </section>
                 )}
@@ -536,6 +502,13 @@ export function DriverDashboard() {
           </>
         )}
       </main>
+      {user && (
+        <FloatingChatbot
+          role={user.role}
+          parkingMode={findingParking}
+          parkingDetailsOpen={findingParking && parkingDetailsOpen}
+        />
+      )}
     </DashboardSidebar>
   )
 }

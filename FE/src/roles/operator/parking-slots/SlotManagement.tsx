@@ -1,32 +1,26 @@
 import { useState, useMemo, useEffect } from "react"
 import { useApp } from "../../../context/AppContext"
-import { operatorData as store } from "../data/data"
-import { structureStore } from "../../owner/data/structureStore"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
-import { request } from "../../../lib/authApi"
+import { parkingApi } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import type { ParkingLot, ParkingSlot } from "../../../lib/types"
-
-const server = (
-  import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
-).replace(/\/$/, "")
+import { PageHeader } from "../../../components/ui/PageHeader"
+import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface SlotManagementProps {
-  lot: ParkingLot | null
+  lot: OperatorSite | null
 }
 
 interface OperationalSpaceItem {
   id: string
   code: string
   vehicleType: "car" | "motorcycle"
+  physicalState: string
 }
 
 export function SlotManagement({ lot }: SlotManagementProps) {
-  const { user } = useApp()
-
   // Permissions & assignment check
-  const [assignments, setAssignments] = useState<OperatorAssignment[]>([])
-  const [hasOverridePermission, setHasOverridePermission] = useState(true) // default true for operator unless assignments loaded
+  const [hasOverridePermission, setHasOverridePermission] = useState(false)
+  const [authorityError, setAuthorityError] = useState("")
 
   // Form states for designating a new backup slot
   const [selectedSlotId, setSelectedSlotId] = useState("")
@@ -47,85 +41,55 @@ export function SlotManagement({ lot }: SlotManagementProps) {
       .assignments()
       .then((res) => {
         if (!active) return
-        setAssignments(res)
-        if (lot && res.length > 0) {
-          const siteAssignment = res.find((a) => a.siteId === lot.id)
-          if (siteAssignment) {
-            setHasOverridePermission(
-              siteAssignment.permissions.includes("SLOT_OVERRIDE") ||
-              siteAssignment.permissions.includes("ADMIN") ||
-              user?.role === "owner",
-            )
-          }
-        }
+        const siteAssignment = res.find((a) => a.siteId === lot?.id)
+        setHasOverridePermission(Boolean(siteAssignment?.permissions.some((permission) =>
+          permission === "SLOT_OVERRIDE" || permission === "ADMIN",
+        )))
+        setAuthorityError("")
       })
-      .catch(() => {
-        // If API fails or in local preview, standard operator has default override rights
-        if (active) setHasOverridePermission(true)
+      .catch((error: unknown) => {
+        if (active) {
+          setHasOverridePermission(false)
+          setAuthorityError(error instanceof Error ? error.message : "Could not verify slot override permission.")
+        }
       })
 
     return () => {
       active = false
     }
-  }, [lot?.id, user])
+  }, [lot?.id])
 
-  // Get structure data from structureStore
-  const structure = useMemo(() => {
-    if (!lot) return null
-    try {
-      return structureStore.getStructure(lot.id)
-    } catch {
-      return null
-    }
-  }, [lot])
-
-  // Get all spaces across all floors and zones
-  const allSpaces = useMemo(() => {
-    if (!structure?.floors) return []
-    return structure.floors.flatMap((f) => f.zones).flatMap((z) => z.spaces)
-  }, [structure])
-
-  // Current backup slots
-  const backupSlots = useMemo(() => {
-    if (!lot) return []
-    // Combine structureStore spaces marked as isBackup with lot slots
-    return allSpaces.filter((s) => s.isBackup || s.reservationState === "BACKUP")
-  }, [allSpaces, lot])
+  const allSpaces = lot?.slots ?? []
+  const backupSlots = useMemo(
+    () => allSpaces.filter((slot) => slot.reservationState?.toUpperCase() === "BACKUP").map((slot) => ({
+      id: slot.id,
+      code: slot.number,
+      vehicleType: slot.vehicleType.toLowerCase().includes("motorcycle") ? "motorcycle" as const : "car" as const,
+      physicalState: slot.isPhysicallyOccupied ? "OCCUPIED" : "AVAILABLE",
+    })),
+    [allSpaces],
+  )
 
   // Slots eligible for being designated as backup:
   // Must be AVAILABLE, not physically occupied, not reserved, operational
   const eligibleSlots: OperationalSpaceItem[] = useMemo(() => {
     if (!lot) return []
-    if (allSpaces.length > 0) {
-      return allSpaces
-        .filter(
-          (s) =>
-            !s.isBackup &&
-            s.reservationState !== "BACKUP" &&
-            (s.status === "available" || s.physicalState === "AVAILABLE") &&
-            s.physicalState !== "OCCUPIED" &&
-            s.physicalState !== "MAINTENANCE" &&
-            s.physicalState !== "UNAVAILABLE",
-        )
-        .map((s) => ({
-          id: s.id,
-          code: s.code,
-          vehicleType: s.vehicleType,
-        }))
-    }
     return lot.slots
-      .filter((s) => s.status === "available")
+      .filter((slot) =>
+        slot.status === "available" &&
+        slot.operationalStatus.toUpperCase() === "OPERATIONAL" &&
+        !slot.isPhysicallyOccupied &&
+        (!slot.reservationState || slot.reservationState.toUpperCase() === "NONE"),
+      )
       .map((s) => ({
         id: s.id,
         code: s.number,
-        vehicleType: s.number.startsWith("M") ? ("motorcycle" as const) : ("car" as const),
+        vehicleType: s.vehicleType.toLowerCase().includes("motorcycle") ? "motorcycle" as const : "car" as const,
+        physicalState: "AVAILABLE",
       }))
-  }, [allSpaces, lot])
+  }, [lot])
 
-  // Designated backup capacity percentage from owner policy (read-only)
-  const backupPolicyPercentage = structure?.policy?.backupCapacityPercentage ?? 10
-  const totalSlots = lot?.totalSlots ?? 0
-  const maxRecommendedBackup = Math.round((totalSlots * backupPolicyPercentage) / 100)
+  const configuredBackupCount = lot?.configuredBackupCount ?? 0
 
   // Handle Mark Slot as Backup
   async function handleDesignateBackup(e: React.FormEvent) {
@@ -136,39 +100,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
     setFeedback(null)
 
     try {
-      // 1. Try calling backend API
-      try {
-        await request(
-          `/${lot.id}/slots/${selectedSlotId}/backup`,
-          "POST",
-          { reason: designateReason.trim() },
-          "/api/parking-lots",
-          server,
-        )
-      } catch {
-        // Backend might be mock or offline; proceed to sync local store
-      }
-
-      // 2. Update structureStore
-      structureStore.updateSpaceStatus(
-        lot.id,
-        selectedSlotId,
-        "available",
-        designateReason.trim(),
-        {
-          reservationState: "BACKUP",
-          isBackup: true,
-        },
-      )
-
-      // 3. Update main store audit log
-      store.addAuditLog({
-        userId: user?.id ?? "op",
-        userName: user?.name ?? "Operator",
-        userRole: user?.role ?? "operator",
-        action: "BACKUP_SLOT_DESIGNATED",
-        details: `Slot ${selectedSlotId} designated as Backup Capacity. Reason: ${designateReason.trim()}`,
-      })
+      await parkingApi.markBackup(lot.id, selectedSlotId, designateReason.trim())
 
       setFeedback({
         type: "success",
@@ -177,6 +109,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
 
       setSelectedSlotId("")
       setDesignateReason("")
+      window.dispatchEvent(new Event("sp-operator-refresh"))
     } catch (err) {
       setFeedback({
         type: "error",
@@ -194,32 +127,14 @@ export function SlotManagement({ lot }: SlotManagementProps) {
     setFeedback(null)
 
     try {
-      // 1. Update structureStore
-      structureStore.updateSpaceStatus(
-        lot.id,
-        spaceId,
-        "available",
-        undefined,
-        {
-          reservationState: "NONE",
-          isBackup: false,
-        },
-      )
-
-      // 2. Audit log
-      store.addAuditLog({
-        userId: user?.id ?? "op",
-        userName: user?.name ?? "Operator",
-        userRole: user?.role ?? "operator",
-        action: "BACKUP_SLOT_RELEASED",
-        details: `Backup designation released for slot ${spaceId}. Returned to vacant pool.`,
-      })
+      await parkingApi.releaseBackup(lot.id, spaceId)
 
       setFeedback({
         type: "success",
         message: `Backup designation released. The slot is now available for regular bookings.`,
       })
       setReleasingSlot(null)
+      window.dispatchEvent(new Event("sp-operator-refresh"))
     } catch (err) {
       setFeedback({
         type: "error",
@@ -240,22 +155,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-purple-500/10 px-2 py-0.5 text-xs font-semibold text-purple-600">
-            SRS 3.4.5 Capacity Management
-          </span>
-          <span className="text-xs text-[var(--muted)]">·</span>
-          <span className="text-xs text-[var(--muted)]">{lot.name}</span>
-        </div>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Backup Slot & Capacity Operations
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow.
-        </p>
-      </div>
+      <PageHeader title="Backup Slot & Capacity Operations" eyebrow={<>SRS 3.4.5 Capacity Management · {lot.name}</>} description="Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow." />
 
       {/* Permission Alert if missing */}
       {!hasOverridePermission && (
@@ -267,6 +167,12 @@ export function SlotManagement({ lot }: SlotManagementProps) {
           <p className="mt-1">
             Your current operator profile does not possess the <code className="font-mono font-bold">SLOT_OVERRIDE</code> permission for this facility. You may inspect backup allocations, but designating or releasing backup spaces requires elevated rights.
           </p>
+        </div>
+      )}
+
+      {authorityError && (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-600">
+          Could not verify slot permissions: {authorityError}
         </div>
       )}
 
@@ -318,15 +224,13 @@ export function SlotManagement({ lot }: SlotManagementProps) {
         {/* Card 2: Configured Policy Target */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-            <span>Owner Target Policy</span>
+            <span>Configured Backup Capacity</span>
             <UntitledIcon name="building" size={16} />
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-bold text-[var(--fg)]">
-              {backupPolicyPercentage}% ({maxRecommendedBackup} slots)
-            </div>
+            <div className="text-2xl font-bold text-[var(--fg)]">{configuredBackupCount} slots</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">
-              Read-only owner configuration
+              Configured by the site owner
             </div>
           </div>
         </div>
@@ -440,15 +344,14 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                 <th className="px-4 py-3">Slot Code</th>
                 <th className="px-4 py-3">Vehicle Type</th>
                 <th className="px-4 py-3">Physical State</th>
-                <th className="px-4 py-3">Designation Purpose</th>
-                <th className="px-4 py-3">Protection Window</th>
+                <th className="px-4 py-3">Reservation State</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {backupSlots.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">
+                  <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted)]">
                     No slots are currently designated as backup in this facility.
                   </td>
                 </tr>
@@ -468,11 +371,8 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                         {space.physicalState || "AVAILABLE"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[var(--fg)] max-w-xs truncate">
-                      {space.maintenanceNote || "Standard operational backup buffer"}
-                    </td>
                     <td className="px-4 py-3 text-[var(--muted)]">
-                      {space.lastUpdated ? new Date(space.lastUpdated).toLocaleDateString() : "Active"}
+                      BACKUP
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

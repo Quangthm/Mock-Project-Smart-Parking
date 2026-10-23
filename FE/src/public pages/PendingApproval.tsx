@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useApp } from "../context/AppContext"
 
 import { UntitledIcon } from "../components/icon/UntitledIcon"
@@ -32,28 +33,8 @@ export function PendingApproval() {
         >
           <UntitledIcon name="clock" size={22} />
         </div>
-        <h1
-          style={{
-            fontFamily: "Outfit",
-            fontWeight: 800,
-            fontSize: "1.75rem",
-            color: "var(--fg)",
-            marginBottom: "0.75rem",
-          }}
-        >
-          Application Submitted!
-        </h1>
-        <p
-          style={{
-            color: "var(--muted)",
-            fontSize: "1rem",
-            lineHeight: 1.7,
-            marginBottom: "1.5rem",
-          }}
-        >
-          Thank you for applying to become a SmartParking partner. Your
-          application is now under review by our team.
-        </p>
+        <PageHeader variant="default" align="center" title={<>Application Submitted!</>} description={<>Your email is verified and your parking lot setup has been submitted.
+          Your application is now under Admin review.</>} />
 
         <div
           className="card"
@@ -80,24 +61,24 @@ export function PendingApproval() {
             {[
               {
                 step: "01",
-                label: "Application Review",
-                desc: "An Admin will review your company and contact details.",
+                label: "Business and Lot Setup",
+                desc: "Your Business registration and parking lot setup are complete.",
                 color: "#2563eb",
                 done: true,
               },
 
               {
                 step: "02",
-                label: "Admin Decision",
-                desc: "The Admin records an approval or rejection. Contact support for your application status.",
+                label: "Admin Review",
+                desc: "An Admin reviews your verified account and parking lot before approval.",
                 color: "#f59e0b",
                 done: false,
               },
 
               {
                 step: "03",
-                label: "Account Activation",
-                desc: "Once approved, sign in to access your Owner dashboard and set up your lot.",
+                label: "Owner Access",
+                desc: "Once approved, sign in to use your Owner dashboard and parking lot.",
                 color: "#22c55e",
                 done: false,
               },

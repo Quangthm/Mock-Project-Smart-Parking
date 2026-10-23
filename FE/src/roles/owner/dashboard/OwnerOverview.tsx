@@ -3,6 +3,7 @@ import { ownerData as store } from '../data/data';
 import type { Booking } from '../../../lib/types';
 import type { Site, Operator } from '../../../lib/parkingApi';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 function buildRevenueTrend(bookings: Booking[]) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -38,18 +39,14 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
   }, [selectedSiteId, sites, operators]);
 
   const stats = [
-    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('en-US')} ₫`, accent: 'text-green-600' },
+    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND`, accent: 'text-green-600' },
     { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US'), accent: 'text-blue-600' },
     { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US'), accent: 'text-violet-600' },
   ];
 
   return (
     <section className="space-y-6">
-      <header>
-        <p className="text-sm font-medium text-[var(--primary)]">{selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'}</p>
-        <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Owner Overview</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Combined performance for the selected parking sites.</p>
-      </header>
+      <PageHeader eyebrow={selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'} title="Owner Overview" description="Combined performance for the selected parking sites." />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map(stat => <article key={stat.label} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"><p className="text-sm text-[var(--muted)]">{stat.label}</p><p className={`mt-2 text-2xl font-bold ${stat.accent}`}>{stat.value}</p></article>)}
       </div>
@@ -63,7 +60,7 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
             <YAxis tickFormatter={value => value === 0 ? '0' : `${(Number(value) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
-            <Tooltip formatter={value => `${Number(value).toLocaleString('en-US')} ₫`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+            <Tooltip formatter={value => `${Number(value).toLocaleString('vi-VN')} VND`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
             <Area type="monotone" dataKey="revenue" stroke="#2563eb" fill="#2563eb18" strokeWidth={2} name="Revenue" />
             <Area type="monotone" dataKey="netRevenue" stroke="#22c55e" fill="#22c55e18" strokeWidth={2} name="Net Revenue (85%)" />
           </AreaChart>

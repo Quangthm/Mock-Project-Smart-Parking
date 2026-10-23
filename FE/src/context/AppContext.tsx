@@ -12,8 +12,9 @@ import type { User } from "../lib/types"
 import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
+import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
 
-export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
+export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "parking-lot-setup" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
 
 interface AppCtx {
   user: User | null
@@ -47,10 +48,39 @@ const Ctx = createContext<AppCtx>({} as AppCtx)
 
 export const useApp = () => useContext(Ctx)
 
+function hasPendingVerification() {
+  if (restoreDriverRegistration()) return true
+  try {
+    const owner = JSON.parse(
+      sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
+    )
+    return typeof owner?.email === "string" && (
+      (typeof owner?.verification?.challengeId === "string" &&
+        Number.isFinite(Date.parse(owner.verification.expiresAt)) &&
+        Number.isFinite(Date.parse(owner.verification.resendAt))) ||
+      (typeof owner?.id === "string" && typeof owner?.setupToken === "string")
+    )
+  } catch {
+    return false
+  }
+}
+
+function initialView(): View {
+  if (hasPendingVerification()) return "sign-up"
+  try {
+    if (sessionStorage.getItem("sp_pending_driver_registration") ||
+        sessionStorage.getItem("sp_pending_owner_registration"))
+      return "sign-in"
+  } catch {
+    /* Login remains available through the navigation. */
+  }
+  return "landing"
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
 
-  const [view, setView] = useState<View>("landing")
+  const [view, setView] = useState<View>(initialView)
 
   const [theme, setTheme] = useState<"light" | "dark">("light")
 
