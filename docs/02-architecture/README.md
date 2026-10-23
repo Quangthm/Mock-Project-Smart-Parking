@@ -1,8 +1,8 @@
 # Architecture
 
-Start with [Solution Architecture v1.0](solution-architecture/smartpark-solution-architecture-v1.0.md) for the current project-wide direction, then read the detailed contracts below. Product behavior is summarized in [Consolidated SRS v1.0](../01-requirements/srs/smartpark-srs-v1.0.md).
+Start with [Solution Architecture — current v1.1 review candidate](solution-architecture/smartpark-solution-architecture-v1.0.md) for the current project-wide direction, then read the detailed contracts below. The stable `v1.0` filenames are compatibility entries for the v1.1 documentation review candidate based on approved decisions. Product behavior is summarized in [Consolidated SRS — current v1.1 review candidate](../01-requirements/srs/smartpark-srs-v1.0.md).
 
-The approved RC3 target uses six domain-owned services, Clean Architecture, PostgreSQL boundaries, HTTP/OpenAPI for immediate requests and **RabbitMQ + MassTransit** for durable asynchronous outcomes. Kafka is deferred. Search is an Operations module; Assistant is an IoT & Recognition module; General Support is a Notification & Audit module.
+The v1.1 target retains the approved RC3 architecture and uses six domain-owned services, Clean Architecture, PostgreSQL boundaries, HTTP/OpenAPI for immediate requests and **RabbitMQ + MassTransit** for durable asynchronous outcomes. Kafka is deferred. Search is an Operations module; Assistant is an IoT & Recognition module; General Support is a Notification & Audit module.
 
 - [Service ownership and event contracts](service-boundaries/ownership-and-events.md)
 - [Media lifecycle and portability](service-boundaries/media-contract.md)

@@ -1,4 +1,4 @@
-# UC-MON-04 — Validate monthly visits and bill uncovered use
+# UC-MON-04 — Validate monthly/yearly visits and bill uncovered use
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Assigned Operator, Driver
@@ -7,7 +7,7 @@
 
 ## Goal
 
-Validate monthly visits and bill uncovered use.
+Validate monthly/yearly visits and bill uncovered use.
 
 ## Preconditions
 
@@ -18,7 +18,7 @@ Valid bound pass or ordinary reservation/visit.
 1. Validate account/vehicle/location/period/current rights and actual compatible admission capacity.
 2. Record one session/occupancy; available-only pass never forces full-lot entry.
 3. At checkout exclude valid day/night covered intervals; use whole-session 15-minute test and accepted cutoff.
-4. Apply monthly coverage before any separately booked minimum; retain independent extras and credited money.
+4. Apply eligible monthly/yearly coverage before any separately booked minimum; retain independent extras and credited money.
 
 ## Alternatives and failures
 

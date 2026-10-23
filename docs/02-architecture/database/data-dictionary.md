@@ -1,6 +1,6 @@
-# SmartPark Data Dictionary — Deployed Profile (SRS v1.0)
+# SmartPark Data Dictionary — Recorded Deployment Profile
 
-This dictionary summarizes the data structures of the **deployed** branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays. It reflects the runtime schema, including T4-approved deviations from the arch design baseline.
+This dictionary summarizes the recorded data structures of branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays. It preserves the schema evidence, including T4-approved deviations from the arch design baseline; this documentation update did not query a running database. Target v1.1 gaps are [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending), not newly deployed fields.
 
 ## 1. Global persistence strategies
 
@@ -95,3 +95,7 @@ Base: `06-iot-recognition-service-db.sql`; 6 tables: `devices`, `lpr_events`, `s
 | D7 | `site_capacity_pools` recreated in reservation overlay |
 
 See `docs/04-testing/reports/refactor-Docker Setup & Function Test/10-db-docs-deployment-alignment.md` for the full decision record.
+
+## 9. v1.1 target mapping, not deployed schema
+
+User applications/terms need protected original/replacement document evidence and independent additional-lot proposal identity (DB25); User/Account status and credentials need simulation/scoped setup, activation and sole-Admin guards (DB26). The fake VNeID API returns a GUID substitute linked to the user and persisted by User & Access under the [21 October clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md); concrete field/schema and retry consistency remain pending, with no claim that a deployed column exists. This simulated identifier is neither government verification nor an auth token. `approved` or `ACTIVE` alone cannot prove provisioning/opening (DB27). `monthly_passes` and Payment subject enums do not demonstrate yearly periods/policies (DB28); Facility cascades and soft-delete timestamps do not prove atomic descendant/dependency handling or retained vehicle bindings (DB29/DB30). Discovery projections need source/freshness and current-tariff versus interval-total semantics (DB32); delivery labels need notification-only retry and queued/delivered distinction (DB33). All schema/seed work and the documentation-approved future development reset remain pending (DB31).

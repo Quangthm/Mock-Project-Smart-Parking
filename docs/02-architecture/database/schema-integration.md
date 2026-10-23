@@ -1,6 +1,6 @@
 # Tích hợp database với code ứng dụng
 
-Tài liệu này mô tả **profile đang triển khai** trên branch `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` hiện tại `58df087`). Nguồn runtime là 7 base DDL + 8 overlay + `compose.schema-integration.yml` + `scripts/apply-workflow-migrations.ps1` + `setup.ps1`, không phải checkout arch.
+Tài liệu này mô tả **profile triển khai đã ghi nhận trước SPARK-296** trên branch `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` tại lần ghi nhận `58df087`). Nguồn runtime là 7 base DDL + 8 overlay + `compose.schema-integration.yml` + `scripts/apply-workflow-migrations.ps1` + `setup.ps1`, không phải checkout arch.
 
 ## 1. Baseline và quan hệ với nhánh arch
 
@@ -45,7 +45,9 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 
 Overlay dùng `CREATE TABLE IF NOT EXISTS` / `IF NOT EXISTS` / `NOT VALID` để chạy lại được trên DB dev. Base DDL là `CREATE TABLE`, không phải migration cho DB đã có dữ liệu: **không chạy base lên volume cũ**, không dùng EF `EnsureCreated` thay thế.
 
-## 5. Chạy local
+## 5. Recorded local setup procedure — gated future use
+
+For v1.1, V11-08 requires documentation update and approval before a development reset. DB31 tracks environment/owner/reviewed scripts/date as TBD; schema/seed/application compatibility must be fixed first. The following commands describe the prior setup mechanism only and were not executed by SPARK-296.
 
 Yêu cầu: Docker Desktop, .NET 10 SDK, Node dependencies cho FE.
 
@@ -73,7 +75,7 @@ Sau khi setup, chạy 3 service tích hợp:
 
 ## 6. Demo data và role
 
-`setup.ps1` tạo Admin qua `DevelopmentAdmin` (BCrypt, chỉ Development). Các role seed trong `01` gồm 7 mã: 4 mã actor SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) + 3 mã runtime (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng. Dev có thể seed demo Owner/Operator qua `DevelopmentOwner`/`DevelopmentOperator`; sau khi UserService chạy lần đầu, `scripts/seed-demo-site.ps1` tạo tenant/site/slot/grant demo idempotent để test ngay. Production phải có seed/role migration tương ứng trước khi dùng các luồng đó.
+`setup.ps1` tạo Admin qua `DevelopmentAdmin` (BCrypt, chỉ Development). Các role seed trong `01` gồm 7 mã: 4 mã actor SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) + 3 mã runtime (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng. Dev có thể seed demo Owner/Operator qua `DevelopmentOwner`/`DevelopmentOperator`; sau khi UserService chạy lần đầu, `scripts/seed-demo-site.ps1` tạo tenant/site/slot/grant demo idempotent để test ngay. For the v1.1 target, DB26/DB31 require exactly one protected seeded Admin, no Admin registration or role-management feature, and simulation/verified-contact gates for other accounts including demo Operator/Owner records. Existing 7 aliases do not create seven business roles or authorize a Partner role. Optional Operator password must be supported. Reset/seed verification is pending; the old demo path is not evidence these gates pass.
 
 ## 7. Fence và phục hồi lỗi
 
@@ -110,3 +112,7 @@ Kết quả/evidence mới nhất nằm trong report 07, 08, 09 và 10; không d
 - Payment/Notification/IoT chưa có runner local đầy đủ trong tài liệu này.
 - `support_tickets` BE-shape ở parking là technical debt có chủ đích (D6).
 - Các script legacy `05.1–05.9` và `integration/01–03` bị chặn; không mount lại.
+
+## 11. v1.1 alignment work
+
+Use [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending) for target application/revision/document links, simulation, durable provisioning identity/status, monthly/yearly products, discovery, notification delivery, dependency-safe batches and vehicle history. Existing columns and T4 deviations above remain recorded facts. V11-08 replaces migration/grandfathering of invalid development applications with a future approved development reset; runtime scoped-credential recovery remains a separate requirement. No setup/reset/test execution is claimed here.

@@ -2,9 +2,13 @@
 
 > **Service**: Payment & Pricing Service (`PaymentDb`)  
 > **Database file**: [`04-payment-pricing-service-db.sql`](../../../../scripts/database/microservices/04-payment-pricing-service-db.sql)  
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB28/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý toàn bộ vòng đời tài chính, biểu giá và giao dịch dòng tiền: Biểu giá động (`tariffs`), Lịch sử chính sách giá bất biến (`policy_revisions`), Đơn hàng thanh toán (`payment_orders`), Giao dịch thanh toán (`payment_transactions`), Hóa đơn kế toán (`invoices`), Yêu cầu hoàn tiền (`refund_requests`), và Webhook cổng thanh toán payOS (`provider_webhooks`).
+
+## v1.1 target alignment (DB28/DB32)
+
+Payment owns tariffs and financial terms for monthly/yearly Driver products; Operations owns plans/coverage. Yearly periods are 12 calendar months, one period in advance, with separate configurable financial/refund policies; no refund percentage or renewal default is approved. Explicit Owner product enablement is separate from price. Existing financial columns/subject labels do not prove annual support. Discovery exposes current tariff plus billing unit without a made-up total when no interval exists; interval selection uses a source-backed estimated total. Preserve settled rounding, payment/entitlement timing, refund limits and unknown-outcome reconciliation. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 

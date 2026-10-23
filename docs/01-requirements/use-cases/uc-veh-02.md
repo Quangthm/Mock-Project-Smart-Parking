@@ -18,7 +18,7 @@ Conflicting normalized plate binding; authorized support case.
 1. Driver supplies verified contact and relevant registration/transfer evidence.
 2. Operator supplies scoped local findings; notify existing holder.
 3. Admin assesses evidence sufficiency and records a reasoned decision.
-4. User & Access commits approved binding change with version guard and preserved history.
+4. User & Access commits approved binding change with version guard and preserved history. Soft removal under UC-VEH-01 never substitutes for reviewed transfer or invalidates active dependencies.
 
 ## Alternatives and failures
 

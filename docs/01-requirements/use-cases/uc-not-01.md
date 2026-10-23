@@ -17,7 +17,7 @@ Authoritative business event and supported channel/preference.
 
 1. Record deduplicated recipient/event/template/version delivery work.
 2. Deliver in declared in-app/email-capture/SMS-fixture mode.
-3. Track attempts/failure without changing original business result.
+3. Distinguish queued/pending/failed/delivered and retry logical delivery without changing the committed result or recreating account/application/site. Email Partner approval/rejection with safe reason; modified-document approval uses the required notification and distinguishes review approval from provisioning readiness.
 4. Send monthly reminders at 7 and 1 day; refresh authorized bell after reconnect.
 
 ## Alternatives and failures
