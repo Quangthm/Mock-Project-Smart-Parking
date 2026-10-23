@@ -1,62 +1,10 @@
 using System.Data;
 using Npgsql;
+using SmartParking.ReservationService.Application;
 
 namespace SmartParking.ReservationService.Persistence;
 
-public sealed record ReservationGateEntry(
-    Guid Id,
-    Guid AccountId,
-    Guid SiteId,
-    string SiteName,
-    Guid? SlotId,
-    string SlotNumber,
-    string LicensePlate,
-    string Status,
-    string? PaymentStatus,
-    string? PaymentMethod,
-    decimal? Amount,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    DateTimeOffset? EntryTime,
-    DateTimeOffset? ExitTime,
-    string? EntryImageUrl,
-    string? ExitImageUrl,
-    DateTimeOffset CreatedAt);
-
-public sealed record WalkInParkingSession(
-    Guid Id,
-    Guid SiteId,
-    Guid? SlotId,
-    string? SlotNumber,
-    string LicensePlate,
-    string VehicleType,
-    DateTimeOffset EntryTime,
-    DateTimeOffset? ExitTime,
-    string? EntryImageUrl,
-    string? ExitImageUrl);
-
-public sealed record ParkingSessionHistoryEntry(
-    Guid Id,
-    Guid? ReservationId,
-    Guid TenantId,
-    Guid SiteId,
-    Guid? AccessItemId,
-    Guid? AccountId,
-    Guid? CurrentSlotId,
-    string? SlotNumber,
-    string? OriginalPlate,
-    string? NormalizedPlate,
-    string VehicleType,
-    string? TicketReference,
-    DateTimeOffset EntryTime,
-    string? EntryImageUrl,
-    DateTimeOffset? ExitTime,
-    string? ExitImageUrl,
-    string Status,
-    int Version,
-    DateTimeOffset CreatedAt);
-
-public sealed class ReservationGateStore(NpgsqlDataSource source)
+public sealed class ReservationGateStore(NpgsqlDataSource source) : IReservationGateStore
 {
     public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(
         Guid tenantId,
@@ -703,11 +651,4 @@ public sealed class ReservationGateStore(NpgsqlDataSource source)
 
     private static string NormalizePlate(string value) =>
         string.Concat(value.Where(char.IsLetterOrDigit)).ToUpperInvariant();
-}
-
-public sealed class ReservationGateException(int statusCode, string code, string message)
-    : Exception(message)
-{
-    public int StatusCode { get; } = statusCode;
-    public string Code { get; } = code;
 }

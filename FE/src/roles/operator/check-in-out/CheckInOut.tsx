@@ -757,6 +757,15 @@ export function CheckInOut({
             </div>
 
             <div className="mt-4 space-y-4">
+              <div className="rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/5 px-4 py-3">
+                <span className="block text-xs text-[var(--muted)]">Parking Duration</span>
+                <span className="text-lg font-bold text-[var(--primary)]" aria-live="off">
+                  {formatParkingDuration(
+                    selectedSession.entryTime,
+                    selectedSession.exitTime ? new Date(selectedSession.exitTime).getTime() : durationClock,
+                  )}
+                </span>
+              </div>
               <div className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs sm:grid-cols-2">
                 <SessionField label="Reservation ID" value={selectedSession.reservationId} />
                 <SessionField label="Tenant ID" value={selectedSession.tenantId} />
@@ -772,13 +781,6 @@ export function CheckInOut({
                 <SessionField label="Session Status" value={selectedSession.status} />
                 <SessionField label="Entry Time" value={new Date(selectedSession.entryTime).toLocaleString()} />
                 <SessionField label="Exit Time" value={selectedSession.exitTime ? new Date(selectedSession.exitTime).toLocaleString() : null} />
-                <SessionField
-                  label="Parking Duration"
-                  value={formatParkingDuration(
-                    selectedSession.entryTime,
-                    selectedSession.exitTime ? new Date(selectedSession.exitTime).getTime() : durationClock,
-                  )}
-                />
                 <SessionField label="Created At" value={new Date(selectedSession.createdAt).toLocaleString()} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

@@ -2,11 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
-using SmartParking.ReservationService.Persistence;
+using SmartParking.ReservationService.Application;
 
 namespace SmartParking.ReservationService.API;
 
-public sealed class OperatorIdentityClient(HttpClient client, IHttpContextAccessor context)
+public sealed class OperatorIdentityClient(HttpClient client, IHttpContextAccessor context) : IOperatorIdentityClient
 {
     public async Task<OperatorSiteScope> RequireSiteAsync(Guid siteId, CancellationToken ct)
     {
@@ -44,5 +44,3 @@ public sealed class OperatorIdentityClient(HttpClient client, IHttpContextAccess
     }
     private sealed record IdentityScope(Guid UserId, Guid[] TenantIds);
 }
-
-public sealed record OperatorSiteScope(Guid UserId, Guid TenantId, Guid SiteId);
