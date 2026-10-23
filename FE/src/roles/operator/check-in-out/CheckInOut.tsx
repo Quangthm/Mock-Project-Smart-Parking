@@ -45,6 +45,7 @@ export function CheckInOut({
 
   const [selectedSession, setSelectedSession] = useState<ParkingSessionHistoryEntry | null>(null)
   const [historyRefresh, setHistoryRefresh] = useState(0)
+  const [durationClock, setDurationClock] = useState(() => Date.now())
 
   // Confirmation modal state for check-in / check-out
   const [confirmingAction, setConfirmingAction] = useState<{
@@ -62,6 +63,14 @@ export function CheckInOut({
   const [sessionsError, setSessionsError] = useState("")
 
   const [sessions, setSessions] = useState<ParkingSessionHistoryEntry[]>([])
+
+  useEffect(() => {
+    setDurationClock(Date.now())
+    if (!selectedSession || selectedSession.exitTime) return
+
+    const timer = window.setInterval(() => setDurationClock(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [selectedSession?.id, selectedSession?.entryTime, selectedSession?.exitTime])
 
   function slotLabel(booking: Booking) {
     return lot?.slots.find((slot) => slot.id === booking.slotId)?.number ?? booking.slotNumber
@@ -763,6 +772,13 @@ export function CheckInOut({
                 <SessionField label="Session Status" value={selectedSession.status} />
                 <SessionField label="Entry Time" value={new Date(selectedSession.entryTime).toLocaleString()} />
                 <SessionField label="Exit Time" value={selectedSession.exitTime ? new Date(selectedSession.exitTime).toLocaleString() : null} />
+                <SessionField
+                  label="Parking Duration"
+                  value={formatParkingDuration(
+                    selectedSession.entryTime,
+                    selectedSession.exitTime ? new Date(selectedSession.exitTime).getTime() : durationClock,
+                  )}
+                />
                 <SessionField label="Created At" value={new Date(selectedSession.createdAt).toLocaleString()} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -899,6 +915,19 @@ function SessionField({ label, value }: { label: string; value: string | null })
       <span className="break-all font-medium">{value ?? "—"}</span>
     </div>
   )
+}
+
+function formatParkingDuration(entryTime: string, endTime: number) {
+  const start = new Date(entryTime).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(endTime)) return "—"
+
+  const totalSeconds = Math.max(0, Math.floor((endTime - start) / 1000))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const time = [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":")
+  return days > 0 ? `${days}d ${time}` : time
 }
 
 function EvidenceImage({ label, image }: { label: string; image: string | null }) {
