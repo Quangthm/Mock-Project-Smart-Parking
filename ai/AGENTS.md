@@ -17,8 +17,8 @@
 - **Root Solution:** `SmartParking.slnx` (.NET 10 Web API microservices under `src/Services/`).
 - **Backend Services:**
   - `src/Services/UserService`: 5-layer Clean Architecture (API, Application, Domain, Infrastructure, Persistence) + EF Core 10 + MediatR + PostgreSQL.
-  - `src/Services/ParkingService`: 5 projects (API, Application, Domain, Infrastructure, Persistence) + raw Npgsql (Minimal APIs & endpoints).
-  - `src/Services/ReservationService`: 4 projects (API, Application, Domain, Persistence) + raw Npgsql.
+  - `src/Services/ParkingService` (evolving to **FacilityService** in `Fix2FA`): 5 projects (API, Application, Domain, Infrastructure, Persistence) + raw Npgsql (Minimal APIs & endpoints).
+  - `src/Services/ReservationService` (domain authority aligned to **Parking Operations** in SRS v1.1): 4 projects (API, Application, Domain, Persistence) + raw Npgsql.
   - `src/Services/IoTService`: Python AI service (`python-ai/`) for license plate recognition & CCTV stream ingestion.
   *(Note: ASP.NET Core microservices feature service-specific application and persistence patterns; consult `ai/architecture-reference.md` before making service-specific assumptions).*
 - **Frontend App:** `FE/` (React 19, Vite 8, TypeScript 5.7, Tailwind CSS v4, Three.js 0.186.1, MapTiler 4.1.0; see `FE/AGENTS.md`).
@@ -57,10 +57,10 @@ Loading context follows a 3-tier strategy:
 
 | Topic | Canonical source |
 |---|---|
-| Requirements (SRS) | `docs/01-requirements/srs/smartpark-srs-v1.0.md` (Module breakdown under `docs/01-requirements/srs/modules/`) |
+| Requirements (SRS) | `docs/01-requirements/srs/smartpark-srs-v1.1.md` (Module breakdown under `docs/01-requirements/srs/modules/`) |
 | Use cases | `docs/01-requirements/use-cases/` |
 | Business rules | `docs/01-requirements/business-rules/` (and `policy-catalogue.md`) |
-| Architecture & Solution Design | `docs/02-architecture/solution-architecture/smartpark-solution-architecture-v1.0.md` |
+| Architecture & Solution Design | `docs/02-architecture/solution-architecture/smartpark-solution-architecture-v1.1.md` |
 | Service boundaries | `docs/02-architecture/service-boundaries/` |
 | Database ownership & schemas | `docs/02-architecture/database/` |
 | Git & Jira convention | `docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md` |

@@ -20,22 +20,17 @@
 
 ### 1.1. Purpose
 
-This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Legacy `ParkingService`/`ReservationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
+This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`).
+
+> **Transitional Implementation Note (v1.1 / Fix2FA):** In the current codebase on `develop`, endpoints reside under `src/Services/ParkingService/` (`GET /api/parking-lots/{id}/operational-layout`). In accordance with approved SRS v1.1 Decision V11-09 and the `Fix2FA` refactor branch, this codebase is migrating to `src/Services/FacilityService/` (`SmartParking.FacilityService.API`). The 3D client integrates against contract behavior that remains stable across this renaming.
 
 The target binding must ensure the following; historical prototype evidence is separately labelled in §§11–13:
 
 * **Strict Backend State Fidelity**: Backend-provided slot state is reflected deterministically in the correct 3D representation without data distortion.
-<<<<<<< HEAD
-* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with **SmartPark SRS v1.0 §5 (Capacity Safety)** and **FR-MAP-02**.
+* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with the current facility/discovery state contract and **FR-MAP-02**.
 * **Graceful Degradation**: Unknown, missing, or stale telemetry data is handled safely without guessing or masking failures (FR-MAP-04).
-* **Non-Authoritative Visual Boundary**: The 3D client acts strictly as a presentation layer consuming authoritative backend state; 3D clicks or scene alterations never directly mutate transactional database state (**SRS v1.0 §3.2.3 & FR-MAP-02**).
-* **Asset Compatibility**: Preserves 100% compatibility with production 3D deployment assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
-=======
-* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with the current facility/discovery state contract.
-* **Graceful Degradation**: Unknown, missing, or stale telemetry data is handled safely without guessing or masking failures.
 * **Non-Authoritative Visual Boundary**: The 3D client acts strictly as a presentation layer consuming authoritative backend state; 3D clicks or scene alterations never directly mutate transactional database state (FR-MAP-02).
-* **Asset Compatibility**: Preserves 100% compatibility with Sprint 2 production 3D assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
->>>>>>> develop
+* **Asset Compatibility**: Preserves 100% compatibility with production 3D deployment assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
 
 ### 1.2. In Scope
 
@@ -66,7 +61,7 @@ The target binding must ensure the following; historical prototype evidence is s
   * Section 3.4.4 (*Reservation Protection Window: 4-hour default*).
   * Section 3.4.5 (*Continuous Capacity Tracking*).
   * Rule BR-CAP-01 (*Motorcycle Aggregate Capacity Model*).
-* **SmartPark Solution Architecture v1.0**:
+* **SmartPark Solution Architecture v1.1**:
   * Section 4 (*Facility & Visualization Domain vs Parking Operations Domain*).
   * Section 5 (*Live Views via Scoped SignalR Hub & Reconnect Recovery Protocol*).
 * **Design & Architecture Documents**:

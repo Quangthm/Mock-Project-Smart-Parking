@@ -6,7 +6,7 @@ Tài liệu này mô tả **profile triển khai đã ghi nhận trước SPARK-
 
 - **Runtime canonical:** branch `feature/db-hybrid-srs-v1`. SQL nằm trong `scripts/database/microservices/` (7 file) và `scripts/database/overlay/` (8 file).
 - **Design baseline:** `arch/database-schema` @ `9a13499` (SRS v1.0 RC3, commit `6165024`). Arch vẫn là nguồn đối chiếu thiết kế, nhưng **không dựng trực tiếp** để chạy BE (xem §2).
-- **SRS:** `docs/01-requirements/srs/smartpark-srs-v1.0.md`.
+- **SRS:** `docs/01-requirements/srs/smartpark-srs-v1.1.md`.
 - Các quyết định D1–D7/Q1–Q6 đã được phê tại cổng T4; bằng chứng nằm trong `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md`.
 
 ## 2. Vì sao không chạy trực tiếp arch

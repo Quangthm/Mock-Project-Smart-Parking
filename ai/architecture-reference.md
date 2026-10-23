@@ -174,11 +174,11 @@ Before reporting a change complete:
 
 ## 9. Canonical sources & Precedence
 
-Canonical source definitions, document hierarchy, and precedence rules are maintained centrally in [ai/AGENTS.md](AGENTS.md) (§ Source of truth).
+Canonical source definitions, document hierarchy, and precedence rules are maintained centrally in [ai/AGENTS.md](AGENTS.md) (ï¿½ Source of truth).
 
 **Core Precedence Principle:**
 - The SRS is authoritative for requirements. Context files, handoffs, and decision records interpret it; they do not replace it.
-- If code and documentation disagree, consult §8 (Conflict Register) above for verified repository reality.
+- If code and documentation disagree, consult ï¿½8 (Conflict Register) above for verified repository reality.
 - When an architectural question is unanswered in canonical documents, classify it as `OPEN`, `DEFERRED`, or `PROPOSED` rather than inventing an assumption.
 
 ---

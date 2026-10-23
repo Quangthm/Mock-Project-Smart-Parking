@@ -11,7 +11,7 @@ This file is a compact working snapshot. Detailed decisions should be stored as 
 | AI form filling | WORKING | AI may help fill an existing form; correct UI form must be shown for manual confirmation | BA context |
 | Product AI scope | MVP / WORKING | Chatbot, recommendation, and LPR/CV are in current MVP scope; model/provider details remain deferred. Repo reality: chatbot is a disabled scaffold; LPR has initial Python service in `src/Services/IoTService/python-ai/` | Review + Reservation specification |
 | AI service boundary | OPEN / DEFERRED | Requires architecture review | BA architecture backlog |
-| Normative baseline | CONFIRMED | Baseline upgraded to SRS v1.0 and Solution Architecture v1.0 | Team decision review |
+| Normative baseline | CONFIRMED | Baseline upgraded to SRS v1.1 and Solution Architecture v1.1 | Team decision review |
 | Business-rule provenance | CONFIRMED | Do not silently promote proposals/open items to requirements | BA context |
 | Status vocabulary | CONFIRMED | Use project status labels consistently | BA context |
 | Messaging broker | CONFIRMED | RabbitMQ is the current direction; Kafka is not used | Conflict Register (`ai/architecture-reference.md`) |
