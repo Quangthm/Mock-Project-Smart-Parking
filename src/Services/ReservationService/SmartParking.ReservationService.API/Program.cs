@@ -89,6 +89,15 @@ public static class ReservationHost
             var scope = await identity.RequireSiteAsync(siteId, ct);
             return Results.Ok(new { success = true, data = await store.ListAsync(scope.TenantId, siteId, ct) });
         });
+        app.MapGet("/api/parking-sessions", async (
+            Guid siteId,
+            OperatorIdentityClient identity,
+            ReservationGateStore store,
+            CancellationToken ct) =>
+        {
+            var scope = await identity.RequireSiteAsync(siteId, ct);
+            return Results.Ok(new { success = true, data = await store.ListSessionsAsync(scope.TenantId, siteId, ct) });
+        });
         app.MapGet("/api/reservations/lookup", async (
             Guid siteId,
             string query,
