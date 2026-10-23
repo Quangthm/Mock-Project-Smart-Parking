@@ -1,5 +1,6 @@
 using Npgsql;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using SmartParking.ParkingService.Application;
 using SmartParking.ParkingService.Domain;
 using SmartParking.ParkingService.Persistence;
@@ -20,6 +21,21 @@ public sealed class StructurePostgresFactAttribute : FactAttribute
 
 public sealed class PostgresStructureWorkflowTests
 {
+    [Fact]
+    public void ReservationEfModelMapsExistingOperationsTablesAndKeys()
+    {
+        var options = new DbContextOptionsBuilder<ReservationDbContext>()
+            .UseNpgsql("Host=localhost;Database=model-only")
+            .Options;
+        using var context = new ReservationDbContext(options);
+        var model = context.Model;
+
+        Assert.Equal("parking_sessions", model.FindEntityType(typeof(ParkingSessionRow))!.GetTableName());
+        Assert.Equal("reservations", model.FindEntityType(typeof(ReservationRow))!.GetTableName());
+        Assert.Equal("structure_edit_holds", model.FindEntityType(typeof(StructureEditHoldRow))!.GetTableName());
+        Assert.All(model.GetEntityTypes(), entity => Assert.NotNull(entity.FindPrimaryKey()));
+    }
+
     [StructurePostgresFact]
     public async Task CommittedEditSurvivesLostResponseAndRecoversWithANewApplicationInstance()
     {
@@ -245,6 +261,7 @@ public sealed class PostgresStructureWorkflowTests
         private readonly string reservationDatabase;
         public NpgsqlDataSource Parking { get; }
         public NpgsqlDataSource Reservation { get; }
+        private ReservationDbContext ReservationContext { get; }
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
         public Guid SiteId { get; private set; }
         public Guid UnitId { get; private set; }
@@ -264,9 +281,11 @@ public sealed class PostgresStructureWorkflowTests
             Parking = NpgsqlDataSource.Create(parkingConnection);
             settings.Database = reservation;
             Reservation = NpgsqlDataSource.Create(settings.ConnectionString);
+            ReservationContext = new ReservationDbContext(new DbContextOptionsBuilder<ReservationDbContext>()
+                .UseNpgsql(Reservation).Options);
             Gates = new(parkingConnection);
             Store = new(Parking, Gates);
-            ReservationService = new(new StructureSafetyStore(Reservation));
+            ReservationService = new(new StructureSafetyStore(ReservationContext));
             Transport = new(ReservationService);
             var synchronization = new StructureSynchronizationService(Store, Transport);
             Service = new(new PostgresParkingStructureRepository(Parking), this, this, Transport, Store, synchronization);
@@ -352,6 +371,7 @@ public sealed class PostgresStructureWorkflowTests
         public async ValueTask DisposeAsync()
         {
             await Gates.DisposeAsync();
+            await ReservationContext.DisposeAsync();
             await Parking.DisposeAsync();
             await Reservation.DisposeAsync();
             await using var connection = new NpgsqlConnection(adminConnection);
