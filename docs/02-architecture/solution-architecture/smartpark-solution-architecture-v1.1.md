@@ -1,11 +1,11 @@
 # SmartPark — Solution Architecture v1.1 review candidate
 
 **Main architecture overview · 21 October 2026 · v1.1 documentation review candidate based on approved decisions**
-Stable `v1.0` filename retained as a compatibility entry; this is the current v1.1 overview. Original source: `docs` branch at [923e9c7](https://github.com/Quangthm/Mock-Project-Smart-Parking/commit/923e9c783c77f1feb75440cbc79d8422c0b03c16). This describes the approved target and known implementation work, not a claim that the repository already implements every boundary. Requirements release remains a review candidate and product acceptance remains NOT RUN.
+This is the canonical v1.1 architecture overview. Original source: `docs` branch at [923e9c7](https://github.com/Quangthm/Mock-Project-Smart-Parking/commit/923e9c783c77f1feb75440cbc79d8422c0b03c16). This describes the approved target and known implementation work, not a claim that the repository already implements every boundary. Requirements release remains a review candidate and product acceptance remains NOT RUN.
 
 ## 1. Purpose and governing decisions
 
-Use this document for **how the solution is organized and why each responsibility belongs where it does**. Read the [consolidated SRS](../../01-requirements/srs/smartpark-srs-v1.0.md) for product behavior; follow the linked contracts for exact schemas, security flows and race handling. This overview consolidates existing decisions and does not grant new privileges or change prices, capacity rules or acceptance gates.
+Use this document for **how the solution is organized and why each responsibility belongs where it does**. Read the [consolidated SRS](../../01-requirements/srs/smartpark-srs-v1.1.md) for product behavior; follow the linked contracts for exact schemas, security flows and race handling. This overview consolidates existing decisions and does not grant new privileges or change prices, capacity rules or acceptance gates.
 
 The current direction is six domain-owned services with Clean Architecture, PostgreSQL persistence, synchronous APIs for immediate decisions, and RabbitMQ/MassTransit for durable asynchronous outcomes. Search belongs inside Operations; Assistant belongs inside IoT & Recognition; General Support belongs inside Notification & Audit. Their presence does not require new deployable services.
 
@@ -158,7 +158,7 @@ Development reset is a future implementation task only after documentation updat
 
 | Need | Start here |
 |---|---|
-| Product scope and business rules | [Consolidated SRS](../../01-requirements/srs/smartpark-srs-v1.0.md) |
+| Product scope and business rules | [Consolidated SRS](../../01-requirements/srs/smartpark-srs-v1.1.md) |
 | Ownership, communication and layering | [Service contracts](../service-boundaries/ownership-and-events.md) |
 | Capacity/payment timing and retries | [State/race contract](../../01-requirements/srs/state-transitions.md) |
 | Database migration gaps | [Alignment backlog](../database/alignment-backlog.md) |
