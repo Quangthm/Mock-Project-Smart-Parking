@@ -438,7 +438,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -553,13 +553,13 @@ export function OnboardingWizard({
                       gap: "0.5rem",
                     }}
                   >
-                    <span>🎮 3D Parking Model Integration</span>
+                    <span><UntitledIcon name="parking" size={18} /> 3D Parking Model</span>
                     <span
                       style={{
                         fontSize: "0.7rem",
                         padding: "0.1rem 0.45rem",
                         borderRadius: "999px",
-                        background: "var(--primary)15",
+                        background: "var(--status-available-bg)",
                         color: "var(--primary)",
                         fontWeight: 600,
                       }}
@@ -750,10 +750,8 @@ export function OnboardingWizard({
                     paddingTop: "0.5rem",
                   }}
                 >
-                  ℹ️ <em>SRS Architecture Note:</em> The 3D Digital Twin
-                  visualization reflects backend-authoritative spot occupancy
-                  and will be rendered automatically in the live operations view
-                  without overhead during facility creation.
+                  The 3D view will show live space occupancy when operators open
+                  the parking site. You can finish setting up the facility now.
                 </p>
               </div>
             </div>
@@ -768,7 +766,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -893,7 +891,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "0.375rem",
@@ -981,7 +979,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -1192,7 +1190,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",

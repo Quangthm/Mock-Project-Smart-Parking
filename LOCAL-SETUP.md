@@ -102,6 +102,8 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 | `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
+> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** ParkingService (dùng `facility-db` trên port 5442) đang được đổi tên thành FacilityService trong branch `Fix2FA` theo SRS v1.1 (quyết định V11-09). Tương tự, ReservationService (dùng `operations-db` trên port 5443) sẽ hợp nhất vào Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
+
 - Mỗi lệnh build image nếu cần, chạy đúng một service và mở một cửa sổ CMD theo dõi log.
 - `-NoBuild` chạy nhanh khi image đã có; `-NoLogWindow` cho CI/automation.
 - Double-click được: `scripts\run-*.cmd` hoặc `scripts\run-all-apps.cmd`.

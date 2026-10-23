@@ -41,6 +41,11 @@ Controllers should normally interact with the Application layer through MediatR/
 - Do not directly query another service's database.
 - Cross-service communication uses synchronous APIs when an immediate response is required and RabbitMQ when asynchronous processing/loose coupling provides a meaningful benefit.
 
+### API design and contracts
+
+- API designs must use the canonical template at [`docs/03-design/api/api-design-template.md`](../../docs/03-design/api/api-design-template.md).
+- Contract changes must specify route, HTTP method, authentication/authorization, request/response models, validation errors, and observable state/retry outcomes without exposing live secrets.
+
 ## CQRS direction
 
 CQRS + MediatR is the intended application pattern.

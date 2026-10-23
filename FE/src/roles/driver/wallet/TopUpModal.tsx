@@ -76,7 +76,7 @@ export function TopUpModal({
         >
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
 
               fontWeight: 700,
 
@@ -138,7 +138,7 @@ export function TopUpModal({
           </div>
           <div
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
 
               fontWeight: 800,
 

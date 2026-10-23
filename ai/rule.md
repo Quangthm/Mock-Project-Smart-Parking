@@ -205,6 +205,7 @@ Trong quá trình thực hiện task, Agent bắt buộc phải cập nhật ses
   3. **Ranh giới dữ liệu dịch vụ (Database per Service):** Mỗi microservice sở hữu schema độc lập. Không truy vấn chéo database giữa các dịch vụ.
   4. **Frontend Architecture:** React 19 + TypeScript + Tailwind CSS v4 + Three.js (xem thêm [`FE/AGENTS.md`](../FE/AGENTS.md)). Không sử dụng Material UI (MUI).
   5. **Definition of Done (DoD):** Sau khi code xong phải chạy lệnh xác thực `dotnet build SmartParking.slnx` (0 error) và unit tests trước khi hoàn tất task. Báo cáo kết quả trung thực, đánh dấu `[UNVERIFIED]` cho những mục chưa chạy kiểm thử.
+  6. **Thiết kế API Specification:** Khi tạo tài liệu đặc tả thiết kế API mới hoặc cập nhật API contract, bắt buộc tuân theo template chuẩn tại [`docs/03-design/api/api-design-template.md`](../docs/03-design/api/api-design-template.md). Bao gồm đầy đủ metadata, traceability (FR/BR/UC), method/route, request/response sample, validation & error codes, retry & state outcomes, và review checklist.
 
 ---
 

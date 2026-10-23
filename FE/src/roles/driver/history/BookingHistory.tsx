@@ -22,11 +22,13 @@ export function BookingHistory() {
     <div>
       <PageHeader title="Booking History" variant="compact" />
       <div
+        className="booking-history-tabs"
         style={{
           display: "flex",
-          gap: "0.5rem",
+          gap: "0.75rem",
           flexWrap: "wrap",
-          marginBottom: "1rem",
+          marginTop: "1.25rem",
+          marginBottom: "1.5rem",
         }}
       >
         <button

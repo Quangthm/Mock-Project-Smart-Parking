@@ -86,6 +86,28 @@ export interface WalkInParkingSession {
   exitImageUrl: string | null
 }
 
+export interface ParkingSessionHistoryEntry {
+  id: string
+  reservationId: string | null
+  tenantId: string
+  siteId: string
+  accessItemId: string | null
+  accountId: string | null
+  currentSlotId: string | null
+  slotNumber: string | null
+  originalPlate: string | null
+  normalizedPlate: string | null
+  vehicleType: string
+  ticketReference: string | null
+  entryTime: string
+  entryImageUrl: string | null
+  exitTime: string | null
+  exitImageUrl: string | null
+  status: string
+  version: number
+  createdAt: string
+}
+
 export interface OperatorIncident {
   id: string
   siteId: string
@@ -274,6 +296,12 @@ export const reservationApi = {
   async list(siteId: string) {
     const items = await reservationRequest<GateReservation[]>(`?siteId=${encodeURIComponent(siteId)}`)
     return items.map(toBooking)
+  },
+
+  listParkingSessions(siteId: string) {
+    return parkingSessionRequest<ParkingSessionHistoryEntry[]>(
+      `?siteId=${encodeURIComponent(siteId)}`,
+    )
   },
 
   async lookup(siteId: string, query: string) {

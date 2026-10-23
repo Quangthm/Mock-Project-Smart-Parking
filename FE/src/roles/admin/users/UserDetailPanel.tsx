@@ -12,7 +12,7 @@ export function UserDetailPanel({ model }: { model: UsersViewModel }) {
             <div className="card sticky top-20 space-y-4 p-5">
               <div className="flex items-start justify-between border-b border-[var(--border)] pb-3">
                 <div>
-                  <h2 className="font-['Outfit'] text-lg font-bold text-[var(--fg)]">
+                  <h2 className="font-['Be_Vietnam_Pro'] text-lg font-bold text-[var(--fg)]">
                     Account Profile
                   </h2>
                   <p className="text-xs text-[var(--muted)]">

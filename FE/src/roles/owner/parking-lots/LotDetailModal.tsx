@@ -66,15 +66,15 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
                     <span className="font-bold text-sm text-amber-600 dark:text-amber-400">{detailSite.metrics?.pendingPayment ?? "—"}</span>
                   </div>
                   <div>
-                    <span className="text-purple-600 dark:text-purple-400 block font-medium">Backup Buffer:</span>
-                    <span className="font-bold text-sm text-purple-600 dark:text-purple-400">{detailSite.metrics?.backup ?? "—"}</span>
+                    <span className="text-[var(--muted)] block font-medium">Backup Buffer:</span>
+                    <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics?.backup ?? "—"}</span>
                   </div>
                 </div>
 
                 {/* Vehicle Type Breakdown if available */}
                 {detailSite.structure?.capacityViews && detailSite.structure.capacityViews.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-xs text-[var(--fg)] uppercase tracking-wide">
+                    <h4 className="font-semibold text-base text-[var(--fg)]">
                       Vehicle Type Allocations
                     </h4>
                     <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
@@ -109,7 +109,7 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
                 {/* Units / Physical Levels Breakdown */}
                 {detailSite.structure?.units && detailSite.structure.units.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-xs text-[var(--fg)] uppercase tracking-wide">
+                    <h4 className="font-semibold text-base text-[var(--fg)]">
                       Configured Units & Levels ({detailSite.structure.units.length})
                     </h4>
                     <div className="grid gap-2 sm:grid-cols-2">

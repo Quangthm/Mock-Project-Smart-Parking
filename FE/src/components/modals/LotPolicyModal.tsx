@@ -121,7 +121,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                 <h3
                   id="policy-modal-title"
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontWeight: 700,
                     fontSize: "1.15rem",
                     margin: 0,
@@ -328,7 +328,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                       Section 1. Operating Hours & Service Rates
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Open 24/7 for vehicles registered through SmartPark.
+                      - Open 24/7 for vehicles registered through SmartParking.
                       <br />- Daytime rate (06:00 - 22:00):{" "}
                       <strong>
                         {lot.hourlyRate.toLocaleString("vi-VN")} VND/hour
@@ -510,7 +510,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                   style={{
                     fontSize: "1.1rem",
                     fontWeight: 700,
-                    color: "#818cf8",
+                    color: "var(--fg)",
                   }}
                 >
                   60 Minutes

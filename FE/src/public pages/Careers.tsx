@@ -107,7 +107,7 @@ export function Careers() {
 
       <h2
         style={{
-          fontFamily: "Outfit",
+          fontFamily: "Be Vietnam Pro",
           fontWeight: 700,
           fontSize: "1.3rem",
           color: "var(--fg)",
@@ -140,7 +140,7 @@ export function Careers() {
             <div style={{ flex: 1 }}>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "0.95rem",
                   color: "var(--fg)",
@@ -206,7 +206,7 @@ export function Careers() {
       <div className="card" style={{ textAlign: "center", padding: "2rem" }}>
         <h3
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
             fontWeight: 700,
             fontSize: "1rem",
             color: "var(--fg)",

@@ -17,8 +17,8 @@
 - **Root Solution:** `SmartParking.slnx` (.NET 10 Web API microservices under `src/Services/`).
 - **Backend Services:**
   - `src/Services/UserService`: 5-layer Clean Architecture (API, Application, Domain, Infrastructure, Persistence) + EF Core 10 + MediatR + PostgreSQL.
-  - `src/Services/ParkingService`: 5 projects (API, Application, Domain, Infrastructure, Persistence) + raw Npgsql (Minimal APIs & endpoints).
-  - `src/Services/ReservationService`: 4 projects (API, Application, Domain, Persistence) + raw Npgsql.
+  - `src/Services/ParkingService` (evolving to **FacilityService** in `Fix2FA`): 5 projects (API, Application, Domain, Infrastructure, Persistence) + raw Npgsql (Minimal APIs & endpoints).
+  - `src/Services/ReservationService` (domain authority aligned to **Parking Operations** in SRS v1.1): 4 projects (API, Application, Domain, Persistence) + raw Npgsql.
   - `src/Services/IoTService`: Python AI service (`python-ai/`) for license plate recognition & CCTV stream ingestion.
   *(Note: ASP.NET Core microservices feature service-specific application and persistence patterns; consult `ai/architecture-reference.md` before making service-specific assumptions).*
 - **Frontend App:** `FE/` (React 19, Vite 8, TypeScript 5.7, Tailwind CSS v4, Three.js 0.186.1, MapTiler 4.1.0; see `FE/AGENTS.md`).
@@ -46,7 +46,7 @@ Loading context follows a 3-tier strategy:
 | **Environment / .env / Compose / Ports** | Rule 4 in `ai/rule.md` | `docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md`; `.env.example` | Unrelated business logic docs |
 | **Coding (Backend / Service / Database)** | Rule 5 in `ai/rule.md` | `ai/architecture-reference.md`; `ai/context/architecture-guardrails.md`; affected source & tests | Frontend-specific docs |
 | **Frontend-only changes** | `FE/AGENTS.md` | Relevant FE components, stores, styles & tests | Backend architecture docs, DB scripts |
-| **Architecture or API contract changes** | `ai/architecture-reference.md` | `docs/02-architecture/`; `ai/context/architecture-guardrails.md`; affected contracts | Unrelated service code |
+| **Architecture or API contract changes** | `ai/architecture-reference.md` | `docs/02-architecture/`; `docs/03-design/api/` (template: `docs/03-design/api/api-design-template.md`); `ai/context/architecture-guardrails.md`; affected contracts | Unrelated service code |
 | **Build / test / CI failures** | Verification commands below | Failing build/test output; affected project `.csproj` or config | Architecture docs, unless diagnosing root cause |
 | **Security / auth / secrets** | Safety rules below; `ai/context/architecture-guardrails.md` | Affected auth implementations & policies | Unrelated service docs |
 | **Unknown or cross-cutting tasks** | Start with smallest context | Investigate repo; load `ai/context/project-context.md` & `ai/architecture-reference.md` | Nothing is unconditionally skipped |
@@ -57,12 +57,13 @@ Loading context follows a 3-tier strategy:
 
 | Topic | Canonical source |
 |---|---|
-| Requirements (SRS) | `docs/01-requirements/srs/smartpark-srs-v1.0.md` (Module breakdown under `docs/01-requirements/srs/modules/`) |
+| Requirements (SRS) | `docs/01-requirements/srs/smartpark-srs-v1.1.md` (Module breakdown under `docs/01-requirements/srs/modules/`) |
 | Use cases | `docs/01-requirements/use-cases/` |
 | Business rules | `docs/01-requirements/business-rules/` (and `policy-catalogue.md`) |
-| Architecture & Solution Design | `docs/02-architecture/solution-architecture/smartpark-solution-architecture-v1.0.md` |
+| Architecture & Solution Design | `docs/02-architecture/solution-architecture/smartpark-solution-architecture-v1.1.md` |
 | Service boundaries | `docs/02-architecture/service-boundaries/` |
 | Database ownership & schemas | `docs/02-architecture/database/` |
+| API design specifications & template | `docs/03-design/api/` (template: `docs/03-design/api/api-design-template.md`) |
 | Git & Jira convention | `docs/07-skills/SmartParking_Git_Conventional_Commits_Jira_SKILL_v1.0.md` |
 | Pull Request guide | `docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md` |
 | Session tracking | `docs/07-skills/SmartParking_Session_SKILL_v1.0.md` |

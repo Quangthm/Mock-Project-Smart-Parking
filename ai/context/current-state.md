@@ -1,7 +1,7 @@
 # SmartPark AI Development Current State
 
 **Status:** WORKING
-**Snapshot Date:** 2026-10-21 (Updated for Sprint 3 & SRS v1.0 Baseline)
+**Snapshot Date:** 2026-10-21 (Updated for Sprint 3 & SRS v1.1 Baseline)
 
 ## Current phase
 
@@ -33,11 +33,11 @@ The architecture foundation is established, core services are active, and Sprint
 
 ## Parallel workstreams
 
-- Business Rules and Policy reconciliation against SRS v1.0.
+- Business Rules and Policy reconciliation against SRS v1.1.
 - API Contract refinement and OpenAPI schema generation.
 - 3D Digital Twin visual telemetry and Three.js operational layout binding.
 - Architecture alignment and outbox/event-driven message broker onboarding.
 
 ## Canonical Reference Rule
 
-Before changing code or requirements, refer to `ai/AGENTS.md` and `ai/architecture-reference.md`. Canonical requirements are governed by **SRS v1.0** (`docs/01-requirements/srs/smartpark-srs-v1.0.md`).
+Before changing code or requirements, refer to `ai/AGENTS.md` and `ai/architecture-reference.md`. Canonical requirements are governed by **SRS v1.1** (`docs/01-requirements/srs/smartpark-srs-v1.1.md`).

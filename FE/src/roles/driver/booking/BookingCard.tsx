@@ -73,7 +73,7 @@ export function BookingCard({
         </div>
         <div
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 600,
 
@@ -186,7 +186,7 @@ export function BookingCard({
 
         <div
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -313,7 +313,7 @@ export function BookingCard({
                     style={{
                       margin: 0,
                       fontSize: "1.25rem",
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontWeight: 700,
                       color: "var(--fg)",
                     }}

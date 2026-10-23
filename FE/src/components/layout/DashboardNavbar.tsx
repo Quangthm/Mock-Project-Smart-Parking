@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import { useApp } from "../../context/AppContext"
 import { NotificationBell } from "../navigation/NotificationBell"
@@ -44,7 +44,7 @@ const rolePages: Record<string, { id: string; label: string }[]> = {
 }
 
 const accents = [
-  { id: "blue", label: "Default", color: "#2563eb" },
+  { id: "blue", label: "SmartParking", color: "#146b61" },
   { id: "pink", label: "Pink", color: "#db2777" },
   { id: "sky", label: "Blue", color: "#0284c7" },
   { id: "green", label: "Green", color: "#16a34a" },
@@ -59,17 +59,19 @@ export function DashboardNavbar() {
     theme,
     toggleTheme,
     signOut,
-    dashboardMenuOpen,
     setDashboardMenuOpen,
     accentColor,
     setAccentColor,
   } = useApp()
 
-  const [panel, setPanel] = useState<"profile" | "settings" | "search" | null>(null)
+  const [panel, setPanel] = useState<"profile" | "search" | null>(null)
   const [query, setQuery] = useState("")
+  const profileTriggerRef = useRef<HTMLButtonElement>(null)
+  const settingsDialogRef = useRef<HTMLDivElement>(null)
+  const settingsCloseRef = useRef<HTMLButtonElement>(null)
 
   // Universal Account & Security Modal state
-  const [accountModalTab, setAccountModalTab] = useState<"profile" | "security" | null>(null)
+  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "security" | null>(null)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
 
@@ -78,6 +80,33 @@ export function DashboardNavbar() {
       setProfileForm({ name: user.name ?? "", phone: user.phone ?? "" })
     }
   }, [user])
+
+  const settingsOpen = accountModalTab !== null
+  useEffect(() => {
+    if (!settingsOpen) return
+    settingsCloseRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setAccountModalTab(null)
+        profileTriggerRef.current?.focus()
+      }
+      if (event.key !== "Tab" || !settingsDialogRef.current) return
+      const focusable = Array.from(settingsDialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]"))
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [settingsOpen])
+
+  function closeSettings() {
+    setAccountModalTab(null)
+    profileTriggerRef.current?.focus()
+  }
 
   const pages =
     user?.role === "operator"
@@ -103,7 +132,7 @@ export function DashboardNavbar() {
     setQuery("")
   }
 
-  function handleOpenAccountModal(tab: "profile" | "security") {
+  function handleOpenAccountModal(tab: "profile" | "appearance" | "security") {
     setPanel(null)
     setDashboardMenuOpen(false)
     setAccountModalTab(tab)
@@ -124,11 +153,6 @@ export function DashboardNavbar() {
     setProfileMsg("Your account settings have been saved.")
   }
 
-  function toggleNavigation() {
-    setPanel(null)
-    setDashboardMenuOpen(!dashboardMenuOpen)
-  }
-
   function toggleSearch() {
     const opening = panel !== "search"
     if (opening) setDashboardMenuOpen(false)
@@ -145,19 +169,6 @@ export function DashboardNavbar() {
     <>
       <nav className="dashboard-topbar">
         <div className="dashboard-topbar-left">
-          {user?.operatorRole !== "cashier" && (
-            <button
-              type="button"
-              className="icon-button menu-toggle"
-              aria-label={
-                dashboardMenuOpen ? "Close navigation" : "Open navigation"
-              }
-              aria-expanded={dashboardMenuOpen}
-              onClick={toggleNavigation}
-            >
-              <UntitledIcon name="menu" />
-            </button>
-          )}
           <button
             type="button"
             className="dashboard-brand"
@@ -174,11 +185,7 @@ export function DashboardNavbar() {
             }
             aria-label="SmartParking dashboard"
           >
-            <BrandLogo height={60} />
-            <span className="brand-wordmark" style={{ fontSize: "1.1rem" }}>
-              <span className="brand-smart">Smart</span>
-              <span className="brand-parking">Parking</span>
-            </span>
+            <BrandLogo height={48} />
           </button>
         </div>
 
@@ -201,7 +208,6 @@ export function DashboardNavbar() {
                   </label>
                   <input
                     id="dashboard-search"
-                    autoFocus
                     className="input"
                     placeholder="Search pages and features"
                     value={query}
@@ -232,6 +238,7 @@ export function DashboardNavbar() {
             <button
               type="button"
               className="profile-trigger"
+              ref={profileTriggerRef}
               aria-label="Open profile menu"
               aria-expanded={panel === "profile"}
               onClick={toggleProfile}
@@ -275,7 +282,7 @@ export function DashboardNavbar() {
                   onClick={() => handleOpenAccountModal("profile")}
                 >
                   <UntitledIcon name="users" size={16} />
-                  <span>Account Settings</span>
+                  <span>Settings</span>
                 </button>
 
                 {user?.role === "driver" && (
@@ -294,15 +301,6 @@ export function DashboardNavbar() {
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  className="popover-item"
-                  onClick={() => setPanel("settings")}
-                >
-                  <UntitledIcon name="settings" size={16} />
-                  <span>Appearance Settings</span>
-                </button>
-
                 <div className="popover-divider" />
 
                 <button
@@ -316,56 +314,6 @@ export function DashboardNavbar() {
               </div>
             )}
 
-            {/* Appearance Settings Sub-panel */}
-            {panel === "settings" && (
-              <div className="dashboard-popover settings-popover animate-in">
-                <div className="popover-title-row">
-                  <strong>Appearance Settings</strong>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => setPanel("profile")}
-                  >
-                    Back
-                  </button>
-                </div>
-                <div className="appearance-label">Display Mode</div>
-                <div className="theme-options">
-                  {(["light", "dark"] as const).map((option) => (
-                    <button
-                      type="button"
-                      key={option}
-                      className={`theme-option${theme === option ? " selected" : ""}`}
-                      onClick={() => {
-                        if (theme !== option) toggleTheme()
-                      }}
-                      aria-pressed={theme === option}
-                    >
-                      <span className="theme-option-icon">
-                        <ThemeIcon mode={option} />
-                      </span>
-                      <span>{option === "light" ? "Light" : "Dark"}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="appearance-label accent-label">Accent Color</div>
-                <div className="accent-options">
-                  {accents.map((accent) => (
-                    <button
-                      key={accent.id}
-                      type="button"
-                      className={`accent-option${accentColor === accent.id ? " selected" : ""}`}
-                      onClick={() => setAccentColor(accent.id)}
-                      aria-label={accent.label}
-                      aria-pressed={accentColor === accent.id}
-                    >
-                      <span style={{ background: accent.color }} />
-                      {accent.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -390,65 +338,56 @@ export function DashboardNavbar() {
             aria-labelledby="account-dialog-title"
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setAccountModalTab(null)
+              if (e.target === e.currentTarget) closeSettings()
             }}
           >
-            <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl text-[var(--fg)] animate-in">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
+            <div ref={settingsDialogRef} className="settings-dialog animate-in">
+              <div className="settings-dialog-header">
                 <div>
-                  <h2 id="account-dialog-title" className="text-base font-bold text-[var(--fg)]">
-                    Account Settings
+                  <h2 id="account-dialog-title" className="settings-dialog-title">
+                    Settings
                   </h2>
-                  <p className="text-xs text-[var(--muted)]">
-                    Current role:{" "}
-                    <strong className="text-[var(--primary)] uppercase font-mono">
-                      {user?.role}
-                    </strong>
+                  <p className="settings-dialog-subtitle">
+                    Manage your account and dashboard appearance.
                   </p>
                 </div>
                 <button
+                  ref={settingsCloseRef}
                   type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
-                  onClick={() => setAccountModalTab(null)}
-                  aria-label="Close"
+                  className="btn-ghost settings-close"
+                  onClick={closeSettings}
+                  aria-label="Close settings"
                 >
-                  <UntitledIcon name="x" size={16} />
+                  <UntitledIcon name="x" size={18} />
                 </button>
               </div>
 
-              {/* Tabs selector */}
-              <div className="flex border-b border-[var(--border)] px-6 bg-[var(--bg)]/40">
-                <button
-                  type="button"
-                  className={`px-4 py-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-                    accountModalTab === "profile"
-                      ? "border-[var(--primary)] text-[var(--primary)]"
-                      : "border-transparent text-[var(--muted)] hover:text-[var(--fg)]"
-                  }`}
-                  onClick={() => setAccountModalTab("profile")}
-                >
-                  <UntitledIcon name="users" size={14} />
-                  <span>Personal Information</span>
-                </button>
-                <button
-                  type="button"
-                  className={`px-4 py-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-                    accountModalTab === "security"
-                      ? "border-[var(--primary)] text-[var(--primary)]"
-                      : "border-transparent text-[var(--muted)] hover:text-[var(--fg)]"
-                  }`}
-                  onClick={() => setAccountModalTab("security")}
-                >
-                  <UntitledIcon name="shield" size={14} />
-                  <span>Security (2FA)</span>
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="settings-dialog-body">
+                <nav className="settings-dialog-nav" aria-label="Settings sections">
+                  {([
+                    ["profile", "Account", "users"],
+                    ["appearance", "Interface", "settings"],
+                    ["security", "Security", "shield"],
+                  ] as const).map(([id, label, icon]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`settings-nav-item${accountModalTab === id ? " selected" : ""}`}
+                      aria-current={accountModalTab === id ? "page" : undefined}
+                      onClick={() => setAccountModalTab(id)}
+                    >
+                      <UntitledIcon name={icon} size={18} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </nav>
+                <div className="settings-dialog-content">
                 {accountModalTab === "profile" && (
-                  <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
+                  <form onSubmit={handleSaveProfile} className="settings-form">
+                    <div className="settings-section-heading">
+                      <h3>My account</h3>
+                      <p>Keep your contact details ready for parking updates.</p>
+                    </div>
                     <div>
                       <label className="label" htmlFor="acc-name">
                         Full Name
@@ -470,11 +409,11 @@ export function DashboardNavbar() {
                       </label>
                       <input
                         id="acc-email"
-                        className="input bg-[var(--bg)] opacity-80 cursor-not-allowed font-mono"
+                        className="input bg-[var(--bg)] cursor-not-allowed"
                         value={user?.email ?? ""}
                         readOnly
                       />
-                      <span className="text-[10px] text-[var(--muted)] mt-1 block">
+                      <span className="settings-helper">
                         Your email is used to sign in and cannot be changed here.
                       </span>
                     </div>
@@ -495,16 +434,16 @@ export function DashboardNavbar() {
                     </div>
 
                     {profileMsg && (
-                      <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-medium">
+                      <div role="status" className="settings-save-message">
                         {profileMsg}
                       </div>
                     )}
 
-                    <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+                    <div className="settings-form-actions">
                       <button
                         type="button"
                         className="btn-outline text-xs px-3.5 py-2"
-                        onClick={() => setAccountModalTab(null)}
+                        onClick={closeSettings}
                       >
                         Close
                       </button>
@@ -515,9 +454,65 @@ export function DashboardNavbar() {
                   </form>
                 )}
 
-                {accountModalTab === "security" && (
-                  <AccountSecurityPanel key={user?.id} />
+                {accountModalTab === "appearance" && (
+                  <div className="settings-appearance">
+                    <div className="settings-section-heading">
+                      <h3>Interface</h3>
+                      <p>Choose how your SmartParking dashboard looks.</p>
+                    </div>
+                    <section className="settings-option-group" aria-labelledby="settings-theme-title">
+                      <div className="settings-option-heading">
+                        <h4 id="settings-theme-title">Appearance</h4>
+                        <p>Select a display mode that is comfortable for you.</p>
+                      </div>
+                      <div className="settings-theme-options">
+                        {(["light", "dark"] as const).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            className={`settings-theme-option${theme === option ? " selected" : ""}`}
+                            onClick={() => { if (theme !== option) toggleTheme() }}
+                            aria-pressed={theme === option}
+                          >
+                            <span className="settings-theme-preview" data-theme={option}>
+                              <span /><span /><span />
+                            </span>
+                            <span className="settings-theme-label"><ThemeIcon mode={option} />{option === "light" ? "Light" : "Dark"}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                    <section className="settings-option-group" aria-labelledby="settings-accent-title">
+                      <div className="settings-option-heading">
+                        <h4 id="settings-accent-title">Accent color</h4>
+                        <p>Used for navigation and focus highlights.</p>
+                      </div>
+                      <div className="settings-accent-options">
+                        {accents.map((accent) => (
+                          <button
+                            key={accent.id}
+                            type="button"
+                            className={`settings-accent-option${accentColor === accent.id ? " selected" : ""}`}
+                            onClick={() => setAccentColor(accent.id)}
+                            aria-label={accent.label}
+                            aria-pressed={accentColor === accent.id}
+                          >
+                            <span style={{ background: accent.color }} />
+                            {accent.label}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  </div>
                 )}
+
+                {accountModalTab === "security" && (
+                  <div className="settings-security">
+                    <div className="settings-section-heading"><h3>Security</h3><p>Manage extra protection for your account.</p></div>
+                    <AccountSecurityPanel key={user?.id} />
+                  </div>
+                )}
+                </div>
               </div>
             </div>
           </div>,

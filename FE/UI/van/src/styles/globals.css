@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   Global Base & Typography Styles
+   Document Ref: tempfe/design-system.md
+   ========================================================================== */
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border, currentColor);
+  }
+
+  html {
+    color-scheme: light dark;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body,
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: var(--font-body);
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-size: 0.9375rem; /* 15px */
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Plus Jakarta Sans for Headings (Strictly Roman, Never Italic) */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-style: normal !important;
+    letter-spacing: -0.02em;
+  }
+
+  /* Enforce Tabular Numerals for currencies, dates, measurements */
+  .tabular-nums,
+  [data-slot="numeric"] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (hover: none) {
+  .morph-button-icon-to-text {
+    width: auto !important;
+    min-width: max-content !important;
+    padding-inline: 0.75rem !important;
+  }
+
+  .morph-button-icon-to-text .morph-button-label {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .morph-button-icon-to-text .morph-button-icon {
+    transform: translateY(2rem);
+    opacity: 0;
+  }
+}

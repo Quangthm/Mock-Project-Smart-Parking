@@ -5,8 +5,8 @@
 | Field        | Value                                                              |
 | ------------ | ------------------------------------------------------------------ |
 | Document ID  | `SPARK-3D-BE-BINDING`                                              |
-| Version      | `v1.1-review`                                                           |
-| Status       | v1.1 documentation review candidate; implementation pending                                         |
+| Version      | `v1.1.0`                                                           |
+| Status       | Approved Baseline — Aligned to SRS v1.0 & Ingestion Pipeline       |
 | Project      | SmartPark (Smart Parking Management System)                        |
 | Owner        | 3D Digital Twin & Frontend Engineering Group                       |
 | Reviewer     | PM / Technical Lead / Database Constructor                         |
@@ -20,15 +20,17 @@
 
 ### 1.1. Purpose
 
-This document defines the formal technical contract, architectural boundaries, and implementation approach for binding authoritative backend parking-slot operational state (originating from `Facility & Visualization`, `Parking Operations`, and `IoT & Recognition` domains) to corresponding Three.js 3D digital-twin scene objects in the SmartPark web client (`FE/`). See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
+This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`).
+
+> **Transitional Implementation Note (v1.1 / Fix2FA):** In the current codebase on `develop`, endpoints reside under `src/Services/ParkingService/` (`GET /api/parking-lots/{id}/operational-layout`). In accordance with approved SRS v1.1 Decision V11-09 and the `Fix2FA` refactor branch, this codebase is migrating to `src/Services/FacilityService/` (`SmartParking.FacilityService.API`). The 3D client integrates against contract behavior that remains stable across this renaming.
 
 The target binding must ensure the following; historical prototype evidence is separately labelled in §§11–13:
 
 * **Strict Backend State Fidelity**: Backend-provided slot state is reflected deterministically in the correct 3D representation without data distortion.
-* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with the current facility/discovery state contract.
-* **Graceful Degradation**: Unknown, missing, or stale telemetry data is handled safely without guessing or masking failures.
+* **Orthogonal 2-Axis Separation**: Physical availability (`physical_state`) and reservation/protection status (`reservation_state`) remain two completely independent, co-existing data dimensions in accordance with the current facility/discovery state contract and **FR-MAP-02**.
+* **Graceful Degradation**: Unknown, missing, or stale telemetry data is handled safely without guessing or masking failures (FR-MAP-04).
 * **Non-Authoritative Visual Boundary**: The 3D client acts strictly as a presentation layer consuming authoritative backend state; 3D clicks or scene alterations never directly mutate transactional database state (FR-MAP-02).
-* **Asset Compatibility**: Preserves 100% compatibility with Sprint 2 production 3D assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
+* **Asset Compatibility**: Preserves 100% compatibility with production 3D deployment assets (`outdoor_parking_lot_blender.glb`, `indoor_parking_lot_blender.glb`, `underground_parking_lot_blender.glb`, `car_model_blender.glb`, and `motorcycle_model_blender.glb`).
 
 ### 1.2. In Scope
 
@@ -51,14 +53,15 @@ The target binding must ensure the following; historical prototype evidence is s
 
 ### 1.4. References
 
-* **SmartPark SRS v1.0**:
-  * Section 3 & 4 (*Functional Scope & Main Journeys*).
-  * Section 5 (*Capacity Safety: Physical State vs. Reservation/Protection State*).
-  * Section 8 (*Deferred Work: EV charging is outside MVP; Fixed 3D templates are deployment assets*).
-  * `modules/03-discovery-visualization.md` (FR-MAP-01, FR-MAP-02, FR-MAP-03, FR-MAP-04).
-  * `modules/02-facility-capacity.md` (FR-LOT-01, FR-LOT-02, FR-LOT-03, FR-CAP-02).
+* **Historical source: SmartPark SRS v0.9** (section numbering and numeric examples below are retained provenance; the current linked requirements govern):
+  * Section 3.2.2 (*Spot State Management: Physical State vs. Reservation/Protection State*).
+  * Section 3.2.3 (*Parking Lot Diagrams and 3D Digital Twin Non-Authoritative Boundary*).
+  * Section 3.4.2 (*Reservation Lifecycle Statuses*).
+  * Section 3.4.3 (*Payment Hold Duration: 5-minute admin default*).
+  * Section 3.4.4 (*Reservation Protection Window: 4-hour default*).
+  * Section 3.4.5 (*Continuous Capacity Tracking*).
   * Rule BR-CAP-01 (*Motorcycle Aggregate Capacity Model*).
-* **SmartPark Solution Architecture v1.0**:
+* **SmartPark Solution Architecture v1.1**:
   * Section 4 (*Facility & Visualization Domain vs Parking Operations Domain*).
   * Section 5 (*Live Views via Scoped SignalR Hub & Reconnect Recovery Protocol*).
 * **Design & Architecture Documents**:

@@ -57,7 +57,7 @@ export function WalletView() {
       )}
       <div
         style={{
-          background: "linear-gradient(135deg, #1d4ed8, #7c3aed)",
+          background: "var(--card)",
 
           borderRadius: "var(--radius)",
 
@@ -65,13 +65,14 @@ export function WalletView() {
 
           marginBottom: "1.5rem",
 
-          color: "#fff",
+          color: "var(--fg)",
+          border: "1px solid var(--border)",
         }}
       >
-        <PageHeader title="SmartParking Wallet" variant="promo" />
+        <PageHeader title="SmartParking Wallet" variant="default" />
         <div
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 800,
 
@@ -88,15 +89,15 @@ export function WalletView() {
           style={{
             marginTop: "1.25rem",
 
-            background: "rgba(255,255,255,0.2)",
+            background: "var(--action)",
 
-            border: "1px solid rgba(255,255,255,0.3)",
+            border: "1px solid var(--action)",
 
             borderRadius: "var(--radius)",
 
             padding: "0.5rem 1.25rem",
 
-            color: "#fff",
+            color: "var(--action-fg)",
 
             fontWeight: 600,
 
@@ -111,7 +112,7 @@ export function WalletView() {
       <div className="card">
         <h3
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -160,7 +161,7 @@ export function WalletView() {
               </div>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
 
                   fontWeight: 700,
 

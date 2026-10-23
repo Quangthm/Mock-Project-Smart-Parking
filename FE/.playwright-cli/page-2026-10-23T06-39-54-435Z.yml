@@ -1,0 +1,87 @@
+- generic [ref=f3e3]:
+  - link "Skip to main content" [ref=f3e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation "Main navigation" [ref=f3e5]:
+    - generic [ref=f3e6]:
+      - button "SmartParking home" [ref=f3e7] [cursor=pointer]:
+        - img "Smart Parking" [ref=f3e8]
+        - generic [ref=f3e231]:
+          - generic [ref=f3e232]: Smart
+          - generic [ref=f3e233]: Parking
+      - generic [ref=f3e12]:
+        - button "Home" [ref=f3e13] [cursor=pointer]
+        - button "Pricing" [ref=f3e14] [cursor=pointer]
+        - button "Support" [ref=f3e15] [cursor=pointer]
+      - generic [ref=f3e16]:
+        - button "Switch to Dark Mode" [ref=f3e17] [cursor=pointer]
+        - button "Sign In" [active] [ref=f3e21] [cursor=pointer]
+        - button "Sign Up" [ref=f3e22] [cursor=pointer]
+  - main [ref=f3e23]:
+    - generic [ref=f3e237]:
+      - generic [ref=f3e238]:
+        - img "Smart Parking" [ref=f3e239]
+        - generic [ref=f3e244]:
+          - heading "Sign In" [level=1] [ref=f3e246]
+          - paragraph [ref=f3e247]: Welcome back to SmartParking
+      - generic [ref=f3e248]:
+        - generic [ref=f3e249]:
+          - generic [ref=f3e250]: Email
+          - textbox "Email" [ref=f3e251]:
+            - /placeholder: you@example.com
+        - generic [ref=f3e252]:
+          - generic [ref=f3e253]:
+            - generic [ref=f3e254]: Password
+            - button "Forgot password?" [ref=f3e255] [cursor=pointer]
+          - generic [ref=f3e256]:
+            - textbox "Password" [ref=f3e257]:
+              - /placeholder: Enter your password
+            - button "Show password" [ref=f3e258] [cursor=pointer]
+        - button "Sign In" [ref=f3e261] [cursor=pointer]
+        - button "Sign in with email OTP" [ref=f3e262] [cursor=pointer]
+        - paragraph [ref=f3e263]:
+          - text: Don't have an account?
+          - button "Sign Up" [ref=f3e264] [cursor=pointer]
+  - contentinfo [ref=f3e173]:
+    - generic [ref=f3e174]:
+      - generic [ref=f3e175]:
+        - generic [ref=f3e176]:
+          - generic [ref=f3e177]:
+            - img "Smart Parking" [ref=f3e178]
+            - generic [ref=f3e182]:
+              - generic [ref=f3e183]: Smart
+              - generic [ref=f3e184]: Parking
+          - paragraph [ref=f3e185]: Smart parking solutions for drivers and businesses. Find, book, and manage parking with ease.
+          - generic [ref=f3e186]:
+            - button "Facebook" [ref=f3e187] [cursor=pointer]: f
+            - button "LinkedIn" [ref=f3e188] [cursor=pointer]: in
+            - button "YouTube" [ref=f3e189] [cursor=pointer]: ▶
+        - generic [ref=f3e190]:
+          - heading "Information" [level=4] [ref=f3e191]
+          - generic [ref=f3e192]:
+            - button "About Us" [ref=f3e193] [cursor=pointer]
+            - button "Affiliates" [ref=f3e194] [cursor=pointer]
+            - button "Careers" [ref=f3e195] [cursor=pointer]
+        - generic [ref=f3e196]:
+          - heading "For Business" [level=4] [ref=f3e197]
+          - generic [ref=f3e198]:
+            - button "Become a Partner" [ref=f3e199] [cursor=pointer]
+            - button "Business Accounts" [ref=f3e200] [cursor=pointer]
+        - generic [ref=f3e201]:
+          - heading "Support" [level=4] [ref=f3e202]
+          - generic [ref=f3e203]:
+            - button "FAQ" [ref=f3e204] [cursor=pointer]
+            - button "Contact" [ref=f3e205] [cursor=pointer]
+            - button "Report an Issue" [ref=f3e206] [cursor=pointer]
+        - generic [ref=f3e207]:
+          - heading "Contact" [level=4] [ref=f3e208]
+          - generic [ref=f3e209]:
+            - generic [ref=f3e210]: Smart Hub Building, 17 Le Duan Street, District 1, Ho Chi Minh City
+            - generic [ref=f3e214]: "Driver: 1900-xxxx"
+            - generic [ref=f3e217]: "Business: 090xxxxxxx"
+            - generic [ref=f3e220]: support.smartparkingvn@gmail.com
+      - generic [ref=f3e224]:
+        - paragraph [ref=f3e225]: This product is for educational purposes.
+        - generic [ref=f3e226]:
+          - button "Terms of Service" [ref=f3e227] [cursor=pointer]
+          - button "Privacy Policy" [ref=f3e228] [cursor=pointer]
+          - button "Payment & Refund" [ref=f3e229] [cursor=pointer]
