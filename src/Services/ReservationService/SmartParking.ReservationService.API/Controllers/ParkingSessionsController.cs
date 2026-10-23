@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.ReservationService.API.Controllers.Base;
 using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.ReservationService.API.Controllers;
 

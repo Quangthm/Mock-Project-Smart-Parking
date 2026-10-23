@@ -9,6 +9,7 @@ using SmartParking.ParkingService.Domain;
 using SmartParking.ParkingService.Infrastructure;
 using SmartParking.ReservationService.API;
 using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using ReservationDomain = SmartParking.ReservationService.Domain;
 
 namespace SmartParking.UserService.Tests;
@@ -155,6 +156,7 @@ public sealed class StructureHttpContractTests
         {
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
+            builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
             builder.Services.AddSingleton<IStructureSafetyStore>(store);
         });
     }

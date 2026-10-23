@@ -1,10 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using SmartParking.ReservationService.Application;
-using SmartParking.ReservationService.Persistence;
+using SmartParking.ReservationService.Application.Common.Interfaces.Services;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 
-namespace SmartParking.ReservationService.API;
+namespace SmartParking.ReservationService.Infrastructure.Clients;
 
 public sealed class ParkingGateSlotClient(HttpClient client) : IOperatorGateSlotClaims
 {

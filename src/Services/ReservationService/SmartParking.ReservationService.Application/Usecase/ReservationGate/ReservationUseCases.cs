@@ -1,7 +1,10 @@
 using MediatR;
-using SmartParking.ReservationService.Domain;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
+using SmartParking.ReservationService.Application.Common.Interfaces.Services;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
+using SmartParking.ReservationService.Application.DTOs;
 
-namespace SmartParking.ReservationService.Application;
+namespace SmartParking.ReservationService.Application.Usecase.ReservationGate;
 
 public sealed record ListReservationsQuery(Guid SiteId) : IRequest<IReadOnlyList<ReservationGateEntry>>;
 public sealed record ListParkingSessionsQuery(Guid SiteId) : IRequest<IReadOnlyList<ParkingSessionHistoryEntry>>;

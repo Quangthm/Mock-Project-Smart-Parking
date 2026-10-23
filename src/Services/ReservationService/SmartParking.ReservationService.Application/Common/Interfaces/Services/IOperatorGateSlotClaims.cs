@@ -1,4 +1,4 @@
-namespace SmartParking.ReservationService.Persistence;
+namespace SmartParking.ReservationService.Application.Common.Interfaces.Services;
 
 public sealed record ClaimedParkingSlot(Guid Id, string Code, string VehicleType);
 

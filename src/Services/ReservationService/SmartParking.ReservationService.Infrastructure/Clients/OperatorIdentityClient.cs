@@ -2,9 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
-using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Common.Interfaces.Services;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 
-namespace SmartParking.ReservationService.API;
+namespace SmartParking.ReservationService.Infrastructure.Clients;
 
 public sealed class OperatorIdentityClient(HttpClient client, IHttpContextAccessor context) : IOperatorIdentityClient
 {

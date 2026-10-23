@@ -1,7 +1,9 @@
 using MediatR;
+using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 using SmartParking.ReservationService.Domain;
 
-namespace SmartParking.ReservationService.Application;
+namespace SmartParking.ReservationService.Application.Usecase.Structure;
 
 public sealed record PrepareStructureEditCommand(Guid TenantId, Guid SiteId, Guid Token) : IRequest<HoldSnapshot>;
 public sealed record ReadStructureImpactQuery(Guid TenantId, Guid SiteId) : IRequest<object>;

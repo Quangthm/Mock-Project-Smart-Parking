@@ -1,6 +1,8 @@
 using System.Data;
 using Npgsql;
-using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
+using SmartParking.ReservationService.Application.DTOs;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 
 namespace SmartParking.ReservationService.Persistence;
 
