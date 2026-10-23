@@ -473,7 +473,7 @@ export function DriverDashboard() {
             {tab === "home" && homePanel !== "find" && (
               <div className="animate-in">
                 {homePanel === "bookings" ? (
-                  <section>
+                  <section className="driver-bookings-page">
                     <PageHeader title="Bookings" variant="compact" />
                     <ActiveBookings />
                   </section>

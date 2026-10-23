@@ -328,7 +328,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                       Section 1. Operating Hours & Service Rates
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Open 24/7 for vehicles registered through SmartPark.
+                      - Open 24/7 for vehicles registered through SmartParking.
                       <br />- Daytime rate (06:00 - 22:00):{" "}
                       <strong>
                         {lot.hourlyRate.toLocaleString("vi-VN")} VND/hour

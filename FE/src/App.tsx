@@ -97,8 +97,8 @@ function AppContent() {
 
   return (
     <div
-      className={isDashboard ? "dashboard-theme" : undefined}
-      data-accent={isDashboard ? accentColor : undefined}
+      className={isDashboard ? "dashboard-theme" : view === "sign-in" || view === "sign-up" ? "auth-route" : undefined}
+      data-accent={accentColor}
       style={{
         minHeight: "100vh",
         display: "flex",

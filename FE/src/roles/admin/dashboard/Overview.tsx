@@ -130,7 +130,7 @@ export function Overview() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+    <div className="management-dashboard" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       <PageHeader title="Admin Overview" />
       {/* Top KPI row - Enterprise cards without aggressive gradients */}
       <div className="admin-kpi-strip">

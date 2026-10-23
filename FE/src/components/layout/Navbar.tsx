@@ -1,6 +1,6 @@
 import { useApp, type View } from "../../context/AppContext"
 
-import { BrandLogo } from "../brand/BrandLogo"
+import { BrandLogo, BrandWordmark } from "../brand/BrandLogo"
 
 import { ThemeIcon } from "../icon/ThemeIcon"
 
@@ -41,13 +41,8 @@ export function Navbar() {
             padding: 0,
           }}
         >
-          <BrandLogo height={60} />
-          <span className="hidden sm:inline-flex">
-            <span className="brand-wordmark" style={{ fontSize: "1.1rem" }}>
-              <span className="brand-smart">Smart</span>
-              <span className="brand-parking">Parking</span>
-            </span>
-          </span>
+          <BrandLogo height={48} />
+          <span className="hidden sm:inline-flex"><BrandWordmark height={22} /></span>
         </button>
 
         {/* Nav links */}
@@ -95,11 +90,12 @@ export function Navbar() {
         >
           <button
             type="button"
+            className="public-theme-toggle"
             onClick={toggleTheme}
             style={{
               background: "var(--card)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
+              borderRadius: "var(--button-radius)",
               width: 44,
               height: 44,
               cursor: "pointer",

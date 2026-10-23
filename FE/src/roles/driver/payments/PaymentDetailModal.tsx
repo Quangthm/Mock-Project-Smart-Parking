@@ -523,7 +523,7 @@ export function PaymentDetailModal({
                     letterSpacing: "-0.02em",
                   }}
                 >
-                  SmartPark Intelligent Parking System
+                  SmartParking Intelligent Parking System
                 </span>
               </div>
               <p

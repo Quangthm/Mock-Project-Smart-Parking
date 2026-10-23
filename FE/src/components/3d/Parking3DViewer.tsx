@@ -113,22 +113,11 @@ export function Parking3DViewer({
 
   const [loadingError, setLoadingError] = useState<string | null>(null)
 
-  const [modelSourceInfo, setModelSourceInfo] = useState<{
-    isCustomGlb: boolean
-    fileName: string
-  }>({
-    isCustomGlb: false,
-
-    fileName: ALLOWED_PARKING_MODELS[lotType].fileName,
-  })
-
   const [hoveredSlot, setHoveredSlot] = useState<{
     slot: ParkingSlot
     screenX: number
     screenY: number
   } | null>(null)
-
-  const [detectedCount, setDetectedCount] = useState(0)
 
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -477,8 +466,6 @@ export function Parking3DViewer({
 
       inst.slotMapping = mapping
 
-      setDetectedCount(mapping.detectedSlotKeys.length)
-
       // Visuals
 
       refreshSlotVisualsRef.current()
@@ -490,12 +477,6 @@ export function Parking3DViewer({
         inst.camera,
         inst.controls,
       )
-
-      setModelSourceInfo({
-        isCustomGlb: isGlb,
-
-        fileName: resolvedName,
-      })
 
       if (onModelLoadedRef.current) {
         onModelLoadedRef.current({
@@ -588,7 +569,6 @@ export function Parking3DViewer({
 
     inst.slotMapping = mapping
 
-    setDetectedCount(mapping.detectedSlotKeys.length)
 
     refreshSlotVisuals()
   }, [slots, refreshSlotVisuals])
@@ -760,30 +740,8 @@ export function Parking3DViewer({
           <p className="text-xs font-medium text-slate-300">
             Loading the 3D parking model...
           </p>
-          <span className="text-[11px] text-slate-400 mt-1">
-            {expectedFileName}
-          </span>
         </div>
       )}
-
-      {/* Top Bar: Model Badge & Info */}
-      <div className="absolute top-3 left-3 right-[4.25rem] flex flex-wrap items-center gap-2 z-10 pointer-events-none">
-        <div className="min-w-0 max-w-full px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-white/10 text-[11px] text-white font-medium flex items-center gap-1.5 shadow-sm">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              modelSourceInfo.isCustomGlb
-                ? "bg-emerald-400 animate-pulse"
-                : "bg-blue-400"
-            }`}
-          />
-          <span className="min-w-0 truncate font-mono text-sky-300">
-            {modelSourceInfo.fileName}
-          </span>
-          <span className="shrink-0 whitespace-nowrap text-slate-400 font-normal">
-            ({detectedCount} slots)
-          </span>
-        </div>
-      </div>
 
       {/* Floating Controls */}
       {showControls && (

@@ -1,6 +1,6 @@
 import { useApp } from "../../context/AppContext"
 
-import { BrandLogo } from "../brand/BrandLogo"
+import { BrandLogo, BrandWordmark } from "../brand/BrandLogo"
 
 import { UntitledIcon } from "../icon/UntitledIcon"
 
@@ -8,21 +8,21 @@ export function Footer() {
   const { setView } = useApp()
 
   return (
-    <footer
+    <footer className="site-footer"
       style={{
         background: "var(--card)",
         borderTop: "1px solid var(--border)",
         marginTop: "5rem",
       }}
     >
-      <div
+      <div className="site-footer-inner"
         style={{
           maxWidth: "1200px",
           margin: "0 auto",
           padding: "3rem 1.5rem 2rem",
         }}
       >
-        <div
+        <div className="site-footer-columns"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -30,7 +30,7 @@ export function Footer() {
             marginBottom: "2.5rem",
           }}
         >
-          <div>
+          <div className="site-footer-brand">
             <div
               style={{
                 display: "flex",
@@ -39,11 +39,8 @@ export function Footer() {
                 marginBottom: "1rem",
               }}
             >
-              <BrandLogo height={60} />
-              <span className="brand-wordmark" style={{ fontSize: "1.05rem" }}>
-                <span className="brand-smart">Smart</span>
-                <span className="brand-parking">Parking</span>
-              </span>
+              <BrandLogo height={48} />
+              <BrandWordmark height={21} />
             </div>
             <p
               style={{
@@ -55,39 +52,9 @@ export function Footer() {
               Smart parking solutions for drivers and businesses. Find, book,
               and manage parking with ease.
             </p>
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
-              {[
-                { icon: "f", label: "Facebook" },
-                { icon: "in", label: "LinkedIn" },
-                { icon: "▶", label: "YouTube" },
-              ].map((s) => (
-                <button
-                  key={s.label}
-                  title={s.label}
-                  style={{
-                    width: 44,
-                    height: 44,
-                    border: "1px solid var(--border)",
-                    borderRadius: "50%",
-                    background: "none",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.7rem",
-                    fontWeight: 700,
-                    color: "var(--muted)",
-                    cursor: "pointer",
-                    transition: "border-color 0.15s, color 0.15s",
-                  }}
-                  aria-label={s.label}
-                >
-                  {s.icon}
-                </button>
-              ))}
-            </div>
           </div>
 
-          <div>
+          <div className="site-footer-group">
             <h4
               style={{
                 fontFamily: "Be Vietnam Pro",
@@ -110,7 +77,7 @@ export function Footer() {
             />
           </div>
 
-          <div>
+          <div className="site-footer-group">
             <h4
               style={{
                 fontFamily: "Be Vietnam Pro",
@@ -131,7 +98,7 @@ export function Footer() {
             />
           </div>
 
-          <div>
+          <div className="site-footer-group">
             <h4
               style={{
                 fontFamily: "Be Vietnam Pro",
@@ -154,7 +121,7 @@ export function Footer() {
             />
           </div>
 
-          <div>
+          <div className="site-footer-group site-footer-contact">
             <h4
               style={{
                 fontFamily: "Be Vietnam Pro",
@@ -193,7 +160,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div
+        <div className="site-footer-bottom"
           style={{
             borderTop: "1px solid var(--border)",
             paddingTop: "1.5rem",

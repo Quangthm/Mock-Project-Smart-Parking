@@ -48,7 +48,7 @@ export function OperatorOverview({
 
   if (!lot) {
     return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm text-[var(--muted)]">
+      <div className="operator-empty-workspace rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm text-[var(--muted)]">
         <UntitledIcon name="building" size={32} />
         <p className="mt-2 font-medium">No assigned parking site found.</p>
         <p className="text-xs">Please contact your facility administrator or owner.</p>
@@ -82,12 +82,12 @@ export function OperatorOverview({
           onClick={() => onNavigateTab("status")}
           className="operator-kpi"
         >
-          <div className="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
+          <div className="flex items-center justify-between text-sm font-medium text-[var(--muted)]">
             <span>Total Capacity</span>
             <UntitledIcon name="building" size={16} />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-[var(--fg)]">{totalSlots}</div>
+            <div className="text-2xl font-semibold tabular-nums text-[var(--fg)]">{totalSlots}</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">Configured spaces</div>
           </div>
         </button>
@@ -162,12 +162,12 @@ export function OperatorOverview({
           className="operator-kpi"
           data-status="maintenance"
         >
-          <div className="flex items-center justify-between text-xs font-medium text-[var(--muted)]">
+          <div className="flex items-center justify-between text-sm font-medium">
             <span>Maintenance / Off</span>
             <UntitledIcon name="wrench" size={16} />
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-[var(--fg)]">{maintenanceSlots}</div>
+            <div className="text-2xl font-semibold tabular-nums">{maintenanceSlots}</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">Unavailable slots</div>
           </div>
         </button>

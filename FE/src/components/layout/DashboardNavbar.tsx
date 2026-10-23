@@ -59,7 +59,6 @@ export function DashboardNavbar() {
     theme,
     toggleTheme,
     signOut,
-    dashboardMenuOpen,
     setDashboardMenuOpen,
     accentColor,
     setAccentColor,
@@ -154,11 +153,6 @@ export function DashboardNavbar() {
     setProfileMsg("Your account settings have been saved.")
   }
 
-  function toggleNavigation() {
-    setPanel(null)
-    setDashboardMenuOpen(!dashboardMenuOpen)
-  }
-
   function toggleSearch() {
     const opening = panel !== "search"
     if (opening) setDashboardMenuOpen(false)
@@ -175,21 +169,6 @@ export function DashboardNavbar() {
     <>
       <nav className="dashboard-topbar">
         <div className="dashboard-topbar-left">
-          {user?.operatorRole !== "cashier" && (
-            <button
-              ref={profileTriggerRef}
-              type="button"
-              className="icon-button menu-toggle"
-              aria-controls="dashboard-navigation"
-              aria-label={
-                dashboardMenuOpen ? "Close navigation" : "Open navigation"
-              }
-              aria-expanded={dashboardMenuOpen}
-              onClick={toggleNavigation}
-            >
-              <UntitledIcon name="menu" />
-            </button>
-          )}
           <button
             type="button"
             className="dashboard-brand"
@@ -206,11 +185,7 @@ export function DashboardNavbar() {
             }
             aria-label="SmartParking dashboard"
           >
-            <BrandLogo height={60} />
-            <span className="brand-wordmark" style={{ fontSize: "1.1rem" }}>
-              <span className="brand-smart">Smart</span>
-              <span className="brand-parking">Parking</span>
-            </span>
+            <BrandLogo height={48} />
           </button>
         </div>
 
@@ -263,6 +238,7 @@ export function DashboardNavbar() {
             <button
               type="button"
               className="profile-trigger"
+              ref={profileTriggerRef}
               aria-label="Open profile menu"
               aria-expanded={panel === "profile"}
               onClick={toggleProfile}

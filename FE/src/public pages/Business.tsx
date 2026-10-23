@@ -303,7 +303,7 @@ export function Business() {
                 background: "rgba(255,255,255,0.15)",
                 border: "1.5px solid rgba(255,255,255,0.5)",
                 color: "#fff",
-                borderRadius: "var(--radius)",
+                borderRadius: "999px",
                 cursor: "pointer",
                 fontWeight: 600,
               }}

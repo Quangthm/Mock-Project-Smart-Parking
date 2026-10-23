@@ -1,0 +1,545 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - link "⚡ Parity Deals" [ref=e3] [cursor=pointer]:
+      - /url: https://www.paritydeals.com/
+    - generic [ref=e4]: Hello We support Parity Purchasing, use code “pdycpaao30” to get 30% off.
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - navigation [ref=e12]:
+        - link [ref=e14] [cursor=pointer]:
+          - /url: /
+          - img "MotionSites logo" [ref=e15]
+        - generic [ref=e16]:
+          - link "MCP" [ref=e17] [cursor=pointer]:
+            - /url: /mcp
+          - link "Backgrounds" [ref=e18] [cursor=pointer]:
+            - /url: /backgrounds
+          - link "Academy" [ref=e19] [cursor=pointer]:
+            - /url: /academy
+          - link "Restyle" [ref=e20] [cursor=pointer]:
+            - /url: /restyle
+          - link "3D" [ref=e21] [cursor=pointer]:
+            - /url: /3d-websites
+          - link "Affiliate" [ref=e22] [cursor=pointer]:
+            - /url: /affiliates
+          - button "Submit" [ref=e23]
+          - link "Contact" [ref=e24] [cursor=pointer]:
+            - /url: /public-contact
+        - generic [ref=e25]:
+          - button "Search" [ref=e26]
+          - link "Sign up" [ref=e29] [cursor=pointer]:
+            - /url: /auth
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - button "Featured" [ref=e33]
+            - button "Popular" [ref=e34]
+            - button "Recent" [ref=e35]
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - button "All" [ref=e38]
+              - button "Apps" [ref=e39]
+              - button "Sections" [ref=e40]
+              - button "Hero" [ref=e41]
+              - button "Landing Page" [ref=e42]
+              - button "Saas" [ref=e43]
+              - button "3d" [ref=e44]
+              - button "Creative" [ref=e45]
+              - button "Agency" [ref=e46]
+              - button "Portfolio" [ref=e47]
+              - button "Ai" [ref=e48]
+              - button "Fintech" [ref=e49]
+              - button "Travel" [ref=e50]
+              - button "Technology" [ref=e51]
+              - button "Wellness" [ref=e52]
+              - button "3d Website" [ref=e53]
+              - button "Ecommerce" [ref=e54]
+              - button "Interactive" [ref=e55]
+            - button "Scroll categories right" [ref=e56]
+          - button "Pricing" [ref=e60]
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - generic [ref=e67] [cursor=pointer]:
+              - img "Halora" [ref=e69]
+              - generic [ref=e71]:
+                - generic [ref=e72]:
+                  - heading "Halora" [level=3] [ref=e73]
+                  - generic [ref=e74]: Wearables
+                - button "Copy prompt" [ref=e76]
+            - generic [ref=e80] [cursor=pointer]:
+              - img "Ledgely" [ref=e82]
+              - generic [ref=e84]:
+                - generic [ref=e85]:
+                  - heading "Ledgely" [level=3] [ref=e86]
+                  - generic [ref=e87]: Finance App
+                - button "Unlock prompt" [ref=e89]
+            - generic [ref=e92] [cursor=pointer]:
+              - img "Cutora" [ref=e94]
+              - generic [ref=e96]:
+                - generic [ref=e97]:
+                  - heading "Cutora" [level=3] [ref=e98]
+                  - generic [ref=e99]: Login Page
+                - button "Copy prompt" [ref=e101]
+            - generic [ref=e105] [cursor=pointer]:
+              - img "Lauberhorn Ridge" [ref=e107]
+              - generic [ref=e109]:
+                - generic [ref=e110]:
+                  - heading "Lauberhorn Ridge" [level=3] [ref=e111]
+                  - generic [ref=e112]: Hiking App
+                - button "Copy prompt" [ref=e114]
+            - link "Backgrounds Animated backgrounds designed to convert, impress, and amaze. Explore Videos" [ref=e118] [cursor=pointer]:
+              - /url: /backgrounds
+              - generic [ref=e119]: Backgrounds
+              - generic [ref=e121]:
+                - heading "Animated backgrounds designed to convert, impress, and amaze." [level=3] [ref=e122]
+                - generic [ref=e123]: Explore Videos
+            - generic [ref=e124] [cursor=pointer]:
+              - img "Meadowbell" [ref=e126]
+              - generic [ref=e128]:
+                - generic [ref=e129]:
+                  - heading "Meadowbell" [level=3] [ref=e130]
+                  - generic [ref=e131]: Kids Show
+                - button "Copy prompt" [ref=e133]
+            - generic [ref=e137] [cursor=pointer]:
+              - img "Renewable greentech" [ref=e139]
+              - generic [ref=e141]:
+                - generic [ref=e142]:
+                  - heading "Renewable greentech" [level=3] [ref=e143]
+                  - generic [ref=e144]: 3D
+                - button "Unlock prompt" [ref=e146]
+            - generic [ref=e149] [cursor=pointer]:
+              - img "Strata AI" [ref=e151]
+              - generic [ref=e153]:
+                - generic [ref=e154]:
+                  - heading "Strata AI" [level=3] [ref=e155]
+                  - generic [ref=e156]: AI Data
+                - button "Copy prompt" [ref=e158]
+            - generic [ref=e162] [cursor=pointer]:
+              - img "Honey Bee" [ref=e166]
+              - generic [ref=e168]:
+                - generic [ref=e169]:
+                  - heading "Honey Bee" [level=3] [ref=e170]
+                  - generic [ref=e171]: Creative
+                - button "Copy prompt" [ref=e173]
+            - generic [ref=e177] [cursor=pointer]:
+              - img "Roadster" [ref=e181]
+              - generic [ref=e183]:
+                - generic [ref=e184]:
+                  - heading "Roadster" [level=3] [ref=e185]
+                  - generic [ref=e186]: Game
+                - button "Unlock prompt" [ref=e188]
+          - generic [ref=e191]:
+            - generic [ref=e192] [cursor=pointer]:
+              - img "Vocari Hero" [ref=e194]
+              - generic [ref=e196]:
+                - generic [ref=e197]:
+                  - heading "Vocari Hero" [level=3] [ref=e198]
+                  - generic [ref=e199]: AI Hero
+                - button "Copy prompt" [ref=e201]
+            - generic [ref=e205] [cursor=pointer]:
+              - img "Find Your Stay" [ref=e207]
+              - generic [ref=e209]:
+                - generic [ref=e210]:
+                  - heading "Find Your Stay" [level=3] [ref=e211]
+                  - generic [ref=e212]: Rental Landing
+                - button "Unlock prompt" [ref=e214]
+            - generic [ref=e217] [cursor=pointer]:
+              - img "Lumora Skyranger" [ref=e219]
+              - generic [ref=e221]:
+                - generic [ref=e222]:
+                  - heading "Lumora Skyranger" [level=3] [ref=e223]
+                  - generic [ref=e224]: 3D Character
+                - button "Copy prompt" [ref=e226]
+            - generic [ref=e230] [cursor=pointer]:
+              - img "Reelmark" [ref=e232]
+              - generic [ref=e234]:
+                - generic [ref=e235]:
+                  - heading "Reelmark" [level=3] [ref=e236]
+                  - generic [ref=e237]: Creator Platform
+                - button "Copy prompt" [ref=e239]
+            - generic [ref=e243] [cursor=pointer]:
+              - img "Wander Far" [ref=e245]
+              - generic [ref=e247]:
+                - generic [ref=e248]:
+                  - heading "Wander Far" [level=3] [ref=e249]
+                  - generic [ref=e250]: Travel
+                - button "Copy prompt" [ref=e252]
+            - generic [ref=e256] [cursor=pointer]:
+              - img "Abyss Atlas" [ref=e258]
+              - generic [ref=e260]:
+                - generic [ref=e261]:
+                  - heading "Abyss Atlas" [level=3] [ref=e262]
+                  - generic [ref=e263]: 3D Viewer
+                - button "Unlock prompt" [ref=e265]
+            - generic [ref=e268] [cursor=pointer]:
+              - img "Skyprompt" [ref=e270]
+              - generic [ref=e272]:
+                - generic [ref=e273]:
+                  - heading "Skyprompt" [level=3] [ref=e274]
+                  - generic [ref=e275]: AI Course
+                - button "Copy prompt" [ref=e277]
+            - generic [ref=e281] [cursor=pointer]:
+              - img "Keylight" [ref=e283]
+              - generic [ref=e285]:
+                - generic [ref=e286]:
+                  - heading "Keylight" [level=3] [ref=e287]
+                  - generic [ref=e288]: Authentication
+                - button "Copy prompt" [ref=e290]
+            - generic [ref=e294] [cursor=pointer]:
+              - img "Arctis" [ref=e298]
+              - generic [ref=e300]:
+                - generic [ref=e301]:
+                  - heading "Arctis" [level=3] [ref=e302]
+                  - generic [ref=e303]: 3D
+                - button "Unlock prompt" [ref=e305]
+          - generic [ref=e308]:
+            - generic [ref=e309] [cursor=pointer]:
+              - img "Vaultra Hero" [ref=e311]
+              - generic [ref=e313]:
+                - generic [ref=e314]:
+                  - heading "Vaultra Hero" [level=3] [ref=e315]
+                  - generic [ref=e316]: Crypto Hero
+                - button "Copy prompt" [ref=e318]
+            - generic [ref=e322] [cursor=pointer]:
+              - img "Halden Stories" [ref=e324]
+              - generic [ref=e326]:
+                - generic [ref=e327]:
+                  - heading "Halden Stories" [level=3] [ref=e328]
+                  - generic [ref=e329]: Interactive Map
+                - button "Copy prompt" [ref=e331]
+            - generic [ref=e335] [cursor=pointer]:
+              - img "Plush Sky Den" [ref=e339]
+              - generic [ref=e341]:
+                - generic [ref=e342]:
+                  - heading "Plush Sky Den" [level=3] [ref=e343]
+                  - generic [ref=e344]: 3D
+                - button "Unlock prompt" [ref=e346]
+            - generic [ref=e349] [cursor=pointer]:
+              - img "Skyra AI" [ref=e353]
+              - generic [ref=e355]:
+                - generic [ref=e356]:
+                  - heading "Skyra AI" [level=3] [ref=e357]
+                  - generic [ref=e358]: 3D
+                - button "Unlock prompt" [ref=e360]
+            - generic [ref=e363] [cursor=pointer]:
+              - img "Glint" [ref=e365]
+              - generic [ref=e367]:
+                - generic [ref=e368]:
+                  - heading "Glint" [level=3] [ref=e369]
+                  - generic [ref=e370]: Fintech
+                - button "Unlock prompt" [ref=e372]
+            - generic [ref=e375] [cursor=pointer]:
+              - img "murmur" [ref=e377]
+              - generic [ref=e379]:
+                - generic [ref=e380]:
+                  - heading "murmur" [level=3] [ref=e381]
+                  - generic [ref=e382]: Podcast
+                - button "Copy prompt" [ref=e384]
+            - generic [ref=e388] [cursor=pointer]:
+              - img "RidgeAI" [ref=e390]
+              - generic [ref=e392]:
+                - generic [ref=e393]:
+                  - heading "RidgeAI" [level=3] [ref=e394]
+                  - generic [ref=e395]: AI Builder
+                - button "Copy prompt" [ref=e397]
+            - generic [ref=e401] [cursor=pointer]:
+              - img "Sakura QR" [ref=e405]
+              - generic [ref=e407]:
+                - generic [ref=e408]:
+                  - heading "Sakura QR" [level=3] [ref=e409]
+                  - generic [ref=e410]: 3D
+                - button "Copy prompt" [ref=e412]
+            - generic [ref=e416] [cursor=pointer]:
+              - img "Genovera" [ref=e420]
+              - generic [ref=e422]:
+                - generic [ref=e423]:
+                  - heading "Genovera" [level=3] [ref=e424]
+                  - generic [ref=e425]: Healthcare
+                - button "Unlock prompt" [ref=e427]
+          - generic [ref=e430]:
+            - generic [ref=e431] [cursor=pointer]:
+              - img "Smarter Growth" [ref=e433]
+              - generic [ref=e435]:
+                - generic [ref=e436]:
+                  - heading "Smarter Growth" [level=3] [ref=e437]
+                  - generic [ref=e438]: Landing Page
+                - button "Unlock prompt" [ref=e440]
+            - generic [ref=e443] [cursor=pointer]:
+              - img "Particle Self" [ref=e445]
+              - generic [ref=e447]:
+                - generic [ref=e448]:
+                  - heading "Particle Self" [level=3] [ref=e449]
+                  - generic [ref=e450]: Scroll-Driven 3D
+                - button "Unlock prompt" [ref=e452]
+            - generic [ref=e455] [cursor=pointer]:
+              - img "Gridwork Co" [ref=e457]
+              - generic [ref=e459]:
+                - generic [ref=e460]:
+                  - heading "Gridwork Co" [level=3] [ref=e461]
+                  - generic [ref=e462]: Onboarding
+                - button "Copy prompt" [ref=e464]
+            - generic [ref=e468] [cursor=pointer]:
+              - img "KAIRN" [ref=e470]
+              - generic [ref=e472]:
+                - generic [ref=e473]:
+                  - heading "KAIRN" [level=3] [ref=e474]
+                  - generic [ref=e475]: Ski Gear
+                - button "Copy prompt" [ref=e477]
+            - generic [ref=e481] [cursor=pointer]:
+              - img "Eclipsio" [ref=e483]
+              - generic [ref=e485]:
+                - generic [ref=e486]:
+                  - heading "Eclipsio" [level=3] [ref=e487]
+                  - generic [ref=e488]: Portfolio Builder
+                - button "Copy prompt" [ref=e490]
+            - generic [ref=e494] [cursor=pointer]:
+              - img "Corvana AI" [ref=e496]
+              - generic [ref=e498]:
+                - generic [ref=e499]:
+                  - heading "Corvana AI" [level=3] [ref=e500]
+                  - generic [ref=e501]: Healthcare AI
+                - button "Copy prompt" [ref=e503]
+            - generic [ref=e507] [cursor=pointer]:
+              - img "Vaultline" [ref=e509]
+              - generic [ref=e511]:
+                - generic [ref=e512]:
+                  - heading "Vaultline" [level=3] [ref=e513]
+                  - generic [ref=e514]: Crypto
+                - button "Unlock prompt" [ref=e516]
+            - generic [ref=e519] [cursor=pointer]:
+              - img "Roadster 3D" [ref=e523]
+              - generic [ref=e525]:
+                - generic [ref=e526]:
+                  - heading "Roadster 3D" [level=3] [ref=e527]
+                  - generic [ref=e528]: 3D
+                - button "Unlock prompt" [ref=e530]
+            - generic [ref=e533] [cursor=pointer]:
+              - img "Autumn Fox" [ref=e537]
+              - generic [ref=e539]:
+                - generic [ref=e540]:
+                  - heading "Autumn Fox" [level=3] [ref=e541]
+                  - generic [ref=e542]: 3D
+                - button "Copy prompt" [ref=e544]
+        - generic [ref=e550]:
+          - generic [ref=e551]:
+            - img "MotionSites logo" [ref=e552]
+            - heading "Develop Your AI Design Skills That Stand Out." [level=2] [ref=e553]
+            - paragraph [ref=e554]: "\"Give Me Just a Few Days And I'll Show You How To Create AI Design Websites That Most Agencies Charge $5,000 For\""
+            - link "Explore the Full Library" [ref=e555] [cursor=pointer]:
+              - /url: https://designrocket.io/
+          - img "Design Rocket preview"
+      - generic [ref=e559]:
+        - generic [ref=e561]:
+          - img "Strata AI" [ref=e564]
+          - generic [ref=e566]:
+            - generic [ref=e567]:
+              - heading "Strata AI" [level=3] [ref=e568]
+              - text: AI Data
+            - button "Like" [ref=e569]:
+              - generic [ref=e572]: "20"
+              - generic [ref=e573]: likes
+            - button "Copy full prompt" [ref=e575]
+            - button "Copy source code requires a paid plan" [ref=e584]: Copy source code
+            - generic [ref=e588]:
+              - generic [ref=e589]: Sponsored
+              - link "Build with Manus" [ref=e590] [cursor=pointer]:
+                - /url: https://manus.im/?utm_source=motionsites
+                - img "Manus" [ref=e592]
+                - generic [ref=e593]:
+                  - generic [ref=e594]: Build in Manus
+                  - generic [ref=e599]: General AI agent
+              - link "Build with Google AI Studio" [ref=e600] [cursor=pointer]:
+                - /url: https://aistudio.google.com/apps?utm_source=motionsites&utm_medium=partner&utm_campaign=26Q4-motionsites_ais&utm_content=text_dialog#prompt=%23%20Prompt%3A%20Strata%20AI%20hero%0A%0ABuild%20a%20single-file%2C%20dark%2C%20premium%20**AI-infrastructure%20landing%20hero**%20for%20a%20fictional%20company%2C%20**Strata%20AI**%20(%22trustworthy%20AI%2C%20built%20up%20layer%20by%20layer%22).%20Use%20plain%20HTML%2C%20CSS%20and%20vanilla%20JS%2C%20with%20no%20framework%20and%20no%20build%20step.%20One%20screen%20tall.%0A%0A%23%23%20Look%20and%20feel%0A%0A-%20**Overall%3A**%20near-black%20and%20calm%2C%20with%20a%20faint%20square%20grid%20in%20the%20background%2C%20white%20type%2C%20violet%20and%20teal%20accents%2C%20and%20soft%20glass%20surfaces.%0A-%20**Colours%3A**%0A%20%20-%20background%20%60%230d0c11%60%0A%20%20-%20ink%20%60%23ffffff%60%0A%20%20-%20nav%20grey%20%60%23b9b8bb%60%0A%20%20-%20muted%20text%20%60%23d3d3d7%60%0A%20%20-%20wordmark%20grey%20%60%23bdbdc1%60%0A%20%20-%20%22AI%22%20superscript%20%60%239ff0ec%60%0A%20%20-%20card%20kicker%20teal%20%60%23bdf7ee%60%0A%20%20-%20logo-row%20grey%20%60%23bcbcbf%60%0A%20%20-%20primary%20violet%20gradient%20%60%234d19b1%20%E2%86%92%20%236f5adc%60%0A-%20**Glass%20surfaces%3A**%20%60rgba(255%2C255%2C255%2C.02)%60%20fill%2C%20a%20%60rgba(255%2C255%2C255%2C.16)%60%20hairline%2C%20and%20%60backdrop-filter%3A%20blur(8px)%20brightness(1.15)%20saturate(.8)%60%2C%20with%20a%20faint%20inner%20white%20glow.%0A-%20**Type%3A**%0A%20%20-%20**DM%20Sans**%20(variable%2C%20weight%20~380)%20for%20the%20headline%2C%20stats%20numbers%20and%20logo-row%20words%0A%20%20-%20**Inter**%20(variable%2C%20~300%E2%80%93560)%20for%20everything%20else%0A%20%20-%20Self-host%20both%2C%20latin%20subset.%0A%0A%23%23%20Layout%20(desktop%2C%20landscape)%0A%0AThe%20whole%20hero%20is%20drawn%20on%20a%20**2048%C3%971455%20design%20canvas**%20scaled%20by%20one%20unit%2C%20%60--u%20%3D%20viewport%20height%20%2F%201455%60%20(minimum%200.468px).%20The%20canvas%20is%20centred%2C%20the%20screen%20is%20always%20filled%20top%20to%20bottom%2C%20and%20any%20spare%20width%20is%20just%20background.%0A%0A1.%20**Header**%20(148u%20tall)%3A%0A%20%20%20-%20**Left%3A**%20a%2070%C3%9769u%20violet%20gradient%20tile%20with%20a%20bold%20white%20**S**%20and%20a%20soft%20violet%20glow%2C%20then%20the%20light-grey%20wordmark%20**%22Strata%22**%20with%20a%20small%20teal%20**%22AI%22**%20superscript%20sitting%20above%20its%20last%20letters.%0A%20%20%20-%20**Centre%3A**%20six%20nav%20links%2C%20about%2048u%20apart%3A%20**Platform%20%C2%B7%20Model%20Scores%20%C2%B7%20Industries%20%C2%B7%20Defense%20AI%20%C2%B7%20Use%20cases%20%C2%B7%20Changelog**.%0A%20%20%20-%20**Right%3A**%20**%22Log%20in%22**%2C%20then%20an%20outlined%20glass%20pill%2C%20**%22Meet%20Strata%22**%20(202%C3%9763u).%0A2.%20**Left%20column**%20(x%20%3D%20150u)%3A%0A%20%20%20-%20**Headline%3A**%20three%20lines%20at%20104u%20%2F%20122u%20line-height%3A%20**%22Grounded%20models%20%2F%20made%20of%20data%20%2F%20you%20trust.%22**%20Each%20line%20stays%20on%20one%20line%20and%20fades%20from%20white%20to%20soft%20grey%20at%20the%20right.%0A%20%20%20-%20**Subline%3A**%20at%2029.5u%20in%20light%20grey%3A%20%22Strata%20layers%20verified%20data%2C%20evaluations%2C%20and%20audits%20for%20model%20teams%2C%20public%20agencies%2C%20and%20enterprise%20operations.%22%0A%20%20%20-%20**Buttons%3A**%20two%2085u-tall%20pills%2C%20a%20violet-gradient%20**%22Meet%20Strata%22**%20and%20a%20dark%20glass%20**%22Try%20Free%22**.%0A%20%20%20-%20**Stats%20row%3A**%20**2.1B**%20labels%20%C2%B7%20**400%252B**%20evals%20%C2%B7%20**99.9%2525**%20uptime.%20The%20numbers%20are%20DM%20Sans%2050u%20and%20the%20labels%20are%2025u%20grey%2C%20separated%20by%20thin%20vertical%20hairlines.%0A3.%20**Right%20half%3A**%20a%20large%20square%20artwork%20(about%201120u%2C%20centred%20near%20x%20%3D%201550u).%20It%20shows%20four%20floating%20translucent%20**glass%20data%20slabs**%20at%20an%20isometric%20angle%2C%20glowing%20teal%20%E2%86%92%20violet%3A%0A%20%20%20-%20a%20grid%20of%20data%20points%0A%20%20%20-%20flowing%20light%20waves%0A%20%20%20-%20pixel%20blocks%0A%20%20%20-%20a%20violet%20haze%0A%20%20%20Its%20edges%20fade%20into%20the%20background%20with%20a%20radial%20mask%2C%20so%20there's%20no%20visible%20box.%0A4.%20**Two%20glass%20cards**%20(451%C3%97201u%2C%20radius%2018u)%20overlap%20the%20artwork.%20Each%20has%20a%2063u%20icon%20tile%2C%20a%20teal%20kicker%20and%20a%20two-line%20white%20title%3A%0A%20%20%20-%20**Upper-left%20of%20the%20slabs%3A**%20kicker%20**%22Benchmarking%22**%2C%20title%20%22STRATA%20Index%3A%20Peer-Scored%2C%20%2F%20Private%20Model%20Evaluations.%22%2C%20with%20a%20teal%20network-graph%20icon.%0A%20%20%20-%20**Lower-right%3A**%20kicker%20**%22Red-team%22**%2C%20title%20%22BASTION%3A%20Adversarial%20Test%20%2F%20for%20Critical%20Systems.%22%2C%20with%20a%20teal%20fortress-and-padlock%20icon.%0A5.%20**Logo%20row**%20at%20the%20bottom%2C%20centred%20and%20grey%3A%20**Arbor**%20(bold%20italic)%20%C2%B7%20**Nova**%20(bold%20italic)%20%C2%B7%20**lumina**%20(regular%2C%20wide%20tracking)%20%C2%B7%20**HALCYONIX**%20(bold%20italic%20caps).%0A%0A%23%23%20Motion%0A%0A-%20**Artwork%3A**%20loops.%20The%20slabs%20bob%20and%20drift%20slightly%2C%20data%20particles%20flow%20across%20the%20top%20slab%2C%20the%20waves%20ripple%20and%20the%20pixel%20blocks%20flicker.%0A-%20**Entrance%3A**%20one%20Web%20Animations%20timeline%20runs%20once%20on%20load%2C%20then%20the%20page%20is%20static.%0A%20%20-%20the%20header%20items%20rise%20and%20fade%20in%2C%20left%20to%20right%0A%20%20-%20each%20headline%20line%20rises%20out%20of%20its%20own%20clip%20mask%2C%200.12s%20apart%0A%20%20-%20the%20subline%20settles%2C%20then%20the%20buttons%20(the%20primary%20with%20a%201.5%2525%20scale%20settle)%0A%20%20-%20the%20stats%20rise%20in%20one%20by%20one%2C%20then%20the%20two%20glass%20cards%20lift%20in%0A%20%20-%20the%20logo%20row%20fades%20in%2C%20left%20to%20right%0A-%20**Reduced%20motion%3A**%20no%20entrance%2C%20no%20loop%3B%20the%20still%20shows%20instead.%0A%0A%23%23%20Smaller%20screens%0A%0AThe%20same%20content%20reflows%20into%20one%20centred%20column%3A%20logo%20with%20a%20round%20menu%20button%20that%20opens%20a%20glass%20dropdown%20panel%2C%20the%20headline%2C%20subline%2C%20buttons%2C%20stats%2C%20then%20the%20artwork%20with%20the%20two%20cards%20staggered%20over%20it%2C%20then%20the%20logo%20row.%20Use%20a%20fluid%20unit%20%60--f%20%3D%20clamp(.55px%2C%20.449px%20%252B%20.0284vw%2C%20.76px)%60%20and%2016%E2%80%9340px%20side%20margins.%0A%0A%23%23%20Media%20(use%20these%20URLs)%0A%0A-%20**Artwork%20loop%3A**%20%60https%3A%2F%2Fd2ol7oe51mr4n9.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2F435a4fe7-e43b-4e7c-af78-0be083e73569.mp4%60%20(960%C3%97960%2C%205s%2C%20H.264%2C%20muted%2C%20loops%3B%20first%20frame%20%3D%20last%20frame).%20Show%20it%20inside%20the%20masked%20artwork%20box.%0A-%20**Artwork%20still**%20(poster%20and%20fallback)%3A%20%60https%3A%2F%2Fd2ol7oe51mr4n9.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2F782a4a52-4c1e-4471-bb0c-aa232927f4a6.webp%60%20(1200%C3%971200%20WebP).%0A%0A%23%23%20Acceptance%20check%20(1440%C3%97900)%0A%0A-%20**Left%3A**%20the%20three-line%20headline%20sits%20top-left%2C%20with%20its%20first%20line%20ending%20just%20before%20the%20%22Benchmarking%22%20card.%20The%20subline%2C%20buttons%20and%20stats%20follow%2C%20with%20even%20spacing.%0A-%20**Right%3A**%20the%20glowing%20slab%20stack%20fills%20the%20right%20half%20and%20moves%2C%20with%20the%20two%20cards%20overlapping%20it.%0A-%20**Bottom%3A**%20four%20fictional%20logos%20sit%20centred%20along%20the%20bottom%20edge.%0A-%20**Content%3A**%20no%20real%20company%20or%20product%20names%20appear%20anywhere.
+                - img "Google AI Studio" [ref=e602]
+                - generic [ref=e603]:
+                  - generic [ref=e604]: Build in AI Studio
+                  - generic [ref=e609]: Build apps with Gemini
+        - generic [ref=e610]:
+          - generic [ref=e611]:
+            - generic [ref=e614] [cursor=pointer]:
+              - img "AI Cyber Defense" [ref=e618]
+              - generic [ref=e620]:
+                - generic [ref=e621]:
+                  - heading "AI Cyber Defense" [level=3] [ref=e622]
+                  - generic [ref=e623]: Security
+                - button "Unlock prompt" [ref=e625]
+            - generic [ref=e629] [cursor=pointer]:
+              - img "Wealthcore" [ref=e633]
+              - generic [ref=e635]:
+                - generic [ref=e636]:
+                  - heading "Wealthcore" [level=3] [ref=e637]
+                  - generic [ref=e638]: Fintech
+                - button "Unlock prompt" [ref=e640]
+            - generic [ref=e644] [cursor=pointer]:
+              - img "Apex SaaS" [ref=e649]
+              - generic [ref=e650]:
+                - generic [ref=e651]:
+                  - heading "Apex SaaS" [level=3] [ref=e652]
+                  - generic [ref=e653]: SaaS
+                - button "Unlock prompt" [ref=e655]
+            - generic [ref=e659] [cursor=pointer]:
+              - img "Guardnet Benefits" [ref=e663]
+              - generic [ref=e664]:
+                - generic [ref=e665]:
+                  - heading "Guardnet Benefits" [level=3] [ref=e666]
+                  - generic [ref=e667]: Benefits
+                - button "Copy prompt" [ref=e669]
+            - generic [ref=e674] [cursor=pointer]:
+              - generic:
+                - img "DeepThink"
+              - generic [ref=e675]:
+                - generic [ref=e676]:
+                  - heading "DeepThink" [level=3] [ref=e677]
+                  - generic [ref=e678]: AI Assistant
+                - button "Copy prompt" [ref=e680]
+            - generic [ref=e685] [cursor=pointer]:
+              - img "Slate" [ref=e690]
+              - generic [ref=e691]:
+                - generic [ref=e692]:
+                  - heading "Slate" [level=3] [ref=e693]
+                  - generic [ref=e694]: SaaS
+                - button "Unlock prompt" [ref=e696]
+          - generic [ref=e699]:
+            - generic [ref=e702] [cursor=pointer]:
+              - img "AKOR Security" [ref=e705]
+              - generic [ref=e706]:
+                - generic [ref=e707]:
+                  - heading "AKOR Security" [level=3] [ref=e708]
+                  - generic [ref=e709]: Landing Page
+                - button "Unlock prompt" [ref=e711]
+            - generic [ref=e715] [cursor=pointer]:
+              - img "Finlytic AI Agent" [ref=e720]
+              - generic [ref=e721]:
+                - generic [ref=e722]:
+                  - heading "Finlytic AI Agent" [level=3] [ref=e723]
+                  - generic [ref=e724]: SaaS
+                - button "Unlock prompt" [ref=e726]
+            - generic [ref=e730] [cursor=pointer]:
+              - img "Wealth Video Hero" [ref=e735]
+              - generic [ref=e736]:
+                - generic [ref=e737]:
+                  - heading "Wealth Video Hero" [level=3] [ref=e738]
+                  - generic [ref=e739]: Fintech
+                - button "Unlock prompt" [ref=e741]
+            - generic [ref=e745] [cursor=pointer]:
+              - img "Aurora Onboard" [ref=e749]
+              - generic [ref=e750]:
+                - generic [ref=e751]:
+                  - heading "Aurora Onboard" [level=3] [ref=e752]
+                  - generic [ref=e753]: Sign Up
+                - button "Copy prompt" [ref=e755]
+            - generic [ref=e760] [cursor=pointer]:
+              - img "Obsidian Hero" [ref=e764]
+              - generic [ref=e765]:
+                - generic [ref=e766]:
+                  - heading "Obsidian Hero" [level=3] [ref=e767]
+                  - generic [ref=e768]: Hero
+                - button "Unlock prompt" [ref=e770]
+            - generic [ref=e774] [cursor=pointer]:
+              - img "Rocket Pricing" [ref=e778]
+              - generic [ref=e779]:
+                - generic [ref=e780]:
+                  - heading "Rocket Pricing" [level=3] [ref=e781]
+                  - generic [ref=e782]: Pricing
+                - button "Copy prompt" [ref=e784]
+          - generic [ref=e788]:
+            - generic [ref=e791] [cursor=pointer]:
+              - img "Quantum Core" [ref=e795]
+              - generic [ref=e797]:
+                - generic [ref=e798]:
+                  - heading "Quantum Core" [level=3] [ref=e799]
+                  - generic [ref=e800]: Data Intelligence
+                - button "Copy prompt" [ref=e802]
+            - generic [ref=e807] [cursor=pointer]:
+              - img "DesignPro Academy" [ref=e812]
+              - generic [ref=e813]:
+                - generic [ref=e814]:
+                  - heading "DesignPro Academy" [level=3] [ref=e815]
+                  - generic [ref=e816]: Hero Section
+                - button "Copy prompt" [ref=e818]
+            - generic [ref=e823] [cursor=pointer]:
+              - img "NexaCore Process" [ref=e827]
+              - generic [ref=e828]:
+                - generic [ref=e829]:
+                  - heading "NexaCore Process" [level=3] [ref=e830]
+                  - generic [ref=e831]: Process
+                - button "Unlock prompt" [ref=e833]
+            - generic [ref=e842] [cursor=pointer]:
+              - generic [ref=e843]:
+                - heading "Remit Race" [level=3] [ref=e844]
+                - generic [ref=e845]: Fintech
+              - button "Unlock prompt" [ref=e847]
+            - generic [ref=e851] [cursor=pointer]:
+              - img "Creative Matter" [ref=e855]
+              - generic [ref=e857]:
+                - generic [ref=e858]:
+                  - heading "Creative Matter" [level=3] [ref=e859]
+                  - generic [ref=e860]: Creative
+                - button "Unlock prompt" [ref=e862]
+          - generic [ref=e865]:
+            - generic [ref=e867] [cursor=pointer]:
+              - img "Nimbus Ops" [ref=e869]
+              - generic [ref=e870]:
+                - generic [ref=e871]:
+                  - heading "Nimbus Ops" [level=3] [ref=e872]
+                  - generic [ref=e873]: CTA
+                - button "Unlock prompt" [ref=e875]
+            - generic [ref=e879] [cursor=pointer]:
+              - img "EVR Ventures" [ref=e882]
+              - generic [ref=e883]:
+                - generic [ref=e884]:
+                  - heading "EVR Ventures" [level=3] [ref=e885]
+                  - generic [ref=e886]: Hero Section
+                - button "Unlock prompt" [ref=e888]
+            - generic [ref=e892] [cursor=pointer]:
+              - img "Luminex" [ref=e895]
+              - generic [ref=e896]:
+                - generic [ref=e897]:
+                  - heading "Luminex" [level=3] [ref=e898]
+                  - generic [ref=e899]: Hero Section
+                - button "Copy prompt" [ref=e901]
+            - generic [ref=e906] [cursor=pointer]:
+              - img "Datacore Booking" [ref=e911]
+              - generic [ref=e912]:
+                - generic [ref=e913]:
+                  - heading "Datacore Booking" [level=3] [ref=e914]
+                  - generic [ref=e915]: SaaS
+                - button "Copy prompt" [ref=e917]
+            - generic [ref=e927] [cursor=pointer]:
+              - generic [ref=e928]:
+                - heading "Financial Suite" [level=3] [ref=e929]
+                - generic [ref=e930]: Landing Page
+              - button "Unlock prompt" [ref=e932]
+            - generic [ref=e936] [cursor=pointer]:
+              - img "Keep Ahead Features" [ref=e940]
+              - generic [ref=e941]:
+                - generic [ref=e942]:
+                  - heading "Keep Ahead Features" [level=3] [ref=e943]
+                  - generic [ref=e944]: Features Section
+                - button "Unlock prompt" [ref=e946]
+            - generic [ref=e950] [cursor=pointer]:
+              - img "Global CTA Footer" [ref=e954]
+              - generic [ref=e955]:
+                - generic [ref=e956]:
+                  - heading "Global CTA Footer" [level=3] [ref=e957]
+                  - generic [ref=e958]: CTA
+                - button "Unlock prompt" [ref=e960]
+      - button "Back" [ref=e964]
+  - contentinfo [ref=e967]:
+    - generic [ref=e968]:
+      - generic [ref=e969]: © 2026 MotionSites AI · Operated by Viktor Odainyi, sole trader · viktoroddy@gmail.com
+      - generic [ref=e970]:
+        - link "Terms of Use" [ref=e971] [cursor=pointer]:
+          - /url: /terms
+        - link "Cookie Policy" [ref=e972] [cursor=pointer]:
+          - /url: /cookie-policy
+        - link "Refund Policy" [ref=e973] [cursor=pointer]:
+          - /url: /refund-policy
+    - generic [ref=e974]:
+      - link "YouTube" [ref=e975] [cursor=pointer]:
+        - /url: https://www.youtube.com/@ViktorOddy
+      - link "X" [ref=e978] [cursor=pointer]:
+        - /url: https://x.com/viktoroddy

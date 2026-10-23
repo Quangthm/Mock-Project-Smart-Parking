@@ -127,7 +127,7 @@ export function PolicySettings({
         setCurrentPdf({
           ...ownerPdf,
           lotId: selectedLotId,
-          title: `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+          title: `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
         })
       } else {
         setCurrentPdf(lotPdf)
@@ -162,7 +162,7 @@ export function PolicySettings({
         title:
           selectedLotId === "all"
             ? "System-wide Parking Operations Policy"
-            : `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+            : `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
         summaryText: `Official updated rules for ${lot?.name || "all of the owner's parking sites"}.`,
       }
 
@@ -192,7 +192,7 @@ export function PolicySettings({
         "driver",
         "POLICY_UPDATED",
         "Parking Policy Updated",
-        `Parking site ${lot?.name || "SmartPark"} has updated its operations policy document.`,
+        `Parking site ${lot?.name || "SmartParking"} has updated its operations policy document.`,
       )
     }
 
@@ -217,7 +217,7 @@ export function PolicySettings({
           setCurrentPdf({
             ...ownerPdf,
             lotId: selectedLotId,
-            title: `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+            title: `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
           })
         } else {
           const fallback = store.getLotPolicyPdf(selectedLotId, user.id)
@@ -235,7 +235,7 @@ export function PolicySettings({
     const lot = ownerLots.find((l) => l.id === selectedLotId) ||
       ownerLots[0] || {
         id: "sample",
-        name: "SmartPark Sample Parking Site",
+        name: "SmartParking Sample Parking Site",
         address: "72 Lê Thánh Tôn, Quận 1, TP.HCM",
         type: "basement",
         slots: [],
@@ -393,7 +393,7 @@ export function PolicySettings({
                   {currentPdf?.fileName ||
                     `Chinh_Sach_Quy_Dinh_${(
                       ownerLots.find((l) => l.id === selectedLotId)?.name ||
-                      "SmartPark"
+                      "SmartParking"
                     ).replace(/\s+/g, "_")}.pdf`}
                 </span>
                 <span
@@ -405,7 +405,7 @@ export function PolicySettings({
                 >
                   {currentPdf?.fileData
                     ? "Uploaded File"
-                    : "Default SmartPark Document"}
+                    : "Default SmartParking Document"}
                 </span>
               </div>
               <p className="mt-1 text-xs text-[var(--muted)]">

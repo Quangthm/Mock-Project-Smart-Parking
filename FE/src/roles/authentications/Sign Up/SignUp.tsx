@@ -7,7 +7,7 @@ import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
 import type { LotType } from "../../../lib/types"
 
-import { BrandLogo } from "../../../components/brand/BrandLogo"
+import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 
@@ -546,19 +546,12 @@ export function SignUp() {
 
     color: tab === t ? "var(--primary-fg)" : "var(--muted)",
 
-    transition: "all 0.2s",
+    transition: "background-color 0.2s, color 0.2s",
   })
 
   return (
     <div
-      className="auth-page-background"
-      style={{
-        minHeight: "80vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "2rem 1rem",
-      }}
+      className="auth-page-background auth-stage auth-stage-sign-up"
     >
       {showTnC && (
         <TermsModal
@@ -569,14 +562,16 @@ export function SignUp() {
           onClose={() => setShowTnC(false)}
         />
       )}
-      <div style={{ width: "100%", maxWidth: "480px" }}>
-        <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
-          <BrandLogo height={100} style={{ margin: "0 auto 1rem" }} />
+      <div className="auth-panel">
+        <div className="auth-panel-heading">
+          <BrandLogo height={64} style={{ margin: "0 auto 0.5rem" }} />
+          <BrandWordmark height={21} />
           <PageHeader title="Create Account" variant="compact" align="center" description="Join SmartParking today" />
         </div>
 
         {!registration && (!ownerRegistration || ownerRegistration.lotSetupComplete === false) && (
           <div
+            className="auth-role-tabs"
             style={{
               display: "flex",
               border: "1px solid var(--border)",
@@ -661,7 +656,7 @@ export function SignUp() {
         ) : tab === "driver" ? (
           <form
             onSubmit={submitDriver}
-            className="card auth-form-background"
+            className="card auth-form-background auth-form-card"
             style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
           >
             <Field label="Full Name">
@@ -795,7 +790,7 @@ export function SignUp() {
         ) : (
           <form
             onSubmit={submitOwner}
-            className="card auth-form-background"
+            className="card auth-form-background auth-form-card"
             style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
           >
             <div

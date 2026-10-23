@@ -1,7 +1,7 @@
-import { useEffect, type ReactNode } from "react"
+import { useEffect, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 import { useApp } from "../../context/AppContext"
-
 import { UntitledIcon } from "../icon/UntitledIcon"
 
 export type DashboardNavItem = {
@@ -15,75 +15,57 @@ export type DashboardNavItem = {
 
 export type DashboardNavGroup = { label?: string; items: DashboardNavItem[] }
 
-export function DashboardSidebar({
-  groups,
-  children,
-}: {
-  groups: DashboardNavGroup[]
-  children: ReactNode
-}) {
-  const { dashboardMenuOpen, setDashboardMenuOpen, user } = useApp()
-  const navigationVisible = dashboardMenuOpen
+type NavHint = { label: string; top: number; left: number }
 
-  useEffect(() => {
-    if (!dashboardMenuOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDashboardMenuOpen(false)
-    }
-    window.addEventListener("keydown", closeOnEscape)
-    return () => window.removeEventListener("keydown", closeOnEscape)
-  }, [dashboardMenuOpen, setDashboardMenuOpen])
+export function DashboardSidebar({ groups, children }: { groups: DashboardNavGroup[]; children: ReactNode }) {
+  const { user } = useApp()
+  const [hint, setHint] = useState<NavHint | null>(null)
+  const [toolbar, setToolbar] = useState<Element | null>(null)
+
+  useEffect(() => { setToolbar(document.querySelector(".dashboard-topbar")) }, [])
+
+  function showHint(event: MouseEvent<HTMLButtonElement> | FocusEvent<HTMLButtonElement>, label: string) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setHint({ label, top: rect.top + rect.height / 2, left: rect.right + 12 })
+  }
+
+  const navigation = (
+    <aside id="dashboard-navigation" className="dashboard-sidebar" aria-label={`${user?.role ?? "Dashboard"} navigation`}>
+        <div className="dashboard-nav-scroll">
+          {groups.map((group, index) => (
+            <div className="dashboard-nav-group" key={group.label ?? index}>
+              {group.label && <span className="sr-only">{group.label}</span>}
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`dashboard-nav-item${item.active ? " active" : ""}`}
+                  aria-label={item.label}
+                  aria-current={item.active ? "page" : undefined}
+                  onMouseEnter={(event) => showHint(event, item.label)}
+                  onMouseLeave={() => setHint(null)}
+                  onFocus={(event) => showHint(event, item.label)}
+                  onBlur={() => setHint(null)}
+                  onClick={() => { setHint(null); item.onClick() }}
+                >
+                  <UntitledIcon name={item.icon ?? item.label} size={20} />
+                  <span className="dashboard-nav-mobile-label" aria-hidden="true">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+    </aside>
+  )
 
   return (
-    <div
-      className={`dashboard-workspace${
-        dashboardMenuOpen ? " is-menu-open" : ""
-      }`}
-    >
-      <aside
-        id="dashboard-navigation"
-        className={`dashboard-sidebar${dashboardMenuOpen ? " is-open" : ""}`}
-        aria-label={`${user?.role ?? "Dashboard"} navigation`}
-        aria-hidden={!navigationVisible}
-      >
-        <div className="dashboard-sidebar-heading">
-          <div><strong>Menu</strong><span>{user?.role ? `${user.role.charAt(0).toUpperCase()}${user.role.slice(1)} workspace` : "Workspace"}</span></div>
-          <button type="button" className="btn-ghost dashboard-sidebar-close" aria-label="Close navigation" onClick={() => setDashboardMenuOpen(false)} tabIndex={navigationVisible ? 0 : -1}>
-            <UntitledIcon name="x" size={18} />
-          </button>
-        </div>
-        {groups.map((group, index) => (
-          <div className="dashboard-nav-group" key={group.label ?? index}>
-            {group.label && (
-              <div className="dashboard-nav-label">{group.label}</div>
-            )}
-            {group.items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`btn-ghost dashboard-nav-item${item.active ? " active" : ""}`}
-                aria-current={item.active ? "page" : undefined}
-                onClick={() => {
-                  item.onClick()
-                  if (!item.keepMenuOpen) setDashboardMenuOpen(false)
-                }}
-                tabIndex={navigationVisible ? 0 : -1}
-              >
-                <span className="dashboard-nav-icon">
-                  <UntitledIcon name={item.icon ?? item.label} size={18} />
-                </span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-        ))}
-      </aside>
-      {dashboardMenuOpen && (
-        <button
-          className="dashboard-scrim"
-          aria-label="Close navigation"
-          onClick={() => setDashboardMenuOpen(false)}
-        />
+    <div className="dashboard-workspace">
+      {toolbar ? createPortal(navigation, toolbar) : navigation}
+      {hint && typeof document !== "undefined" && createPortal(
+        <span className="dashboard-nav-hint" role="presentation" style={{ top: hint.top, left: hint.left }}>
+          {hint.label}
+        </span>,
+        document.body,
       )}
       <div className="dashboard-content">{children}</div>
     </div>
