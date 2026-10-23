@@ -521,8 +521,8 @@ export function OperatorDashboard({
 function FinanceMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-[var(--fg)]">{value}</p>
+      <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--fg)]">{value}</p>
     </div>
   )
 }

@@ -1,0 +1,2042 @@
+{
+ "url": "http://127.0.0.1:5174/",
+ "at": "2026-10-21T06:29:37.292Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 4,
+   "filled": [
+    0.59,
+    0.7,
+    0.63,
+    0.55
+   ],
+   "motion": {
+    "elements": 20,
+    "css": 3,
+    "transitions": 17,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 2893,
+     "screens": 3.2,
+     "words": 352,
+     "img": 9,
+     "video": 0,
+     "canvas": 0,
+     "svg": 16,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 1,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "photo-1506521781263-d8422e82f27a?w=900&h=500&fit"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "chars": 37,
+     "lines": 3,
+     "size": 48,
+     "vw": 3.3,
+     "font": "Be Vietnam Pro",
+     "weight": 600,
+     "tracking": -0.02,
+     "leading": 1.12,
+     "top": 133,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "lines": 3,
+     "size": 48,
+     "font": "Be Vietnam Pro"
+    },
+    "headings": [
+     {
+      "text": "Park Smart. Book Easy. Manage Better.",
+      "words": 6,
+      "chars": 37,
+      "lines": 3,
+      "size": 48,
+      "vw": 3.3,
+      "font": "Be Vietnam Pro",
+      "weight": 600,
+      "tracking": -0.025,
+      "leading": 1.12,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.25,
+      "top": 133,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Why SmartParking?",
+      "words": 2,
+      "chars": 17,
+      "lines": 1,
+      "size": 32,
+      "vw": 2.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.83,
+      "top": 711,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "How It Works",
+      "words": 3,
+      "chars": 12,
+      "lines": 1,
+      "size": 32,
+      "vw": 2.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.8,
+      "top": 1182,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Supported Payment Methods",
+      "words": 3,
+      "chars": 25,
+      "lines": 1,
+      "size": 32,
+      "vw": 2.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.63,
+      "top": 1624,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Ready to Park Smarter?",
+      "words": 4,
+      "chars": 22,
+      "lines": 1,
+      "size": 32,
+      "vw": 2.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.52,
+      "top": 2159,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 5,
+     "maxLines": 3,
+     "over2Lines": 1,
+     "statements": 0,
+     "centered": 4,
+     "medianWords": 3,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Be Vietnam Pro",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32,
+      48
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Be Vietnam Pro",
+      "size": 13.6,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": null
+     },
+     "measureChars": 60,
+     "max": {
+      "size": 48,
+      "vw": 3.3,
+      "font": "Be Vietnam Pro",
+      "text": "Park Smart.Manage Better."
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 6,
+     "microLabelShare": 0.02,
+     "microSamples": [
+      "STEP 01",
+      "STEP 02",
+      "STEP 03",
+      "STEP 04",
+      "STEP 05",
+      "STEP 06"
+     ],
+     "upperShare": 0.02,
+     "centerShare": 0.47,
+     "smallText": 13
+    },
+    "eyebrows": [],
+    "numbered": [
+     {
+      "text": "STEP 01",
+      "size": 11.5,
+      "top": 1320
+     },
+     {
+      "text": "STEP 02",
+      "size": 11.5,
+      "top": 1320
+     },
+     {
+      "text": "STEP 03",
+      "size": 11.5,
+      "top": 1320
+     },
+     {
+      "text": "STEP 04",
+      "size": 11.5,
+      "top": 1320
+     },
+     {
+      "text": "STEP 05",
+      "size": 11.5,
+      "top": 1320
+     },
+     {
+      "text": "STEP 06",
+      "size": 11.5,
+      "top": 1320
+     }
+    ],
+    "color": {
+     "bodyBg": "#151c1b",
+     "bodyBgHsl": {
+      "h": 171,
+      "s": 0.14,
+      "l": 0.1
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#151c1b",
+       "top": 0,
+       "hsl": {
+        "h": 171,
+        "s": 0.14,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#1e2725",
+       "top": 646,
+       "hsl": {
+        "h": 167,
+        "s": 0.13,
+        "l": 0.14
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#b6c7c0",
+       "share": 0.72
+      },
+      {
+       "color": "#f1f6f3",
+       "share": 0.16
+      },
+      {
+       "color": "#ffffff",
+       "share": 0.06
+      },
+      {
+       "color": "#69d7b2",
+       "share": 0.04
+      },
+      {
+       "color": "#151c1b",
+       "share": 0.02
+      }
+     ],
+     "button": {
+      "bg": "#69d7b2",
+      "hsl": {
+       "h": 160,
+       "s": 0.58,
+       "l": 0.63
+      },
+      "fg": "#151c1b"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 5,
+     "radius": 6,
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to main content",
+      "Sign In",
+      "Sign Up",
+      "Book a Spot",
+      "Become a Partner"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 1,
+     "scrims": 0,
+     "gradientSamples": [
+      "div → linear-gradient(to top, rgba(11, 22, 40, 0.92) 0%, rgba(11, 22, 40, 0.3) 60%, rgba(0, 0, 0, 0) 100%)"
+     ],
+     "gradientText": 0,
+     "hairlines": 5,
+     "hairlineSamples": [
+      "nav 1440px",
+      "section 1440px",
+      "section 1440px",
+      "footer 1440px",
+      "div 1152px"
+     ],
+     "outlinedBoxes": 17,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 17,
+     "boxRadius": 8,
+     "squareMedia": 0,
+     "roundedMedia": 1,
+     "mediaRadius": 14,
+     "textShadow": 1,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 863
+      },
+      {
+       "count": 6,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1295
+      }
+     ]
+    },
+    "heroMedia": [
+     {
+      "type": "img",
+      "ratio": 0.14
+     }
+    ],
+    "nav": {
+     "links": 0,
+     "fixed": true,
+     "height": 61,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "be vietnam pro"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "pageH": 2893,
+    "margins": {
+     "left": 144,
+     "right": 144
+    },
+    "sections": [
+     {
+      "sel": "main#main-content",
+      "tag": "main",
+      "top": 61,
+      "height": 2342,
+      "words": 288,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Park Smart.",
+       "size": 48,
+       "tag": "h1"
+      },
+      "left": 145,
+      "right": 145,
+      "textLeft": 145,
+      "textRight": 145,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "footer",
+      "tag": "footer",
+      "top": 2483,
+      "height": 410,
+      "words": 67,
+      "media": 0,
+      "middle": 32,
+      "heading": {
+       "text": "Information",
+       "size": 14,
+       "tag": "h4"
+      },
+      "left": 144,
+      "right": 113,
+      "textLeft": 144,
+      "textRight": 113,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Park Smart. Book Easy. Manage Better.",
+      "size": 48,
+      "top": 133,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 145,
+      "n": 6
+     },
+     {
+      "x": 451,
+      "n": 2
+     },
+     {
+      "x": 757,
+      "n": 2
+     },
+     {
+      "x": 1063,
+      "n": 2
+     },
+     {
+      "x": 773,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 13,
+    "bodySize": 14,
+    "stage": false,
+    "explains": true,
+    "slivers": [],
+    "voidShare": 0.13,
+    "voidBox": {
+     "x": 960,
+     "y": 540,
+     "w": 480,
+     "h": 360
+    }
+   },
+   "app": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "dark": true,
+    "ground": "#151c1b",
+    "sidebar": null,
+    "topbar": {
+     "h": 61
+    },
+    "canvas": {
+     "left": 144,
+     "right": 144
+    },
+    "hero": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "chars": 37,
+     "lines": 3,
+     "size": 48,
+     "vw": 3.3,
+     "font": "Be Vietnam Pro",
+     "weight": 600,
+     "tracking": -0.02,
+     "leading": 1.12,
+     "top": 133,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 17,
+     "firstScreen": 1,
+     "ragged": [],
+     "voids": []
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 17,
+     "radii": [
+      [
+       8,
+       16
+      ],
+      [
+       14,
+       1
+      ]
+     ],
+     "heavyBorders": 1,
+     "borderSamples": [
+      "#40504a on #0b1628 (2.13:1)"
+     ],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 0,
+     "hues": 0,
+     "samples": []
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 0,
+     "tabularShare": null,
+     "kpiMax": null
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.19,
+     "tiny": 0,
+     "tinySamples": [],
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32,
+      48
+     ]
+    },
+    "title": {
+     "text": "Park Smart.\nBook Easy.\nManage Better.",
+     "size": 48,
+     "top": 133
+    },
+    "colourShare": 0.007
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 4,
+   "filled": [
+    0.66,
+    0.62,
+    0.63,
+    0.7
+   ],
+   "motion": {
+    "elements": 20,
+    "css": 3,
+    "transitions": 17,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 3607,
+     "screens": 3.5,
+     "words": 352,
+     "img": 9,
+     "video": 0,
+     "canvas": 0,
+     "svg": 16,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 1,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "photo-1506521781263-d8422e82f27a?w=900&h=500&fit"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "chars": 37,
+     "lines": 4,
+     "size": 48,
+     "vw": 6.3,
+     "font": "Be Vietnam Pro",
+     "weight": 600,
+     "tracking": -0.02,
+     "leading": 1.12,
+     "top": 107,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "lines": 4,
+     "size": 48,
+     "font": "Be Vietnam Pro"
+    },
+    "headings": [
+     {
+      "text": "Park Smart. Book Easy. Manage Better.",
+      "words": 6,
+      "chars": 37,
+      "lines": 4,
+      "size": 48,
+      "vw": 6.3,
+      "font": "Be Vietnam Pro",
+      "weight": 600,
+      "tracking": -0.025,
+      "leading": 1.12,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.46,
+      "top": 107,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Why SmartParking?",
+      "words": 2,
+      "chars": 17,
+      "lines": 1,
+      "size": 32,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 804,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "How It Works",
+      "words": 3,
+      "chars": 12,
+      "lines": 1,
+      "size": 32,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 1444,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Supported Payment Methods",
+      "words": 3,
+      "chars": 25,
+      "lines": 1,
+      "size": 32,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 2121,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Ready to Park Smarter?",
+      "words": 4,
+      "chars": 22,
+      "lines": 1,
+      "size": 32,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 2656,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 5,
+     "maxLines": 4,
+     "over2Lines": 1,
+     "statements": 0,
+     "centered": 4,
+     "medianWords": 3,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Be Vietnam Pro",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32,
+      48
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Be Vietnam Pro",
+      "size": 13.6,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": null
+     },
+     "measureChars": 39,
+     "max": {
+      "size": 48,
+      "vw": 6.3,
+      "font": "Be Vietnam Pro",
+      "text": "Park Smart.Manage Better."
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 6,
+     "microLabelShare": 0.02,
+     "microSamples": [
+      "STEP 01",
+      "STEP 02",
+      "STEP 03",
+      "STEP 04",
+      "STEP 05",
+      "STEP 06"
+     ],
+     "upperShare": 0.02,
+     "centerShare": 0.47,
+     "smallText": 13
+    },
+    "eyebrows": [],
+    "numbered": [
+     {
+      "text": "STEP 01",
+      "size": 11.5,
+      "top": 1582
+     },
+     {
+      "text": "STEP 02",
+      "size": 11.5,
+      "top": 1582
+     },
+     {
+      "text": "STEP 03",
+      "size": 11.5,
+      "top": 1582
+     },
+     {
+      "text": "STEP 04",
+      "size": 11.5,
+      "top": 1582
+     },
+     {
+      "text": "STEP 05",
+      "size": 11.5,
+      "top": 1817
+     },
+     {
+      "text": "STEP 06",
+      "size": 11.5,
+      "top": 1817
+     }
+    ],
+    "color": {
+     "bodyBg": "#151c1b",
+     "bodyBgHsl": {
+      "h": 171,
+      "s": 0.14,
+      "l": 0.1
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#151c1b",
+       "top": 0,
+       "hsl": {
+        "h": 171,
+        "s": 0.14,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#1e2725",
+       "top": 739,
+       "hsl": {
+        "h": 167,
+        "s": 0.13,
+        "l": 0.14
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#b6c7c0",
+       "share": 0.72
+      },
+      {
+       "color": "#f1f6f3",
+       "share": 0.16
+      },
+      {
+       "color": "#ffffff",
+       "share": 0.06
+      },
+      {
+       "color": "#69d7b2",
+       "share": 0.04
+      },
+      {
+       "color": "#151c1b",
+       "share": 0.02
+      }
+     ],
+     "button": {
+      "bg": "#69d7b2",
+      "hsl": {
+       "h": 160,
+       "s": 0.58,
+       "l": 0.63
+      },
+      "fg": "#151c1b"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 5,
+     "radius": 6,
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to main content",
+      "Sign In",
+      "Sign Up",
+      "Book a Spot",
+      "Become a Partner"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 1,
+     "scrims": 0,
+     "gradientSamples": [
+      "div → linear-gradient(to top, rgba(11, 22, 40, 0.92) 0%, rgba(11, 22, 40, 0.3) 60%, rgba(0, 0, 0, 0) 100%)"
+     ],
+     "gradientText": 0,
+     "hairlines": 5,
+     "hairlineSamples": [
+      "nav 768px",
+      "section 768px",
+      "section 768px",
+      "footer 768px",
+      "div 720px"
+     ],
+     "outlinedBoxes": 17,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 17,
+     "boxRadius": 8,
+     "squareMedia": 0,
+     "roundedMedia": 1,
+     "mediaRadius": 14,
+     "textShadow": 1,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 956
+      },
+      {
+       "count": 6,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1557
+      }
+     ]
+    },
+    "heroMedia": [
+     {
+      "type": "img",
+      "ratio": 0.15
+     }
+    ],
+    "nav": {
+     "links": 0,
+     "fixed": true,
+     "height": 61,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "be vietnam pro"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "pageH": 3607,
+    "margins": {
+     "left": 17,
+     "right": 24
+    },
+    "sections": [
+     {
+      "sel": "main#main-content",
+      "tag": "main",
+      "top": 61,
+      "height": 2839,
+      "words": 288,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Park Smart.",
+       "size": 48,
+       "tag": "h1"
+      },
+      "left": 17,
+      "right": 18,
+      "textLeft": 17,
+      "textRight": 42,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "footer",
+      "tag": "footer",
+      "top": 2980,
+      "height": 628,
+      "words": 67,
+      "media": 0,
+      "middle": 12,
+      "heading": {
+       "text": "Information",
+       "size": 14,
+       "tag": "h4"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 24,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Park Smart. Book Easy. Manage Better.",
+      "size": 48,
+      "top": 107,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 421,
+      "n": 5
+     },
+     {
+      "x": 17,
+      "n": 4
+     },
+     {
+      "x": 49,
+      "n": 4
+     }
+    ],
+    "leftBlocks": 13,
+    "bodySize": 14,
+    "stage": false,
+    "explains": true,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "dark": true,
+    "ground": "#151c1b",
+    "sidebar": null,
+    "topbar": {
+     "h": 61
+    },
+    "canvas": {
+     "left": 17,
+     "right": 24
+    },
+    "hero": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "chars": 37,
+     "lines": 4,
+     "size": 48,
+     "vw": 6.3,
+     "font": "Be Vietnam Pro",
+     "weight": 600,
+     "tracking": -0.02,
+     "leading": 1.12,
+     "top": 107,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 17,
+     "firstScreen": 3,
+     "ragged": [],
+     "voids": []
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 17,
+     "radii": [
+      [
+       8,
+       16
+      ],
+      [
+       14,
+       1
+      ]
+     ],
+     "heavyBorders": 1,
+     "borderSamples": [
+      "#40504a on #0b1628 (2.13:1)"
+     ],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 0,
+     "hues": 0,
+     "samples": []
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 0,
+     "tabularShare": null,
+     "kpiMax": null
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.19,
+     "tiny": 0,
+     "tinySamples": [],
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32,
+      48
+     ]
+    },
+    "title": {
+     "text": "Park Smart.\nBook Easy.\nManage Better.",
+     "size": 48,
+     "top": 107
+    },
+    "colourShare": 0.016
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 7,
+   "filled": [
+    0.75,
+    0.93,
+    0.82,
+    0.89,
+    0.49,
+    1,
+    1
+   ],
+   "motion": {
+    "elements": 24,
+    "css": 3,
+    "transitions": 21,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 5398,
+     "screens": 6.4,
+     "words": 350,
+     "img": 9,
+     "video": 0,
+     "canvas": 0,
+     "svg": 16,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 1,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "photo-1506521781263-d8422e82f27a?w=900&h=500&fit"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "chars": 37,
+     "lines": 3,
+     "size": 36,
+     "vw": 9.2,
+     "font": "Be Vietnam Pro",
+     "weight": 600,
+     "tracking": -0.02,
+     "leading": 1.12,
+     "top": 161,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "lines": 3,
+     "size": 36,
+     "font": "Be Vietnam Pro"
+    },
+    "headings": [
+     {
+      "text": "Park Smart. Book Easy. Manage Better.",
+      "words": 6,
+      "chars": 37,
+      "lines": 3,
+      "size": 36,
+      "vw": 9.2,
+      "font": "Be Vietnam Pro",
+      "weight": 600,
+      "tracking": -0.025,
+      "leading": 1.12,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.68,
+      "top": 161,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Find",
+      "words": 1,
+      "chars": 4,
+      "lines": 1,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.5,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.24,
+      "top": 556,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "Book",
+      "words": 1,
+      "chars": 4,
+      "lines": 1,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.5,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.15,
+      "top": 556,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "Go",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.5,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.27,
+      "top": 556,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "Why SmartParking?",
+      "words": 2,
+      "chars": 17,
+      "lines": 1,
+      "size": 32,
+      "vw": 8.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 1073,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "How It Works",
+      "words": 3,
+      "chars": 12,
+      "lines": 1,
+      "size": 32,
+      "vw": 8.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 2197,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Supported Payment Methods",
+      "words": 3,
+      "chars": 25,
+      "lines": 2,
+      "size": 32,
+      "vw": 8.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 3089,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Ready to Park Smarter?",
+      "words": 4,
+      "chars": 22,
+      "lines": 2,
+      "size": 32,
+      "vw": 8.2,
+      "font": "Be Vietnam Pro",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 3753,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 8,
+     "maxLines": 3,
+     "over2Lines": 1,
+     "statements": 0,
+     "centered": 4,
+     "medianWords": 2,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Be Vietnam Pro",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32,
+      36
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Be Vietnam Pro",
+      "size": 16,
+      "leading": 1.75,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 9.8
+     },
+     "measureChars": 45,
+     "max": {
+      "size": 36,
+      "vw": 9.2,
+      "font": "Be Vietnam Pro",
+      "text": "Park Smart.Manage Better."
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 6,
+     "microLabelShare": 0.02,
+     "microSamples": [
+      "STEP 01",
+      "STEP 02",
+      "STEP 03",
+      "STEP 04",
+      "STEP 05",
+      "STEP 06"
+     ],
+     "upperShare": 0.02,
+     "centerShare": 0.47,
+     "smallText": 13
+    },
+    "eyebrows": [],
+    "numbered": [
+     {
+      "text": "STEP 01",
+      "size": 11.5,
+      "top": 2334
+     },
+     {
+      "text": "STEP 02",
+      "size": 11.5,
+      "top": 2334
+     },
+     {
+      "text": "STEP 03",
+      "size": 11.5,
+      "top": 2569
+     },
+     {
+      "text": "STEP 04",
+      "size": 11.5,
+      "top": 2569
+     },
+     {
+      "text": "STEP 05",
+      "size": 11.5,
+      "top": 2785
+     },
+     {
+      "text": "STEP 06",
+      "size": 11.5,
+      "top": 2785
+     }
+    ],
+    "color": {
+     "bodyBg": "#151c1b",
+     "bodyBgHsl": {
+      "h": 171,
+      "s": 0.14,
+      "l": 0.1
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#151c1b",
+       "top": 0,
+       "hsl": {
+        "h": 171,
+        "s": 0.14,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#0b1628",
+       "top": 634,
+       "hsl": {
+        "h": 217,
+        "s": 0.57,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#1e2725",
+       "top": 1008,
+       "hsl": {
+        "h": 167,
+        "s": 0.13,
+        "l": 0.14
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#b6c7c0",
+       "share": 0.73
+      },
+      {
+       "color": "#f1f6f3",
+       "share": 0.16
+      },
+      {
+       "color": "#ffffff",
+       "share": 0.06
+      },
+      {
+       "color": "#69d7b2",
+       "share": 0.03
+      },
+      {
+       "color": "#151c1b",
+       "share": 0.02
+      }
+     ],
+     "button": {
+      "bg": "#69d7b2",
+      "hsl": {
+       "h": 160,
+       "s": 0.58,
+       "l": 0.63
+      },
+      "fg": "#151c1b"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 5,
+     "radius": 6,
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to main content",
+      "Sign In",
+      "Sign Up",
+      "Book a Spot",
+      "Become a Partner"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 1,
+     "scrims": 0,
+     "gradientSamples": [
+      "div → linear-gradient(to top, rgba(11, 22, 40, 0.92) 0%, rgba(11, 22, 40, 0.3) 60%, rgba(0, 0, 0, 0) 100%)"
+     ],
+     "gradientText": 0,
+     "hairlines": 5,
+     "hairlineSamples": [
+      "nav 390px",
+      "section 390px",
+      "section 390px",
+      "footer 390px",
+      "div 342px"
+     ],
+     "outlinedBoxes": 11,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 11,
+     "boxRadius": 8,
+     "squareMedia": 0,
+     "roundedMedia": 1,
+     "mediaRadius": 14,
+     "textShadow": 1,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1223
+      },
+      {
+       "count": 6,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 2309
+      }
+     ]
+    },
+    "heroMedia": [
+     {
+      "type": "img",
+      "ratio": 0.23
+     }
+    ],
+    "nav": {
+     "links": 0,
+     "fixed": true,
+     "height": 129,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "be vietnam pro"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "pageH": 5398,
+    "margins": {
+     "left": 16,
+     "right": 16
+    },
+    "sections": [
+     {
+      "sel": "nav",
+      "tag": "nav",
+      "top": 0,
+      "height": 129,
+      "words": 7,
+      "media": 0,
+      "middle": 4,
+      "heading": null,
+      "left": 16,
+      "right": 16,
+      "textLeft": 93,
+      "textRight": 31,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": true
+     },
+     {
+      "sel": "main#main-content",
+      "tag": "main",
+      "top": 129,
+      "height": 3997,
+      "words": 288,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Park Smart.",
+       "size": 36,
+       "tag": "h1"
+      },
+      "left": 16,
+      "right": 16,
+      "textLeft": 16,
+      "textRight": 27,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "footer",
+      "tag": "footer",
+      "top": 4206,
+      "height": 1192,
+      "words": 67,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Information",
+       "size": 14,
+       "tag": "h4"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 42,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Park Smart. Book Easy. Manage Better.",
+      "size": 36,
+      "top": 161,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 41,
+      "n": 10
+     },
+     {
+      "x": 16,
+      "n": 4
+     }
+    ],
+    "leftBlocks": 14,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "dark": true,
+    "ground": "#151c1b",
+    "sidebar": null,
+    "topbar": null,
+    "canvas": {
+     "left": 16,
+     "right": 16
+    },
+    "hero": {
+     "text": "Park Smart. Book Easy. Manage Better.",
+     "words": 6,
+     "chars": 37,
+     "lines": 3,
+     "size": 36,
+     "vw": 9.2,
+     "font": "Be Vietnam Pro",
+     "weight": 600,
+     "tracking": -0.02,
+     "leading": 1.12,
+     "top": 161,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 12,
+     "firstScreen": 1,
+     "ragged": [],
+     "voids": []
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 12,
+     "radii": [
+      [
+       8,
+       10
+      ],
+      [
+       14,
+       1
+      ],
+      [
+       0,
+       1
+      ]
+     ],
+     "heavyBorders": 1,
+     "borderSamples": [
+      "#40504a on #0b1628 (2.13:1)"
+     ],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 0,
+     "hues": 0,
+     "samples": []
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 0,
+     "tabularShare": null,
+     "kpiMax": null
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.19,
+     "tiny": 0,
+     "tinySamples": [],
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32,
+      36
+     ]
+    },
+    "title": {
+     "text": "Park Smart.\nBook Easy.\nManage Better.",
+     "size": 36,
+     "top": 161
+    },
+    "colourShare": 0.066
+   },
+   "consoleErrors": []
+  }
+ ],
+ "findings": [
+  {
+   "level": "FAIL",
+   "id": "headline-lines",
+   "width": 1440,
+   "message": "1 headline(s) wrap past two lines at 1440px: \"Park Smart. Book Easy. Manage Better.\" → 3 lines (6 words, 48px)",
+   "fix": "Cut words first (a headline is a title, not a sentence). Then give it a wider measure. Lower the size only as a last resort and never below the scale you chose. A real statement paragraph belongs in a <p> or <blockquote> at 36px or less."
+  },
+  {
+   "level": "FAIL",
+   "id": "micro-label",
+   "width": 1440,
+   "message": "6 tiny uppercase letter-spaced labels (e.g. \"STEP 01\", \"STEP 02\", \"STEP 03\", \"STEP 04\").",
+   "fix": "Use sentence-case text at a readable size, or delete the label.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "gradient",
+   "width": 1440,
+   "message": "1 gradient fill(s): div → linear-gradient(to top, rgba(11, 22, 40, 0.92) 0%, rgba(11, 22, 40, 0.3) 60%, rgba(0, 0, 0, 0) 100%)",
+   "fix": "Use a flat colour or a real image. The only gradient allowed by default is a neutral scrim over a photo for legibility.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "text-shadow",
+   "width": 1440,
+   "message": "1 text-shadow(s).",
+   "fix": "Remove; fix legibility with a scrim or a different crop.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "below-fold",
+   "width": 1440,
+   "message": "Only 1 of 17 blocks start on the first 1440px screen.",
+   "fix": "Every block the brief names shows its header and first rows on the first desktop screen: size the headline block to its question, cap long lists with \"View all\", and put time-sensitive blocks before long tables."
+  },
+  {
+   "level": "WARN",
+   "id": "app-title-size",
+   "width": 1440,
+   "message": "The h1 is 48px (\"Park Smart.\nBook Easy.\nManage Better.\").",
+   "fix": "An app screen is not a landing page: the title is 18-32px (20-24px on a phone).",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "headline-lines",
+   "width": 768,
+   "message": "1 headline(s) wrap past two lines at 768px: \"Park Smart. Book Easy. Manage Better.\" → 4 lines (6 words, 48px)",
+   "fix": "Cut words first (a headline is a title, not a sentence). Then give it a wider measure. Lower the size only as a last resort and never below the scale you chose. A real statement paragraph belongs in a <p> or <blockquote> at 32px or less."
+  },
+  {
+   "level": "FAIL",
+   "id": "headline-lines",
+   "width": 390,
+   "message": "1 headline(s) wrap past two lines at 390px: \"Park Smart. Book Easy. Manage Better.\" → 3 lines (6 words, 36px)",
+   "fix": "Cut words first (a headline is a title, not a sentence). Then give it a wider measure. Lower the size only as a last resort and never below the scale you chose. A real statement paragraph belongs in a <p> or <blockquote> at 24px or less."
+  }
+ ],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\inspect\\desktop-fold.jpg",
+   "pages": [
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\inspect\\desktop-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\inspect\\tablet-fold.jpg",
+   "pages": [
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\inspect\\tablet-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\inspect\\mobile-fold.jpg",
+   "pages": [
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\inspect\\mobile-page-01.jpg"
+   ],
+   "film": []
+  }
+ ]
+}

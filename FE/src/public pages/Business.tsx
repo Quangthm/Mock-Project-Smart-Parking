@@ -99,15 +99,15 @@ function Calculator() {
       result.current.innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1rem">
           <div style="text-align:center;padding:1rem;background:var(--primary)10;border-radius:8px;border:1px solid var(--primary)30">
-            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:var(--primary)">${yearly.toLocaleString("vi-VN")} VND</div>
+            <div style="font-family:Be Vietnam Pro;font-weight:800;font-size:1.3rem;color:var(--primary)">${yearly.toLocaleString("vi-VN")} VND</div>
             <div style="font-size:0.78rem;color:var(--muted)">Gross Revenue/Year</div>
           </div>
           <div style="text-align:center;padding:1rem;background:#22c55e10;border-radius:8px;border:1px solid #22c55e30">
-            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:#22c55e">${yourShare.toLocaleString("vi-VN")} VND</div>
+            <div style="font-family:Be Vietnam Pro;font-weight:800;font-size:1.3rem;color:#22c55e">${yourShare.toLocaleString("vi-VN")} VND</div>
             <div style="font-size:0.78rem;color:var(--muted)">Your Share (85%)</div>
           </div>
           <div style="text-align:center;padding:1rem;background:var(--card);border-radius:8px;border:1px solid var(--border)">
-            <div style="font-family:Outfit;font-weight:800;font-size:1.3rem;color:var(--muted)">${platform.toLocaleString("vi-VN")} VND</div>
+            <div style="font-family:Be Vietnam Pro;font-weight:800;font-size:1.3rem;color:var(--muted)">${platform.toLocaleString("vi-VN")} VND</div>
             <div style="font-size:0.78rem;color:var(--muted)">Platform Fee (15%)</div>
           </div>
         </div>
@@ -119,7 +119,7 @@ function Calculator() {
     <div className="card" style={{ maxWidth: "700px", margin: "0 auto" }}>
       <h3
         style={{
-          fontFamily: "Outfit",
+          fontFamily: "Be Vietnam Pro",
           fontWeight: 700,
           fontSize: "1.15rem",
           color: "var(--fg)",
@@ -303,7 +303,7 @@ export function Business() {
                 background: "rgba(255,255,255,0.15)",
                 border: "1.5px solid rgba(255,255,255,0.5)",
                 color: "#fff",
-                borderRadius: "var(--radius)",
+                borderRadius: "999px",
                 cursor: "pointer",
                 fontWeight: 600,
               }}
@@ -409,7 +409,7 @@ export function Business() {
             <div key={b.label}>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 800,
                   fontSize: "2.25rem",
                   color: "var(--primary)",
@@ -419,7 +419,7 @@ export function Business() {
               </div>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 600,
                   fontSize: "0.95rem",
                   color: "var(--fg)",
@@ -443,7 +443,7 @@ export function Business() {
         <div style={{ textAlign: "center", marginBottom: "3rem" }}>
           <h2
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
               fontSize: "1.85rem",
               color: "var(--fg)",
@@ -488,7 +488,7 @@ export function Business() {
               <div>
                 <div
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontWeight: 600,
                     fontSize: "0.95rem",
                     color: "var(--fg)",
@@ -534,7 +534,7 @@ export function Business() {
           <div>
             <h2
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.75rem",
                 color: "var(--fg)",
@@ -619,7 +619,7 @@ export function Business() {
         <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
           <h2
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
               fontSize: "1.75rem",
               color: "var(--fg)",
@@ -649,7 +649,7 @@ export function Business() {
           <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
             <h2
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.75rem",
                 color: "var(--fg)",
@@ -690,7 +690,7 @@ export function Business() {
               </div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "1.05rem",
                   color: "var(--fg)",
@@ -753,7 +753,7 @@ function ContactForm() {
       </div>
       <h3
         style={{
-          fontFamily: "Outfit",
+          fontFamily: "Be Vietnam Pro",
           fontWeight: 700,
           fontSize: "1.05rem",
           color: "var(--fg)",

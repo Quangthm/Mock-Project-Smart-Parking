@@ -207,15 +207,15 @@ export function Subscriptions() {
         style={{
           borderRadius: "1rem",
 
-          background: "linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)",
+          background: "var(--card)",
 
-          border: "1px solid rgba(59, 130, 246, 0.35)",
+          border: "1px solid var(--border)",
 
           padding: "1.75rem 2rem",
 
-          color: "#ffffff",
+          color: "var(--fg)",
 
-          boxShadow: "0 10px 30px -5px rgba(30, 58, 138, 0.3)",
+          boxShadow: "none",
 
           position: "relative",
 
@@ -223,7 +223,7 @@ export function Subscriptions() {
         }}
       >
         <div style={{ position: "relative", zIndex: 2, maxWidth: "780px" }}>
-          <PageHeader variant="promo" eyebrow={<><UntitledIcon name="shopping-bag" size={14} /> SMART PARKING PASS STORE</>} title="Unlimited Commuter Passes & Memberships" description="Subscribe to monthly or annual passes directly from top real-estate enterprises. Enjoy guaranteed reserved spots, 24/7 unlimited access, and up to 40% savings." />
+          <PageHeader variant="default" title="Parking Passes" description="Compare monthly and annual passes from participating parking sites." />
 
           {/* STORE VALUE PROPOSITION PILLS */}
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
@@ -232,15 +232,15 @@ export function Subscriptions() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.4rem",
-                background: "rgba(255, 255, 255, 0.1)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
+                background: "var(--raised)",
+                border: "1px solid var(--border)",
                 borderRadius: "999px",
                 padding: "0.3rem 0.75rem",
                 fontSize: "0.78rem",
                 fontWeight: 600,
               }}
             >
-              <UntitledIcon name="zap" size={14} style={{ color: "#38bdf8" }} />{" "}
+              <UntitledIcon name="zap" size={14} style={{ color: "var(--accent)" }} />{" "}
               24/7 Unlimited Access
             </span>
             <span
@@ -248,15 +248,15 @@ export function Subscriptions() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.4rem",
-                background: "rgba(255, 255, 255, 0.1)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
+                background: "var(--raised)",
+                border: "1px solid var(--border)",
                 borderRadius: "999px",
                 padding: "0.3rem 0.75rem",
                 fontSize: "0.78rem",
                 fontWeight: 600,
               }}
             >
-              <UntitledIcon name="tag" size={14} style={{ color: "#38bdf8" }} />{" "}
+              <UntitledIcon name="tag" size={14} style={{ color: "var(--accent)" }} />{" "}
               Save Up To 40%
             </span>
             <span
@@ -264,15 +264,15 @@ export function Subscriptions() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.4rem",
-                background: "rgba(255, 255, 255, 0.1)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
+                background: "var(--raised)",
+                border: "1px solid var(--border)",
                 borderRadius: "999px",
                 padding: "0.3rem 0.75rem",
                 fontSize: "0.78rem",
                 fontWeight: 600,
               }}
             >
-              <UntitledIcon name="car" size={14} style={{ color: "#38bdf8" }} />{" "}
+              <UntitledIcon name="car" size={14} style={{ color: "var(--accent)" }} />{" "}
               Automated Gate Camera Scan
             </span>
             <span
@@ -280,8 +280,8 @@ export function Subscriptions() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.4rem",
-                background: "rgba(255, 255, 255, 0.1)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
+                background: "var(--raised)",
+                border: "1px solid var(--border)",
                 borderRadius: "999px",
                 padding: "0.3rem 0.75rem",
                 fontSize: "0.78rem",
@@ -291,7 +291,7 @@ export function Subscriptions() {
               <UntitledIcon
                 name="shield"
                 size={14}
-                style={{ color: "#38bdf8" }}
+                style={{ color: "var(--accent)" }}
               />{" "}
               Guaranteed Reserved Slot
             </span>
@@ -674,7 +674,7 @@ export function Subscriptions() {
                       padding: "1rem 1.15rem",
 
                       background:
-                        "linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(15, 23, 42, 0.02) 100%)",
+                        "var(--raised)",
 
                       borderBottom: "1px solid var(--border)",
 
@@ -720,7 +720,7 @@ export function Subscriptions() {
                       </span>
                       <h3
                         style={{
-                          fontFamily: "Outfit",
+                          fontFamily: "Be Vietnam Pro",
                           fontWeight: 700,
                           fontSize: "1.08rem",
                           margin: 0,
@@ -903,7 +903,7 @@ export function Subscriptions() {
                         >
                           <strong
                             style={{
-                              fontFamily: "Outfit",
+                              fontFamily: "Be Vietnam Pro",
                               fontWeight: 800,
                               fontSize: "1.25rem",
                               color: "var(--primary)",
@@ -970,7 +970,7 @@ export function Subscriptions() {
               </div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "1.2rem",
                   color: "var(--fg)",
@@ -1051,7 +1051,7 @@ export function Subscriptions() {
                         <h4
                           style={{
                             margin: "0.4rem 0 0",
-                            fontFamily: "Outfit",
+                            fontFamily: "Be Vietnam Pro",
                             fontWeight: 700,
                             fontSize: "1.1rem",
                             color: "var(--fg)",
@@ -1169,7 +1169,7 @@ export function Subscriptions() {
               </div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "1.2rem",
                   color: "var(--fg)",
@@ -1233,7 +1233,7 @@ export function Subscriptions() {
                       style={{
                         fontSize: "0.95rem",
                         color: "var(--fg)",
-                        fontFamily: "Outfit",
+                        fontFamily: "Be Vietnam Pro",
                       }}
                     >
                       {order.plan === "monthly"
@@ -1265,7 +1265,7 @@ export function Subscriptions() {
                       style={{
                         display: "block",
                         fontSize: "1.1rem",
-                        fontFamily: "Outfit",
+                        fontFamily: "Be Vietnam Pro",
                         color: "var(--primary)",
                       }}
                     >
@@ -1326,7 +1326,7 @@ export function Subscriptions() {
               </div>
               <h3
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "1.2rem",
                   color: "var(--fg)",
@@ -1422,7 +1422,7 @@ export function Subscriptions() {
                   <h3
                     style={{
                       margin: "0.4rem 0 0.2rem",
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontWeight: 800,
                       fontSize: "1.4rem",
                       color: "var(--fg)",
@@ -1495,7 +1495,7 @@ export function Subscriptions() {
                   </div>
                   <h4
                     style={{
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontWeight: 700,
                       fontSize: "1.3rem",
                       color: "#22c55e",
@@ -1607,7 +1607,7 @@ export function Subscriptions() {
                       </div>
                       <h4
                         style={{
-                          fontFamily: "Outfit",
+                          fontFamily: "Be Vietnam Pro",
                           fontWeight: 800,
                           fontSize: "1.2rem",
                           margin: "0 0 0.35rem",
@@ -1618,7 +1618,7 @@ export function Subscriptions() {
                       </h4>
                       <div
                         style={{
-                          fontFamily: "Outfit",
+                          fontFamily: "Be Vietnam Pro",
                           fontWeight: 800,
                           fontSize: "1.35rem",
                           color: "var(--primary)",
@@ -1728,7 +1728,7 @@ export function Subscriptions() {
                       </div>
                       <h4
                         style={{
-                          fontFamily: "Outfit",
+                          fontFamily: "Be Vietnam Pro",
                           fontWeight: 800,
                           fontSize: "1.2rem",
                           margin: "0 0 0.35rem",
@@ -1739,7 +1739,7 @@ export function Subscriptions() {
                       </h4>
                       <div
                         style={{
-                          fontFamily: "Outfit",
+                          fontFamily: "Be Vietnam Pro",
                           fontWeight: 800,
                           fontSize: "1.35rem",
                           color: "#22c55e",
@@ -1934,7 +1934,7 @@ export function Subscriptions() {
                         </span>
                         <strong
                           style={{
-                            fontFamily: "Outfit",
+                            fontFamily: "Be Vietnam Pro",
                             fontWeight: 800,
                             fontSize: "1.4rem",
                             color: "var(--primary)",

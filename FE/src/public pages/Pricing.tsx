@@ -132,7 +132,7 @@ export function Pricing() {
             <div style={{ marginBottom: "1rem" }}>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 700,
                   fontSize: "1rem",
                   color: plan.color,
@@ -143,7 +143,7 @@ export function Pricing() {
               </div>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                   fontWeight: 800,
                   fontSize: "1.75rem",
                   color: "var(--fg)",
@@ -203,7 +203,7 @@ export function Pricing() {
       <div className="card" style={{ maxWidth: "700px", margin: "0 auto" }}>
         <h3
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
             fontWeight: 700,
             fontSize: "1.1rem",
             marginBottom: "1rem",

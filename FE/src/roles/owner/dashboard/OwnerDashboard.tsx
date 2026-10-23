@@ -70,7 +70,7 @@ export function OwnerDashboard() {
         { id: 'policy', label: 'Policies', icon: '⚖', active: tab === 'policy', onClick: () => setTab('policy') },
       ] },
     ]}>
-      <main className={`min-w-0 overflow-y-auto${showOnboarding ? '' : ' p-4 sm:p-7'}`}>
+      <main className={`owner-workspace-main min-w-0 overflow-y-auto${showOnboarding ? '' : ' p-4 sm:p-7'}`}>
         {showOnboarding ? (
           <div className="min-h-[calc(100vh-60px)] bg-[var(--bg)]">
             <OnboardingWizard onComplete={(lot) => { setSetupSiteId(lot.id); setSelectedSiteId(lot.id); setTab('structure'); setSiteRefresh(value => value + 1); }} />
@@ -78,15 +78,15 @@ export function OwnerDashboard() {
         ) : (
           <>
         {loading && <p role="status">Loading owner sites…</p>}
-        {error && <div role="alert" className="text-red-600">{error} <button className="btn-outline" onClick={() => setSiteRefresh(value => value + 1)}>Retry</button></div>}
-        {(tab === 'dashboard' || tab === 'finance') && (
+        {error && <div role="alert" className="owner-workspace-error">{error} <button className="btn-outline" onClick={() => setSiteRefresh(value => value + 1)}>Retry</button></div>}
+        {tab === 'finance' && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <div><p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Multi-site</p><p className="mt-1 font-semibold text-[var(--fg)]">Filter Owner Dashboard</p></div>
+            <div><p className="text-sm font-medium text-[var(--muted)]">Multiple sites</p><p className="mt-1 font-semibold text-[var(--fg)]">Filter Owner Dashboard</p></div>
             <label className="flex items-center gap-3 text-sm font-medium text-[var(--fg)]"><span>Site</span><select className="input min-w-[210px]" value={selectedSiteId} onChange={event => setSelectedSiteId(event.target.value)}><option value="all">All Sites</option>{sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}</select></label>
           </div>
         )}
         <div className="animate-in">
-          {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} sites={sites} operators={operators} />}
+          {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} sites={sites} operators={operators} />}
           {tab === 'sites' && <SiteManagement onSiteCreated={(site, created) => { if (created) { setSetupSiteId(site.id); setSelectedSiteId(site.id); setTab('structure'); } setSiteRefresh(value => value + 1); }} />}
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
           {tab === 'structure' && (setupSiteId && !sites.some(site => site.id === setupSiteId)

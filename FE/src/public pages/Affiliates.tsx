@@ -47,7 +47,7 @@ export function Affiliates() {
             </div>
             <div
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.95rem",
                 color: "var(--fg)",
@@ -72,7 +72,7 @@ export function Affiliates() {
       <div className="card" style={{ marginBottom: "2.5rem" }}>
         <h2
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
             fontWeight: 700,
             fontSize: "1.15rem",
             color: "var(--fg)",
@@ -149,7 +149,7 @@ export function Affiliates() {
       <div className="card" style={{ maxWidth: "480px" }}>
         <h3
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
             fontWeight: 700,
             fontSize: "1rem",
             color: "var(--fg)",

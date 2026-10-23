@@ -28,7 +28,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
             {!loading && page && (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[620px] text-left text-sm">
-                  <thead className="border-b border-[var(--border)] bg-[var(--bg)]/50 text-xs uppercase tracking-wider text-[var(--muted)]">
+                  <thead className="border-b border-[var(--border)] text-sm text-[var(--muted)]">
                     <tr>
                       <th className="px-4 py-3 font-semibold">User</th>
                       <th className="px-4 py-3 font-semibold">Contact</th>
@@ -53,7 +53,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                           {/* User info */}
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-2.5">
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/15 font-['Outfit'] text-xs font-bold text-[var(--primary)]">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/15 font-['Be_Vietnam_Pro'] text-xs font-bold text-[var(--primary)]">
                                 {account.fullName?.charAt(0).toUpperCase() ||
                                   "?"}
                               </span>

@@ -283,7 +283,7 @@ export function DriverDashboard() {
                     id="driver-profile-title"
                     style={{
                       margin: "0.35rem 0 0",
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontSize: "1.35rem",
                       fontWeight: 700,
                     }}
@@ -473,7 +473,7 @@ export function DriverDashboard() {
             {tab === "home" && homePanel !== "find" && (
               <div className="animate-in">
                 {homePanel === "bookings" ? (
-                  <section>
+                  <section className="driver-bookings-page">
                     <PageHeader title="Bookings" variant="compact" />
                     <ActiveBookings />
                   </section>
