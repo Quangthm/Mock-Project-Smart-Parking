@@ -1,17 +1,8 @@
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using SmartParking.ReservationService.Domain;
 
 namespace SmartParking.ReservationService.Application;
 
-public interface IStructureSafetyStore
-{
-    Task<HoldSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken);
-    Task<HoldSnapshot> AcquireAsync(Guid tenantId, Guid siteId, Guid token, CancellationToken cancellationToken);
-    Task ReleaseAsync(Guid tenantId, Guid siteId, Guid token, EditOutcome? outcome, CancellationToken cancellationToken);
-    Task<object> ImpactAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken);
-}
-
-// API delegates the use case here. Rules remain in Domain; Persistence implements
-// local transactions, SQL and the advisory lock shared with reservation writers.
 public sealed class StructureSafetyService(IStructureSafetyStore store)
 {
     public Task<HoldSnapshot> PrepareAsync(Guid tenantId, Guid siteId, Guid token, CancellationToken ct)
