@@ -5,6 +5,7 @@ using SmartParking.ParkingService.Application;
 using SmartParking.ParkingService.Domain;
 using SmartParking.ParkingService.Persistence;
 using SmartParking.ReservationService.Persistence;
+using SmartParking.ReservationService.Domain.Entities;
 using ReservationApplication = SmartParking.ReservationService.Application;
 using ReservationDomain = SmartParking.ReservationService.Domain;
 

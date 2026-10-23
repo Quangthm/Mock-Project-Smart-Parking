@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 using SmartParking.ReservationService.Application.DTOs;
+using SmartParking.ReservationService.Domain.Entities;
 
 namespace SmartParking.ReservationService.Persistence;
 

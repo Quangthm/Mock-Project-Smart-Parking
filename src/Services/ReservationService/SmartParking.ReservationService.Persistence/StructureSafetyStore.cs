@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using SmartParking.ReservationService.Domain;
+using SmartParking.ReservationService.Domain.Entities;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
