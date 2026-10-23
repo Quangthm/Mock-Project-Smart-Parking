@@ -43,7 +43,7 @@ public sealed record PricingPolicySnapshot(
     int FreeParkingGraceMinutes,
     IReadOnlyList<TimeBlockRule> TimeBlocks,
     string TimeZoneId = "Asia/Ho_Chi_Minh",
-    MonetaryRoundingMode RoundingMode = MonetaryRoundingMode.HALF_UP_WHOLE_VND
+    MonetaryRoundingMode RoundingMode = MonetaryRoundingMode.HALF_UP_THOUSAND
 );
 
 public sealed record PricingCalculationRequest(

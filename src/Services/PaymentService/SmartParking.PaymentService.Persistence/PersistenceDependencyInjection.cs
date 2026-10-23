@@ -1,13 +1,31 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
+using SmartParking.PaymentService.Persistence.Adapters;
 
 namespace SmartParking.PaymentService.Persistence;
 
 public static class PersistenceDependencyInjection
 {
-    public static IServiceCollection AddPersistenceServices(this IServiceCollection services)
+    public static IServiceCollection AddPersistenceServices(
+        this IServiceCollection services,
+        IConfiguration? configuration = null)
     {
-        // Persistence skeleton placeholder for SPARK-229.
-        // Full DbContext and repositories will be registered here in the DB/Payment Order Sprint.
+        if (configuration != null)
+        {
+            var connectionString = configuration.GetConnectionString("Payment")
+                ?? configuration.GetConnectionString("DefaultConnection");
+
+            if (!string.IsNullOrWhiteSpace(connectionString))
+            {
+                services.AddDbContext<PaymentDbContext>(options =>
+                    options.UseNpgsql(connectionString));
+            }
+        }
+
+        services.AddScoped<IParkingTariffPort, TariffPersistenceAdapter>();
+
         return services;
     }
 }

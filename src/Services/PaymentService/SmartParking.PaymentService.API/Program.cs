@@ -33,7 +33,7 @@ builder.Services.AddAuthorization();
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
-builder.Services.AddPersistenceServices();
+builder.Services.AddPersistenceServices(builder.Configuration);
 
 var app = builder.Build();
 

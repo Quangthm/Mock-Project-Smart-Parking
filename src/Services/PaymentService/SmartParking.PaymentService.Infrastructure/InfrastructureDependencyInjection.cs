@@ -9,14 +9,7 @@ public static class InfrastructureDependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        var parkingServiceBaseUrl = configuration["Services:ParkingService:BaseUrl"] ?? "http://localhost:5001/";
         var reservationServiceBaseUrl = configuration["Services:ReservationService:BaseUrl"] ?? "http://localhost:5002/";
-
-        services.AddHttpClient<IParkingTariffPort, ParkingTariffHttpAdapter>(client =>
-        {
-            client.BaseAddress = new Uri(parkingServiceBaseUrl);
-            client.Timeout = TimeSpan.FromSeconds(3);
-        });
 
         services.AddHttpClient<IReservationPricingSnapshotPort, ReservationSnapshotHttpAdapter>(client =>
         {

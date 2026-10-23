@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.PaymentService.Application;
@@ -8,6 +9,7 @@ using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
+using SmartParking.PaymentService.Persistence.Adapters;
 
 namespace SmartParking.PaymentService.Tests.Integration;
 
@@ -21,7 +23,7 @@ public class DependencyInjectionTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Services:ParkingService:BaseUrl"] = "http://localhost:5001/",
+                ["ConnectionStrings:Payment"] = "Host=localhost;Port=5444;Database=smartpark_payment;Username=postgres;Password=postgres",
                 ["Services:ReservationService:BaseUrl"] = "http://localhost:5002/"
             })
             .Build();
@@ -29,7 +31,7 @@ public class DependencyInjectionTests
         services.AddLogging();
         services.AddApplicationServices();
         services.AddInfrastructureServices(configuration);
-        services.AddPersistenceServices();
+        services.AddPersistenceServices(configuration);
 
         var provider = services.BuildServiceProvider();
 
@@ -49,9 +51,10 @@ public class DependencyInjectionTests
         var handler = provider.GetService<IRequestHandler<CalculateParkingFeeQuery, PricingCalculationResult>>();
         Assert.NotNull(handler);
 
-        // 5. Hexagonal Ports & Adapters
+        // 5. Hexagonal Ports & Persistence Adapters
         var tariffPort = provider.GetService<IParkingTariffPort>();
         Assert.NotNull(tariffPort);
+        Assert.IsType<TariffPersistenceAdapter>(tariffPort);
 
         var reservationPort = provider.GetService<IReservationPricingSnapshotPort>();
         Assert.NotNull(reservationPort);
