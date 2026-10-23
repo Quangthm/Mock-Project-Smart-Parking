@@ -1,0 +1,116 @@
+name: smartpark-app
+
+x-backend-env: &backend-env
+  ASPNETCORE_ENVIRONMENT: Development
+  ASPNETCORE_URLS: http://+:8080
+  Services__Key: ${SMARTPARK_SERVICE_KEY:?Set SMARTPARK_SERVICE_KEY}
+  Services__User: http://user-service:8080/
+  Services__Parking: http://parking-service:8080/
+  Services__Reservation: http://reservation-service:8080/
+
+x-healthcheck: &healthcheck
+  test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
+services:
+  user-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        SERVICE: UserService
+    image: smartpark/user-service:local
+    environment:
+      <<: *backend-env
+      ConnectionStrings__User: "Host=user-db;Port=5432;Database=smartpark_user;Username=smartpark_user;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      DevelopmentAdmin__Email: ${SMARTPARK_ADMIN_EMAIL:-admin@smartpark.local}
+      DevelopmentAdmin__Password: ${SMARTPARK_ADMIN_PASSWORD:?Set SMARTPARK_ADMIN_PASSWORD}
+      DevelopmentOwner__Email: ${SMARTPARK_OWNER_EMAIL:-owner@smartpark.local}
+      DevelopmentOwner__Password: ${SMARTPARK_OWNER_PASSWORD:?Set SMARTPARK_OWNER_PASSWORD}
+      DevelopmentOperator__Email: ${SMARTPARK_OPERATOR_EMAIL:-operator@smartpark.local}
+      DevelopmentOperator__Password: ${SMARTPARK_OPERATOR_PASSWORD:?Set SMARTPARK_OPERATOR_PASSWORD}
+      # Optional OTP email delivery (Otp:Smtp). Empty values keep SMTP disabled.
+      Otp__Smtp__Host: ${SMARTPARK_SMTP_HOST:-}
+      Otp__Smtp__Port: ${SMARTPARK_SMTP_PORT:-587}
+      Otp__Smtp__Username: ${SMARTPARK_SMTP_USERNAME:-}
+      Otp__Smtp__Password: ${SMARTPARK_SMTP_PASSWORD:-}
+      Otp__Smtp__From: ${SMARTPARK_SMTP_FROM:-}
+      # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
+      Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
+      Workflow__KeyDirectory: /app/.cache/workflow-keys
+    ports:
+      - "127.0.0.1:5035:8080"
+    volumes:
+      - workflow-keys:/app/.cache/workflow-keys
+    networks:
+      - smartpark
+    healthcheck: *healthcheck
+    restart: "no"
+
+  parking-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        SERVICE: ParkingService
+    image: smartpark/parking-service:local
+    environment:
+      <<: *backend-env
+      ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+    ports:
+      - "127.0.0.1:5045:8080"
+    networks:
+      - smartpark
+    healthcheck: *healthcheck
+    restart: "no"
+
+  reservation-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        SERVICE: ReservationService
+    image: smartpark/reservation-service:local
+    environment:
+      <<: *backend-env
+      ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+    ports:
+      - "127.0.0.1:5055:8080"
+    networks:
+      - smartpark
+    healthcheck: *healthcheck
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./FE
+      dockerfile: Dockerfile
+    image: smartpark/frontend:local
+    environment:
+      VITE_API_BASE_URL: http://localhost:5035
+      VITE_PARKING_API_BASE_URL: http://localhost:5045
+      VITE_RESERVATION_API_BASE_URL: http://localhost:5055
+      VITE_AI_API_BASE_URL: http://localhost:5001
+      VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./FE:/app
+      - fe-node-modules:/app/node_modules
+    networks:
+      - smartpark
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+    restart: "no"
+
+networks:
+  smartpark:
+    name: smartpark-schema_default
+    external: true
+
+volumes:
+  workflow-keys:
+  fe-node-modules:

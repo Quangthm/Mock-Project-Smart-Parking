@@ -2,9 +2,13 @@
 
 > **Service**: IoT & Recognition Service (`IoTDb`)  
 > **Database file**: [`06-iot-recognition-service-db.sql`](../../../../scripts/database/microservices/06-iot-recognition-service-db.sql)  
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB26/DB27/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit (Inter-service) & MQTT (Thiết bị IoT)  
 > **Scope**: Quản lý danh mục thiết bị ngoại vi và cổng barrier (`devices`), ghi nhận sự kiện nhận diện biển số và bảo tồn chứng cứ media (`lpr_events`), lưu trữ dữ liệu cảm biến ô đỗ (`sensor_telemetries`), và tích hợp toàn diện **Module Trợ lý ảo AI** (`assistant_conversations`, `assistant_messages`, `assistant_tool_runs`).
+
+## v1.1 target alignment (DB26/DB27/DB32)
+
+IoT owns external device integrations and raw observations, while Operations accepts occupancy/availability and Facility owns configuration. Combined Partner setup does not transfer these responsibilities to User or legacy ParkingService; exact device-configuration handoff remains design-pending. VNeID is a clearly labelled mandatory simulation (sole seeded Admin exempt), not a live government or IoT integration. Backend discovery/model state must preserve accepted source/version/freshness. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 

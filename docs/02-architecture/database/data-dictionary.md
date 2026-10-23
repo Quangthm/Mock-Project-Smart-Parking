@@ -1,6 +1,6 @@
-# SmartPark Data Dictionary — Deployed Profile (SRS v1.0)
+# SmartPark Data Dictionary — Recorded Deployment Profile
 
-This dictionary summarizes the data structures of the **deployed** branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays. It reflects the runtime schema, including T4-approved deviations from the arch design baseline.
+This dictionary summarizes the recorded data structures of branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays. It preserves the schema evidence, including T4-approved deviations from the arch design baseline; this documentation update did not query a running database. Target v1.1 gaps are [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending), not newly deployed fields.
 
 ## 1. Global persistence strategies
 
@@ -33,7 +33,7 @@ Base: `01-user-access-service-db.sql`; no overlays.
 
 Runtime role mapping: `PLATFORM_ADMIN`/`ADMIN` → admin; `BUSINESS_OWNER`/`OWNER` → owner; `SITE_OPERATOR`/`OPERATOR` → operator; `DRIVER` → driver.
 
-## 3. Facility & Parking DB (`smartpark_parking`)
+## 3. Facility & Parking DB (`smartpark_facility`)
 
 Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 
@@ -53,7 +53,7 @@ Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 
 Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4).
 
-## 4. Reservation & Operations DB (`smartpark_reservation`)
+## 4. Reservation & Operations DB (`smartpark_operations`)
 
 Base: `03b-reservation-operations-service-db.sql`.
 
@@ -78,7 +78,7 @@ Base: `04-payment-pricing-service-db.sql`; 7 tables: `tariffs`, `policy_revision
 
 ## 6. Notification & Audit DB (`smartpark_notification`)
 
-Base: `05-notification-audit-service-db.sql`; 6 tables: `notification_templates`, `push_device_tokens`, `durable_notifications`, `support_tickets`, `support_ticket_messages`, `central_audit_projections`. `support_tickets` here is the SRS shape; the BE-shape copy in `smartpark_parking` is temporary D6 debt.
+Base: `05-notification-audit-service-db.sql`; 6 tables: `notification_templates`, `push_device_tokens`, `durable_notifications`, `support_tickets`, `support_ticket_messages`, `central_audit_projections`. `support_tickets` here is the SRS shape; the BE-shape copy in `smartpark_facility` is temporary D6 debt.
 
 ## 7. IoT & Recognition DB (`smartpark_iot`)
 
@@ -88,10 +88,14 @@ Base: `06-iot-recognition-service-db.sql`; 6 tables: `devices`, `lpr_events`, `s
 
 | Mã | Delta |
 |---|---|
-| D1 | `03a` → `smartpark_parking`; `03b` → `smartpark_reservation` |
+| D1 | `03a` → `smartpark_facility`; `03b` → `smartpark_operations` |
 | D4 | 7 role seeds; 2 `parking_slots` runtime columns; `unit_id`/`count` renames |
 | D5 | `tenants` canonical in User DB, local copy in parking |
 | D6 | BE-shape `support_tickets` in parking overlay (temporary) |
 | D7 | `site_capacity_pools` recreated in reservation overlay |
 
 See `docs/04-testing/reports/refactor-Docker Setup & Function Test/10-db-docs-deployment-alignment.md` for the full decision record.
+
+## 9. v1.1 target mapping, not deployed schema
+
+User applications/terms need protected original/replacement document evidence and independent additional-lot proposal identity (DB25); User/Account status and credentials need simulation/scoped setup, activation and sole-Admin guards (DB26). The fake VNeID API returns a GUID substitute linked to the user and persisted by User & Access under the [21 October clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md); concrete field/schema and retry consistency remain pending, with no claim that a deployed column exists. This simulated identifier is neither government verification nor an auth token. `approved` or `ACTIVE` alone cannot prove provisioning/opening (DB27). `monthly_passes` and Payment subject enums do not demonstrate yearly periods/policies (DB28); Facility cascades and soft-delete timestamps do not prove atomic descendant/dependency handling or retained vehicle bindings (DB29/DB30). Discovery projections need source/freshness and current-tariff versus interval-total semantics (DB32); delivery labels need notification-only retry and queued/delivered distinction (DB33). All schema/seed work and the documentation-approved future development reset remain pending (DB31).

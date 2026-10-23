@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi } from "../../../lib/operatorApi"
 import type { SupportTicket } from "../../../lib/types"
 
@@ -86,15 +87,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Support Ticket Management
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Review, investigate, and resolve support requests submitted by drivers in real-time.
-        </p>
-      </div>
+      <PageHeader title="Support Ticket Management" description="Review, investigate, and resolve support requests submitted by drivers in real-time." />
 
       {/* Feedback Banner */}
       {loadError && (

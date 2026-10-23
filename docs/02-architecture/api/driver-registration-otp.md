@@ -1,6 +1,6 @@
 # SPARK-176 — Driver registration and OTP
 
-> Historical contract/review (06/10/2026). See [current workflow contract and mapping, 08/10/2026](workflows-2026-10-08.md) for the implemented changes.
+> Historical contract/review (6 October 2026), non-authoritative for v1.1. Preserve the dated evidence below; use [active v1.1 API contracts](README.md) for current behavior and [historical workflow mapping](../../archive/api/workflows-2026-10-08.md) for the 8 October implementation.
 
 Implemented contract, 2026-10-06. Basis: SRS §3.1.1 / FR-AUTH-01 and UC-AUTH-01.
 

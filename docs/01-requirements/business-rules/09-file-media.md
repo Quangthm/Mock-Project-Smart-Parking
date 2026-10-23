@@ -1,4 +1,4 @@
-# File Media — business rules RC1
+# File Media — business rules v1.1
 
 [Rule index](README.md) · [SRS module](../srs/modules/09-file-media.md)
 
@@ -6,9 +6,9 @@
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Apply least data exposure and approved processing boundaries under the domain contract, the domain contract and the domain contract; do not treat unspecified identity fields as authority to collect documents.
+Apply least exposure and owning-service authorization. Initial Partner agreement/policy uploads are required restricted scope: retain original/replacement versions, actor/time/reason, bind approval to the reviewed version, and permit Admin replacement only while the initial application is pending. No other fields, additional-lot document editing or changes to finalized applications. Stable service-owned assets and authenticated reads replace arbitrary URLs. Formats/limits, storage concurrency and retention classification remain Q01 design-pending; mandatory simulated VNeID returns a GUID substitute associated with the user and persisted in the User & Access database. Additional mock fields, consent/completion evidence encoding and retention remain Q02; the GUID is neither a real identity document/number nor an authentication token.
 
-**Trace:** FR-AUTH-06, FR-RPT-05; UC-RPT-01, UC-RPT-02, UC-AI-03
+**Trace:** FR-AUTH-01/05/06, FR-RPT-05; UC-RPT-01, UC-RPT-02, UC-AI-03
 
 ## BR-PRIV-02
 

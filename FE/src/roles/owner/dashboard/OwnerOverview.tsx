@@ -3,6 +3,7 @@ import { ownerData as store } from '../data/data';
 import type { Booking } from '../../../lib/types';
 import type { Site, Operator } from '../../../lib/parkingApi';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 function buildRevenueTrend(bookings: Booking[]) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -45,11 +46,7 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
 
   return (
     <section className="space-y-6">
-      <header>
-        <p className="text-sm font-medium text-[var(--primary)]">{selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'}</p>
-        <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">Owner Overview</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Combined performance for the selected parking sites.</p>
-      </header>
+      <PageHeader eyebrow={selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'} title="Owner Overview" description="Combined performance for the selected parking sites." />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map(stat => <article key={stat.label} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"><p className="text-sm text-[var(--muted)]">{stat.label}</p><p className={`mt-2 text-2xl font-bold ${stat.accent}`}>{stat.value}</p></article>)}
       </div>

@@ -1,0 +1,11 @@
+**/bin
+**/obj
+**/.vs
+**/.git
+**/node_modules
+**/dist
+FE
+tests
+*.user
+.env
+.env.*

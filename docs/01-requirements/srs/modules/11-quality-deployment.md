@@ -1,8 +1,8 @@
-# Quality Deployment — SRS v1.0 RC3
+# Quality Deployment — SRS v1.1
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
-**Status:** review candidate, 13 October 2026; implementation/evidence not assessed. Source review section numbers below refer to the decision review, not this module numbering.
+**Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
 | Integration | Approved local profile | Evidence / limit |
 |---|---|---|
@@ -10,7 +10,7 @@
 | Media | Evaluate Cloudinary adapter for backend upload, restricted reads, holds, deletion and recovery; fixtures for deterministic failures | Provider capability and account limits unverified until tested. No production/free-tier suitability claim. |
 | Notifications | Local email capture and SMS fixtures; real delivery tests separately labelled if configured | No proof of external delivery from local capture. Applies to all-role OTP flows. |
 | Hardware/gate | Deterministic events and Operator workflows | No real adapter or physical device acceptance. |
-| Maps | Manual location fallback and deterministic coordinates for core tests; configured provider connectivity tested separately | No GPS-only dependency or claim of provider integration from coordinates alone. |
+| Maps | MapTiler discovery with manual location fallback and deterministic coordinates for core tests; configured provider connectivity tested separately | No GPS-only dependency or claim of provider integration from coordinates alone. |
 | Assistant/LPR | General contracts and manual/ordinary-UI fallback; detailed integration/evaluation deferred after v1.0 | No accuracy, model-completion or live-provider claim from fixtures. |
 | Deployment | Docker local profile, one instance per required service, separate PostgreSQL databases/credentials, RabbitMQ and scoped SignalR | One PostgreSQL server permitted. No mandatory clustering or Redis scale-out. |
 
@@ -32,6 +32,10 @@ PAY-01 supersedes the earlier one-real-payment-sandbox requirement with controll
 
 No incompatible double capacity commitment, duplicate collection/refund or unauthorized access is acceptable merely because aggregate latency/error targets pass. Scope provider upload/payment/AI latency separately. Record production, sandbox (if separately used) and fixture modes and actual timings; unexecuted tests stay NOT RUN. These are local mock-project objectives, not production SLOs or claims of achieved throughput.
 
+## Development transition gate
+
+V11-08 selects development database reset after the updated documentation is approved, replacing migration/grandfathering of invalid development applications. This documentation task performs no reset or setup. The implementation plan must record target development environments, responsible teammate, reset/seed scripts and execution date; none is invented here. Fix schema/seed/application alignment before coordinated execution. Seeds must preserve one protected Admin and all required verification/simulation/review/provisioning states.
+
 ## Functional requirements
 
 ## Retained quality requirements
@@ -49,7 +53,7 @@ These requirements remain specified; no achievement is asserted. Original produc
 | Account Lockout | 15 minutes after 3 failed attempts |
 | Data in Transit | TLS 1.3 mandatory for APIs, TLS 1.2+ for internal services |
 | Data at Rest | AES-256 encryption for databases and backups |
-| Sensitive Data | CCCD/GPLX are not collected or stored in this phase. If future scope introduces such data, the applicable encryption/tokenization controls shall apply. |
+| Sensitive Data | No real CCCD/GPLX collection or government verification. Mandatory consented VNeID simulation uses a fake API returning a user-associated GUID substitute persisted in the User & Access database. It is not government identity data or an auth token; additional fields/evidence/retention/wire details remain Q02 design-pending. |
 | API Rate Limit | 100 requests/minute per user, 10 requests/minute per IP (unauthenticated) |
 | JWT Algorithm | RS256 (asymmetric) |
 | Audit Log Retention | 7 years |
@@ -114,3 +118,6 @@ These requirements remain specified; no achievement is asserted. Original produc
 ## Current MFA acceptance and security
 
 SEC-01/SEC-02 adds real local TOTP enrollment/challenge, single-use backup recovery, reviewed Admin reset and session/security-version enforcement. Protect TOTP secrets at rest, hash backup codes, redact QR/secrets/codes/tokens from all logs, bound attempts and expiry, reject replay and enforce revocation at resource APIs/SignalR. Use the security-reviewed profile in [authentication recovery](../authentication-recovery.md); numeric technical parameters must be finalized/tested before acceptance. Existing primary-token/OTP values remain unchanged. Email/SMS delivery retains declared capture/fixture modes. See the additional acceptance scenarios; all are NOT RUN.
+
+
+Design/implementation owners and exit criteria: [V11-DES-12](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

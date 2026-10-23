@@ -19,6 +19,7 @@ Driver manages own vehicle records; Operator manages assigned-lot visit intake.
 2. Reject duplicate active binding without disclosing another account; validate compatible vehicle categories.
 3. For supported non-plated walk-ins, create visit/session ticket without fabricated permanent plate.
 4. Permit reasoned Operator recognition/session correction while retaining original evidence.
+5. Soft-remove an own vehicle only after active visit/reservation/pass dependencies are handled and rechecked. Preserve binding history; removal is not transfer approval and cleanup follows retention.
 
 ## Alternatives and failures
 

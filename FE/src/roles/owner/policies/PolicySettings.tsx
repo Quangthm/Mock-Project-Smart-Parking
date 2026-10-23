@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { store } from "../../../lib/store"
 
@@ -324,19 +325,7 @@ export function PolicySettings({
       className="mx-auto w-full max-w-5xl space-y-6"
       aria-labelledby="policy-settings-title"
     >
-      <header>
-        <p className="text-sm font-medium text-[var(--primary)]">Owner tools</p>
-        <h1
-          id="policy-settings-title"
-          className="mt-1 text-2xl font-bold text-[var(--fg)]"
-        >
-          Policy Settings
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Configure pricing, deposit rules, and upload official PDF policy
-          documents for your parking lots.
-        </p>
-      </header>
+      <PageHeader id="policy-settings-title" eyebrow="Owner tools" title="Policy Settings" description="Configure pricing, deposit rules, and upload official PDF policy documents for your parking lots." />
 
       {pdfNotice && (
         <div

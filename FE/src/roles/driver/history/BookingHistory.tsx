@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
 
@@ -19,6 +20,7 @@ export function BookingHistory() {
 
   return (
     <div>
+      <PageHeader title="Booking History" variant="compact" />
       <div
         style={{
           display: "flex",

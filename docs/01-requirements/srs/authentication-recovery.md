@@ -1,6 +1,14 @@
-# Authentication and account recovery — RC2
+# Authentication and account recovery — v1.1
 
-**SEC-01/SEC-02 confirmed, 13 October 2026. Implementation and tests pending.**
+**v1.1 documentation review candidate based on approved decisions, 20 October 2026.** SEC-01/SEC-02 remain confirmed; implementation and tests pending.
+
+## Account establishment and normal-session gates
+
+Partner Registration retains Owner and immediately persists a pending identity. Mandatory consented VNeID simulation, first-lot setup save, email OTP/verification, combined Admin approval and successful provisioning precede normal Owner login. Setup/verification/resend/recovery credentials are purpose-scoped; application ID alone grants nothing. Phone verification is separate and required only before phone OTP login, not Owner review. Simulation is mandatory for Driver/Owner registration and invited Operator email activation; password setup is optional for Operator. The sole seeded Admin is exempt. Simulation is clearly labelled and does not replace contact verification, approval or MFA. The fake VNeID API returns a GUID substitute associated with the user; User & Access persists that association and GUID in its database. This is a simulated identifier, not a government identity number, authentication token or authorization credential. Additional mock fields, consent/completion evidence encoding and retention remain Q02 design tasks; scoped credential expiry/recovery remains Q03. The [21 October clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md) settles GUID return, user association and database persistence, not an API path or schema field name.
+
+Driver verification does not automatically log in. Normal completed login returns necessary tokens; retrieve authorized account/profile/onboarding information separately (for example through /me), without unconditional profile/onboarding payloads. A required MFA challenge remains a restricted intermediate response, not normal login. Safe standardized actionable failures retain reasons for pending review, rejection and pending/failed initial provisioning after sufficient credential validation; do not reveal raw exceptions, secrets or an account-enumeration oracle. Response envelope, delivery and credential-validation threshold remain API/security design work.
+
+Re-enable is an explicit authorized Admin action with reason that removes only administrative disablement; it cannot reverse initial rejection, approve a pending Owner, verify contacts, restore removed grants, clear independent restrictions or revive sessions. The rejected initial Partner email cannot register again. Sole-Admin administrative lock/disable/delete/role changes are prohibited; ordinary own profile/security and authentication lockouts remain, with maintainer recovery.
 
 ## Authentication and factor lifecycle
 
@@ -8,7 +16,7 @@ Four roles remain optional TOTP participants. Initial signup/contact verificatio
 
 Enrollment requires recent primary authentication. Deliver a pending secret/QR only to its authorized enrollment context; validate a six-digit code before activation. Abandoned enrollment leaves TOTP disabled. Regenerate pending secret with a new version and reject old challenges. Existing enabled-factor replacement requires current factor or approved recovery, not just primary proof.
 
-Normal enabled-account login: primary proof → restricted challenge → valid TOTP → normal session. Restricted challenge/recovery credentials are rejected by all ordinary resource endpoints and SignalR subscriptions. Password reset alone cannot bypass enabled TOTP. Disabled accounts follow existing primary-login rules.
+Normal enabled-account login: primary proof → restricted challenge → valid TOTP → normal session. Restricted challenge/recovery credentials are rejected by all ordinary resource endpoints and SignalR subscriptions. Password reset alone cannot bypass enabled TOTP. Accounts with TOTP disabled follow existing primary-login rules; administratively disabled accounts cannot obtain a normal session.
 
 Disable requires recent primary proof and current TOTP. Successful disable invalidates backup set and challenges, revokes old sessions, records audit and sends notification; the user may subsequently log in through the normal non-TOTP route. This voluntary disable is distinct from Admin reset, which requires replacement.
 
@@ -36,7 +44,7 @@ Password: authorize single-use limited flow; holder proves and redeems it, choos
 
 TOTP: after authorized case decision User & Access invalidates old secret/codes and revokes sessions; enters REPLACEMENT_REQUIRED. Issue restricted single-use enrollment grant through the verified case workflow. Until new secret proof succeeds, block ordinary login even via password/OTP. On completion enable replacement, issue new backup set, consume grant and invalidate prior contexts. BOTH combines the required password and factor changes before ordinary login. No temporary-password handoff or Admin-selected TOTP key is provided.
 
-Admin targets require another Admin; server rejects actor=target even if a grant is replayed. Where no other Admin is available, the controlled deployment-maintainer procedure below applies. Account blocking, Owner approval, role/lot grants and unrelated business rights are unaffected by successful recovery.
+MVP has one protected seeded Admin; server rejects self-approval even if a grant is replayed. Recover that account only through the [controlled deployment-maintainer runbook](../../02-architecture/service-boundaries/admin-recovery-runbook.md); no Admin registration or second-Admin onboarding is added. Account blocking, Owner approval, role/lot grants and unrelated business rights are unaffected by successful recovery.
 
 ## Races, retries and revocation
 
@@ -60,3 +68,6 @@ Select and document TOTP algorithm, 30-second-step recommendation, bounded clock
 Run actual TOTP generation/verification and backup-code lifecycle locally; email capture/SMS fixtures remain the declared notification/primary-channel modes, not simulated factor verification. No claim of delivered implementation is made.
 
 References informing technical design: [RFC6238](https://www.rfc-editor.org/rfc/rfc6238) defines time-based OTP, default30-second step and replay considerations; [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html) informs protected replacement/recovery and notifications. Project-specific decisions above come from SEC-01/SEC-02, not from those references.
+
+
+Design/implementation owners and exit criteria: [V11-DES-02–04 and 11](../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

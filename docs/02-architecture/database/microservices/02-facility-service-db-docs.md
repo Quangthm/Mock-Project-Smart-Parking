@@ -2,15 +2,19 @@
 
 > **Service**: Facility & Visualization Service (`FacilityDb`)  
 > **Database file**: [`02-facility-service-db.sql`](../../../../scripts/database/microservices/02-facility-service-db.sql)  
-> **SRS baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9)  
+> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB27/DB29/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
 > **Scope**: Quản lý toàn bộ tài nguyên hạ tầng vật lý tĩnh của bãi đỗ xe: bãi đỗ (`parking_sites`), phân cấp không gian (`spatial_units`), sức chứa cấu hình tĩnh (`spatial_unit_capacities`), ô đỗ vật lý và tọa độ 3D (`parking_slots`), tương thích loại xe (`slot_compatibilities`), luồng di chuyển nội bộ (`parking_access_paths`), thao tác cấu trúc (`structure_operations`), và lịch sử kiểm toán thay đổi cấu trúc (`structure_slot_audit`, `structure_change_audit`).
+
+## v1.1 target alignment (DB27/DB29/DB32)
+
+Facility owns configuration and model/resource identity. Review, provisioning, activation and opening are distinct; `status DEFAULT 'ACTIVE'` does not authorize bypassing approval/readiness. Operations owns accepted physical occupancy and claims even where the recorded Parking schema stores projections. D11 requires explicit descendants/dependencies and same-lot all-or-nothing batches with per-item validation; recorded `ON DELETE CASCADE` is not permission for a silent business cascade. Discovery uses Facility lot coordinates/type and Operations availability; no embedded geographic routing is introduced. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 
 | Hạng mục | Giá trị |
 |---|---|
-| Database vật lý | `smartpark_parking` (PostgreSQL 16, port `5442`) |
+| Database vật lý | `smartpark_facility` (PostgreSQL 16, port `5442`) |
 | Base DDL | [`02-facility-service-db.sql`](../../../../scripts/database/microservices/02-facility-service-db.sql) + [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) |
 | Overlays | `parking-tenants.sql`, `parking-structure-synchronizations.sql`, `parking-operator-tables.sql`, `parking-slot-constraints.sql` |
 | Deployment status | Base `02` khớp arch `9a13499` + 2 cột runtime D4/P1; 4 overlay bổ sung cho runtime |
@@ -198,7 +202,7 @@ Bản triển khai bổ sung hai cột runtime `supported_vehicle_type` và `res
 | `slot_type` | `VARCHAR(50) NOT NULL DEFAULT 'STANDARD'` | Loại ô đỗ: `'STANDARD'`, `'EV'`, `'DISABLED'`, `'VIP'` | Cấu hình ô đỗ | BR-FAC-03 |
 | `features` | `JSONB NULL` | Thuộc tính mở rộng (có mái che, sạc nhanh...) | Cấu hình linh hoạt | FR-FAC-04 |
 | `coordinates_3d` | `JSONB NULL` | Tọa độ x, y, z và góc xoay 3D | Mesh mapping trong 3D Digital Twin | FR-FAC-04 |
-| `physical_state` | `VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE'` | Trạng thái cảm biến/vật lý: AVAILABLE, OCCUPIED, UNKNOWN, MAINTENANCE, UNAVAILABLE | Cảm biến IoT / Barrier / Operator cập nhật | BR-FAC-04 |
+| `physical_state` | `VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE'` | Trạng thái cảm biến/vật lý: AVAILABLE, OCCUPIED, UNKNOWN, MAINTENANCE, UNAVAILABLE | Recorded physical-state field; target projection of Operations-accepted state, not raw sensor authority (DB27) | BR-FAC-04 |
 | `supported_vehicle_type` | `VARCHAR(20) NULL CHECK (supported_vehicle_type IN ('CAR','MOTORCYCLE','OVERSIZED'))` | Loại xe mà ô đỗ hỗ trợ; dùng để lọc/gán slot. `NULL` = chưa cấu hình | ParkingService ghi/đọc; đồng bộ từ `slot_compatibilities` khi cấu hình | FR-FAC-04; D4/P1 |
 | `reservation_state` | `VARCHAR(20) NULL CHECK (reservation_state IS NULL OR reservation_state IN ('PROTECTED','RESERVED','BACKUP'))` | Bản sao trạng thái đặt chỗ của ô (NULL = không có cam kết). Operations/Reservation là nguồn chân lý | ParkingService cập nhật theo reservation event/API; không dùng làm nguồn quyết định duy nhất | D4/P1 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo | Database tự sinh | — |
@@ -319,7 +323,7 @@ structure_operations (1) ──── (0..N) structure_change_audit [operation_i
 
 ---
 
-## 12. Deployment overlays cho `smartpark_parking`
+## 12. Deployment overlays cho `smartpark_facility`
 
 Bốn overlay được mount sau base `02` + `03a` (thứ tự trong `compose.schema-integration.yml`):
 

@@ -1,8 +1,8 @@
-# Facility Capacity — SRS v1.0 RC1
+# Facility Capacity — SRS v1.1
 
 [Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
-**Status:** review candidate, 13 October 2026; implementation/evidence not assessed. Source review section numbers below refer to the decision review, not this module numbering.
+**Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
 **Capacity/layout:** support individually represented spaces and category-specific pools. A car unit and motorcycle unit are not interchangeable generic units. Specific-slot/zone/capacity reservation products remain unchanged; a capacity reservation may be allocated from individually represented spaces. Automatic mixed-category area conversion has not been selected for MVP.
 
@@ -22,15 +22,19 @@ Facility owns structural/service changes; Operations owns accepted occupancy and
 
 Physical facts AVAILABLE/OCCUPIED/UNKNOWN/MAINTENANCE/UNAVAILABLE are separate from reservation/protection NOT_RESERVED/RESERVED/PROTECTED/BACKUP. Maintenance or closure cannot erase accepted occupation. Unknown is excluded from automatic allocation until authoritative reconciliation. Fixed backup and demand-driven protection are distinguished in the claim ledger.
 
+Combined onboarding retains service authority: User owns identity, organization/membership and review evidence; Facility owns structural configuration; Operations owns accepted occupancy/claims, discovery and plan definition/coverage; Payment owns tariffs/financial terms; IoT owns raw observations/integrations. A submitted proposal is evidence, not another service's operational source of truth.
+
 ## Functional requirements
 
 ### FR-LOT-01
 
 **Status:** CONFIRMED — implementation pending / not assessed  
-**Actors:** Owner  
+**Actors:** Prospective Owner, Owner, Admin (review)
 **Stories:** US-OW01
 
-Owner creates/updates/deactivates owned facility profile, address, coordinates, supported categories, operating information and open/closed status. Layout/service changes follow the planned/emergency recovery contract and preserve existing accepted rights and actual occupation.
+Initial first-lot setup is saved within Partner Registration before email verification and combined Admin review (FR-AUTH-01/05). An approved Owner submits each additional lot as a separate application for Admin approval/rejection. Rejection leaves the Owner and other approved lots unaffected. Rejected applications remain immutable; Draft as new lot application creates a distinct proposal and review identity, including identical content. Submission/provisioning retries are idempotent; absence of content-deduplication does not permit duplicate applications/sites. Admin document replacement is confined to the initial pending Partner application.
+
+Approval authorizes the lot; successful provisioning/activation and operational opening remain separate. Facility owns configuration/readiness; Operations validates accepted occupancy/claims and admission readiness, with required Payment terms before sales. Pending/failed/unknown provisioning is visible and recoverable without duplicate sites. Normal initial Owner login waits for successful provisioning. Open only after required configuration and operational readiness checks under existing permissions; approval never automatically opens for parking. Owner updates/deactivates owned facility profile, address, coordinates, supported categories and operating/open-state configuration while preserving accepted rights and actual occupation.
 
 ### FR-LOT-02
 
@@ -55,6 +59,8 @@ Owner configures lot/floor/zone/row/space identifiers, access paths, compatible 
 **Stories:** US-O05, US-OW01
 
 Facility owns structural/service changes; Operations owns accepted occupancy and availability. Planned reductions remain pending until recoverable Operations restriction/recovery commits; emergency physical closure is recorded immediately and admission stopped safely even if communication fails. Preserve occupied facts, affected rights and history; recover compatible capacity or apply approved failure handling, never displace occupants.
+
+Spatial deactivation never silently cascades to descendants. Explicitly select/handle affected floors/zones/rows/spaces and resolve operational dependencies before acceptance. FE supports multiselect. A batch is confined to one lot and is all-or-nothing: validate authorization, versions, descendants and dependencies for every item; return per-item errors and mutate none when any fails. Recheck dependencies at commit; planned restriction/recovery coordination and emergency physical-closure safeguards remain applicable.
 
 ### FR-LOT-05
 
@@ -130,3 +136,6 @@ Backup capacity follows the domain contract. Owner may configure backup capacity
 
 
 A resource with no reservation/protection record is not reserved; a dedicated NOT_RESERVED database enum is not required. RESERVED includes the explicitly approved zero-price-confirmed E03 branch as well as paid confirmed reservations. AVAILABLE+RESERVED can become OCCUPIED+RESERVED on actual entry; maintenance/unavailable configuration preserves the entitlement for recovery rather than erasing it.
+
+
+Design/implementation owners and exit criteria: [V11-DES-04 and 09](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

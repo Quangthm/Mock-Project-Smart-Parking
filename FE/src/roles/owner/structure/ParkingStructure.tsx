@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { parkingApi, type Site, type Slot, type Structure, type Unit } from "../../../lib/parkingApi"
 import { BackupCapacityPanel } from "../dashboard/BackupCapacityPanel"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 interface ParkingStructureProps {
   sites?: Site[]
@@ -189,19 +190,13 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
   return (
     <section className="space-y-5 text-[var(--fg)]">
-      <header className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Parking Structure</h1>
-          <p className="mt-1 text-xs text-[var(--muted)]">Manage floors, zones, blocks and parking slots.</p>
-        </div>
-        <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
+      <PageHeader title="Parking Structure" variant="compact" divider description="Manage floors, zones, blocks and parking slots." actions={<label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
           <span>Site</span>
           <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
             {!sites.length && <option value="">No sites available</option>}
             {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
-        </label>
-      </header>
+        </label>} />
 
       {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
       {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-700 dark:text-red-300"><span>{error}</span>{siteId && <button type="button" className="underline" onClick={() => setReload((value) => value + 1)}>Retry</button>}</div>}
