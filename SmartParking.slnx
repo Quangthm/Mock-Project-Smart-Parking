@@ -1,14 +1,15 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/Services/" />
-  <Folder Name="/src/Services/ParkingService/">
-    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Domain/SmartParking.ParkingService.Domain.csproj" />
-    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.API/SmartParking.ParkingService.API.csproj" />
-    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Application/SmartParking.ParkingService.Application.csproj" />
-    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Infrastructure/SmartParking.ParkingService.Infrastructure.csproj" />
-    <Project Path="src/Services/ParkingService/SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" />
+  <Folder Name="/src/Services/FacilityService/">
+    <Project Path="src/Services/FacilityService/SmartParking.FacilityService.Domain/SmartParking.FacilityService.Domain.csproj" />
+    <Project Path="src/Services/FacilityService/SmartParking.FacilityService.API/SmartParking.FacilityService.API.csproj" />
+    <Project Path="src/Services/FacilityService/SmartParking.FacilityService.Application/SmartParking.FacilityService.Application.csproj" />
+    <Project Path="src/Services/FacilityService/SmartParking.FacilityService.Infrastructure/SmartParking.FacilityService.Infrastructure.csproj" />
+    <Project Path="src/Services/FacilityService/SmartParking.FacilityService.Persistence/SmartParking.FacilityService.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Services/ReservationService/">
+    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Infrastructure/SmartParking.ReservationService.Infrastructure.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Application/SmartParking.ReservationService.Application.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Domain/SmartParking.ReservationService.Domain.csproj" />
     <Project Path="src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
@@ -23,7 +24,12 @@
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/Services/">
-    <Project Path="tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj" />
+    <Project Path="tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
   </Folder>
+  <Folder Name="/src/Services/IoTService/">
+    <Project Path="src/Services/IoTService/SmartParking.IoTService.Application/SmartParking.IoTService.Application.csproj" />
+    <Project Path="src/Services/IoTService/SmartParking.IoTService.Infrastructure/SmartParking.IoTService.Infrastructure.csproj" />
+  </Folder>
+  <Project Path="tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj" />
 </Solution>

@@ -10,6 +10,9 @@ services:
     volumes:
       - user-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/01-user-access-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/05.13-Mfa-Lifecycle.sql:/docker-entrypoint-initdb.d/02-feature.sql:ro
+      - ./scripts/database/05.14-Identity-Access-Hardening.sql:/docker-entrypoint-initdb.d/03-feature.sql:ro
+      - ./scripts/database/05.15-Owner-Onboarding.sql:/docker-entrypoint-initdb.d/04-feature.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_user -d smartpark_user"]
       interval: 5s
@@ -31,6 +34,7 @@ services:
       - ./scripts/database/overlay/parking-structure-synchronizations.sql:/docker-entrypoint-initdb.d/04-overlay-synchronizations.sql:ro
       - ./scripts/database/overlay/parking-operator-tables.sql:/docker-entrypoint-initdb.d/05-overlay-operator.sql:ro
       - ./scripts/database/overlay/parking-slot-constraints.sql:/docker-entrypoint-initdb.d/06-overlay-slot-constraints.sql:ro
+      - ./scripts/database/05.16-Parking-Owner-Onboarding.sql:/docker-entrypoint-initdb.d/07-owner-onboarding.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_facility -d smartpark_facility"]
       interval: 5s

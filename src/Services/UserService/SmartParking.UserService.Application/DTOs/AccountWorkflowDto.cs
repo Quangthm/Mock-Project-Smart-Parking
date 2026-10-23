@@ -13,11 +13,17 @@ public sealed class OtpLoginDto : IValidatableObject
     }
 }
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed class CompleteOtpLoginDto
+public sealed class CompleteOtpLoginDto : IValidatableObject
 {
     public Guid ChallengeId { get; set; }
     [Required, RegularExpression("^[0-9]{6}$")] public string Code { get; set; } = "";
     [RegularExpression("^[0-9]{6}$")] public string? Totp { get; set; }
+    [StringLength(40)] public string? RecoveryCode { get; set; }
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (!string.IsNullOrWhiteSpace(Totp) && !string.IsNullOrWhiteSpace(RecoveryCode))
+            yield return new("Use either an authenticator code or a recovery code.");
+    }
 }
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class ChangeBootstrapPasswordDto

@@ -2,7 +2,10 @@ import { useState, useId } from "react"
 
 import { useApp } from "../../../context/AppContext"
 import { parkingApi } from "../../../lib/parkingApi"
-import { ownerApi, type OwnerApplicationRecord, type OwnerLotSetup } from "../../../lib/ownerApi"
+import { ownerApi, type OwnerLotSetup } from "../../../lib/ownerApi"
+import { AuthApiError } from "../../../lib/authApi"
+import { restoreOwnerRegistration, ownerRegistrationStage, type PendingOwnerRegistration } from "../../../lib/ownerRegistration"
+import { OwnerRegistrationRecovery } from "../../authentications/Sign Up/OwnerRegistrationRecovery"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { formatGroupedDigits } from "../../../lib/groupedDigits"
@@ -102,12 +105,15 @@ export function OnboardingWizard({
   onComplete?: (lot: ParkingLot) => void
   registration?: {
     id: string
+    email: string
     setupToken?: string
     lotType: LotType
-    onComplete: (application: OwnerApplicationRecord) => void
+    onComplete: (application: PendingOwnerRegistration) => void
   }
 }) {
-  const { user, setUser } = useApp()
+  const { user, setUser, setView } = useApp()
+  const [setupToken, setSetupToken] = useState(registration?.setupToken)
+  const [needsSetupRecovery, setNeedsSetupRecovery] = useState(false)
 
   const [step, setStep] = useState<OnboardStep>(1)
 
@@ -267,7 +273,7 @@ export function OnboardingWizard({
         }
         const application = await ownerApi.submitLotSetup(
           registration.id,
-          registration.setupToken ?? "",
+          setupToken ?? "",
           setup,
         )
         registration.onComplete(application)
@@ -351,6 +357,8 @@ export function OnboardingWizard({
         )
       }
     } catch (error) {
+      if (registration && error instanceof AuthApiError && error.code === "SETUP_TOKEN_INVALID")
+        setNeedsSetupRecovery(true)
       setCompletionError(
         error instanceof Error
           ? error.message
@@ -369,17 +377,27 @@ export function OnboardingWizard({
     "Confirm",
   ]
 
+  if (registration && needsSetupRecovery) {
+    return <OwnerRegistrationRecovery registration={{ email: registration.email }}
+      onRecovered={(application) => {
+        sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(application))
+        if (ownerRegistrationStage(application) === "setup") {
+          setSetupToken(application.setupToken)
+          setNeedsSetupRecovery(false)
+          setCompletionError("")
+        } else if (ownerRegistrationStage(application) === "verification") {
+          registration.onComplete(application)
+        }
+      }} onBack={() => setView("sign-in")} />
+  }
+
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1rem" }}>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
         <PageHeader title="Set Up Your Parking Lot" variant="compact" align="center" description={registration
           ? "Set up your lot before verifying your email and submitting it for Admin review."
           : "Complete setup to start accepting bookings."} />
-        {registration && !registration.setupToken && (
-          <p role="status" style={{ color: "#b45309", fontSize: "0.85rem", marginTop: "0.75rem" }}>
-            The server has not enabled saving parking lot setup before approval yet.
-          </p>
-        )}
+
       </div>
 
       {/* Step progress */}
@@ -1310,25 +1328,7 @@ export function OnboardingWizard({
 
 export function BusinessLotSetupPage() {
   const { setView } = useApp()
-  const [registration] = useState<{
-    id: string
-    email: string
-    lotType: LotType
-    setupToken?: string
-  } | null>(() => {
-    try {
-      const pending = JSON.parse(
-        sessionStorage.getItem("sp_pending_owner_registration") ??
-          localStorage.getItem("sp_pending_owner_registration") ?? "null",
-      )
-      return pending?.id && pending?.email && pending?.lotType &&
-        pending?.lotSetupComplete !== true
-        ? pending
-        : null
-    } catch {
-      return null
-    }
-  })
+  const [registration] = useState(restoreOwnerRegistration)
 
   if (!registration) {
     return (
@@ -1342,12 +1342,21 @@ export function BusinessLotSetupPage() {
     )
   }
 
+  if (ownerRegistrationStage(registration) !== "setup") {
+    return <OwnerRegistrationRecovery registration={registration}
+      onRecovered={(application) => {
+        sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(application))
+        setView("sign-up")
+      }} onBack={() => setView("sign-in")} />
+  }
+
   return (
     <OnboardingWizard
       registration={{
-        id: registration.id,
+        id: registration.id!,
+        email: registration.email,
         setupToken: registration.setupToken,
-        lotType: registration.lotType,
+        lotType: registration.lotType!,
         onComplete: (application) => {
           sessionStorage.setItem(
             "sp_pending_owner_registration",

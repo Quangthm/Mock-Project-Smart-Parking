@@ -46,7 +46,7 @@ Owner/Admin → API Gateway
 
 **Nguyên tắc thiết kế cốt lõi v1.0:**
 1. **Ranh giới vật lý thuần túy (Pure Physical Resources):** Facility chỉ quản lý những gì tồn tại vật lý. Bảng `spatial_unit_capacities` chỉ lưu `max_capacity` tĩnh; cột `current_occupied` và `reserved_count` đã được loại bỏ để chuyển về quyền quản lý của Parking Operations Service.
-2. **Trạng thái đặt chỗ là bản sao runtime có kiểm soát:** `parking_slots` lưu `physical_state` (AVAILABLE, OCCUPIED, UNKNOWN, MAINTENANCE, UNAVAILABLE) và hai cột runtime `supported_vehicle_type`, `reservation_state` (PROTECTED, RESERVED, BACKUP; NULL khi trống). Đây là các cột denormalized do ParkingService đọc/ghi để lọc và gán slot nhanh (D4/P1); quyền quyết định trạng thái đặt chỗ vẫn thuộc Operations/Reservation. Khi lệch, Operations/Reservation là nguồn chân lý.
+2. **Trạng thái đặt chỗ là bản sao runtime có kiểm soát:** `parking_slots` lưu `physical_state` (AVAILABLE, OCCUPIED, UNKNOWN, MAINTENANCE, UNAVAILABLE) và hai cột runtime `supported_vehicle_type`, `reservation_state` (PROTECTED, RESERVED, BACKUP; NULL khi trống). Đây là các cột denormalized do FacilityService đọc/ghi để lọc và gán slot nhanh (D4/P1); quyền quyết định trạng thái đặt chỗ vẫn thuộc Operations/Reservation. Khi lệch, Operations/Reservation là nguồn chân lý.
 3. **Bảo tồn lịch sử kiểm toán tuyệt đối (Zero Cascade on Audit):** Bỏ toàn bộ `ON DELETE CASCADE` trên các bảng audit (`structure_slot_audit`, `structure_change_audit`), sử dụng `RESTRICT` hoặc `SET NULL` để đảm bảo log kiểm toán không bao giờ bị biến mất.
 4. **RLS không được bật trong profile triển khai:** Schema dùng simple intra-database FK; `tenant_id` được denormalize để application tự scope. Row-Level Security (RLS) là bước riêng, cần policy/role tường minh nếu muốn bật; không mặc định có tác dụng bảo vệ.
 5. **Giao tiếp bất đồng bộ bền vững:** Sử dụng **RabbitMQ + MassTransit** để công bố các sự kiện thay đổi cấu trúc (`ChangeProposed`, `ChangeCommitted`, `EmergencyRestrictionRecorded`).
@@ -180,7 +180,7 @@ Lưu trữ **sức chứa thiết kế tĩnh (Static Capacity Configuration)** c
 
 Lưu trữ thông tin chi tiết từng ô đỗ xe vật lý đánh số riêng lẻ: mã ô (`slot_code`), loại ô (`STANDARD`, `EV`, `DISABLED`, `VIP`), tọa độ không gian 3D (`coordinates_3d`) phục vụ Digital Twin, và trạng thái vật lý thực tế (`physical_state`).
 
-Bản triển khai bổ sung hai cột runtime `supported_vehicle_type` và `reservation_state` (D4/P1). Chúng không thay đổi ownership: Operations/Reservation vẫn quyết định trạng thái đặt chỗ; Facility giữ bản sao denormalized phục vụ đọc/ghi của ParkingService.
+Bản triển khai bổ sung hai cột runtime `supported_vehicle_type` và `reservation_state` (D4/P1). Chúng không thay đổi ownership: Operations/Reservation vẫn quyết định trạng thái đặt chỗ; Facility giữ bản sao denormalized phục vụ đọc/ghi của FacilityService.
 
 ### 5.2 Traceability Mapping
 
@@ -203,8 +203,8 @@ Bản triển khai bổ sung hai cột runtime `supported_vehicle_type` và `res
 | `features` | `JSONB NULL` | Thuộc tính mở rộng (có mái che, sạc nhanh...) | Cấu hình linh hoạt | FR-FAC-04 |
 | `coordinates_3d` | `JSONB NULL` | Tọa độ x, y, z và góc xoay 3D | Mesh mapping trong 3D Digital Twin | FR-FAC-04 |
 | `physical_state` | `VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE'` | Trạng thái cảm biến/vật lý: AVAILABLE, OCCUPIED, UNKNOWN, MAINTENANCE, UNAVAILABLE | Recorded physical-state field; target projection of Operations-accepted state, not raw sensor authority (DB27) | BR-FAC-04 |
-| `supported_vehicle_type` | `VARCHAR(20) NULL CHECK (supported_vehicle_type IN ('CAR','MOTORCYCLE','OVERSIZED'))` | Loại xe mà ô đỗ hỗ trợ; dùng để lọc/gán slot. `NULL` = chưa cấu hình | ParkingService ghi/đọc; đồng bộ từ `slot_compatibilities` khi cấu hình | FR-FAC-04; D4/P1 |
-| `reservation_state` | `VARCHAR(20) NULL CHECK (reservation_state IS NULL OR reservation_state IN ('PROTECTED','RESERVED','BACKUP'))` | Bản sao trạng thái đặt chỗ của ô (NULL = không có cam kết). Operations/Reservation là nguồn chân lý | ParkingService cập nhật theo reservation event/API; không dùng làm nguồn quyết định duy nhất | D4/P1 |
+| `supported_vehicle_type` | `VARCHAR(20) NULL CHECK (supported_vehicle_type IN ('CAR','MOTORCYCLE','OVERSIZED'))` | Loại xe mà ô đỗ hỗ trợ; dùng để lọc/gán slot. `NULL` = chưa cấu hình | FacilityService ghi/đọc; đồng bộ từ `slot_compatibilities` khi cấu hình | FR-FAC-04; D4/P1 |
+| `reservation_state` | `VARCHAR(20) NULL CHECK (reservation_state IS NULL OR reservation_state IN ('PROTECTED','RESERVED','BACKUP'))` | Bản sao trạng thái đặt chỗ của ô (NULL = không có cam kết). Operations/Reservation là nguồn chân lý | FacilityService cập nhật theo reservation event/API; không dùng làm nguồn quyết định duy nhất | D4/P1 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo | Database tự sinh | — |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật cuối | Application cập nhật | — |
 | `deleted_at` | `TIMESTAMPTZ NULL` | Soft-delete timestamp | Application cập nhật | — |
@@ -329,7 +329,7 @@ Bốn overlay được mount sau base `02` + `03a` (thứ tự trong `compose.sc
 
 | Overlay | Đối tượng | Mục đích |
 |---|---|---|
-| `parking-tenants.sql` | `tenants` | Bản sao local của `tenants` (canonical ở UserDb) để ParkingService JOIN trong cùng transaction; D5 |
+| `parking-tenants.sql` | `tenants` | Bản sao local của `tenants` (canonical ở UserDb) để FacilityService JOIN trong cùng transaction; D5 |
 | `parking-structure-synchronizations.sql` | `structure_synchronizations` | Hàng đợi/trạng thái đồng bộ cấu trúc giữa Parking và Reservation; D1/Q2 |
 | `parking-operator-tables.sql` | `support_tickets`, `operator_notifications`, `operator_audit_logs` | Shape BE tạm thời cho các endpoint `/api/operator/*`; `operator_incident_events` nằm ở `03a`; D3/D6 |
 | `parking-slot-constraints.sql` | `ck_deleted_slot_safe`, `uq_site_slot_code_ci` | Ràng buộc xóa an toàn + uniqueness mã ô theo site; D4 |

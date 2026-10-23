@@ -1,7 +1,9 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation')][string]$Service
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Reservation')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
+# Parking remains an alias so existing scripts and configuration continue to work.
+if ($Service -eq 'Facility') { $Service = 'Parking' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
 
@@ -74,6 +76,13 @@ if ($Service -eq 'User') {
 
 # Optional .env settings override saved user-secrets only for this runner process.
 if ($Service -eq 'User') {
+    if ($env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN) { $env:Onboarding__PublicOrigin = $env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN }
+    if ($env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK) { $env:Onboarding__AllowHttpLoopback = $env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK }
+    if ($env:SMARTPARK_MESSAGING_ENABLED) { $env:Messaging__Enabled = $env:SMARTPARK_MESSAGING_ENABLED }
+    foreach ($field in @('Host','Port','VirtualHost','Username','Password')) {
+        $value = [Environment]::GetEnvironmentVariable('SMARTPARK_RABBITMQ_' + $field.ToUpperInvariant())
+        if ($value) { [Environment]::SetEnvironmentVariable('Messaging__' + $field, $value, 'Process') }
+    }
     foreach ($field in @('Host','Port','Username','Password','From')) {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
@@ -85,6 +94,7 @@ if ($Service -eq 'User') {
         $env:Workflow__KeyDirectory = $keyDirectory
     }
 }
-$projectDir = Join-Path $taskRoot "src/Services/${Service}Service/SmartParking.${Service}Service.API"
+$projectService = if ($Service -eq 'Parking') { 'Facility' } else { $Service }
+$projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
-if ($LASTEXITCODE -ne 0) { throw "${Service}Service exited with code $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "${projectService}Service exited with code $LASTEXITCODE" }

@@ -89,7 +89,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 
 ```powershell
 .\scripts\run-app-service.ps1 -Service User
-.\scripts\run-app-service.ps1 -Service Parking
+.\scripts\run-app-service.ps1 -Service Facility
 .\scripts\run-app-service.ps1 -Service Reservation
 .\scripts\run-app-service.ps1 -Service Frontend
 .\scripts\run-app-service.ps1 -Service All        # cả 4 container
@@ -108,7 +108,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 - Dừng stack (giữ volume): `.\scripts\stop-app-service.ps1 -Service All`.
 - Log một service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
 
-Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`ParkingService`/`ReservationService`).
+Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`FacilityService`/`ReservationService`).
 
 > **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055` đang bị runner host chiếm, dừng runner host trước khi chạy container.
 
@@ -121,7 +121,7 @@ Mở ba terminal PowerShell riêng tại repo:
 ```
 
 ```powershell
-.\scripts\run-schema-service.ps1 -Service Parking
+.\scripts\run-schema-service.ps1 -Service Facility
 ```
 
 ```powershell
@@ -133,11 +133,13 @@ Runner dùng `.env` cho connection string, shared service key, Admin/owner/opera
 | Service | HTTP API | PostgreSQL host port | Database |
 | --- | --- | --- | --- |
 | User | http://localhost:5035 | 5441 | smartpark_user |
-| Parking | http://localhost:5045 | 5442 | smartpark_facility |
+| Facility | http://localhost:5045 | 5442 | smartpark_facility |
 | Reservation | http://localhost:5055 | 5443 | smartpark_operations |
 | Payment | — | 5444 | smartpark_payment |
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
+
+`FacilityService` là tên mới của `ParkingService`. Runner vẫn nhận `-Service Parking` để tương thích lệnh cũ. Giữ nguyên các khóa `ConnectionStrings:Parking`, `Services:Parking`, biến `SMARTPARK_*PARKING*` và UserSecretsId cũ. Database theo baseline develop là `smartpark_facility` / `smartpark_operations`; API routes và port không đổi.
 
 ### 3.3 Frontend trên host
 

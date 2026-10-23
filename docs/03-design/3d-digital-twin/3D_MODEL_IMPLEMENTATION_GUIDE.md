@@ -309,7 +309,7 @@ Mock-Project-Smart-Parking/
 │           └── 3d-palette.ts                     # PBR design tokens & SRS v0.9 reservation status codes
 └── src/
     └── Services/                                 # Authoritative Backend .NET Microservices
-        ├── ParkingService/                       # Owns slot inventory, spatial hierarchy & WebSocket topics
+        ├── FacilityService/                       # Owns slot inventory, spatial hierarchy & WebSocket topics
         ├── ReservationService/                   # Owns booking lifecycle & active parking sessions
         └── IoTService/                           # Ingests camera LPR & physical slot sensor telemetries
 ```

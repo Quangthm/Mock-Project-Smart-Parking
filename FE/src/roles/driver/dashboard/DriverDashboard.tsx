@@ -54,6 +54,7 @@ export function DriverDashboard() {
   const [accountForm, setAccountForm] = useState({ name: "", phone: "" })
 
   const [profileMessage, setProfileMessage] = useState("")
+  const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -85,6 +86,7 @@ export function DriverDashboard() {
   })
 
   function openProfileSection(section: ProfileSection) {
+    if (securityDismissBlocked) return
     setProfileSection(section)
 
     setProfileMessage("")
@@ -212,7 +214,7 @@ export function DriverDashboard() {
           <div
             role="presentation"
             onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setProfileSection(null)
+              if (e.target === e.currentTarget && !securityDismissBlocked) setProfileSection(null)
             }}
             style={{
               position: "fixed",
@@ -298,7 +300,8 @@ export function DriverDashboard() {
                 <button
                   type="button"
                   aria-label="Close profile window"
-                  onClick={() => setProfileSection(null)}
+                  disabled={securityDismissBlocked}
+                  onClick={() => { if (!securityDismissBlocked) setProfileSection(null) }}
                   style={{
                     width: 34,
                     height: 34,
@@ -441,7 +444,7 @@ export function DriverDashboard() {
               )}
 
               {profileSection === "security" && (
-                <AccountSecurityPanel key={user?.id} />
+                <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
               )}
 
               {profileSection === "vehicles" && <VehicleManager />}

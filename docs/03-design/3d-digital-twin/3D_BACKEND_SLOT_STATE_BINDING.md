@@ -20,7 +20,7 @@
 
 ### 1.1. Purpose
 
-This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Legacy `ParkingService`/`ReservationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
+This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Transitional `FacilityService` (renamed from `ParkingService`)/`ReservationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
 
 The target binding must ensure the following; historical prototype evidence is separately labelled in §§11–13:
 
@@ -70,7 +70,7 @@ The target binding must ensure the following; historical prototype evidence is s
   * `scripts/database/microservices/03-reservation-session-service-db.sql` (`reservations`, `parking_sessions`, `slot_allocations`).
   * `scripts/database/microservices/06-iot-service-db.sql` (`sensor_telemetries`, `devices`).
 * **Source Code Implementations**:
-  * Backend API: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+  * Backend API: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
   * Frontend 3D Subsystem: `FE/src/components/3d/Parking3DViewer.tsx`, `FE/src/lib/3d/slotMatcher.ts`, `FE/src/lib/3d/parking3DConfig.ts`.
 
 ---
@@ -99,7 +99,7 @@ The approved target has six domain-owned services. The source folder names below
 
 | Service / component | Contract status | Technical responsibility |
 | :--- | :--- | :--- |
-| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; legacy `ParkingService` is transitional. |
+| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; runtime `FacilityService` (formerly `ParkingService`) remains transitional. |
 | **Parking Operations** | Target ownership | Accepted occupancy/uncertainty, reservations, claims, allocation, protection, availability, Search and monthly/yearly coverage. Legacy `ReservationService` is implementation evidence. |
 | **User & Access** | Target ownership | Identity, organization/membership/review and current scoped permissions. |
 | **IoT & Recognition** | Target ownership | Raw device observations, recognition/evidence and integrations; no direct occupancy/admission authority. |
@@ -115,6 +115,8 @@ The approved target has six domain-owned services. The source folder names below
 ### 2.3. Source of Truth
 
 * **Strict Invariant**: Operations owns accepted occupancy/uncertainty, reservations, claims and allocation; Payment owns fees/tariffs; Facility owns resources/configuration/model association. IoT owns raw observations. Neither legacy folder/DB placement nor visualization storage changes these boundaries.
+Current FacilityService gate handlers still mutate `physical_state` directly (`OperatorGateSlotStore`); this is transitional implementation evidence, not completion of Operations ownership (DB27).
+
 * **Client Presentation Role**: The Three.js canvas is purely an interactive read-only display.
 * **Prohibited Behavior**: Selecting a bay, rotating the camera, hovering over an object, or executing a client-side animation must **never** create or mutate a database record.
 
@@ -627,7 +629,7 @@ The table preserves prototype technical choices, not current v1.1 API or runtime
 
 | ID | Topic / Question | Current Project Baseline | Resolution Owner | Status |
 | :--- | :--- | :--- | :--- | :---: |
-| **Q-01** | Which endpoint serves operational layout? | `GET /api/parking-lots/{id}/operational-layout` in `ParkingService.API` | Backend Team | **RESOLVED** |
+| **Q-01** | Which endpoint serves operational layout? | `GET /api/parking-lots/{id}/operational-layout` in `FacilityService.API` | Backend Team | **RESOLVED** |
 | **Q-02** | Is `slotId` or `slotCode` the primary mapping key? | `slotCode` matches 3D mesh names; `slotId` UUID tracks DB transactions. | FE & DB Lead | **RESOLVED** |
 | **Q-03** | How are reservation states formatted? | `reservation_state` enum column (`RESERVED`, `PROTECTED`, `BACKUP`) in DB. | DB Lead | **RESOLVED** |
 | **Q-04** | Can multiple overlays coexist? | Mutually exclusive in MVP; single highest priority halo displayed. | PM / UI Lead | **CONFIRMED** |

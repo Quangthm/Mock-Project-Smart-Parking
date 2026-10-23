@@ -38,6 +38,9 @@ services:
       Otp__Smtp__Username: ${SMARTPARK_SMTP_USERNAME:-}
       Otp__Smtp__Password: ${SMARTPARK_SMTP_PASSWORD:-}
       Otp__Smtp__From: ${SMARTPARK_SMTP_FROM:-}
+      # Operator activation links must point to the browser-facing frontend.
+      Onboarding__PublicOrigin: ${SMARTPARK_ONBOARDING_PUBLIC_ORIGIN:-http://localhost:5173}
+      Onboarding__AllowHttpLoopback: ${SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK:-true}
       # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
       Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
@@ -55,7 +58,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
-        SERVICE: ParkingService
+        SERVICE: FacilityService
     image: smartpark/parking-service:local
     environment:
       <<: *backend-env

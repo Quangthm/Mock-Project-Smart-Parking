@@ -25,7 +25,7 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 | DB vật lý | Port | Base DDL | Overlay | Service dùng |
 |---|---|---|---|---|
 | `smartpark_user` | 5441 | `01-user-access-service-db.sql` | — | UserService |
-| `smartpark_facility` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | ParkingService |
+| `smartpark_facility` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | FacilityService |
 | `smartpark_operations` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | ReservationService |
 | `smartpark_payment` | 5444 | `04-payment-pricing-service-db.sql` | — | PaymentService |
 | `smartpark_notification` | 5445 | `05-notification-audit-service-db.sql` | — | NotificationService |

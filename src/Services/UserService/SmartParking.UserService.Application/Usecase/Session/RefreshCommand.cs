@@ -21,7 +21,7 @@ public sealed class RefreshCommandHandler(IUnitOfWork unitOfWork, IAuthSessionSt
         if (session is null || session.IsRevoked || session.ExpiresAt <= clock.GetUtcNow())
             throw AuthException.InvalidToken();
         var user = await unitOfWork.UserRepository.GetByIdWithRolesAsync(session.UserId, cancellationToken);
-        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
+        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active || AccountRolePolicy.CurrentRole(user) is null)
             throw AuthException.InvalidToken();
         return await auth.RotateAsync(user, session, cancellationToken);
     }

@@ -1,3 +1,4 @@
+using SmartParking.ReservationService.Infrastructure;
 using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
@@ -20,12 +21,13 @@ public static class ReservationHost
         builder.Services.TryAddScoped<IStructureSafetyStore, StructureSafetyStore>();
         builder.Services.AddScoped<StructureSafetyService>();
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddHttpClient<OperatorIdentityClient>(client =>
+        builder.Services.AddHttpClient<IOperatorIdentityClient, OperatorIdentityClient>(client =>
         {
             client.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
-        builder.Services.AddScoped<ReservationGateStore>();
+        builder.Services.AddScoped<IReservationGateStore, ReservationGateStore>();
+        builder.Services.AddScoped<ReservationGateService>();
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
             .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
             .AllowAnyHeader()
@@ -82,8 +84,8 @@ public static class ReservationHost
             Results.Ok(await service.ReadSnapshotAsync(body.TenantId, siteId, ct)));
         app.MapGet("/api/reservations", async (
             Guid siteId,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             var scope = await identity.RequireSiteAsync(siteId, ct);
@@ -92,8 +94,8 @@ public static class ReservationHost
         app.MapGet("/api/reservations/lookup", async (
             Guid siteId,
             string query,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(query) || query.Length > 100)
@@ -107,8 +109,8 @@ public static class ReservationHost
         app.MapGet("/api/parking-sessions/walk-in/lookup", async (
             Guid siteId,
             string plate,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(plate) || plate.Length > 50)
@@ -122,8 +124,8 @@ public static class ReservationHost
         app.MapPost("/api/parking-sessions/walk-in/check-in", async (
             Guid siteId,
             WalkInGateActionRequest body,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.PlateNumber) || body.PlateNumber.Length > 50)
@@ -149,8 +151,8 @@ public static class ReservationHost
             Guid sessionId,
             Guid siteId,
             WalkInGateActionRequest body,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.PlateNumber) || body.PlateNumber.Length > 50)
@@ -165,8 +167,8 @@ public static class ReservationHost
             Guid reservationId,
             GateActionRequest body,
             Guid siteId,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             if (body.PlateNumber is { Length: > 50 })
@@ -181,8 +183,8 @@ public static class ReservationHost
             Guid reservationId,
             GateActionRequest body,
             Guid siteId,
-            OperatorIdentityClient identity,
-            ReservationGateStore store,
+            IOperatorIdentityClient identity,
+            ReservationGateService store,
             CancellationToken ct) =>
         {
             if (body.PlateNumber is { Length: > 50 })

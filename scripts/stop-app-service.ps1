@@ -1,7 +1,8 @@
 param(
-    [ValidateSet('User','Parking','Reservation','Frontend','All')][string]$Service = 'All'
+    [ValidateSet('User','Facility','Parking','Reservation','Frontend','All')][string]$Service = 'All'
 )
 $ErrorActionPreference = 'Stop'
+if ($Service -eq 'Facility') { $Service = 'Parking' }
 $root = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $root '.env'
 $composePath = Join-Path $root 'compose.app.yml'
