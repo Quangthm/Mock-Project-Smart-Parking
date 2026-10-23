@@ -4,7 +4,7 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 
 | FR | Status | Module | Rules | Stories | Use cases |
 |---|---|---|---|---|---|
-| FR-LOT-01 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-01, BR-EMERG-01 | US-OW01 | UC-LOT-01 |
+| FR-LOT-01 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-AUTH-01, BR-AUTH-02, BR-CAP-01, BR-EMERG-01 | US-OW01 | UC-LOT-01 |
 | FR-LOT-02 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-01, BR-EMERG-01 | US-OW01 | UC-LOT-01 |
 | FR-LOT-03 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-01, BR-EMERG-01 | US-OW01 | UC-LOT-01 |
 | FR-LOT-04 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-01, BR-EMERG-01 | US-O05, US-OW01 | UC-LOT-01 |
@@ -17,3 +17,8 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | FR-CAP-05 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-05 | US-O01, US-O02 | UC-GATE-01 |
 | FR-CAP-06 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-02 | US-O01, US-O02, US-O03 | UC-RES-02 |
 | FR-CAP-07 | CONFIRMED — implementation pending / not assessed | 02-facility-capacity | BR-CAP-04 | US-O05, US-OW02 | UC-POL-01 |
+
+
+## v1.1 decision and acceptance links
+
+V11-03, V11-05, V11-07, V11-09; D11: [exact changed clauses, API/architecture contracts and acceptance scenarios](v1.1-decision-coverage.md). Existing IDs are retained; these associations describe requirements, not implementation/test completion.

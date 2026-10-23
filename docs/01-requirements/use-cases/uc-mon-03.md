@@ -1,4 +1,4 @@
-# UC-MON-03 — Renew, expire or repurchase a monthly pass
+# UC-MON-03 — Renew, expire or repurchase a monthly/yearly pass
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Operations, Payment
@@ -7,7 +7,7 @@
 
 ## Goal
 
-Renew, expire or repurchase a monthly pass.
+Renew, expire or repurchase a monthly/yearly pass.
 
 ## Preconditions
 
@@ -15,9 +15,9 @@ Existing paid periods or expired prior pass.
 
 ## Main flow
 
-1. Open renewal 7 days before final committed E and append from that E with original anchor.
+1. For monthly renewal, open 7 days before final committed E and append from that E with original anchor. Yearly renewal policy and calendar-boundary details are separately configurable/design-pending; no monthly default is silently inherited.
 2. Verify full settlement and strict deadline; no automatic charge or next-period debt.
-3. Send expiry reminders at 7 and 1 day; at E stop coverage without clearing occupancy.
+3. Send monthly expiry reminders at 7 and 1 day, and yearly reminders only under separately agreed settings; at E stop coverage without clearing occupancy.
 4. After expiry repurchase with new non-retroactive start/anchor; while parked retain same physical session.
 
 ## Alternatives and failures

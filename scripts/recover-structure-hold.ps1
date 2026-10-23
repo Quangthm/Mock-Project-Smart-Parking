@@ -19,12 +19,12 @@ function Read-Database([string]$service, [string]$dbName, [string]$sql) {
     return ($result -join "`n")
 }
 # Fail if even an idle Parking connection remains: a paused request could still commit later.
-$connections = Read-Database 'parking-db' 'smartpark_parking' "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()"
+$connections = Read-Database 'facility-db' 'smartpark_facility' "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()"
 if ([int]$connections -ne 0) { throw 'Parking DB still has other connections. Stop API instances and wait for connections to close before recovery.' }
-$hold = Read-Database 'reservation-db' 'smartpark_reservation' "SELECT row_to_json(h) FROM structure_edit_holds h WHERE site_id='$SiteId'::uuid"
+$hold = Read-Database 'operations-db' 'smartpark_operations' "SELECT row_to_json(h) FROM structure_edit_holds h WHERE site_id='$SiteId'::uuid"
 if (!$hold) { Write-Output 'No pending hold for this site.'; return }
 $pending = $hold | ConvertFrom-Json
-$protectedJson = Read-Database 'reservation-db' 'smartpark_reservation' "SELECT coalesce(json_agg(id),'[]'::json) FROM (SELECT slot_id AS id FROM slot_allocations WHERE site_id='$SiteId'::uuid AND allocation_status IN ('RESERVED','OCCUPIED') UNION SELECT current_slot_id FROM parking_sessions WHERE site_id='$SiteId'::uuid AND exit_time IS NULL AND current_slot_id IS NOT NULL) p"
+$protectedJson = Read-Database 'operations-db' 'smartpark_operations' "SELECT coalesce(json_agg(id),'[]'::json) FROM (SELECT slot_id AS id FROM slot_allocations WHERE site_id='$SiteId'::uuid AND allocation_status IN ('RESERVED','OCCUPIED') UNION SELECT current_slot_id FROM parking_sessions WHERE site_id='$SiteId'::uuid AND exit_time IS NULL AND current_slot_id IS NOT NULL) p"
 $protectedSql = (@($protectedJson | ConvertFrom-Json) | ForEach-Object { "'$([guid]$_)'::uuid" }) -join ','
 if (!$protectedSql) { $protectedSql = 'NULL::uuid' }
 $snapshotSql = @"
@@ -64,15 +64,15 @@ SELECT jsonb_build_object('tenantId', tenant_id, 'outcome', jsonb_build_object(
     'capacities', coalesce((SELECT jsonb_agg(jsonb_build_object('unitId',c.unit_id,'vehicleType',c.vehicle_type,'capacity',c.capacity,'backup',b.backup)) FROM capacities c JOIN backups b ON b.unit_id IS NOT DISTINCT FROM c.unit_id AND b.vehicle_type=c.vehicle_type),'[]'::jsonb)
 )) FROM site;
 "@
-$snapshot = Read-Database 'parking-db' 'smartpark_parking' $snapshotSql
+$snapshot = Read-Database 'facility-db' 'smartpark_facility' $snapshotSql
 if (!$snapshot) { throw 'Site missing in authoritative Parking DB; manual investigation required.' }
 $body = $snapshot | ConvertFrom-Json
 if ([guid]$body.tenantId -ne [guid]$pending.tenant_id) { throw 'Hold tenant differs from Parking site tenant; manual investigation required.' }
 
 $tracked = $null
-$hasSynchronizationTable = Read-Database 'parking-db' 'smartpark_parking' "SELECT to_regclass('structure_synchronizations') IS NOT NULL"
+$hasSynchronizationTable = Read-Database 'facility-db' 'smartpark_facility' "SELECT to_regclass('structure_synchronizations') IS NOT NULL"
 if (($hasSynchronizationTable -join '').Trim() -eq 't') {
-    $trackedJson = Read-Database 'parking-db' 'smartpark_parking' "SELECT row_to_json(s) FROM structure_synchronizations s WHERE token='$([guid]$pending.token)'::uuid"
+    $trackedJson = Read-Database 'facility-db' 'smartpark_facility' "SELECT row_to_json(s) FROM structure_synchronizations s WHERE token='$([guid]$pending.token)'::uuid"
     if ($trackedJson) {
         $tracked = $trackedJson | ConvertFrom-Json
         if ($tracked.state -eq 'completed') { throw 'A completed synchronization still has a hold; investigate before releasing it.' }
@@ -94,8 +94,8 @@ if (!$env:SMARTPARK_SERVICE_KEY -or $env:SMARTPARK_SERVICE_KEY.Length -lt 32) { 
 # Committed edits replay their durable outcome. Legacy holds use the authoritative
 # snapshot; tracked preparations that never committed use a null abort outcome.
 Invoke-RestMethod -Method Post -Uri "$($ReservationUrl.TrimEnd('/'))/internal/structure/$SiteId/$($pending.token)/release" -Headers @{ 'X-Service-Key'=$env:SMARTPARK_SERVICE_KEY } -ContentType 'application/json' -Body $snapshot | Out-Null
-Read-Database 'parking-db' 'smartpark_parking' "UPDATE structure_operations SET status='completed',reason='Recovered from authoritative Parking snapshot after projection acknowledgement',updated_at=now() WHERE site_id='$SiteId'::uuid AND tenant_id='$([guid]$body.tenantId)'::uuid AND physical_committed AND status<>'completed'" | Out-Null
+Read-Database 'facility-db' 'smartpark_facility' "UPDATE structure_operations SET status='completed',reason='Recovered from authoritative Parking snapshot after projection acknowledgement',updated_at=now() WHERE site_id='$SiteId'::uuid AND tenant_id='$([guid]$body.tenantId)'::uuid AND physical_committed AND status<>'completed'" | Out-Null
 if ($tracked) {
-    Read-Database 'parking-db' 'smartpark_parking' "UPDATE structure_synchronizations SET state='completed',updated_at=now() WHERE token='$([guid]$pending.token)'::uuid" | Out-Null
+    Read-Database 'facility-db' 'smartpark_facility' "UPDATE structure_synchronizations SET state='completed',updated_at=now() WHERE token='$([guid]$pending.token)'::uuid" | Out-Null
 }
 Write-Output 'Reconciled and released. Parking API can now restart.'

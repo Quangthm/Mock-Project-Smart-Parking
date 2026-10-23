@@ -44,6 +44,7 @@ public static class ParkingHost
         builder.Services.AddScoped<OperatorOperationsStore>();
         builder.Services.AddScoped<OperatorGateSlotStore>();
         var app = builder.Build();
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.UseCors();
         app.Use(async (context, next) =>
         {
