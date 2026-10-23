@@ -1,13 +1,13 @@
 # SmartPark — Consolidated SRS v1.1
 
 **v1.1 documentation review candidate based on approved decisions · Updated 21 October 2026**
-The v1.0 filename is retained as a stable compatibility entry for this canonical v1.1 overview. The preceding v1.0 RC3 baseline was a review candidate, not a signed release. The [approved decision register](../../05-project-management/decision-log/2026-10-20-approved-v1.1-changes.md) governs this update; implementation and [acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md) remain **NOT RUN/not assessed**, not product acceptance.
+The preceding v1.0 RC3 baseline was a review candidate, not a signed release. The [approved decision register](../../05-project-management/decision-log/2026-10-20-approved-v1.1-changes.md) governs this update; implementation and [acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md) remain **NOT RUN/not assessed**, not product acceptance.
 
 ## 1. Purpose and how to use this document
 
 SmartPark is a Vietnam-focused web parking management system for Drivers, Operators, Owners and Admins. It connects discovery and reservations with on-site parking operations, fee calculation, payments, monthly/yearly coverage and accountable support. It supports cars, motorcycles and permitted account-free/non-plated walk-in workflows without assuming every lot uses numbered spaces.
 
-Read this file first for **what the product must do and its limits**. Then read the [solution architecture overview](../../02-architecture/solution-architecture/smartpark-solution-architecture-v1.0.md) for ownership and technical direction. Follow the links beside each topic for exact rules, boundary examples and implementation contracts. This overview summarizes approved decisions; it does not replace detailed requirement IDs or introduce new policy.
+Read this file first for **what the product must do and its limits**. Then read the [solution architecture overview](../../02-architecture/solution-architecture/smartpark-solution-architecture-v1.1.md) for ownership and technical direction. Follow the links beside each topic for exact rules, boundary examples and implementation contracts. This overview summarizes approved decisions; it does not replace detailed requirement IDs or introduce new policy.
 
 Authority: explicit approved amendments and the synchronized active baseline govern. If a summary omits a condition, use the detailed contract. If sources conflict, flag the concrete difference for correction rather than inventing a rule. Older v0.8/v0.9 documents and historical alternatives do not override the active modular baseline.
 

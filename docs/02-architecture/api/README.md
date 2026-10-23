@@ -4,6 +4,8 @@ This is a **v1.1 documentation review candidate based on approved decisions** (S
 
 Start with [shared contracts and pending API work](v1.1-contracts.md). The following are the active, minimal designs; their explicit design-pending items require FE/BE agreement before implementation acceptance.
 
+> **API Design Template:** All new and updated API endpoints must follow the standard specification template at [API Design Template](../../03-design/api/api-design-template.md).
+
 | Capability | Active design |
 |---|---|
 | Partner Registration, existing Owner role | [Registration and first-lot setup](../../03-design/api/owner-register-api-design.md) |
