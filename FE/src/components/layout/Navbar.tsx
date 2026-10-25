@@ -3,9 +3,16 @@ import { useApp, type View } from "../../context/AppContext"
 import { BrandLogo, BrandWordmark } from "../brand/BrandLogo"
 
 import { ThemeIcon } from "../icon/ThemeIcon"
+import { useLocation, useNavigate } from "react-router-dom"
 
 export function Navbar() {
   const { user, view, theme, setView, toggleTheme, signOut } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const goTo = (next: View) => {
+    setView(next)
+    if (location.pathname !== "/") navigate("/")
+  }
 
   return (
     <nav
@@ -31,7 +38,7 @@ export function Navbar() {
           type="button"
           className="public-brand-trigger"
           aria-label="SmartParking home"
-          onClick={() => setView("landing")}
+          onClick={() => goTo("landing")}
           style={{
             display: "flex",
             alignItems: "center",
@@ -59,17 +66,17 @@ export function Navbar() {
               <NavLink
                 label="Home"
                 active={view === "landing"}
-                onClick={() => setView("landing")}
+                onClick={() => goTo("landing")}
               />
               <NavLink
                 label="Pricing"
                 active={view === "pricing"}
-                onClick={() => setView("pricing")}
+                onClick={() => goTo("pricing")}
               />
               <NavLink
                 label="Support"
                 active={view === "support"}
-                onClick={() => setView("support")}
+                onClick={() => goTo("support")}
               />
             </>
           )}
@@ -128,14 +135,14 @@ export function Navbar() {
               <button
                 className="btn-outline"
                 style={{ fontSize: "0.85rem", padding: "0.4rem 0.875rem" }}
-                onClick={() => setView("sign-in")}
+                onClick={() => goTo("sign-in")}
               >
                 Sign In
               </button>
               <button
                 className="btn-primary"
                 style={{ fontSize: "0.85rem", padding: "0.4rem 0.875rem" }}
-                onClick={() => setView("sign-up")}
+                onClick={() => goTo("sign-up")}
               >
                 Sign Up
               </button>

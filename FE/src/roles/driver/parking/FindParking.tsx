@@ -63,6 +63,9 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const appliedMapStyleRef = useRef("")
   const markersRef = useRef(new Map<string, maptilersdk.Marker>())
   const locationMarkerRef = useRef<maptilersdk.Marker | null>(null)
+  const locationWatchRef = useRef<number | null>(null)
+  const locationTimerRef = useRef<number | null>(null)
+  const locationRequestRef = useRef(0)
   const routeRequestRef = useRef<AbortController | null>(null)
   const routeSequenceRef = useRef(0)
   const [selected, setSelected] = useState<ParkingLot | null>(null)
@@ -80,7 +83,9 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const [maxDistance, setMaxDistance] = useState<number | null>(null)
   const [lotType, setLotType] = useState<LotType | "all">("all")
   const [location, setLocation] = useState<LatLng | null>(null)
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [locationError, setLocationError] = useState("")
+  const [locating, setLocating] = useState(false)
   const [mapState, setMapState] = useState<MapState>("loading")
   const [mapStyle, setMapStyle] = useState<MapStyleName>("streets")
   const [mapMenuOpen, setMapMenuOpen] = useState(false)
@@ -195,6 +200,9 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   useEffect(() => () => {
     routeSequenceRef.current += 1
     routeRequestRef.current?.abort()
+    locationRequestRef.current += 1
+    if (locationWatchRef.current !== null) navigator.geolocation?.clearWatch(locationWatchRef.current)
+    if (locationTimerRef.current !== null) window.clearTimeout(locationTimerRef.current)
   }, [])
   useEffect(() => {
     if (!visible) return
@@ -371,6 +379,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
         return
       }
       setLocation(current)
+      setLocationAccuracy(coords.accuracy)
       setRouteStatus("loading")
       let timedOut = false
       const timeout = window.setTimeout(() => { timedOut = true; controller.abort() }, 12000)
@@ -390,7 +399,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       if (sequence !== routeSequenceRef.current) return
       setRouteStatus("error")
       setRouteError(error.code === 1 ? "Allow location access to show driving directions." : "Your current location could not be determined. Please try again.")
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 })
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
   useEffect(() => {
     const map = mapInstance.current
@@ -411,15 +420,44 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   }, [route, mapState, mapStyle, searchCollapsed, detailsOpen, visible])
   function findMyLocation(applyNearFilter = false) {
     if (!navigator.geolocation) { setLocationError("Location is unavailable in this browser."); return }
+    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current)
+    if (locationTimerRef.current !== null) window.clearTimeout(locationTimerRef.current)
+    const requestId = ++locationRequestRef.current
+    let best: GeolocationPosition | null = null
+    let completed = false
     setLocationError("")
-    navigator.geolocation.getCurrentPosition(({ coords }) => {
-      const next = { lat: coords.latitude, lng: coords.longitude }
-      if (validCoordinates(next)) {
-        setLocation(next)
-        if (applyNearFilter) setMaxDistance(5)
-        mapInstance.current?.flyTo({ center: [next.lng, next.lat], zoom: 14, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 850 })
+    setLocation(null)
+    setLocationAccuracy(null)
+    setLocating(true)
+    const finish = (position: GeolocationPosition | null, message = "Your current location could not be determined. Check location permissions and try again.") => {
+      if (completed || requestId !== locationRequestRef.current) return
+      completed = true
+      if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current)
+      if (locationTimerRef.current !== null) window.clearTimeout(locationTimerRef.current)
+      locationWatchRef.current = null
+      locationTimerRef.current = null
+      setLocating(false)
+      if (!position) { setLocationError(message); return }
+      const next = { lat: position.coords.latitude, lng: position.coords.longitude }
+      setLocation(next)
+      setLocationAccuracy(position.coords.accuracy)
+      if (applyNearFilter && position.coords.accuracy <= 5000) setMaxDistance(5)
+      if (applyNearFilter && position.coords.accuracy > 5000) {
+        setMaxDistance(null)
+        setLocationError("Location is too approximate for a 5 km search. Try again with device location enabled.")
       }
-    }, () => { setLocationError("Allow location access to find parking near you."); setRouteError("Your current location could not be determined.") }, { enableHighAccuracy: true, timeout: 10000 })
+      const zoom = position.coords.accuracy > 5000 ? 10 : position.coords.accuracy > 1000 ? 12 : 14
+      mapInstance.current?.flyTo({ center: [next.lng, next.lat], zoom, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 850 })
+    }
+    locationWatchRef.current = navigator.geolocation.watchPosition((position) => {
+      const point = { lat: position.coords.latitude, lng: position.coords.longitude }
+      if (!validCoordinates(point) || !Number.isFinite(position.coords.accuracy)) return
+      if (!best || position.coords.accuracy < best.coords.accuracy) best = position
+      if (position.coords.accuracy <= 150) finish(position)
+    }, (error) => {
+      finish(best, error.code === 1 ? "Allow location access to find parking near you." : "Your current location could not be determined. Please try again.")
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+    if (!completed) locationTimerRef.current = window.setTimeout(() => finish(best), 10000)
   }
   function changeMapStyle(style: MapStyleName) {
     setMapStyle(style)
@@ -461,7 +499,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
           <div className="find-parking-search-heading">
             <PageHeader title="Search Parking" variant="compact" />
             <div className="find-parking-search-tools">
-              <button type="button" className="find-parking-location" onClick={() => findMyLocation()} aria-label="Use my location" title="Use my location"><UntitledIcon name="map-pin" size={18} /></button>
+              <button type="button" className="find-parking-location" onClick={() => findMyLocation()} aria-label={locating ? "Locating your position" : "Use my location"} title={locating ? "Locating…" : "Use my location"} disabled={locating}><UntitledIcon name="map-pin" size={18} /></button>
               <button type="button" className="find-parking-location" onClick={collapseSearch} aria-label="Collapse parking search" title="Collapse parking search"><span className="find-parking-collapse-icon"><UntitledIcon name="chevron-down" size={18} /></span></button>
             </div>
           </div>
@@ -565,7 +603,8 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
           <strong>{mapState === "missing-key" ? "MapTiler API key required" : mapState === "error" ? "MapTiler is unavailable" : "Loading MapTiler…"}</strong>
           <p>{mapState === "missing-key" ? "Add VITE_MAPTILER_API_KEY to use the map. Parking search remains available." : mapState === "error" ? "Check the map key or connection. Parking search remains available." : "Loading the interactive map."}</p>
         </div>}
-        {location && <span className="find-parking-distance-note">Distances from your location</span>}
+        {locating && <span className="find-parking-distance-note" role="status">Finding your location…</span>}
+        {!locating && location && <span className="find-parking-distance-note">{locationAccuracy !== null && locationAccuracy > 150 ? `Approximate location (±${locationAccuracy >= 1000 ? `${(locationAccuracy / 1000).toFixed(1)} km` : `${Math.round(locationAccuracy)} m`})` : "Distances from your location"}</span>}
       </div>
       {selected && detailsOpen && <div ref={detailsPanelRef} className="find-parking-details-wrap">
         <ParkingDetailsPanel

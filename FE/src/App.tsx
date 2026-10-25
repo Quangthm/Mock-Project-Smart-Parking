@@ -85,6 +85,7 @@ function AppContent() {
     "/dashboard/operation",
     "/pos",
   ].includes(location.pathname)
+  const isEmailOtpPath = location.pathname === "/sign-in/email-otp"
 
   useEffect(() => {
     if (
@@ -97,18 +98,20 @@ function AppContent() {
     }
   }, [authReady, location.pathname, navigate, user, view])
 
-  const isDashboard =
+  const isDashboard = !isEmailOtpPath && (
     (user && ["driver", "owner", "operator", "admin"].includes(view)) ||
     isOperatorPath
+  )
 
   if (location.pathname === "/change-password") return <BootstrapPassword />
 
-  const usesDashboardNavbar =
+  const usesDashboardNavbar = !isEmailOtpPath && (
     ["driver", "owner", "operator", "admin"].includes(view) || isOperatorPath
+  )
 
   return (
     <div
-      className={isDashboard ? `dashboard-theme${view === "driver" ? " driver-theme" : ""}` : view === "sign-in" || view === "sign-up" ? "auth-route" : undefined}
+      className={isDashboard ? `dashboard-theme${view === "driver" ? " driver-theme" : ""}` : view === "sign-in" || view === "sign-up" || isEmailOtpPath ? "auth-route" : undefined}
       data-accent={accentColor}
       style={{
         minHeight: "100vh",
@@ -135,6 +138,7 @@ function AppContent() {
           <div key={`${location.pathname}-${view}`} className="animate-in">
             <Routes>
               <Route path="/" element={<LegacyView view={view} />} />
+              <Route path="/sign-in/email-otp" element={<SignIn flow="email-otp" />} />
               <Route
                 path="/dashboard/finance"
                 element={
