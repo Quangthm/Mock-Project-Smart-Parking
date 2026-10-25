@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useEffect, type FormEvent } from "react"
 import { createPortal } from "react-dom"
 
@@ -365,7 +366,7 @@ export function ZoneModal({
             >
               Zone Operating Status
             </label>
-            <select
+            <RoundedSelect
               className="input"
               value={status}
               onChange={(e) =>
@@ -374,7 +375,7 @@ export function ZoneModal({
             >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-            </select>
+            </RoundedSelect>
           </div>
 
           {error && (

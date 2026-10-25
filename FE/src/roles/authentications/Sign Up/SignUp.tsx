@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useRef } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -859,7 +860,7 @@ export function SignUp() {
               />
             </Field>
             <Field label="Parking Lot Type">
-              <select
+              <RoundedSelect
                 className="input"
                 value={ownerForm.lotType}
                 onChange={(e) =>
@@ -873,7 +874,7 @@ export function SignUp() {
                 <option value="outdoor">Outdoor Lot</option>
                 <option value="basement">Basement Parking</option>
                 <option value="multi-storey">Multi-Storey Parking</option>
-              </select>
+              </RoundedSelect>
             </Field>
             <Field label="Password (optional; leave blank to use OTP sign-in)">
               <div style={{ position: "relative" }}>

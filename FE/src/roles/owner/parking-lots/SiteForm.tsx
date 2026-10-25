@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import type { Site } from "../../../lib/parkingApi"
 import type { LotType } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -105,7 +106,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
               <label className="label" htmlFor={`${formId}-city`}>
                 Province / City *
               </label>
-              <select
+              <RoundedSelect
                 id={`${formId}-city`}
                 className="input"
                 value={selectedCity}
@@ -116,14 +117,14 @@ export function SiteForm({ site, onSaved, onCancel }: {
                     {c.name} ({c.code})
                   </option>
                 ))}
-              </select>
+              </RoundedSelect>
             </div>
 
             <div>
               <label className="label" htmlFor={`${formId}-district`}>
                 District *
               </label>
-              <select
+              <RoundedSelect
                 id={`${formId}-district`}
                 className="input"
                 value={district}
@@ -134,7 +135,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
                     {d}
                   </option>
                 ))}
-              </select>
+              </RoundedSelect>
             </div>
           </div>
 

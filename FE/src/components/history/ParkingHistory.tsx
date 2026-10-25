@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../ui/RoundedSelect"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { UntitledIcon } from "../icon/UntitledIcon"
@@ -151,8 +152,8 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
         <label className="sr-only" htmlFor="parking-history-search">Search license plate or {dateLabel === "Entry" ? "account" : "parking site"}</label>
         <input id="parking-history-search" type="search" name="parking-history-search" autoComplete="off" placeholder={dateLabel === "Entry" ? "Search plate or account…" : "Search plate or parking site…"} value={query} onChange={event => setQuery(event.target.value)} />
       </div>
-      <label className="parking-history-select"><span>Status</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{statuses.map(item => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label>
-      {showVehicleFilter && <label className="parking-history-select"><span>Vehicle</span><select value={vehicle} onChange={event => setVehicle(event.target.value)}><option value="all">All vehicles</option>{vehicles.map(item => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label>}
+      <label className="parking-history-select"><span>Status</span><RoundedSelect value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{statuses.map(item => <option key={item} value={item}>{statusLabel(item)}</option>)}</RoundedSelect></label>
+      {showVehicleFilter && <label className="parking-history-select"><span>Vehicle</span><RoundedSelect value={vehicle} onChange={event => setVehicle(event.target.value)}><option value="all">All vehicles</option>{vehicles.map(item => <option key={item} value={item}>{statusLabel(item)}</option>)}</RoundedSelect></label>}
     </div>
 
     {error && <div role="alert" className="parking-history-message is-error"><UntitledIcon name="alert" size={19} /><span>{error}</span>{onRetry && <button type="button" onClick={onRetry}>Retry</button>}</div>}

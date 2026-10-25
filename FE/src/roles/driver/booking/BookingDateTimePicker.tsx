@@ -2,9 +2,9 @@ import { useEffect, useState } from "react"
 
 type Field = "start" | "end"
 
-const halfHourTimes = Array.from({ length: 48 }, (_, index) => {
-  const hour = Math.floor(index / 2)
-  const minute = index % 2 ? 30 : 0
+const quarterHourTimes = Array.from({ length: 96 }, (_, index) => {
+  const hour = Math.floor(index / 4)
+  const minute = (index % 4) * 15
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
 })
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -115,7 +115,7 @@ export function BookingDateTimePicker({ start, end, onStartChange, onEndChange }
             {weekdays.map((day) => <span className="booking-calendar-weekday" key={day}>{day}</span>)}
             {dateCells.map((day, index) => day > 0 ? (() => {
               const date = localDate(new Date(month.getFullYear(), month.getMonth(), day))
-              const disabled = !halfHourTimes.some((time) => new Date(`${date}T${time}`).getTime() > min.getTime())
+              const disabled = !quarterHourTimes.some((time) => new Date(`${date}T${time}`).getTime() > min.getTime())
               return <button key={date} type="button" disabled={disabled} className={`${date === draftDate ? "is-selected " : ""}${date === today ? "is-today" : ""}`} onClick={() => chooseDay(day)} aria-label={new Intl.DateTimeFormat("en-VN", { dateStyle: "full" }).format(new Date(month.getFullYear(), month.getMonth(), day))} aria-pressed={date === draftDate}>{day}</button>
             })() : <span key={`empty-${index}`} />)}
           </div>
@@ -123,11 +123,11 @@ export function BookingDateTimePicker({ start, end, onStartChange, onEndChange }
         <div className="booking-time-list">
           <strong>Time <small>(local)</small></strong>
           <div role="group" aria-label={`${field === "start" ? "Arrival" : "Departure"} time`}>
-            {draftDate ? halfHourTimes.map((time) => <button key={time} type="button" disabled={!validChoice(draftDate, time)} className={time === draftTime ? "is-selected" : ""} onClick={() => chooseTime(time)} aria-pressed={time === draftTime}>{time}</button>) : <p>Choose a date first.</p>}
+            {draftDate ? quarterHourTimes.map((time) => <button key={time} type="button" disabled={!validChoice(draftDate, time)} className={time === draftTime ? "is-selected" : ""} onClick={() => chooseTime(time)} aria-pressed={time === draftTime}>{time}</button>) : <p>Choose a date first.</p>}
           </div>
         </div>
       </div>
-      <p className="booking-datetime-hint">Choose an arrival after the current time, then a departure after arrival. Times use your device’s local timezone.</p>
+      <p className="booking-datetime-hint">Choose an arrival after the current time, then a departure after arrival. Times are 15 minutes apart in your device’s local timezone.</p>
     </div>
   )
 }

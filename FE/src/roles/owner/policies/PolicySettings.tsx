@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useRef, useMemo } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -365,7 +366,7 @@ export function PolicySettings({
             >
               Applies to:
             </label>
-            <select
+            <RoundedSelect
               id="policy-lot-scope"
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none"
               value={selectedLotId}
@@ -377,7 +378,7 @@ export function PolicySettings({
                   {lot.name}
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           </div>
         </div>
 
@@ -560,7 +561,7 @@ export function PolicySettings({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
                         Deposit type
-                        <select
+                        <RoundedSelect
                           className={inputClass}
                           value={policy.depositMode}
                           onChange={(event) =>
@@ -572,7 +573,7 @@ export function PolicySettings({
                         >
                           <option value="percentage">Percentage (%)</option>
                           <option value="fixed">Fixed amount (VND)</option>
-                        </select>
+                        </RoundedSelect>
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
                         {policy.depositMode === "percentage"

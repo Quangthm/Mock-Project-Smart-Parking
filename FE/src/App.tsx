@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 
 import {
   BrowserRouter,
@@ -61,6 +61,7 @@ import { Careers } from "./public pages/Careers"
 import { PendingApproval } from "./public pages/PendingApproval"
 
 import { getUserHomePath } from "./roles/operator/data/roleRoutes"
+import { scrollPageToTop } from "./lib/scrollPageToTop"
 
 function AppContent() {
   const { view, user, authReady, authError, accentColor } = useApp()
@@ -68,6 +69,16 @@ function AppContent() {
   const location = useLocation()
 
   const navigate = useNavigate()
+
+  useLayoutEffect(() => {
+    scrollPageToTop()
+  }, [location.pathname, view])
+
+  useEffect(() => {
+    const previous = window.history.scrollRestoration
+    window.history.scrollRestoration = "manual"
+    return () => { window.history.scrollRestoration = previous }
+  }, [])
 
   const isOperatorPath = [
     "/dashboard/finance",
@@ -97,7 +108,7 @@ function AppContent() {
 
   return (
     <div
-      className={isDashboard ? "dashboard-theme" : view === "sign-in" || view === "sign-up" ? "auth-route" : undefined}
+      className={isDashboard ? `dashboard-theme${view === "driver" ? " driver-theme" : ""}` : view === "sign-in" || view === "sign-up" ? "auth-route" : undefined}
       data-accent={accentColor}
       style={{
         minHeight: "100vh",

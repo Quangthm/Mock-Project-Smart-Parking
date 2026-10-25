@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useMemo, useRef, useState } from "react"
 import * as maptilersdk from "@maptiler/sdk"
 import { animate } from "animejs"
@@ -55,6 +56,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const mapElement = useRef<HTMLDivElement>(null)
   const mapFrameRef = useRef<HTMLDivElement>(null)
   const mapMenuRef = useRef<HTMLDivElement>(null)
+  const mapStyleRef = useRef<HTMLDivElement>(null)
   const searchPanelRef = useRef<HTMLElement>(null)
   const detailsPanelRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<maptilersdk.Map | null>(null)
@@ -82,9 +84,16 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const [mapState, setMapState] = useState<MapState>("loading")
   const [mapStyle, setMapStyle] = useState<MapStyleName>("streets")
   const [mapMenuOpen, setMapMenuOpen] = useState(false)
+  const [mapStyleOpen, setMapStyleOpen] = useState(false)
   const [route, setRoute] = useState<DrivingRoute | null>(null)
   const [routeStatus, setRouteStatus] = useState<"idle" | "locating" | "loading" | "ready" | "error">("idle")
   const [routeError, setRouteError] = useState("")
+  useEffect(() => {
+    if (detailsOpen) {
+      setMapMenuOpen(false)
+      setMapStyleOpen(false)
+    }
+  }, [detailsOpen])
   useEffect(() => {
     if (searchCollapsed || !searchPanelRef.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
     const entrance = animate(searchPanelRef.current, { opacity: [0, 1], y: [-8, 0], duration: 220, ease: "outCubic" })
@@ -108,6 +117,11 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       localStorage.setItem(historyKey, JSON.stringify(next))
       return next
     })
+  }
+  function clearSearchHistory() {
+    try { localStorage.removeItem(historyKey) }
+    catch { /* The in-memory list can still be cleared if storage is unavailable. */ }
+    setSearchHistory([])
   }
   const results = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
@@ -146,6 +160,21 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     document.addEventListener("keydown", escape)
     return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape) }
   }, [mapMenuOpen])
+  useEffect(() => {
+    if (!mapStyleOpen) return
+    const dismiss = (event: PointerEvent) => {
+      if (!mapStyleRef.current?.contains(event.target as Node)) setMapStyleOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMapStyleOpen(false)
+        mapStyleRef.current?.querySelector<HTMLButtonElement>(".find-parking-map-style-trigger")?.focus()
+      }
+    }
+    document.addEventListener("pointerdown", dismiss)
+    document.addEventListener("keydown", escape)
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape) }
+  }, [mapStyleOpen])
   useEffect(() => {
     const refresh = () => setSourceLots(store.getLots())
     window.addEventListener("sp-data-change", refresh)
@@ -224,12 +253,10 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     const map = mapInstance.current
     markersRef.current.forEach((marker) => marker.remove())
     markersRef.current.clear()
-    validLots.forEach((lot, index) => {
+    validLots.forEach((lot) => {
       const level = availabilityLevel(lot)
-      const nearbyEarlier = validLots.slice(0, index).filter((other) => distanceKm(other, lot) < 1.5).length
       const element = document.createElement("div")
-      const staggered = nearbyEarlier % 2 === 1
-      element.className = `parking-map-marker is-${level}${staggered ? " is-staggered" : ""}${parkingCenter && lot.lng > parkingCenter.lng ? " is-east" : ""}`
+      element.className = `parking-map-marker is-${level}`
       const button = document.createElement("button")
       button.type = "button"
       button.className = `parking-map-label is-${level}`
@@ -278,7 +305,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current.clear()
     }
-  }, [mapState, validLots, parkingCenter])
+  }, [mapState, validLots])
   useEffect(() => {
     const element = mapElement.current
     if (!element || !window.ResizeObserver) return
@@ -417,7 +444,13 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     setSelected(lot)
     setCoordinateError(validCoordinates(lot) ? "" : "This parking lot has invalid coordinates. The map cannot move to it.")
     setDetailsOpen(true)
-    if (window.matchMedia("(max-width: 900px)").matches) setSearchCollapsed(true)
+    if (window.matchMedia("(max-width: 900px)").matches) collapseSearch()
+  }
+
+  function collapseSearch() {
+    setSearchCollapsed(true)
+    setQuery("")
+    setResultsOpen(false)
   }
 
   return (
@@ -429,28 +462,36 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
             <PageHeader title="Search Parking" variant="compact" />
             <div className="find-parking-search-tools">
               <button type="button" className="find-parking-location" onClick={() => findMyLocation()} aria-label="Use my location" title="Use my location"><UntitledIcon name="map-pin" size={18} /></button>
-              <button type="button" className="find-parking-location" onClick={() => setSearchCollapsed(true)} aria-label="Collapse parking search" title="Collapse parking search"><span className="find-parking-collapse-icon"><UntitledIcon name="chevron-down" size={18} /></span></button>
+              <button type="button" className="find-parking-location" onClick={collapseSearch} aria-label="Collapse parking search" title="Collapse parking search"><span className="find-parking-collapse-icon"><UntitledIcon name="chevron-down" size={18} /></span></button>
             </div>
           </div>
           <label className="sr-only" htmlFor="find-parking-query">Search by parking name or address</label>
           <input id="find-parking-query" name="parking-search" className="input" value={query} onFocus={() => setResultsOpen(true)} onChange={(event) => { setQuery(event.target.value); setResultsOpen(true) }} onKeyDown={(event) => { if (event.key === "Enter") rememberSearch(query) }} placeholder="Search name or address…" autoComplete="off" />
-          {searchHistory.length > 0 && <div className="find-parking-history" aria-label="Recent searches"><strong>Recent Searches</strong>{searchHistory.map((item) => <button key={item} type="button" onClick={() => { setQuery(item); setResultsOpen(true) }}><UntitledIcon name="clock" size={16} />{item}</button>)}</div>}
+          {searchHistory.length > 0 && <div className="find-parking-history" aria-label="Recent searches">
+            <div className="find-parking-history-heading">
+              <strong>Recent Searches</strong>
+              <button type="button" className="find-parking-history-clear" aria-label="Clear recent searches" title="Clear recent searches" onClick={clearSearchHistory}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 3h4l1 4H9l1-4ZM6.5 7l.8 13h9.4l.8-13M10 11v5m4-5v5" /></svg>
+              </button>
+            </div>
+            {searchHistory.map((item) => <button key={item} type="button" onClick={() => { setQuery(item); setResultsOpen(true) }}><UntitledIcon name="clock" size={16} />{item}</button>)}
+          </div>}
           <button type="button" className="find-parking-filter-toggle" aria-expanded={filtersOpen} aria-controls="find-parking-filter-options" onClick={() => setFiltersOpen((open) => !open)}><UntitledIcon name="filter" size={16} />Filters<UntitledIcon name="chevron-down" size={15} /></button>
           {filtersOpen && <div id="find-parking-filter-options" className="find-parking-filters" aria-label="Parking filters">
             <button type="button" className={availableOnly ? "is-active" : ""} aria-pressed={availableOnly} onClick={() => setAvailableOnly((value) => !value)}>Available</button>
             <button type="button" className={sortByPrice ? "is-active" : ""} aria-pressed={sortByPrice} onClick={() => setSortByPrice((value) => !value)}>Lowest price</button>
-            <select aria-label="Maximum hourly price" value={maxPrice ?? "all"} onChange={(event) => setMaxPrice(event.target.value === "all" ? null : Number(event.target.value))}>
+            <RoundedSelect aria-label="Maximum hourly price" value={maxPrice ?? "all"} onChange={(event) => setMaxPrice(event.target.value === "all" ? null : Number(event.target.value))}>
               <option value="all">Any price</option>
               {priceOptions.map((price) => <option key={price} value={price}>Up to {formatRate(price)}/hr</option>)}
-            </select>
-            <select aria-label="Maximum distance" value={maxDistance ?? "all"} disabled={!location} title={!location ? "Use your location to filter by distance" : undefined} onChange={(event) => setMaxDistance(event.target.value === "all" ? null : Number(event.target.value))}>
+            </RoundedSelect>
+            <RoundedSelect aria-label="Maximum distance" value={maxDistance ?? "all"} disabled={!location} title={!location ? "Use your location to filter by distance" : undefined} onChange={(event) => setMaxDistance(event.target.value === "all" ? null : Number(event.target.value))}>
               <option value="all">Any distance</option>
               {[1, 3, 5, 10].map((km) => <option key={km} value={km}>Within {km} km</option>)}
-            </select>
-            <select aria-label="Parking type" value={lotType} onChange={(event) => setLotType(event.target.value as LotType | "all")}>
+            </RoundedSelect>
+            <RoundedSelect aria-label="Parking type" value={lotType} onChange={(event) => setLotType(event.target.value as LotType | "all")}>
               <option value="all">All parking types</option>
               {Object.entries(lotTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            </RoundedSelect>
             <button type="button" className={maxDistance === 5 ? "is-active" : ""} aria-pressed={maxDistance === 5} onClick={() => { if (maxDistance === 5) setMaxDistance(null); else if (location) setMaxDistance(5); else findMyLocation(true) }}>Near You (&lt; 5 km)</button>
           </div>}
           {locationError && <p className="find-parking-location-error" role="status">{locationError}</p>}
@@ -474,13 +515,40 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       <div ref={mapFrameRef} className="find-parking-map">
         <div ref={mapElement} className="find-parking-map-canvas" aria-label="MapTiler parking locations" />
         <div className="find-parking-map-toolbar">
-          <label className="find-parking-map-style"><span className="find-parking-map-style-label">Map</span>
-            <select aria-label="Map type" value={mapStyle} onChange={(event) => changeMapStyle(event.target.value as MapStyleName)} disabled={mapState !== "ready"}>
-              <option value="streets">Street</option><option value="satellite">Satellite</option><option value="hybrid">Hybrid</option>
-            </select>
-          </label>
+          <div ref={mapStyleRef} className="find-parking-map-style">
+            <button type="button" className="find-parking-map-style-trigger" aria-label={`Map type: ${mapStyle === "streets" ? "Street" : mapStyle === "satellite" ? "Satellite" : "Hybrid"}`} aria-haspopup="menu" aria-expanded={mapStyleOpen} aria-controls="find-parking-map-style-options" disabled={mapState !== "ready"} onClick={() => { setMapMenuOpen(false); setMapStyleOpen((open) => !open) }} onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault()
+                const fromStart = event.key === "ArrowDown"
+                setMapMenuOpen(false)
+                setMapStyleOpen(true)
+                requestAnimationFrame(() => {
+                  const choices = mapStyleRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
+                  if (choices?.length) choices[fromStart ? 0 : choices.length - 1]?.focus()
+                })
+              }
+            }}>
+              <span className="find-parking-map-style-label">Map</span>
+              <span className="find-parking-map-style-value">{mapStyle === "streets" ? "Street" : mapStyle === "satellite" ? "Satellite" : "Hybrid"}</span>
+              <UntitledIcon name="chevron-down" size={16} />
+            </button>
+            <div id="find-parking-map-style-options" className="find-parking-map-style-list" role="menu" aria-label="Map type" data-open={mapStyleOpen} aria-hidden={!mapStyleOpen} inert={!mapStyleOpen} onKeyDown={(event) => {
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") return
+              event.preventDefault()
+              const choices = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')]
+              const current = choices.indexOf(document.activeElement as HTMLButtonElement)
+              const next = event.key === "Home" ? 0 : event.key === "End" ? choices.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length
+              choices[next]?.focus()
+            }}>
+              {([ ["streets", "Street"], ["satellite", "Satellite"], ["hybrid", "Hybrid"] ] as const).map(([value, label]) => (
+                <button key={value} type="button" role="menuitemradio" aria-checked={mapStyle === value} onClick={() => { changeMapStyle(value); setMapStyleOpen(false); mapStyleRef.current?.querySelector<HTMLButtonElement>(".find-parking-map-style-trigger")?.focus() }}>
+                  <span>{label}</span><span className="find-parking-map-style-check" aria-hidden="true">{mapStyle === value ? "✓" : ""}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div ref={mapMenuRef} className="find-parking-map-menu">
-            <button type="button" className="find-parking-map-menu-trigger" aria-label="Map controls" aria-expanded={mapMenuOpen} aria-controls="find-parking-map-controls" onClick={() => setMapMenuOpen((open) => !open)}>
+            <button type="button" className="find-parking-map-menu-trigger" aria-label="Map controls" aria-expanded={mapMenuOpen} aria-controls="find-parking-map-controls" onClick={() => { setMapStyleOpen(false); setMapMenuOpen((open) => !open) }}>
               <UntitledIcon name="menu" size={20} />
             </button>
             {mapMenuOpen && <div id="find-parking-map-controls" className="find-parking-map-menu-list" role="group" aria-label="Map controls">

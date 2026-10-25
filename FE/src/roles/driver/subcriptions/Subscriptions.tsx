@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
 
 import { createPortal } from "react-dom"
@@ -1804,7 +1805,7 @@ export function Subscriptions() {
                         Select Registered Vehicle Plate:
                       </label>
                       {vehicles.length > 0 ? (
-                        <select
+                        <RoundedSelect
                           className="input"
                           value={selectedVehiclePlate}
                           onChange={(e) =>
@@ -1818,7 +1819,7 @@ export function Subscriptions() {
                               {v.vehicleType === "CAR" ? "Car" : "Motorcycle"})
                             </option>
                           ))}
-                        </select>
+                        </RoundedSelect>
                       ) : (
                         <input
                           className="input"

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
 import { useApp } from "../../../context/AppContext"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
@@ -270,7 +271,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
               <label className="block text-xs font-semibold text-[var(--fg)] mb-1">
                 Select Vacant Operational Slot:
               </label>
-              <select
+              <RoundedSelect
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] font-mono font-semibold"
                 value={selectedSlotId}
                 disabled={!hasOverridePermission || busy || eligibleSlots.length === 0}
@@ -283,7 +284,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                     Slot {s.code} ({s.vehicleType === "motorcycle" ? "Motorcycle" : "Car"})
                   </option>
                 ))}
-              </select>
+              </RoundedSelect>
               {eligibleSlots.length === 0 && (
                 <p className="mt-1 text-[11px] text-amber-600">
                   No vacant spaces currently available to designate.

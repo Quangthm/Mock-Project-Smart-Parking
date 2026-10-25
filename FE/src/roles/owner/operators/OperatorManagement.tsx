@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -205,7 +206,7 @@ export function OperatorManagement({
 
         <div className="flex items-center gap-2 text-xs">
           <span className="text-[var(--muted)] font-medium">Filter Site:</span>
-          <select
+          <RoundedSelect
             className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
             value={filterSite}
             onChange={(e) => setFilterSite(e.target.value)}
@@ -216,7 +217,7 @@ export function OperatorManagement({
                 {s.name}
               </option>
             ))}
-          </select>
+          </RoundedSelect>
         </div>
       </div>
 
@@ -377,7 +378,7 @@ export function OperatorManagement({
                   <label className="label mb-1" htmlFor="transfer-target-site">
                     New Assigned Site:
                   </label>
-                  <select
+                  <RoundedSelect
                     id="transfer-target-site"
                     className="input"
                     value={targetSiteId}
@@ -391,7 +392,7 @@ export function OperatorManagement({
                         {s.name}
                       </option>
                     ))}
-                  </select>
+                  </RoundedSelect>
                 </div>
               </div>
 

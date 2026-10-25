@@ -718,7 +718,7 @@
 .dashboard-theme .parking-map-label-copy strong { color: var(--fg); font-size: 11px; font-weight: 750; }
 .dashboard-theme .parking-map-label-copy > span { color: var(--muted); font-size: 10px; }
 .dashboard-theme .parking-map-label-copy .parking-map-label-meta { color: var(--primary); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.dashboard-theme .parking-map-marker { position: relative; width: max-content; }
+.dashboard-theme .parking-map-marker { position: absolute; width: max-content; }
 .dashboard-theme .parking-map-marker:hover, .dashboard-theme .parking-map-marker:focus-within { z-index: 1000 !important; }
 .dashboard-theme .parking-map-hover { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 9px); display: grid; gap: 6px; width: min(248px, calc(100vw - 36px)); padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--fg); box-shadow: 0 14px 38px #10251b45; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(5px); transition: opacity 170ms ease, transform 170ms ease, visibility 170ms ease; }
 .dashboard-theme .parking-map-hover strong { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }

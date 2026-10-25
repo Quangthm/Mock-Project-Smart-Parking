@@ -29,6 +29,7 @@ export function Navbar() {
         {/* Logo */}
         <button
           type="button"
+          className="public-brand-trigger"
           aria-label="SmartParking home"
           onClick={() => setView("landing")}
           style={{
@@ -158,6 +159,7 @@ function NavLink({
   return (
     <button
       type="button"
+      className="public-nav-link"
       aria-current={active ? "page" : undefined}
       onClick={onClick}
       style={{
@@ -175,7 +177,6 @@ function NavLink({
 
         color: active ? "var(--primary)" : "var(--muted)",
 
-        transition: "color 0.15s",
       }}
     >
       {label}

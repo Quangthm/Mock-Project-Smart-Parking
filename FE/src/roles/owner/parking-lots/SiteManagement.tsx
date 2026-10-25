@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import type { Site } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -87,7 +88,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
 
         <div className="flex items-center gap-2 text-xs">
           <span className="text-[var(--muted)]">Status:</span>
-          <select
+          <RoundedSelect
             className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
@@ -95,7 +96,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
             <option value="all">All Sites ({sites.length})</option>
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
-          </select>
+          </RoundedSelect>
         </div>
       </div>
 
