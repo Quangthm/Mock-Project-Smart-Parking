@@ -41,6 +41,13 @@ services:
       # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
       Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
+      Messaging__OutboxDeliveryEnabled: ${Messaging__OutboxDeliveryEnabled:-false}
+      # Set Host to a broker address reachable from this container (e.g. host.docker.internal).
+      Messaging__RabbitMq__Host: ${Messaging__RabbitMq__Host:-host.docker.internal}
+      Messaging__RabbitMq__Port: ${Messaging__RabbitMq__Port:-5672}
+      Messaging__RabbitMq__VirtualHost: ${Messaging__RabbitMq__VirtualHost:-/}
+      Messaging__RabbitMq__Username: ${Messaging__RabbitMq__Username:-guest}
+      Messaging__RabbitMq__Password: ${Messaging__RabbitMq__Password:-guest}
     ports:
       - "127.0.0.1:5035:8080"
     volumes:

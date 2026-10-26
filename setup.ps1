@@ -684,6 +684,11 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
         if (!$keyDirectory) { $keyDirectory = '.cache/workflow-keys' }
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
         $desired['Workflow:KeyDirectory'] = $keyDirectory
+        $desired['Messaging:OutboxDeliveryEnabled'] = if ($settings['Messaging__OutboxDeliveryEnabled']) { $settings['Messaging__OutboxDeliveryEnabled'] } else { 'false' }
+        foreach ($field in @('Host','Port','VirtualHost','Username','Password')) {
+            $value = $settings["Messaging__RabbitMq__$field"]
+            if ($value) { $desired["Messaging:RabbitMq:$field"] = $value }
+        }
         foreach ($field in @('Host','Port','Username','Password','From')) {
             $value = $settings["SMARTPARK_SMTP_$($field.ToUpperInvariant())"]
             if ($value) { $desired["Otp:Smtp:$field"] = $value }
@@ -698,7 +703,8 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
     }
     # Optional keys (JWT PEM, SMTP fields) that are no longer configured in .env are removed.
     $removable = @()
-    foreach ($name in @('Jwt:PrivateKeyPem','Otp:Smtp:Host','Otp:Smtp:Port','Otp:Smtp:Username','Otp:Smtp:Password','Otp:Smtp:From')) {
+    foreach ($name in @('Jwt:PrivateKeyPem','Otp:Smtp:Host','Otp:Smtp:Port','Otp:Smtp:Username','Otp:Smtp:Password','Otp:Smtp:From',
+        'Messaging:RabbitMq:Host','Messaging:RabbitMq:Port','Messaging:RabbitMq:VirtualHost','Messaging:RabbitMq:Username','Messaging:RabbitMq:Password')) {
         if (!$desired.Contains($name) -and $existingByService[$service].ContainsKey($name)) { $removable += $name }
     }
     if ($service -eq 'User' -and $existingByService[$service].ContainsKey('DevelopmentAdmin:Password') -and $toSync.ContainsKey('DevelopmentAdmin:Password')) {

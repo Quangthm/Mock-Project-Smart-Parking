@@ -13,7 +13,7 @@
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns></returns>
         Task PublishAsync<TMessage>(TMessage message, CancellationToken cancellationToken)
-            where TMessage : IIntegrationEventMessage;
+            where TMessage : class, IIntegrationEventMessage;
 
         /// <summary>
         /// Publishes the many asynchronous.
@@ -23,6 +23,6 @@
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns></returns>
         Task PublishManyAsync<TMessage>(IEnumerable<TMessage> messages, CancellationToken cancellationToken)
-            where TMessage : IIntegrationEventMessage;
+            where TMessage : class, IIntegrationEventMessage;
     }
 }

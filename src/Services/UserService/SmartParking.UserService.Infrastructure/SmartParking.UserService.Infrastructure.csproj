@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.7" />
     <ProjectReference Include="..\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
     <ProjectReference Include="..\SmartParking.UserService.Domain\SmartParking.UserService.Domain.csproj" />
     <EmbeddedResource Include="Assets\Logo.png" LogicalName="SmartParking.UserService.Infrastructure.Assets.Logo.png" />
