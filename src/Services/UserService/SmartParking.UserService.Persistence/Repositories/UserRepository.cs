@@ -26,18 +26,37 @@ public class UserRepository
     public async Task<User?> GetByEmailForLoginAsync(string email, CancellationToken cancellationToken)
     {
         // The caller holds a transaction; row locking serializes failures across API instances.
-        return await this.dbSet
+        var user = await this.dbSet
             .FromSqlInterpolated($"SELECT * FROM users WHERE (lower(email) = lower({email}) OR phone = {email}) AND deleted_at IS NULL FOR UPDATE")
             .Include(u => u.Accounts).ThenInclude(a => a.AccountRoles)
             .FirstOrDefaultAsync(cancellationToken);
+        if (user is not null) await this.dbContext.Entry(user).ReloadAsync(cancellationToken);
+        return user;
     }
 
     public async Task<User?> GetByIdWithRolesAsync(Guid userId, CancellationToken cancellationToken)
     {
         return await this.dbSet
+            .AsNoTracking()
             .Include(u => u.Accounts)
             .ThenInclude(a => a.AccountRoles)
             .ThenInclude(ar => ar.Role)
             .FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
+    }
+
+    public async Task<User?> GetByIdForUpdateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        // This legacy User-only guard is not sufficient for own-profile authorization.
+        // ProfileAccessStore additionally locks the exact Account, role rows and session.
+        var user = await this.dbSet
+            .FromSqlInterpolated($"SELECT * FROM users WHERE id = {userId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+        if (user is not null)
+        {
+            await this.dbContext.Entry(user).ReloadAsync(cancellationToken);
+            await this.dbContext.Entry(user).Collection(u => u.Accounts).Query()
+                .Include(a => a.AccountRoles).LoadAsync(cancellationToken);
+        }
+        return user;
     }
 }

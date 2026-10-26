@@ -1,4 +1,6 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using SmartParking.UserService.Domain.Entities;
 
 namespace UserService.Persistence
@@ -25,6 +27,8 @@ namespace UserService.Persistence
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            // Keep framework entities/mappings exact; the reviewed SQL script is generated from this model.
+            modelBuilder.AddTransactionalOutboxEntities();
             MapWorkflow<AuthChallenge>(modelBuilder, "auth_challenges", "Id");
             MapWorkflow<WorkflowDelivery>(modelBuilder, "workflow_deliveries", "Id");
             MapWorkflow<MfaCredential>(modelBuilder, "mfa_credentials", "UserId");
@@ -100,6 +104,10 @@ namespace UserService.Persistence
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
                 entity.Property(e => e.FullName).HasColumnName("full_name");
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
+                // Preserve the stored, read-only avatar value without reinterpretation or conversion.
+                entity.Property(e => e.AvatarUrl)
+                    .HasColumnName("avatar_url")
+                    .HasColumnType("text");
                 entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
                 entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(
@@ -174,6 +182,8 @@ namespace UserService.Persistence
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.AccountId).HasColumnName("account_id")
+                    .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
                 entity.Property(e => e.AccessTokenId).HasColumnName("access_token_id");
                 entity.Property(e => e.TokenHash).HasColumnName("token_hash").HasMaxLength(255);
                 entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
@@ -182,6 +192,8 @@ namespace UserService.Persistence
                 entity.Property(e => e.CreatedAt).HasColumnName("created_at");
                 entity.HasIndex(e => e.TokenHash).IsUnique();
                 entity.HasIndex(e => e.AccessTokenId).IsUnique();
+                entity.HasIndex(e => e.AccountId);
+                entity.HasOne<Account>().WithMany().HasForeignKey(e => e.AccountId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId);
             });
         }

@@ -176,3 +176,5 @@ debug_output/
 # OS junk
 .DS_Store
 Thumbs.db
+
+.claude

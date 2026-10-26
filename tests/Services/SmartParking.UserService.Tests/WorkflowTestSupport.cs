@@ -28,7 +28,7 @@ internal static class ServiceSchema
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir is not null && !File.Exists(Path.Combine(dir.FullName,"SmartParking.slnx"))) dir=dir.Parent;
             var root = dir?.FullName ?? throw new InvalidOperationException("Repository root missing.");
-            if (!File.Exists(Path.Combine(root,"scripts/database/microservices/01-user-service-db.sql")))
+            if (!File.Exists(Path.Combine(root,"scripts/database/microservices/01-user-access-service-db.sql")))
                 throw new InvalidOperationException("Set SMARTPARK_SCHEMA_ROOT to the arch/database-schema checkout before running database tests.");
             return root;
         }
@@ -36,7 +36,7 @@ internal static class ServiceSchema
     public static async Task InitializeAsync(AppDbContext db)
     {
         await db.Database.OpenConnectionAsync();
-        foreach(var path in new[] {"microservices/01-user-service-db.sql", "integration/01-user-service-alignment.sql", "integration/01-user-service-alignment.sql"})
+        foreach(var path in new[] {"microservices/01-user-access-service-db.sql", "integration/01-user-service-alignment.sql", "integration/01-user-service-alignment.sql"})
         {
             await using var cmd=new NpgsqlCommand(await File.ReadAllTextAsync(Path.Combine(Root,"scripts/database",path)),(NpgsqlConnection)db.Database.GetDbConnection());
             await cmd.ExecuteNonQueryAsync();
@@ -57,6 +57,14 @@ internal static class ServiceSchema
         await db.Database.OpenConnectionAsync();
         await using var cmd=new NpgsqlCommand(sql,(NpgsqlConnection)db.Database.GetDbConnection());await cmd.ExecuteNonQueryAsync();
         await db.Database.CloseConnectionAsync();
+        foreach (var file in new[] { "microservices/13-own-profile-session-account.sql", "microservices/14-user-profile-outbox.sql" })
+        {
+            await db.Database.OpenConnectionAsync();
+            await using var feature = new NpgsqlCommand(await File.ReadAllTextAsync(FeaturePath(file)),
+                (NpgsqlConnection)db.Database.GetDbConnection());
+            await feature.ExecuteNonQueryAsync();
+            await db.Database.CloseConnectionAsync();
+        }
     }
 }
 internal sealed class TestParkingDirectory : IParkingDirectory
@@ -66,11 +74,14 @@ internal sealed class TestParkingDirectory : IParkingDirectory
     public HashSet<Guid> InactiveSites { get; } = [];
     public HashSet<Guid> InactiveTenants { get; } = [];
     public HashSet<Guid> Provisioned { get; } = [];
+    // The parking service owns the tenants table in production; a database-backed test has to
+    // emulate that write, otherwise the account tenant reference fails its foreign key.
+    public Func<Guid,string,string,string,CancellationToken,Task>? OnProvision { get; set; }
     public Task ProvisionTenantAsync(Guid id,string name,string email,string phone,CancellationToken ct)
     {
         if(Unavailable) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE","Unavailable",503);
         lock(Provisioned) Provisioned.Add(id);
-        return Task.CompletedTask;
+        return OnProvision?.Invoke(id,name,email,phone,ct) ?? Task.CompletedTask;
     }
     public Task<IReadOnlyList<DirectorySite>> ActiveSitesAsync(Guid[] siteIds,Guid[] tenantIds,CancellationToken ct)
     {

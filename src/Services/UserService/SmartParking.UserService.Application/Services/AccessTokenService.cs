@@ -21,11 +21,16 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
         ClockSkew = TimeSpan.Zero, NameClaimType = JwtRegisteredClaimNames.Sub, RoleClaimType = "role"
     };
 
-    public static string? CurrentRole(User user)
-    {
-        var code = user.Accounts.FirstOrDefault(a => a.Status == "ACTIVE" && a.DeletedOn == null && a.AccountRoles.Any())?
-            .AccountRoles.First().RoleCode;
-        return code?.ToUpperInvariant() switch
+    public static Account? SelectLoginAccount(User user) => user.Accounts
+        .Where(a => a.Id is not null && a.Status == "ACTIVE" && a.DeletedOn == null && CurrentRole(a) is not null)
+        .OrderBy(a => a.Id).FirstOrDefault();
+
+    public static string? CurrentRole(User user) => SelectLoginAccount(user) is { } account ? CurrentRole(account) : null;
+
+    public static string? CurrentRole(Account account) => account.AccountRoles.OrderBy(r => r.RoleCode, StringComparer.Ordinal)
+        .Select(r => MapRole(r.RoleCode)).FirstOrDefault(r => r is not null);
+
+    public static string? MapRole(string code) => code.ToUpperInvariant() switch
         {
             "PLATFORM_ADMIN" or "ADMIN" => "admin",
             "BUSINESS_OWNER" or "OWNER" => "owner",
@@ -33,14 +38,16 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
             "DRIVER" => "driver",
             _ => null
         };
-    }
 
-    public string GenerateAccessToken(User user, Guid accessTokenId, DateTimeOffset expiresAt)
+    public string GenerateAccessToken(User user, Account account, Guid accessTokenId, DateTimeOffset expiresAt)
     {
-        var role = CurrentRole(user) ?? throw new InvalidOperationException("A login account must have an assigned role.");
+        if (account.UserId != user.Id || account.Id is null)
+            throw new InvalidOperationException("The session account must belong to the authenticated User.");
+        var role = CurrentRole(account) ?? throw new InvalidOperationException("A login account must have an assigned role.");
         var token = new JwtSecurityToken(options.Issuer, options.Audience,
             [new Claim(JwtRegisteredClaimNames.Sub, user.Id!.Value.ToString()),
-             new Claim(JwtRegisteredClaimNames.Jti, accessTokenId.ToString("N")), new Claim("role", role)],
+             new Claim(JwtRegisteredClaimNames.Jti, accessTokenId.ToString("N")),
+             new Claim("account_id", account.Id.Value.ToString()), new Claim("role", role)],
             clock.GetUtcNow().UtcDateTime, expiresAt.UtcDateTime,
             new SigningCredentials(keys.SigningKey, SecurityAlgorithms.RsaSha256));
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -55,7 +62,8 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
             var principal = handler.ValidateToken(accessToken, ValidationParameters(options, keys), out _);
             return Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId)
                 && Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value, out var tokenId)
-                && await sessions.IsActiveAsync(tokenId, userId, cancellationToken);
+                && Guid.TryParse(principal.FindFirst("account_id")?.Value, out var accountId)
+                && await sessions.IsActiveAsync(tokenId, userId, accountId, cancellationToken);
         }
         catch (Exception exception) when (exception is SecurityTokenException or ArgumentException)
         {

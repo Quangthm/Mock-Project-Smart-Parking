@@ -28,6 +28,15 @@ public sealed class OwnerRegistrationTests
         var passwords = new BcryptPasswordService();
         var adminId = Guid.NewGuid();
         var directory = new TestParkingDirectory();
+        directory.OnProvision = async (id, name, email, phone, ct) =>
+        {
+            await using var tenantDb = new AppDbContext(options);
+            await tenantDb.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO tenants (id, code, name, contact_email, contact_phone)
+                VALUES ({id}, {"tenant-" + id.ToString("N")}, {name}, {email}, {phone})
+                ON CONFLICT (id) DO NOTHING
+                """, ct);
+        };
         async Task<T> Run<T>(Func<OwnerRegistrationService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
@@ -56,7 +65,9 @@ public sealed class OwnerRegistrationTests
             {
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
-                db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
+                // The schema already seeds PLATFORM_ADMIN; adding it again breaks the roles primary key.
+                if (!await db.Roles.AnyAsync(r => r.Code == "PLATFORM_ADMIN"))
+                    db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.Add(new User { Id = adminId, FullName = "Admin", Phone = "0900000000", Email = "admin@example.com",
                     PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
                     Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] });

@@ -203,7 +203,8 @@ public sealed class AuthSessionTests
         var token = new JwtSecurityToken(invalid == "issuer" ? "wrong" : f.Options.Issuer,
             invalid == "audience" ? "wrong" : f.Options.Audience,
             [new Claim("sub", invalid == "other-user" ? Guid.NewGuid().ToString() : f.User.Id.ToString()!),
-             new Claim("jti", invalid == "unknown-session" ? Guid.NewGuid().ToString("N") : jwt.Id)],
+             new Claim("jti", invalid == "unknown-session" ? Guid.NewGuid().ToString("N") : jwt.Id),
+             new Claim("account_id", f.User.Accounts.Single().Id!.Value.ToString())],
             DateTime.UtcNow.AddMinutes(-10), invalid == "expiry" ? DateTime.UtcNow.AddMinutes(-1) : DateTime.UtcNow.AddMinutes(5), credentials);
         Assert.False(await f.Tokens.ValidateAccessTokenAsync(new JwtSecurityTokenHandler().WriteToken(token)));
     }

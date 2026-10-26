@@ -8,9 +8,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using UserService.API.Controllers;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.DTOs;
 using UserService.Infrastructure.Services;
@@ -40,12 +42,16 @@ public sealed class OwnerRegistrationHttpTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
+        builder.Services.AddApiErrorResponses();
         builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
+        builder.Services.AddSingleton<IProfileAccessStore>(fixture);
+        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
@@ -54,7 +60,8 @@ public sealed class OwnerRegistrationHttpTests
         builder.Services.AddRateLimiter(options => options.AddPolicy("DriverOtp", _ =>
             System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("test")));
         await using var app = builder.Build();
-        app.UseMiddleware<AuthExceptionMiddleware>();
+        app.UseRouting();
+        app.UseApiErrorResponses();
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseRateLimiter();

@@ -7,9 +7,11 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UserService.API.Controllers;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.DTOs;
 using UserService.Infrastructure.Services;
@@ -39,11 +41,15 @@ public sealed class OperatorProvisioningHttpTests
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
+        builder.Services.AddApiErrorResponses();
         builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture(); var operators = new Operators();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
+        builder.Services.AddSingleton<IProfileAccessStore>(fixture);
+        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
@@ -51,7 +57,8 @@ public sealed class OperatorProvisioningHttpTests
         // Create only uses the action-level provisioning service.
         builder.Services.AddSingleton<IUserManagementService, UnusedUsers>();
         await using var app = builder.Build();
-        app.UseMiddleware<AuthExceptionMiddleware>(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
+        app.UseRouting();
+        app.UseApiErrorResponses(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
         await app.StartAsync(); using var client = app.GetTestClient();
         CreateOperatorDto Body() => new() { FullName = "Operator", Email = "staff@personal.example",
             Password = "Password@123", SiteIds = [Guid.NewGuid()], Permissions = ["DEVICE_MANAGE"] };

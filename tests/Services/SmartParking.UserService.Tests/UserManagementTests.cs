@@ -12,9 +12,11 @@ using System.Text.Json;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.API.Controllers;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
@@ -51,19 +53,24 @@ public sealed class UserManagementTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
+        builder.Services.AddApiErrorResponses();
         builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
+        builder.Services.AddSingleton<IProfileAccessStore>(fixture);
+        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
         var users = new FakeUsers();
         builder.Services.AddSingleton<IUserManagementService>(users);
         await using var app = builder.Build();
-        app.UseMiddleware<AuthExceptionMiddleware>();
+        app.UseRouting();
+        app.UseApiErrorResponses();
         app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
         await app.StartAsync();
         using var client = app.GetTestClient();
@@ -151,12 +158,15 @@ public sealed class UserManagementTests
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, new BcryptPasswordService()).SeedAsync();
                 driverId = (await db.Users.SingleAsync()).Id!.Value;
-                db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
+                // The schema already seeds PLATFORM_ADMIN; adding it again breaks the roles primary key.
+                if (!await db.Roles.AnyAsync(r => r.Code == "PLATFORM_ADMIN"))
+                    db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.AddRange(new User { Id = adminId, FullName = "Admin", Status = UserStatus.Active,
                     Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] },
                     new User { Id = pendingId, FullName = "Pending", Status = UserStatus.PendingApproval },
                     new User { Id = deletedId, FullName = "Deleted", Status = UserStatus.Active, DeletedOn = clock.Now });
-                db.AuthSessions.Add(new AuthSession { Id = Guid.NewGuid(), UserId = driverId, AccessTokenId = tokenId,
+                var driverAccountId = await db.Accounts.Where(a => a.UserId == driverId).Select(a => a.Id).SingleAsync();
+                db.AuthSessions.Add(new AuthSession { Id = Guid.NewGuid(), UserId = driverId, AccountId = driverAccountId, AccessTokenId = tokenId,
                     TokenHash = AuthSessionService.HashRefreshToken("test-refresh"), CreatedAt = clock.Now, AccessExpiresAt = clock.Now.AddHours(1), ExpiresAt = clock.Now.AddDays(7) });
                 await db.SaveChangesAsync();
             }

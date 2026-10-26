@@ -1,8 +1,11 @@
 using UserService.Application;
+using UserService.API.Extensions;
+using UserService.API.Services;
 using UserService.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Services;
 using UserService.Infrastructure.Services;
+using UserService.Infrastructure.Messaging;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace UserService.API;
@@ -21,6 +24,7 @@ public static class UserHost
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
         builder.Services.AddControllers().AddApplicationPart(typeof(Controllers.AuthController).Assembly);
+        builder.Services.AddApiErrorResponses();
         builder.Services.AddApplicationServices(builder.Configuration);
         var chatbot=builder.Configuration.GetSection("Chatbot").Get<UserService.Application.Chatbot.ChatbotOptions>()??new();
         if(chatbot.TimeoutSeconds is <1 or >120 || chatbot.AllowedIntents.Any(i=>i is not ("FAQ" or "PARKING_SEARCH")))throw new InvalidOperationException("Invalid chatbot timeout or read intent allowlist.");
@@ -29,8 +33,11 @@ public static class UserHost
         builder.Services.AddScoped<UserService.Application.Chatbot.IChatBackendGateway,UnconfiguredChatBackend>();
         builder.Services.AddScoped<UserService.Application.Chatbot.ChatbotCoordinator>();
         builder.Services.AddPersistenceServices(builder.Configuration);
+        builder.Services.AddProfileMessaging(builder.Configuration,
+            registration => registration.AddProfileOutbox(builder.Configuration));
         builder.Services.AddJWTAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddHttpClient<IParkingDirectory, ParkingDirectoryClient>(client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["Services:Parking"] ?? "http://localhost:5045/");
@@ -104,7 +111,8 @@ public static class UserHost
             app.MapOpenApi();
         }
 
-        app.UseMiddleware<UserService.API.Middleware.AuthExceptionMiddleware>();
+        app.UseRouting();
+        app.UseApiErrorResponses();
 
         app.UseCors("Frontend");
         app.UseAuthentication();

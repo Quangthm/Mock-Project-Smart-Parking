@@ -9,7 +9,7 @@ using UserService.Infrastructure.Services;
 
 namespace SmartParking.UserService.Tests;
 
-internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork
+internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, IProfileAccessStore
 {
     private static readonly string PasswordHash = new BcryptPasswordService().Hash("Password@123");
     public TestClock Clock { get; } = new();
@@ -27,21 +27,43 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork
     public AuthSessionService Auth { get; }
     public LoginCommandHandler Login { get; }
     public int Saved { get; private set; }
+    public bool FailSave { get; set; }
     public IUserRepository UserRepository => this;
     public AuthTestFixture()
     {
+        foreach (var account in User.Accounts)
+        {
+            account.Id = Guid.Parse("22222222-2222-2222-2222-222222222222");
+            account.UserId = User.Id!.Value;
+            account.User = User;
+            foreach (var role in account.AccountRoles) role.AccountId = account.Id.Value;
+        }
         Sessions = new(Clock);
         Keys = new(Options, true);
         Tokens = new(Options, Keys, Sessions, Clock);
         Auth = new(Tokens, Sessions, Policy, Clock);
         Login = new(this, new BcryptPasswordService(), Auth, Policy, Clock);
     }
+    public Task<ProfileAccessState?> LoadCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
+    {
+        var account = User.Accounts.SingleOrDefault(a => a.Id == accountId);
+        var session = Sessions.Snapshot.SingleOrDefault(s => s.AccessTokenId == accessTokenId);
+        return Task.FromResult(account is null || session is null ? null
+            : new ProfileAccessState(User, account, session, account.AccountRoles.Select(r => r.RoleCode).ToArray()));
+    }
+    public Task<ProfileAccessState?> LockCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken) =>
+        LoadCurrentAsync(accountId, accessTokenId, cancellationToken);
     public Task<LoginResult> SignIn(string password = "Password@123", string email = "driver@gmail.com") =>
         Login.Handle(new LoginCommand { Email = email, Password = password }, default);
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken) => Task.FromResult(email == User.Email ? User : null);
     public Task<User?> GetByEmailForLoginAsync(string email, CancellationToken cancellationToken) => GetByEmailAsync(email, cancellationToken);
     public Task<User?> GetByIdWithRolesAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(id == User.Id ? User : null);
-    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) { Saved++; return Task.FromResult(1); }
+    public Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(id == User.Id ? User : null);
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        if (FailSave) throw new InvalidOperationException("Simulated database outage");
+        Saved++; return Task.FromResult(1);
+    }
     public Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken cancellationToken) => Task.FromResult<IUnitOfWorkTransaction>(new Transaction());
     private sealed class Transaction : IUnitOfWorkTransaction
     {
@@ -54,6 +76,14 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork
     public IQueryable<User> QueryIncludingDeleted() => Query();
     public void Remove(User entity) { }
     public void Update(User entity) { }
+}
+
+internal sealed class TestCurrentActor(Guid? userId, string? role = null, Guid? accountId = null, Guid? accessTokenId = null) : ICurrentActor
+{
+    public Guid? UserId { get; } = userId;
+    public string? Role { get; } = role;
+    public Guid? AccountId { get; } = accountId;
+    public Guid? AccessTokenId { get; } = accessTokenId;
 }
 
 internal sealed class TestClock : TimeProvider
@@ -77,7 +107,12 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     public Task<bool> IsActiveAsync(Guid id, Guid user, CancellationToken cancellationToken)
     {
         lock (gate) return Task.FromResult(items.Values.Any(s => s.AccessTokenId == id && s.UserId == user
-            && !s.IsRevoked && s.AccessExpiresAt > clock.Now && s.ExpiresAt > clock.Now));
+            && s.AccountId != null && !s.IsRevoked && s.AccessExpiresAt > clock.Now && s.ExpiresAt > clock.Now));
+    }
+    public Task<bool> IsActiveAsync(Guid id, Guid user, Guid account, CancellationToken cancellationToken)
+    {
+        lock (gate) return Task.FromResult(items.Values.Any(s => s.AccessTokenId == id && s.UserId == user
+            && s.AccountId == account && !s.IsRevoked && s.AccessExpiresAt > clock.Now && s.ExpiresAt > clock.Now));
     }
     public Task<AuthSession?> FindByRefreshHashAsync(string hash, CancellationToken cancellationToken)
     {
@@ -90,6 +125,7 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
             if (!items.TryGetValue(old.Id, out var s) || s.IsRevoked || s.ExpiresAt <= clock.Now
                 || s.TokenHash != old.TokenHash || s.AccessTokenId != old.AccessTokenId || s.UserId != old.UserId)
                 return Task.FromResult(false);
+            if (s.AccountId is null || s.AccountId != old.AccountId) return Task.FromResult(false);
             s.AccessTokenId = id; s.TokenHash = hash; s.AccessExpiresAt = expires;
             return Task.FromResult(true);
         }
@@ -108,7 +144,7 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     }
     private static AuthSession Clone(AuthSession s) => new()
     {
-        Id = s.Id, UserId = s.UserId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
+        Id = s.Id, UserId = s.UserId, AccountId = s.AccountId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
         AccessExpiresAt = s.AccessExpiresAt, ExpiresAt = s.ExpiresAt, CreatedAt = s.CreatedAt, IsRevoked = s.IsRevoked
     };
 }

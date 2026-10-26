@@ -78,6 +78,8 @@ public sealed class UserManagementService(AppDbContext db, TimeProvider clock) :
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await RequireAdmin(adminId, ct);
         var user = await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync(ct);
+        // A lock does not refresh an entity already tracked during authentication.
+        if (user is not null) await db.Entry(user).ReloadAsync(ct);
         if (user == null || user.DeletedOn != null) throw Error("USER_NOT_FOUND", "User was not found.", 404);
         await db.Entry(user).Collection(u => u.Accounts).Query().Include(a => a.AccountRoles).LoadAsync(ct);
         if (id == adminId || Result(user).Roles.Contains("admin"))

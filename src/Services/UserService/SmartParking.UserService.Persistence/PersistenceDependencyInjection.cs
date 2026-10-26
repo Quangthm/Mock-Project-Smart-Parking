@@ -17,6 +17,7 @@ public static class PersistenceDependencyInjection
                 ?? throw new InvalidOperationException("Configure ConnectionStrings:User for the service-owned User database.")));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IProfileAccessStore, ProfileAccessStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddTransient<DataSeeder>();
         services.AddSingleton(TimeProvider.System);

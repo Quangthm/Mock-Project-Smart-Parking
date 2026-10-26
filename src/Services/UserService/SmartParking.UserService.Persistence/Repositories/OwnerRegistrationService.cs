@@ -80,6 +80,7 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         if (application is null) throw Error("APPLICATION_NOT_FOUND", "Owner application was not found.", 404);
         var user = await db.Users.FromSqlInterpolated(
             $"SELECT * FROM users WHERE id = {application.UserId} FOR UPDATE").SingleAsync(ct);
+        await db.Entry(user).ReloadAsync(ct);
         await db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={application.UserId} ORDER BY id FOR UPDATE").Include(a=>a.AccountRoles).LoadAsync(ct);
         if (application.Status != "pending" || user.DeletedOn != null || user.Status != UserStatus.PendingApproval)
             throw Error("APPLICATION_CLOSED", "Owner application is no longer pending.", 409);

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using System.IdentityModel.Tokens.Jwt;
+using UserService.API.Common;
 using UserService.API.Controllers.Base;
 using UserService.Application.DTOs;
 using UserService.Application.Usecase.Login;
@@ -65,16 +66,6 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
     }
 
     [Authorize]
-    [HttpGet("me")]
-    public async Task<IActionResult> Me(CancellationToken cancellationToken)
-    {
-        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
-            return InvalidToken();
-        var user = await Mediator.Send(new GetCurrentUserQuery(userId), cancellationToken);
-        return user is null ? InvalidToken() : Ok(new { success = true, data = user });
-    }
-
-    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenDto? body,
@@ -99,6 +90,6 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
 
     private UnauthorizedObjectResult InvalidToken() => Unauthorized(new
     {
-        success = false, code = "INVALID_TOKEN", message = "Token is invalid, expired or revoked."
+        success = false, code = ApiResponseFactory.InvalidTokenCode, message = "Token is invalid, expired or revoked."
     });
 }

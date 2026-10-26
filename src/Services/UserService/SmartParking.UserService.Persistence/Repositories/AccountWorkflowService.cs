@@ -90,6 +90,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         contact=Contact(contact);
         await using var tx=await db.Database.BeginTransactionAsync(ct);
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND (lower(email)={contact} OR phone={contact}) FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleOrDefaultAsync(ct);
+        if(user is not null)await db.Entry(user).ReloadAsync(ct);
         if(user?.Status==UserStatus.Locked && user.LockedUntil is {} until && until<=clock.GetUtcNow())
         {user.Status=UserStatus.Active;user.LockedUntil=null;user.FailedLoginAttempts=0;}
         if(user is null) throw Error("AUTH_FAILED","Account is not eligible for sign in.",401);
@@ -114,7 +115,8 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         // All account flows lock the user before challenges, including login issuance.
         var userId=await db.AuthChallenges.AsNoTracking().Where(c=>c.Id==id).Select(c=>(Guid?)c.UserId).SingleOrDefaultAsync(ct);
         if(userId is null)throw Error("CHALLENGE_CLOSED","Challenge is not available for this purpose.",409);
-        await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={userId.Value} FOR UPDATE").SingleAsync(ct);
+        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={userId.Value} FOR UPDATE").SingleAsync(ct);
+        await db.Entry(user).ReloadAsync(ct);
         var c=await db.AuthChallenges.FromSqlInterpolated($"SELECT * FROM auth_challenges WHERE id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
         if(c is null || c.Purpose!=purpose || c.ConsumedAt!=null) throw Error("CHALLENGE_CLOSED","Challenge is not available for this purpose.",409);
         if(c.LockedUntil>clock.GetUtcNow()) throw Error("OTP_LOCKED","Try again after 15 minutes.",423);
@@ -186,6 +188,9 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         Validate(body);await using var tx=await db.Database.BeginTransactionAsync(ct);var c=await LoadAsync(body.ChallengeId,"BOOTSTRAP_PASSWORD",ct);
         if(c.ExpiresAt<=clock.GetUtcNow() || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(c.CodeHash),Encoding.UTF8.GetBytes(AuthSessionService.HashRefreshToken(body.Token)))) throw Error("INVALID_TOKEN","Password link is invalid or expired.",401);
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").SingleAsync(ct);
+        // User precedes bulk session revocation in the profile guard order; reload any
+        // authentication-tracked snapshot before checking current global restrictions.
+        await db.Entry(user).ReloadAsync(ct);
         if(user.Status!=UserStatus.Active || user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
         user.PasswordHash=passwords.Hash(body.Password);c.ConsumedAt=clock.GetUtcNow();c.CodeHash="";
         await db.AuthSessions.Where(s=>s.UserId==c.UserId).ExecuteUpdateAsync(s=>s.SetProperty(x=>x.IsRevoked,true),ct);
