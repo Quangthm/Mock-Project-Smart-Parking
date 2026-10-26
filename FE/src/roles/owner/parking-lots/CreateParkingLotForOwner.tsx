@@ -1307,28 +1307,9 @@ export function OnboardingWizard({
 }
 
 export function BusinessLotSetupPage() {
-  const { setView } = useApp()
-  const [registration] = useState<{
-    id: string
-    email: string
-    lotType: LotType
-    setupToken?: string
-  } | null>(() => {
-    try {
-      const pending = JSON.parse(
-        sessionStorage.getItem("sp_pending_owner_registration") ??
-          localStorage.getItem("sp_pending_owner_registration") ?? "null",
-      )
-      return pending?.id && pending?.email && pending?.lotType &&
-        pending?.lotSetupComplete !== true
-        ? pending
-        : null
-    } catch {
-      return null
-    }
-  })
+  const { setView, pendingOwnerSetup, setPendingOwnerSetup } = useApp()
 
-  if (!registration) {
+  if (!pendingOwnerSetup?.id || !pendingOwnerSetup.email || !pendingOwnerSetup.lotType) {
     return (
       <div className="card mx-auto my-12 max-w-lg text-center">
         <PageHeader title="No Business registration in progress" variant="compact" align="center" />
@@ -1343,9 +1324,9 @@ export function BusinessLotSetupPage() {
   return (
     <OnboardingWizard
       registration={{
-        id: registration.id,
-        setupToken: registration.setupToken,
-        lotType: registration.lotType,
+        id: pendingOwnerSetup.id,
+        setupToken: pendingOwnerSetup.setupToken,
+        lotType: pendingOwnerSetup.lotType,
         onComplete: (application) => {
           sessionStorage.setItem(
             "sp_pending_owner_registration",
@@ -1357,6 +1338,7 @@ export function BusinessLotSetupPage() {
               verification: application.verification,
             }),
           )
+          setPendingOwnerSetup(null)
           setView("sign-up")
         },
       }}

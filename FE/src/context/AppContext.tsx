@@ -7,7 +7,8 @@ import {
   type ReactNode,
 } from "react"
 
-import type { User } from "../lib/types"
+import type { User, LotType } from "../lib/types"
+import type { OwnerApplicationRecord } from "../lib/ownerApi"
 
 import { store } from "../lib/store"
 
@@ -15,6 +16,15 @@ import { authApi, authExpiredEvent } from "../lib/authApi"
 import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
 
 export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "parking-lot-setup" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
+
+export type PendingOwnerSetup = {
+  id: string
+  email: string
+  lotType: LotType
+  setupToken?: string
+  verification?: OwnerApplicationRecord["verification"]
+  lotSetupComplete?: boolean
+}
 
 interface AppCtx {
   user: User | null
@@ -30,6 +40,10 @@ interface AppCtx {
   authReady: boolean
 
   authError: string
+
+  pendingOwnerSetup: PendingOwnerSetup | null
+
+  setPendingOwnerSetup: (val: PendingOwnerSetup | null) => void
 
   setUser: (u: User | null) => void
 
@@ -54,11 +68,12 @@ function hasPendingVerification() {
     const owner = JSON.parse(
       sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
     )
-    return typeof owner?.email === "string" && (
-      (typeof owner?.verification?.challengeId === "string" &&
-        Number.isFinite(Date.parse(owner.verification.expiresAt)) &&
-        Number.isFinite(Date.parse(owner.verification.resendAt))) ||
-      (typeof owner?.id === "string" && typeof owner?.setupToken === "string")
+    return (
+      typeof owner?.email === "string" &&
+      owner?.lotSetupComplete === true &&
+      typeof owner?.verification?.challengeId === "string" &&
+      Number.isFinite(Date.parse(owner.verification.expiresAt)) &&
+      Number.isFinite(Date.parse(owner.verification.resendAt))
     )
   } catch {
     return false
@@ -99,6 +114,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false)
 
   const [authError, setAuthError] = useState("")
+
+  const [pendingOwnerSetup, setPendingOwnerSetup] = useState<PendingOwnerSetup | null>(null)
 
   const logoutPending = useRef(false)
 
@@ -301,6 +318,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dashboardMenuOpen,
         authReady,
         authError,
+        pendingOwnerSetup,
+        setPendingOwnerSetup,
         setUser,
         setView,
         toggleTheme,

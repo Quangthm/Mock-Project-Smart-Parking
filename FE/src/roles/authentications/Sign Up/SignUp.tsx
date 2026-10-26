@@ -312,7 +312,7 @@ function TermsModal({
 }
 
 export function SignUp() {
-  const { setView } = useApp()
+  const { setView, setPendingOwnerSetup } = useApp()
 
   const [tab, setTab] = useState<Tab>("driver")
 
@@ -330,19 +330,18 @@ export function SignUp() {
 
   const [ownerRegistration, setOwnerRegistration] =
     useState<(Pick<OwnerApplicationRecord, "email" | "verification"> &
-      Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete">>) | null>(
+      Partial<Pick<OwnerApplicationRecord, "id" | "lotType" | "lotSetupComplete">>) | null>(
       () => {
         try {
           const value = JSON.parse(
-            sessionStorage.getItem("sp_pending_owner_registration") ??
-              localStorage.getItem("sp_pending_owner_registration") ?? "null",
+            sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
           )
           return typeof value?.email === "string" &&
-            ((typeof value?.verification?.challengeId === "string" &&
-              Number.isFinite(Date.parse(value.verification.expiresAt)) &&
-              Number.isFinite(Date.parse(value.verification.resendAt))) ||
-              (typeof value?.id === "string" && typeof value?.setupToken === "string"))
-            ? { ...value, lotSetupComplete: value.lotSetupComplete === true }
+            value?.lotSetupComplete === true &&
+            typeof value?.verification?.challengeId === "string" &&
+            Number.isFinite(Date.parse(value.verification.expiresAt)) &&
+            Number.isFinite(Date.parse(value.verification.resendAt))
+            ? value
             : null
         } catch {
           return null
@@ -352,21 +351,28 @@ export function SignUp() {
 
   function saveOwnerRegistration(
     application: Pick<OwnerApplicationRecord, "email" | "verification"> &
-      Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete">>,
+      Partial<Pick<OwnerApplicationRecord, "id" | "lotType" | "lotSetupComplete">>,
   ) {
     const pending = {
       id: application.id,
       email: application.email,
       lotType: application.lotType,
-      setupToken: application.lotSetupComplete ? undefined : application.setupToken,
-      lotSetupComplete: application.lotSetupComplete,
+      lotSetupComplete: application.lotSetupComplete === true,
       verification: application.verification,
     }
     setOwnerRegistration(pending)
-    try {
-      sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(pending))
-    } catch {
-      /* The current tab can continue without saved registration metadata. */
+    if (pending.lotSetupComplete) {
+      try {
+        sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(pending))
+      } catch {
+        /* The current tab can continue without saved registration metadata. */
+      }
+    } else {
+      try {
+        sessionStorage.removeItem("sp_pending_owner_registration")
+      } catch {
+        /* Storage cleanup. */
+      }
     }
   }
 
@@ -504,7 +510,14 @@ export function SignUp() {
 
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
-      saveOwnerRegistration({ ...application, lotSetupComplete: false })
+      setPendingOwnerSetup({
+        id: application.id,
+        email: application.email,
+        lotType: application.lotType,
+        setupToken: application.setupToken,
+        verification: application.verification,
+        lotSetupComplete: false,
+      })
       setView("parking-lot-setup")
     } catch (e) {
       try {
@@ -520,7 +533,19 @@ export function SignUp() {
           ...recovered.data,
           lotSetupComplete: recovered.data.lotSetupComplete === true,
         }
-        saveOwnerRegistration(pending)
+        if (pending.lotSetupComplete) {
+          saveOwnerRegistration(pending)
+        } else {
+          setPendingOwnerSetup({
+            id: pending.id ?? "",
+            email: pending.email,
+            lotType: pending.lotType ?? ownerForm.lotType,
+            setupToken: pending.setupToken,
+            verification: pending.verification,
+            lotSetupComplete: false,
+          })
+          setView("parking-lot-setup")
+        }
         setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
       } catch {
@@ -570,7 +595,7 @@ export function SignUp() {
           <PageHeader title="Create Account" variant="compact" align="center" description="Join SmartParking today" />
         </div>
 
-        {!registration && (!ownerRegistration || ownerRegistration.lotSetupComplete === false) && (
+        {!registration && !ownerRegistration?.lotSetupComplete && (
           <div
             className="auth-role-tabs"
             style={{
@@ -593,15 +618,7 @@ export function SignUp() {
           </div>
         )}
 
-        {ownerRegistration?.lotSetupComplete === false && tab === "business" ? (
-          <div className="card">
-            <h2>Continue parking lot setup</h2>
-            <p>Your Business account is registered. Complete your parking lot setup before verifying your email.</p>
-            <button className="btn-primary" onClick={() => setView("parking-lot-setup")}>
-              Continue to Parking Lot Setup
-            </button>
-          </div>
-        ) : ownerRegistration?.lotSetupComplete ? (
+        {ownerRegistration?.lotSetupComplete ? (
           <OwnerVerification
             application={ownerRegistration}
             onUpdate={(verification) =>
@@ -610,6 +627,7 @@ export function SignUp() {
             onBack={() => {
               sessionStorage.removeItem("sp_pending_owner_registration")
               localStorage.removeItem("sp_pending_owner_registration")
+              setPendingOwnerSetup(null)
               setOwnerRegistration(null)
               setView("sign-in")
             }}
@@ -621,6 +639,7 @@ export function SignUp() {
               } catch {
                 /* This tab can continue. */
               }
+              setPendingOwnerSetup(null)
               setOwnerRegistration(null)
               setView("pending-approval")
             }}
