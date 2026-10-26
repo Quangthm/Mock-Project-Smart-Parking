@@ -22,6 +22,8 @@ Spatial deactivation never silently cascades to descendants. Explicitly select/h
 
 Report compatible category capacity, distinct unavailable units/claims, pending-payment holds, confirmed reservations and actual occupancy separately. Pending payment blocks incompatible claims but is not counted as confirmed reserved capacity. Union overlapping occupied/protected/backup coverage rather than subtracting it twice. Example: 10 slots, 3 occupied, 2 backup with 1 occupied overlap leaves 6 before other claims. Fixed backup and dynamic protection are distinct designations; no monthly guarantee claim.
 
+`OCCUPIED` does not identify the reservation holder. A resource may be `OCCUPIED + RESERVED` or `OCCUPIED + PROTECTED` while the current occupant and reservation claimant are either the same Driver or different Drivers. Fulfillment requires authoritative session/allocation/reservation linkage. The earlier `100 total / 60 occupied / 20 protected / 5 pending payment / 10 backup = 5 available` illustration is valid only when those sets are mutually distinct; overlap is unioned before subtraction.
+
 **Trace:** FR-CAP-03/06; UC-RES-01
 
 ## BR-CAP-03
@@ -36,7 +38,7 @@ No incompatible claims may consume the same last resource. Idempotent retries re
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Backup capacity follows the domain contract. Owner may configure backup capacity. Operator-marked backup slots remain backup; Protected capacity is dynamically calculated from applicable future reservations and the Reservation Protection Window. This protection is separate from configured backup capacity and does not force an already-occupied vehicle to move. Use 4-hour reservation protection, separate fixed backup and dynamic protection, compatible temporal claims and a conflict queue for affected claimants. Occupancy projection horizon is 4 hours, never a timer to free a vehicle. Protect requested preferences without promising impossible exact-slot admission.
+Backup capacity follows the domain contract. Owner may configure backup capacity. Operator-marked backup slots remain backup; Protected capacity is dynamically calculated from applicable future reservations and the Reservation Protection Window. This protection is separate from configured backup capacity and does not force an already-occupied vehicle to move. A slot may be `OCCUPIED + PROTECTED` while another Driver's future reservation is being protected. If the current occupant departs, protection may remain as `AVAILABLE + PROTECTED`; if the occupant remains when the reservation needs a usable resource, use compatible reallocation/conflict handling. Use the effective `RESERVATION_PROTECTION_WINDOW` (default 4 hours), separate fixed backup and dynamic protection, compatible temporal claims and a conflict queue for affected claimants. Use the effective `OCCUPANCY_VALIDITY_TIMESPAN` (default 4 hours) for projection; it is never a timer to free a vehicle. Protect requested preferences without promising impossible exact-slot admission.
 
 **Trace:** FR-CAP-07, FR-BAS-04; UC-POL-01, UC-RES-02
 
@@ -44,6 +46,6 @@ Backup capacity follows the domain contract. Owner may configure backup capacity
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-A claim becoming occupied changes accounting once; physical/protection states may coexist. Expiry/cancellation of a booking cannot release a vehicle's still-occupied space; release follows verified departure.
+A claim becoming occupied changes accounting once; physical/protection states may coexist. A pre-existing occupied state does not fulfill a reservation by itself. `OCCUPIED + RESERVED` or `OCCUPIED + PROTECTED` may involve the same Driver or different Drivers; authoritative session/allocation/reservation linkage determines fulfillment. `AVAILABLE + RESERVED → OCCUPIED + RESERVED` represents reservation-linked actual entry only when that linkage is established. Expiry/cancellation of a booking cannot release a vehicle's still-occupied space; release follows verified departure.
 
 **Trace:** FR-CAP-05, FR-GATE-05/09; UC-GATE-01
