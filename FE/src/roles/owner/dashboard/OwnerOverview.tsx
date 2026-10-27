@@ -1,8 +1,8 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ownerData as store } from '../data/data';
 import type { Booking } from '../../../lib/types';
-import type { Site, Operator } from '../../../lib/parkingApi';
+import { parkingApi, type Site, type Operator } from '../../../lib/parkingApi';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '../../../components/ui/PageHeader';
 
@@ -26,6 +26,26 @@ function buildRevenueTrend(bookings: Booking[]) {
 }
 
 export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }: { selectedSiteId: string; onSiteChange: (siteId: string) => void; sites: Site[]; operators: Operator[] }) {
+  const [liveCapacity, setLiveCapacity] = useState<{ available: number; total: number } | null>(null);
+  const visibleSiteIds = useMemo(() => (selectedSiteId === 'all' ? sites : sites.filter(site => site.id === selectedSiteId)).map(site => site.id), [selectedSiteId, sites]);
+
+  useEffect(() => {
+    let active = true;
+    setLiveCapacity(null);
+    if (!visibleSiteIds.length) { setLiveCapacity({ available: 0, total: 0 }); return; }
+    Promise.allSettled(visibleSiteIds.map(id => parkingApi.structure(id))).then(results => {
+      if (!active) return;
+      const values = results.map(result => {
+        if (result.status !== 'fulfilled') return null;
+        const siteViews = result.value.capacityViews.filter(view => view.unitId === null);
+        return siteViews.length && siteViews.every(view => view.available !== null)
+          ? { available: siteViews.reduce((sum, view) => sum + (view.available ?? 0), 0), total: siteViews.reduce((sum, view) => sum + view.total, 0) }
+          : null;
+      });
+      setLiveCapacity(values.every(value => value !== null) ? values.reduce((sum, value) => ({ available: sum.available + (value?.available ?? 0), total: sum.total + (value?.total ?? 0) }), { available: 0, total: 0 }) : null);
+    });
+    return () => { active = false; };
+  }, [visibleSiteIds]);
 
   // Build the view data from the owner's sites, then apply the global site selection before aggregating stats.
   const overview = useMemo(() => {
@@ -41,7 +61,7 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
 
   const stats = [
     { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND` },
-    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US') },
+    { label: 'Available Slots', value: `${liveCapacity === null ? '—' : liveCapacity.available.toLocaleString('en-US')}/${(liveCapacity?.total ?? overview.capacity).toLocaleString('en-US')}` },
     { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US') },
   ];
 
@@ -84,7 +104,7 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
           </div>
         </section>
       </div>
-      <p className="text-xs text-[var(--muted)]">Revenue uses completed bookings. Parking Capacity comes from the saved physical layout.</p>
+      <p className="text-xs text-[var(--muted)]">Revenue uses completed bookings. Available slots come from the live site structure; the denominator is physical capacity.</p>
     </section>
   );
 }

@@ -1,0 +1,92 @@
+.dashboard-theme .driver-current-bookings { gap: 28px; }
+.driver-booking-group { min-width: 0; }
+.driver-booking-group + .driver-booking-group { padding-top: 26px; border-top: 1px solid var(--border); }
+.driver-booking-group-header, .driver-ticket-history-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.driver-booking-group-header h2, .driver-ticket-history-header h2 { margin: 0; color: var(--fg); font-size: 1.25rem; line-height: 1.3; }
+.driver-booking-group-header p, .driver-ticket-history-header p { margin: 4px 0 0; color: var(--muted); font-size: .875rem; }
+.driver-booking-group-count { display: flex; flex: none; align-items: baseline; gap: 8px; min-width: 0; padding: 2px 0 2px 16px; border-left: 2px solid var(--primary); color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.driver-booking-group-count strong { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.driver-booking-group-count span { color: var(--muted); font-size: .8125rem; font-weight: 600; }
+.driver-ticket-history-header > span { display: grid; flex: none; place-items: center; min-width: 34px; min-height: 34px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--fg); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.driver-booking-list, .driver-ticket-list { display: grid; gap: 10px; }
+.driver-booking-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .9fr) minmax(0, 1.2fr) minmax(0, .85fr); gap: 20px; align-items: center; min-width: 0; padding: 20px 22px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); }
+.driver-booking-cell { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.driver-booking-cell-label { color: var(--muted); font-size: .75rem; font-weight: 650; }
+.driver-booking-cell h3, .driver-booking-cell strong { margin: 0; color: var(--fg); font-size: .9375rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.driver-booking-site h3 { font-size: 1rem; }
+.driver-booking-site p { display: flex; align-items: flex-start; gap: 5px; margin: 0; color: var(--muted); font-size: .8125rem; line-height: 1.4; }
+.driver-booking-site p svg { flex: none; margin-top: 1px; }
+.driver-booking-plate { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.driver-booking-secondary { color: var(--muted); font-size: .8125rem; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.driver-booking-outcome { justify-items: end; text-align: right; }
+.driver-booking-status, .ticket-decision { display: inline-flex; align-items: center; gap: 7px; width: fit-content; min-height: 28px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--fg); background: var(--raised); font-size: .75rem; font-weight: 700; white-space: nowrap; }
+.driver-booking-status > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.driver-booking-status.is-parking, .ticket-decision.is-approved { color: var(--badge-success-fg); background: var(--status-available-bg); }
+.driver-booking-status.is-pending, .ticket-decision.is-in-progress { color: var(--badge-warning-fg); background: var(--status-reserved-bg); }
+.driver-booking-status.is-upcoming, .ticket-decision.is-open { color: var(--badge-primary-fg); background: var(--active); }
+.ticket-decision.is-rejected { color: var(--badge-danger-strong); background: var(--status-occupied-bg); }
+.driver-booking-empty, .driver-ticket-empty { display: flex; align-items: center; gap: 10px; min-height: 78px; padding: 18px 20px; border: 1px dashed var(--border); border-radius: 16px; color: var(--muted); background: var(--card); font-size: .875rem; }
+.driver-booking-empty svg { flex: none; color: var(--primary); }
+.driver-history-list { display: grid; gap: 20px; }
+.driver-history-list .parking-history-table-wrap { display: none; }
+.driver-history-list .parking-history-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; }
+.driver-history-list .parking-history-card { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 16px 24px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--card); }
+.driver-history-list .parking-history-card dl { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 14px; margin: 0; }
+.driver-history-list .parking-history-card .parking-history-details { width: auto; margin: 0; }
+.driver-passes-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; }
+.driver-passes-grid > * { min-width: 0; overflow-wrap: anywhere; }
+.driver-passes-grid .card > div:first-child, .driver-passes-grid .card > div:last-child { flex-wrap: wrap; gap: 8px; }
+.driver-passes-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.driver-passes-pagination > div { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.driver-passes-pagination button { min-height: 44px; border-radius: 999px; }
+.driver-passes-pagination button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.driver-support-page { display: grid; gap: 22px; min-width: 0; }
+.driver-support-layout { display: grid; grid-template-columns: minmax(280px, .82fr) minmax(0, 1.18fr); align-items: start; gap: 20px; }
+.driver-support-form, .driver-ticket-history { display: grid; align-content: start; gap: 12px; min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); }
+.driver-support-form h2 { margin: 0; color: var(--fg); font-size: 1.25rem; }
+.driver-support-form > p { margin: -6px 0 6px; color: var(--muted); font-size: .875rem; }
+.driver-support-form label, .operator-ticket-decision-form > label { color: var(--fg); font-size: .875rem; font-weight: 650; }
+.driver-support-form label span { color: var(--muted); font-weight: 400; }
+.driver-support-form .input, .operator-ticket-decision-form .input { width: 100%; min-height: 44px; border-radius: 13px; color: var(--fg); background: var(--bg); font-size: 1rem; }
+.driver-support-form textarea, .operator-ticket-decision-form textarea { resize: vertical; }
+.driver-support-form .btn-primary { justify-self: start; min-height: 44px; margin-top: 4px; }
+.driver-support-success { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-radius: 12px; background: var(--status-available-bg); color: var(--badge-success-fg); font-size: .875rem; }
+.driver-ticket-history-header { margin-bottom: 2px; }
+.driver-ticket-card { display: grid; gap: 12px; padding: 17px; border: 1px solid var(--border); border-radius: 15px; background: var(--bg); }
+.driver-ticket-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.driver-ticket-card-head h3 { margin: 0; color: var(--fg); font-size: 1rem; }
+.driver-ticket-card-head p { margin: 4px 0 0; color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
+.driver-ticket-inquiry, .driver-ticket-response p, .driver-ticket-awaiting { margin: 0; color: var(--fg); font-size: .875rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.driver-ticket-response { display: grid; gap: 7px; padding-top: 12px; border-top: 1px solid var(--border); }
+.driver-ticket-response > strong { color: var(--fg); font-size: .8125rem; }
+.driver-ticket-response b { color: var(--fg); }
+.driver-ticket-awaiting { color: var(--muted); }
+.operator-ticket-decision-form { display: grid; gap: 9px; padding-top: 12px; border-top: 1px solid var(--border); }
+.operator-ticket-decision-form fieldset { margin: 0 0 4px; padding: 0; border: 0; }
+.operator-ticket-decision-form legend { margin-bottom: 8px; color: var(--fg); font-size: .875rem; font-weight: 700; }
+.operator-ticket-decision-options { display: flex; flex-wrap: wrap; gap: 9px; }
+.operator-ticket-decision-options label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; color: var(--fg); cursor: pointer; }
+.operator-ticket-decision-options label:has(input:checked) { border-color: var(--primary); background: var(--active); }
+.operator-ticket-decision-options input { accent-color: var(--primary); }
+.operator-ticket-existing-response { display: grid; gap: 7px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.operator-ticket-existing-response p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875rem; }
+.operator-ticket-management button, .operator-ticket-management input:not([type="radio"]), .operator-ticket-management select { min-height: 44px; }
+.operator-ticket-management button:focus-visible, .operator-ticket-management input:focus-visible, .operator-ticket-management textarea:focus-visible, .operator-ticket-management select:focus-visible, .driver-support-form :is(button, input, select, textarea):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .driver-passes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .driver-booking-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .driver-booking-outcome { justify-items: start; text-align: left; }
+  .driver-support-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .driver-booking-row { gap: 16px; padding: 17px; }
+  .driver-history-list .parking-history-card { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 18px; }
+  .driver-history-list .parking-history-card .parking-history-details { width: 100%; }
+  .driver-passes-grid { grid-template-columns: minmax(0, 1fr); }
+  .driver-support-form, .driver-ticket-history { padding: 18px; }
+}
+@media (max-width: 430px) {
+  .driver-booking-row { grid-template-columns: minmax(0, 1fr); }
+  .driver-booking-cell { gap: 3px; }
+  .driver-ticket-card-head { flex-wrap: wrap; }
+}

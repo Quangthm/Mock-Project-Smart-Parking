@@ -147,8 +147,8 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
     </div>
 
     <div className="parking-history-filters" aria-label="Filter parking history">
-      <div className="parking-history-search">
-        <UntitledIcon name="search" size={18} />
+      <div className="parking-history-search sp-search-field">
+        <UntitledIcon name="search" size={18} aria-hidden="true" />
         <label className="sr-only" htmlFor="parking-history-search">Search license plate or {dateLabel === "Entry" ? "account" : "parking site"}</label>
         <input id="parking-history-search" type="search" name="parking-history-search" autoComplete="off" placeholder={dateLabel === "Entry" ? "Search plate or account…" : "Search plate or parking site…"} value={query} onChange={event => setQuery(event.target.value)} />
       </div>

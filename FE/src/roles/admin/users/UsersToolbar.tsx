@@ -17,9 +17,9 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
             <UntitledIcon name="search" size={16} />
           </span>
           <Input
-            className="w-full !pl-11 !pr-9"
+            className="sp-search-input w-full !pl-11 !pr-9"
             aria-label="Search users by name, email, or phone number"
-            placeholder="Search by name, email, or phone number..."
+            placeholder="Search by name, email, or phone number…"
             maxLength={200}
             disabled={saving}
             value={search}

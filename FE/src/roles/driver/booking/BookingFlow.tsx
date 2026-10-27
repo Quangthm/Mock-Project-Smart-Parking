@@ -278,7 +278,7 @@ export function BookingFlow({
           <button
             type="button"
             className="btn-outline"
-            title="View parking rules and policies (PDF)"
+            title="Review owner and platform policies"
             onClick={() => setShowPolicyModal(true)}
             style={{
               padding: "0.4rem 0.75rem",
@@ -289,7 +289,7 @@ export function BookingFlow({
             }}
           >
             <UntitledIcon name="file" size={13} />
-            Parking policies
+            Owner & platform policies
           </button>
           <button
             type="button"
@@ -874,7 +874,7 @@ export function BookingFlow({
             <button
               type="button"
               className="btn-outline"
-              title="View cancellation policies and parking rules"
+              title="Review owner and platform policies"
               onClick={() => setShowPolicyModal(true)}
               style={{
                 fontSize: "0.75rem",
@@ -885,7 +885,7 @@ export function BookingFlow({
               }}
             >
               <UntitledIcon name="file" size={12} />
-              Parking policies
+              Owner & platform policies
             </button>
           </div>
           <div

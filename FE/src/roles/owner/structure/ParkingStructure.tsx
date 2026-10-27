@@ -134,7 +134,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
   const siteCapacity = (structure?.capacityViews ?? []).filter((view) => view.unitId === null)
   const floors = units.filter((unit) => unit.type === "FLOOR")
   const visibleUnits = units.filter((unit) => !floorFilter || insideUnit(unit.id, floorFilter))
-  const total = (field: "available" | "protected" | "pendingPayment" | "effectiveBackup") => siteCapacity.reduce((sum, view) => sum + (view[field] ?? 0), 0)
+  const total = (field: "total" | "available" | "protected" | "pendingPayment" | "effectiveBackup") => siteCapacity.reduce((sum, view) => sum + (view[field] ?? 0), 0)
 
   async function mutate(action: () => Promise<unknown>, success: string) {
     if (savingRef.current || !siteId) return false
@@ -209,7 +209,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
           {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No backend parking slots are configured for this site yet. Add a unit, then add slots here for operators to use.</p>}
           <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="Physical slots" value={slots.length} tone="available" />
-            <Metric label="Available" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? total("available") : "—"} tone="available" />
+            <Metric label="Available / Capacity" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? `${total("available")}/${total("total")}` : `—/${slots.length}`} tone="available" />
             <Metric label="Occupied" value={slots.filter((slot) => slot.isPhysicallyOccupied).length} tone="occupied" />
             <Metric label="Protected" value={siteCapacity.length ? total("protected") : "—"} tone="protected" />
             <Metric label="Pending payment" value={siteCapacity.length ? total("pendingPayment") : "—"} tone="payment" />
@@ -254,7 +254,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
           <section className="space-y-3">
             <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-sm">
+              <label className="sp-search-field flex min-w-0 flex-1 items-center gap-2 sm:max-w-sm">
                 <UntitledIcon name="search" size={15} className="shrink-0 text-[var(--muted)]" />
                 <span className="sr-only">Search slot code</span>
                 <input className="min-w-0 flex-1 bg-transparent text-xs text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by slot code…" />
@@ -265,7 +265,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
               </div>
             </div>
             {!shownSlots.length ? <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-10 text-center text-xs text-[var(--muted)]">{slots.length ? "No parking slots match the current filters." : "No parking slots have been created for this site."}</p> :
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {shownSlots.map((slot) => {
                   const appearance = slotAppearance(slot)
                   return <button key={slot.id} type="button" onClick={() => setSelectedSlot(slot)} className="parking-space min-h-28 text-left" data-status={appearance.status} aria-label={`Space ${slot.code}, ${appearance.label}, ${slot.vehicleType}`}>

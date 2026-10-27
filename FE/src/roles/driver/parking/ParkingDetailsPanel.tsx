@@ -1,6 +1,8 @@
 import type { ParkingLot, LotType } from "../../../lib/types"
 import type { DrivingRoute } from "../../../lib/routingApi"
+import { useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
 
 type RouteStatus = "idle" | "locating" | "loading" | "ready" | "error"
 export type VehicleCapacityInfo = { status: "loading" | "ready" | "unavailable"; car: number | null; motorcycle: number | null }
@@ -23,6 +25,7 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
   onBook: () => void
   onClose: () => void
 }) {
+  const [policyOpen, setPolicyOpen] = useState(false)
   const hasSlots = Array.isArray(lot.slots)
   const available = hasSlots ? lot.slots.filter((slot) => slot.status === "available").length : null
   const canBook = lot.status === "active" && available !== null && available > 0
@@ -32,9 +35,14 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
   return (
     <aside className="find-parking-details-panel" aria-label="Parking details">
       <div className="find-parking-details-header">
-        <div>
+        <div className="find-parking-details-heading">
           <span className="find-parking-eyebrow">Parking details</span>
-          <h2>{lot.name}</h2>
+          <div className="find-parking-details-title-row">
+            <h2>{lot.name}</h2>
+            <button type="button" className="find-parking-policy-button" onClick={() => setPolicyOpen(true)} aria-label={`View policies for ${lot.name}`}>
+              <span className="find-parking-policy-button-label"><UntitledIcon name="file" size={14} /> Policy</span>
+            </button>
+          </div>
         </div>
         <button type="button" className="find-parking-icon-button" onClick={onClose} aria-label="Close parking details"><UntitledIcon name="x" size={18} /></button>
       </div>
@@ -81,6 +89,7 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
         <button type="button" className="btn-primary" onClick={onBook} disabled={!canBook}>Book Now</button>
         {!canBook && <p>{available === null ? "Booking is unavailable while availability is unknown." : lot.status !== "active" ? "This parking lot is unavailable." : "No spaces are currently available."}</p>}
       </div>
+      {policyOpen && <LotPolicyModal lot={lot} onClose={() => setPolicyOpen(false)} />}
     </aside>
   )
 }

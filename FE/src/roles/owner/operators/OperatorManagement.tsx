@@ -185,10 +185,13 @@ export function OperatorManagement({
 
       {/* Filters Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+        <div className="sp-search-field flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
+            type="search"
+            aria-label="Search operators by name or email"
+            autoComplete="off"
             placeholder="Search operator by name or email…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}

@@ -1,5 +1,6 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
+import "../../../booking-support.css"
 
 import { createPortal } from "react-dom"
 
@@ -45,11 +46,13 @@ function isNearLot(lot: ParkingLot): boolean {
 }
 
 type TabMode = "store" | "my-passes" | "orders"
+const passesPerPage = 12
 
 export function Subscriptions() {
   const { user } = useApp()
 
   const [tabMode, setTabMode] = useState<TabMode>("store")
+  const [passPage, setPassPage] = useState(1)
 
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -82,6 +85,9 @@ export function Subscriptions() {
     () => (user ? store.getPassesByDriver(user.id) : []),
     [user, checkoutSuccess],
   )
+  const passPageCount = Math.max(1, Math.ceil(passes.length / passesPerPage))
+  const currentPassPage = Math.min(passPage, passPageCount)
+  const visiblePasses = passes.slice((currentPassPage - 1) * passesPerPage, currentPassPage * passesPerPage)
 
   const orders = useMemo(
     () => (user ? store.getPackageOrdersByDriver(user.id) : []),
@@ -401,10 +407,10 @@ export function Subscriptions() {
                   <UntitledIcon name="search" size={17} />
                 </span>
                 <input
-                  className="input"
+                  className="input sp-search-input"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by enterprise or parking lot name..."
+                  placeholder="Search by enterprise or parking lot name…"
                   style={{
                     paddingLeft: "2.4rem",
                     paddingRight: searchQuery ? "2.4rem" : "0.85rem",
@@ -1003,14 +1009,9 @@ export function Subscriptions() {
       {tabMode === "my-passes" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {passes.length > 0 ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                gap: "1rem",
-              }}
-            >
-              {passes.map((pass) => {
+            <>
+            <div className="driver-passes-grid">
+              {visiblePasses.map((pass) => {
                 const isExpired = new Date(pass.expiresAt) <= new Date()
 
                 return (
@@ -1144,6 +1145,15 @@ export function Subscriptions() {
                 )
               })}
             </div>
+            {passPageCount > 1 && <nav className="driver-passes-pagination" aria-label="Pass pages">
+              <span>Showing {(currentPassPage - 1) * passesPerPage + 1}–{Math.min(currentPassPage * passesPerPage, passes.length)} of {passes.length} passes</span>
+              <div>
+                <button type="button" className="btn-outline" disabled={currentPassPage === 1} onClick={() => setPassPage(Math.max(1, currentPassPage - 1))}>Previous</button>
+                <span aria-current="page">Page {currentPassPage} of {passPageCount}</span>
+                <button type="button" className="btn-outline" disabled={currentPassPage === passPageCount} onClick={() => setPassPage(Math.min(passPageCount, currentPassPage + 1))}>Next</button>
+              </div>
+            </nav>}
+            </>
           ) : (
             <div
               className="card"

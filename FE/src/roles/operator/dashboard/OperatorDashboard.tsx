@@ -25,7 +25,6 @@ export type OperatorTab =
   | "overview"
   | "checkin"
   | "checkout"
-  | "cashier"
   | "status"
   | "slots"
   | "tickets"
@@ -81,7 +80,7 @@ export function OperatorDashboard({
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail as OperatorTab
-      if (["overview", "checkin", "checkout", "cashier", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
+      if (["overview", "checkin", "checkout", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
         setTab(detail)
     }
     window.addEventListener("sp:dashboard-nav", onNavigate)
@@ -261,13 +260,6 @@ export function OperatorDashboard({
                 },
               },
               {
-                id: "cashier",
-                label: "Cashier View",
-                icon: "banknote",
-                active: tab === "cashier",
-                onClick: () => setTab("cashier"),
-              },
-              {
                 id: "status",
                 label: "Lot Status & 3D Map",
                 icon: "grid",
@@ -330,15 +322,15 @@ export function OperatorDashboard({
   return (
     <DashboardSidebar groups={sidebarGroups}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
-        {tab !== "cashier" && sitesError && (
+        {sitesError && (
           <div role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
             {sitesError}
           </div>
         )}
-        {tab !== "cashier" && sitesLoading && (
+        {sitesLoading && (
           <p role="status" className="mb-5 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>
         )}
-        {accessRole === "operation" && tab !== "cashier" && selectedLot && resourceStatus.map(([label, state]) => (
+        {accessRole === "operation" && selectedLot && resourceStatus.map(([label, state]) => (
           state.scope !== resourceScope || state.loading ? (
             <p key={label} role="status" className="mb-3 text-sm text-[var(--muted)]">Loading {label.toLowerCase()}…</p>
           ) : state.error ? (
@@ -408,10 +400,6 @@ export function OperatorDashboard({
               initialPlateQuery={targetPlateQuery}
               onDataChanged={() => setRefreshKey((value) => value + 1)}
             />
-          )}
-
-          {accessRole === "operation" && tab === "cashier" && (
-            <CashierPOS key={selectedLot?.id ?? "none"} lot={selectedLot} sitesLoading={sitesLoading} sitesError={sitesError} onDataChanged={() => setRefreshKey((value) => value + 1)} readOnly />
           )}
 
           {/* TAB 3: LOT STATUS & 3D STRUCTURE */}
