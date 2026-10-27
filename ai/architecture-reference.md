@@ -22,7 +22,7 @@
 | UserService | Clean Architecture (5 projects) + EF Core 10.0.12 + MediatR 14.2.0 + FluentValidation 12.1.1 + AutoMapper 16.2.0 + BCrypt.Net-Next 4.2.0 | `src/Services/UserService/*` |
 | ParkingService | Clean Architecture (5 projects) + raw Npgsql 10.0.3 + Minimal APIs | `src/Services/ParkingService/*` |
 | ReservationService | 2 projects (API + Persistence) + raw Npgsql 10.0.3 | `src/Services/ReservationService/*` |
-| Database | PostgreSQL (service-owned schemas) | `docker-compose.yml`, `docs/02-architecture/database/` |
+| Database | PostgreSQL (service-owned schemas) | `compose.schema-integration.yml`, `docs/02-architecture/database/` |
 | Frontend | React 19 + react-router-dom 7.18.4 + Vite 8.0.5 + TypeScript 5.7 + Tailwind CSS 4.0 + Three.js 0.186.1 + @maptiler/sdk 4.1.0 + recharts 3.10.1 | `FE/package.json` |
 | Backend tests | xUnit 2.9.3 + Microsoft.NET.Test.Sdk 17.14.1 + coverlet 6.0.4 | `tests/Services/*` |
 | Frontend tests | node:test (`*.test.cjs`) | `tests/frontend/*` |

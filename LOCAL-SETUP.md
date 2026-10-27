@@ -288,7 +288,7 @@ Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết
 
 - Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`.
 - Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
-- `docker-compose.yml` là compose monolith cũ (port `5433`, container `smartparking_db`), **không** được setup hiện tại sử dụng.
+- `docker-compose.yml` (compose monolith cũ, port `5433`, container `smartparking_db`) và `scripts/database/docker-compose-smartpark.yml` **đã bị xoá** khỏi repo. Database được tạo bằng `compose.schema-integration.yml` thông qua `setup.ps1`.
 
 ### 7.3 Volume và migration
 
