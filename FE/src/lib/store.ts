@@ -914,15 +914,6 @@ export const store = {
         if (ownerPdf) return JSON.parse(ownerPdf)
       }
 
-      // Check if any owner policy PDF exists in storage
-      const ownerKeys = Object.keys(localStorage).filter((k) =>
-        k.startsWith("sp_owner_policy_pdf_"),
-      )
-      if (ownerKeys.length > 0) {
-        const anyOwnerPdf = localStorage.getItem(ownerKeys[0])
-        if (anyOwnerPdf) return JSON.parse(anyOwnerPdf)
-      }
-
       // Default policy document for any parking lot
       if (lot) {
         return {

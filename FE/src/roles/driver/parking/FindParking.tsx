@@ -322,8 +322,8 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    markersRef.current.forEach((marker, id) => marker.getElement().querySelector(".parking-map-label")?.classList.toggle("is-selected-parking-marker", id === selected?.id))
-    if (!visible || !selected || !validCoordinates(selected)) return
+    markersRef.current.forEach((marker, id) => marker.getElement().querySelector(".parking-map-label")?.classList.toggle("is-selected-parking-marker", detailsOpen && id === selected?.id))
+    if (!visible || !detailsOpen || !selected || !validCoordinates(selected)) return
     const map = mapInstance.current
     if (!map) return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -504,7 +504,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
             </div>
           </div>
           <label className="sr-only" htmlFor="find-parking-query">Search by parking name or address</label>
-          <input id="find-parking-query" name="parking-search" className="input" value={query} onFocus={() => setResultsOpen(true)} onChange={(event) => { setQuery(event.target.value); setResultsOpen(true) }} onKeyDown={(event) => { if (event.key === "Enter") rememberSearch(query) }} placeholder="Search name or address…" autoComplete="off" />
+          <input id="find-parking-query" name="parking-search" className="input sp-search-input" value={query} onFocus={() => setResultsOpen(true)} onChange={(event) => { setQuery(event.target.value); setResultsOpen(true) }} onKeyDown={(event) => { if (event.key === "Enter") rememberSearch(query) }} placeholder="Search name or address…" autoComplete="off" />
           {searchHistory.length > 0 && <div className="find-parking-history" aria-label="Recent searches">
             <div className="find-parking-history-heading">
               <strong>Recent Searches</strong>
@@ -617,7 +617,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
           onDirection={startDirections}
           onCloseRoute={closeDirections}
           onBook={() => onBook(selected)}
-          onClose={() => { closeDirections(); setDetailsOpen(false) }}
+          onClose={() => { closeDirections(); setDetailsOpen(false); setSelected(null) }}
         />
       </div>}
     </section>

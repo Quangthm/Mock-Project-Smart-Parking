@@ -4,6 +4,11 @@ import { parkingApi, type Site, type Slot, type Structure, type Unit } from "../
 import { BackupCapacityPanel } from "../dashboard/BackupCapacityPanel"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { useApp } from "../../../context/AppContext"
+import { ownerData as store } from "../data/data"
+import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
+import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
 
 interface ParkingStructureProps {
   sites?: Site[]
@@ -35,17 +40,33 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+const RESERVATION_APPEARANCE_MAP: Record<string, { label: string; status: "reserved" }> = {
+  PROTECTED: { label: "Protected", status: "reserved" },
+  PENDING_PAYMENT: { label: "Pending payment", status: "reserved" },
+}
+
+const ACTIVE_OPERATIONAL_SET = new Set(["ACTIVE", "AVAILABLE", "OPERATIONAL"])
+
 function slotAppearance(slot: Slot) {
-  if (slot.isPhysicallyOccupied && slot.reservationState === "PROTECTED") return { label: "Occupied + protected", status: "occupied" }
-  if (slot.isPhysicallyOccupied) return { label: "Occupied", status: "occupied" }
-  if (slot.reservationState === "PROTECTED") return { label: "Protected", status: "reserved" }
-  if (slot.reservationState === "PENDING_PAYMENT") return { label: "Pending payment", status: "reserved" }
-  if (slot.reservationState && slot.reservationState !== "NONE") return { label: slot.reservationState.replace(/_/g, " "), status: "reserved" }
-  if (slot.operationalStatus !== "ACTIVE" && slot.operationalStatus !== "AVAILABLE") return { label: slot.operationalStatus.replace(/_/g, " "), status: "maintenance" }
+  if (slot.isPhysicallyOccupied) {
+    return slot.reservationState === "PROTECTED"
+      ? { label: "Occupied + protected", status: "occupied" }
+      : { label: "Occupied", status: "occupied" }
+  }
+  if (slot.reservationState && slot.reservationState !== "NONE") {
+    return RESERVATION_APPEARANCE_MAP[slot.reservationState] ?? {
+      label: slot.reservationState.replace(/_/g, " "),
+      status: "reserved",
+    }
+  }
+  if (!ACTIVE_OPERATIONAL_SET.has(slot.operationalStatus)) {
+    return { label: slot.operationalStatus.replace(/_/g, " "), status: "maintenance" }
+  }
   return { label: "Available", status: "available" }
 }
 
 export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: ParkingStructureProps) {
+  const { user } = useApp()
   const [siteId, setSiteId] = useState("")
   const [structure, setStructure] = useState<Structure | null>(null)
   const [loading, setLoading] = useState(false)
@@ -60,6 +81,8 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
   const [statusFilter, setStatusFilter] = useState("")
   const [createModal, setCreateModal] = useState<"unit" | "slot" | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
+  const [savedModelUrl, setSavedModelUrl] = useState<string | null>(null)
+  const [modelStorageReady, setModelStorageReady] = useState(false)
   const [unitForm, setUnitForm] = useState({ type: "FLOOR", name: "", parentId: "", capacity: "0" })
   const [slotForm, setSlotForm] = useState({ unitId: "", code: "", vehicleType: "CAR", type: "STANDARD" })
 
@@ -69,6 +92,14 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
       return sites.some((site) => site.id === current) ? current : (sites[0]?.id ?? "")
     })
   }, [selectedSiteId, sites])
+
+  useEffect(() => {
+    let active = true
+    setSavedModelUrl(null)
+    setModelStorageReady(false)
+    loadOwnerModelUrl(siteId).then(url => { if (active) setSavedModelUrl(url) }).catch(() => {}).finally(() => { if (active) setModelStorageReady(true) })
+    return () => { active = false }
+  }, [siteId, reload])
 
   useEffect(() => {
     let current = true
@@ -97,6 +128,12 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
   const units = structure?.units ?? []
   const slots = structure?.slots ?? []
+  const ownerLot = useMemo(() => store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === siteId), [user?.id, siteId, reload])
+  const modelSlots = useMemo(() => slots.map(slot => ({ id: slot.id, number: slot.code, floor: 1,
+    status: slot.isPhysicallyOccupied ? "occupied" as const
+      : !["ACTIVE", "AVAILABLE", "OPERATIONAL"].includes(slot.operationalStatus) ? "maintenance" as const
+      : slot.reservationState && slot.reservationState !== "NONE" ? "reserved" as const : "available" as const,
+  })), [slots])
   const unitById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units])
   const parentOptions = units.filter((unit) =>
     unitForm.type === "ZONE" ? unit.type === "FLOOR" : unitForm.type === "BLOCK" && (unit.type === "FLOOR" || unit.type === "ZONE"),
@@ -125,16 +162,23 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     return false
   }
 
+  const SLOT_FILTER_PREDICATES: Record<string, (s: Slot) => boolean> = {
+    occupied: (s) => s.isPhysicallyOccupied,
+    empty: (s) => !s.isPhysicallyOccupied,
+    protected: (s) => s.reservationState === "PROTECTED",
+    payment: (s) => s.reservationState === "PENDING_PAYMENT",
+  }
+
   const shownSlots = slots.filter((slot) =>
     (!floorFilter || insideUnit(slot.unitId, floorFilter)) &&
     (!unitFilter || insideUnit(slot.unitId, unitFilter)) &&
-    (!statusFilter || (statusFilter === "occupied" ? slot.isPhysicallyOccupied : statusFilter === "empty" ? !slot.isPhysicallyOccupied : statusFilter === "protected" ? slot.reservationState === "PROTECTED" : statusFilter === "payment" ? slot.reservationState === "PENDING_PAYMENT" : slot.operationalStatus === statusFilter)) &&
+    (!statusFilter || (SLOT_FILTER_PREDICATES[statusFilter] ? SLOT_FILTER_PREDICATES[statusFilter](slot) : slot.operationalStatus === statusFilter)) &&
     slot.code.toLowerCase().includes(search.trim().toLowerCase()),
   )
   const siteCapacity = (structure?.capacityViews ?? []).filter((view) => view.unitId === null)
   const floors = units.filter((unit) => unit.type === "FLOOR")
   const visibleUnits = units.filter((unit) => !floorFilter || insideUnit(unit.id, floorFilter))
-  const total = (field: "available" | "protected" | "pendingPayment" | "effectiveBackup") => siteCapacity.reduce((sum, view) => sum + (view[field] ?? 0), 0)
+  const total = (field: "total" | "available" | "protected" | "pendingPayment" | "effectiveBackup") => siteCapacity.reduce((sum, view) => sum + (view[field] ?? 0), 0)
 
   async function mutate(action: () => Promise<unknown>, success: string) {
     if (savingRef.current || !siteId) return false
@@ -189,9 +233,18 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     ).then((saved) => { if (saved) { setSlotForm((form) => ({ ...form, code: "" })); setCreateModal(null) } })
   }
 
+  function changeSelectedSlotBackup() {
+    const slot = selectedSlot
+    if (!slot) return
+    const marked = slot.reservationState === "BACKUP"
+    if (!confirm(`${marked ? "Release backup designation" : "Designate as backup"} for slot ${slot.code}?`)) return
+    void mutate(() => parkingApi.edit(siteId, { action: "markBackup", resourceId: slot.id, active: !marked }),
+      marked ? "Backup designation released." : "Slot designated as backup.").then(ok => { if (ok) setSelectedSlot(null) })
+  }
+
   return (
     <section className="space-y-5 text-[var(--fg)]">
-      <PageHeader title="Parking Structure" variant="compact" divider description="Manage floors, zones, blocks and parking slots." actions={<label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
+      <PageHeader title="Parking Structure" variant="compact" divider description="Inspect the site model, capacity and live parking slots." actions={<label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
           <span>Site</span>
           <RoundedSelect className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
             {!sites.length && <option value="">No sites available</option>}
@@ -206,10 +259,16 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
       {structure && !loading && (
         <>
-          {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No backend parking slots are configured for this site yet. Add a unit, then add slots here for operators to use.</p>}
+          {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No live parking slots are configured for this site yet.</p>}
+          <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Owner parking 3D model">
+            <div className="mb-3"><h2 className="text-base font-semibold">Site 3D model</h2><p className="mt-1 text-sm text-[var(--muted)]">The same model used in Operator monitoring. Select a bay to inspect its live record where one exists.</p></div>
+            {!modelStorageReady && ownerLot?.modelUrl?.startsWith("blob:") ? <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
+              : savedModelUrl || (ownerLot && !ownerLot.modelUrl?.startsWith("blob:")) ? <Parking3DViewer modelUrl={savedModelUrl ?? ownerLot?.modelUrl ?? ALLOWED_PARKING_MODELS[ownerLot!.type].path} lotType={ownerLot?.type ?? "outdoor"} slots={modelSlots} selectedSlotId={selectedSlot?.id} onSelectSlot={slot => setSelectedSlot(slots.find(item => item.id === slot.id) ?? null)} height={360} />
+              : <p className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">No Owner 3D model is available for this site in this browser profile.</p>}
+          </section>
           <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="Physical slots" value={slots.length} tone="available" />
-            <Metric label="Available" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? total("available") : "—"} tone="available" />
+            <Metric label="Available / Capacity" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? `${total("available")}/${total("total")}` : `—/${slots.length}`} tone="available" />
             <Metric label="Occupied" value={slots.filter((slot) => slot.isPhysicallyOccupied).length} tone="occupied" />
             <Metric label="Protected" value={siteCapacity.length ? total("protected") : "—"} tone="protected" />
             <Metric label="Pending payment" value={siteCapacity.length ? total("pendingPayment") : "—"} tone="payment" />
@@ -223,8 +282,6 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Zone:</span><RoundedSelect className="input max-w-48 text-xs" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}><option value="">All locations</option>{visibleUnits.filter((unit) => unit.type !== "FLOOR").map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>
-              <button type="button" className="btn-outline px-2.5 py-1 text-xs" onClick={() => { setUnitForm((form) => ({ ...form, type: floorFilter ? "ZONE" : "FLOOR", parentId: floorFilter })); setCreateModal("unit") }}><UntitledIcon name="plus" size={12} /> Add unit</button>
-              <button type="button" className="btn-primary px-2.5 py-1 text-xs" onClick={() => setCreateModal("slot")} disabled={!units.length}><UntitledIcon name="plus" size={12} /> Add slot</button>
             </div>
           </div>
 
@@ -254,7 +311,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
           <section className="space-y-3">
             <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-sm">
+              <label className="sp-search-field flex min-w-0 flex-1 items-center gap-2 sm:max-w-sm">
                 <UntitledIcon name="search" size={15} className="shrink-0 text-[var(--muted)]" />
                 <span className="sr-only">Search slot code</span>
                 <input className="min-w-0 flex-1 bg-transparent text-xs text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by slot code…" />
@@ -265,19 +322,30 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
               </div>
             </div>
             {!shownSlots.length ? <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-10 text-center text-xs text-[var(--muted)]">{slots.length ? "No parking slots match the current filters." : "No parking slots have been created for this site."}</p> :
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {shownSlots.map((slot) => {
                   const appearance = slotAppearance(slot)
                   return <button key={slot.id} type="button" onClick={() => setSelectedSlot(slot)} className="parking-space min-h-28 text-left" data-status={appearance.status} aria-label={`Space ${slot.code}, ${appearance.label}, ${slot.vehicleType}`}>
                     <span className="flex w-full items-start justify-between gap-1"><strong className="truncate text-base text-[var(--fg)]">{slot.code}</strong><UntitledIcon name={slot.vehicleType === "MOTORCYCLE" ? "motorcycle" : "car"} size={17} /></span>
-                    <span className="my-1.5 flex items-center gap-1 text-sm font-semibold leading-tight"><UntitledIcon name={appearance.status === "available" ? "check-circle" : appearance.status === "occupied" ? "car" : appearance.status === "reserved" ? "clock" : "wrench"} size={14} />{appearance.label}</span>
+                    <span className="my-1.5 flex items-center gap-1 text-sm font-semibold leading-tight"><UntitledIcon name={({
+    available: "check-circle",
+    occupied: "car",
+    reserved: "clock",
+    maintenance: "wrench",
+  } as Record<string, "check-circle" | "car" | "clock" | "wrench">)[appearance.status] ?? "wrench"} size={14} />{appearance.label}</span>
                     <span className="w-full truncate text-[10px] text-[var(--muted)]" title={location(slot.unitId)}>{location(slot.unitId)}</span>
                   </button>
                 })}
               </div>}
           </section>
 
-          {selectedSlot && <div role="dialog" aria-modal="true" aria-label={`Slot ${selectedSlot.code}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedSlot(null) }}><div className="w-full max-w-md space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Slot {selectedSlot.code}</h2><button type="button" className="rounded px-2 py-1 text-sm hover:bg-[var(--border)]" onClick={() => setSelectedSlot(null)} aria-label="Close slot details">Close</button></div><dl className="grid grid-cols-2 gap-2 text-sm"><dt className="text-[var(--muted)]">Location</dt><dd>{location(selectedSlot.unitId)}</dd><dt className="text-[var(--muted)]">Vehicle type</dt><dd>{selectedSlot.vehicleType}</dd><dt className="text-[var(--muted)]">Slot type</dt><dd>{selectedSlot.type}</dd><dt className="text-[var(--muted)]">Physical state</dt><dd>{selectedSlot.isPhysicallyOccupied ? "Occupied" : "Empty"}</dd><dt className="text-[var(--muted)]">Operational status</dt><dd>{selectedSlot.operationalStatus}</dd><dt className="text-[var(--muted)]">Reservation state</dt><dd>{selectedSlot.reservationState ?? "None"}</dd></dl></div></div>}
+          {selectedSlot && <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setSelectedSlot(null) }}>
+            <div role="dialog" aria-modal="true" aria-label={`Slot ${selectedSlot.code}`} className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
+              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">Parking space</p><h2 className="mt-1 text-xl font-semibold">Slot {selectedSlot.code}</h2><p className="mt-1 text-sm text-[var(--muted)]">{location(selectedSlot.unitId)}</p></div><button type="button" className="btn-outline shrink-0" onClick={() => setSelectedSlot(null)} aria-label="Close slot details">Close</button></div>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">{[["Physical", selectedSlot.isPhysicallyOccupied ? "Occupied" : "Vacant"], ["Operational", selectedSlot.operationalStatus.replace(/_/g, " ")], ["Reservation", selectedSlot.reservationState?.replace(/_/g, " ") ?? "None"], ["Vehicle / type", `${selectedSlot.vehicleType} · ${selectedSlot.type}`]].map(([label, value]) => <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3"><span className="block text-xs text-[var(--muted)]">{label}</span><strong className="mt-1 block text-sm font-semibold">{value}</strong></div>)}</div>
+              <div className="mt-5 border-t border-[var(--border)] pt-4"><p className="text-xs text-[var(--muted)]">Backup designation can be changed here. Physical occupancy and operational status come from live site operations.</p><button type="button" className="btn-outline mt-3 w-full justify-center" disabled={saving || selectedSlot.isPhysicallyOccupied || !["ACTIVE", "AVAILABLE", "OPERATIONAL"].includes(selectedSlot.operationalStatus) || Boolean(selectedSlot.reservationState && !["NONE", "BACKUP"].includes(selectedSlot.reservationState))} onClick={changeSelectedSlotBackup}>{selectedSlot.reservationState === "BACKUP" ? "Release backup status" : "Mark as backup"}</button></div>
+            </div>
+          </div>}
 
           <details className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-[var(--raised)]">

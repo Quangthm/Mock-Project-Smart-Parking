@@ -1,11 +1,39 @@
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import type { UsersViewModel } from "./useUsers"
 
-const roleTones: Record<string, BadgeTone> = { admin: "danger", owner: "warning", operator: "purple", driver: "primary" }
-const roleTone = (role: string): BadgeTone => roleTones[role.toLowerCase()] || "primary"
-const roleLabel = (role: string) => ({ admin: "Admin", owner: "Owner", operator: "Operator", driver: "Driver" })[role.toLowerCase() as "admin" | "owner" | "operator" | "driver"] || "Driver"
-const statusTone = (status: string): BadgeTone => ({ active: "success", locked: "danger", pendingVerification: "warning", pendingApproval: "warning", rejected: "muted" })[status as "active" | "locked" | "pendingVerification" | "pendingApproval" | "rejected"] || "muted"
-const statusLabel = (status: string) => ({ active: "Active", locked: "Locked", pendingVerification: "Pending Verify", pendingApproval: "Pending Approval", rejected: "Rejected" })[status as "active" | "locked" | "pendingVerification" | "pendingApproval" | "rejected"] || status
+const ROLE_TONES: Record<string, BadgeTone> = {
+  admin: "danger",
+  owner: "warning",
+  operator: "purple",
+  driver: "primary",
+}
+const roleTone = (role: string): BadgeTone => ROLE_TONES[role.toLowerCase()] ?? "primary"
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  owner: "Owner",
+  operator: "Operator",
+  driver: "Driver",
+}
+const roleLabel = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? "Driver"
+
+const STATUS_TONES: Record<string, BadgeTone> = {
+  active: "success",
+  locked: "danger",
+  pendingVerification: "warning",
+  pendingApproval: "warning",
+  rejected: "muted",
+}
+const statusTone = (status: string): BadgeTone => STATUS_TONES[status] ?? "muted"
+
+const STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  locked: "Locked",
+  pendingVerification: "Pending Verify",
+  pendingApproval: "Pending Approval",
+  rejected: "Rejected",
+}
+const statusLabel = (status: string) => STATUS_LABELS[status] ?? status
 
 export function UsersTable({ model }: { model: UsersViewModel }) {
   const { selectedId, setSelectedId, loading, page, saving, totalItems, currentPage, totalPages, startIdx, endIdx, setPageNumber } = model
