@@ -1,0 +1,11 @@
+@baseUrl = http://localhost:5068
+
+### 1. Health Check (Happy Path)
+# Kiểm tra trạng thái hoạt động của Notification & Audit Service
+GET {{baseUrl}}/health
+Accept: application/json
+
+### 2. OpenAPI Specification
+# Lấy OpenAPI v3 JSON Schema
+GET {{baseUrl}}/openapi/v1.json
+Accept: application/json

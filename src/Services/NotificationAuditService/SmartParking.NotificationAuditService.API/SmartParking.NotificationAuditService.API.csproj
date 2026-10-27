@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SmartParking.NotificationAuditService.Application\SmartParking.NotificationAuditService.Application.csproj" />
+    <ProjectReference Include="..\SmartParking.NotificationAuditService.Persistence\SmartParking.NotificationAuditService.Persistence.csproj" />
+    <ProjectReference Include="..\SmartParking.NotificationAuditService.Infrastructure\SmartParking.NotificationAuditService.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
