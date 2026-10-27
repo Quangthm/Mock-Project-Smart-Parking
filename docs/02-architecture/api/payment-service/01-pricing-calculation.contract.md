@@ -3,13 +3,13 @@
 > **Feature Key:** `SPARK-229`  
 > **Service Owner:** `Payment Service` *(Financial Domain — theo quyết định kiến trúc `SA-10`)*  
 > **Target Interface / Route:** `IParkingPricingCalculator` *(Authoritative Deliverable của `SPARK-229`)* | *(Companion HTTP Route định hướng cho task tích hợp sau: `POST /api/v1/pricing/calculate`)*  
-> **Document Revision:** `v1.1` *(Đã cập nhật phản hồi Review P0/P1 và chuẩn hóa chi tiết kỹ thuật cho bước Implementation)*  
+> **Document Revision:** `v1.2` *(Đã cập nhật chuẩn hóa toàn diện theo baseline v1.1 và điều chỉnh quyền sở hữu biểu giá thuộc PaymentDb theo SPARK-297)*  
 > **API Version:** `N/A` *(Phạm vi bàn giao chính thức của `SPARK-229` là Internal C# Domain Interface; phần HTTP route là đặc tả companion định hướng cho task tích hợp sau)*  
 > **Contract Status:** `Approved` *(Baseline v1.1 sẵn sàng cho Implementation Handoff)*  
 > **Communication Type:** `Internal Domain Interface` *(Authoritative cho `SPARK-229`)*  
 > **Author:** `Tuong Van (VanNT)`  
 > **Reviewer:** `Independent AI / Technical Reviewer`  
-> **SRS / BR Baseline:** `SRS v0.9 (2026-10-05), Business Rules v0.8.5, Solution Architecture v0.9`  
+> **SRS / BR Baseline:** `SRS v1.1, Business Rules v1.1, Solution Architecture v1.1 (SPARK-297/SPARK-296 Alignment)`  
 
 ---
 
@@ -19,6 +19,7 @@
 | :---: | :---: | :--- | :--- | :--- | :--- |
 | `v1.0` | `2026-10-13` | `Tuong Van (VanNT)` | `Independent Reviewer` | Initial | Khởi tạo tài liệu đặc tả hợp đồng tính giá đỗ xe cốt lõi theo task `SPARK-229`. |
 | `v1.1` | `2026-10-13` | `Tuong Van (VanNT)` | `Independent Reviewer` | Clarification / Non-breaking | Giải quyết 5 điểm review P0/P1 và chốt chi tiết kỹ thuật cho bước Implementation:<br>1. Phân định rõ `IParkingPricingCalculator` là deliverable chính của `SPARK-229`, HTTP route là companion spec.<br>2. Đồng bộ kiểu dữ liệu C# – JSON – DB (`InvoiceRoundedMinutes`, `LocalEntryTime`, `ToSnapshotJson()`).<br>3. Chốt công thức bất biến cho `IsFreeStay` khi `entryTime == exitTime` và `freeParkingGraceMinutes == 0`.<br>4. Chuẩn hóa giải thuật tách `TimeOnly` 6 trường hợp (bao gồm khung giờ qua đêm và khung 24h) và bảng mã lỗi `PricingDomainException`. |
+| `v1.2` | `2026-10-27` | `Tuong Van (VanNT)` | `Technical Lead` | Clarification / Baseline Alignment | Đồng bộ toàn diện theo baseline v1.1 (`SPARK-297`):<br>1. Xác nhận quyền sở hữu biểu giá thuộc `PaymentDb` (bảng `tariffs` và `policy_revisions` theo `04-payment-pricing-service-db.sql`), gỡ bỏ phụ thuộc ParkingDb cũ.<br>2. Xác nhận chuẩn làm tròn mặc định v1.1 là `HALF_UP_THOUSAND` (half-up tới hàng 1.000 VNĐ).<br>3. Bổ sung `ILogger<T>` structured logging an toàn cho tầng Application Use Case và Persistence Adapter. |
 
 *Quy ước phân loại thay đổi:*
 - **Initial:** Soạn thảo bản đầu tiên của tài liệu contract này.
@@ -75,7 +76,7 @@ Hợp đồng này giải quyết bài toán tách biệt hoàn toàn logic tín
        - Hệ thống đọc cột `reservations.accepted_pricing_snapshot` (`JSONB`) đã đóng băng lúc đặt chỗ (`C-22`, `BR-POL-03`).
        - Nếu snapshot bị rỗng (`null`), hỏng cấu trúc JSON hoặc không khớp `siteId`/`vehicleType` $\rightarrow$ Trả lỗi `422 Unprocessable Entity` (`CORRUPTED_POLICY_SNAPSHOT`). **Tuyệt đối không tự động fallback sang bảng giá vãng lai hiện hành** (vì sẽ vi phạm cam kết giá lúc đặt chỗ).
      - **Trường hợp B — Khách vãng lai (`reservationId == null` / Walk-in):**
-       - Hệ thống truy vấn bảng `tariffs` đang hoạt động (`is_active = true`) theo `(tenant_id, site_id, vehicle_type)` kết hợp với `site_operational_settings.free_parking_grace_minutes` của `site_id` đó.
+       - Hệ thống truy vấn bảng `tariffs` đang hoạt động (`is_active = true` và `deleted_at IS NULL`) trong `PaymentDb` theo `(tenant_id, site_id, vehicle_type)` (trong đó `free_parking_grace_minutes` được cấu hình trực tiếp tại bảng `tariffs`) kết hợp bảng `policy_revisions` để xác định số hiệu phiên bản (`revision_number`) mới nhất (`SPARK-297`).
        - Nếu bãi xe chưa cấu hình bảng giá active cho loại xe này $\rightarrow$ Trả lỗi `404 Not Found` (`TARIFF_NOT_FOUND`). Tuyệt đối không mặc định tính giá `0 VND` (`BR-POL-02`).
 
 ### 1.4 Chính sách Idempotency (Idempotency Policy) `[Conditional]`
@@ -90,7 +91,7 @@ Hợp đồng này giải quyết bài toán tách biệt hoàn toàn logic tín
 | :--- | :---: | :--- | :--- |
 | **`FR-PAY-09`** | FR (`Confirmed - C`) | Thời gian đỗ miễn phí mang tính bao gồm (inclusive): nếu thời gian tính phí $\le$ thời gian miễn phí cấu hình ($N > 0$) thì phí đỗ xe = `0 VND`; chỉ tính phí khi vượt quá ngưỡng này. | Mục 2.4, Mục 3.1 (Bước 3), Mục 3.3 |
 | **`FR-PAY-10`** | FR (`Confirmed - C`) | Tính giá theo thời gian thực tế địa phương và độ giao thoa thực tế (actual overlap) với các khung giờ biểu giá. Khoảng đỗ qua nửa đêm phải tách tại ranh giới ngày (`00:00:00`). Cộng tổng các phân đoạn chưa làm tròn trước khi làm tròn tiền tệ 1 lần duy nhất ở kết quả cuối. | Mục 2.2, Mục 3.1 (Bước 4, 5, 6), Mục 3.2, Mục 6 |
-| **`FR-PAY-11` / `C-21`** | FR (`Confirmed - C`) | Giá đỗ xe cuối cùng được xác định từ `entryTime` và `exitTime` thực tế ghi nhận. Mô hình `quote/clearance/requote` không hoạt động trong v0.9. | Mục 1.2, Mục 2.4, Mục 3.1 (Bước 1, 2) |
+| **`FR-PAY-11` / `C-21`** | FR (`Confirmed - C`) | Giá đỗ xe cuối cùng được xác định từ `entryTime` và `exitTime` thực tế ghi nhận. Mô hình `quote/clearance/requote` đã bị đóng băng theo quy chuẩn hệ thống. | Mục 1.2, Mục 2.4, Mục 3.1 (Bước 1, 2) |
 | **`FR-BAS-05` / `C-08`** | FR (`Confirmed - C`) | Hỗ trợ định giá động (Dynamic pricing) trong phạm vi MVP thông qua các khung giờ (time blocks) do Owner cấu hình theo loại xe. Các trigger lễ/sự kiện/nhu cầu để ở tương lai (FUTURE). | Mục 1.2, Mục 2.4, Mục 3.1 (Bước 4), Mục 3.2 |
 | **`FR-POL-05` / `C-22` / `BR-POL-03`** | FR/BR (`Confirmed - C`) | Giao dịch đặt chỗ đã được chấp thuận (`ACCEPTED` / `CONFIRMED`) giữ nguyên phiên bản chính sách/biểu giá tại thời điểm chấp thuận; các chỉnh sửa bảng giá về sau không áp dụng hồi tố (no retroactive repricing). | Mục 1.3, Mục 2.4, Mục 3.1 (Bước 7) |
 | **`BR-PAY-05`** | BR (`Frozen/Inactive - F`) | Đóng băng đề xuất quote/clearance/requote; chỉ sử dụng thời gian vào/ra thực tế. | Mục 1.2 |
@@ -209,9 +210,9 @@ Hợp đồng này giải quyết bài toán tách biệt hoàn toàn logic tín
   - Không làm tròn số tiền ở từng phân đoạn (`RawChargeVnd` giữ nguyên độ chính xác `decimal`).
 - **Quy tắc làm tròn 1 lần ở cuối (Single Final Rounding):**
   - Sau khi cộng tổng $\text{unroundedTotalVnd} = \sum \text{rawChargeVnd}_i$, hệ thống áp dụng `RoundingMode` **đúng 1 lần duy nhất** để chuyển thành số nguyên `FinalAmountVnd` (`long`):
-    - **`HALF_UP_WHOLE_VND` *(Giá trị mặc định chuẩn cho MVP & Unit Tests)*:** `(long)Math.Round(unroundedTotalVnd, 0, MidpointRounding.AwayFromZero)`
+    - **`HALF_UP_THOUSAND` *(Chuẩn mặc định phê duyệt theo v1.1 Baseline)*:** `(long)(Math.Round(unroundedTotalVnd / 1000m, 0, MidpointRounding.AwayFromZero) * 1000m)`
+    - `HALF_UP_WHOLE_VND`: `(long)Math.Round(unroundedTotalVnd, 0, MidpointRounding.AwayFromZero)`
     - `CEILING_WHOLE_VND`: `(long)Math.Ceiling(unroundedTotalVnd)`
-    - `HALF_UP_THOUSAND`: `(long)(Math.Round(unroundedTotalVnd / 1000m, 0, MidpointRounding.AwayFromZero) * 1000m)`
     - `CEILING_THOUSAND`: `(long)(Math.Ceiling(unroundedTotalVnd / 1000m) * 1000m)`
 
 #### Quy ước Thời gian & Cách Serialize `DateTimeOffset` (Timestamp & Business Time):
@@ -704,14 +705,14 @@ Content-Type: application/json
 | `Result.FinalAmountVnd` (`long`) | `smartpark_payment.invoices` | `base_parking_fee` & `final_amount` (`DECIMAL(12,2)`) | Ép kiểu an toàn từ `long` sang `decimal` khi ghi vào cột `DECIMAL(12,2)`. |
 | `Result.ToSnapshotJson()` (`string`) | `smartpark_payment.invoices` | `pricing_snapshot` (`JSONB`) | Lưu bản chụp JSON kết quả tính tiền (`PricingCalculationResult`) phục vụ kiểm toán, xuất PDF hóa đơn và đối soát hoàn tiền. |
 | `PricingPolicySnapshot` (Policy JSON) | `smartpark_reservation.reservations` | `accepted_pricing_snapshot` (`JSONB`) | Lưu cấu hình biểu giá đã đóng băng (`PricingPolicySnapshot` gồm `timeBlocks`, đơn giá, `freeParkingGraceMinutes`, `roundingMode`), **không phải** kết quả tính tiền `PricingCalculationResult`, để khi xe ra bãi có thể đọc lại policy này và tính tiền theo `entryTime`/`exitTime` thực tế (`BR-POL-03`). |
-| `PricingPolicySnapshot` (Input) | `smartpark_parking.tariffs` & `site_operational_settings` | `tariff_rules` (`JSONB`), `version` (`INT`), `free_parking_grace_minutes` (`INT`) | Nguồn cấu hình biểu giá và thời gian miễn phí của bãi xe (`02-parking-service-db.sql`). |
+| `PricingPolicySnapshot` (Input) | `smartpark_payment.tariffs` & `smartpark_payment.policy_revisions` | `tariff_rules` (`JSONB`), `revision_number` (`INT`), `free_parking_grace_minutes` (`INT`) | Nguồn cấu hình biểu giá và lịch sử phiên bản bất biến của PaymentDb (`04-payment-pricing-service-db.sql` - SPARK-297). |
 
 ### 7.2 Danh mục Câu hỏi Mở & Bảng Quyết định Baseline cho Implementation (`[OPEN QUESTION]`)
-Tuân thủ nguyên tắc minh bạch hóa các điểm `X` (Unresolved) trong SRS v0.9 và Business Rules v0.8.5, bảng dưới đây chốt **Quyết định Baseline để code và kiểm thử cho `SPARK-229`**:
+Tuân thủ nguyên tắc minh bạch hóa các điểm `X` (Unresolved) và cập nhật theo baseline SRS v1.1 / Business Rules v1.1, bảng dưới đây chốt **Quyết định Baseline để code và kiểm thử cho `SPARK-229`**:
 
 | Mã câu hỏi | Vấn đề nghiệp vụ trong SRS / BR | Quyết định Baseline hiện thực trong `SPARK-229` | Trạng thái |
 | :--- | :--- | :--- | :---: |
 | **`OQ-PRICE-01`** | **Xung đột giữa Time-Block Slicing và Phụ phí qua đêm cố định của khách vãng lai (`FR-PAY-01/02`, `BR-PAY-01` — Status `X`):** `BR-PAY-01` yêu cầu không tự ý chồng phụ phí qua đêm cố định lên time-block slicing khi chưa chốt. | Hiện thực đúng giải thuật **Time-Block Overlap Slicing** đã được xác nhận (`Status C` tại `FR-PAY-10` và `C-08`). Không tự ý cộng thêm phụ phí qua đêm trọn gói. | `Baseline Locked for SPARK-229` |
 | **`OQ-PRICE-02`** | **Cách tính thời lượng phân đoạn (`§3.5.1` vs `BR-PAY-01`):** Tính chính xác theo độ giao thoa thực tế (`Exact Overlap`) hay làm tròn thời lượng từng phân đoạn theo bước nhảy 15 phút / 60 phút? | Hiện thực **Exact Overlap** ($\frac{\text{overlapMinutes}}{60} \times \text{ratePerHourVnd}$) khớp câu chữ `FR-PAY-10`: *"calculate the charge from the actual overlap with each pricing interval. Calculate each segment's monetary charge without premature rounding"*. | `Baseline Locked for SPARK-229` |
-| **`OQ-PRICE-03`** | **Quy tắc làm tròn tiền tệ mặc định (`RoundingMode`):** Làm tròn đến đồng nguyên (`HALF_UP_WHOLE_VND`) hay làm tròn đến nghìn đồng (`HALF_UP_THOUSAND`)? | Mặc định là **`HALF_UP_WHOLE_VND`** (`MidpointRounding.AwayFromZero` đến đồng nguyên VND), đồng thời hỗ trợ đủ 4 chế độ trong enum `MonetaryRoundingMode` để cấu hình linh hoạt theo từng bãi xe. | `Baseline Locked for SPARK-229` |
+| **`OQ-PRICE-03`** | **Quy tắc làm tròn tiền tệ mặc định (`RoundingMode`):** Làm tròn đến đồng nguyên (`HALF_UP_WHOLE_VND`) hay làm tròn đến nghìn đồng (`HALF_UP_THOUSAND`)? | Theo chuẩn v1.1 đã phê duyệt, mặc định là **`HALF_UP_THOUSAND`** (`MidpointRounding.AwayFromZero` làm tròn half-up đến hàng 1.000 VNĐ), đồng thời hỗ trợ đủ 4 chế độ trong enum `MonetaryRoundingMode` để cấu hình linh hoạt theo từng bãi xe. | `Baseline Locked for SPARK-229 (v1.1)` |
 | **`OQ-PRICE-04`** | **Định dạng lưu trữ của `reservations.accepted_pricing_snapshot` khi tích hợp Reservation Service sau này:** Cột này cần đủ thông tin `timeBlocks` và đơn giá để tính lại khi xe thực tế ra bãi. | Ghi nhận rõ: cột `reservations.accepted_pricing_snapshot` lưu cấu trúc **`PricingPolicySnapshot`** (serialize riêng ở task Reservation), còn `PricingCalculationResult.ToSnapshotJson()` chỉ dùng để lưu kết quả tính tiền vào `invoices.pricing_snapshot`. | `Baseline Locked for SPARK-229` |

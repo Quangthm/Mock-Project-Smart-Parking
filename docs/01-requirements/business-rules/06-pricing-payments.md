@@ -1,4 +1,4 @@
-# Pricing Payments — business rules RC3
+# Pricing Payments — business rules v1.1
 
 [Rule index](README.md) · [SRS module](../srs/modules/06-pricing-payments.md)
 
@@ -54,6 +54,6 @@ Ordinary free threshold is 15 minutes per whole session to accepted checkout, in
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Scoped Operator handles ordinary appeals/mispricing; Owner handles escalation and monthly cancellation; Payment executes payouts. Reserve refundable collected balance atomically, including pending/UNKNOWN refunds. Approval is not completion; actual payout proof is required. Automatically initiate excess-deposit refund through original route where supported, or audited cash return for original cash. Covered commercial checkout may complete while surplus payout remains pending. No cancellation penalty on surplus. Voluntary reservation defaults: ≥30 minutes before start 100%, ≥15 and <30 minutes 50%, <15 minutes 0%; no-show 0%. Base is eligible money actually collected, with no collection of unpaid remainder as a penalty. Facility failure refunds 100% eligible unused value; pricing correction is difference-only at original cutoff. Sum unrounded eligible amounts, round half-up once to 1,000 VND, then apply remaining collected-money cap. No automatic offset against unrelated debt.
+Scoped Operator handles ordinary appeals/mispricing; Owner handles escalation and monthly/yearly cancellation; Payment executes payouts. Reserve refundable collected balance atomically, including pending/UNKNOWN refunds. Approval is not completion; actual payout proof is required. Automatically initiate excess-deposit refund through original route where supported, or audited cash return for original cash. Covered commercial checkout may complete while surplus payout remains pending. No cancellation penalty on surplus. Voluntary reservation defaults: ≥30 minutes before start 100%, ≥15 and <30 minutes 50%, <15 minutes 0%; no-show 0%. Base is eligible money actually collected, with no collection of unpaid remainder as a penalty. Facility failure refunds 100% eligible unused value; pricing correction is difference-only at original cutoff. Sum unrounded eligible amounts, round half-up once to 1,000 VND, then apply remaining collected-money cap. No automatic offset against unrelated debt. Yearly voluntary refund rates are separately configurable and design-pending; do not inherit monthly percentages. Preserve the existing collected-money, rounding, dependency and facility-failure invariants.
 
 **Trace:** FR-PAY-06, FR-INC-05; UC-INC-02

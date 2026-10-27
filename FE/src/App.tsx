@@ -97,8 +97,8 @@ function AppContent() {
 
   return (
     <div
-      className={isDashboard ? "dashboard-theme" : undefined}
-      data-accent={isDashboard ? accentColor : undefined}
+      className={isDashboard ? "dashboard-theme" : view === "sign-in" || view === "sign-up" ? "auth-route" : undefined}
+      data-accent={accentColor}
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -107,8 +107,9 @@ function AppContent() {
         color: "var(--fg)",
       }}
     >
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
-      <main style={{ flex: 1 }}>
+      <main id="main-content" tabIndex={-1} style={{ flex: 1 }}>
         {authError && (
           <div role="alert" className="p-4 text-center text-red-600">
             {authError}
@@ -152,7 +153,7 @@ function AppContent() {
           </div>
         )}
       </main>
-      {authReady && user && usesDashboardNavbar && (
+      {authReady && user && usesDashboardNavbar && view !== "driver" && (
         <FloatingChatbot key={user.id} role={user.role} />
       )}
       {!isDashboard && <Footer />}

@@ -123,6 +123,10 @@ coverage*.xml
 # Test result artifacts
 TestResults/
 *.trx
+
+# Agents
+.agents/*
+
 # =========================
 # Python / IoT AI
 # =========================
@@ -176,8 +180,3 @@ debug_output/
 # OS junk
 .DS_Store
 Thumbs.db
-# Agents
-.agents/*
-
-# Personal
-van/*

@@ -1,5 +1,7 @@
 # SPARK-206 — Admin user management
 
+> Historical implementation contract (6 October 2026), non-authoritative for v1.1. Use [current Admin design](../../03-design/api/admin-manage-users-api-design.md); the evidence below is preserved at its original date.
+
 Implemented 2026-10-06 against SRS v0.9 §3.7.4 and FR-AUTH-06. These request/response details complete the endpoint outline from API Design; confirm them with the team before another client integrates.
 
 All endpoints require a valid Bearer session and current active Admin permissions. Responses use `{ "success": true, "data": ... }`, are not cached, and never expose password hashes, access tokens, refresh hashes or session identifiers. Deleted users are excluded. No schema migration is required beyond the existing auth/registration schema.

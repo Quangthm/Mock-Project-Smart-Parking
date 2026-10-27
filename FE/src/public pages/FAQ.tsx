@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 ﻿import { useState } from "react"
 
 const FAQS = [
@@ -49,12 +50,7 @@ export function FAQ() {
     <div
       style={{ maxWidth: "900px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1 className="section-title" style={{ marginBottom: "0.5rem" }}>
-        Frequently Asked Questions
-      </h1>
-      <p className="section-sub" style={{ marginBottom: "2rem" }}>
-        Find answers to common questions about SmartParking.
-      </p>
+      <PageHeader variant="default" align="start" title={<>Frequently Asked Questions</>} description={<>Find answers to common questions about SmartParking.</>} />
       <section
         style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
       >

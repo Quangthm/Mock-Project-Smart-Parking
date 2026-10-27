@@ -164,7 +164,7 @@ export function ZoneModal({
             <h3
               id="zone-modal-title"
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.25rem",
                 margin: "0.2rem 0 0",

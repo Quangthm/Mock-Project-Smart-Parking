@@ -4,6 +4,7 @@ import { useApp } from "../../../context/AppContext"
 import { parkingApi } from "../../../lib/parkingApi"
 import { ownerApi, type OwnerApplicationRecord, type OwnerLotSetup } from "../../../lib/ownerApi"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { formatGroupedDigits } from "../../../lib/groupedDigits"
 
 import { ownerData as store } from "../data/data"
@@ -371,22 +372,9 @@ export function OnboardingWizard({
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1rem" }}>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-        <h2
-          style={{
-            fontFamily: "Outfit",
-            fontWeight: 800,
-            fontSize: "1.5rem",
-            color: "var(--fg)",
-            marginBottom: "0.375rem",
-          }}
-        >
-          Set Up Your Parking Lot
-        </h2>
-        <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
-          {registration
-            ? "Set up your lot before verifying your email and submitting it for Admin review."
-            : "Complete setup to start accepting bookings."}
-        </p>
+        <PageHeader title="Set Up Your Parking Lot" variant="compact" align="center" description={registration
+          ? "Set up your lot before verifying your email and submitting it for Admin review."
+          : "Complete setup to start accepting bookings."} />
         {registration && !registration.setupToken && (
           <p role="status" style={{ color: "#b45309", fontSize: "0.85rem", marginTop: "0.75rem" }}>
             The server has not enabled saving parking lot setup before approval yet.
@@ -450,7 +438,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -565,13 +553,13 @@ export function OnboardingWizard({
                       gap: "0.5rem",
                     }}
                   >
-                    <span>🎮 3D Parking Model Integration</span>
+                    <span><UntitledIcon name="parking" size={18} /> 3D Parking Model</span>
                     <span
                       style={{
                         fontSize: "0.7rem",
                         padding: "0.1rem 0.45rem",
                         borderRadius: "999px",
-                        background: "var(--primary)15",
+                        background: "var(--status-available-bg)",
                         color: "var(--primary)",
                         fontWeight: 600,
                       }}
@@ -762,10 +750,8 @@ export function OnboardingWizard({
                     paddingTop: "0.5rem",
                   }}
                 >
-                  ℹ️ <em>SRS Architecture Note:</em> The 3D Digital Twin
-                  visualization reflects backend-authoritative spot occupancy
-                  and will be rendered automatically in the live operations view
-                  without overhead during facility creation.
+                  The 3D view will show live space occupancy when operators open
+                  the parking site. You can finish setting up the facility now.
                 </p>
               </div>
             </div>
@@ -780,7 +766,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -905,7 +891,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "0.375rem",
@@ -993,7 +979,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -1204,7 +1190,7 @@ export function OnboardingWizard({
           <div>
             <h3
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 marginBottom: "1.25rem",
@@ -1345,7 +1331,7 @@ export function BusinessLotSetupPage() {
   if (!registration) {
     return (
       <div className="card mx-auto my-12 max-w-lg text-center">
-        <h2>No Business registration in progress</h2>
+        <PageHeader title="No Business registration in progress" variant="compact" align="center" />
         <p>Register your Business account before setting up a parking lot.</p>
         <button className="btn-primary" onClick={() => setView("sign-up")}>
           Go to Sign Up

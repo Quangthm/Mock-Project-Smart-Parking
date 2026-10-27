@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.PaymentService.Application;
@@ -14,6 +15,7 @@ using SmartParking.PaymentService.Domain.Ports;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
+using SmartParking.PaymentService.Persistence.Adapters;
 
 namespace SmartParking.PaymentService.Tests.Integration;
 
@@ -27,9 +29,8 @@ public class DependencyInjectionTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Services:ParkingService:BaseUrl"] = "http://localhost:5001/",
-                ["Services:ReservationService:BaseUrl"] = "http://localhost:5002/",
-                ["ConnectionStrings:Payment"] = "Host=127.0.0.1;Port=5444;Database=smartpark_payment;Username=smartpark_payment;Password=smartpark_dev_password"
+                ["ConnectionStrings:Payment"] = "Host=localhost;Port=5444;Database=smartpark_payment;Username=postgres;Password=postgres",
+                ["Services:ReservationService:BaseUrl"] = "http://localhost:5002/"
             })
             .Build();
 
@@ -60,10 +61,10 @@ public class DependencyInjectionTests
         Assert.NotNull(provider.GetService<IRequestHandler<ProcessPayOsWebhookCommand, ProcessPayOsWebhookResult>>());
         Assert.NotNull(provider.GetService<IRequestHandler<GetPaymentStatusQuery, PaymentTransactionStatusDto>>());
 
-        // 5. Hexagonal Ports & Adapters
-        Assert.NotNull(provider.GetService<IParkingTariffPort>());
-        Assert.NotNull(provider.GetService<IReservationPricingSnapshotPort>());
-        Assert.NotNull(provider.GetService<IPaymentGatewayPort>());
+        // 5. Hexagonal Ports & Persistence Adapters
+        var tariffPort = provider.GetService<IParkingTariffPort>();
+        Assert.NotNull(tariffPort);
+        Assert.IsType<TariffPersistenceAdapter>(tariffPort);
 
         // 6. Persistence Repositories & UnitOfWork
         using var scope = provider.CreateScope();

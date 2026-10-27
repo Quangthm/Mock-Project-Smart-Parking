@@ -111,7 +111,7 @@ export function AdminDashboard() {
         },
       ]}
     >
-      <div style={{ padding: "1.75rem", overflowY: "auto" }}>
+      <div className="admin-workspace-main" style={{ padding: "1.75rem", overflowY: "auto" }}>
         <div className="animate-in">
           {tab === "overview" && <Overview />}
           {tab === "applications" && <Applications />}

@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Domain.Entities;
-using SmartParking.PaymentService.Persistence.Context;
 
 namespace SmartParking.PaymentService.Persistence.Repositories;
 

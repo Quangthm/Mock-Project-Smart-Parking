@@ -1,3 +1,21 @@
+# SPARK-296 — v1.1 documentation review candidate
+
+20 October 2026 (Asia/Saigon). Applies the [approved revision 0.2 register](decision-log/2026-10-20-approved-v1.1-changes.md) to the local documentation baseline. This is a **v1.1 documentation review candidate based on approved decisions**; product acceptance remains NOT RUN.
+
+Partner Registration retains the Owner role and creates a pending identity immediately. The initial proposal includes first-lot setup before email OTP, mandatory simulated VNeID, combined review and durable provisioning before normal login. Initial pending agreement replacement is versioned and limited to uploaded documents; final records are immutable. Additional lots have independent review and Draft as new.
+
+The sole seeded Admin is protected, with no registration or role-management feature. Re-enable removes only an administrative disable restriction. Operator activation requires verified email and simulation, with optional password setup. Normal login returns necessary tokens after account and MFA gates; scoped onboarding credentials remain separate.
+
+Driver monthly/yearly products, MapTiler discovery, explicit spatial batch deactivation and vehicle soft removal are integrated into the existing contracts. Operations retains discovery/coverage/occupancy authority; Payment retains financial terms. Earlier TOTP/recovery, payOS, settlement, reservation and retention invariants remain applicable.
+
+[Decision coverage and acceptance mapping](../01-requirements/requirements-traceability/v1.1-decision-coverage.md) identifies all 24 V11/D decisions and design work. [The implementation register](decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions) tracks unresolved wire/security/media/policy details and the future development reset. No code, SQL, database, deployment or remote project changes form part of this documentation update.
+
+The [21 October V11-06 clarification](decision-log/2026-10-21-vneid-simulation-guid.md) requires the fake VNeID API to return a GUID substitute persisted against the user. Canonical requirements, API/schema backlog and AC-113 reflect this direction; field names and implementation remain pending.
+
+## Historical change records
+
+The following RC1–RC3 records describe earlier review candidates and their original preparation context. Historical package-only comparison/patch paths are not current repository artifacts. Their counts, completion statements and earlier proposals do not override v1.1 or establish signed product acceptance.
+
 # SmartPark v1.0 RC1 — change summary
 
 Prepared 13 October 2026 from the five supplied files and the PM's subsequent Option A confirmation. This is a synchronized requirements release candidate, not a signed release, repository commit, implemented system or passed acceptance result.
@@ -84,4 +102,4 @@ Historical source files and RC1 before/after reports are unchanged; the updated 
 
 ## RC3 / PAY-01 — 13 October 2026
 
-payOS QR is now first implementation priority. Controlled low-value payOS production testing plus deterministic failure/race fixtures replaces the one-real-sandbox gate. Native VNPay/MoMo/ZaloPay stay separate planned options with truthful modes; unfinished native integrations may be simulated/deferred. Added adapter clarification and integration test plan. Pricing/refund/capacity/security rules are preserved; refund execution still requires capability evidence. See [complete RC3 changes](docs/05-project-management/decision-log/rc3-change-summary.md) and patch RC2-to-RC3.diff for exact edits. Prior sections describe earlier revision deltas.
+payOS QR is now first implementation priority. Controlled low-value payOS production testing plus deterministic failure/race fixtures replaces the one-real-sandbox gate. Native VNPay/MoMo/ZaloPay stay separate planned options with truthful modes; unfinished native integrations may be simulated/deferred. Added adapter clarification and integration test plan. Pricing/refund/capacity/security rules are preserved; refund execution still requires capability evidence. See [complete RC3 changes](decision-log/rc3-change-summary.md) and patch RC2-to-RC3.diff for exact edits. Prior sections describe earlier revision deltas.

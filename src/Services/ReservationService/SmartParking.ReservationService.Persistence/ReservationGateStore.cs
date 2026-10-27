@@ -1,129 +1,81 @@
-using System.Data;
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
+using SmartParking.ReservationService.Application.Common.Models.Exceptions;
+using SmartParking.ReservationService.Application.DTOs;
+using SmartParking.ReservationService.Domain.Entities;
 
 namespace SmartParking.ReservationService.Persistence;
 
-public sealed record ReservationGateEntry(
-    Guid Id,
-    Guid AccountId,
-    Guid SiteId,
-    string SiteName,
-    Guid? SlotId,
-    string SlotNumber,
-    string LicensePlate,
-    string Status,
-    string? PaymentStatus,
-    string? PaymentMethod,
-    decimal? Amount,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    DateTimeOffset? EntryTime,
-    DateTimeOffset? ExitTime,
-    string? EntryImageUrl,
-    string? ExitImageUrl,
-    DateTimeOffset CreatedAt);
-
-public sealed record WalkInParkingSession(
-    Guid Id,
-    Guid SiteId,
-    Guid? SlotId,
-    string? SlotNumber,
-    string LicensePlate,
-    string VehicleType,
-    DateTimeOffset EntryTime,
-    DateTimeOffset? ExitTime,
-    string? EntryImageUrl,
-    string? ExitImageUrl);
-
-public sealed class ReservationGateStore(NpgsqlDataSource source)
+public sealed class ReservationGateStore(ReservationDbContext db) : IReservationGateStore
 {
-    public async Task<IReadOnlyList<ReservationGateEntry>> ListAsync(
-        Guid tenantId,
-        Guid siteId,
-        CancellationToken ct)
+    public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(
+        Guid tenantId, Guid siteId, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = CreateEntryQuery(db, null);
-        command.Parameters.AddWithValue(tenantId);
-        command.Parameters.AddWithValue(siteId);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        var entries = new List<ReservationGateEntry>();
-        while (await reader.ReadAsync(ct))
-            entries.Add(ReadEntry(reader));
-        return entries;
+        var sessions = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.TenantId == tenantId && s.SiteId == siteId)
+            .OrderByDescending(s => s.EntryTime).ThenByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+        var ids = sessions.Select(s => s.Id).ToArray();
+        var allocations = await db.SlotAllocations.AsNoTracking()
+            .Where(a => a.ParkingSessionId != null && ids.Contains(a.ParkingSessionId.Value))
+            .OrderByDescending(a => a.CreatedAt)
+            .ToListAsync(ct);
+        return sessions.Select(s =>
+        {
+            var slotId = s.CurrentSlotId ?? allocations.FirstOrDefault(a => a.ParkingSessionId == s.Id)?.SlotId;
+            return new ParkingSessionHistoryEntry(
+                s.Id, s.ReservationId, s.TenantId, s.SiteId, s.AccessItemId, s.AccountId,
+                slotId, null, s.OriginalPlate, s.NormalizedPlate, s.VehicleType, s.TicketReference,
+                s.EntryTime, s.EntryImageUrl, s.ExitTime, s.ExitImageUrl, s.SessionStatus, s.Version, s.CreatedAt);
+        }).ToArray();
     }
 
-    public async Task<ReservationGateEntry?> FindAsync(
-        Guid tenantId,
-        Guid siteId,
-        string query,
-        CancellationToken ct)
+    public async Task<IReadOnlyList<ReservationGateEntry>> ListAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = CreateEntryQuery(db, query);
-        command.Parameters.AddWithValue(tenantId);
-        command.Parameters.AddWithValue(siteId);
-        command.Parameters.AddWithValue(Guid.TryParse(query, out var id) ? id : Guid.Empty);
-        command.Parameters.AddWithValue(NormalizePlate(query));
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? ReadEntry(reader) : null;
+        var reservations = await db.Reservations.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.SiteId == siteId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync(ct);
+        return await ToEntriesAsync(reservations, ct);
+    }
+
+    public async Task<ReservationGateEntry?> FindAsync(Guid tenantId, Guid siteId, string query, CancellationToken ct)
+    {
+        var plate = NormalizePlate(query);
+        var id = Guid.TryParse(query, out var parsedId) ? parsedId : Guid.Empty;
+        var reservation = await db.Reservations.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.SiteId == siteId &&
+                (r.Id == id || r.NormalizedPlate == plate))
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (reservation is null)
+            return null;
+        return (await ToEntriesAsync([reservation], ct)).Single();
     }
 
     public async Task<WalkInParkingSession?> FindActiveWalkInAsync(
-        Guid tenantId,
-        Guid siteId,
-        string plate,
-        CancellationToken ct)
+        Guid tenantId, Guid siteId, string plate, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = new NpgsqlCommand("""
-            SELECT session.id, session.site_id, session.current_slot_id,
-                   COALESCE(allocation.slot_id::text, session.current_slot_id::text),
-                   COALESCE(session.original_plate, session.normalized_plate, ''),
-                   session.vehicle_type, session.entry_time, session.exit_time,
-                   session.entry_image_url, session.exit_image_url
-            FROM parking_sessions session
-            LEFT JOIN LATERAL (
-                SELECT slot_id
-                FROM slot_allocations
-                WHERE parking_session_id = session.id AND allocation_status = 'OCCUPIED'
-                ORDER BY created_at DESC
-                LIMIT 1
-            ) allocation ON TRUE
-            WHERE session.tenant_id = $1 AND session.site_id = $2
-              AND session.reservation_id IS NULL AND session.session_status = 'ACTIVE'
-              AND session.normalized_plate = $3
-            ORDER BY session.entry_time DESC
-            LIMIT 1
-            """, db);
-        command.Parameters.AddWithValue(tenantId);
-        command.Parameters.AddWithValue(siteId);
-        command.Parameters.AddWithValue(NormalizePlate(plate));
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct))
+        var normalizedPlate = NormalizePlate(plate);
+        var session = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ReservationId == null &&
+                s.SessionStatus == "ACTIVE" && s.NormalizedPlate == normalizedPlate)
+            .OrderByDescending(s => s.EntryTime)
+            .FirstOrDefaultAsync(ct);
+        if (session is null)
             return null;
-        Guid? slotId = reader.IsDBNull(2) ? null : reader.GetGuid(2);
-        return new(
-            reader.GetGuid(0),
-            reader.GetGuid(1),
-            slotId,
-            reader.IsDBNull(3) ? null : reader.GetString(3),
-            reader.GetString(4),
-            reader.GetString(5),
-            reader.GetFieldValue<DateTimeOffset>(6),
-            reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7),
-            reader.IsDBNull(8) ? null : reader.GetString(8),
-            reader.IsDBNull(9) ? null : reader.GetString(9));
+        var allocation = await db.SlotAllocations.AsNoTracking()
+            .Where(a => a.ParkingSessionId == session.Id && a.AllocationStatus == "OCCUPIED")
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        var slot = session.CurrentSlotId ?? allocation?.SlotId;
+        return new(session.Id, session.SiteId, session.CurrentSlotId, slot?.ToString(),
+            session.OriginalPlate ?? session.NormalizedPlate ?? "", session.VehicleType,
+            session.EntryTime, session.ExitTime, session.EntryImageUrl, session.ExitImageUrl);
     }
 
     public async Task<WalkInParkingSession> CreateWalkInAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid sessionId,
-        string vehicleType,
-        string plate,
-        string? imageData,
-        CancellationToken ct)
+        Guid tenantId, Guid siteId, Guid sessionId, string vehicleType, string plate, string? imageData, CancellationToken ct)
     {
         var normalizedPlate = NormalizePlate(plate);
         if (normalizedPlate.Length is < 2 or > 50)
@@ -131,481 +83,208 @@ public sealed class ReservationGateStore(NpgsqlDataSource source)
         if (vehicleType is not ("CAR" or "MOTORCYCLE"))
             throw new ReservationGateException(400, "INVALID_VEHICLE_TYPE", "Vehicle type must be CAR or MOTORCYCLE.");
 
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await LockPlateAsync(siteId, normalizedPlate, ct);
+        if (await db.ParkingSessions.AnyAsync(s => s.TenantId == tenantId && s.SiteId == siteId &&
+            s.NormalizedPlate == normalizedPlate && s.ExitTime == null, ct))
+            throw new ReservationGateException(409, "VEHICLE_ALREADY_INSIDE", "An active parking session already exists for this plate.");
+
         var now = DateTimeOffset.UtcNow;
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var transaction = await db.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-        await using (var lockCommand = new NpgsqlCommand(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-            db,
-            transaction))
+        db.ParkingSessions.Add(new ParkingSessionRow
         {
-            lockCommand.Parameters.AddWithValue($"{siteId:N}:{normalizedPlate}");
-            await lockCommand.ExecuteNonQueryAsync(ct);
-        }
-        await using (var duplicateCommand = new NpgsqlCommand("""
-            SELECT EXISTS (
-                SELECT 1 FROM parking_sessions
-                WHERE tenant_id = $1 AND site_id = $2 AND normalized_plate = $3
-                  AND exit_time IS NULL
-            )
-            """, db, transaction))
-        {
-            duplicateCommand.Parameters.AddWithValue(tenantId);
-            duplicateCommand.Parameters.AddWithValue(siteId);
-            duplicateCommand.Parameters.AddWithValue(normalizedPlate);
-            if ((bool)(await duplicateCommand.ExecuteScalarAsync(ct))!)
-                throw new ReservationGateException(409, "VEHICLE_ALREADY_INSIDE", "An active parking session already exists for this plate.");
-        }
-
-        await using (var command = new NpgsqlCommand("""
-            INSERT INTO parking_sessions
-                (id, tenant_id, site_id, original_plate, normalized_plate,
-                 vehicle_type, ticket_reference, entry_time, entry_image_url, session_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE')
-            """, db, transaction))
-        {
-            command.Parameters.AddWithValue(sessionId);
-            command.Parameters.AddWithValue(tenantId);
-            command.Parameters.AddWithValue(siteId);
-            command.Parameters.AddWithValue(plate.Trim());
-            command.Parameters.AddWithValue(normalizedPlate);
-            command.Parameters.AddWithValue(vehicleType);
-            command.Parameters.AddWithValue($"WALKIN-{sessionId:N}");
-            command.Parameters.AddWithValue(now);
-            command.Parameters.AddWithValue((object?)imageData ?? DBNull.Value);
-            await command.ExecuteNonQueryAsync(ct);
-        }
-
+            Id = sessionId, TenantId = tenantId, SiteId = siteId, OriginalPlate = plate.Trim(),
+            NormalizedPlate = normalizedPlate, VehicleType = vehicleType,
+            TicketReference = $"WALKIN-{sessionId:N}", EntryTime = now, EntryImageUrl = imageData,
+            SessionStatus = "ACTIVE", CreatedAt = now, Version = 1
+        });
+        await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return new(sessionId, siteId, null, null, plate.Trim(), vehicleType, now, null, imageData, null);
     }
 
     public async Task<WalkInParkingSession> CheckOutWalkInAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid sessionId,
-        string plate,
-        string? imageData,
-        CancellationToken ct)
+        Guid tenantId, Guid siteId, Guid sessionId, string plate, string? imageData, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var transaction = await db.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-        WalkInParkingSession session;
-        await using (var command = new NpgsqlCommand("""
-            SELECT id, site_id, current_slot_id, COALESCE(original_plate, normalized_plate, ''),
-                   vehicle_type, entry_time, exit_time, entry_image_url, exit_image_url
-            FROM parking_sessions
-            WHERE id = $1 AND tenant_id = $2 AND site_id = $3
-              AND reservation_id IS NULL
-            FOR UPDATE
-            """, db, transaction))
-        {
-            command.Parameters.AddWithValue(sessionId);
-            command.Parameters.AddWithValue(tenantId);
-            command.Parameters.AddWithValue(siteId);
-            await using var reader = await command.ExecuteReaderAsync(ct);
-            if (!await reader.ReadAsync(ct))
-                throw new ReservationGateException(404, "WALK_IN_SESSION_NOT_FOUND", "Active walk-in session was not found.");
-            var storedPlate = reader.GetString(3);
-            if (!string.Equals(NormalizePlate(storedPlate), NormalizePlate(plate), StringComparison.Ordinal))
-                throw new ReservationGateException(409, "PLATE_MISMATCH", "The scanned plate does not match this parking session.");
-            if (reader.GetString(4) is not ("CAR" or "MOTORCYCLE"))
-                throw new ReservationGateException(409, "INVALID_VEHICLE_TYPE", "This parking session has an unsupported vehicle type.");
-            session = new(
-                reader.GetGuid(0),
-                reader.GetGuid(1),
-                reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                reader.IsDBNull(2) ? null : reader.GetGuid(2).ToString(),
-                storedPlate,
-                reader.GetString(4),
-                reader.GetFieldValue<DateTimeOffset>(5),
-                reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6),
-                reader.IsDBNull(7) ? null : reader.GetString(7),
-                reader.IsDBNull(8) ? null : reader.GetString(8));
-        }
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var session = await db.ParkingSessions
+            .FromSqlInterpolated($"SELECT * FROM parking_sessions WHERE id = {sessionId} AND tenant_id = {tenantId} AND site_id = {siteId} AND reservation_id IS NULL FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (session is null)
+            throw new ReservationGateException(404, "WALK_IN_SESSION_NOT_FOUND", "Active walk-in session was not found.");
+        var storedPlate = session.OriginalPlate ?? session.NormalizedPlate ?? "";
+        if (NormalizePlate(storedPlate) != NormalizePlate(plate))
+            throw new ReservationGateException(409, "PLATE_MISMATCH", "The scanned plate does not match this parking session.");
+        if (session.VehicleType is not ("CAR" or "MOTORCYCLE"))
+            throw new ReservationGateException(409, "INVALID_VEHICLE_TYPE", "This parking session has an unsupported vehicle type.");
 
         if (session.ExitTime is null)
         {
-            var exitTime = DateTimeOffset.UtcNow;
-            await using (var command = new NpgsqlCommand("""
-                UPDATE parking_sessions
-                SET exit_time = $1, exit_image_url = $2, session_status = 'COMPLETED'
-                WHERE id = $3 AND session_status = 'ACTIVE'
-                """, db, transaction))
+            var now = DateTimeOffset.UtcNow;
+            session.ExitTime = now;
+            session.ExitImageUrl = imageData;
+            session.SessionStatus = "COMPLETED";
+            if (session.CurrentSlotId is not null)
             {
-                command.Parameters.AddWithValue(exitTime);
-                command.Parameters.AddWithValue((object?)imageData ?? DBNull.Value);
-                command.Parameters.AddWithValue(sessionId);
-                await command.ExecuteNonQueryAsync(ct);
+                var allocations = await db.SlotAllocations
+                    .Where(a => a.ParkingSessionId == sessionId && a.AllocationStatus == "OCCUPIED")
+                    .ToListAsync(ct);
+                foreach (var allocation in allocations)
+                {
+                    allocation.AllocationStatus = "RELEASED";
+                    allocation.AllocatedEndTime = now;
+                }
             }
-            if (session.SlotId is not null)
-            await using (var command = new NpgsqlCommand("""
-                UPDATE slot_allocations
-                SET allocation_status = 'RELEASED', allocated_end_time = $1
-                WHERE parking_session_id = $2 AND allocation_status = 'OCCUPIED'
-                """, db, transaction))
-            {
-                command.Parameters.AddWithValue(exitTime);
-                command.Parameters.AddWithValue(sessionId);
-                await command.ExecuteNonQueryAsync(ct);
-            }
-            session = session with { ExitTime = exitTime, ExitImageUrl = imageData };
+            await db.SaveChangesAsync(ct);
         }
 
+        var currentSlot = session.CurrentSlotId;
         await transaction.CommitAsync(ct);
-        return session;
+        return new(session.Id, session.SiteId, currentSlot, currentSlot?.ToString(), storedPlate,
+            session.VehicleType, session.EntryTime, session.ExitTime, session.EntryImageUrl, session.ExitImageUrl);
     }
 
     public Task<ReservationGateEntry> CheckInAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid actorId,
-        Guid reservationId,
-        string? recognizedPlate,
-        string? imageData,
-        CancellationToken ct) =>
-        TransitionAsync(
-            tenantId,
-            siteId,
-            actorId,
-            reservationId,
-            recognizedPlate,
-            imageData,
-            checkIn: true,
-            ct);
+        Guid tenantId, Guid siteId, Guid actorId, Guid reservationId, string? recognizedPlate, string? imageData, CancellationToken ct) =>
+        TransitionAsync(tenantId, siteId, actorId, reservationId, recognizedPlate, imageData, true, ct);
 
     public Task<ReservationGateEntry> CheckOutAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid actorId,
-        Guid reservationId,
-        string? recognizedPlate,
-        string? imageData,
-        CancellationToken ct) =>
-        TransitionAsync(
-            tenantId,
-            siteId,
-            actorId,
-            reservationId,
-            recognizedPlate,
-            imageData,
-            checkIn: false,
-            ct);
+        Guid tenantId, Guid siteId, Guid actorId, Guid reservationId, string? recognizedPlate, string? imageData, CancellationToken ct) =>
+        TransitionAsync(tenantId, siteId, actorId, reservationId, recognizedPlate, imageData, false, ct);
 
     private async Task<ReservationGateEntry> TransitionAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid actorId,
-        Guid reservationId,
-        string? recognizedPlate,
-        string? imageData,
-        bool checkIn,
-        CancellationToken ct)
+        Guid tenantId, Guid siteId, Guid actorId, Guid reservationId,
+        string? recognizedPlate, string? imageData, bool checkIn, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var transaction = await db.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-        Guid accountId;
-        Guid? targetSlotId;
-        string plate;
-        string vehicleType;
-        string status;
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var reservation = await db.Reservations
+            .FromSqlInterpolated($"SELECT * FROM reservations WHERE id = {reservationId} AND tenant_id = {tenantId} AND site_id = {siteId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
+        if (reservation is null)
+            throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");
 
-        await using (var command = new NpgsqlCommand("""
-            SELECT account_id, target_slot_id,
-                   COALESCE(original_plate, normalized_plate, ''), vehicle_type, status
-            FROM reservations
-            WHERE id = $1 AND tenant_id = $2 AND site_id = $3
-            FOR UPDATE
-            """, db, transaction))
-        {
-            command.Parameters.AddWithValue(reservationId);
-            command.Parameters.AddWithValue(tenantId);
-            command.Parameters.AddWithValue(siteId);
-            await using var reader = await command.ExecuteReaderAsync(ct);
-            if (!await reader.ReadAsync(ct))
-                throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");
-
-            accountId = reader.GetGuid(0);
-            targetSlotId = reader.IsDBNull(1) ? null : reader.GetGuid(1);
-            plate = reader.GetString(2);
-            vehicleType = reader.GetString(3);
-            status = reader.GetString(4);
-        }
-
-        var expectedStatus = checkIn ? status is "CONFIRMED" or "ALLOCATED" : status == "PARKING";
+        var plate = reservation.OriginalPlate ?? reservation.NormalizedPlate ?? "";
+        var expectedStatus = checkIn
+            ? reservation.Status is "CONFIRMED" or "ALLOCATED"
+            : reservation.Status == "PARKING";
         if (!expectedStatus)
         {
-            if (!checkIn && status == "COMPLETED")
+            if (!checkIn && reservation.Status == "COMPLETED")
             {
-                if (!string.IsNullOrWhiteSpace(recognizedPlate) &&
-                    !string.Equals(NormalizePlate(plate), NormalizePlate(recognizedPlate), StringComparison.Ordinal))
-                    throw new ReservationGateException(409, "PLATE_MISMATCH", "The scanned plate does not match this reservation.");
-
-                await using var completedSession = new NpgsqlCommand("""
-                    SELECT EXISTS (
-                        SELECT 1 FROM parking_sessions
-                        WHERE reservation_id = $1 AND tenant_id = $2 AND site_id = $3
-                          AND exit_time IS NOT NULL
-                    )
-                    """, db, transaction);
-                completedSession.Parameters.AddWithValue(reservationId);
-                completedSession.Parameters.AddWithValue(tenantId);
-                completedSession.Parameters.AddWithValue(siteId);
-                if ((bool)(await completedSession.ExecuteScalarAsync(ct))!)
+                VerifyPlate(plate, recognizedPlate);
+                if (await db.ParkingSessions.AnyAsync(s => s.ReservationId == reservationId &&
+                    s.TenantId == tenantId && s.SiteId == siteId && s.ExitTime != null, ct))
                 {
                     await transaction.RollbackAsync(ct);
                     return await FindByIdAsync(tenantId, siteId, reservationId, ct)
                         ?? throw new InvalidOperationException("Reservation disappeared after a completed gate transition.");
                 }
             }
-
-            throw new ReservationGateException(
-                409,
-                "INVALID_RESERVATION_STATE",
-                checkIn
-                    ? "Only confirmed reservations can check in."
-                    : "Only checked-in reservations can check out.");
+            throw new ReservationGateException(409, "INVALID_RESERVATION_STATE",
+                checkIn ? "Only confirmed reservations can check in." : "Only checked-in reservations can check out.");
         }
+        VerifyPlate(plate, recognizedPlate);
 
-        if (!string.IsNullOrWhiteSpace(recognizedPlate) &&
-            !string.Equals(NormalizePlate(plate), NormalizePlate(recognizedPlate), StringComparison.Ordinal))
-            throw new ReservationGateException(409, "PLATE_MISMATCH", "The scanned plate does not match this reservation.");
-
-        Guid? sessionId = checkIn ? Guid.NewGuid() : null;
         var now = DateTimeOffset.UtcNow;
-
-        var reservedSlotId = checkIn
-            ? await FindReservedSlotAsync(db, transaction, tenantId, siteId, reservationId, ct)
-            : null;
-
         if (checkIn)
         {
-            var activeSessionId = sessionId ?? throw new InvalidOperationException("A check-in session ID is required.");
-            var activeSlotId = reservedSlotId ?? targetSlotId;
-
-            await using (var command = new NpgsqlCommand("""
-                INSERT INTO parking_sessions
-                    (id, reservation_id, tenant_id, site_id, account_id, current_slot_id,
-                     original_plate, normalized_plate, vehicle_type, ticket_reference,
-                     entry_time, entry_image_url, session_status)
-                VALUES
-                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE')
-                """, db, transaction))
+            var allocation = await db.SlotAllocations
+                .Where(a => a.ReservationId == reservationId && a.TenantId == tenantId &&
+                    a.SiteId == siteId && a.AllocationStatus == "RESERVED")
+                .OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync(ct);
+            var sessionId = Guid.NewGuid();
+            var slotId = allocation?.SlotId ?? reservation.TargetSlotId;
+            db.ParkingSessions.Add(new ParkingSessionRow
             {
-                command.Parameters.AddWithValue(activeSessionId);
-                command.Parameters.AddWithValue(reservationId);
-                command.Parameters.AddWithValue(tenantId);
-                command.Parameters.AddWithValue(siteId);
-                command.Parameters.AddWithValue(accountId);
-                command.Parameters.AddWithValue((object?)activeSlotId ?? DBNull.Value);
-                command.Parameters.AddWithValue(plate);
-                command.Parameters.AddWithValue(NormalizePlate(plate));
-                command.Parameters.AddWithValue(vehicleType);
-                command.Parameters.AddWithValue($"GATE-{activeSessionId:N}");
-                command.Parameters.AddWithValue(now);
-                command.Parameters.AddWithValue((object?)imageData ?? DBNull.Value);
-                await command.ExecuteNonQueryAsync(ct);
-            }
-
-            if (activeSlotId is not null)
+                Id = sessionId, ReservationId = reservationId, TenantId = tenantId, SiteId = siteId,
+                AccountId = reservation.AccountId, CurrentSlotId = slotId, OriginalPlate = plate,
+                NormalizedPlate = NormalizePlate(plate), VehicleType = reservation.VehicleType,
+                TicketReference = $"GATE-{sessionId:N}", EntryTime = now, EntryImageUrl = imageData,
+                SessionStatus = "ACTIVE", Version = 1, CreatedAt = now
+            });
+            if (allocation is not null)
             {
-                await using var command = new NpgsqlCommand("""
-                    UPDATE slot_allocations
-                    SET allocation_status = 'OCCUPIED', parking_session_id = $1
-                    WHERE reservation_id = $2 AND tenant_id = $3 AND site_id = $4
-                      AND slot_id = $5 AND allocation_status = 'RESERVED'
-                    """, db, transaction);
-                command.Parameters.AddWithValue(activeSessionId);
-                command.Parameters.AddWithValue(reservationId);
-                command.Parameters.AddWithValue(tenantId);
-                command.Parameters.AddWithValue(siteId);
-                command.Parameters.AddWithValue(activeSlotId);
-                await command.ExecuteNonQueryAsync(ct);
+                allocation.AllocationStatus = "OCCUPIED";
+                allocation.ParkingSessionId = sessionId;
             }
-
-            await using (var command = new NpgsqlCommand(
-                "UPDATE reservations SET status = 'PARKING' WHERE id = $1 AND tenant_id = $2 AND site_id = $3",
-                db,
-                transaction))
-            {
-                command.Parameters.AddWithValue(reservationId);
-                command.Parameters.AddWithValue(tenantId);
-                command.Parameters.AddWithValue(siteId);
-                await command.ExecuteNonQueryAsync(ct);
-            }
+            reservation.Status = "PARKING";
         }
         else
         {
-            await using (var command = new NpgsqlCommand("""
-                SELECT id
-                FROM parking_sessions
-                WHERE reservation_id = $1 AND tenant_id = $2 AND site_id = $3 AND session_status = 'ACTIVE'
-                FOR UPDATE
-                """, db, transaction))
+            var session = await db.ParkingSessions
+                .FromSqlInterpolated($"SELECT * FROM parking_sessions WHERE reservation_id = {reservationId} AND tenant_id = {tenantId} AND site_id = {siteId} AND session_status = 'ACTIVE' FOR UPDATE")
+                .FirstOrDefaultAsync(ct);
+            if (session is null)
+                throw new ReservationGateException(409, "ACTIVE_SESSION_NOT_FOUND", "No active parking session exists for this reservation.");
+            session.ExitTime = now;
+            session.ExitImageUrl = imageData;
+            session.SessionStatus = "COMPLETED";
+            reservation.Status = "COMPLETED";
+            var allocations = await db.SlotAllocations
+                .Where(a => a.ParkingSessionId == session.Id && a.AllocationStatus == "OCCUPIED")
+                .ToListAsync(ct);
+            foreach (var allocation in allocations)
             {
-                command.Parameters.AddWithValue(reservationId);
-                command.Parameters.AddWithValue(tenantId);
-                command.Parameters.AddWithValue(siteId);
-                await using var reader = await command.ExecuteReaderAsync(ct);
-                if (!await reader.ReadAsync(ct))
-                    throw new ReservationGateException(409, "ACTIVE_SESSION_NOT_FOUND", "No active parking session exists for this reservation.");
-                sessionId = reader.GetGuid(0);
-            }
-
-            await using (var command = new NpgsqlCommand("""
-                UPDATE parking_sessions
-                SET exit_time = $1, exit_image_url = $2, session_status = 'COMPLETED'
-                WHERE id = $3 AND session_status = 'ACTIVE'
-                """, db, transaction))
-            {
-                command.Parameters.AddWithValue(now);
-                command.Parameters.AddWithValue((object?)imageData ?? DBNull.Value);
-                command.Parameters.AddWithValue(sessionId.Value);
-                await command.ExecuteNonQueryAsync(ct);
-            }
-
-            await using (var command = new NpgsqlCommand(
-                "UPDATE reservations SET status = 'COMPLETED' WHERE id = $1 AND tenant_id = $2 AND site_id = $3",
-                db,
-                transaction))
-            {
-                command.Parameters.AddWithValue(reservationId);
-                command.Parameters.AddWithValue(tenantId);
-                command.Parameters.AddWithValue(siteId);
-                await command.ExecuteNonQueryAsync(ct);
-            }
-
-            await using (var command = new NpgsqlCommand("""
-                UPDATE slot_allocations
-                SET allocation_status = 'RELEASED', allocated_end_time = $2
-                WHERE parking_session_id = $1 AND allocation_status = 'OCCUPIED'
-                """, db, transaction))
-            {
-                command.Parameters.AddWithValue(sessionId.Value);
-                command.Parameters.AddWithValue(now);
-                await command.ExecuteNonQueryAsync(ct);
+                allocation.AllocationStatus = "RELEASED";
+                allocation.AllocatedEndTime = now;
             }
         }
 
-        await using (var command = new NpgsqlCommand("""
-            INSERT INTO audit_logs
-                (id, tenant_id, site_id, actor_id, actor_role, action, target_entity, target_id, reason)
-            VALUES ($1, $2, $3, $4, 'operator', $5, 'RESERVATION', $6, $7)
-            """, db, transaction))
+        db.AuditLogs.Add(new AuditLogRow
         {
-            command.Parameters.AddWithValue(Guid.NewGuid());
-            command.Parameters.AddWithValue(tenantId);
-            command.Parameters.AddWithValue(siteId);
-            command.Parameters.AddWithValue(actorId);
-            command.Parameters.AddWithValue(checkIn ? "VEHICLE_CHECK_IN" : "VEHICLE_CHECK_OUT");
-            command.Parameters.AddWithValue(reservationId);
-            command.Parameters.AddWithValue($"Gate action for plate {plate}.");
-            await command.ExecuteNonQueryAsync(ct);
-        }
-
+            Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, ActorId = actorId,
+            ActorRole = "operator", Action = checkIn ? "VEHICLE_CHECK_IN" : "VEHICLE_CHECK_OUT",
+            TargetEntity = "RESERVATION", TargetId = reservationId,
+            Reason = $"Gate action for plate {plate}.", CreatedAt = now
+        });
+        await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return await FindByIdAsync(tenantId, siteId, reservationId, ct)
             ?? throw new InvalidOperationException("Reservation disappeared after a successful gate transition.");
     }
 
-    private static async Task<Guid?> FindReservedSlotAsync(
-        NpgsqlConnection db,
-        NpgsqlTransaction transaction,
-        Guid tenantId,
-        Guid siteId,
-        Guid reservationId,
-        CancellationToken ct)
+    private async Task<ReservationGateEntry?> FindByIdAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand("""
-            SELECT slot_id FROM slot_allocations
-            WHERE reservation_id = $1 AND tenant_id = $2 AND site_id = $3
-              AND allocation_status = 'RESERVED'
-            ORDER BY created_at DESC
-            LIMIT 1 FOR UPDATE
-            """, db, transaction);
-        command.Parameters.AddWithValue(reservationId);
-        command.Parameters.AddWithValue(tenantId);
-        command.Parameters.AddWithValue(siteId);
-        var value = await command.ExecuteScalarAsync(ct);
-        return value is Guid id ? id : null;
+        var reservation = await db.Reservations.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.Id == reservationId && r.TenantId == tenantId && r.SiteId == siteId, ct);
+        if (reservation is null)
+            return null;
+        return (await ToEntriesAsync([reservation], ct)).Single();
     }
 
-    private async Task<ReservationGateEntry?> FindByIdAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid reservationId,
-        CancellationToken ct)
+    private async Task<IReadOnlyList<ReservationGateEntry>> ToEntriesAsync(
+        IReadOnlyList<ReservationRow> reservations, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = CreateEntryQuery(db, null, "r.id = $3");
-        command.Parameters.AddWithValue(tenantId);
-        command.Parameters.AddWithValue(siteId);
-        command.Parameters.AddWithValue(reservationId);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? ReadEntry(reader) : null;
+        if (reservations.Count == 0)
+            return [];
+        var ids = reservations.Select(r => r.Id).ToArray();
+        var sessions = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.ReservationId != null && ids.Contains(s.ReservationId.Value))
+            .OrderByDescending(s => s.CreatedAt).ToListAsync(ct);
+        var allocations = await db.SlotAllocations.AsNoTracking()
+            .Where(a => a.ReservationId != null && ids.Contains(a.ReservationId.Value) &&
+                new[] { "RESERVED", "OCCUPIED" }.Contains(a.AllocationStatus))
+            .OrderByDescending(a => a.CreatedAt).ToListAsync(ct);
+        return reservations.Select(r =>
+        {
+            var session = sessions.FirstOrDefault(s => s.ReservationId == r.Id);
+            var allocation = allocations.FirstOrDefault(a => a.ReservationId == r.Id);
+            var slotId = session?.CurrentSlotId ?? allocation?.SlotId ?? r.TargetSlotId;
+            return new ReservationGateEntry(r.Id, r.AccountId, r.SiteId, r.SiteId.ToString(),
+                slotId, slotId?.ToString() ?? "Unassigned", r.OriginalPlate ?? r.NormalizedPlate ?? "",
+                MapStatus(r.Status), null, null, null, r.ExpectedStartTime, r.ExpectedEndTime,
+                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt);
+        }).ToArray();
     }
 
-    private static NpgsqlCommand CreateEntryQuery(
-        NpgsqlConnection db,
-        string? query,
-        string? idPredicate = null)
-    {
-        var predicate = idPredicate ?? (query is null
-            ? "TRUE"
-            : "(r.id = $3 OR r.normalized_plate = $4)");
-        return new NpgsqlCommand($"""
-            SELECT
-                r.id, r.account_id, r.site_id, r.site_id::text,
-                COALESCE(session.current_slot_id, allocation.slot_id, r.target_slot_id),
-                COALESCE(COALESCE(session.current_slot_id, allocation.slot_id, r.target_slot_id)::text, 'Unassigned'),
-                COALESCE(r.original_plate, r.normalized_plate, ''),
-                r.status,
-                NULL::text,
-                NULL::text,
-                NULL::numeric,
-                r.expected_start_time, r.expected_end_time,
-                session.entry_time, session.exit_time,
-                session.entry_image_url, session.exit_image_url, r.created_at
-            FROM reservations r
-            LEFT JOIN LATERAL (
-                SELECT current_slot_id, entry_time, exit_time, entry_image_url, exit_image_url
-                FROM parking_sessions
-                WHERE reservation_id = r.id
-                ORDER BY created_at DESC
-                LIMIT 1
-            ) session ON TRUE
-            LEFT JOIN LATERAL (
-                SELECT slot_id
-                FROM slot_allocations
-                WHERE reservation_id = r.id AND allocation_status IN ('RESERVED', 'OCCUPIED')
-                ORDER BY created_at DESC
-                LIMIT 1
-            ) allocation ON TRUE
-            WHERE r.tenant_id = $1 AND r.site_id = $2 AND {predicate}
-            ORDER BY r.created_at DESC
-            """, db);
-    }
+    private Task<int> LockPlateAsync(Guid siteId, string plate, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({$"{siteId:N}:{plate}"}, 0))", ct);
 
-    private static ReservationGateEntry ReadEntry(NpgsqlDataReader reader) =>
-        new(
-            reader.GetGuid(0),
-            reader.GetGuid(1),
-            reader.GetGuid(2),
-            reader.GetString(3),
-            reader.IsDBNull(4) ? null : reader.GetGuid(4),
-            reader.GetString(5),
-            reader.GetString(6),
-            MapStatus(reader.GetString(7)),
-            reader.IsDBNull(8) ? null : MapPaymentStatus(reader.GetString(8)),
-            reader.IsDBNull(9) ? null : reader.GetString(9),
-            reader.IsDBNull(10) ? null : reader.GetDecimal(10),
-            reader.GetFieldValue<DateTimeOffset>(11),
-            reader.GetFieldValue<DateTimeOffset>(12),
-            reader.IsDBNull(13) ? null : reader.GetFieldValue<DateTimeOffset>(13),
-            reader.IsDBNull(14) ? null : reader.GetFieldValue<DateTimeOffset>(14),
-            reader.IsDBNull(15) ? null : reader.GetString(15),
-            reader.IsDBNull(16) ? null : reader.GetString(16),
-            reader.GetFieldValue<DateTimeOffset>(17));
+    private static void VerifyPlate(string expected, string? recognized)
+    {
+        if (!string.IsNullOrWhiteSpace(recognized) && NormalizePlate(expected) != NormalizePlate(recognized))
+            throw new ReservationGateException(409, "PLATE_MISMATCH", "The scanned plate does not match this reservation.");
+    }
 
     private static string MapStatus(string status) => status switch
     {
@@ -617,20 +296,6 @@ public sealed class ReservationGateStore(NpgsqlDataSource source)
         _ => status.ToLowerInvariant()
     };
 
-    private static string MapPaymentStatus(string status) => status switch
-    {
-        "PAID" => "paid",
-        "FAILED" => "failed",
-        _ => "pending"
-    };
-
     private static string NormalizePlate(string value) =>
         string.Concat(value.Where(char.IsLetterOrDigit)).ToUpperInvariant();
-}
-
-public sealed class ReservationGateException(int statusCode, string code, string message)
-    : Exception(message)
-{
-    public int StatusCode { get; } = statusCode;
-    public string Code { get; } = code;
 }

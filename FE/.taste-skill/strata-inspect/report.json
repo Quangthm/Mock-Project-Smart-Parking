@@ -1,0 +1,2049 @@
+{
+ "url": "http://127.0.0.1:5176",
+ "at": "2026-10-23T01:42:01.716Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 5,
+   "filled": [
+    0.93,
+    0.56,
+    0.49,
+    0.77,
+    0.93
+   ],
+   "motion": {
+    "elements": 42,
+    "css": 3,
+    "transitions": 37,
+    "scripted": 2,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 3903,
+     "screens": 4.3,
+     "words": 372,
+     "img": 6,
+     "video": 0,
+     "canvas": 0,
+     "svg": 20,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Less searching. More going.",
+     "words": 4,
+     "chars": 27,
+     "lines": 3,
+     "size": 83.5,
+     "vw": 5.8,
+     "font": "Be Vietnam Pro",
+     "weight": 750,
+     "tracking": -0.07,
+     "leading": 0.99,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "left",
+     "widthRatio": 0.39,
+     "top": 214,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Less searching. More going.",
+     "words": 4,
+     "lines": 3,
+     "size": 83.5,
+     "font": "Be Vietnam Pro"
+    },
+    "headings": [
+     {
+      "text": "Less searching. More going.",
+      "words": 4,
+      "chars": 27,
+      "lines": 3,
+      "size": 83.5,
+      "vw": 5.8,
+      "font": "Be Vietnam Pro",
+      "weight": 750,
+      "tracking": -0.07,
+      "leading": 0.99,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.39,
+      "top": 214,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Parking that works for everyone.",
+      "words": 5,
+      "chars": 32,
+      "lines": 2,
+      "size": 60.5,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.51,
+      "top": 1024,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "One easy route through parking.",
+      "words": 5,
+      "chars": 31,
+      "lines": 2,
+      "size": 60.5,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.51,
+      "top": 1757,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Familiar ways to pay.",
+      "words": 4,
+      "chars": 21,
+      "lines": 1,
+      "size": 60.5,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.51,
+      "top": 2643,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Ready when you are.",
+      "words": 4,
+      "chars": 19,
+      "lines": 1,
+      "size": 60.5,
+      "vw": 4.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.38,
+      "top": 3139,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 5,
+     "maxLines": 3,
+     "over2Lines": 1,
+     "statements": 0,
+     "centered": 1,
+     "medianWords": 5,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Be Vietnam Pro",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      16,
+      17,
+      18,
+      61,
+      84
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Be Vietnam Pro",
+      "size": 16,
+      "leading": 1.65,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 8.7
+     },
+     "measureChars": 64,
+     "max": {
+      "size": 83.5,
+      "vw": 5.8,
+      "font": "Be Vietnam Pro",
+      "text": "Less searching."
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 6,
+     "microLabelShare": 0.066,
+     "microSamples": [
+      "PARKING, MOVING FORWARD",
+      "SMARTPARKING / CONNECTED PARKING",
+      "ONE PLATFORM, EVERY JOURNEY",
+      "FROM ARRIVAL TO EXIT",
+      "PAY YOUR WAY",
+      "YOUR SPACE IS OUT THERE"
+     ],
+     "upperShare": 0.07,
+     "centerShare": 0.14,
+     "smallText": 17
+    },
+    "eyebrows": [
+     {
+      "text": "PARKING, MOVING FORWARD",
+      "above": "Less searching. More going.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 168
+     },
+     {
+      "text": "ONE PLATFORM, EVERY JOURNEY",
+      "above": "Parking that works for everyone.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 991
+     },
+     {
+      "text": "FROM ARRIVAL TO EXIT",
+      "above": "One easy route through parking.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 1724
+     },
+     {
+      "text": "PAY YOUR WAY",
+      "above": "Familiar ways to pay.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 2610
+     },
+     {
+      "text": "YOUR SPACE IS OUT THERE",
+      "above": "Ready when you are.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 3108
+     }
+    ],
+    "numbered": [
+     {
+      "text": "01",
+      "size": 12.5,
+      "top": 728
+     },
+     {
+      "text": "02",
+      "size": 12.5,
+      "top": 728
+     },
+     {
+      "text": "03",
+      "size": 12.5,
+      "top": 728
+     },
+     {
+      "text": "01",
+      "size": 12,
+      "top": 1263
+     },
+     {
+      "text": "02",
+      "size": 12,
+      "top": 1263
+     },
+     {
+      "text": "03",
+      "size": 12,
+      "top": 1263
+     },
+     {
+      "text": "04",
+      "size": 12,
+      "top": 1263
+     },
+     {
+      "text": "01",
+      "size": 12.8,
+      "top": 1994
+     },
+     {
+      "text": "02",
+      "size": 12.8,
+      "top": 1994
+     },
+     {
+      "text": "03",
+      "size": 12.8,
+      "top": 1994
+     },
+     {
+      "text": "04",
+      "size": 12.8,
+      "top": 2204
+     },
+     {
+      "text": "05",
+      "size": 12.8,
+      "top": 2204
+     }
+    ],
+    "color": {
+     "bodyBg": "#151c1b",
+     "bodyBgHsl": {
+      "h": 171,
+      "s": 0.14,
+      "l": 0.1
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#151c1b",
+       "top": 0,
+       "hsl": {
+        "h": 171,
+        "s": 0.14,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#101c19",
+       "top": 61,
+       "hsl": {
+        "h": 165,
+        "s": 0.27,
+        "l": 0.09
+       }
+      },
+      {
+       "color": "#1e2725",
+       "top": 1603,
+       "hsl": {
+        "h": 167,
+        "s": 0.13,
+        "l": 0.14
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#b6c7c0",
+       "share": 0.59
+      },
+      {
+       "color": "#f1f6f3",
+       "share": 0.16
+      },
+      {
+       "color": "#c1d1c9",
+       "share": 0.06
+      },
+      {
+       "color": "#69d7b2",
+       "share": 0.05
+      },
+      {
+       "color": "#f2f7f3",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#69d7b2",
+      "hsl": {
+       "h": 160,
+       "s": 0.58,
+       "l": 0.63
+      },
+      "fg": "#151c1b"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 5,
+     "radius": "pill",
+     "height": 50,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to main content",
+      "Sign In",
+      "Sign Up",
+      "Find parking",
+      "For parking partners"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 5,
+     "shadowOverlay": 0,
+     "shadowSamples": [
+      "div.strata-deck.strata-deck-back → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-deck.strata-deck-mid → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-deck.strata-deck-front → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-scene-note.strata-scene-note-top → rgba(0, 16, 11, 0.44) 0px 14px 32px 0px"
+     ],
+     "gradients": 4,
+     "scrims": 0,
+     "gradientSamples": [
+      "div.strata-scene-grid → linear-gradient(rgba(128, 216, 176, 0.114) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(128, 216, 1",
+      "div.strata-deck.strata-deck-back → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+      "div.strata-deck.strata-deck-mid → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+      "div.strata-deck.strata-deck-front → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))"
+     ],
+     "gradientText": 0,
+     "hairlines": 5,
+     "hairlineSamples": [
+      "nav 1440px",
+      "div.hero-facts 520px",
+      "section.landing-final.landing-reveal 1440px",
+      "footer 1440px",
+      "div 1152px"
+     ],
+     "outlinedBoxes": 21,
+     "dashed": 0,
+     "blurred": 5,
+     "roundedBoxes": 22,
+     "boxRadius": 20,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1234
+      },
+      {
+       "count": 6,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1967
+      }
+     ]
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 0,
+     "fixed": true,
+     "height": 61,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "be vietnam pro"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "pageH": 3903,
+    "margins": {
+     "left": 100,
+     "right": 123
+    },
+    "sections": [
+     {
+      "sel": "main#main-content",
+      "tag": "main",
+      "top": 61,
+      "height": 3352,
+      "words": 294,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Less searching.",
+       "size": 84,
+       "tag": "h1"
+      },
+      "left": 100,
+      "right": 103,
+      "textLeft": 100,
+      "textRight": 103,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "footer",
+      "tag": "footer",
+      "top": 3493,
+      "height": 410,
+      "words": 67,
+      "media": 0,
+      "middle": 32,
+      "heading": {
+       "text": "Information",
+       "size": 14,
+       "tag": "h4"
+      },
+      "left": 144,
+      "right": 113,
+      "textLeft": 144,
+      "textRight": 113,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Less searching. More going.",
+      "size": 84,
+      "top": 214,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 100,
+      "n": 9
+     },
+     {
+      "x": 126,
+      "n": 4
+     },
+     {
+      "x": 544,
+      "n": 2
+     },
+     {
+      "x": 754,
+      "n": 2
+     },
+     {
+      "x": 962,
+      "n": 2
+     },
+     {
+      "x": 1068,
+      "n": 2
+     },
+     {
+      "x": 441,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 22,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0.2,
+    "voidBox": {
+     "x": 660,
+     "y": 120,
+     "w": 540,
+     "h": 480
+    }
+   },
+   "app": null,
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 5,
+   "filled": [
+    1,
+    0.71,
+    0.5,
+    0.86,
+    0.93
+   ],
+   "motion": {
+    "elements": 26,
+    "css": 3,
+    "transitions": 21,
+    "scripted": 2,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 4397,
+     "screens": 4.3,
+     "words": 372,
+     "img": 6,
+     "video": 0,
+     "canvas": 0,
+     "svg": 20,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Less searching. More going.",
+     "words": 4,
+     "chars": 27,
+     "lines": 2,
+     "size": 53.6,
+     "vw": 7,
+     "font": "Be Vietnam Pro",
+     "weight": 750,
+     "tracking": -0.07,
+     "leading": 0.99,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.96,
+     "top": 181,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Less searching. More going.",
+     "words": 4,
+     "lines": 2,
+     "size": 53.6,
+     "font": "Be Vietnam Pro"
+    },
+    "headings": [
+     {
+      "text": "Less searching. More going.",
+      "words": 4,
+      "chars": 27,
+      "lines": 2,
+      "size": 53.6,
+      "vw": 7,
+      "font": "Be Vietnam Pro",
+      "weight": 750,
+      "tracking": -0.07,
+      "leading": 0.99,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.96,
+      "top": 181,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Parking that works for everyone.",
+      "words": 5,
+      "chars": 32,
+      "lines": 2,
+      "size": 36,
+      "vw": 4.7,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.57,
+      "top": 1235,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "One easy route through parking.",
+      "words": 5,
+      "chars": 31,
+      "lines": 2,
+      "size": 36,
+      "vw": 4.7,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.57,
+      "top": 2089,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Familiar ways to pay.",
+      "words": 4,
+      "chars": 21,
+      "lines": 1,
+      "size": 36,
+      "vw": 4.7,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.57,
+      "top": 2887,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Ready when you are.",
+      "words": 4,
+      "chars": 19,
+      "lines": 1,
+      "size": 36,
+      "vw": 4.7,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.42,
+      "top": 3442,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 5,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 1,
+     "medianWords": 5,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Be Vietnam Pro",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      16,
+      17,
+      18,
+      36,
+      54
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Be Vietnam Pro",
+      "size": 16,
+      "leading": 1.75,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 11
+     },
+     "measureChars": 69,
+     "max": {
+      "size": 53.6,
+      "vw": 7,
+      "font": "Be Vietnam Pro",
+      "text": "Less searching."
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 6,
+     "microLabelShare": 0.066,
+     "microSamples": [
+      "PARKING, MOVING FORWARD",
+      "SMARTPARKING / CONNECTED PARKING",
+      "ONE PLATFORM, EVERY JOURNEY",
+      "FROM ARRIVAL TO EXIT",
+      "PAY YOUR WAY",
+      "YOUR SPACE IS OUT THERE"
+     ],
+     "upperShare": 0.07,
+     "centerShare": 0.14,
+     "smallText": 17
+    },
+    "eyebrows": [
+     {
+      "text": "PARKING, MOVING FORWARD",
+      "above": "Less searching. More going.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 135
+     },
+     {
+      "text": "ONE PLATFORM, EVERY JOURNEY",
+      "above": "Parking that works for everyone.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 1202
+     },
+     {
+      "text": "FROM ARRIVAL TO EXIT",
+      "above": "One easy route through parking.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 2056
+     },
+     {
+      "text": "PAY YOUR WAY",
+      "above": "Familiar ways to pay.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 2854
+     },
+     {
+      "text": "YOUR SPACE IS OUT THERE",
+      "above": "Ready when you are.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 3411
+     }
+    ],
+    "numbered": [
+     {
+      "text": "01",
+      "size": 12.5,
+      "top": 519
+     },
+     {
+      "text": "02",
+      "size": 12.5,
+      "top": 519
+     },
+     {
+      "text": "03",
+      "size": 12.5,
+      "top": 519
+     },
+     {
+      "text": "01",
+      "size": 12,
+      "top": 1421
+     },
+     {
+      "text": "02",
+      "size": 12,
+      "top": 1421
+     },
+     {
+      "text": "03",
+      "size": 12,
+      "top": 1685
+     },
+     {
+      "text": "04",
+      "size": 12,
+      "top": 1685
+     },
+     {
+      "text": "01",
+      "size": 12.8,
+      "top": 2271
+     },
+     {
+      "text": "02",
+      "size": 12.8,
+      "top": 2271
+     },
+     {
+      "text": "03",
+      "size": 12.8,
+      "top": 2271
+     },
+     {
+      "text": "04",
+      "size": 12.8,
+      "top": 2508
+     },
+     {
+      "text": "05",
+      "size": 12.8,
+      "top": 2508
+     }
+    ],
+    "color": {
+     "bodyBg": "#151c1b",
+     "bodyBgHsl": {
+      "h": 171,
+      "s": 0.14,
+      "l": 0.1
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#151c1b",
+       "top": 0,
+       "hsl": {
+        "h": 171,
+        "s": 0.14,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#101c19",
+       "top": 61,
+       "hsl": {
+        "h": 165,
+        "s": 0.27,
+        "l": 0.09
+       }
+      },
+      {
+       "color": "#1e2725",
+       "top": 1978,
+       "hsl": {
+        "h": 167,
+        "s": 0.13,
+        "l": 0.14
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#b6c7c0",
+       "share": 0.59
+      },
+      {
+       "color": "#f1f6f3",
+       "share": 0.16
+      },
+      {
+       "color": "#c1d1c9",
+       "share": 0.06
+      },
+      {
+       "color": "#69d7b2",
+       "share": 0.05
+      },
+      {
+       "color": "#f2f7f3",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#69d7b2",
+      "hsl": {
+       "h": 160,
+       "s": 0.58,
+       "l": 0.63
+      },
+      "fg": "#151c1b"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 5,
+     "radius": "pill",
+     "height": 50,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to main content",
+      "Sign In",
+      "Sign Up",
+      "Find parking",
+      "For parking partners"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 5,
+     "shadowOverlay": 0,
+     "shadowSamples": [
+      "div.strata-deck.strata-deck-back → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-deck.strata-deck-mid → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-deck.strata-deck-front → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-scene-note.strata-scene-note-top → rgba(0, 16, 11, 0.44) 0px 14px 32px 0px"
+     ],
+     "gradients": 4,
+     "scrims": 0,
+     "gradientSamples": [
+      "div.strata-scene-grid → linear-gradient(rgba(128, 216, 176, 0.114) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(128, 216, 1",
+      "div.strata-deck.strata-deck-back → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+      "div.strata-deck.strata-deck-mid → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+      "div.strata-deck.strata-deck-front → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))"
+     ],
+     "gradientText": 0,
+     "hairlines": 5,
+     "hairlineSamples": [
+      "nav 768px",
+      "div.hero-facts 520px",
+      "section.landing-final.landing-reveal 768px",
+      "footer 768px",
+      "div 720px"
+     ],
+     "outlinedBoxes": 21,
+     "dashed": 0,
+     "blurred": 5,
+     "roundedBoxes": 22,
+     "boxRadius": 20,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1392
+      },
+      {
+       "count": 6,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 2245
+      }
+     ]
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 0,
+     "fixed": true,
+     "height": 61,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "be vietnam pro"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "pageH": 4397,
+    "margins": {
+     "left": 17,
+     "right": 24
+    },
+    "sections": [
+     {
+      "sel": "main#main-content",
+      "tag": "main",
+      "top": 61,
+      "height": 3628,
+      "words": 294,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Less searching.",
+       "size": 54,
+       "tag": "h1"
+      },
+      "left": 17,
+      "right": 45,
+      "textLeft": 17,
+      "textRight": 45,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "footer",
+      "tag": "footer",
+      "top": 3769,
+      "height": 628,
+      "words": 67,
+      "media": 0,
+      "middle": 12,
+      "heading": {
+       "text": "Information",
+       "size": 14,
+       "tag": "h4"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 24,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Less searching. More going.",
+      "size": 54,
+      "top": 181,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 17,
+      "n": 9
+     },
+     {
+      "x": 43,
+      "n": 6
+     },
+     {
+      "x": 418,
+      "n": 3
+     },
+     {
+      "x": 292,
+      "n": 2
+     },
+     {
+      "x": 542,
+      "n": 2
+     }
+    ],
+    "leftBlocks": 22,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": null,
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 8,
+   "filled": [
+    1,
+    0.73,
+    0.75,
+    0.57,
+    0.49,
+    0.83,
+    0.93,
+    1
+   ],
+   "motion": {
+    "elements": 42,
+    "css": 3,
+    "transitions": 37,
+    "scripted": 2,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 6426,
+     "screens": 7.6,
+     "words": 370,
+     "img": 6,
+     "video": 0,
+     "canvas": 0,
+     "svg": 20,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Less searching. More going.",
+     "words": 4,
+     "chars": 27,
+     "lines": 2,
+     "size": 50.4,
+     "vw": 12.9,
+     "font": "Be Vietnam Pro",
+     "weight": 750,
+     "tracking": -0.07,
+     "leading": 0.99,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.9,
+     "top": 241,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Less searching. More going.",
+     "words": 4,
+     "lines": 2,
+     "size": 50.4,
+     "font": "Be Vietnam Pro"
+    },
+    "headings": [
+     {
+      "text": "Less searching. More going.",
+      "words": 4,
+      "chars": 27,
+      "lines": 2,
+      "size": 50.4,
+      "vw": 12.9,
+      "font": "Be Vietnam Pro",
+      "weight": 750,
+      "tracking": -0.07,
+      "leading": 0.99,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 241,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Parking that works for everyone.",
+      "words": 5,
+      "chars": 32,
+      "lines": 2,
+      "size": 36,
+      "vw": 9.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 1230,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "One easy route through parking.",
+      "words": 5,
+      "chars": 31,
+      "lines": 2,
+      "size": 36,
+      "vw": 9.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 2574,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Familiar ways to pay.",
+      "words": 4,
+      "chars": 21,
+      "lines": 1,
+      "size": 36,
+      "vw": 9.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 4188,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Ready when you are.",
+      "words": 4,
+      "chars": 19,
+      "lines": 1,
+      "size": 36,
+      "vw": 9.2,
+      "font": "Be Vietnam Pro",
+      "weight": 400,
+      "tracking": -0.055,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.83,
+      "top": 4894,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 5,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 1,
+     "medianWords": 5,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Be Vietnam Pro",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      16,
+      17,
+      36,
+      50
+     ],
+     "sizeCount": 10,
+     "notLoaded": [],
+     "body": {
+      "font": "Be Vietnam Pro",
+      "size": 16,
+      "leading": 1.75,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 11
+     },
+     "measureChars": 44,
+     "max": {
+      "size": 50.4,
+      "vw": 12.9,
+      "font": "Be Vietnam Pro",
+      "text": "Less searching."
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 6,
+     "microLabelShare": 0.066,
+     "microSamples": [
+      "PARKING, MOVING FORWARD",
+      "SMARTPARKING / CONNECTED PARKING",
+      "ONE PLATFORM, EVERY JOURNEY",
+      "FROM ARRIVAL TO EXIT",
+      "PAY YOUR WAY",
+      "YOUR SPACE IS OUT THERE"
+     ],
+     "upperShare": 0.07,
+     "centerShare": 0.14,
+     "smallText": 14
+    },
+    "eyebrows": [
+     {
+      "text": "PARKING, MOVING FORWARD",
+      "above": "Less searching. More going.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 199
+     },
+     {
+      "text": "ONE PLATFORM, EVERY JOURNEY",
+      "above": "Parking that works for everyone.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 1197
+     },
+     {
+      "text": "FROM ARRIVAL TO EXIT",
+      "above": "One easy route through parking.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 2541
+     },
+     {
+      "text": "PAY YOUR WAY",
+      "above": "Familiar ways to pay.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 4155
+     },
+     {
+      "text": "YOUR SPACE IS OUT THERE",
+      "above": "Ready when you are.",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.5,
+      "top": 4863
+     }
+    ],
+    "numbered": [
+     {
+      "text": "01",
+      "size": 12.5,
+      "top": 659
+     },
+     {
+      "text": "02",
+      "size": 12.5,
+      "top": 659
+     },
+     {
+      "text": "03",
+      "size": 12.5,
+      "top": 659
+     },
+     {
+      "text": "01",
+      "size": 12,
+      "top": 1442
+     },
+     {
+      "text": "02",
+      "size": 12,
+      "top": 1683
+     },
+     {
+      "text": "03",
+      "size": 12,
+      "top": 1925
+     },
+     {
+      "text": "04",
+      "size": 12,
+      "top": 2166
+     },
+     {
+      "text": "01",
+      "size": 12.8,
+      "top": 2784
+     },
+     {
+      "text": "02",
+      "size": 12.8,
+      "top": 2994
+     },
+     {
+      "text": "03",
+      "size": 12.8,
+      "top": 3204
+     },
+     {
+      "text": "04",
+      "size": 12.8,
+      "top": 3415
+     },
+     {
+      "text": "05",
+      "size": 12.8,
+      "top": 3625
+     }
+    ],
+    "color": {
+     "bodyBg": "#151c1b",
+     "bodyBgHsl": {
+      "h": 171,
+      "s": 0.14,
+      "l": 0.1
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#151c1b",
+       "top": 0,
+       "hsl": {
+        "h": 171,
+        "s": 0.14,
+        "l": 0.1
+       }
+      },
+      {
+       "color": "#101c19",
+       "top": 129,
+       "hsl": {
+        "h": 165,
+        "s": 0.27,
+        "l": 0.09
+       }
+      },
+      {
+       "color": "#1e2725",
+       "top": 2463,
+       "hsl": {
+        "h": 167,
+        "s": 0.13,
+        "l": 0.14
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#b6c7c0",
+       "share": 0.6
+      },
+      {
+       "color": "#f1f6f3",
+       "share": 0.16
+      },
+      {
+       "color": "#c1d1c9",
+       "share": 0.06
+      },
+      {
+       "color": "#69d7b2",
+       "share": 0.05
+      },
+      {
+       "color": "#f2f7f3",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#69d7b2",
+      "hsl": {
+       "h": 160,
+       "s": 0.58,
+       "l": 0.63
+      },
+      "fg": "#151c1b"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 5,
+     "radius": "pill",
+     "height": 50,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to main content",
+      "Sign In",
+      "Sign Up",
+      "Find parking",
+      "For parking partners"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 5,
+     "shadowOverlay": 0,
+     "shadowSamples": [
+      "div.strata-deck.strata-deck-back → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-deck.strata-deck-mid → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-deck.strata-deck-front → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+      "div.strata-scene-note.strata-scene-note-top → rgba(0, 16, 11, 0.44) 0px 14px 32px 0px"
+     ],
+     "gradients": 4,
+     "scrims": 0,
+     "gradientSamples": [
+      "div.strata-scene-grid → linear-gradient(rgba(128, 216, 176, 0.114) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(128, 216, 1",
+      "div.strata-deck.strata-deck-back → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+      "div.strata-deck.strata-deck-mid → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+      "div.strata-deck.strata-deck-front → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))"
+     ],
+     "gradientText": 0,
+     "hairlines": 5,
+     "hairlineSamples": [
+      "nav 390px",
+      "div.hero-facts 350px",
+      "section.landing-final.landing-reveal 390px",
+      "footer 390px",
+      "div 342px"
+     ],
+     "outlinedBoxes": 21,
+     "dashed": 0,
+     "blurred": 5,
+     "roundedBoxes": 22,
+     "boxRadius": 20,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 1413
+      },
+      {
+       "count": 6,
+       "iconTopped": true,
+       "rounded": true,
+       "top": 2757
+      }
+     ]
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 0,
+     "fixed": true,
+     "height": 129,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "be vietnam pro"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "pageH": 6426,
+    "margins": {
+     "left": 20,
+     "right": 20
+    },
+    "sections": [
+     {
+      "sel": "nav",
+      "tag": "nav",
+      "top": 0,
+      "height": 129,
+      "words": 7,
+      "media": 0,
+      "middle": 4,
+      "heading": null,
+      "left": 16,
+      "right": 16,
+      "textLeft": 93,
+      "textRight": 31,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": true
+     },
+     {
+      "sel": "main#main-content",
+      "tag": "main",
+      "top": 129,
+      "height": 5025,
+      "words": 294,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Less searching.",
+       "size": 50,
+       "tag": "h1"
+      },
+      "left": 20,
+      "right": 20,
+      "textLeft": 20,
+      "textRight": 20,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "footer",
+      "tag": "footer",
+      "top": 5234,
+      "height": 1192,
+      "words": 67,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Information",
+       "size": 14,
+       "tag": "h4"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 42,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Less searching. More going.",
+      "size": 50,
+      "top": 241,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 46,
+      "n": 13
+     },
+     {
+      "x": 20,
+      "n": 9
+     }
+    ],
+    "leftBlocks": 22,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": null,
+   "consoleErrors": []
+  }
+ ],
+ "findings": [
+  {
+   "level": "FAIL",
+   "id": "headline-lines",
+   "width": 1440,
+   "message": "1 headline(s) wrap past two lines at 1440px: \"Less searching. More going.\" → 3 lines (4 words, 83.5px)",
+   "fix": "Cut words first (a headline is a title, not a sentence). Then give it a wider measure. Lower the size only as a last resort and never below the scale you chose. A real statement paragraph belongs in a <p> or <blockquote> at 36px or less."
+  },
+  {
+   "level": "FAIL",
+   "id": "eyebrow",
+   "width": 1440,
+   "message": "5 eyebrow/kicker label(s) above headings: \"PARKING, MOVING FORWARD\" above \"Less searching. More going.\"; \"ONE PLATFORM, EVERY JOURNEY\" above \"Parking that works for everyone.\"; \"FROM ARRIVAL TO EXIT\" above \"One easy route through parking.\"; \"PAY YOUR WAY\" above \"Familiar ways to pay.\"; \"YOUR SPACE IS OUT THERE\" above \"Ready when you are.\"",
+   "fix": "Delete them. If the label carried real information, fold it into the headline or the supporting sentence.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "numbering",
+   "width": 1440,
+   "message": "Decorative index numbers: \"01\", \"02\", \"03\", \"01\", \"02\", \"03\"",
+   "fix": "Remove them. If order truly matters, write it into the words (\"First, …\") or use a real <ol>.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "micro-label",
+   "width": 1440,
+   "message": "6 tiny uppercase letter-spaced labels (e.g. \"PARKING, MOVING FORWARD\", \"SMARTPARKING / CONNECTED PARKING\", \"ONE PLATFORM, EVERY JOURNEY\", \"FROM ARRIVAL TO EXIT\").",
+   "fix": "Use sentence-case text at a readable size, or delete the label.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "gradient",
+   "width": 1440,
+   "message": "4 gradient fill(s): div.strata-scene-grid → linear-gradient(rgba(128, 216, 176, 0.114) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(128, 216, 1 | div.strata-deck.strata-deck-back → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157)) | div.strata-deck.strata-deck-mid → linear-gradient(130deg, rgba(132, 216, 182, 0.3), rgba(36, 103, 86, 0.28) 60%, rgba(119, 223, 175, 0.157))",
+   "fix": "Use a flat colour or a real image. The only gradient allowed by default is a neutral scrim over a photo for legibility.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "shadow",
+   "width": 1440,
+   "message": "5 box-shadow(s) on elements at rest: div.strata-deck.strata-deck-back → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0 | div.strata-deck.strata-deck-mid → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0 | div.strata-deck.strata-deck-front → rgba(3, 16, 11, 0.42) 0px 18px 55px 0px, rgba(171, 255, 209, 0.1) 0px 0px 35px 0",
+   "fix": "Remove. Separate surfaces with a tone step or space. Shadows are for things that really float (menus, dialogs, sticky bars).",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "hairline",
+   "width": 1440,
+   "message": "5 thin rule(s)/divider line(s): nav 1440px | div.hero-facts 520px | section.landing-final.landing-reveal 1440px | footer 1440px",
+   "fix": "Delete. Separate with space, a tone change, or scale. Lines are only for real tables and form fields.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "outlined-box",
+   "width": 1440,
+   "message": "21 boxes drawn with a 1px outline.",
+   "fix": "Define a surface by its fill (one tone step from the page) or leave the content unboxed.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "glass",
+   "width": 1440,
+   "message": "5 backdrop-blur surfaces.",
+   "fix": "One blurred sticky bar at most; glass cards are a tell.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "icon-cards",
+   "width": 1440,
+   "message": "2 row(s) of identical cards each topped with a small icon (4, 6 cards).",
+   "fix": "Replace with one composed section from the direction: a narrative split, a list set in large type, or real imagery per item.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "size-count",
+   "width": 1440,
+   "message": "11 different font sizes (9, 10, 11, 12, 13, 14, 16, 17, 18, 61, 84).",
+   "fix": "A page needs about five: display, heading, lead, body, small.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "few-pictures",
+   "width": 1440,
+   "message": "Only 0 picture(s) on the page (0 photographs, footage or raster images, 0 interface fragments). Drawings in SVG do not count.",
+   "fix": "Find real pictures of the subject's world with scripts/assets.mjs (photographs, archival images, maps, engravings, footage), download them to assets/ and give them room: a hero picture, one per section that has a subject, a full-width band. At least four, usually six to twelve."
+  },
+  {
+   "level": "WARN",
+   "id": "no-footage",
+   "width": 1440,
+   "message": "No video anywhere on the page.",
+   "fix": "Look for one honest clip with scripts/assets.mjs --video (the place, the material, the process) and use it as a muted loop with a poster frame. Defend its absence only if no clip fits the subject."
+  },
+  {
+   "level": "FAIL",
+   "id": "small-text",
+   "width": 1440,
+   "message": "17 text blocks under 13px.",
+   "fix": "Nothing meant to be read goes below 13px.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "off-centre",
+   "width": 1440,
+   "message": "The margins differ: 100px on the left, 123px on the right, at 1440px.",
+   "fix": "Put the navigation and the content on one pair of margins; check for padding on one side only, a scrollbar gutter, or a header on another inset than the page."
+  }
+ ],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\desktop-fold.jpg",
+   "pages": [
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\desktop-page-01.jpg",
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\desktop-page-02.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\tablet-fold.jpg",
+   "pages": [
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\tablet-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\mobile-fold.jpg",
+   "pages": [
+    "C:\\FPT\\Mock-Project-Smart-Parking\\FE\\.taste-skill\\strata-inspect\\mobile-page-01.jpg"
+   ],
+   "film": []
+  }
+ ]
+}

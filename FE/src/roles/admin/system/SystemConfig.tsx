@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export function SystemConfig() {
   const [config, setConfig] = useState({
@@ -24,22 +25,12 @@ export function SystemConfig() {
 
   return (
     <div style={{ maxWidth: "700px" }}>
-      <h2
-        style={{
-          fontFamily: "Outfit",
-          fontWeight: 700,
-          fontSize: "1.3rem",
-          marginBottom: "1.5rem",
-          color: "var(--fg)",
-        }}
-      >
-        System Configuration
-      </h2>
+      <PageHeader title="System Configuration" variant="compact" />
       <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
         <section className="card">
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 600,
               fontSize: "0.95rem",
               marginBottom: "1rem",
@@ -122,7 +113,7 @@ export function SystemConfig() {
         <section className="card">
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 600,
               fontSize: "0.95rem",
               marginBottom: "1rem",

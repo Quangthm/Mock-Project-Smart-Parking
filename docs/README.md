@@ -2,30 +2,23 @@
 
 This folder contains the shared SmartPark requirements, architecture, design, testing, project-management, and reference documentation.
 
-> **Current baseline:** SmartPark v1.0 RC3 review candidate.  
-> RC3 includes the previously approved RC2 SEC-01/SEC-02 security amendment and the RC3 PAY-01 payment-profile amendment.  
-> Product acceptance remains **NOT RUN**. This is not yet a signed v1.0 release.
+> **Current baseline:** v1.1 documentation review candidate based on approved decisions (SPARK-296, prepared 20–21 October 2026).
+> Preserves SEC-01/SEC-02 security and PAY-01 payment amendments. Product acceptance remains **NOT RUN**; v1.0 was an unsigned review candidate.
 
 ## Current requirements baseline
 
-The active requirements baseline is the modular SmartPark v1.0 documentation under `01-requirements/`.
+The active requirements baseline is the modular SmartPark v1.1 documentation under `01-requirements/`.
 
-Current RC3 totals:
+Maintained inventories: [FR trace matrix](01-requirements/requirements-traceability/matrix.csv), [business rules](01-requirements/business-rules/README.md), [use cases and stories](01-requirements/use-cases/README.md), and [acceptance scenarios](04-testing/requirements-traceability/acceptance-scenarios.md).
 
-- **135** Functional Requirements (FRs)
-- **57** Business Rules (BRs) + **9** monthly rules
-- **41** Use Cases (UCs)
-- **46** User Stories
-- **72** acceptance scenarios, all currently **NOT RUN**
-
-RC3 adds no new FR, BR, UC, or user-story IDs. It updates the approved MVP payment-integration profile and adds acceptance coverage for PAY-01.
+[Approved changes](05-project-management/decision-log/2026-10-20-approved-v1.1-changes.md) are integrated into the canonical contracts; [decision coverage](01-requirements/requirements-traceability/v1.1-decision-coverage.md) and [implementation actions](05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions) distinguish requirements from pending wire details and code.
 
 ### Start here
 
 Read the two project-wide overviews first, then follow their links for detailed contracts:
 
-- [Consolidated SRS v1.0 — product scope and business direction](01-requirements/srs/smartpark-srs-v1.0.md)
-- [Solution Architecture v1.0 — ownership and technical direction](02-architecture/solution-architecture/smartpark-solution-architecture-v1.0.md)
+- [Consolidated SRS v1.1 — product scope and business direction](01-requirements/srs/smartpark-srs-v1.1.md)
+- [Solution Architecture v1.1 — ownership and technical direction](02-architecture/solution-architecture/smartpark-solution-architecture-v1.1.md)
 
 - [SRS reading index](01-requirements/srs/README.md)
 - [Business rules and policy catalogue](01-requirements/business-rules/README.md)
@@ -43,14 +36,14 @@ Read the two project-wide overviews first, then follow their links for detailed 
 ### Testing and release records
 
 - [payOS test plan](04-testing/payment-integration/payos-test-plan.md)
-- [Acceptance specifications — 72 scenarios, NOT RUN](04-testing/requirements-traceability/acceptance-scenarios.md)
+- [Acceptance specifications — NOT RUN](04-testing/requirements-traceability/acceptance-scenarios.md)
 - [Deferred, future, and implementation work](05-project-management/decision-log/deferred-and-implementation-register.md)
 - [Baseline review](05-project-management/decision-log/baseline-review-2026-10-13-rc1.md)
 - [RC2 security change summary](05-project-management/decision-log/rc2-change-summary.md)
 - [RC3 PAY-01 change summary](05-project-management/decision-log/rc3-change-summary.md)
 - [Change history](05-project-management/CHANGES.md)
 - [Documentation validation](05-project-management/VALIDATION.md)
-- [v1.0 baseline manifest](01-requirements/srs/baselines/v1.0/manifest.md)
+- [v1.1 baseline manifest](01-requirements/srs/baselines/v1.1/manifest.md) · [historical v1.0 manifest](01-requirements/srs/baselines/v1.0/manifest.md)
 
 ## RC3 payment-profile amendment
 
@@ -109,7 +102,7 @@ Publication-oriented change and validation records belong under `05-project-mana
 
 Use these records to understand why the baseline changed, but do not treat a validation report as evidence that the software itself has passed implementation, integration, security, provider, or product acceptance testing.
 
-The current **72 acceptance scenarios remain NOT RUN** until execution evidence is recorded.
+The current [acceptance scenarios](04-testing/requirements-traceability/acceptance-scenarios.md) **remain NOT RUN** until execution evidence is recorded.
 
 ## Naming
 
@@ -121,12 +114,6 @@ Historical filenames may be preserved when renaming would weaken traceability. I
 
 ## Publication status
 
-This documentation set currently represents the SmartPark **v1.0 RC3 review candidate**.
+This set is a **v1.1 documentation review candidate based on approved decisions**. It integrates V11-01–12 and D01–D12 while preserving prior domain, security and payOS amendments.
 
-The baseline consists of:
-
-- the RC1 domain baseline;
-- the RC2 SEC-01/SEC-02 security amendment;
-- the RC3 PAY-01 payment-profile amendment.
-
-Final v1.0 publication still requires the applicable PM review/sign-off, implementation evidence where required, and execution of acceptance scenarios before any pass result can be claimed.
+Final documentation approval and implementation/acceptance evidence are separate gates. The development reset is future work after documentation approval and schema/seed alignment. No product acceptance, runtime test, deployment or reset is claimed here.

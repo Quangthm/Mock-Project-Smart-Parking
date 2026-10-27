@@ -15,14 +15,16 @@ Location selected or permission requested.
 
 ## Main flow
 
-1. Use GPS/network where available or accept manual input.
-2. Search compatible lots/time within 5 km by Haversine distance; allow expansion.
-3. Show backend availability, prices, address, distance/travel estimate and freshness; full lots remain labelled.
-4. Driver selects result and reviews fresh reservation terms.
+1. Choose consented current GPS/network location or manual origin on MapTiler; default 5 km radius and offer expansion if empty.
+2. Filter vehicle category separately from outdoor/basement/multi-storey lot type; filter distance, price and availability, with Haversine straight-line ordering.
+3. Without a selected interval use current backend time, category availability and current tariff labelled with billing unit. Invent no duration/total and do not compare unlike raw tariff units as one total-price filter.
+4. With a selected interval show its category availability and estimated total for price comparison/filtering. Operations discovery composes authoritative Facility data and Payment tariffs; expose sources/freshness and label full lots unless deliberately filtered.
+5. Select lot details and use an explicit button to open that lot's internal 2D/3D page with category/interval context; revalidate backend booking capacity/terms.
+6. Optionally open external-map directions. Embedded routing/turn-by-turn is excluded; show travel estimate only with an actual source, otherwise omit/defer it. Haversine is not road distance or ETA.
 
 ## Alternatives and failures
 
-Empty results, stale availability and denied GPS are distinct; no model ranking or guaranteed capacity from a search result.
+Denied GPS, empty results, provider failure and stale/disconnected availability are distinct. Neither cached markers nor internal model selection reserves/guarantees capacity; backend reconfirms.
 
 ## Postconditions
 

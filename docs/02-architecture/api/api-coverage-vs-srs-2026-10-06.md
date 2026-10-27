@@ -1,6 +1,6 @@
 # Những chức năng còn thiếu sau khi sửa Login/Logout
 
-> Historical contract/review (06/10/2026). See [current workflow contract and mapping, 08/10/2026](workflows-2026-10-08.md) for the implemented changes.
+> Historical contract/review (6 October 2026), non-authoritative for v1.1. Preserve the dated evidence below; use [active v1.1 API contracts](README.md) for current behavior and [historical workflow mapping](../../archive/api/workflows-2026-10-08.md) for the 8 October implementation.
 
 Ngày xem xét: 06/10/2026. Đối chiếu code hiện tại với báo cáo PDF và SRS v0.9.
 
@@ -131,8 +131,8 @@ Các điểm này không thay đổi kết luận rằng chức năng đang thi�
 ## Nguồn đối chiếu
 
 - Báo cáo `API Design vs Code Comparison Report.pdf`: phạm vi Login/Logout, kiểm tra commit cũ 2816581.
-- [SRS v0.9](../../01-requirements/srs/smartpark-srs-v0.9.md): phần tài khoản §3.1, quản trị §3.7.4–5 và bảng quyền §2.3.1.
-- [Use Cases v0.9](../../01-requirements/use-cases/smartpark-use-cases-v0.9.md): ba quy trình tài khoản UC-AUTH-01/02/03.
+- [SRS v1.0](../../01-requirements/srs/smartpark-srs-v1.0.md) (tham chi?u l?ch s? [SRS v0.9](../../archive/smartpark-srs-v0.9(1).md)): ph?n t�i kho?n �3.1, qu?n tr? �3.7.4�5 v� b?ng quy?n �2.3.1.
+- [Use Cases](../../01-requirements/use-cases/README.md) (tham chi?u l?ch s? [Use Cases v0.9](../../archive/smartpark-use-cases-v0.9.md)): quy tr?nh t�i kho?n UC-AUTH-01/02/03.
 - [Báo cáo sửa Login/Logout trước](auth-design-alignment-2026-10-06.md).
 - Code chính: AuthController, SignUp, DriverAccounts, Applications, CreateOperatorForm và store.ts.
 

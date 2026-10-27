@@ -1,5 +1,4 @@
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
-using SmartParking.PaymentService.Persistence.Context;
 
 namespace SmartParking.PaymentService.Persistence.Repositories;
 

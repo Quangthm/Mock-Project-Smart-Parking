@@ -57,7 +57,7 @@ export function BackupCapacityPanel({
   return (
     <section className="space-y-5 text-[var(--fg)]">
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--raised)] text-[var(--maintenance)]">
           <UntitledIcon name="shield" size={19} />
         </span>
         <div>

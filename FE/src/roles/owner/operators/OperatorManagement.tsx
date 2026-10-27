@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { createPortal } from "react-dom"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { useApp } from "../../../context/AppContext"
 import {
   operatorsApi,
@@ -131,18 +132,7 @@ export function OperatorManagement({
 
   return (
     <div className="space-y-5 text-[var(--fg)]">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[var(--border)] pb-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--fg)]">
-            Operator Management
-          </h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Create login accounts for your operators and assign their work sites.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
+      <PageHeader title="Operator Management" variant="compact" divider description="Create login accounts for your operators and assign their work sites." actions={<div className="flex items-center gap-2.5">
           <button
             type="button"
             className="btn-outline text-xs px-3 py-2"
@@ -160,8 +150,7 @@ export function OperatorManagement({
             <UntitledIcon name="plus" size={14} />
             <span>Create Operator</span>
           </button>
-        </div>
-      </div>
+        </div>} />
 
       {!loading && !error && !sites.length && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] p-3 text-xs">

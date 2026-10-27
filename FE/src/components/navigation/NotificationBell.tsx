@@ -98,8 +98,8 @@ export function NotificationBell({ userId }: { userId: string }) {
           background: "var(--card)",
           border: "1px solid var(--border)",
           borderRadius: "var(--radius)",
-          width: 36,
-          height: 36,
+          width: 44,
+          height: 44,
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
@@ -172,7 +172,7 @@ export function NotificationBell({ userId }: { userId: string }) {
               borderBottom: "1px solid var(--border)",
             }}
           >
-            <strong style={{ fontFamily: "Outfit" }}>Notifications</strong>
+            <strong style={{ fontFamily: "Be Vietnam Pro" }}>Notifications</strong>
             <button
               type="button"
               disabled={!unread}

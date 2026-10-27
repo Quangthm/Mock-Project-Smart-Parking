@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { UntitledIcon } from "../components/icon/UntitledIcon"
 
 export function About() {
@@ -47,32 +48,7 @@ export function About() {
           }}
         >
           <div>
-            <h1
-              style={{
-                fontFamily: "Outfit",
-
-                fontWeight: 800,
-
-                fontSize: "2rem",
-
-                color: "#fff",
-
-                margin: "0 0 0.5rem",
-              }}
-            >
-              About SmartParking
-            </h1>
-            <p
-              style={{
-                color: "rgba(255,255,255,0.78)",
-
-                fontSize: "0.95rem",
-
-                margin: 0,
-              }}
-            >
-              Redefining urban parking in Vietnam since 2024.
-            </p>
+            <PageHeader variant="promo" align="start" title={<>About SmartParking</>} description={<>Redefining urban parking in Vietnam since 2024.</>} />
           </div>
         </div>
       </div>
@@ -80,7 +56,7 @@ export function About() {
       <section style={{ marginBottom: "2.5rem" }}>
         <h2
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -117,7 +93,7 @@ export function About() {
       <section style={{ marginBottom: "2.5rem" }}>
         <h2
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -170,7 +146,7 @@ export function About() {
       <section style={{ marginBottom: "2.5rem" }}>
         <h2
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -235,7 +211,7 @@ export function About() {
               </div>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
 
                   fontWeight: 600,
 
@@ -267,7 +243,7 @@ export function About() {
       <section>
         <h2
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -286,8 +262,8 @@ export function About() {
         </h2>
         <div className="card">
           <p style={{ color: "var(--muted)", fontSize: "0.9rem", margin: 0 }}>
-            <UntitledIcon name="map-pin" size={16} /> Tòa nhà Smart Hub, 17 Lê
-            Duẩn, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh, Việt Nam
+            <UntitledIcon name="map-pin" size={16} /> Smart Hub Building, 17 Le
+            Duan Street, Ben Nghe Ward, District 1, Ho Chi Minh City, Vietnam
             <br />
             <UntitledIcon name="mail" size={16} />{" "}
             support.smartparkingvn@gmail.com &nbsp;|&nbsp;{" "}

@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
 
@@ -19,12 +20,15 @@ export function BookingHistory() {
 
   return (
     <div>
+      <PageHeader title="Booking History" variant="compact" />
       <div
+        className="booking-history-tabs"
         style={{
           display: "flex",
-          gap: "0.5rem",
+          gap: "0.75rem",
           flexWrap: "wrap",
-          marginBottom: "1rem",
+          marginTop: "1.25rem",
+          marginBottom: "1.5rem",
         }}
       >
         <button

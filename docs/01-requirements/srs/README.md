@@ -1,8 +1,8 @@
-> **Main entry point:** [Consolidated SRS v1.0](smartpark-srs-v1.0.md) summarizes the current RC3 direction. The modules below retain the detailed requirements; earlier revision labels do not override later approved amendments.
+> **Main entry point:** [Consolidated SRS v1.1](smartpark-srs-v1.1.md) is the current overview. The content is the canonical v1.1 documentation review candidate based on approved decisions. Modules retain detailed requirement IDs.
 
-# SmartPark SRS — v1.0 RC3
+# SmartPark SRS — v1.1 documentation review candidate
 
-**Review candidate, 13 October 2026.** Start with overview; read only the relevant domain module, then canonical rules/use cases. Implementation/evidence is not assessed.
+**Based on approved decisions, 20 October 2026; no product acceptance claimed.** Start with overview; read only the relevant domain module, then canonical rules/use cases. Implementation/evidence is not assessed.
 
 - [00-overview](modules/00-overview.md)
 - [01-identity-access](modules/01-identity-access.md)
@@ -23,7 +23,7 @@
 - [Business rules](../business-rules/README.md)
 - [Use cases and stories](../use-cases/README.md)
 - [Traceability](../requirements-traceability/README.md)
-- [Release manifest](baselines/v1.0/manifest.md)
+- [Release manifest](baselines/v1.1/manifest.md)
 - [Deferred register](../../05-project-management/decision-log/deferred-and-implementation-register.md)
 
 Scope labels: CONFIRMED/implementation pending; confirmed direction with POST-v1.0 detail; FUTURE outside MVP; historical reference inactive. Approval of a requirement does not mean delivered implementation.

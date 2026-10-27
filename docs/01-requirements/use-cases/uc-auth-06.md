@@ -12,7 +12,7 @@ Any account holder; Admin with explicit recovery permission for assisted actions
 
 1. Requester submits limited pre-login/authenticated ACCOUNT_RECOVERY form; generic acknowledgement and no account session.
 2. Admin verifies access to a previously verified contact and independently reviews supporting evidence against existing records; record findings.
-3. Different Admin handles Admin target; reject self-approval. When no other Admin exists use controlled maintainer procedure.
+3. The sole seeded Admin uses the controlled maintainer procedure; reject self-approval and do not create a second Admin registration flow.
 4. Admin with current permission/recent full authentication authorizes explicit PASSWORD/TOTP/BOTH single-use flow.
 5. User & Access executes: user chooses password, preserving TOTP for password-only; TOTP reset invalidates old factor/codes, revokes sessions and requires verified new enrollment.
 6. Record actual credential outcome; notify; resolve successful recovery only after required changes complete.

@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useApp } from "../context/AppContext"
 
 import { UntitledIcon } from "../components/icon/UntitledIcon"
@@ -32,28 +33,8 @@ export function PendingApproval() {
         >
           <UntitledIcon name="clock" size={22} />
         </div>
-        <h1
-          style={{
-            fontFamily: "Outfit",
-            fontWeight: 800,
-            fontSize: "1.75rem",
-            color: "var(--fg)",
-            marginBottom: "0.75rem",
-          }}
-        >
-          Application Submitted!
-        </h1>
-        <p
-          style={{
-            color: "var(--muted)",
-            fontSize: "1rem",
-            lineHeight: 1.7,
-            marginBottom: "1.5rem",
-          }}
-        >
-          Your email is verified and your parking lot setup has been submitted.
-          Your application is now under Admin review.
-        </p>
+        <PageHeader variant="default" align="center" title={<>Application Submitted!</>} description={<>Your email is verified and your parking lot setup has been submitted.
+          Your application is now under Admin review.</>} />
 
         <div
           className="card"
@@ -61,7 +42,7 @@ export function PendingApproval() {
         >
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
               fontSize: "0.95rem",
               color: "var(--fg)",
