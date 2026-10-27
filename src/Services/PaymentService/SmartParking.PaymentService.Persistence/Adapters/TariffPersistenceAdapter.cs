@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Domain.Pricing;
 
@@ -7,10 +8,12 @@ namespace SmartParking.PaymentService.Persistence.Adapters;
 public class TariffPersistenceAdapter : IParkingTariffPort
 {
     private readonly PaymentDbContext _dbContext;
+    private readonly ILogger<TariffPersistenceAdapter> _logger;
 
-    public TariffPersistenceAdapter(PaymentDbContext dbContext)
+    public TariffPersistenceAdapter(PaymentDbContext dbContext, ILogger<TariffPersistenceAdapter> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<PricingPolicySnapshot?> GetActivePolicyAsync(
@@ -20,6 +23,10 @@ public class TariffPersistenceAdapter : IParkingTariffPort
         CancellationToken cancellationToken = default)
     {
         var vehicleTypeStr = vehicleType.ToString();
+
+        _logger.LogDebug(
+            "Querying active tariff for TenantId: {TenantId}, SiteId: {SiteId}, VehicleType: {VehicleType}",
+            tenantId, siteId, vehicleTypeStr);
 
         var tariff = await _dbContext.Tariffs
             .AsNoTracking()
@@ -33,6 +40,9 @@ public class TariffPersistenceAdapter : IParkingTariffPort
 
         if (tariff == null)
         {
+            _logger.LogWarning(
+                "No active/non-deleted tariff found in PaymentDb for TenantId: {TenantId}, SiteId: {SiteId}, VehicleType: {VehicleType}",
+                tenantId, siteId, vehicleTypeStr);
             return null;
         }
 
@@ -44,6 +54,10 @@ public class TariffPersistenceAdapter : IParkingTariffPort
             .FirstOrDefaultAsync(cancellationToken);
 
         int policyVersion = latestRevision > 0 ? latestRevision : 1;
+
+        _logger.LogInformation(
+            "Resolved active tariff from PaymentDb. TariffId: {TariffId}, Name: {TariffName}, PolicyVersion (Revision): {PolicyVersion}",
+            tariff.Id, tariff.Name, policyVersion);
 
         return TariffSnapshotParser.Parse(tariff, policyVersion);
     }

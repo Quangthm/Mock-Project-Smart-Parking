@@ -2,7 +2,7 @@
 
 > **Domain Boundary**: Financial & Payment Management  
 > **Database Scope**: `smartpark_payment` (`04-payment-service-db.sql`)  
-> **SRS Baseline**: v0.9 (2026-10-05)  
+> **SRS Baseline**: v1.1  
 > **Standard Statuses**: `Backlog` | `Draft` | `In Review` | `Approved` | `Deprecated`  
 
 ---

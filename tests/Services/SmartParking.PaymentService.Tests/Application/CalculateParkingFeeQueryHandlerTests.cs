@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
 using SmartParking.PaymentService.Domain.Pricing;
@@ -54,7 +55,8 @@ public class CalculateParkingFeeQueryHandlerTests
     {
         var tariffPort = new MockTariffPort();
         var reservationPort = new MockReservationPort();
-        var handler = new CalculateParkingFeeQueryHandler(_calculator, tariffPort, reservationPort);
+        var handler = new CalculateParkingFeeQueryHandler(
+            _calculator, tariffPort, reservationPort, NullLogger<CalculateParkingFeeQueryHandler>.Instance);
 
         var policyOverride = CreateSamplePolicy();
         var query = new CalculateParkingFeeQuery(
@@ -80,7 +82,8 @@ public class CalculateParkingFeeQueryHandlerTests
     {
         var tariffPort = new MockTariffPort();
         var reservationPort = new MockReservationPort { SnapshotToReturn = CreateSamplePolicy() };
-        var handler = new CalculateParkingFeeQueryHandler(_calculator, tariffPort, reservationPort);
+        var handler = new CalculateParkingFeeQueryHandler(
+            _calculator, tariffPort, reservationPort, NullLogger<CalculateParkingFeeQueryHandler>.Instance);
 
         var reservationId = Guid.NewGuid();
         var query = new CalculateParkingFeeQuery(
@@ -105,7 +108,8 @@ public class CalculateParkingFeeQueryHandlerTests
     {
         var tariffPort = new MockTariffPort();
         var reservationPort = new MockReservationPort { SnapshotToReturn = null }; // missing/corrupted
-        var handler = new CalculateParkingFeeQueryHandler(_calculator, tariffPort, reservationPort);
+        var handler = new CalculateParkingFeeQueryHandler(
+            _calculator, tariffPort, reservationPort, NullLogger<CalculateParkingFeeQueryHandler>.Instance);
 
         var query = new CalculateParkingFeeQuery(
             TenantId: Guid.NewGuid(),
@@ -130,7 +134,8 @@ public class CalculateParkingFeeQueryHandlerTests
     {
         var tariffPort = new MockTariffPort { PolicyToReturn = CreateSamplePolicy() };
         var reservationPort = new MockReservationPort();
-        var handler = new CalculateParkingFeeQueryHandler(_calculator, tariffPort, reservationPort);
+        var handler = new CalculateParkingFeeQueryHandler(
+            _calculator, tariffPort, reservationPort, NullLogger<CalculateParkingFeeQueryHandler>.Instance);
 
         var query = new CalculateParkingFeeQuery(
             TenantId: Guid.NewGuid(),
@@ -154,7 +159,8 @@ public class CalculateParkingFeeQueryHandlerTests
     {
         var tariffPort = new MockTariffPort { PolicyToReturn = null }; // no tariff
         var reservationPort = new MockReservationPort();
-        var handler = new CalculateParkingFeeQueryHandler(_calculator, tariffPort, reservationPort);
+        var handler = new CalculateParkingFeeQueryHandler(
+            _calculator, tariffPort, reservationPort, NullLogger<CalculateParkingFeeQueryHandler>.Instance);
 
         var query = new CalculateParkingFeeQuery(
             TenantId: Guid.NewGuid(),

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Persistence;
@@ -75,7 +76,7 @@ public class TariffPersistenceAdapterTests
         dbContext.PolicyRevisions.Add(revision);
         await dbContext.SaveChangesAsync();
 
-        var adapter = new TariffPersistenceAdapter(dbContext);
+        var adapter = new TariffPersistenceAdapter(dbContext, NullLogger<TariffPersistenceAdapter>.Instance);
 
         // Act
         var result = await adapter.GetActivePolicyAsync(tenantId, siteId, PricingVehicleType.CAR);
@@ -100,7 +101,7 @@ public class TariffPersistenceAdapterTests
     {
         // Arrange
         using var dbContext = CreateInMemoryDbContext();
-        var adapter = new TariffPersistenceAdapter(dbContext);
+        var adapter = new TariffPersistenceAdapter(dbContext, NullLogger<TariffPersistenceAdapter>.Instance);
 
         // Act
         var result = await adapter.GetActivePolicyAsync(Guid.NewGuid(), Guid.NewGuid(), PricingVehicleType.MOTORCYCLE);
@@ -133,7 +134,7 @@ public class TariffPersistenceAdapterTests
         dbContext.Tariffs.Add(tariff);
         await dbContext.SaveChangesAsync();
 
-        var adapter = new TariffPersistenceAdapter(dbContext);
+        var adapter = new TariffPersistenceAdapter(dbContext, NullLogger<TariffPersistenceAdapter>.Instance);
 
         // Act
         var result = await adapter.GetActivePolicyAsync(tenantId, siteId, PricingVehicleType.CAR);
@@ -165,7 +166,7 @@ public class TariffPersistenceAdapterTests
         dbContext.Tariffs.Add(tariff);
         await dbContext.SaveChangesAsync();
 
-        var adapter = new TariffPersistenceAdapter(dbContext);
+        var adapter = new TariffPersistenceAdapter(dbContext, NullLogger<TariffPersistenceAdapter>.Instance);
 
         // Act
         var result = await adapter.GetActivePolicyAsync(tenantId, siteId, PricingVehicleType.CAR);
