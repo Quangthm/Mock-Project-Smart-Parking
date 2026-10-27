@@ -1,28 +1,31 @@
-import { useApp } from "../../context/AppContext"
+import { useApp, type View } from "../../context/AppContext"
+import { useLocation, useNavigate } from "react-router-dom"
 
-import { BrandLogo } from "../brand/BrandLogo"
+import { BrandLogo, BrandWordmark } from "../brand/BrandLogo"
 
 import { UntitledIcon } from "../icon/UntitledIcon"
 
 export function Footer() {
   const { setView } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   return (
-    <footer
+    <footer className="site-footer"
       style={{
         background: "var(--card)",
         borderTop: "1px solid var(--border)",
         marginTop: "5rem",
       }}
     >
-      <div
+      <div className="site-footer-inner"
         style={{
           maxWidth: "1200px",
           margin: "0 auto",
           padding: "3rem 1.5rem 2rem",
         }}
       >
-        <div
+        <div className="site-footer-columns"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -30,7 +33,7 @@ export function Footer() {
             marginBottom: "2.5rem",
           }}
         >
-          <div>
+          <div className="site-footer-brand">
             <div
               style={{
                 display: "flex",
@@ -39,11 +42,8 @@ export function Footer() {
                 marginBottom: "1rem",
               }}
             >
-              <BrandLogo height={60} />
-              <span className="brand-wordmark" style={{ fontSize: "1.05rem" }}>
-                <span className="brand-smart">Smart</span>
-                <span className="brand-parking">Parking</span>
-              </span>
+              <BrandLogo height={48} />
+              <BrandWordmark height={21} />
             </div>
             <p
               style={{
@@ -55,41 +55,12 @@ export function Footer() {
               Smart parking solutions for drivers and businesses. Find, book,
               and manage parking with ease.
             </p>
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
-              {[
-                { icon: "f", label: "Facebook" },
-                { icon: "in", label: "LinkedIn" },
-                { icon: "▶", label: "YouTube" },
-              ].map((s) => (
-                <button
-                  key={s.label}
-                  title={s.label}
-                  style={{
-                    width: 30,
-                    height: 30,
-                    border: "1px solid var(--border)",
-                    borderRadius: "50%",
-                    background: "none",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.7rem",
-                    fontWeight: 700,
-                    color: "var(--muted)",
-                    cursor: "pointer",
-                    transition: "border-color 0.15s, color 0.15s",
-                  }}
-                >
-                  {s.icon}
-                </button>
-              ))}
-            </div>
           </div>
 
-          <div>
+          <div className="site-footer-group">
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -109,10 +80,10 @@ export function Footer() {
             />
           </div>
 
-          <div>
+          <div className="site-footer-group">
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -130,10 +101,10 @@ export function Footer() {
             />
           </div>
 
-          <div>
+          <div className="site-footer-group">
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -153,10 +124,10 @@ export function Footer() {
             />
           </div>
 
-          <div>
+          <div className="site-footer-group site-footer-contact">
             <h4
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 600,
                 fontSize: "0.9rem",
                 marginBottom: "1rem",
@@ -175,8 +146,8 @@ export function Footer() {
               }}
             >
               <span>
-                <UntitledIcon name="map-pin" size={15} /> Tòa nhà Smart Hub, 17
-                Lê Duẩn, Q.1, TP.HCM
+                <UntitledIcon name="map-pin" size={15} /> Smart Hub Building, 17
+                Le Duan Street, District 1, Ho Chi Minh City
               </span>
               <span>
                 <UntitledIcon name="phone" size={15} /> Driver: 1900-xxxx
@@ -192,7 +163,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div
+        <div className="site-footer-bottom"
           style={{
             borderTop: "1px solid var(--border)",
             paddingTop: "1.5rem",
@@ -216,7 +187,7 @@ export function Footer() {
             ].map((p) => (
               <button
                 key={p.label}
-                onClick={() => setView(p.view)}
+                onClick={() => { setView(p.view); if (location.pathname !== "/") navigate("/") }}
                 style={{
                   background: "none",
                   border: "none",
@@ -237,15 +208,17 @@ export function Footer() {
   )
 }
 
-function FooterLinks({ links }: { links: { label: string; view: string }[] }) {
+function FooterLinks({ links }: { links: { label: string; view: View }[] }) {
   const { setView } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       {links.map((l) => (
         <button
           key={l.label}
-          onClick={() => setView(l.view as any)}
+          onClick={() => { setView(l.view); if (location.pathname !== "/") navigate("/") }}
           style={{
             background: "none",
             border: "none",

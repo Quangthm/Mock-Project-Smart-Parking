@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { ownerData as store } from '../data/data';
@@ -66,19 +67,16 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
       <PageHeader eyebrow={selectedSiteId === 'all' ? `All Sites (${lots.length})` : (lots[0]?.name ?? 'Selected Site')} title="Financial & Revenue Center" description="Comprehensive revenue reconciliation, platform settlements, and booking audit for your parking assets." />
 
       {/* KPI METRIC CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
+      <div className="owner-finance-kpis">
         {[
-          { label: 'Gross Revenue', value: `${totalRevenue.toLocaleString('vi-VN')} VND`, icon: '💰', color: '#22c55e', sub: 'From completed bookings' },
-          { label: 'Net Earnings (85%)', value: `${netProfit.toLocaleString('vi-VN')} VND`, icon: '📈', color: '#2563eb', sub: 'After platform fee settlement' },
-          { label: 'Platform Fee (15%)', value: `${platformFee.toLocaleString('vi-VN')} VND`, icon: '📊', color: '#f59e0b', sub: 'SmartParking system service fee' },
-          { label: 'Completed Transactions', value: String(completedBookings.length), icon: '📋', color: '#a855f7', sub: `Across ${lots.length} active sites` },
+          { label: 'Gross Revenue', value: `${totalRevenue.toLocaleString('vi-VN')} VND`, sub: 'From completed bookings' },
+          { label: 'Net Earnings (85%)', value: `${netProfit.toLocaleString('vi-VN')} VND`, sub: 'After platform fee settlement' },
+          { label: 'Platform Fee (15%)', value: `${platformFee.toLocaleString('vi-VN')} VND`, sub: 'SmartParking system service fee' },
+          { label: 'Completed Transactions', value: String(completedBookings.length), sub: `Across ${lots.length} active sites` },
         ].map(stat => (
-          <div key={stat.label} className="card" style={{ padding: '1.15rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontWeight: 500 }}>{stat.label}</span>
-              <span style={{ color: stat.color }}><UntitledIcon name={stat.icon} size={20} /></span>
-            </div>
-            <div style={{ fontFamily: 'Outfit', fontWeight: 800, fontSize: '1.4rem', color: stat.color, marginBottom: '0.25rem' }}>
+          <div key={stat.label} className="owner-finance-kpi">
+            <div style={{ fontSize: '0.875rem', color: 'var(--muted)', fontWeight: 500, marginBottom: '0.5rem' }}>{stat.label}</div>
+            <div style={{ fontFamily: 'Be Vietnam Pro', fontWeight: 600, fontSize: '1.4rem', color: 'var(--fg)', marginBottom: '0.25rem', fontVariantNumeric: 'tabular-nums' }}>
               {stat.value}
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>{stat.sub}</div>
@@ -90,7 +88,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
       <div className="card" style={{ padding: '1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
-            <h3 style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '1.05rem', margin: 0, color: 'var(--fg)' }}>
+            <h3 style={{ fontFamily: 'Be Vietnam Pro', fontWeight: 600, fontSize: '1.05rem', margin: 0, color: 'var(--fg)' }}>
               6-Month Revenue Trend & Net Settlement
             </h3>
             <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
@@ -98,11 +96,11 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
             </span>
           </div>
           <div style={{ display: 'flex', gap: '1rem', fontSize: '0.78rem' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#2563eb', fontWeight: 600 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#2563eb' }} /> Gross Revenue
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--accent)', fontWeight: 600 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent)' }} /> Gross Revenue
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#22c55e', fontWeight: 600 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#22c55e' }} /> Net Settlement (85%)
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--muted)', fontWeight: 600 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--muted)' }} /> Net Settlement (85%)
             </span>
           </div>
         </div>
@@ -114,8 +112,8 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
               <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
               <YAxis tickFormatter={v => v === 0 ? '0' : `${(Number(v) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
               <Tooltip formatter={(v) => `${Number(v).toLocaleString('vi-VN')} VND`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.82rem' }} />
-              <Area type="monotone" dataKey="revenue" stroke="#2563eb" fill="#2563eb18" strokeWidth={2} name="Gross Revenue" />
-              <Area type="monotone" dataKey="profit" stroke="#22c55e" fill="#22c55e18" strokeWidth={2} name="Net Revenue" />
+              <Area type="linear" dataKey="revenue" stroke="var(--accent)" fill="transparent" strokeWidth={2} name="Gross Revenue" />
+              <Area type="linear" dataKey="profit" stroke="var(--muted)" fill="transparent" strokeWidth={2} strokeDasharray="5 4" name="Net Revenue" />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
@@ -131,7 +129,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
       <div className="card" style={{ padding: '1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h3 style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '1.05rem', margin: 0, color: 'var(--fg)' }}>
+            <h3 style={{ fontFamily: 'Be Vietnam Pro', fontWeight: 600, fontSize: '1.05rem', margin: 0, color: 'var(--fg)' }}>
               Completed Transactions & Settlement Audit
             </h3>
             <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
@@ -142,13 +140,16 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <input
               className="input"
+              aria-label="Search transactions by ID, plate, or parking lot"
+              name="transaction-search"
               placeholder="Search by ID, plate, or lot..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', width: 220 }}
             />
-            <select
+            <RoundedSelect
               className="input"
+              aria-label="Filter by payment method"
               value={filterMethod}
               onChange={e => setFilterMethod(e.target.value)}
               style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', width: 'auto' }}
@@ -160,7 +161,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
               <option value="visa">Visa / Card</option>
               <option value="applepay">Apple Pay</option>
               <option value="qr">VietQR</option>
-            </select>
+            </RoundedSelect>
           </div>
         </div>
 

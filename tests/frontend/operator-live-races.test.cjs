@@ -12,6 +12,9 @@ function load(file, imports, globals = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
   const context = { exports: {}, ...globals, require(name) {
+    if (name.endsWith("/ui/RoundedSelect")) return { RoundedSelect: "select" };
+    if (name.endsWith("/ui/PageHeader")) return { PageHeader: "page-header" };
+    if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" };
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];
   } };

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
 import { CheckInOut } from "../check-in-out/CheckInOut"
@@ -369,7 +370,7 @@ export function OperatorDashboard({
                 (Assigned to {ownerLots.length} sites)
               </span>
             </div>
-            <select
+            <RoundedSelect
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs font-semibold text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={selectedLot?.id ?? ""}
               onChange={(e) => setActiveSiteId(e.target.value)}
@@ -379,12 +380,12 @@ export function OperatorDashboard({
                   {lot.name} ({lot.totalSlots} slots)
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           </div>
         )}
 
         {/* Tab View Container */}
-        <div className="animate-in">
+        <div key={tab} className="animate-in">
           {/* TAB 1: OVERVIEW */}
           {accessRole === "operation" && tab === "overview" && (
             <OperatorOverview
@@ -521,8 +522,8 @@ export function OperatorDashboard({
 function FinanceMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-[var(--fg)]">{value}</p>
+      <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--fg)]">{value}</p>
     </div>
   )
 }

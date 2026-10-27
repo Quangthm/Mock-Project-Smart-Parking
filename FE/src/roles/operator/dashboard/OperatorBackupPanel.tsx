@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 
 import { request } from "../../../lib/authApi"
@@ -94,7 +95,7 @@ export function OperatorBackupPanel() {
       <h3>Operational backup slots</h3>
       <label className="label">
         Assigned lot
-        <select
+        <RoundedSelect
           className="input"
           disabled={busy}
           value={site}
@@ -109,7 +110,7 @@ export function OperatorBackupPanel() {
               {s.siteId}
             </option>
           ))}
-        </select>
+        </RoundedSelect>
       </label>
       <label className="label">
         Reason

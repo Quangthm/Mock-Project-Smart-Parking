@@ -1,4 +1,4 @@
-> **Main entry point:** [Consolidated SRS v1.1](smartpark-srs-v1.0.md) is the current overview. Its v1.0 filename is a stable compatibility entry; the content is the v1.1 documentation review candidate based on approved decisions. Modules retain detailed requirement IDs.
+> **Main entry point:** [Consolidated SRS v1.1](smartpark-srs-v1.1.md) is the current overview. The content is the canonical v1.1 documentation review candidate based on approved decisions. Modules retain detailed requirement IDs.
 
 # SmartPark SRS — v1.1 documentation review candidate
 

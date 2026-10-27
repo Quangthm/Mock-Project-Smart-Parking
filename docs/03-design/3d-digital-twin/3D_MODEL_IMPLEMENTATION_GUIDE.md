@@ -2,13 +2,13 @@
 
 **Document Reference**: `3D_MODEL_IMPLEMENTATION_GUIDE.md`  
 **System Reference**: SmartPark / Parking Lot Management System  
-**Baseline Standard**: SmartPark SRS v0.9 (Performance SLA < 3s, Non-authoritative Digital Twin §3.2.3, BR-CAP-01, BR-VEH-03, C-23)  
-**Technical Architecture Reference**: SmartPark Solution Architecture v0.9 (3D WebGL Subsystem)  
+**Baseline Standard**: SmartPark SRS v1.0 (FR-MAP-01–04, FR-LOT-01–03, Performance SLA < 3s, Non-authoritative Digital Twin §3.2.3, C-23)  
+**Technical Architecture Reference**: SmartPark Solution Architecture v1.0 (Facility & Visualization + Parking Operations Domains)  
 **Target Audience**: Frontend Engineers, 3D Artists, UI/UX Designers, Solution Architects, Project Managers  
 **Language**: English (Official Technical Reference)  
 **Status**: Approved for Implementation  
-**Version**: `v1.2.0` (SRS v0.9 Canonical Baseline)  
-**Last Updated**: 2026-10-07  
+**Version**: `v1.3.0` (SRS v1.0 Canonical Baseline)  
+**Last Updated**: 2026-10-19  
 
 ---
 
@@ -41,7 +41,7 @@
 25. [Performance Optimization (Measured Benchmarks & Leak Tests)](#25-performance-optimization-measured-benchmarks--leak-tests)
 26. [Responsive & Browser Considerations](#26-responsive--browser-considerations)
 27. [Error Handling & Fallbacks](#27-error-handling--fallbacks)
-28. [Testing & Profiling](#28-testing--profiling)
+28: [Testing & Profiling](#28-testing--profiling)
 29. [Troubleshooting Guide](#29-troubleshooting-guide)
 30. [Asset Governance, Provenance & Stable-ID Rules (SPARK-185)](#30-asset-governance-provenance--stable-id-rules-spark-185)
 31. [Deployment & CDN Configuration](#31-deployment--cdn-configuration)
@@ -58,9 +58,9 @@
 | :--- | :--- |
 | **Document ID** | `DOC-3D-IMPL-001` |
 | **Title** | SmartPark 3D Digital Twin Master Model Implementation Guide |
-| **Version** | `v1.2.0` (SRS v0.9 Canonical Baseline) |
+| **Version** | `v1.3.0` (SRS v1.0 Canonical Baseline) |
 | **Primary System** | SmartPark Parking Lot Management & Reservation System |
-| **Source Standards** | SmartPark SRS v0.9, Solution Architecture v0.9 |
+| **Source Standards** | SmartPark SRS v1.0, Solution Architecture v1.0 |
 | **Primary Authors** | Antigravity AI Architecture Team & Lead Frontend Engineers |
 | **Review / Sign-off** | Project Manager, Tech Lead, UI/UX Lead |
 
@@ -124,11 +124,15 @@ This guide governs all 3D digital twin assets deployed across SmartPark:
 * **Subterranean Garage**: `underground_parking_lot.glb` (2 underground floors: Basement 1 `Floor_B1`, Basement 2 `Floor_B2`, street portal, inter-level ramps).
 * **Dynamic Vehicle Models**: `car_model.glb` (Passenger sedan), `motorcycle_model.glb` (Electric/gas 2-wheeler).
 
+> [!NOTE]
+> **EV Charging Architectural Asset Scope (SRS v1.0 Section 8 & FR-LOT-02)**:
+> Dedicated EV parking stalls and VinFast battery station geometries are authored as static architectural visual elements to enhance 3D realism. Per SmartPark SRS v1.0 (§8 and `modules/03-discovery-visualization.md:9`), **transactional EV charging sessions and power management are explicitly deferred as Future / outside MVP scope**.
+
 ### 2.3. Architectural Roadmap: Phase 1 MVP vs. Phase 2 Commercial SaaS
 To ensure the SmartPark platform avoids custom code re-engineering for future clients while delivering immediate MVP value, this implementation enforces a two-phase architecture:
 * **Phase 1 (Current MVP Baseline — Standardized Catalog)**:
-  * SmartPark provides 3 verified facility archetypes (Parking House, Outdoor, Underground).
-  * Facility Owners select an archetype during onboarding (SRS FR-LOT-01 / FR-LOT-02).
+  * SmartPark provides 3 verified facility archetypes (Parking House, Outdoor, Underground). Fixed 3D models remain versioned deployment assets (SRS v1.0 FR-LOT-01, FR-LOT-02, FR-LOT-03).
+  * Facility Owners select an archetype during onboarding.
   * The frontend runtime uses a generic, rule-based Three.js engine that treats all models uniformly.
 * **Phase 2 (Post-MVP — Commercial SaaS & Multi-Tenant Self-Service)**:
   * Enterprise B2B clients (malls, airports, hospitals) upload their own bespoke 3D models via the Owner Portal.
@@ -141,7 +145,7 @@ This document serves as the formal specification contract given to developers an
 2. **Hierarchy Contract (§6.2)**: Strict 2-tier scene tree allows instant floor pagination without traversing thousands of individual meshes.
 3. **Performance & Compression Contract (§9, §25)**: Strict file size ($\le 25\text{ MB}$ raw, $\le 8\text{ MB}$ Draco) and draw call budgets ($\le 250$) guaranteeing the **< 3.0s initial render SLA**.
 4. **PBR Material & Design Token Contract (§16)**: Dynamic runtime shader colorization eliminates the grey clay artifact of raw `.glb` exports without requiring manual material re-baking.
-5. **Non-Authoritative State Contract (§7, §20)**: Complete decoupling of 3D rendering from business transactions, adhering strictly to SRS §3.2.3.
+5. **Non-Authoritative State Contract (§7, §20)**: Complete decoupling of 3D rendering from business transactions, adhering strictly to SRS v1.0 FR-MAP-02 and §3.2.3.
 
 ---
 
@@ -229,13 +233,13 @@ flowchart TD
         SlotSvc["Slot Management & Allocation"]
         TeleSvc["EV & Battery Telemetry"]
         GateSvc["Access Gate Control"]
-        WSGateway["WebSocket Gateway (/topic/lots)"]
+        SignalRHub["SignalR Hub (/hubs/parking-lot)"]
     end
 
     subgraph WebClient ["SmartPark Web Application"]
         subgraph StateLayer ["State & Communication"]
-            REST["REST Client (Initial Setup)"]
-            WSSub["WebSocket Subscriber"]
+            REST["REST Client (Initial Setup & Reconnect)"]
+            SignalRSub["SignalR Subscriber"]
             AppStore["Zustand / Redux Store"]
         end
 
@@ -254,10 +258,10 @@ flowchart TD
         end
     end
 
-    Backend -->|REST Handshake| REST
-    WSGateway -->|Live Telemetry Events| WSSub
+    Backend -->|REST Handshake & Snapshot Recovery| REST
+    SignalRHub -->|Live Telemetry Events| SignalRSub
     REST --> AppStore
-    WSSub --> AppStore
+    SignalRSub --> AppStore
     AppStore --> FloorCtrl
     AppStore --> VehicleInstancer
     SceneMgr --> RaycastMgr
@@ -266,7 +270,7 @@ flowchart TD
 ```
 
 > [!IMPORTANT]
-> **SRS §3.2.3 Non-Authoritative Rule**: The 3D Digital Twin never commits business decisions. It visualizes authoritative backend state and translates user clicks into intent events dispatched to backend APIs.
+> **SRS v1.0 §3.2.3 & FR-MAP-02 Non-Authoritative Rule**: The 3D Digital Twin never commits business decisions. It visualizes authoritative backend state and translates user clicks into intent events dispatched to backend APIs.
 
 ---
 
@@ -278,7 +282,7 @@ In accordance with the repository's Clean Architecture layout — where the Fron
 Mock-Project-Smart-Parking/
 ├── FE/                                   # Unified React Web Frontend (Vite + TypeScript)
 │   ├── public/                           # Static runtime assets served directly by Vite
-│   │   ├── draco/                        # WebAssembly geometry decoding runtime files
+│   │   ├── draco/                        # WebAssembly geometry decoding runtime files (Optional)
 │   │   │   ├── draco_decoder.wasm        # Compiled binary WebAssembly KD-tree decompression engine
 │   │   │   ├── draco_decoder.js          # Web Worker thread orchestrator
 │   │   │   └── draco_wasm_wrapper.js     # Legacy browser compatibility wrapper
@@ -298,15 +302,15 @@ Mock-Project-Smart-Parking/
 │       ├── services/
 │       │   └── 3d/
 │       │       ├── ModelLoaderService.ts         # Singleton GLTF + Draco loader with memory cache
-│       │       ├── FloorPaginationController.ts  # Floor isolation & GSAP cinematic camera flight
+│       │       ├── FloorPaginationController.ts  # Floor isolation & camera flight
 │       │       ├── ColorMaterialService.ts       # Fallback PBR auto-colorizer for untextured/clay models
 │       │       ├── InstancedVehicleRenderer.ts   # High-efficiency car & motorcycle instancing (1 draw call)
-│       │       ├── MemoryDisposalService.ts      # Zero-byte WebGL context & buffer cleanup
+│       │       ├── MemoryDisposalService.ts      # Comprehensive WebGL context, geometry & texture cleanup
 │       │       └── InteractionManager.ts         # Throttled raycasting engine (60 FPS hover/click)
 │       ├── types/
 │       │   └── 3d.ts                             # TypeScript interfaces, DTOs & state contracts
 │       └── constants/
-│           └── 3d-palette.ts                     # PBR design tokens & SRS v0.9 reservation status codes
+│           └── 3d-palette.ts                     # PBR design tokens & SRS v1.0 reservation status codes
 └── src/
     └── Services/                                 # Authoritative Backend .NET Microservices
         ├── FacilityService/                       # Owns slot inventory, spatial hierarchy & WebSocket topics

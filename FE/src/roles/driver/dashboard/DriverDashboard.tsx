@@ -285,7 +285,7 @@ export function DriverDashboard() {
                     id="driver-profile-title"
                     style={{
                       margin: "0.35rem 0 0",
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontSize: "1.35rem",
                       fontWeight: 700,
                     }}
@@ -303,8 +303,8 @@ export function DriverDashboard() {
                   disabled={securityDismissBlocked}
                   onClick={() => { if (!securityDismissBlocked) setProfileSection(null) }}
                   style={{
-                    width: 34,
-                    height: 34,
+                    width: 44,
+                    height: 44,
                     border: "1px solid var(--border)",
                     borderRadius: "50%",
                     background: "var(--card)",
@@ -474,9 +474,9 @@ export function DriverDashboard() {
         ) : (
           <>
             {tab === "home" && homePanel !== "find" && (
-              <div className="animate-in">
+              <div key={homePanel} className="animate-in">
                 {homePanel === "bookings" ? (
-                  <section>
+                  <section className="driver-bookings-page">
                     <PageHeader title="Bookings" variant="compact" />
                     <ActiveBookings />
                   </section>

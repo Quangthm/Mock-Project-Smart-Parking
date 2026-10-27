@@ -1,8 +1,9 @@
 import type { ReactNode, SVGProps } from "react"
 
-type IconName = "activity" | "alert" | "arrow-left" | "arrow-right" | "banknote" | "building" | "calendar" | "car" | "chart" | "check" | "check-circle" | "chevron-down" | "clipboard" | "clock" | "credit-card" | "database" | "file" | "graduation-cap" | "grid" | "help" | "house" | "leaf" | "life-buoy" | "link" | "lock" | "log-out" | "mail" | "map" | "map-pin" | "menu" | "phone" | "globe" | "motorcycle" | "parking" | "search" | "settings" | "shield" | "sparkles" | "target" | "ticket" | "users" | "wallet" | "wrench" | "x" | "plus" | "youtube" | "zap" | "tag" | "flame" | "star" | "shopping-bag" | "percent" | "award"
+type IconName = "activity" | "alert" | "arrow-left" | "arrow-right" | "banknote" | "building" | "calendar" | "car" | "chart" | "check" | "check-circle" | "chevron-down" | "clipboard" | "clock" | "credit-card" | "database" | "file" | "filter" | "graduation-cap" | "grid" | "help" | "house" | "leaf" | "life-buoy" | "link" | "lock" | "log-out" | "mail" | "map" | "map-pin" | "menu" | "phone" | "globe" | "motorcycle" | "parking" | "search" | "settings" | "shield" | "sparkles" | "target" | "ticket" | "users" | "wallet" | "wrench" | "x" | "plus" | "youtube" | "zap" | "tag" | "flame" | "star" | "shopping-bag" | "percent" | "award"
 
 const paths: Record<IconName, ReactNode> = {
+  filter: <><path d="M4 7h16M7 12h10m-7 5h4" /><circle cx="8" cy="7" r="1" /><circle cx="15" cy="12" r="1" /></>,
   activity: (
     <>
       <path d="M22 12h-4l-3 9L9 3l-3 9H2" />

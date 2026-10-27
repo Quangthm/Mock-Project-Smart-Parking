@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { parkingApi, type Site, type Slot, type Structure, type Unit } from "../../../lib/parkingApi"
 import { BackupCapacityPanel } from "../dashboard/BackupCapacityPanel"
@@ -18,16 +19,16 @@ const inputClass = "input w-full text-sm"
 const labelClass = "space-y-1 text-xs font-medium text-[var(--muted)]"
 
 const metricStyles = {
-  available: { color: "text-emerald-700 dark:text-emerald-300", bg: "rgba(34,197,94,.10)", border: "rgba(34,197,94,.3)", icon: "check-circle" },
-  occupied: { color: "text-red-700 dark:text-red-300", bg: "rgba(239,68,68,.10)", border: "rgba(239,68,68,.3)", icon: "car" },
-  protected: { color: "text-indigo-700 dark:text-indigo-300", bg: "rgba(99,102,241,.10)", border: "rgba(99,102,241,.3)", icon: "shield" },
-  payment: { color: "text-amber-700 dark:text-amber-300", bg: "rgba(245,158,11,.10)", border: "rgba(245,158,11,.3)", icon: "banknote" },
-  backup: { color: "text-purple-700 dark:text-purple-300", bg: "rgba(147,51,234,.10)", border: "rgba(147,51,234,.3)", icon: "shield" },
+  available: { color: "var(--available)", icon: "check-circle" },
+  occupied: { color: "var(--occupied)", icon: "car" },
+  protected: { color: "var(--reserved)", icon: "shield" },
+  payment: { color: "var(--reserved)", icon: "banknote" },
+  backup: { color: "var(--maintenance)", icon: "shield" },
 } as const
 
 function Metric({ label, value, tone }: { label: string; value: string | number; tone: keyof typeof metricStyles }) {
   const style = metricStyles[tone]
-  return <div className="min-w-0 rounded-xl border p-3" style={{ background: style.bg, borderColor: style.border }}><div className={`flex items-center justify-between gap-2 text-[11px] font-semibold ${style.color}`}><span>{label}</span><UntitledIcon name={style.icon} size={14} /></div><div className={`mt-1 truncate text-xl font-bold ${style.color}`}>{value}</div></div>
+  return <div className="min-w-0 border-r border-[var(--border)] p-3"><div className="flex items-center justify-between gap-2 text-sm font-medium" style={{ color: style.color }}><span>{label}</span><UntitledIcon name={style.icon} size={15} /></div><div className="mt-2 truncate text-2xl font-semibold tabular-nums text-[var(--fg)]">{value}</div></div>
 }
 
 function errorText(error: unknown, fallback: string) {
@@ -35,13 +36,13 @@ function errorText(error: unknown, fallback: string) {
 }
 
 function slotAppearance(slot: Slot) {
-  if (slot.isPhysicallyOccupied && slot.reservationState === "PROTECTED") return { label: "Occupied + protected", color: "#be123c", bg: "rgba(225,29,72,.12)", border: "rgba(225,29,72,.55)" }
-  if (slot.isPhysicallyOccupied) return { label: "Occupied", color: "#dc2626", bg: "rgba(239,68,68,.10)", border: "rgba(239,68,68,.4)" }
-  if (slot.reservationState === "PROTECTED") return { label: "Protected", color: "#4f46e5", bg: "rgba(99,102,241,.10)", border: "rgba(99,102,241,.4)" }
-  if (slot.reservationState === "PENDING_PAYMENT") return { label: "Pending payment", color: "#d97706", bg: "rgba(245,158,11,.10)", border: "rgba(245,158,11,.4)" }
-  if (slot.reservationState && slot.reservationState !== "NONE") return { label: slot.reservationState.replace(/_/g, " "), color: "#2563eb", bg: "rgba(37,99,235,.10)", border: "rgba(37,99,235,.4)" }
-  if (slot.operationalStatus !== "ACTIVE" && slot.operationalStatus !== "AVAILABLE") return { label: slot.operationalStatus.replace(/_/g, " "), color: "#9333ea", bg: "rgba(147,51,234,.10)", border: "rgba(147,51,234,.4)" }
-  return { label: slot.operationalStatus, color: "#16a34a", bg: "rgba(34,197,94,.10)", border: "rgba(34,197,94,.4)" }
+  if (slot.isPhysicallyOccupied && slot.reservationState === "PROTECTED") return { label: "Occupied + protected", status: "occupied" }
+  if (slot.isPhysicallyOccupied) return { label: "Occupied", status: "occupied" }
+  if (slot.reservationState === "PROTECTED") return { label: "Protected", status: "reserved" }
+  if (slot.reservationState === "PENDING_PAYMENT") return { label: "Pending payment", status: "reserved" }
+  if (slot.reservationState && slot.reservationState !== "NONE") return { label: slot.reservationState.replace(/_/g, " "), status: "reserved" }
+  if (slot.operationalStatus !== "ACTIVE" && slot.operationalStatus !== "AVAILABLE") return { label: slot.operationalStatus.replace(/_/g, " "), status: "maintenance" }
+  return { label: "Available", status: "available" }
 }
 
 export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: ParkingStructureProps) {
@@ -192,10 +193,10 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     <section className="space-y-5 text-[var(--fg)]">
       <PageHeader title="Parking Structure" variant="compact" divider description="Manage floors, zones, blocks and parking slots." actions={<label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
           <span>Site</span>
-          <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
+          <RoundedSelect className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
             {!sites.length && <option value="">No sites available</option>}
             {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-          </select>
+          </RoundedSelect>
         </label>} />
 
       {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
@@ -206,7 +207,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
       {structure && !loading && (
         <>
           {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No backend parking slots are configured for this site yet. Add a unit, then add slots here for operators to use.</p>}
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="Physical slots" value={slots.length} tone="available" />
             <Metric label="Available" value={siteCapacity.length > 0 && siteCapacity.every((view) => view.available !== null) ? total("available") : "—"} tone="available" />
             <Metric label="Occupied" value={slots.filter((slot) => slot.isPhysicallyOccupied).length} tone="occupied" />
@@ -217,11 +218,11 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
             <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
-              <button type="button" onClick={() => { setFloorFilter(""); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${!floorFilter ? "bg-[var(--primary)] text-white" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>All areas</button>
-              {floors.map((floor) => <button key={floor.id} type="button" onClick={() => { setFloorFilter(floor.id); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${floorFilter === floor.id ? "bg-[var(--primary)] text-white" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>{floor.name}</button>)}
+              <button type="button" onClick={() => { setFloorFilter(""); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${!floorFilter ? "bg-[var(--action)] text-[var(--action-fg)]" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>All areas</button>
+              {floors.map((floor) => <button key={floor.id} type="button" onClick={() => { setFloorFilter(floor.id); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${floorFilter === floor.id ? "bg-[var(--action)] text-[var(--action-fg)]" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>{floor.name}</button>)}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Zone:</span><select className="input max-w-48 text-xs" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}><option value="">All locations</option>{visibleUnits.filter((unit) => unit.type !== "FLOOR").map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>
+              <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Zone:</span><RoundedSelect className="input max-w-48 text-xs" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}><option value="">All locations</option>{visibleUnits.filter((unit) => unit.type !== "FLOOR").map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>
               <button type="button" className="btn-outline px-2.5 py-1 text-xs" onClick={() => { setUnitForm((form) => ({ ...form, type: floorFilter ? "ZONE" : "FLOOR", parentId: floorFilter })); setCreateModal("unit") }}><UntitledIcon name="plus" size={12} /> Add unit</button>
               <button type="button" className="btn-primary px-2.5 py-1 text-xs" onClick={() => setCreateModal("slot")} disabled={!units.length}><UntitledIcon name="plus" size={12} /> Add slot</button>
             </div>
@@ -231,9 +232,9 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
             {createModal === "unit" ? <form onSubmit={addUnit} className="w-full max-w-lg space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
               <h2 className="font-semibold">Add floor, zone or block</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={labelClass}><span>Type</span><select className={inputClass} value={unitForm.type} onChange={(event) => setUnitForm((form) => ({ ...form, type: event.target.value, parentId: "" }))}>{unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                <label className={labelClass}><span>Type</span><RoundedSelect className={inputClass} value={unitForm.type} onChange={(event) => setUnitForm((form) => ({ ...form, type: event.target.value, parentId: "" }))}>{unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}</RoundedSelect></label>
                 <label className={labelClass}><span>Name</span><input className={inputClass} value={unitForm.name} onChange={(event) => setUnitForm((form) => ({ ...form, name: event.target.value }))} required /></label>
-                {unitForm.type !== "FLOOR" && <label className={labelClass}><span>Parent {unitForm.type === "ZONE" ? "(optional)" : "(required)"}</span><select className={inputClass} value={unitForm.parentId} onChange={(event) => setUnitForm((form) => ({ ...form, parentId: event.target.value }))} required={unitForm.type === "BLOCK"}><option value="">{unitForm.type === "ZONE" ? "Site root" : "Select a parent"}</option>{parentOptions.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>}
+                {unitForm.type !== "FLOOR" && <label className={labelClass}><span>Parent {unitForm.type === "ZONE" ? "(optional)" : "(required)"}</span><RoundedSelect className={inputClass} value={unitForm.parentId} onChange={(event) => setUnitForm((form) => ({ ...form, parentId: event.target.value }))} required={unitForm.type === "BLOCK"}><option value="">{unitForm.type === "ZONE" ? "Site root" : "Select a parent"}</option>{parentOptions.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>}
                 <label className={labelClass}><span>Capacity (0 = unlimited)</span><input className={inputClass} type="number" min="0" step="1" value={unitForm.capacity} onChange={(event) => setUnitForm((form) => ({ ...form, capacity: event.target.value }))} required /></label>
               </div>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
@@ -241,10 +242,10 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
             </form> : <form onSubmit={addSlot} className="w-full max-w-lg space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
               <h2 className="font-semibold">Add parking slot</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={labelClass}><span>Location</span><select className={inputClass} value={slotForm.unitId} onChange={(event) => setSlotForm((form) => ({ ...form, unitId: event.target.value }))} required><option value="">Select a unit</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>
+                <label className={labelClass}><span>Location</span><RoundedSelect className={inputClass} value={slotForm.unitId} onChange={(event) => setSlotForm((form) => ({ ...form, unitId: event.target.value }))} required><option value="">Select a unit</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>
                 <label className={labelClass}><span>Slot code</span><input className={inputClass} value={slotForm.code} onChange={(event) => setSlotForm((form) => ({ ...form, code: event.target.value }))} required /></label>
-                <label className={labelClass}><span>Vehicle type</span><select className={inputClass} value={slotForm.vehicleType} onChange={(event) => setSlotForm((form) => ({ ...form, vehicleType: event.target.value }))}>{vehicleTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-                <label className={labelClass}><span>Slot type</span><select className={inputClass} value={slotForm.type} onChange={(event) => setSlotForm((form) => ({ ...form, type: event.target.value }))}>{slotTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                <label className={labelClass}><span>Vehicle type</span><RoundedSelect className={inputClass} value={slotForm.vehicleType} onChange={(event) => setSlotForm((form) => ({ ...form, vehicleType: event.target.value }))}>{vehicleTypes.map((type) => <option key={type} value={type}>{type}</option>)}</RoundedSelect></label>
+                <label className={labelClass}><span>Slot type</span><RoundedSelect className={inputClass} value={slotForm.type} onChange={(event) => setSlotForm((form) => ({ ...form, type: event.target.value }))}>{slotTypes.map((type) => <option key={type} value={type}>{type}</option>)}</RoundedSelect></label>
               </div>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
               <div className="flex justify-end gap-2"><button type="button" className="btn-outline" onClick={() => setCreateModal(null)} disabled={saving}>Cancel</button><button type="submit" className="btn-primary" disabled={saving || !units.length}>{saving ? "Saving…" : "Add slot"}</button></div>
@@ -259,7 +260,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
                 <input className="min-w-0 flex-1 bg-transparent text-xs text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by slot code…" />
               </label>
               <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><select className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}</select></label>
+                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><RoundedSelect className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}</RoundedSelect></label>
                 <span className="whitespace-nowrap text-[11px] text-[var(--muted)]">Showing <strong className="text-[var(--fg)]">{shownSlots.length}</strong> / {slots.length}</span>
               </div>
             </div>
@@ -267,9 +268,9 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
                 {shownSlots.map((slot) => {
                   const appearance = slotAppearance(slot)
-                  return <button key={slot.id} type="button" onClick={() => setSelectedSlot(slot)} className="flex min-h-28 min-w-0 flex-col justify-between rounded-xl border-2 p-3 text-left transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" style={{ background: appearance.bg, borderColor: appearance.border }}>
-                    <span className="flex w-full items-start justify-between gap-1"><strong className="truncate font-mono text-sm text-[var(--fg)]">{slot.code}</strong><span className="text-xs" aria-label={slot.vehicleType} title={slot.vehicleType}>{slot.vehicleType === "MOTORCYCLE" ? "🏍️" : slot.vehicleType === "CAR" ? "🚗" : "🚐"}</span></span>
-                    <span className="my-1.5 text-[10px] font-bold uppercase leading-tight" style={{ color: appearance.color }}>{appearance.label}</span>
+                  return <button key={slot.id} type="button" onClick={() => setSelectedSlot(slot)} className="parking-space min-h-28 text-left" data-status={appearance.status} aria-label={`Space ${slot.code}, ${appearance.label}, ${slot.vehicleType}`}>
+                    <span className="flex w-full items-start justify-between gap-1"><strong className="truncate text-base text-[var(--fg)]">{slot.code}</strong><UntitledIcon name={slot.vehicleType === "MOTORCYCLE" ? "motorcycle" : "car"} size={17} /></span>
+                    <span className="my-1.5 flex items-center gap-1 text-sm font-semibold leading-tight"><UntitledIcon name={appearance.status === "available" ? "check-circle" : appearance.status === "occupied" ? "car" : appearance.status === "reserved" ? "clock" : "wrench"} size={14} />{appearance.label}</span>
                     <span className="w-full truncate text-[10px] text-[var(--muted)]" title={location(slot.unitId)}>{location(slot.unitId)}</span>
                   </button>
                 })}
@@ -279,8 +280,8 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
           {selectedSlot && <div role="dialog" aria-modal="true" aria-label={`Slot ${selectedSlot.code}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedSlot(null) }}><div className="w-full max-w-md space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Slot {selectedSlot.code}</h2><button type="button" className="rounded px-2 py-1 text-sm hover:bg-[var(--border)]" onClick={() => setSelectedSlot(null)} aria-label="Close slot details">Close</button></div><dl className="grid grid-cols-2 gap-2 text-sm"><dt className="text-[var(--muted)]">Location</dt><dd>{location(selectedSlot.unitId)}</dd><dt className="text-[var(--muted)]">Vehicle type</dt><dd>{selectedSlot.vehicleType}</dd><dt className="text-[var(--muted)]">Slot type</dt><dd>{selectedSlot.type}</dd><dt className="text-[var(--muted)]">Physical state</dt><dd>{selectedSlot.isPhysicallyOccupied ? "Occupied" : "Empty"}</dd><dt className="text-[var(--muted)]">Operational status</dt><dd>{selectedSlot.operationalStatus}</dd><dt className="text-[var(--muted)]">Reservation state</dt><dd>{selectedSlot.reservationState ?? "None"}</dd></dl></div></div>}
 
           <details className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-violet-500/5">
-              <span className="flex min-w-0 items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300"><UntitledIcon name="shield" size={17} /></span><span><strong className="block text-sm">Capacity and backup settings</strong><span className="mt-0.5 block text-xs text-[var(--muted)]">View inventory and configure backup capacity</span></span></span>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-[var(--raised)]">
+              <span className="flex min-w-0 items-center gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--status-maintenance-bg)] text-[var(--maintenance)]"><UntitledIcon name="shield" size={17} /></span><span><strong className="block text-base">Capacity and backup settings</strong><span className="mt-0.5 block text-sm text-[var(--muted)]">View inventory and configure backup capacity</span></span></span>
               <UntitledIcon name="chevron-down" size={16} className="shrink-0 text-[var(--muted)] transition-transform group-open:rotate-180" />
             </summary>
             <div className="border-t border-[var(--border)] p-4"><BackupCapacityPanel structure={structure} onChanged={() => { setReload((value) => value + 1); onChanged?.() }} /></div>

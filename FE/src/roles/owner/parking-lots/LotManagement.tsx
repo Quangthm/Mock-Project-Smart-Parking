@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { useLotManagement } from "./useLotManagement"
@@ -64,10 +65,10 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
           <span className="text-[10px] text-amber-600/70 dark:text-amber-400/70 block">Awaiting checkout</span>
         </div>
 
-        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3.5 space-y-1">
-          <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 block">Backup Buffer</span>
-          <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{summaryValue(totals.totalBackup)}</span>
-          <span className="text-[10px] text-purple-600/70 dark:text-purple-400/70 block">Overflow guarantee</span>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-1">
+          <span className="text-[11px] font-medium text-[var(--muted)] block">Backup Buffer</span>
+          <span className="text-lg font-bold text-[var(--fg)]">{summaryValue(totals.totalBackup)}</span>
+          <span className="text-[10px] text-[var(--muted)] block">Overflow guarantee</span>
         </div>
       </div>
 
@@ -95,7 +96,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-[var(--muted)]">Status:</span>
-            <select
+            <RoundedSelect
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
@@ -103,12 +104,12 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
               <option value="all">All Statuses</option>
               <option value="active">Active Only</option>
               <option value="inactive">Inactive Only</option>
-            </select>
+            </RoundedSelect>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="text-[var(--muted)]">Sort:</span>
-            <select
+            <RoundedSelect
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "name" | "capacity" | "occupancy")}
@@ -116,7 +117,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
               <option value="name">Lot Name</option>
               <option value="capacity">Total Capacity</option>
               <option value="occupancy">Occupancy Rate</option>
-            </select>
+            </RoundedSelect>
           </div>
         </div>
       </div>
@@ -203,7 +204,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                     </td>
 
                     {/* Backup */}
-                    <td className="px-3 py-3.5 text-right font-medium text-purple-600 dark:text-purple-400">
+                    <td className="px-3 py-3.5 text-right font-medium text-[var(--fg)]">
                       {metrics?.backup ?? "—"}
                     </td>
 

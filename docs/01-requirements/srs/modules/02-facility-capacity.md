@@ -22,6 +22,17 @@ Facility owns structural/service changes; Operations owns accepted occupancy and
 
 Physical facts AVAILABLE/OCCUPIED/UNKNOWN/MAINTENANCE/UNAVAILABLE are separate from reservation/protection NOT_RESERVED/RESERVED/PROTECTED/BACKUP. Maintenance or closure cannot erase accepted occupation. Unknown is excluded from automatic allocation until authoritative reconciliation. Fixed backup and demand-driven protection are distinguished in the claim ledger.
 
+**Occupancy and reservation/protection identity clarification:** `OCCUPIED` describes physical occupation/projection, not who owns a reservation. The current occupant/session and the reservation/protection claimant may be the same Driver or different Drivers. Never infer identity equality from `OCCUPIED + RESERVED` or `OCCUPIED + PROTECTED`; authoritative Operations session/allocation/reservation linkage establishes whether a reservation has actually been fulfilled.
+
+`RESERVED` and `PROTECTED` remain mutually exclusive values of the current Reservation / Protection State projection. This clarification does not require a split enum or database migration. An underlying reservation entitlement may remain active in Operations while the slot projection is `PROTECTED` during the protection behavior.
+
+**Canonical different-driver example:** at 10:00, Slot S-12 is physically `OCCUPIED` by Driver A while Driver B has a future reservation associated with S-12 and its protection window is active. The slot may therefore be `OCCUPIED + PROTECTED`. Driver A's occupation does not fulfill Driver B's reservation. If Driver A departs before fulfillment, the slot can become `AVAILABLE + PROTECTED`; if Driver A remains when a usable resource is required, Operations uses compatible alternative/reallocation/conflict handling and never displaces Driver A.
+
+**Canonical same-driver example:** when Driver B is admitted into the reservation's accepted allocation and Operations links the parking session to that reservation, `OCCUPIED + RESERVED` may represent the same Driver. The equality is proven by the linkage, not the state combination.
+
+**Occupancy Validity Timespan:** this is a configurable policy; the current default is 4 hours. Runtime projection uses the resolved effective value. At an evaluation time of 10:00 with the 4-hour default effective, a currently accepted `OCCUPIED` slot is treated as occupied through the 14:00 projection horizon unless newer authoritative evidence changes it earlier. The projection supports future-capacity evaluation and may be displayed together with a future reservation/protection overlay. It is not a guarantee of actual departure time and its expiry never releases physical occupancy.
+
+
 Combined onboarding retains service authority: User owns identity, organization/membership and review evidence; Facility owns structural configuration; Operations owns accepted occupancy/claims, discovery and plan definition/coverage; Payment owns tariffs/financial terms; IoT owns raw observations/integrations. A submitted proposal is evidence, not another service's operational source of truth.
 
 ## Functional requirements
@@ -116,7 +127,7 @@ Operations atomically validates temporal/category-compatible claims and commits 
 **Actors:** Driver, Operator  
 **Stories:** US-O01, US-O02
 
-Convert a fulfilled reservation claim to actual occupancy once. Arrival, gate opening, payment, entitlement cancellation and physical departure remain separate facts; only verified departure releases occupied capacity. Preserve backup designation/history while counting occupied backup once.
+Convert a fulfilled reservation claim to actual occupancy once. A pre-existing `OCCUPIED` state does not prove fulfillment: fulfillment requires authoritative linkage between the accepted parking session, allocation and reservation. The current occupant may be the reservation claimant or a different Driver. Arrival, gate opening, payment, entitlement cancellation and physical departure remain separate facts; only verified departure releases occupied capacity. Preserve backup designation/history while counting occupied backup once.
 
 ### FR-CAP-06
 
@@ -132,10 +143,10 @@ Reject ordinary walk-in admission if actual compatible space is unavailable. Res
 **Actors:** Owner, Operator  
 **Stories:** US-O05, US-OW02
 
-Backup capacity follows the domain contract. Owner may configure backup capacity. Operator-marked backup slots remain backup; Protected capacity is dynamically calculated from applicable future reservations and the Reservation Protection Window. This protection is separate from configured backup capacity and does not force an already-occupied vehicle to move.
+Backup capacity follows the domain contract. Owner may configure backup capacity. Operator-marked backup slots remain backup; Protected capacity is dynamically calculated from applicable future reservations and the Reservation Protection Window. This protection is separate from configured backup capacity and does not force an already-occupied vehicle to move. A slot may therefore be `OCCUPIED + PROTECTED` while an unrelated current session remains in the slot. If that occupant departs, protection may remain active as `AVAILABLE + PROTECTED`; if the occupant remains when fulfillment needs the resource, apply recovery/reallocation rather than treating the reservation as fulfilled.
 
 
-A resource with no reservation/protection record is not reserved; a dedicated NOT_RESERVED database enum is not required. RESERVED includes the explicitly approved zero-price-confirmed E03 branch as well as paid confirmed reservations. AVAILABLE+RESERVED can become OCCUPIED+RESERVED on actual entry; maintenance/unavailable configuration preserves the entitlement for recovery rather than erasing it.
+A resource with no reservation/protection record is not reserved; a dedicated NOT_RESERVED database enum is not required. RESERVED includes the explicitly approved zero-price-confirmed E03 branch as well as paid confirmed reservations. `AVAILABLE + RESERVED` can become `OCCUPIED + RESERVED` when the reservation-linked Driver actually enters and the accepted session is linked to that reservation. `OCCUPIED + RESERVED` alone does not prove that linkage and can also coexist with an unrelated current occupant. Maintenance/unavailable configuration preserves the entitlement for recovery rather than erasing it.
 
 
 Design/implementation owners and exit criteria: [V11-DES-04 and 09](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

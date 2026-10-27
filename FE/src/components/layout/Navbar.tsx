@@ -1,21 +1,28 @@
 import { useApp, type View } from "../../context/AppContext"
 
-import { BrandLogo } from "../brand/BrandLogo"
+import { BrandLogo, BrandWordmark } from "../brand/BrandLogo"
 
 import { ThemeIcon } from "../icon/ThemeIcon"
+import { useLocation, useNavigate } from "react-router-dom"
 
 export function Navbar() {
   const { user, view, theme, setView, toggleTheme, signOut } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const goTo = (next: View) => {
+    setView(next)
+    if (location.pathname !== "/") navigate("/")
+  }
 
   return (
     <nav
+      aria-label="Main navigation"
       style={{
         position: "sticky",
         top: 0,
         zIndex: 100,
-        background: "var(--bg)",
+        background: "var(--sidebar)",
         borderBottom: "1px solid var(--border)",
-        backdropFilter: "blur(8px)",
       }}
     >
       <div
@@ -28,7 +35,10 @@ export function Navbar() {
       >
         {/* Logo */}
         <button
-          onClick={() => setView("landing")}
+          type="button"
+          className="public-brand-trigger"
+          aria-label="SmartParking home"
+          onClick={() => goTo("landing")}
           style={{
             display: "flex",
             alignItems: "center",
@@ -39,13 +49,8 @@ export function Navbar() {
             padding: 0,
           }}
         >
-          <BrandLogo height={60} />
-          <span className="hidden sm:inline-flex">
-            <span className="brand-wordmark" style={{ fontSize: "1.1rem" }}>
-              <span className="brand-smart">Smart</span>
-              <span className="brand-parking">Parking</span>
-            </span>
-          </span>
+          <BrandLogo height={48} />
+          <span className="hidden sm:inline-flex"><BrandWordmark height={22} /></span>
         </button>
 
         {/* Nav links */}
@@ -61,17 +66,17 @@ export function Navbar() {
               <NavLink
                 label="Home"
                 active={view === "landing"}
-                onClick={() => setView("landing")}
+                onClick={() => goTo("landing")}
               />
               <NavLink
                 label="Pricing"
                 active={view === "pricing"}
-                onClick={() => setView("pricing")}
+                onClick={() => goTo("pricing")}
               />
               <NavLink
                 label="Support"
                 active={view === "support"}
-                onClick={() => setView("support")}
+                onClick={() => goTo("support")}
               />
             </>
           )}
@@ -92,13 +97,15 @@ export function Navbar() {
           }}
         >
           <button
+            type="button"
+            className="public-theme-toggle"
             onClick={toggleTheme}
             style={{
               background: "var(--card)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
-              width: 36,
-              height: 36,
+              borderRadius: "var(--button-radius)",
+              width: 44,
+              height: 44,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -108,6 +115,7 @@ export function Navbar() {
             title={
               theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
             }
+            aria-label={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
             <span style={{ display: "block", width: 20, height: 20 }}>
               <ThemeIcon mode={theme === "dark" ? "light" : "dark"} />
@@ -127,14 +135,14 @@ export function Navbar() {
               <button
                 className="btn-outline"
                 style={{ fontSize: "0.85rem", padding: "0.4rem 0.875rem" }}
-                onClick={() => setView("sign-in")}
+                onClick={() => goTo("sign-in")}
               >
                 Sign In
               </button>
               <button
                 className="btn-primary"
                 style={{ fontSize: "0.85rem", padding: "0.4rem 0.875rem" }}
-                onClick={() => setView("sign-up")}
+                onClick={() => goTo("sign-up")}
               >
                 Sign Up
               </button>
@@ -157,13 +165,16 @@ function NavLink({
 }) {
   return (
     <button
+      type="button"
+      className="public-nav-link"
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
       style={{
         background: "none",
         border: "none",
         cursor: "pointer",
 
-        padding: "0.375rem 0.75rem",
+        padding: "0.625rem 0.75rem",
 
         borderRadius: "var(--radius)",
 
@@ -173,7 +184,6 @@ function NavLink({
 
         color: active ? "var(--primary)" : "var(--muted)",
 
-        transition: "color 0.15s",
       }}
     >
       {label}

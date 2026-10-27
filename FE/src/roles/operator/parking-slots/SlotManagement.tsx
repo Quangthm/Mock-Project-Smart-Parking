@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
 import { useApp } from "../../../context/AppContext"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
@@ -212,7 +213,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
             <UntitledIcon name="shield" size={16} />
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-bold text-purple-600">
+            <div className="text-2xl font-semibold tabular-nums text-[var(--fg)]">
               {backupSlots.length} slots
             </div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">
@@ -270,7 +271,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
               <label className="block text-xs font-semibold text-[var(--fg)] mb-1">
                 Select Vacant Operational Slot:
               </label>
-              <select
+              <RoundedSelect
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] font-mono font-semibold"
                 value={selectedSlotId}
                 disabled={!hasOverridePermission || busy || eligibleSlots.length === 0}
@@ -283,7 +284,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                     Slot {s.code} ({s.vehicleType === "motorcycle" ? "Motorcycle" : "Car"})
                   </option>
                 ))}
-              </select>
+              </RoundedSelect>
               {eligibleSlots.length === 0 && (
                 <p className="mt-1 text-[11px] text-amber-600">
                   No vacant spaces currently available to designate.
@@ -312,10 +313,10 @@ export function SlotManagement({ lot }: SlotManagementProps) {
             <button
               type="submit"
               disabled={!hasOverridePermission || !selectedSlotId || !designateReason.trim() || busy}
-              className="btn-primary text-xs py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+              className="btn-primary"
             >
               <UntitledIcon name="shield" size={14} />
-              {busy ? "Designating..." : "Confirm Backup Designation"}
+              {busy ? "Designating…" : "Confirm Backup Designation"}
             </button>
           </div>
         </form>
@@ -332,8 +333,8 @@ export function SlotManagement({ lot }: SlotManagementProps) {
               Spaces protected from general bookings and held for operational contingencies
             </p>
           </div>
-          <span className="text-xs font-mono bg-purple-500/10 text-purple-600 px-2.5 py-1 rounded font-bold">
-            BUFFER ACTIVE
+          <span className="rounded bg-[var(--status-maintenance-bg)] px-2.5 py-1 text-sm font-medium text-[var(--maintenance)]">
+            Backup active
           </span>
         </div>
 
@@ -406,7 +407,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
             className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
           >
             <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-purple-500/10 p-3 text-purple-600">
+              <div className="rounded-lg bg-[var(--status-maintenance-bg)] p-3 text-[var(--maintenance)]">
                 <UntitledIcon name="shield" size={24} />
               </div>
               <div>

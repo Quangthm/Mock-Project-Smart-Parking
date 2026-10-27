@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState } from "react"
 
 import { parkingApi, type Structure } from "../../../lib/parkingApi"
@@ -57,7 +58,7 @@ export function BackupCapacityPanel({
   return (
     <section className="space-y-5 text-[var(--fg)]">
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--raised)] text-[var(--maintenance)]">
           <UntitledIcon name="shield" size={19} />
         </span>
         <div>
@@ -104,16 +105,16 @@ export function BackupCapacityPanel({
           <div><h4 className="text-sm font-semibold">Configure backup</h4><p className="mt-1 text-xs text-[var(--muted)]">Reserve capacity by location and vehicle category.</p></div>
           <label className="block space-y-1.5 text-xs font-medium text-[var(--muted)]">
             <span>Scope</span>
-            <select className="input w-full text-sm" value={form.unitId} onChange={(e) => setForm({ ...form, unitId: e.target.value })}>
+            <RoundedSelect className="input w-full text-sm" value={form.unitId} onChange={(e) => setForm({ ...form, unitId: e.target.value })}>
               <option value="">Whole site</option>
               {structure.units.map((unit) => <option key={unit.id} value={unit.id}>{scopeName(unit.id)}</option>)}
-            </select>
+            </RoundedSelect>
           </label>
           <label className="block space-y-1.5 text-xs font-medium text-[var(--muted)]">
             <span>Vehicle category</span>
-            <select className="input w-full text-sm" value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}>
+            <RoundedSelect className="input w-full text-sm" value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}>
               {["CAR", "MOTORCYCLE"].map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
+            </RoundedSelect>
           </label>
           <label className="block space-y-1.5 text-xs font-medium text-[var(--muted)]">
             <span>Configured backup</span>

@@ -1,9 +1,9 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useApp } from "../../../context/AppContext"
 import { authData as store } from "../data/data"
 import { useNavigate } from "react-router-dom"
 import { getUserHomePath } from "../../operator/data/roleRoutes"
-import { BrandLogo } from "../../../components/brand/BrandLogo"
+import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -13,16 +13,20 @@ import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
 import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
 import { isValidAccountEmail, isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
 
-export function SignIn() {
-  const { setUser, setView } = useApp()
+export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" } = {}) {
+  const { view, user: currentUser, setUser, setView } = useApp()
   const navigate = useNavigate()
+  const [mode, setMode] = useState<"password" | "otp">(flow === "email-otp" ? "otp" : "password")
+
+  useEffect(() => {
+    if (flow === "email-otp" && !currentUser && view !== "sign-in") setView("sign-in")
+  }, [currentUser, flow, setView, view])
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [mode, setMode] = useState<"otp" | "password">("password")
 
   const [challenge, setChallenge] = useState<{
     challengeId: string
@@ -117,6 +121,7 @@ export function SignIn() {
         if (nextView) {
           setPassword("")
           setView(nextView)
+          if (flow === "email-otp") navigate("/")
           return
         }
       } catch (recoveryError) {
@@ -180,8 +185,8 @@ export function SignIn() {
     setError("")
     setSubmitting(true)
     try {
-      setChallenge(await authApi.requestOtp(email.trim()))
       setMode("otp")
+      setChallenge(await authApi.requestOtp(email.trim()))
       setCode("")
       setMfaValue("")
       setPassword("")
@@ -193,6 +198,7 @@ export function SignIn() {
         if (nextView) {
           setPassword("")
           setView(nextView)
+          if (flow === "email-otp") navigate("/")
           return
         }
       } catch (recoveryError) {
@@ -296,31 +302,24 @@ export function SignIn() {
 
   const handleCompleteForgotPassword = () => {
     setShowForgotPassword(false)
-    setMode("password")
     setEmail(fpEmail)
     setPassword(fpNewPassword)
   }
 
   return (
     <div
-      className="auth-page-background"
-      style={{
-        minHeight: "80vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "2rem 1rem",
-      }}
+      className="auth-page-background auth-stage auth-stage-sign-in"
     >
-      <div style={{ width: "100%", maxWidth: "420px" }}>
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <BrandLogo height={100} style={{ margin: "0 auto 1rem" }} />
-          <PageHeader title="Sign In" variant="compact" align="center" description="Welcome back to SmartParking" />
+      <div className="auth-panel">
+        <div className="auth-panel-heading">
+          <BrandLogo height={64} style={{ margin: "0 auto 0.5rem" }} />
+          <BrandWordmark height={21} />
+          <PageHeader title={mode === "otp" ? "Email OTP Sign In" : "Sign In"} variant="compact" align="center" description={mode === "otp" ? challenge ? "Enter the code sent to your email" : "Enter your email to receive a sign-in code" : "Welcome back to SmartParking"} />
         </div>
 
         <form
           onSubmit={submit}
-          className="card auth-form-background"
+          className="card auth-form-background auth-form-card"
           style={{ display: "flex", flexDirection: "column", gap: "1.125rem" }}
         >
           <div>
@@ -329,15 +328,15 @@ export function SignIn() {
             </label>
             <input
               id="sign-in-email"
+              name="email"
               className="input"
               type="text"
               autoComplete="username"
               value={email}
               disabled={submitting || !!challenge || !!mfaChallenge}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setError("") }}
               placeholder="you@example.com or phone number"
               required
-              autoFocus
               style={{ fontSize: "1rem" }}
             />
           </div>
@@ -347,7 +346,6 @@ export function SignIn() {
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
                   alignItems: "center",
                   marginBottom: "0.25rem",
                 }}
@@ -359,25 +357,11 @@ export function SignIn() {
                 >
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={handleOpenForgotPassword}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--primary)",
-                    cursor: "pointer",
-                    fontSize: "0.825rem",
-                    fontWeight: 600,
-                    padding: 0,
-                  }}
-                >
-                  Forgot password?
-                </button>
               </div>
               <div style={{ position: "relative" }}>
                 <input
                   id="sign-in-password"
+                  name="password"
                   className="input"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
@@ -410,6 +394,23 @@ export function SignIn() {
                   <PasswordVisibilityIcon visible={showPassword} />
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={handleOpenForgotPassword}
+                style={{
+                  display: "block",
+                  margin: "0.5rem 0 0 auto",
+                  padding: 0,
+                  background: "none",
+                  border: "none",
+                  color: "var(--primary)",
+                  cursor: "pointer",
+                  fontSize: "0.825rem",
+                  fontWeight: 600,
+                }}
+              >
+                Forgot password?
+              </button>
             </div>
           )}
 
@@ -445,6 +446,20 @@ export function SignIn() {
               >
                 Check {email} for your code. Expires in 5 minutes.
               </p>
+              <button
+                className="btn-outline justify-center"
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  setChallenge(null)
+                  setCode("")
+                  setMfaValue("")
+                  setUseRecoveryCode(false)
+                  setError("")
+                }}
+              >
+                Change email
+              </button>
               <label className="label text-center">
                 Verification code
                 <input
@@ -520,19 +535,52 @@ export function SignIn() {
               padding: "0.75rem",
             }}
           >
-            {submitting ? "Please wait…" : "Sign-In"}
+            {submitting ? "Please wait…" : mode === "otp" ? challenge ? "Verify and Sign In" : "Send Email Code" : "Sign In"}
           </button>
 
           {mode === "password" && !mfaChallenge && (
+            <div className="auth-alt-actions" aria-label="Other sign-in options">
+              <button
+                type="button"
+                disabled={submitting}
+                className="btn-outline justify-center"
+                onClick={() => {
+                  setError("")
+                  setPassword("")
+                  navigate("/sign-in/email-otp")
+                }}
+                aria-label="Sign in with email OTP"
+              >
+                <span className="auth-email-icon" aria-hidden="true">✉</span> Email OTP
+              </button>
+              <button
+                type="button"
+                disabled
+                className="btn-outline justify-center"
+                aria-label="Sign in with Google (not available yet)"
+                title="Google sign-in is not available yet"
+              >
+                <svg className="auth-google-icon" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" />
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.27 5.48-4.8 7.18l7.73 6c4.51-4.17 7.11-10.52 7.11-17.65Z" />
+                  <path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.75 24c0-1.6.28-3.15.77-4.59l-7.98-6.2A24.1 24.1 0 0 0 0 24c0 3.87.93 7.52 2.55 10.78l7.98-6.19Z" />
+                  <path fill="#34A853" d="M24 48c6.48 0 11.92-2.13 15.89-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z" />
+                </svg> Google
+              </button>
+            </div>
+          )}
+
+          {mode === "otp" && (
             <button
               type="button"
-              disabled={submitting}
               className="btn-outline justify-center"
-              onClick={requestSignInOtp}
+              disabled={submitting}
+              onClick={() => { setView("sign-in"); navigate("/") }}
             >
-              Sign in with email / SMS code
+              Back to password sign-in
             </button>
           )}
+
 
           <p
             style={{
@@ -545,7 +593,7 @@ export function SignIn() {
             Don't have an account?{" "}
             <button
               type="button"
-              onClick={() => setView("sign-up")}
+              onClick={() => { setView("sign-up"); if (mode === "otp") navigate("/") }}
               style={{
                 background: "none",
                 border: "none",
@@ -621,7 +669,7 @@ export function SignIn() {
                 <h3
                   id="forgot-password-title"
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontWeight: 800,
                     fontSize: "1.4rem",
                     margin: "0.2rem 0 0",
@@ -877,7 +925,7 @@ export function SignIn() {
                 </div>
                 <h4
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontSize: "1.2rem",
                     fontWeight: 700,
                     margin: 0,

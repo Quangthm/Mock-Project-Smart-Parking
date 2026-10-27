@@ -9,6 +9,7 @@ using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
 using SmartParking.ReservationService.API;
 using SmartParking.ReservationService.Application;
+using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using ReservationDomain = SmartParking.ReservationService.Domain;
 
 namespace SmartParking.UserService.Tests;
@@ -47,6 +48,9 @@ public sealed class StructureHttpContractTests
         using var list = await client.GetAsync($"api/reservations?siteId={Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.Unauthorized, list.StatusCode);
         Assert.Contains("UNAUTHENTICATED", await list.Content.ReadAsStringAsync());
+        using var sessions = await client.GetAsync($"api/parking-sessions?siteId={Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.Unauthorized, sessions.StatusCode);
+        Assert.Contains("UNAUTHENTICATED", await sessions.Content.ReadAsStringAsync());
         using var snapshot = await client.PostAsJsonAsync($"internal/structure/{Guid.NewGuid()}/snapshot", new { tenantId = Guid.NewGuid() });
         Assert.Equal(HttpStatusCode.Unauthorized, snapshot.StatusCode);
         Assert.Null(store.CurrentToken);
@@ -152,6 +156,7 @@ public sealed class StructureHttpContractTests
         {
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
+            builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
             builder.Services.AddSingleton<IStructureSafetyStore>(store);
         });
     }

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -44,6 +45,14 @@ function isAvailable(slot: ParkingSlot) {
       !!slot.reservedUntil &&
       new Date(slot.reservedUntil).getTime() <= Date.now())
   )
+}
+
+function formatDuration(hours: number) {
+  const totalMinutes = Math.round(hours * 60)
+  const wholeHours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return [wholeHours ? `${wholeHours} hr${wholeHours === 1 ? "" : "s"}` : "", minutes ? `${minutes} min` : ""]
+    .filter(Boolean).join(" ")
 }
 
 export function BookingFlow({
@@ -264,7 +273,8 @@ export function BookingFlow({
 
   return (
     <div className="driver-booking-flow" style={{ maxWidth: 1440, margin: "0 auto" }}>
-      <PageHeader title={<>Book a Spot at {lotSnapshot.name}</>} variant="compact" actions={<div className="flex items-center gap-2">
+      <div className="booking-flow-header">
+      <PageHeader title={<>Book a Spot at {lotSnapshot.name}</>} variant="compact" actions={<div className="booking-flow-header-actions">
           <button
             type="button"
             className="btn-outline"
@@ -293,12 +303,13 @@ export function BookingFlow({
             ← Back to Parking
           </button>
         </div>} />
-      <div style={{ display: "flex", gap: "0.3rem", marginBottom: "1.5rem" }}>
+      </div>
+      <div className="booking-flow-steps" aria-label="Booking progress">
         {["Select Slot", "Time & Vehicle", "Payment"].map((label, index) => {
           const currentIndex = step === "slot" ? 0 : step === "details" ? 1 : 2
 
           return (
-            <div key={label} style={{ flex: 1, textAlign: "center" }}>
+            <div key={label} className="booking-flow-step">
               <div
                 style={{
                   height: 3,
@@ -343,7 +354,7 @@ export function BookingFlow({
                   fontSize: "1.05rem",
                   fontWeight: 700,
                   color: "var(--fg)",
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
                 }}
               >
                 Select a Parking Slot
@@ -385,12 +396,12 @@ export function BookingFlow({
                   background:
                     viewMode === "3d" ? "var(--primary)" : "transparent",
 
-                  color: viewMode === "3d" ? "white" : "var(--muted)",
+                  color: viewMode === "3d" ? "var(--primary-fg)" : "var(--muted)",
 
-                  transition: "all 0.2s",
+                  transition: "background-color 0.2s, color 0.2s",
                 }}
               >
-                🎮 3D View
+                <UntitledIcon name="parking" size={16} /> 3D View
               </button>
               <button
                 type="button"
@@ -411,12 +422,12 @@ export function BookingFlow({
                   background:
                     viewMode === "grid" ? "var(--primary)" : "transparent",
 
-                  color: viewMode === "grid" ? "white" : "var(--muted)",
+                  color: viewMode === "grid" ? "var(--primary-fg)" : "var(--muted)",
 
-                  transition: "all 0.2s",
+                  transition: "background-color 0.2s, color 0.2s",
                 }}
               >
-                ▦ Grid View
+                <UntitledIcon name="grid" size={16} /> Grid View
               </button>
             </div>
           </div>
@@ -516,13 +527,7 @@ export function BookingFlow({
                         Floor {floor}
                       </div>
                     )}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(8, minmax(28px, 1fr))",
-                        gap: "0.35rem",
-                      }}
-                    >
+                    <div className="booking-slot-grid">
                       {floorSlots.map((slot) => {
                         const available = isAvailable(slot)
 
@@ -545,7 +550,7 @@ export function BookingFlow({
                             disabled={step !== "slot"}
                             onClick={() => chooseSlot(slot)}
                             style={{
-                              height: 36,
+                              minHeight: 44,
                               borderRadius: 4,
                               border: `1.5px solid ${
                                 selectedSlot?.id === slot.id
@@ -589,7 +594,7 @@ export function BookingFlow({
             <dl className="booking-summary-list">
               <div><dt>Vehicle</dt><dd>{selectedVehicle ? `${selectedVehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} · ${formatVietnamesePlate(selectedVehicle)}` : vehicleLoading ? "Loading vehicles…" : "Choose in the next step"}</dd></div>
               <div><dt>Arrival</dt><dd>{startTime ? new Date(startTime).toLocaleString("vi-VN") : "Choose in the next step"}</dd></div>
-              <div><dt>Duration</dt><dd>{hours > 0 ? `${hours.toFixed(1)} hours` : "Choose in the next step"}</dd></div>
+              <div><dt>Duration</dt><dd>{hours > 0 ? formatDuration(hours) : "Choose in the next step"}</dd></div>
               <div><dt>Estimated price</dt><dd>{hours > 0 ? `${amount.toLocaleString("vi-VN")} VND` : "Available after choosing time"}</dd></div>
             </dl>
             {!selectedSlot && <p className="booking-summary-empty">Select an available space in the model or grid to continue.</p>}
@@ -627,7 +632,7 @@ export function BookingFlow({
             style={{
               margin: "0 0 0.9rem",
               color: "var(--fg)",
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
             }}
           >
             Slot {selectedSlot?.number} · Choose time and vehicle
@@ -643,7 +648,7 @@ export function BookingFlow({
               Vehicle
               {vehicleLoading && <span className="text-sm text-[var(--muted)]">Loading vehicles…</span>}
               {!vehicleLoading && vehicles.length > 0 && (
-                <select
+                <RoundedSelect
                   className="input"
                   value={selectedVehicleId}
                   onChange={(event) => setSelectedVehicleId(event.target.value)}
@@ -654,7 +659,7 @@ export function BookingFlow({
                       {formatVietnamesePlate(vehicle)}
                     </option>
                   ))}
-                </select>
+                </RoundedSelect>
               )}
             </label>
           {vehicleError && (
@@ -710,7 +715,7 @@ export function BookingFlow({
             >
               <label className="label">
                 Type
-                <select
+                <RoundedSelect
                   className="input"
                   value={vehicleForm.type}
                   onChange={(event) => {
@@ -723,7 +728,7 @@ export function BookingFlow({
                 >
                   <option value="motorcycle">Motorcycle</option>
                   <option value="car">Car</option>
-                </select>
+                </RoundedSelect>
               </label>
               <label className="label" style={{ gridColumn: "1 / -1" }}>
                 Vietnamese license plate
@@ -827,7 +832,7 @@ export function BookingFlow({
           <h3
             style={{
               margin: "0 0 0.9rem",
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               color: "var(--fg)",
             }}
           >
@@ -976,7 +981,7 @@ export function BookingFlow({
           <h3
             style={{
               margin: "0 0 0.5rem",
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               color: "var(--fg)",
             }}
           >

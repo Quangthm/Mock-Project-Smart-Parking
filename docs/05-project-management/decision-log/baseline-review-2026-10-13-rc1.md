@@ -358,6 +358,9 @@ Current index cleanup: repository documentation indexes still describe older SRS
 
 ## 11. Evidence references
 
+> [!NOTE]
+> **Historical Baseline Reference:** Inputs listed below (e.g. smartpark-srs-v0.9.md, smartpark-business-rules-v0.8.5.md, Solution architecture v0.9) reflect the historical repository inputs audited at the review date (2026-10-13). Active normative requirements and architecture have since progressed to **SRS v1.0** (docs/01-requirements/srs/smartpark-srs-v1.0.md) and **Solution Architecture v1.0** (docs/02-architecture/solution-architecture/smartpark-solution-architecture-v1.0.md). Earlier files are archived in docs/archive/.
+
 Local inputs: `smartpark-srs-v0.9.md` (especially §3.1–3.9, §4, §6.8, Appendix D/E/F); `smartpark-business-rules-v0.8.5.md` (policy register, monthly M-01–09 and retained conflict notes); `smartpark-use-cases-v0.9.md`; `smartpark-user-stories-v0.8.5.md`; supplied SQL/dictionary/DB architecture/README.
 
 Repository references at the reviewed commit:

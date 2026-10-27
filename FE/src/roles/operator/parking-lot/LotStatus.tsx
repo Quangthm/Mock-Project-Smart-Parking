@@ -1,6 +1,8 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { ParkingStatus, type ParkingStatusKind } from "../../../components/ui/ParkingStatus"
 import { SlotInspectionModal } from "./SlotInspectionModal"
 import type { OperatorSite } from "../../../lib/operatorApi"
 import { useLotStatus, type SlotStatusFilter } from "./useLotStatus"
@@ -38,7 +40,7 @@ export function LotStatus({
             type="button"
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
               viewMode === "3d"
-                ? "bg-[var(--primary)] text-white shadow-sm"
+                ? "bg-[var(--action)] text-[var(--action-fg)]"
                 : "text-[var(--muted)] hover:text-[var(--fg)]"
             }`}
             onClick={() => {
@@ -46,13 +48,13 @@ export function LotStatus({
               setThreeError(false)
             }}
           >
-            <span>🎮</span> 3D Digital Twin
+            <UntitledIcon name="parking" size={15} /> 3D Digital Twin
           </button>
           <button
             type="button"
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
               viewMode === "grid"
-                ? "bg-[var(--primary)] text-white shadow-sm"
+                ? "bg-[var(--action)] text-[var(--action-fg)]"
                 : "text-[var(--muted)] hover:text-[var(--fg)]"
             }`}
             onClick={() => setViewMode("grid")}
@@ -63,7 +65,7 @@ export function LotStatus({
             type="button"
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
               viewMode === "list"
-                ? "bg-[var(--primary)] text-white shadow-sm"
+                ? "bg-[var(--action)] text-[var(--action-fg)]"
                 : "text-[var(--muted)] hover:text-[var(--fg)]"
             }`}
             onClick={() => setViewMode("list")}
@@ -73,35 +75,18 @@ export function LotStatus({
         </div>} />
 
       {/* Mini Stat Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-green-600 font-semibold block">Available</span>
-            <span className="text-xl font-bold text-green-600">{availableCount}</span>
+      <div className="parking-kpi-strip">
+        {([
+          ["available", availableCount],
+          ["occupied", occupiedCount],
+          ["reserved", reservedCount],
+          ["maintenance", maintenanceCount],
+        ] as [ParkingStatusKind, number][]).map(([status, count]) => (
+          <div className="parking-kpi" key={status}>
+            <ParkingStatus status={status} />
+            <strong>{count}</strong>
           </div>
-          <span className="h-3 w-3 rounded-full bg-green-500" />
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-red-600 font-semibold block">Occupied</span>
-            <span className="text-xl font-bold text-red-600">{occupiedCount}</span>
-          </div>
-          <span className="h-3 w-3 rounded-full bg-red-500" />
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-amber-600 font-semibold block">Reserved / Hold</span>
-            <span className="text-xl font-bold text-amber-600">{reservedCount}</span>
-          </div>
-          <span className="h-3 w-3 rounded-full bg-amber-500" />
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-semibold block">Maintenance</span>
-            <span className="text-xl font-bold text-[var(--fg)]">{maintenanceCount}</span>
-          </div>
-          <span className="h-3 w-3 rounded-full bg-slate-400" />
-        </div>
+        ))}
       </div>
 
       {/* Navigation Filter Bar */}
@@ -122,7 +107,7 @@ export function LotStatus({
                     }}
                     className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${
                       selectedFloor === floor
-                        ? "bg-[var(--primary)] text-white"
+                        ? "bg-[var(--action)] text-[var(--action-fg)]"
                         : "bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--fg)] border border-[var(--border)]"
                     }`}
                   >
@@ -142,7 +127,8 @@ export function LotStatus({
           <div className="relative">
             <input
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] uppercase font-mono w-44"
-              placeholder="Find Slot (e.g. A-001)"
+              aria-label="Find a parking space by code"
+              placeholder="Find space (e.g. A-001)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -154,18 +140,18 @@ export function LotStatus({
           <span className="text-[var(--muted)] font-medium">Filters:</span>
 
           {/* Vehicle Type */}
-          <select
+          <RoundedSelect
             className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
             value={vehicleTypeFilter}
             onChange={(e) => setVehicleTypeFilter(e.target.value as "all" | "car" | "motorcycle")}
           >
             <option value="all">All Vehicle Types</option>
-            <option value="car">Car (Ô tô)</option>
-            <option value="motorcycle">Motorcycle (Xe máy)</option>
-          </select>
+            <option value="car">Car</option>
+            <option value="motorcycle">Motorcycle</option>
+          </RoundedSelect>
 
           {/* Status dimension */}
-          <select
+          <RoundedSelect
             className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -176,11 +162,11 @@ export function LotStatus({
             <option value="reserved">Reserved / Protected</option>
             <option value="backup">Designated Backup</option>
             <option value="maintenance">Maintenance / Disabled</option>
-          </select>
+          </RoundedSelect>
 
           {/* Zone Selector */}
           {availableZones.length > 0 && (
-            <select
+            <RoundedSelect
               className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
               value={selectedZone}
               onChange={(e) => setSelectedZone(e.target.value)}
@@ -191,7 +177,7 @@ export function LotStatus({
                   {z.name}
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           )}
 
           <span className="ml-auto text-xs text-[var(--muted)]">
@@ -248,22 +234,14 @@ export function LotStatus({
                 2D Schematic Map — {isOutdoor ? "Ground Zone Grid" : `Floor ${selectedFloor}`}
               </h3>
               <p className="text-xs text-[var(--muted)]">
-                Color-coded occupancy matrix. Click any space badge to inspect telemetry.
+                Space status is shown with a label and icon. Select a space for details.
               </p>
             </div>
-            <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-green-500" /> Vacant
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-red-500" /> Occupied
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-amber-500" /> Reserved
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded bg-purple-500" /> Backup
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <ParkingStatus status="available" compact />
+              <ParkingStatus status="occupied" compact />
+              <ParkingStatus status="reserved" compact />
+              <ParkingStatus status="maintenance" compact />
             </div>
           </div>
 
@@ -275,28 +253,20 @@ export function LotStatus({
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
               {filteredSlots.map((slot) => {
                 const isSelected = inspectedSlot?.id === slot.id
-                let bgClass = "bg-green-500/15 border-green-500/40 text-green-700 dark:text-green-400"
-                if (slot.status === "occupied") {
-                  bgClass = "bg-red-500/15 border-red-500/40 text-red-700 dark:text-red-400"
-                } else if (slot.status === "reserved") {
-                  bgClass = "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-400"
-                } else if (slot.status === "maintenance" || slot.status === "disabled") {
-                  bgClass = "bg-slate-500/15 border-slate-500/40 text-slate-500"
-                }
+                const status: ParkingStatusKind = slot.status === "occupied" ? "occupied" : slot.status === "reserved" ? "reserved" : slot.status === "maintenance" || slot.status === "disabled" ? "maintenance" : "available"
 
                 return (
                   <button
                     key={slot.id}
                     type="button"
                     onClick={() => setInspectedSlot(slot)}
-                    className={`h-12 rounded-lg border text-xs font-mono font-bold flex flex-col items-center justify-center transition-all transform hover:scale-105 ${bgClass} ${
-                      isSelected ? "ring-2 ring-[var(--primary)] shadow-md" : ""
-                    }`}
+                    className={`parking-space${isSelected ? " is-selected" : ""}`}
+                    data-status={status}
+                    aria-label={`Space ${slot.number}, ${status}, ${slot.vehicleType}`}
+                    aria-pressed={isSelected}
                   >
-                    <span>{slot.number}</span>
-                    <span className="text-[9px] font-normal opacity-80">
-                      {slot.vehicleType}
-                    </span>
+                    <strong>{slot.number}</strong>
+                    <ParkingStatus status={status} compact />
                   </button>
                 )
               })}

@@ -37,20 +37,22 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
   useEffect(() => {
     const resize = () => {
       setViewport({ width: window.innerWidth, height: window.innerHeight })
-      if (!open) setPosition((current) => ({ x: clamp(current.x, edgeGap, Math.max(edgeGap, window.innerWidth - launcherSize - edgeGap)), y: clamp(current.y, parkingMode ? edgeGap : 76, Math.max(parkingMode ? edgeGap : 76, window.innerHeight - launcherSize - edgeGap)) }))
+      const driverMobile = role === "driver" && window.matchMedia("(max-width: 900px)").matches
+      const bottomGap = driverMobile ? parkingMode ? 88 : 96 : edgeGap
+      if (!open) setPosition((current) => ({ x: clamp(current.x, edgeGap, Math.max(edgeGap, window.innerWidth - launcherSize - edgeGap)), y: clamp(current.y, parkingMode ? edgeGap : 76, Math.max(parkingMode ? edgeGap : 76, window.innerHeight - launcherSize - bottomGap)) }))
     }
     window.addEventListener("resize", resize)
     return () => window.removeEventListener("resize", resize)
-  }, [open, parkingMode])
+  }, [open, parkingMode, role])
   useEffect(() => {
     if (open) return
     if (wasDraggedRef.current && !parkingDetailsOpen) return
     const mobile = window.matchMedia("(max-width: 900px)").matches
     const details = parkingMode && parkingDetailsOpen ? document.querySelector(".find-parking-details-wrap")?.getBoundingClientRect() : null
     const x = details && !mobile ? details.left - launcherSize - 16 : viewport.width - launcherSize - (mobile ? 18 : 24)
-    const y = details && mobile ? details.top - launcherSize - 12 : viewport.height - launcherSize - (parkingMode && mobile && parkingSheetOpen ? Math.min(viewport.height * .46, 370) + 36 : parkingMode && mobile ? 88 : 24)
+    const y = details && mobile ? details.top - launcherSize - 12 : viewport.height - launcherSize - (parkingMode && mobile && parkingSheetOpen ? Math.min(viewport.height * .46, 370) + 36 : parkingMode && mobile ? 88 : role === "driver" && mobile ? 96 : 24)
     setPosition({ x: clamp(x, edgeGap, viewport.width - launcherSize - edgeGap), y: clamp(y, edgeGap, viewport.height - launcherSize - edgeGap) })
-  }, [open, parkingMode, parkingSheetOpen, parkingDetailsOpen, viewport])
+  }, [open, parkingMode, parkingSheetOpen, parkingDetailsOpen, role, viewport])
 
   const mobileParking = parkingMode && window.matchMedia("(max-width: 900px)").matches
   const detailsRect = parkingMode && parkingDetailsOpen ? document.querySelector(".find-parking-details-wrap")?.getBoundingClientRect() : null
@@ -58,7 +60,8 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
   const safeLeft = parkingMode && !mobileParking && searchRect ? searchRect.right + 12 : edgeGap
   const safeRight = parkingMode && !mobileParking && detailsRect ? detailsRect.left - 12 : viewport.width - edgeGap
   const safeTop = mobileParking ? searchRect ? searchRect.bottom + 12 : 118 : parkingMode ? 205 : 76
-  const safeBottom = mobileParking && detailsRect ? detailsRect.top - 12 : viewport.height - edgeGap
+  const driverMobile = role === "driver" && window.matchMedia("(max-width: 900px)").matches
+  const safeBottom = mobileParking && detailsRect ? detailsRect.top - 12 : driverMobile ? viewport.height - 96 : viewport.height - edgeGap
   const chatWidth = Math.min(380, Math.max(180, safeRight - safeLeft))
   const chatHeight = Math.min(520, Math.max(160, safeBottom - safeTop))
   const chatLeft = clamp(position.x + launcherSize - chatWidth, safeLeft, Math.max(safeLeft, safeRight - chatWidth))
@@ -83,7 +86,7 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
     const minX = parkingMode && !mobile && search ? search.right + 12 : edgeGap
     const maxX = parkingMode && !mobile && details ? details.left - launcherSize - 12 : window.innerWidth - launcherSize - edgeGap
     const minY = mobile ? search ? search.bottom + 12 : 118 : parkingMode ? 205 : 76
-    const maxY = mobile && details ? details.top - launcherSize - 12 : window.innerHeight - launcherSize - edgeGap
+    const maxY = mobile && details ? details.top - launcherSize - 12 : window.innerHeight - launcherSize - (role === "driver" && window.matchMedia("(max-width: 900px)").matches ? parkingMode ? 88 : 96 : edgeGap)
     setPosition({
       x: clamp(drag.start.x + dx, minX, Math.max(minX, maxX)),
       y: clamp(drag.start.y + dy, minY, Math.max(minY, maxY)),
@@ -181,8 +184,8 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
           <header className="flex shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4 py-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)] text-[var(--primary-fg)]"><UntitledIcon name="sparkles" size={18} /></span>
             <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">SmartParking AI</h2><p className="text-[11px] text-[var(--muted)]">How can I help?</p></div>
-            <button type="button" onClick={newConversation} title="New conversation" aria-label="New conversation" className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--card)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"><UntitledIcon name="plus" size={15} /><span>New</span></button>
-            <button type="button" onClick={closeChat} title="Close" aria-label="Close conversation" className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--card)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"><UntitledIcon name="x" size={17} /></button>
+            <button type="button" onClick={newConversation} title="New conversation" aria-label="New conversation" className="flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--card)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"><UntitledIcon name="plus" size={15} /><span>New</span></button>
+            <button type="button" onClick={closeChat} title="Close" aria-label="Close conversation" className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--card)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"><UntitledIcon name="x" size={17} /></button>
           </header>
 
           <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions text">
@@ -195,7 +198,7 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
           <form onSubmit={submit} className="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--bg)] p-3">
             <label htmlFor="smartparking-ai-input" className="sr-only">Message SmartParking AI</label>
             <input id="smartparking-ai-input" ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} maxLength={500} placeholder="Ask a question…" className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--primary)]" />
-            <button type="submit" disabled={!input.trim() || pending} aria-label="Send message" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)] text-[var(--primary-fg)] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"><UntitledIcon name="arrow-right" size={18} /></button>
+            <button type="submit" disabled={!input.trim() || pending} aria-label="Send message" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-fg)] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"><UntitledIcon name="arrow-right" size={18} /></button>
           </form>
         </section>
       <button

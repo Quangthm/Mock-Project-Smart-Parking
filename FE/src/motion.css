@@ -1,0 +1,295 @@
+/* Animate UI motion roles for SmartParking's custom React components.
+   The app does not use Radix/shadcn primitives, so these token-aligned
+   transitions keep the existing elements and their behavior intact. */
+:root {
+  --sp-motion-press: 120ms;
+  --sp-motion-fade: 200ms;
+  --sp-motion-menu: 220ms;
+  --sp-motion-reveal: 300ms;
+  --sp-motion-surface: 400ms;
+  --sp-ease-out: cubic-bezier(.23, 1, .32, 1);
+  --sp-ease-soft: cubic-bezier(.215, .61, .355, 1);
+  --sp-ease-color: cubic-bezier(.25, .1, .25, 1);
+}
+
+/* Controls answer immediately on press; hover changes their surface, not size. */
+:is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent,
+    .icon-button, .profile-trigger, .dashboard-nav-item, .popover-item,
+    .settings-nav-item, .settings-accent-option, .find-parking-reopen,
+    .settings-theme-option, .find-parking-map-menu-trigger,
+    .parking-hero-3d-pause, .carousel-pause, .notification-trigger,
+    .public-nav-link, .public-brand-trigger, .public-theme-toggle,
+    .auth-role-tabs > button, .driver-history-tabs > button,
+    .current-bookings-tabs button, .auth-alt-actions > button,
+    .landing-page .hero-actions > button,
+    .landing-final-actions > button) {
+  transition:
+    transform var(--sp-motion-press) var(--sp-ease-out),
+    background-color var(--sp-motion-fade) var(--sp-ease-color),
+    border-color var(--sp-motion-fade) var(--sp-ease-color),
+    color var(--sp-motion-fade) var(--sp-ease-color),
+    box-shadow var(--sp-motion-fade) var(--sp-ease-color),
+    opacity var(--sp-motion-fade) var(--sp-ease-out);
+}
+
+:is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent,
+    .icon-button, .profile-trigger, .dashboard-nav-item, .popover-item,
+    .settings-nav-item, .settings-theme-option, .find-parking-reopen,
+    .notification-trigger, .public-nav-link, .public-brand-trigger,
+    .landing-page .hero-actions > button, .landing-final-actions > button):not(:disabled):hover,
+.dashboard-theme :is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost,
+                     .btn-danger, .btn-accent, .icon-button, .profile-trigger,
+                     .settings-nav-item, .popover-item):not(:disabled):hover,
+.dashboard-theme .find-parking-map-menu-trigger:hover,
+.dashboard-theme .dashboard-nav-item:hover,
+.dashboard-theme .dashboard-nav-item:focus-visible,
+.landing-benefit:hover, .landing-step:hover,
+.dashboard-theme :is(.find-parking-result, .current-booking-card):hover {
+  transform: none;
+}
+
+:is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent,
+    .icon-button, .profile-trigger, .dashboard-nav-item, .popover-item,
+    .settings-nav-item, .settings-accent-option, .settings-theme-option,
+    .find-parking-reopen, .find-parking-map-menu-trigger,
+    .parking-hero-3d-pause, .carousel-pause, .notification-trigger,
+    .public-nav-link, .public-brand-trigger, .public-theme-toggle,
+    .auth-role-tabs > button, .driver-history-tabs > button,
+    .current-bookings-tabs button, .auth-alt-actions > button,
+    .landing-page .hero-actions > button,
+    .landing-final-actions > button):not(:disabled):active {
+  transform: scale(.97);
+}
+
+/* Whole clickable rows use a quieter press than small buttons. */
+.dashboard-theme .find-parking-result:active { transform: scale(.985); }
+.dashboard-theme .dashboard-nav-item:not(:disabled):active { transform: scale(.97); }
+
+.public-nav-link { position: relative; }
+.public-nav-link::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--sp-motion-reveal) var(--sp-ease-soft);
+}
+.public-nav-link[aria-current="page"]::after { transform: scaleX(1); }
+
+/* Short spatial entrances for menus and hints used throughout the four roles. */
+.dashboard-theme .dashboard-popover {
+  transform-origin: top right;
+  animation: sp-menu-in var(--sp-motion-menu) var(--sp-ease-soft) both;
+}
+.dashboard-nav-hint {
+  transform-origin: left center;
+  animation: sp-hint-in var(--sp-motion-menu) var(--sp-ease-soft) both;
+}
+.dashboard-theme .find-parking-map-menu-list {
+  transform-origin: top right;
+  animation: sp-menu-in var(--sp-motion-menu) var(--sp-ease-soft) both;
+}
+.notification-pop-in {
+  transform-origin: top right;
+  animation: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(.94) translateY(-5px);
+  transition: opacity 170ms var(--sp-ease-out),
+              transform var(--sp-motion-menu) var(--sp-ease-soft),
+              visibility 0s linear var(--sp-motion-menu);
+}
+.notification-pop-in[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: scale(1) translateY(0);
+  transition: opacity 170ms var(--sp-ease-out),
+              transform var(--sp-motion-menu) var(--sp-ease-soft),
+              visibility 0s;
+}
+.notification-trigger svg { transition: transform var(--sp-motion-menu) var(--sp-ease-soft); }
+.notification-trigger[aria-expanded="true"] svg { transform: rotate(-12deg); }
+.notification-badge { animation: sp-notification-badge 360ms var(--sp-ease-out) both; }
+@keyframes sp-notification-badge {
+  from { opacity: 0; transform: scale(.65); }
+  to { opacity: 1; transform: scale(1); }
+}
+.dashboard-theme .find-parking-map-style-list {
+  transform-origin: top left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(.92) translateY(-4px);
+  transition: opacity 160ms var(--sp-ease-out),
+              transform var(--sp-motion-menu) var(--sp-ease-soft),
+              visibility 0s linear var(--sp-motion-menu);
+}
+.dashboard-theme .find-parking-map-style-list[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: scale(1) translateY(0);
+  transition: opacity 160ms var(--sp-ease-out),
+              transform var(--sp-motion-menu) var(--sp-ease-soft),
+              visibility 0s;
+}
+.notification-row {
+  transition: background-color var(--sp-motion-fade) var(--sp-ease-color),
+              color var(--sp-motion-fade) var(--sp-ease-color),
+              transform var(--sp-motion-press) var(--sp-ease-out);
+}
+.notification-row:active { transform: scale(.985); }
+.input, .dashboard-theme :is(select, textarea) {
+  transition: border-color var(--sp-motion-fade) var(--sp-ease-color),
+              background-color var(--sp-motion-fade) var(--sp-ease-color),
+              box-shadow var(--sp-motion-fade) var(--sp-ease-color);
+}
+@keyframes sp-menu-in {
+  from { opacity: 0; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes sp-hint-in {
+  from { opacity: 0; translate: -5px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* Large surfaces settle calmly; dialogs keep their center while fading in. */
+.dashboard-theme .settings-dialog,
+[role="dialog"].card {
+  animation: sp-surface-in var(--sp-motion-surface) var(--sp-ease-soft) both;
+}
+.dashboard-theme .find-parking-details-panel {
+  animation: sp-panel-in var(--sp-motion-reveal) var(--sp-ease-out) both;
+}
+@keyframes sp-surface-in {
+  from { opacity: 0; filter: blur(4px); transform: scale(.96); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+@keyframes sp-panel-in {
+  from { opacity: 0; filter: blur(4px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+/* Content changes are visible without moving the fixed rail or map canvas. */
+#main-content > .animate-in,
+.dashboard-theme .dashboard-content .animate-in {
+  animation: sp-view-in var(--sp-motion-reveal) var(--sp-ease-out) both;
+}
+/* Keep fixed map tools and the Driver chatbot anchored to the viewport. */
+.dashboard-theme #main-content > .animate-in {
+  animation: sp-fade-in var(--sp-motion-fade) var(--sp-ease-out) both;
+}
+.dashboard-theme .driver-map-main > .animate-in { animation-name: sp-fade-in; }
+@keyframes sp-view-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.notification-sweep { border-radius: 18px; transform-origin: top left; animation: sp-toast-in-out 5.2s both; }
+@keyframes sp-toast-in-out {
+  0% { opacity: 0; transform: translateY(-8px) scale(.96); filter: blur(4px); }
+  4%, 94% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(-8px) scale(.98); filter: blur(0); }
+}
+
+/* Existing scroll reveal keeps its observer, using the same motion rhythm. */
+.landing-motion-ready .landing-reveal {
+  transform: translate3d(0, 16px, 0);
+  transition: opacity var(--sp-motion-surface) var(--sp-ease-out),
+              transform var(--sp-motion-surface) var(--sp-ease-out);
+}
+.landing-motion-ready .landing-reveal[data-motion="scale"] {
+  transform: translate3d(0, 16px, 0);
+}
+.landing-motion-ready .landing-reveal.is-visible { transform: translate3d(0, 0, 0); }
+.landing-motion-ready .landing-reveal-delay-1 { transition-delay: 85ms; }
+.landing-motion-ready .landing-reveal-delay-2 { transition-delay: 170ms; }
+.landing-motion-ready .landing-reveal-delay-3 { transition-delay: 255ms; }
+.landing-page :is(.landing-benefit, .landing-step),
+.dashboard-theme :is(.card, .owner-kpi, .operator-kpi, .admin-kpi, .parking-kpi,
+                     .find-parking-result, .current-booking-card) {
+  transition: border-color var(--sp-motion-fade) var(--sp-ease-color),
+              background-color var(--sp-motion-fade) var(--sp-ease-color),
+              box-shadow var(--sp-motion-fade) var(--sp-ease-color);
+}
+.auth-route .auth-panel {
+  animation: sp-surface-in var(--sp-motion-surface) var(--sp-ease-soft) both;
+}
+
+@media (max-width: 1024px) {
+  /* Keep the hint's existing transform that positions it over its icon. */
+  .dashboard-nav-hint { animation: sp-hint-in var(--sp-motion-menu) var(--sp-ease-soft) both; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-pop-in,
+  .notification-pop-in[data-open="true"],
+  .dashboard-theme .find-parking-map-style-list,
+  .dashboard-theme .find-parking-map-style-list[data-open="true"] {
+    transform: none;
+    transition: opacity var(--sp-motion-fade) var(--sp-ease-out), visibility 0s;
+  }
+  .notification-trigger svg,
+  .dashboard-theme .find-parking-map-style-trigger svg { transition: none; transform: none; }
+  .notification-badge { animation: none; }
+  :is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent,
+      .icon-button, .profile-trigger, .dashboard-nav-item, .popover-item,
+      .settings-nav-item, .settings-accent-option, .settings-theme-option,
+      .find-parking-reopen, .find-parking-map-menu-trigger,
+      .parking-hero-3d-pause, .carousel-pause, .notification-trigger,
+      .public-nav-link, .public-brand-trigger, .public-theme-toggle,
+      .auth-role-tabs > button, .driver-history-tabs > button,
+      .current-bookings-tabs button, .auth-alt-actions > button,
+      .landing-page .hero-actions > button,
+      .landing-final-actions > button),
+  .landing-page :is(.landing-benefit, .landing-step),
+  .dashboard-theme :is(.card, .owner-kpi, .operator-kpi, .admin-kpi, .parking-kpi,
+                       .find-parking-result, .current-booking-card) {
+    transition: background-color var(--sp-motion-fade) var(--sp-ease-color),
+                border-color var(--sp-motion-fade) var(--sp-ease-color),
+                color var(--sp-motion-fade) var(--sp-ease-color);
+  }
+  :is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent,
+      .icon-button, .profile-trigger, .dashboard-nav-item, .popover-item,
+      .settings-nav-item, .settings-accent-option, .settings-theme-option,
+      .find-parking-reopen, .find-parking-map-menu-trigger,
+      .parking-hero-3d-pause, .carousel-pause, .notification-trigger,
+      .public-nav-link, .public-brand-trigger, .public-theme-toggle,
+      .auth-role-tabs > button, .driver-history-tabs > button,
+      .current-bookings-tabs button, .auth-alt-actions > button,
+      .landing-page .hero-actions > button,
+      .landing-final-actions > button):not(:disabled):active,
+  .dashboard-theme .find-parking-result:active { transform: none; }
+  .dashboard-theme .dashboard-nav-item:not(:disabled):active { transform: none; }
+  .dashboard-theme .dashboard-popover,
+  .dashboard-theme .find-parking-map-menu-list,
+  .dashboard-nav-hint,
+  .dashboard-theme .settings-dialog,
+  [role="dialog"].card,
+  .dashboard-theme .find-parking-details-panel,
+  #main-content > .animate-in,
+  .dashboard-theme .dashboard-content .animate-in,
+  .auth-route .auth-panel { animation: sp-fade-in var(--sp-motion-fade) var(--sp-ease-out) both; }
+  .landing-motion-ready .landing-reveal,
+  .landing-motion-ready .landing-reveal[data-motion="scale"],
+  .landing-motion-ready .landing-reveal.is-visible { transform: none; transition: opacity var(--sp-motion-fade) var(--sp-ease-out); }
+  .notification-row { transition: background-color var(--sp-motion-fade) var(--sp-ease-color); }
+  .notification-row:active { transform: none; }
+  .notification-sweep { animation: sp-toast-fade 5.2s both; }
+  .public-nav-link::after { transition: none; }
+}
+@media (max-width: 1024px) {
+  .notification-pop-in { transform-origin: bottom left; }
+}
+@keyframes sp-toast-fade { 0%, 100% { opacity: 0; } 4%, 94% { opacity: 1; } }

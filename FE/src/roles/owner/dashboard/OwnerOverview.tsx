@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useMemo } from 'react';
 import { ownerData as store } from '../data/data';
 import type { Booking } from '../../../lib/types';
@@ -24,7 +25,7 @@ function buildRevenueTrend(bookings: Booking[]) {
   });
 }
 
-export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSiteId: string; sites: Site[]; operators: Operator[] }) {
+export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }: { selectedSiteId: string; onSiteChange: (siteId: string) => void; sites: Site[]; operators: Operator[] }) {
 
   // Build the view data from the owner's sites, then apply the global site selection before aggregating stats.
   const overview = useMemo(() => {
@@ -35,37 +36,54 @@ export function OwnerOverview({ selectedSiteId, sites, operators }: { selectedSi
     const revenue = completedBookings.reduce((sum, booking) => sum + booking.amount, 0);
     const capacity = visibleSites.reduce((sum, site) => sum + site.totalPhysicalCapacity, 0);
     const visibleOperators = operators.filter(operator => selectedSiteId === 'all' || operator.siteIds.includes(selectedSiteId));
-    return { revenue, capacity, employeeCount: visibleOperators.length, siteCount: siteIds.size, revenueTrend: buildRevenueTrend(bookings) };
+    return { revenue, capacity, employeeCount: visibleOperators.length, siteCount: siteIds.size, visibleSites, revenueTrend: buildRevenueTrend(bookings) };
   }, [selectedSiteId, sites, operators]);
 
   const stats = [
-    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND`, accent: 'text-green-600' },
-    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US'), accent: 'text-blue-600' },
-    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US'), accent: 'text-violet-600' },
+    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND` },
+    { label: 'Parking Capacity', value: overview.capacity.toLocaleString('en-US') },
+    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US') },
   ];
 
   return (
     <section className="space-y-6">
-      <PageHeader eyebrow={selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'} title="Owner Overview" description="Combined performance for the selected parking sites." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {stats.map(stat => <article key={stat.label} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"><p className="text-sm text-[var(--muted)]">{stat.label}</p><p className={`mt-2 text-2xl font-bold ${stat.accent}`}>{stat.value}</p></article>)}
+      <div className="management-title-row">
+        <PageHeader eyebrow={selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'} title="Owner Overview" description="Combined performance for the selected parking sites." />
+        <label className="management-site-filter"><span>Site</span><RoundedSelect className="input" value={selectedSiteId} onChange={event => onSiteChange(event.target.value)}><option value="all">All Sites</option>{sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}</RoundedSelect></label>
       </div>
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-        <div className="mb-5">
-          <h2 className="text-lg font-semibold text-[var(--fg)]">Revenue Trend</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">Completed bookings over the last 6 months</p>
+      <div className="owner-overview-canvas management-dashboard-grid">
+        <div className="owner-kpi-strip management-kpi-strip">
+          {stats.map(stat => <article key={stat.label} className="owner-kpi"><p className="text-sm text-[var(--muted)]">{stat.label}</p><p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--fg)]">{stat.value}</p></article>)}
         </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={overview.revenueTrend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
-            <YAxis tickFormatter={value => value === 0 ? '0' : `${(Number(value) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
-            <Tooltip formatter={value => `${Number(value).toLocaleString('vi-VN')} VND`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-            <Area type="monotone" dataKey="revenue" stroke="#2563eb" fill="#2563eb18" strokeWidth={2} name="Revenue" />
-            <Area type="monotone" dataKey="netRevenue" stroke="#22c55e" fill="#22c55e18" strokeWidth={2} name="Net Revenue (85%)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </section>
+        <section className="owner-revenue-panel rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-[var(--fg)]">Revenue Trend</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">Completed bookings over the last 6 months</p>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={overview.revenueTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted)' }} />
+              <YAxis ticks={overview.revenueTrend.every(point => point.revenue === 0) ? [0] : undefined} tickFormatter={value => value === 0 ? '0' : `${(Number(value) / 1000).toFixed(0)}K`} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
+              <Tooltip formatter={value => `${Number(value).toLocaleString('vi-VN')} VND`} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+              <Area type="linear" dataKey="revenue" stroke="var(--accent)" fill="transparent" strokeWidth={2} name="Revenue" />
+              <Area type="linear" dataKey="netRevenue" stroke="var(--muted)" fill="transparent" strokeWidth={2} strokeDasharray="5 4" name="Net Revenue (85%)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="management-side-panel" aria-labelledby="owner-sites-heading">
+          <div className="management-panel-heading"><div><h2 id="owner-sites-heading">Parking sites</h2><p>Capacity across the current selection</p></div><span className="management-panel-count">{overview.siteCount}</span></div>
+          <div className="management-site-list">
+            {overview.visibleSites.length ? overview.visibleSites.slice(0, 5).map(site => (
+              <div className="management-site-row" key={site.id}>
+                <span className="management-site-symbol" aria-hidden="true">P</span>
+                <span className="management-site-copy"><strong>{site.name}</strong><small>{site.address}</small></span>
+                <span className="management-site-number">{site.totalPhysicalCapacity.toLocaleString('en-US')}<small>spaces</small></span>
+              </div>
+            )) : <p className="management-empty">No parking sites in this selection.</p>}
+          </div>
+        </section>
+      </div>
       <p className="text-xs text-[var(--muted)]">Revenue uses completed bookings. Parking Capacity comes from the saved physical layout.</p>
     </section>
   );

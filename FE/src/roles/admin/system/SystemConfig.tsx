@@ -30,7 +30,7 @@ export function SystemConfig() {
         <section className="card">
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 600,
               fontSize: "0.95rem",
               marginBottom: "1rem",
@@ -113,7 +113,7 @@ export function SystemConfig() {
         <section className="card">
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 600,
               fontSize: "0.95rem",
               marginBottom: "1rem",
