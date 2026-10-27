@@ -135,12 +135,12 @@ export function OnboardingWizard({
   })
 
   const [pricing, setPricing] = useState({
-    hourlyRate: "15000",
-    dailyRate: "100000",
-    nightRate: "50000",
-    gracePeriodMinutes: 15,
-    subscriptionMonthly: "800000",
-    subscriptionYearly: "8000000",
+    hourlyRate: "",
+    dailyRate: "",
+    nightRate: "",
+    gracePeriodMinutes: "15",
+    subscriptionMonthly: "",
+    subscriptionYearly: "",
   })
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
@@ -241,12 +241,12 @@ export function OnboardingWizard({
       }
 
       const numericPricing = {
-        hourlyRate: Number(pricing.hourlyRate || 0),
-        dailyRate: Number(pricing.dailyRate || 0),
-        nightRate: Number(pricing.nightRate || 0),
-        gracePeriodMinutes: pricing.gracePeriodMinutes,
-        subscriptionMonthly: Number(pricing.subscriptionMonthly || 0),
-        subscriptionYearly: Number(pricing.subscriptionYearly || 0),
+        hourlyRate: Number(pricing.hourlyRate || 15000),
+        dailyRate: Number(pricing.dailyRate || 100000),
+        nightRate: Number(pricing.nightRate || 50000),
+        gracePeriodMinutes: Number(pricing.gracePeriodMinutes || 15),
+        subscriptionMonthly: Number(pricing.subscriptionMonthly || 800000),
+        subscriptionYearly: Number(pricing.subscriptionYearly || 8000000),
       }
       if (Object.values(numericPricing).some((value) =>
         !Number.isSafeInteger(value) || value < 0)) {
@@ -841,6 +841,7 @@ export function OnboardingWizard({
                     max={2000}
                     value={lotConfig.totalSlots}
                     placeholder="e.g. 50"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) =>
                       setLotConfig((c) => ({
                         ...c,
@@ -859,6 +860,7 @@ export function OnboardingWizard({
                       max={20}
                       value={lotConfig.floors}
                       placeholder="e.g. 3"
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         setLotConfig((c) => ({ ...c, floors: e.target.value }))
                       }
@@ -1015,17 +1017,36 @@ export function OnboardingWizard({
               }}
             >
               {([
-                { label: "Hourly Rate (VND)", key: "hourlyRate" },
-
-                { label: "Daily Rate (VND)", key: "dailyRate" },
-
-                { label: "Night Rate (VND)", key: "nightRate" },
-
-                { label: "Grace Period (min)", key: "gracePeriodMinutes" },
-
-                { label: "Monthly Pass (VND)", key: "subscriptionMonthly" },
-
-                { label: "Annual Pass (VND)", key: "subscriptionYearly" },
+                {
+                  label: "Hourly Rate (VND)",
+                  key: "hourlyRate",
+                  placeholder: "15,000",
+                },
+                {
+                  label: "Daily Rate (VND)",
+                  key: "dailyRate",
+                  placeholder: "100,000",
+                },
+                {
+                  label: "Night Rate (VND)",
+                  key: "nightRate",
+                  placeholder: "50,000",
+                },
+                {
+                  label: "Grace Period (min)",
+                  key: "gracePeriodMinutes",
+                  placeholder: "15",
+                },
+                {
+                  label: "Monthly Pass (VND)",
+                  key: "subscriptionMonthly",
+                  placeholder: "800,000",
+                },
+                {
+                  label: "Annual Pass (VND)",
+                  key: "subscriptionYearly",
+                  placeholder: "8,000,000",
+                },
               ] as const).map((f) => (
                 <div key={f.key}>
                   <label className="label">{f.label}</label>
@@ -1034,17 +1055,20 @@ export function OnboardingWizard({
                       className="input"
                       type="number"
                       min={0}
+                      placeholder={f.placeholder}
                       value={pricing.gracePeriodMinutes}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         setPricing((p) => ({
                           ...p,
-                          gracePeriodMinutes: parseFloat(e.target.value) || 0,
+                          gracePeriodMinutes: e.target.value,
                         }))
                       }
                     />
                   ) : (
                     <GroupedNumberInput
                       className="input"
+                      placeholder={f.placeholder}
                       value={pricing[f.key]}
                       onValueChange={(digits) =>
                         setPricing((p) => ({ ...p, [f.key]: digits }))
@@ -1253,27 +1277,27 @@ export function OnboardingWizard({
               />
               <Row
                 label="Hourly Rate"
-                value={`${formatGroupedDigits(pricing.hourlyRate || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.hourlyRate || "15000")} VND`}
               />
               <Row
                 label="Daily Rate"
-                value={`${formatGroupedDigits(pricing.dailyRate || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.dailyRate || "100000")} VND`}
               />
               <Row
                 label="Night Rate"
-                value={`${formatGroupedDigits(pricing.nightRate || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.nightRate || "50000")} VND`}
               />
               <Row
                 label="Monthly Pass"
-                value={`${formatGroupedDigits(pricing.subscriptionMonthly || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.subscriptionMonthly || "800000")} VND`}
               />
               <Row
                 label="Annual Pass"
-                value={`${formatGroupedDigits(pricing.subscriptionYearly || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.subscriptionYearly || "8000000")} VND`}
               />
               <Row
                 label="Grace Period"
-                value={`${pricing.gracePeriodMinutes} minutes`}
+                value={`${pricing.gracePeriodMinutes || "15"} minutes`}
               />
             </div>
             <div style={{ display: "flex", gap: "0.75rem" }}>
