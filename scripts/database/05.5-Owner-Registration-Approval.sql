@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS owner_applications (
     user_id UUID NOT NULL UNIQUE REFERENCES users(id),
     business_name VARCHAR(255) NOT NULL,
     lot_type VARCHAR(30) NOT NULL CHECK (lot_type IN ('outdoor', 'basement', 'multi-storey')),
+    setup_token VARCHAR(255),
+    draft_structure JSONB,
+    lot_setup_complete BOOLEAN NOT NULL DEFAULT FALSE,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     submitted_at TIMESTAMPTZ NOT NULL,
     reviewed_at TIMESTAMPTZ,
@@ -16,4 +19,7 @@ CREATE TABLE IF NOT EXISTS owner_applications (
     CHECK ((status = 'pending' AND reviewed_at IS NULL AND reviewed_by IS NULL)
         OR (status <> 'pending' AND reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL))
 );
+ALTER TABLE owner_applications ADD COLUMN IF NOT EXISTS setup_token VARCHAR(255);
+ALTER TABLE owner_applications ADD COLUMN IF NOT EXISTS draft_structure JSONB;
+ALTER TABLE owner_applications ADD COLUMN IF NOT EXISTS lot_setup_complete BOOLEAN NOT NULL DEFAULT FALSE;
 COMMIT;

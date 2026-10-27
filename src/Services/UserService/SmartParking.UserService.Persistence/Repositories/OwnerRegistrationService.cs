@@ -1,4 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.UserService.Domain.Entities;
@@ -19,9 +22,30 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         if (!Validator.TryValidateObject(body, new ValidationContext(body), errors, true))
             throw Error("VALIDATION_FAILED", string.Join(" ", errors.Select(e => e.ErrorMessage)));
     }
-    private static OwnerApplicationDto Result(OwnerApplication a) => new(a.Id, a.UserId, a.User.FullName,
-        a.BusinessName, a.User.Email!, a.User.Phone!, a.LotType, a.Status, a.SubmittedAt,
-        a.ReviewedAt, a.ReviewedBy, a.ReviewNote);
+
+    private static OwnerLotSetupDto? ParseLotSetup(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<OwnerLotSetupDto>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); }
+        catch { return null; }
+    }
+
+    private static OwnerApplicationDto Result(OwnerApplication a) => new(
+        a.Id,
+        a.UserId,
+        a.User.FullName,
+        a.BusinessName,
+        a.User.Email!,
+        a.User.Phone!,
+        a.LotType,
+        a.Status,
+        a.SubmittedAt,
+        a.ReviewedAt,
+        a.ReviewedBy,
+        a.ReviewNote,
+        ContactVerified: a.User?.EmailVerifiedAt != null,
+        LotSetupComplete: a.LotSetupComplete,
+        LotSetup: ParseLotSetup(a.DraftStructure));
 
     public async Task<OwnerApplicationDto> RegisterAsync(OwnerRegistrationDto body, CancellationToken ct)
     {
@@ -39,15 +63,63 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
             Status = "PENDING_APPROVAL", CreatedOn = now };
         account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id.Value, RoleCode = "BUSINESS_OWNER" });
         user.Accounts.Add(account);
+        var setupToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var application = new OwnerApplication { Id = Guid.NewGuid(), UserId = user.Id.Value, User = user,
-            BusinessName = body.BusinessName.Trim(), LotType = body.LotType, SubmittedAt = now };
+            BusinessName = body.BusinessName.Trim(), LotType = body.LotType, SubmittedAt = now,
+            SetupToken = setupToken, LotSetupComplete = false };
         db.OwnerApplications.Add(application);
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: "23505" })
         { throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409); }
-        var challenge = await workflows.IssueOwnerAsync(user, ct);
         await tx.CommitAsync(ct);
-        return Result(application) with { Verification = challenge, ContactVerified = false };
+        return Result(application) with { SetupToken = setupToken, LotSetupComplete = false, ContactVerified = false, Verification = null };
+    }
+
+    public async Task<OwnerApplicationDto> SubmitLotSetupAsync(SubmitLotSetupRequestDto body, CancellationToken ct)
+    {
+        Validate(body);
+        Validate(body.Lot);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var application = await db.OwnerApplications.FromSqlInterpolated(
+            $"SELECT * FROM owner_applications WHERE id = {body.RegistrationId} FOR UPDATE")
+            .Include(a => a.User)
+            .SingleOrDefaultAsync(ct);
+        if (application is null)
+            throw Error("APPLICATION_NOT_FOUND", "Owner application was not found.", 404);
+        if (application.Status != "pending")
+            throw Error("APPLICATION_CLOSED", "Owner application is no longer pending.", 409);
+        if (string.IsNullOrWhiteSpace(application.SetupToken) || !CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(application.SetupToken),
+            Encoding.UTF8.GetBytes(body.SetupToken.Trim())))
+            throw Error("INVALID_SETUP_TOKEN", "Setup token is invalid or expired.", 401);
+        var user = await db.Users.FromSqlInterpolated(
+            $"SELECT * FROM users WHERE id = {application.UserId} FOR UPDATE").SingleAsync(ct);
+        if (user.DeletedOn != null || user.Status != UserStatus.PendingVerification)
+            throw Error("APPLICATION_CLOSED", "Account is no longer awaiting setup.", 409);
+
+        body.Lot.Devices ??= [];
+        var lotJson = JsonSerializer.Serialize(body.Lot);
+        application.DraftStructure = lotJson;
+        application.LotSetupComplete = true;
+        application.User = user;
+        await db.SaveChangesAsync(ct);
+
+        var existingChallenge = await db.AuthChallenges
+            .Where(c => c.UserId == user.Id && c.Purpose == "OWNER_CONTACT" && c.ConsumedAt == null && c.ExpiresAt > clock.GetUtcNow())
+            .OrderByDescending(c => c.ExpiresAt)
+            .FirstOrDefaultAsync(ct);
+        var challenge = existingChallenge != null
+            ? AccountWorkflowService.Result(existingChallenge)
+            : await workflows.IssueOwnerAsync(user, ct);
+
+        await tx.CommitAsync(ct);
+        return Result(application) with
+        {
+            LotSetupComplete = true,
+            LotSetup = body.Lot,
+            Verification = challenge,
+            ContactVerified = user.EmailVerifiedAt != null
+        };
     }
 
     private async Task RequireAdmin(Guid id, CancellationToken ct)
@@ -83,6 +155,8 @@ public sealed class OwnerRegistrationService(AppDbContext db, IPasswordService p
         await db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={application.UserId} ORDER BY id FOR UPDATE").Include(a=>a.AccountRoles).LoadAsync(ct);
         if (application.Status != "pending" || user.DeletedOn != null || user.Status != UserStatus.PendingApproval)
             throw Error("APPLICATION_CLOSED", "Owner application is no longer pending.", 409);
+        if (!application.LotSetupComplete)
+            throw Error("SETUP_REQUIRED", "First-lot setup must be completed before approval.", 409);
         if (user.EmailVerifiedAt is null)
             throw Error("CONTACT_UNVERIFIED", "Verify required contact before approval.", 409);
         var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "PENDING_APPROVAL" &&

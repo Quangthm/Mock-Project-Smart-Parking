@@ -7,6 +7,9 @@ public sealed class OwnerApplication
     public User User { get; set; } = null!;
     public string BusinessName { get; set; } = "";
     public string LotType { get; set; } = "";
+    public string? SetupToken { get; set; }
+    public bool LotSetupComplete { get; set; }
+    public string? DraftStructure { get; set; }
     public string Status { get; set; } = "pending";
     public DateTimeOffset SubmittedAt { get; set; }
     public DateTimeOffset? ReviewedAt { get; set; }

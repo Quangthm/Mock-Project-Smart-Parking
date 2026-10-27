@@ -25,6 +25,13 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
         StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
 
     [AllowAnonymous]
+    [HttpPost("register/owner/lot-setup")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> SubmitLotSetup([FromBody] SubmitLotSetupRequestDto body,
+        [FromServices] IOwnerRegistrationService registrations, CancellationToken ct) =>
+        Ok(new { success = true, data = await registrations.SubmitLotSetupAsync(body, ct) });
+
+    [AllowAnonymous]
     [HttpPost("register/driver")]
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> RegisterDriver([FromBody] DriverRegistrationDto body,
