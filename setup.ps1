@@ -644,8 +644,7 @@ if (!$SkipDatabase) {
         # Container env is used internally; credentials never become command arguments.
         # Send shell code through stdin: PowerShell 5.1 strips native argument quotes.
         # The trailing comment also consumes its Windows CRLF line terminator.
-        $probe = 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q -c "SELECT 1" # local authentication probe'
-        $probe | & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile exec -T $container sh -s | Out-Null
+        & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile exec -T $container sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q -c "SELECT 1"' | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "$service database authentication failed. Restore the password used to initialize this volume; no data was reset." }
         # Runner status lines print green; psql command chatter prints dim gray.
         $runnerOutput = & (Join-Path $taskRoot 'scripts/apply-workflow-migrations.ps1') -Service $service -SchemaRoot $taskRoot -EnvPath $envFile
@@ -705,12 +704,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
         Write-Warning 'DevelopmentAdmin:Password differs between user-secrets and .env; user-secrets will be overwritten to match .env. Setup does not change the Admin password already seeded in the database — if Admin login fails afterwards, restore the old password in .env or rerun with -RecreateDb.'
     }
     if ($toSync.Count) {
-        $previousEncoding = $OutputEncoding
-        try {
-            $OutputEncoding = New-Object Text.UTF8Encoding($false)
-            $toSync | ConvertTo-Json | & dotnet user-secrets set --project $projectByService[$service] | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service." }
-        } finally { $OutputEncoding = $previousEncoding }
+        foreach ($name in $toSync.Keys) {
+            & dotnet user-secrets set $name $toSync[$name] --project $projectByService[$service] | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service ($name)." }
+        }
     }
     foreach ($name in $removable) {
         & dotnet user-secrets remove $name --project $projectByService[$service] | Out-Null
