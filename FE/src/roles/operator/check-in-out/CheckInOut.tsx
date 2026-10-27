@@ -16,6 +16,60 @@ type QuickGateResult =
   | { kind: "reservation"; booking: Booking; action: GateAction }
   | { kind: "walk-in"; plate: string; session: WalkInParkingSession | null; action: GateAction; vehicleType?: string }
 
+function notifyDemoSlotScan(
+  siteId: string,
+  action: GateAction,
+  plate: string,
+  imageUrl?: string,
+  session?: {
+    id: string
+    entryTime: string
+    entryImageUrl: string | null
+    vehicleType: string
+    ticketReference?: string
+    originalPlate?: string
+    normalizedPlate?: string
+    status?: string
+  },
+) {
+  if (action === "check-in" && typeof window !== "undefined") {
+    const storageKey = `smartpark:demo-pending-checkins:${siteId}`
+    const pending = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as Array<{
+      plate: string
+      imageUrl?: string
+      vehicleType?: string
+      session?: object
+    }>
+    pending.push({ plate, imageUrl, vehicleType: session?.vehicleType, session })
+    window.localStorage.setItem(storageKey, JSON.stringify(pending))
+  }
+  window.dispatchEvent(new CustomEvent(
+    action === "check-in" ? "smartpark:demo-check-in" : "smartpark:demo-check-out",
+    {
+      detail: {
+        siteId,
+        plate,
+        imageUrl,
+        vehicleType: session?.vehicleType,
+        session: session
+          ? {
+              id: session.id,
+              originalPlate: session.originalPlate ?? plate,
+              normalizedPlate: session.normalizedPlate ?? plate.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(),
+              vehicleType: session.vehicleType,
+              ticketReference: session.ticketReference ?? `WALKIN-${session.id.slice(0, 8).toUpperCase()}`,
+              entryTime: session.entryTime,
+              exitTime: null,
+              status: session.status ?? "ACTIVE",
+              entryImageUrl: session.entryImageUrl ?? imageUrl ?? null,
+              exitImageUrl: null,
+            }
+          : undefined,
+      },
+    },
+  ))
+}
+
 interface CheckInOutProps {
   mode: "check-in" | "check-out"
   lot: OperatorSite | null
@@ -231,6 +285,15 @@ export function CheckInOut({
       setQuickInput("")
       setLatestScanImage("")
       setLatestImageIsUpload(false)
+      notifyDemoSlotScan(lot.id, action, updatedBooking.licensePlate, imageData, action === "check-in"
+        ? {
+            id: updatedBooking.id,
+            entryTime: updatedBooking.startTime,
+            entryImageUrl: updatedBooking.entryImageUrl ?? null,
+            vehicleType: "CAR",
+            originalPlate: updatedBooking.licensePlate,
+          }
+        : undefined)
       onDataChanged?.()
     } catch (error) {
       setActionFeedback({
@@ -276,6 +339,16 @@ export function CheckInOut({
       setQuickInput("")
       setLatestScanImage("")
       setLatestImageIsUpload(false)
+      notifyDemoSlotScan(lot.id, action, session.licensePlate, imageData, action === "check-in"
+        ? {
+            id: session.id,
+            entryTime: session.entryTime,
+            entryImageUrl: session.entryImageUrl,
+            vehicleType: session.vehicleType,
+            ticketReference: `WALKIN-${session.id.slice(0, 8).toUpperCase()}`,
+            originalPlate: session.licensePlate,
+          }
+        : undefined)
       onDataChanged?.()
     } catch (error) {
       setActionFeedback({

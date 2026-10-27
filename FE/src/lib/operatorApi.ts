@@ -32,6 +32,23 @@ export interface OperatorSlot extends ParkingSlot {
   operationalStatus: string
   isPhysicallyOccupied: boolean
   reservationState: string | null
+  demoPlate?: string
+  demoImageUrl?: string
+  demoCheckedInAt?: string
+  demoSession?: DemoSlotSession
+}
+
+export interface DemoSlotSession {
+  id: string
+  originalPlate: string
+  normalizedPlate: string
+  vehicleType: string
+  ticketReference: string
+  entryTime: string
+  exitTime: string | null
+  status: string
+  entryImageUrl: string | null
+  exitImageUrl: string | null
 }
 
 export interface OperatorSite {

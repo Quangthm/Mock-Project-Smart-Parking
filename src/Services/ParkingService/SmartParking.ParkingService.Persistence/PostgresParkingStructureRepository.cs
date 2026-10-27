@@ -1,117 +1,197 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.ParkingService.Application;
 using SmartParking.ParkingService.Domain;
+using SmartParking.ParkingService.Persistence.Entities;
 
 namespace SmartParking.ParkingService.Persistence;
 
-// One transaction and site row lock per mutation. Register as scoped; NpgsqlDataSource is singleton.
-public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) : IParkingStructureRepository
+public sealed class PostgresParkingStructureRepository(ParkingDbContext db) : IParkingStructureRepository
 {
-    private static NpgsqlCommand Command(NpgsqlConnection db, NpgsqlTransaction tx, string sql, params object?[] values)
-    {
-        var command = new NpgsqlCommand(sql, db, tx);
-        foreach (var value in values) command.Parameters.Add(new NpgsqlParameter { Value = value ?? DBNull.Value });
-        return command;
-    }
-    private static async Task Execute(NpgsqlConnection db, NpgsqlTransaction tx, string sql, CancellationToken ct, params object?[] values)
-    { await using var cmd = Command(db, tx, sql, values); await cmd.ExecuteNonQueryAsync(ct); }
-    private static async Task EnsureTenantAsync(
-        NpgsqlConnection db, NpgsqlTransaction tx, OwnerScope owner, CancellationToken ct)
-    {
-        await using var command = Command(db, tx,
-            "SELECT id FROM tenants WHERE id=$1 AND status='ACTIVE' AND deleted_at IS NULL FOR SHARE",
-            owner.TenantId);
-        if (await command.ExecuteScalarAsync(ct) is null)
-        {
-            throw new StructureException("FORBIDDEN", "Active tenant is required.");
-        }
-    }
-    private static SiteProfile Profile(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.GetString(4),
-        r.IsDBNull(5) ? null : r.GetDecimal(5), r.IsDBNull(6) ? null : r.GetDecimal(6), r.GetString(7) == "ACTIVE", r.GetInt32(8), r.GetString(7));
-    private const string SiteColumns = "id, tenant_id, site_code, name, address, latitude, longitude, status, total_physical_capacity";
-    private static string AuditState(ParkingStructure structure) => System.Text.Json.JsonSerializer.Serialize(new { structure.Site, structure.Units, structure.Slots, structure.Paths, structure.BackupPolicies });
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct); await using var tx = await db.BeginTransactionAsync(ct);
-        await EnsureTenantAsync(db, tx, owner, ct);
-        var result = new List<SiteProfile>();
-        await using (var cmd = Command(db, tx, $"SELECT {SiteColumns} FROM parking_sites WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY site_code", owner.TenantId))
-        await using (var reader = await cmd.ExecuteReaderAsync(ct))
-            while (await reader.ReadAsync(ct)) result.Add(Profile(reader));
-        await tx.CommitAsync(ct); return result;
+        await EnsureTenantAsync(owner.TenantId, ct);
+        return await db.ParkingSites.AsNoTracking()
+            .Where(site => site.TenantId == owner.TenantId && site.DeletedAt == null)
+            .OrderBy(site => site.SiteCode)
+            .Select(site => ToProfile(site))
+            .ToListAsync(ct);
     }
+
     public async Task<SiteProfile> CreateAsync(OwnerScope owner, SiteProfile site, CancellationToken ct)
     {
         if (site.TenantId != owner.TenantId)
             throw new StructureException("FORBIDDEN", "Site must belong to the supplied tenant.");
-        await using var db = await source.OpenConnectionAsync(ct); await using var tx = await db.BeginTransactionAsync(ct);
-        await EnsureTenantAsync(db, tx, owner, ct);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await EnsureTenantAsync(owner.TenantId, ct);
+        db.ParkingSites.Add(new ParkingSiteEntity
+        {
+            Id = site.Id,
+            TenantId = site.TenantId,
+            SiteCode = site.Code,
+            Name = site.Name,
+            Address = site.Address,
+            Latitude = site.Latitude,
+            Longitude = site.Longitude,
+            Status = site.Status,
+            TotalPhysicalCapacity = site.TotalPhysicalCapacity,
+        });
+        db.StructureChangeAudits.Add(new StructureChangeAuditEntity
+        {
+            Id = Guid.NewGuid(),
+            SiteId = site.Id,
+            ActorId = owner.UserId,
+            AfterState = JsonSerializer.Serialize(new ParkingStructure(site), JsonOptions),
+        });
+
         try
         {
-            await Execute(db, tx, """
-                INSERT INTO parking_sites(id, tenant_id, site_code, name, address, latitude, longitude)
-                VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::numeric)
-                """, ct, site.Id, site.TenantId, site.Code, site.Name, site.Address, site.Latitude, site.Longitude);
-            await Execute(db, tx, "INSERT INTO structure_change_audit(id,site_id,actor_id,after_state) VALUES ($1,$2,$3,$4::jsonb)", ct, Guid.NewGuid(), site.Id, owner.UserId, AuditState(new ParkingStructure(site)));
-            await tx.CommitAsync(ct); return site;
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return site;
         }
-        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation)
-        { throw new StructureException("DUPLICATE_IDENTIFIER", "Site code already exists in this tenant."); }
+        catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new StructureException("DUPLICATE_IDENTIFIER", "Site code already exists in this tenant.");
+        }
     }
 
     public async Task<ParkingStructure> ReadAsync(
         OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
-        await EnsureTenantAsync(db, tx, owner, ct);
-        var structure = await Load(db, tx, owner.TenantId, siteId, false, ct, snapshot);
-        await tx.CommitAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead, ct);
+        await EnsureTenantAsync(owner.TenantId, ct);
+        var structure = await LoadAsync(owner.TenantId, siteId, false, snapshot, ct);
+        await transaction.CommitAsync(ct);
         return structure;
     }
 
     public async Task<IParkingStructureEdit> BeginEditAsync(
         OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, Guid? operationId, CancellationToken ct)
     {
-        var db = await source.OpenConnectionAsync(ct);
-        NpgsqlTransaction? tx = null;
+        var transaction = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, ct);
         try
         {
-            tx = await db.BeginTransactionAsync(ct);
-            await EnsureTenantAsync(db, tx, owner, ct);
-
+            await EnsureTenantAsync(owner.TenantId, ct);
             if (operationId is { } operation)
             {
-                await using var check = Command(db, tx,
-                    "SELECT physical_committed FROM structure_operations WHERE id=$1 AND site_id=$2 AND tenant_id=$3 AND actor_id=$4 FOR UPDATE",
-                    operation, siteId, owner.TenantId, owner.UserId);
-                var committed = await check.ExecuteScalarAsync(ct);
-                if (committed is null)
+                var operationRow = await db.StructureOperations
+                    .SingleOrDefaultAsync(row => row.Id == operation &&
+                        row.SiteId == siteId && row.TenantId == owner.TenantId &&
+                        row.ActorId == owner.UserId, ct);
+                if (operationRow is null)
                     throw new StructureException("FORBIDDEN", "Operation is not in scope.");
-                if ((bool)committed)
+                if (operationRow.PhysicalCommitted)
                     throw new StructureException("STRUCTURE_CONFLICT", "This physical operation has already committed.");
             }
 
-            var structure = await Load(db, tx, owner.TenantId, siteId, true, ct, snapshot);
-            return new ParkingStructureEdit(db, tx, owner, siteId, operationId, structure);
+            var structure = await LoadAsync(owner.TenantId, siteId, true, snapshot, ct);
+            return new ParkingStructureEdit(db, transaction, owner, siteId, operationId, structure);
         }
         catch
         {
-            if (tx is not null) await tx.DisposeAsync();
-            await db.DisposeAsync();
+            await transaction.DisposeAsync();
             throw;
         }
     }
 
-    private sealed class ParkingStructureEdit(
-        NpgsqlConnection db, NpgsqlTransaction tx, OwnerScope owner,
-        Guid siteId, Guid? operationId, ParkingStructure structure) : IParkingStructureEdit
+    private async Task EnsureTenantAsync(Guid tenantId, CancellationToken ct)
     {
-        private readonly HashSet<Guid> oldUnits = structure.Units.Select(unit => unit.Id).ToHashSet();
-        private readonly HashSet<Guid> oldSlots = structure.Slots.Select(slot => slot.Id).ToHashSet();
-        private readonly HashSet<Guid> oldPaths = structure.Paths.Select(path => path.Id).ToHashSet();
-        private readonly string before = AuditState(structure);
+        if (!await db.Tenants.AsNoTracking().AnyAsync(
+                tenant => tenant.Id == tenantId &&
+                    tenant.Status == "ACTIVE" && tenant.DeletedAt == null, ct))
+            throw new StructureException("FORBIDDEN", "Active tenant is required.");
+    }
+
+    private async Task<ParkingStructure> LoadAsync(
+        Guid tenantId, Guid siteId, bool write, CommitmentSnapshot snapshot, CancellationToken ct)
+    {
+        var site = await db.ParkingSites
+            .SingleOrDefaultAsync(item => item.Id == siteId &&
+                item.TenantId == tenantId && item.DeletedAt == null, ct);
+        if (site is null)
+            throw new StructureException("SITE_NOT_FOUND", "Parking site was not found in this tenant.");
+
+        var units = await db.SpatialUnits
+            .Where(item => item.SiteId == siteId && item.TenantId == tenantId && item.DeletedAt == null)
+            .ToListAsync(ct);
+        var slots = await db.ParkingSlots
+            .Where(item => item.SiteId == siteId && item.TenantId == tenantId && item.DeletedAt == null)
+            .ToListAsync(ct);
+        var paths = await db.ParkingAccessPaths
+            .Where(item => item.SiteId == siteId && item.TenantId == tenantId && item.DeletedAt == null)
+            .ToListAsync(ct);
+        var backups = await db.StructureBackupPolicies
+            .Where(item => item.SiteId == siteId)
+            .ToListAsync(ct);
+
+        return new ParkingStructure(
+            ToProfile(site),
+            units.Select(item => new SpatialUnit(
+                item.Id, item.ParentId, item.Path, Enum.Parse<UnitType>(item.UnitType),
+                item.Name, item.MaxCapacity)),
+            slots.Select(ToSlot),
+            paths.Select(item => new AccessPath(
+                item.Id, item.PathCode, item.FromUnitId, item.ToUnitId, item.MapData)),
+            snapshot.ProtectedSlots,
+            snapshot.HasLiveCommitments,
+            backups.Select(item => new BackupPolicy(
+                item.UnitId, Enum.Parse<VehicleType>(item.VehicleType), item.Count)),
+            snapshot.Capacities);
+    }
+
+    private static SiteProfile ToProfile(ParkingSiteEntity site) =>
+        new(site.Id, site.TenantId, site.SiteCode, site.Name, site.Address,
+            site.Latitude, site.Longitude, site.Status == "ACTIVE",
+            site.TotalPhysicalCapacity, site.Status);
+
+    private static ParkingSlot ToSlot(ParkingSlotEntity slot)
+    {
+        var operationalStatus = slot.PhysicalState switch
+        {
+            "AVAILABLE" or "OCCUPIED" => OperationalStatus.OPERATIONAL,
+            "UNAVAILABLE" => OperationalStatus.BLOCKED,
+            _ => Enum.Parse<OperationalStatus>(slot.PhysicalState),
+        };
+        return new ParkingSlot(
+            slot.Id,
+            slot.SpatialUnitId,
+            slot.SlotCode,
+            Enum.Parse<VehicleType>(slot.SupportedVehicleType),
+            Enum.Parse<SlotType>(slot.SlotType),
+            operationalStatus,
+            slot.PhysicalState == "OCCUPIED",
+            slot.Coordinates3D,
+            slot.Features,
+            slot.ReservationState);
+    }
+
+    private static string PhysicalState(ParkingSlot slot) =>
+        slot.IsPhysicallyOccupied
+            ? "OCCUPIED"
+            : slot.OperationalStatus == OperationalStatus.BLOCKED
+                ? "UNAVAILABLE"
+                : slot.OperationalStatus.ToString();
+
+    private sealed class ParkingStructureEdit(
+        ParkingDbContext db,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        OwnerScope owner,
+        Guid siteId,
+        Guid? operationId,
+        ParkingStructure structure) : IParkingStructureEdit
+    {
+        private readonly HashSet<Guid> oldUnits = structure.Units.Select(item => item.Id).ToHashSet();
+        private readonly HashSet<Guid> oldSlots = structure.Slots.Select(item => item.Id).ToHashSet();
+        private readonly HashSet<Guid> oldPaths = structure.Paths.Select(item => item.Id).ToHashSet();
+        private readonly string before = JsonSerializer.Serialize(structure, JsonOptions);
+
         public ParkingStructure Structure => structure;
 
         public async Task CommitAsync(
@@ -120,98 +200,148 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) 
         {
             try
             {
-                var site = structure.Site;
-                await Execute(db, tx, """
-                    UPDATE parking_sites SET site_code=$2, name=$3, address=$4, latitude=$5::numeric, longitude=$6::numeric,
-                    status=$7, total_physical_capacity=$8, updated_at=CURRENT_TIMESTAMP WHERE id=$1
-                    """, ct, site.Id, site.Code, site.Name, site.Address, site.Latitude, site.Longitude, site.Status, structure.Slots.Count);
-                // Children are soft-deleted before their parents. No historical reference is cascaded away.
-                foreach (var id in oldPaths.Except(structure.Paths.Select(p => p.Id)))
-                    await Execute(db, tx, "UPDATE parking_access_paths SET deleted_at=CURRENT_TIMESTAMP WHERE id=$1", ct, id);
-                foreach (var id in oldSlots.Except(structure.Slots.Select(s => s.Id)))
-                    await Execute(db, tx, "UPDATE parking_slots SET deleted_at=CURRENT_TIMESTAMP WHERE id=$1", ct, id);
-                foreach (var id in oldUnits.Except(structure.Units.Select(u => u.Id)))
-                    await Execute(db, tx, "UPDATE spatial_units SET deleted_at=CURRENT_TIMESTAMP WHERE id=$1", ct, id);
-                foreach (var u in structure.Units.OrderBy(u => u.Path.Length))
+                var site = await db.ParkingSites.SingleAsync(item => item.Id == siteId, ct);
+                site.SiteCode = structure.Site.Code;
+                site.Name = structure.Site.Name;
+                site.Address = structure.Site.Address;
+                site.Latitude = structure.Site.Latitude;
+                site.Longitude = structure.Site.Longitude;
+                site.Status = structure.Site.Status;
+                site.TotalPhysicalCapacity = structure.Slots.Count;
+
+                var currentUnits = await db.SpatialUnits
+                    .Where(item => item.SiteId == siteId && item.DeletedAt == null)
+                    .ToListAsync(ct);
+                foreach (var removed in currentUnits.Where(item => !structure.Units.Any(unit => unit.Id == item.Id)))
+                    removed.DeletedAt = DateTimeOffset.UtcNow;
+                foreach (var unit in structure.Units)
                 {
-                    if (oldUnits.Contains(u.Id))
-                        await Execute(db, tx, "UPDATE spatial_units SET name=$2, max_capacity=$3 WHERE id=$1", ct, u.Id, u.Name, u.MaxCapacity);
-                    else await Execute(db, tx, """
-                        INSERT INTO spatial_units(id,tenant_id,site_id,parent_id,path,unit_type,name,max_capacity)
-                        VALUES ($1,$2,$3,$4::uuid,$5,$6,$7,$8)
-                        """, ct, u.Id, site.TenantId, site.Id, u.ParentId, u.Path, u.Type.ToString(), u.Name, u.MaxCapacity);
-                }
-                foreach (var s in structure.Slots)
-                {
-                    if (oldSlots.Contains(s.Id))
-                        await Execute(db, tx, """
-                            UPDATE parking_slots SET spatial_unit_id=$2, slot_code=$3, supported_vehicle_type=$4, slot_type=$5,
-                            coordinates_3d=$6::jsonb, features=$7::jsonb, reservation_state=$8 WHERE id=$1
-                            """, ct, s.Id, s.UnitId, s.Code, s.VehicleType.ToString(), s.Type.ToString(), s.Coordinates3D, s.Features, s.ReservationState);
-                    else await Execute(db, tx, """
-                        INSERT INTO parking_slots(id,tenant_id,site_id,spatial_unit_id,slot_code,supported_vehicle_type,slot_type,coordinates_3d,features)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb)
-                        """, ct, s.Id, site.TenantId, site.Id, s.UnitId, s.Code, s.VehicleType.ToString(), s.Type.ToString(), s.Coordinates3D, s.Features);
-                }
-                foreach (var p in structure.Paths.Where(p => !oldPaths.Contains(p.Id)))
-                    await Execute(db, tx, """
-                        INSERT INTO parking_access_paths(id,tenant_id,site_id,path_code,from_unit_id,to_unit_id,map_data)
-                        VALUES ($1,$2,$3,$4,$5::uuid,$6::uuid,$7::jsonb)
-                        """, ct, p.Id, site.TenantId, site.Id, p.Code, p.FromUnitId, p.ToUnitId, p.MapData);
-                await Execute(db, tx, "DELETE FROM structure_backup_policies WHERE site_id=$1", ct, siteId);
-                foreach (var policy in structure.BackupPolicies)
-                    await Execute(db, tx, "INSERT INTO structure_backup_policies(id,site_id,unit_id,vehicle_type,count) VALUES ($1,$2,$3,$4,$5)", ct, Guid.NewGuid(), siteId, policy.UnitId, policy.VehicleType.ToString(), policy.Count);
-                if (operationId is { } applied) await Execute(db, tx, "UPDATE structure_operations SET physical_committed=TRUE,updated_at=now() WHERE id=$1", ct, applied);
-                await Execute(db, tx, "INSERT INTO structure_change_audit(id,site_id,actor_id,operation_id,before_state,after_state) VALUES ($1,$2,$3,$4::uuid,$5::jsonb,$6::jsonb)", ct, Guid.NewGuid(), siteId, owner.UserId, operationId, before, AuditState(structure));
-                if (markedSlot is { } marked)
-                {
-                    await Execute(db, tx, "INSERT INTO structure_slot_audit(id,site_id,slot_id,actor_id,action,reason) VALUES ($1,$2,$3,$4,$5,$6)", ct, Guid.NewGuid(), siteId, marked, owner.UserId, structure.Slots.Single(slot => slot.Id == marked).ReservationState == "BACKUP" ? "MARK_BACKUP" : "RELEASE_BACKUP", reason);
+                    var entity = currentUnits.SingleOrDefault(item => item.Id == unit.Id);
+                    if (entity is null)
+                    {
+                        db.SpatialUnits.Add(new SpatialUnitEntity
+                        {
+                            Id = unit.Id, TenantId = site.TenantId, SiteId = siteId,
+                            ParentId = unit.ParentId, Path = unit.Path, UnitType = unit.Type.ToString(),
+                            Name = unit.Name, MaxCapacity = unit.MaxCapacity,
+                        });
+                    }
+                    else
+                    {
+                        entity.ParentId = unit.ParentId;
+                        entity.Path = unit.Path;
+                        entity.UnitType = unit.Type.ToString();
+                        entity.Name = unit.Name;
+                        entity.MaxCapacity = unit.MaxCapacity;
+                    }
                 }
 
-                await using var ready = Command(db, tx, """
-                    UPDATE structure_synchronizations SET state='ready',outcome=$2::jsonb,updated_at=now()
-                    WHERE token=$1 AND state='preparing' AND site_id=$3 AND tenant_id=$4
-                    """, synchronizationToken,
-                    System.Text.Json.JsonSerializer.Serialize(outcome, StructureSynchronizationJson.Options),
-                    siteId, owner.TenantId);
-                if (await ready.ExecuteNonQueryAsync(ct) != 1)
+                var currentSlots = await db.ParkingSlots
+                    .Where(item => item.SiteId == siteId && item.DeletedAt == null)
+                    .ToListAsync(ct);
+                foreach (var removed in currentSlots.Where(item => !structure.Slots.Any(slot => slot.Id == item.Id)))
+                    removed.DeletedAt = DateTimeOffset.UtcNow;
+                foreach (var slot in structure.Slots)
+                {
+                    var entity = currentSlots.SingleOrDefault(item => item.Id == slot.Id);
+                    if (entity is null)
+                    {
+                        db.ParkingSlots.Add(ToEntity(site, slot));
+                    }
+                    else
+                    {
+                        entity.SpatialUnitId = slot.UnitId;
+                        entity.SlotCode = slot.Code;
+                        entity.SupportedVehicleType = slot.VehicleType.ToString();
+                        entity.SlotType = slot.Type.ToString();
+                        entity.PhysicalState = PhysicalState(slot);
+                        entity.Coordinates3D = slot.Coordinates3D;
+                        entity.Features = slot.Features;
+                        entity.ReservationState = slot.ReservationState;
+                    }
+                }
+
+                var currentPaths = await db.ParkingAccessPaths
+                    .Where(item => item.SiteId == siteId && item.DeletedAt == null)
+                    .ToListAsync(ct);
+                foreach (var removed in currentPaths.Where(item => !structure.Paths.Any(path => path.Id == item.Id)))
+                    removed.DeletedAt = DateTimeOffset.UtcNow;
+                foreach (var path in structure.Paths)
+                {
+                    var entity = currentPaths.SingleOrDefault(item => item.Id == path.Id);
+                    if (entity is null)
+                    {
+                        db.ParkingAccessPaths.Add(new ParkingAccessPathEntity
+                        {
+                            Id = path.Id, TenantId = site.TenantId, SiteId = siteId,
+                            PathCode = path.Code, FromUnitId = path.FromUnitId,
+                            ToUnitId = path.ToUnitId, MapData = path.MapData,
+                        });
+                    }
+                }
+
+                var policies = await db.StructureBackupPolicies
+                    .Where(item => item.SiteId == siteId).ToListAsync(ct);
+                db.StructureBackupPolicies.RemoveRange(policies);
+                db.StructureBackupPolicies.AddRange(structure.BackupPolicies.Select(policy =>
+                    new StructureBackupPolicyEntity
+                    {
+                        Id = Guid.NewGuid(), SiteId = siteId, UnitId = policy.UnitId,
+                        VehicleType = policy.VehicleType.ToString(), Count = policy.Count,
+                    }));
+
+                if (operationId is { } operation)
+                {
+                    var operationRow = await db.StructureOperations
+                        .SingleAsync(item => item.Id == operation, ct);
+                    operationRow.PhysicalCommitted = true;
+                }
+
+                db.StructureChangeAudits.Add(new StructureChangeAuditEntity
+                {
+                    Id = Guid.NewGuid(), SiteId = siteId, ActorId = owner.UserId,
+                    OperationId = operationId, BeforeState = before,
+                    AfterState = JsonSerializer.Serialize(structure, JsonOptions),
+                });
+                if (markedSlot is { } slotId)
+                {
+                    db.StructureSlotAudits.Add(new StructureSlotAuditEntity
+                    {
+                        Id = Guid.NewGuid(), SiteId = siteId, SlotId = slotId,
+                        ActorId = owner.UserId, Action = structure.Slots.Single(slot => slot.Id == slotId)
+                            .ReservationState == "BACKUP" ? "MARK_BACKUP" : "RELEASE_BACKUP",
+                        Reason = reason ?? "",
+                    });
+                }
+
+                var synchronization = await db.StructureSynchronizations
+                    .SingleOrDefaultAsync(item => item.Token == synchronizationToken &&
+                        item.SiteId == siteId && item.TenantId == owner.TenantId &&
+                        item.State == "preparing", ct);
+                if (synchronization is null)
                     throw new StructureException("STRUCTURE_CONFLICT", "Synchronization preparation is missing.");
+                synchronization.State = "ready";
+                synchronization.Outcome = JsonSerializer.Serialize(outcome, JsonOptions);
 
-                await tx.CommitAsync(ct);
+                await db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
             }
-            catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.UniqueViolation)
+            catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             {
                 throw new StructureException("DUPLICATE_IDENTIFIER", "Structure identifier already exists.");
             }
         }
 
-        public async ValueTask DisposeAsync()
-        {
-            try { await tx.DisposeAsync(); }
-            finally { await db.DisposeAsync(); }
-        }
-    }
+        public async ValueTask DisposeAsync() => await transaction.DisposeAsync();
 
-    private static async Task<ParkingStructure> Load(NpgsqlConnection db, NpgsqlTransaction tx, Guid tenantId, Guid siteId, bool write, CancellationToken ct, CommitmentSnapshot? snapshot = null)
-    {
-        SiteProfile site;
-        await using (var cmd = Command(db, tx, $"SELECT {SiteColumns} FROM parking_sites WHERE id=$1 AND tenant_id=$2 AND deleted_at IS NULL" + (write ? " FOR UPDATE" : ""), siteId, tenantId))
-        await using (var r = await cmd.ExecuteReaderAsync(ct))
-        { if (!await r.ReadAsync(ct)) throw new StructureException("SITE_NOT_FOUND", "Parking site was not found in this tenant."); site = Profile(r); }
-        var units = new List<SpatialUnit>(); var slots = new List<ParkingSlot>(); var paths = new List<AccessPath>();
-        await using (var cmd = Command(db, tx, "SELECT id,parent_id,path,unit_type,name,max_capacity FROM spatial_units WHERE site_id=$1 AND tenant_id=$2 AND deleted_at IS NULL", siteId, tenantId))
-        await using (var r = await cmd.ExecuteReaderAsync(ct))
-            while (await r.ReadAsync(ct)) units.Add(new(r.GetGuid(0), r.IsDBNull(1) ? null : r.GetGuid(1), r.GetString(2), Enum.Parse<UnitType>(r.GetString(3)), r.GetString(4), r.GetInt32(5)));
-        await using (var cmd = Command(db, tx, "SELECT id,spatial_unit_id,slot_code,supported_vehicle_type,slot_type,CASE physical_state WHEN 'AVAILABLE' THEN 'OPERATIONAL' WHEN 'OCCUPIED' THEN 'OPERATIONAL' WHEN 'UNAVAILABLE' THEN 'BLOCKED' ELSE physical_state END,(physical_state='OCCUPIED'),coordinates_3d::text,features::text,reservation_state FROM parking_slots WHERE site_id=$1 AND tenant_id=$2 AND deleted_at IS NULL" + (write ? " FOR UPDATE" : ""), siteId, tenantId))
-        await using (var r = await cmd.ExecuteReaderAsync(ct))
-            while (await r.ReadAsync(ct)) slots.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), Enum.Parse<VehicleType>(r.GetString(3)), Enum.Parse<SlotType>(r.GetString(4)),
-                Enum.Parse<OperationalStatus>(r.GetString(5)), r.GetBoolean(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9)));
-        await using (var cmd = Command(db, tx, "SELECT id,path_code,from_unit_id,to_unit_id,map_data::text FROM parking_access_paths WHERE site_id=$1 AND tenant_id=$2 AND deleted_at IS NULL", siteId, tenantId))
-        await using (var r = await cmd.ExecuteReaderAsync(ct))
-            while (await r.ReadAsync(ct)) paths.Add(new(r.GetGuid(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetGuid(2), r.IsDBNull(3) ? null : r.GetGuid(3), r.IsDBNull(4) ? null : r.GetString(4)));
-        var backups = new List<BackupPolicy>();
-        await using (var cmd = Command(db, tx, "SELECT unit_id,vehicle_type,count FROM structure_backup_policies WHERE site_id=$1", siteId))
-        await using (var r = await cmd.ExecuteReaderAsync(ct)) while (await r.ReadAsync(ct)) backups.Add(new(r.IsDBNull(0) ? null : r.GetGuid(0), Enum.Parse<VehicleType>(r.GetString(1)), r.GetInt32(2)));
-        return new(site, units, slots, paths, snapshot?.ProtectedSlots, snapshot?.HasLiveCommitments ?? false, backups, snapshot?.Capacities);
+        private static ParkingSlotEntity ToEntity(ParkingSiteEntity site, ParkingSlot slot) =>
+            new()
+            {
+                Id = slot.Id, TenantId = site.TenantId, SiteId = site.Id,
+                SpatialUnitId = slot.UnitId, SlotCode = slot.Code,
+                SupportedVehicleType = slot.VehicleType.ToString(), SlotType = slot.Type.ToString(),
+                PhysicalState = PhysicalState(slot), Coordinates3D = slot.Coordinates3D,
+                Features = slot.Features, ReservationState = slot.ReservationState,
+            };
     }
 }

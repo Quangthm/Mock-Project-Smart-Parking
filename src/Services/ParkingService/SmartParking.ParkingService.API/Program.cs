@@ -1,9 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.ParkingService.Application;
+using SmartParking.ParkingService.Application.Common.Interfaces.Persistence;
 using SmartParking.ParkingService.Domain;
 using SmartParking.ParkingService.Persistence;
+using SmartParking.ParkingService.Persistence.Repositories;
 using SmartParking.ParkingService.Infrastructure;
 
 namespace SmartParking.ParkingService.API;
@@ -17,6 +20,10 @@ public static class ParkingHost
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Parking") ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking.")));
+        builder.Services.AddDbContext<ParkingDbContext>(options =>
+            options.UseNpgsql(builder.Configuration.GetConnectionString("Parking")
+                ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking.")));
+        builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false)));
         builder.Services.AddHttpClient<OwnerIdentityClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
@@ -38,6 +45,7 @@ public static class ParkingHost
         builder.Services.AddScoped<StructureOperationService>();
         builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
         builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443").AllowAnyHeader().AllowAnyMethod()));
+        builder.Services.AddControllers();
         builder.Services.AddHttpClient<OperatorSiteClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
         builder.Services.AddScoped<IOperatorSiteAuthorizer>(s => s.GetRequiredService<OperatorSiteClient>());
         builder.Services.AddScoped<OperatorLayoutService>();
@@ -125,50 +133,7 @@ public static class ParkingHost
             await store.ReleaseAsync(body.TenantId, siteId, slotId, ct);
             return Results.NoContent();
         });
-        async Task<OwnerScope> Scope(OwnerIdentityClient identity, Guid? tenant, CancellationToken ct)
-        {
-            var scope = await identity.ScopeAsync(ct);
-            var selected = tenant ?? (scope.TenantIds.Length == 1 ? scope.TenantIds[0] : Guid.Empty);
-            if (!scope.TenantIds.Contains(selected)) throw new StructureException("FORBIDDEN", "Select an authorized tenant.");
-            return new(scope.UserId, selected);
-        }
-        app.MapGet("/api/parking-lots", async (Guid? tenantId, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.ListAsync(await Scope(identity, tenantId, ct), ct) }));
-        app.MapPost("/api/parking-lots", async (CreateSite body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) =>
-        {
-            var site = await service.CreateAsync(await Scope(identity, body.TenantId, ct), body.Code, body.Name, body.Address, body.Latitude, body.Longitude, ct);
-            return Results.Created($"/api/parking-lots/{site.Id}/structure", new { success = true, data = site });
-        });
-        app.MapGet("/api/parking-lots/{id:guid}/structure", async (Guid id, Guid? tenantId, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.GetAsync(await Scope(identity, tenantId, ct), id, ct) }));
-        app.MapGet("/api/parking-lots/{id:guid}/operational-layout", async (Guid id, SlotOperatorClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.ReadOperationalAsync(await identity.ScopeAsync(id, ct), id, ct) }));
-        app.MapPost("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup", async (Guid id, Guid slot, BackupMarkBody body, SlotOperatorClient identity, ParkingStructureService service, CancellationToken ct) =>
-        { await service.MarkOperationalBackupAsync(await identity.ScopeAsync(id, ct), id, slot, body.Reason, ct); return Results.Ok(new { success = true }); });
-        app.MapPost("/api/parking-lots/{id:guid}/operations", async (Guid id, OperationBody body, OwnerIdentityClient identity, StructureOperationService operations, CancellationToken ct) =>
-        {
-            var result = await operations.ExecuteAsync(await Scope(identity, body.TenantId, ct), id, body.IdempotencyKey, body.Edit, ct);
-            return Results.Json(new { success = result.Status == "completed", data = result, message = $"Operation {result.Id}: {result.Status}. {result.Reason}" }, statusCode: result.Status == "completed" ? 200 : result.Status == "pending" ? 202 : 409);
-        });
-        app.MapGet("/api/parking-lots/{id:guid}/operations/{operationId:guid}", async (Guid id, Guid operationId, Guid? tenantId, OwnerIdentityClient identity, StructureOperationService operations, CancellationToken ct) => Results.Ok(new { success = true, data = await operations.ReadAsync(await Scope(identity, tenantId, ct), id, operationId, ct) }));
-        app.MapPost("/api/parking-lots/{id:guid}/units", async (Guid id, UnitBody body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddUnitAsync(await Scope(identity, body.TenantId, ct), id, body.Type, body.Name, body.ParentId, body.Capacity, ct) }));
-        app.MapPost("/api/parking-lots/{id:guid}/slots", async (Guid id, SlotBody body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddSlotAsync(await Scope(identity, body.TenantId, ct), id, body.UnitId, body.Code, body.VehicleType, body.Type, ct) }));
-        app.MapPatch("/api/parking-lots/{id:guid}/structure", async (Guid id, EditStructure body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) =>
-        {
-            if (body.Action == "backup") await identity.ScopeAsync(ct, "BACKUP_CONFIGURE");
-            if (body.Action == "markBackup") await identity.ScopeAsync(ct, "BACKUP_MARK");
-            var edit = new StructureEdit(
-                body.Action, body.ResourceId, body.UnitId, body.Code, body.Name, body.Address,
-                body.Active, body.Capacity, body.VehicleType, body.SlotType,
-                body.Coordinates3D, body.Features, body.Latitude, body.Longitude);
-            await service.ApplyAsync(await Scope(identity, body.TenantId, ct), id, edit, ct);
-            return Results.Ok(new { success = true });
-        });
-        app.MapPost("/api/parking-lots/{id:guid}/paths", async (Guid id, PathBody body, OwnerIdentityClient identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddAccessPathAsync(await Scope(identity, body.TenantId, ct), id, body.Code, body.From, body.To, body.MapData, ct) }));
-        app.MapGet("/api/parking-lots/{id:guid}/operator-layout", async (Guid id, OperatorLayoutService service, CancellationToken ct) =>
-            Results.Ok(new { success = true, data = await service.ReadAsync(id, ct) }));
-        app.MapDelete("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup", async (Guid id, Guid slot, SlotOperatorClient identity, ParkingStructureService service, CancellationToken ct) =>
-        {
-            await service.SetOperationalBackupAsync(await identity.ScopeAsync(id, ct), id, slot, false, "Backup designation released by operator.", ct);
-            return Results.Ok(new { success = true });
-        });
+        app.MapControllers();
         app.MapOperatorOperations();
         return app;
     }

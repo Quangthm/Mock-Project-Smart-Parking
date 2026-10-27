@@ -22,6 +22,7 @@ export function LotStatus({
     vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
     allSlots, filteredSlots, availableCount, occupiedCount, reservedCount, maintenanceCount,
+    scanSlots, isScanning, lastScanAt,
   } = useLotStatus(lot, initialSlotCode, initialStatusFilter)
 
   if (!lot) {
@@ -34,58 +35,42 @@ export function LotStatus({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Parking Structure & Slot Monitoring" eyebrow={<>{isOutdoor ? "Single-Level Facility" : `Multi-Level Facility (${lot.floors} Floors)`} · {lot.totalSlots} total slots</>} description="Live digital twin, floor navigation, and real-time physical space supervision." actions={<div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
-          <button
-            type="button"
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-              viewMode === "3d"
-                ? "bg-[var(--action)] text-[var(--action-fg)]"
-                : "text-[var(--muted)] hover:text-[var(--fg)]"
-            }`}
-            onClick={() => {
-              setViewMode("3d")
-              setThreeError(false)
-            }}
-          >
-            <UntitledIcon name="parking" size={15} /> 3D Digital Twin
-          </button>
-          <button
-            type="button"
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-              viewMode === "grid"
-                ? "bg-[var(--action)] text-[var(--action-fg)]"
-                : "text-[var(--muted)] hover:text-[var(--fg)]"
-            }`}
-            onClick={() => setViewMode("grid")}
-          >
-            <UntitledIcon name="grid" size={13} /> 2D Grid Map
-          </button>
-          <button
-            type="button"
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-              viewMode === "list"
-                ? "bg-[var(--action)] text-[var(--action-fg)]"
-                : "text-[var(--muted)] hover:text-[var(--fg)]"
-            }`}
-            onClick={() => setViewMode("list")}
-          >
-            <UntitledIcon name="clipboard" size={13} /> Slot List
-          </button>
-        </div>} />
+      <PageHeader title="Parking Structure & Slot Monitoring" eyebrow={<>{isOutdoor ? "Single-Level Facility" : `Multi-Level Facility (${lot.floors} Floors)`} · {lot.totalSlots} total slots</>} description="Live digital twin, floor navigation, and real-time physical space supervision." />
 
       {/* Mini Stat Summary */}
-      <div className="parking-kpi-strip">
-        {([
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-[var(--fg)]">Slot Status</h2>
+            <p className="text-xs text-[var(--muted)]">
+              AI demo scan assigns a recent check-in image to one unassigned open slot.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {lastScanAt && (
+              <span className="hidden text-[11px] text-[var(--muted)] sm:inline">
+                Last scan {new Date(lastScanAt).toLocaleTimeString()}
+              </span>
+            )}
+            <button type="button" className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-3" onClick={scanSlots} disabled={isScanning}>
+              <UntitledIcon name="scan" size={14} />
+              {isScanning ? "AI scanning..." : "Scan now"}
+            </button>
+          </div>
+        </div>
+        <div className="parking-kpi-strip">
+          {([
           ["available", availableCount],
           ["occupied", occupiedCount],
           ["reserved", reservedCount],
           ["maintenance", maintenanceCount],
-        ] as [ParkingStatusKind, number][]).map(([status, count]) => (
-          <div className="parking-kpi" key={status}>
-            <ParkingStatus status={status} />
-            <strong>{count}</strong>
-          </div>
-        ))}
+          ] as [ParkingStatusKind, number][]).map(([status, count]) => (
+            <div className="parking-kpi" key={status}>
+              <ParkingStatus status={status} />
+              <strong>{count}</strong>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Navigation Filter Bar */}
@@ -185,20 +170,13 @@ export function LotStatus({
         </div>
       </div>
 
-      {/* VIEW MODE 1: 3D Digital Twin Viewer */}
-      {viewMode === "3d" && (
+      {/* 3D Digital Twin Viewer */}
+      <div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 relative">
           {threeError ? (
             <div className="p-8 text-center text-xs text-[var(--muted)] space-y-3">
               <UntitledIcon name="alert" size={24} />
-              <p>3D model asset could not be initialized. Switched to fallback 2D grid.</p>
-              <button
-                type="button"
-                className="btn-primary text-xs py-1.5 px-3"
-                onClick={() => setViewMode("grid")}
-              >
-                Open 2D Grid Map
-              </button>
+              <p>3D model asset could not be initialized. The 2D grid below remains available.</p>
             </div>
           ) : (
             <div>
@@ -212,7 +190,7 @@ export function LotStatus({
               </div>
               <Parking3DViewer
                 modelUrl={lot.modelUrl}
-                slots={lot.slots}
+                slots={allSlots}
                 selectedSlotId={inspectedSlot?.id || inspectedSlot?.number}
                 focusSlotId={searchQuery.trim() ? searchQuery.trim().toUpperCase() : null}
                 onSelectSlot={(slot) => setInspectedSlot(allSlots.find((item) => item.id === slot.id) ?? null)}
@@ -222,10 +200,37 @@ export function LotStatus({
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {/* VIEW MODE 2: 2D Interactive Grid Map */}
-      {viewMode === "grid" && (
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              viewMode === "grid"
+                ? "bg-[var(--action)] text-[var(--action-fg)]"
+                : "text-[var(--muted)] hover:text-[var(--fg)]"
+            }`}
+            onClick={() => setViewMode("grid")}
+          >
+            <UntitledIcon name="grid" size={13} /> 2D Grid Map
+          </button>
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              viewMode === "list"
+                ? "bg-[var(--action)] text-[var(--action-fg)]"
+                : "text-[var(--muted)] hover:text-[var(--fg)]"
+            }`}
+            onClick={() => setViewMode("list")}
+          >
+            <UntitledIcon name="clipboard" size={13} /> Slot List
+          </button>
+        </div>
+      </div>
+
+      {/* 2D Interactive Grid Map */}
+      {viewMode === "grid" && <div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
@@ -265,6 +270,16 @@ export function LotStatus({
                     aria-pressed={isSelected}
                   >
                     <strong>{slot.number}</strong>
+                    {slot.demoPlate && (
+                      <span className="mt-1 block max-w-full truncate font-mono text-[9px] text-[var(--primary)]">
+                        {slot.demoPlate}
+                      </span>
+                    )}
+                    {slot.demoImageUrl && !slot.demoPlate && (
+                      <span className="mt-1 block truncate text-[9px] text-[var(--primary)]">
+                        Image ready
+                      </span>
+                    )}
                     <ParkingStatus status={status} compact />
                   </button>
                 )
@@ -272,10 +287,10 @@ export function LotStatus({
             </div>
           )}
         </div>
-      )}
+      </div>}
 
-      {/* VIEW MODE 3: Detailed Slot Table */}
-      {viewMode === "list" && (
+      {/* Detailed Slot Table */}
+      {viewMode === "list" && <div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
           <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg)]">
             <table className="w-full text-left text-xs min-w-[650px]">
@@ -284,6 +299,8 @@ export function LotStatus({
                   <th className="px-4 py-3">Slot Code</th>
                   <th className="px-4 py-3">Level / Zone</th>
                   <th className="px-4 py-3">Vehicle Type</th>
+                  <th className="px-4 py-3">AI Plate</th>
+                  <th className="px-4 py-3">Parking Session</th>
                   <th className="px-4 py-3">Physical State</th>
                   <th className="px-4 py-3">Reservation State</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -292,7 +309,7 @@ export function LotStatus({
               <tbody className="divide-y divide-[var(--border)]">
                 {filteredSlots.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">
+                    <td colSpan={8} className="px-4 py-8 text-center text-[var(--muted)]">
                       No slots found matching the criteria.
                     </td>
                   </tr>
@@ -307,6 +324,25 @@ export function LotStatus({
                       </td>
                       <td className="px-4 py-3 font-medium">
                         {slot.vehicleType}
+                      </td>
+                      <td className="px-4 py-3 font-mono font-semibold text-[var(--primary)]">
+                        {slot.demoPlate ?? "Not scanned"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {slot.demoSession ? (
+                          <div className="max-w-40">
+                            <div className="truncate font-mono text-[11px] font-semibold text-[var(--fg)]">
+                              {slot.demoSession.id}
+                            </div>
+                            <div className="truncate text-[10px] text-[var(--muted)]">
+                              {slot.demoSession.ticketReference}
+                            </div>
+                          </div>
+                        ) : slot.demoImageUrl ? (
+                          <span className="text-[10px] text-[var(--primary)]">Waiting for scan</span>
+                        ) : (
+                          <span className="text-[var(--muted)]">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-semibold">
                         <span
@@ -348,7 +384,7 @@ export function LotStatus({
             </table>
           </div>
         </div>
-      )}
+      </div>}
 
       <SlotInspectionModal lot={lot} inspectedSlot={inspectedSlot} isOutdoor={isOutdoor} onClose={() => setInspectedSlot(null)} />
     </div>
