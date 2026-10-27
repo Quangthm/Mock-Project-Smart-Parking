@@ -142,7 +142,7 @@ export function PaymentDetailModal({
             <span
               id="payment-receipt-title"
               style={{
-                fontFamily: "Outfit",
+                fontFamily: "Be Vietnam Pro",
                 fontWeight: 700,
                 fontSize: "1.1rem",
                 color: "var(--fg)",
@@ -463,8 +463,8 @@ export function PaymentDetailModal({
                 position: "absolute",
                 top: "2.5rem",
                 right: "2rem",
-                border: "3px solid #7c3aed",
-                color: "#7c3aed",
+                border: "3px solid var(--maintenance)",
+                color: "var(--maintenance)",
                 padding: "0.35rem 0.75rem",
                 borderRadius: "6px",
                 fontWeight: 800,
@@ -523,7 +523,7 @@ export function PaymentDetailModal({
                     letterSpacing: "-0.02em",
                   }}
                 >
-                  SmartPark Intelligent Parking System
+                  SmartParking Intelligent Parking System
                 </span>
               </div>
               <p
@@ -741,7 +741,7 @@ export function PaymentDetailModal({
                       textAlign: "right",
                     }}
                   >
-                    Unit Price (₫)
+                    Unit Price (VND)
                   </th>
                   <th
                     style={{
@@ -751,7 +751,7 @@ export function PaymentDetailModal({
                       textAlign: "right",
                     }}
                   >
-                    Amount (₫)
+                    Amount (VND)
                   </th>
                 </tr>
               </thead>
@@ -935,10 +935,10 @@ export function PaymentDetailModal({
                 fontSize: "1.4rem",
                 fontWeight: 900,
                 color: "#0f172a",
-                fontFamily: "Outfit, sans-serif",
+                fontFamily: "Be Vietnam Pro, sans-serif",
               }}
             >
-              {totalAmount.toLocaleString("vi-VN")} ₫
+              {totalAmount.toLocaleString("vi-VN")} VND
             </div>
           </div>
 
@@ -957,7 +957,7 @@ export function PaymentDetailModal({
             >
               <strong>Refund Notice:</strong> An amount of{" "}
               <strong>
-                {transaction.refundInfo.amount.toLocaleString("vi-VN")} ₫
+                {transaction.refundInfo.amount.toLocaleString("vi-VN")} VND
               </strong>{" "}
               was refunded on{" "}
               {new Date(transaction.refundInfo.refundedAt).toLocaleString(

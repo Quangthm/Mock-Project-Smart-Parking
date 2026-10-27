@@ -21,13 +21,7 @@ export function BookingCard({
 
   const lot = store.getLots().find((l) => l.id === booking.lotId)
 
-  const paymentStatus =
-    booking.paymentStatus ??
-    (booking.status === "completed" ||
-    booking.status === "checked-in" ||
-    booking.status === "confirmed"
-      ? "paid"
-      : "pending")
+  const paymentStatus = booking.paymentStatus
 
   const bookingColor =
     booking.status === "completed"
@@ -38,7 +32,9 @@ export function BookingCard({
           ? "#2563eb"
           : booking.status === "confirmed"
             ? "#22c55e"
-            : "#f59e0b"
+      : paymentStatus === "pending"
+        ? "#f59e0b"
+        : "var(--muted)"
 
   const paymentColor =
     paymentStatus === "paid"
@@ -77,7 +73,7 @@ export function BookingCard({
         </div>
         <div
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 600,
 
@@ -184,13 +180,13 @@ export function BookingCard({
                   : `1px solid ${paymentColor}30`,
             }}
           >
-            Payment {paymentStatus.toUpperCase()}
+            Payment {paymentStatus?.toUpperCase() ?? "UNKNOWN"}
           </div>
         </div>
 
         <div
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -201,7 +197,7 @@ export function BookingCard({
             marginTop: "0.375rem",
           }}
         >
-          {booking.amount.toLocaleString("vi-VN")}₫
+          {booking.amount.toLocaleString("vi-VN")} VND
         </div>
 
         <div
@@ -225,7 +221,7 @@ export function BookingCard({
             </button>
           )}
           {onPayNow &&
-            paymentStatus !== "paid" &&
+            (paymentStatus === "pending" || paymentStatus === "failed") &&
             booking.status !== "completed" &&
             booking.status !== "cancelled" && (
               <button
@@ -317,7 +313,7 @@ export function BookingCard({
                     style={{
                       margin: 0,
                       fontSize: "1.25rem",
-                      fontFamily: "Outfit",
+                      fontFamily: "Be Vietnam Pro",
                       fontWeight: 700,
                       color: "var(--fg)",
                     }}

@@ -68,6 +68,7 @@ public static class UserHost
         var app = builder.Build();
         // Fail early when the signing key is missing or invalid.
         _ = app.Services.GetRequiredService<JwtKeyProvider>();
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
         if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("SeedDemoUser"))
         {
@@ -81,6 +82,20 @@ public static class UserHost
             if (string.IsNullOrWhiteSpace(password)) throw new InvalidOperationException("Configure DevelopmentAdmin:Password explicitly.");
             using var scope = app.Services.CreateScope();
             await scope.ServiceProvider.GetRequiredService<DataSeeder>().SeedAdminAsync(builder.Configuration["DevelopmentAdmin:Email"]!, password);
+        }
+        if (app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(builder.Configuration["DevelopmentOwner:Email"]))
+        {
+            var password = builder.Configuration["DevelopmentOwner:Password"];
+            if (string.IsNullOrWhiteSpace(password)) throw new InvalidOperationException("Configure DevelopmentOwner:Password explicitly.");
+            using var scope = app.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DataSeeder>().SeedRoleUserAsync(builder.Configuration["DevelopmentOwner:Email"]!, password, "Demo Owner", "BUSINESS_OWNER", "Business Owner");
+        }
+        if (app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(builder.Configuration["DevelopmentOperator:Email"]))
+        {
+            var password = builder.Configuration["DevelopmentOperator:Password"];
+            if (string.IsNullOrWhiteSpace(password)) throw new InvalidOperationException("Configure DevelopmentOperator:Password explicitly.");
+            using var scope = app.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DataSeeder>().SeedRoleUserAsync(builder.Configuration["DevelopmentOperator:Email"]!, password, "Demo Operator", "SITE_OPERATOR", "Site Operator");
         }
 
         // Configure the HTTP request pipeline.

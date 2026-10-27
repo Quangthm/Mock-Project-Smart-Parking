@@ -40,8 +40,8 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
           `Type: ${lot.type}\n` +
           `Updated: ${new Date(policyPdf?.uploadedAt || lot.createdAt).toLocaleDateString("en-US")}\n\n` +
           `1. OPERATING HOURS AND RATES:\n` +
-          `- Daytime rate: ${lot.hourlyRate.toLocaleString("en-US")} VND/hour\n` +
-          `- Nighttime rate: ${lot.nightRate.toLocaleString("en-US")} VND/hour\n` +
+          `- Daytime rate: ${lot.hourlyRate.toLocaleString("vi-VN")} VND/hour\n` +
+          `- Nighttime rate: ${lot.nightRate.toLocaleString("vi-VN")} VND/hour\n` +
           `- Free grace period: First ${lot.gracePeriodMinutes || 15} minutes after entry\n\n` +
           `2. RESERVATION PROTECTION (SRS v0.9):\n` +
           `- Reservation protection window: 60 minutes from the scheduled arrival time\n` +
@@ -121,7 +121,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                 <h3
                   id="policy-modal-title"
                   style={{
-                    fontFamily: "Outfit",
+                    fontFamily: "Be Vietnam Pro",
                     fontWeight: 700,
                     fontSize: "1.15rem",
                     margin: 0,
@@ -328,14 +328,14 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                       Section 1. Operating Hours & Service Rates
                     </h5>
                     <p style={{ margin: 0 }}>
-                      - Open 24/7 for vehicles registered through SmartPark.
+                      - Open 24/7 for vehicles registered through SmartParking.
                       <br />- Daytime rate (06:00 - 22:00):{" "}
                       <strong>
-                        {lot.hourlyRate.toLocaleString("en-US")} VND/hour
+                        {lot.hourlyRate.toLocaleString("vi-VN")} VND/hour
                       </strong>
                       .<br />- Nighttime rate (22:00 - 06:00 the next day):{" "}
                       <strong>
-                        {lot.nightRate.toLocaleString("en-US")} VND/hour
+                        {lot.nightRate.toLocaleString("vi-VN")} VND/hour
                       </strong>
                       .<br />- Grace period: The first{" "}
                       <strong>{lot.gracePeriodMinutes || 15} minutes</strong> are
@@ -439,7 +439,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  {lot.hourlyRate.toLocaleString("en-US")} ₫/h
+                  {lot.hourlyRate.toLocaleString("vi-VN")} VND/h
                 </div>
                 <div
                   style={{
@@ -476,7 +476,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                     color: "var(--fg)",
                   }}
                 >
-                  {lot.nightRate.toLocaleString("en-US")} ₫/h
+                  {lot.nightRate.toLocaleString("vi-VN")} VND/h
                 </div>
                 <div
                   style={{
@@ -510,7 +510,7 @@ export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
                   style={{
                     fontSize: "1.1rem",
                     fontWeight: 700,
-                    color: "#818cf8",
+                    color: "var(--fg)",
                   }}
                 >
                   60 Minutes

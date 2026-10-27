@@ -61,7 +61,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         var challenge=new AuthChallenge { Id=Guid.NewGuid(),UserId=user.Id!.Value,Purpose=purpose,Channel=channel,Destination=destination,
             CodeHash=passwords.Hash(code),ExpiresAt=clock.GetUtcNow().AddMinutes(5),ResendAt=clock.GetUtcNow().AddMinutes(1) };
         db.AuthChallenges.Add(challenge); await db.SaveChangesAsync(ct);
-        await QueueAsync(user.Id.Value,user.Id.Value,purpose,new(channel,destination,"SmartPark verification",$"Your code is {code}. Valid for 5 minutes."),ct,challenge.Id);
+        await QueueAsync(user.Id.Value,user.Id.Value,purpose,OtpWorkflowMessage.Create(channel,destination,code),ct,challenge.Id);
         return challenge;
     }
     public static ChallengeResult Result(AuthChallenge c)=>new(c.Id,c.ExpiresAt,c.ResendAt);
@@ -158,7 +158,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         var code=RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
         while(passwords.Verify(code,c.CodeHash))code=RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
         c.CodeHash=passwords.Hash(code);c.ExpiresAt=clock.GetUtcNow().AddMinutes(5);c.ResendAt=clock.GetUtcNow().AddMinutes(1);
-        await QueueAsync(c.UserId,c.UserId,"OWNER_CONTACT",new(c.Channel,c.Destination,"SmartPark verification",$"Your code is {code}. Valid for 5 minutes."),ct,c.Id);
+        await QueueAsync(c.UserId,c.UserId,"OWNER_CONTACT",OtpWorkflowMessage.Create(c.Channel,c.Destination,code),ct,c.Id);
         await tx.CommitAsync(ct);return Result(c);
     }
     public async Task<UserSessionDto> CompleteLoginAsync(CompleteOtpLoginDto body,AuthSessionService sessions,CancellationToken ct)

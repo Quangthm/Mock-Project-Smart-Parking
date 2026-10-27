@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext"
 import { driverData as store } from "../data/data"
 
 import { TopUpModal } from "./TopUpModal"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 export function WalletView() {
   const { user, setUser } = useApp()
@@ -37,7 +38,7 @@ export function WalletView() {
 
       action: "WALLET_TOPUP",
 
-      details: `Added ${amount.toLocaleString("vi-VN")}₫ to wallet`,
+      details: `Added ${amount.toLocaleString("vi-VN")} VND to wallet`,
     })
 
     setShowTopUp(false)
@@ -56,7 +57,7 @@ export function WalletView() {
       )}
       <div
         style={{
-          background: "linear-gradient(135deg, #1d4ed8, #7c3aed)",
+          background: "var(--card)",
 
           borderRadius: "var(--radius)",
 
@@ -64,17 +65,14 @@ export function WalletView() {
 
           marginBottom: "1.5rem",
 
-          color: "#fff",
+          color: "var(--fg)",
+          border: "1px solid var(--border)",
         }}
       >
-        <div
-          style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: "0.25rem" }}
-        >
-          SmartParking Wallet
-        </div>
+        <PageHeader title="SmartParking Wallet" variant="default" />
         <div
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 800,
 
@@ -83,7 +81,7 @@ export function WalletView() {
             marginBottom: "0.25rem",
           }}
         >
-          {balance.toLocaleString("vi-VN")}₫
+          {balance.toLocaleString("vi-VN")} VND
         </div>
         <div style={{ fontSize: "0.78rem", opacity: 0.75 }}>{user?.name}</div>
         <button
@@ -91,15 +89,15 @@ export function WalletView() {
           style={{
             marginTop: "1.25rem",
 
-            background: "rgba(255,255,255,0.2)",
+            background: "var(--action)",
 
-            border: "1px solid rgba(255,255,255,0.3)",
+            border: "1px solid var(--action)",
 
             borderRadius: "var(--radius)",
 
             padding: "0.5rem 1.25rem",
 
-            color: "#fff",
+            color: "var(--action-fg)",
 
             fontWeight: 600,
 
@@ -114,7 +112,7 @@ export function WalletView() {
       <div className="card">
         <h3
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
 
             fontWeight: 700,
 
@@ -163,7 +161,7 @@ export function WalletView() {
               </div>
               <div
                 style={{
-                  fontFamily: "Outfit",
+                  fontFamily: "Be Vietnam Pro",
 
                   fontWeight: 700,
 
@@ -173,7 +171,7 @@ export function WalletView() {
                 }}
               >
                 {t.amount > 0 ? "+" : ""}
-                {t.amount.toLocaleString("vi-VN")}₫
+                {t.amount.toLocaleString("vi-VN")} VND
               </div>
             </div>
           ))}

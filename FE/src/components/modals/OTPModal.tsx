@@ -62,7 +62,7 @@ export function OTPModal({ contact, onSuccess, onFailLock, onClose }: Props) {
       }}
     >
       <div
-        className="card"
+        className="card text-center"
         style={{ width: "100%", maxWidth: "400px", margin: "1rem" }}
       >
         <div
@@ -74,7 +74,7 @@ export function OTPModal({ contact, onSuccess, onFailLock, onClose }: Props) {
         >
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
               fontSize: "1.2rem",
               margin: 0,

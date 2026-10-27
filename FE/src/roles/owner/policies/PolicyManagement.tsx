@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -23,7 +24,7 @@ export function PolicyManagement() {
     <div>
       <h3
         style={{
-          fontFamily: "Outfit",
+          fontFamily: "Be Vietnam Pro",
           fontWeight: 700,
           fontSize: "1.05rem",
           marginBottom: "1.25rem",
@@ -35,7 +36,7 @@ export function PolicyManagement() {
       {lots.length > 1 && (
         <div style={{ marginBottom: "1rem" }}>
           <label className="label">Select Lot</label>
-          <select
+          <RoundedSelect
             className="input"
             style={{ maxWidth: "300px" }}
             value={selectedLot?.id}
@@ -48,7 +49,7 @@ export function PolicyManagement() {
                 {l.name}
               </option>
             ))}
-          </select>
+          </RoundedSelect>
         </div>
       )}
       {selectedLot && (

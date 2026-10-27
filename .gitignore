@@ -96,11 +96,87 @@ docs/04-testing/develop-sync-review-2026-10-08.md
 # =========================
 # Onboarding setup script
 # =========================
-# Local setup (contains environment-specific values; distribute via team channel, not git)
-setup.ps1
+# setup.ps1 contains no credentials and is tracked; .env remains ignored.
 
 # =========================
 # Blender
 # =========================
 # Blender auto-saved backup files (*.blend1, *.blend2, ...)
 *.blend[0-9]
+
+# =========================
+# SonarQube / Test Coverage
+# =========================
+
+# SonarScanner for .NET working directory
+.sonarqube/
+
+# Generic SonarScanner working directory
+.scannerwork/
+
+# .NET coverage reports
+coverage.xml
+coverage*.xml
+*.coverage
+*.coveragexml
+
+# Test result artifacts
+TestResults/
+*.trx
+
+# Agents
+.agents/*
+
+# =========================
+# Python / IoT AI
+# =========================
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Local Python environment files / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / local tooling
+.vscode/
+.idea/
+
+# Logs / debug output
+*.log
+debug_output/
+
+# Local generated data / temporary files
+*.tmp
+*.temp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS junk
+.DS_Store
+Thumbs.db

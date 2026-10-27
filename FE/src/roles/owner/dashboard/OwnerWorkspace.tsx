@@ -1,8 +1,10 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import {
   operatorsApi,
@@ -210,16 +212,13 @@ export function OwnerWorkspace() {
       ]}
     >
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
-        <h1 style={{ fontFamily: "Outfit", color: "var(--fg)" }}>
-          Owner workspace
-        </h1>
-        <button
+        <PageHeader title="Owner workspace" actions={<button
           className="btn-outline"
           disabled={busy}
           onClick={() => setReload((value) => value + 1)}
         >
           Refresh
-        </button>
+        </button>} />
         {loading && <p role="status">Loading sites and staff…</p>}
         {error && (
           <p role="alert" style={{ color: "#dc2626" }}>
@@ -377,7 +376,7 @@ export function OwnerWorkspace() {
             <h2>Parking structure</h2>
             {field(
               "Site",
-              <select
+              <RoundedSelect
                 className="input"
                 disabled={busy}
                 value={selected}
@@ -389,7 +388,7 @@ export function OwnerWorkspace() {
                     {site.name}
                   </option>
                 ))}
-              </select>,
+              </RoundedSelect>,
             )}
             {layoutLoading && <p role="status">Loading structure…</p>}
             {layoutError && <p role="alert">{layoutError}</p>}
@@ -452,7 +451,7 @@ export function OwnerWorkspace() {
                   )}
                   {field(
                     "Type",
-                    <select
+                    <RoundedSelect
                       className="input"
                       disabled={busy}
                       value={unitForm.type}
@@ -463,11 +462,11 @@ export function OwnerWorkspace() {
                       {["FLOOR", "ZONE", "BLOCK"].map((type) => (
                         <option key={type}>{type}</option>
                       ))}
-                    </select>,
+                    </RoundedSelect>,
                   )}
                   {field(
                     "Parent",
-                    <select
+                    <RoundedSelect
                       className="input"
                       disabled={busy}
                       value={unitForm.parentId}
@@ -483,7 +482,7 @@ export function OwnerWorkspace() {
                           {unit.name} · {unit.type}
                         </option>
                       ))}
-                    </select>,
+                    </RoundedSelect>,
                   )}
                   {field(
                     "Maximum physical slots (0 = unlimited)",
@@ -548,7 +547,7 @@ export function OwnerWorkspace() {
                   <h3>Add physical slot</h3>
                   {field(
                     "Unit",
-                    <select
+                    <RoundedSelect
                       className="input"
                       required
                       disabled={busy}
@@ -563,7 +562,7 @@ export function OwnerWorkspace() {
                           {unit.name}
                         </option>
                       ))}
-                    </select>,
+                    </RoundedSelect>,
                   )}
                   {field(
                     "Slot code (unique within site)",
@@ -580,7 +579,7 @@ export function OwnerWorkspace() {
                   )}
                   {field(
                     "Vehicle type",
-                    <select
+                    <RoundedSelect
                       className="input"
                       disabled={busy}
                       value={slotForm.vehicleType}
@@ -594,11 +593,11 @@ export function OwnerWorkspace() {
                       {["CAR", "MOTORCYCLE", "OVERSIZED"].map((type) => (
                         <option key={type}>{type}</option>
                       ))}
-                    </select>,
+                    </RoundedSelect>,
                   )}
                   {field(
                     "Slot type",
-                    <select
+                    <RoundedSelect
                       className="input"
                       disabled={busy}
                       value={slotForm.type}
@@ -609,7 +608,7 @@ export function OwnerWorkspace() {
                       {["STANDARD", "VIP", "EV", "DISABLED"].map((type) => (
                         <option key={type}>{type}</option>
                       ))}
-                    </select>,
+                    </RoundedSelect>,
                   )}
                   <button
                     className="btn-primary"

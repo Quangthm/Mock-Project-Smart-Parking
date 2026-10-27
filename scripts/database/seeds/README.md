@@ -9,7 +9,9 @@ columns. The manifest describes those examples, not accounts bootstrapped by the
 The runnable integration initializes each service with its own SQL baseline and
 overlay through root `compose.schema-integration.yml`. Bootstrap a development
 Admin through `SMARTPARK_ADMIN_PASSWORD`, then create Owners, sites, slots and
-Operators through the APIs so lifecycle and ownership records are consistent.
+Operators through the APIs — or, for a ready-to-test demo dataset, run
+`scripts/seed-demo-site.ps1` after UserService has seeded the owner/operator
+accounts. The demo seed is idempotent and writes only `DEMO-HQ` demo data.
 
 See [schema integration](../../../docs/02-architecture/database/schema-integration.md)
 for startup, sample credentials policy, validation and recovery.

@@ -7,13 +7,24 @@ import {
   type ReactNode,
 } from "react"
 
-import type { User } from "../lib/types"
+import type { User, LotType } from "../lib/types"
+import type { OwnerApplicationRecord } from "../lib/ownerApi"
 
 import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
+import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
 
-export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
+export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "parking-lot-setup" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
+
+export type PendingOwnerSetup = {
+  id: string
+  email: string
+  lotType: LotType
+  setupToken?: string
+  verification?: OwnerApplicationRecord["verification"]
+  lotSetupComplete?: boolean
+}
 
 interface AppCtx {
   user: User | null
@@ -29,6 +40,10 @@ interface AppCtx {
   authReady: boolean
 
   authError: string
+
+  pendingOwnerSetup: PendingOwnerSetup | null
+
+  setPendingOwnerSetup: (val: PendingOwnerSetup | null) => void
 
   setUser: (u: User | null) => void
 
@@ -47,12 +62,50 @@ const Ctx = createContext<AppCtx>({} as AppCtx)
 
 export const useApp = () => useContext(Ctx)
 
+function hasPendingVerification() {
+  if (restoreDriverRegistration()) return true
+  try {
+    const owner = JSON.parse(
+      sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
+    )
+    return (
+      typeof owner?.email === "string" &&
+      owner?.lotSetupComplete === true &&
+      typeof owner?.verification?.challengeId === "string" &&
+      Number.isFinite(Date.parse(owner.verification.expiresAt)) &&
+      Number.isFinite(Date.parse(owner.verification.resendAt))
+    )
+  } catch {
+    return false
+  }
+}
+
+function initialView(): View {
+  if (hasPendingVerification()) return "sign-up"
+  try {
+    if (sessionStorage.getItem("sp_pending_driver_registration") ||
+        sessionStorage.getItem("sp_pending_owner_registration"))
+      return "sign-in"
+  } catch {
+    /* Login remains available through the navigation. */
+  }
+  return "landing"
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
 
-  const [view, setView] = useState<View>("landing")
+  const [view, setView] = useState<View>(initialView)
 
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      const saved = localStorage.getItem("sp_theme")
+      if (saved === "light" || saved === "dark") return saved
+    } catch {
+      /* The system preference still works when storage is unavailable. */
+    }
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  })
 
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false)
 
@@ -62,6 +115,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [authError, setAuthError] = useState("")
 
+  const [pendingOwnerSetup, setPendingOwnerSetup] = useState<PendingOwnerSetup | null>(null)
+
   const logoutPending = useRef(false)
 
   const authRevision = useRef(0)
@@ -69,12 +124,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     store.init()
 
-    const savedTheme =
-      localStorage.getItem("sp_theme") as "light" | "dark" || "light"
+    const savedTheme = localStorage.getItem("sp_theme")
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+    const initialTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : systemTheme.matches ? "dark" : "light"
+    setTheme(initialTheme)
+    document.documentElement.classList.toggle("dark", initialTheme === "dark")
 
-    setTheme(savedTheme)
-
-    if (savedTheme === "dark") document.documentElement.classList.add("dark")
+    const followSystemTheme = (event: MediaQueryListEvent) => {
+      if (localStorage.getItem("sp_theme")) return
+      setTheme(event.matches ? "dark" : "light")
+      document.documentElement.classList.toggle("dark", event.matches)
+    }
+    systemTheme.addEventListener("change", followSystemTheme)
 
     const savedAccent = localStorage.getItem("sp_accent") || "blue"
 
@@ -140,6 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => {
       active = false
+      systemTheme.removeEventListener("change", followSystemTheme)
       window.removeEventListener(authExpiredEvent, expire)
     }
   }, [])
@@ -188,6 +252,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (next === "dark") document.documentElement.classList.add("dark")
     else document.documentElement.classList.remove("dark")
   }
+
+  useEffect(() => {
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    if (themeMeta) themeMeta.content = theme === "dark" ? "#151C1B" : "#F5F7F5"
+  }, [theme])
 
   const setAccentColor = (color: string) => {
     setAccentColorState(color)
@@ -249,6 +318,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dashboardMenuOpen,
         authReady,
         authError,
+        pendingOwnerSetup,
+        setPendingOwnerSetup,
         setUser,
         setView,
         toggleTheme,

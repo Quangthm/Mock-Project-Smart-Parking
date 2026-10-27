@@ -1,0 +1,92 @@
+- generic [ref=f19e3]:
+  - link "Skip to main content" [ref=f19e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation [ref=f19e5]:
+    - button "SmartParking dashboard" [ref=f19e7] [cursor=pointer]:
+      - img "Smart Parking" [ref=f19e8]
+    - generic [ref=f19e12]:
+      - button "Search pages" [ref=f19e14] [cursor=pointer]
+      - button "Notifications" [ref=f19e19] [cursor=pointer]
+      - button "Open profile menu" [ref=f19e23] [cursor=pointer]:
+        - generic [ref=f19e24]: V
+    - complementary "operator navigation" [ref=f19e27]:
+      - generic [ref=f19e28]:
+        - button "Dashboard Overview" [ref=f19e30] [cursor=pointer]
+        - generic [ref=f19e33]:
+          - generic [ref=f19e34]: Parking Operations
+          - button "Gate Check-In" [ref=f19e35] [cursor=pointer]
+          - button "Gate Check-Out" [ref=f19e39] [cursor=pointer]
+          - button "Cashier View" [ref=f19e43] [cursor=pointer]
+          - button "Lot Status & 3D Map" [ref=f19e47] [cursor=pointer]
+          - button "Backup Slots & Buffer" [ref=f19e53] [cursor=pointer]
+          - button "Driver Support Tickets" [ref=f19e57] [cursor=pointer]
+          - button "Emergency Dispatch" [ref=f19e60] [cursor=pointer]
+          - button "My Assignments" [ref=f19e64] [cursor=pointer]
+  - main [ref=f19e68]:
+    - main [ref=f19e72]:
+      - status [ref=f19e73]: Loading reservations…
+      - status [ref=f19e74]: Loading support tickets…
+      - status [ref=f19e75]: Loading notifications…
+      - generic [ref=f19e77]:
+        - generic [ref=f19e79]:
+          - paragraph [ref=f19e80]: LOT-1 · 17 Le Duan Street
+          - heading "Central Parking" [level=1] [ref=f19e82]
+          - paragraph [ref=f19e83]: Live operational dashboard, parking occupancy, and gate controls.
+        - generic "Parking site summary" [ref=f19e84]:
+          - button "Total Capacity 5 Configured spaces" [ref=f19e85] [cursor=pointer]:
+            - generic [ref=f19e86]: Total Capacity
+            - generic [ref=f19e91]:
+              - generic [ref=f19e92]: "5"
+              - generic [ref=f19e93]: Configured spaces
+          - button "Available Vacant 1 Ready for walk-in/booking" [ref=f19e94] [cursor=pointer]:
+            - generic [ref=f19e95]: Available Vacant
+            - generic [ref=f19e100]:
+              - generic [ref=f19e101]: "1"
+              - generic [ref=f19e102]: Ready for walk-in/booking
+          - button "In Use / Parked 1 Vehicles physically in lot" [ref=f19e103] [cursor=pointer]:
+            - generic [ref=f19e104]: In Use / Parked
+            - generic [ref=f19e109]:
+              - generic [ref=f19e110]: "1"
+              - generic [ref=f19e111]: Vehicles physically in lot
+          - button "Reserved / Holds 2 Incoming & payment holds" [ref=f19e112] [cursor=pointer]:
+            - generic [ref=f19e113]: Reserved / Holds
+            - generic [ref=f19e118]:
+              - generic [ref=f19e119]: "2"
+              - generic [ref=f19e120]: Incoming & payment holds
+          - button "Backup Designated 1 Emergency / overflow pool" [ref=f19e121] [cursor=pointer]:
+            - generic [ref=f19e122]: Backup Designated
+            - generic [ref=f19e127]:
+              - generic [ref=f19e128]: "1"
+              - generic [ref=f19e129]: Emergency / overflow pool
+          - button "Maintenance / Off 1 Unavailable slots" [ref=f19e130] [cursor=pointer]:
+            - generic [ref=f19e131]: Maintenance / Off
+            - generic [ref=f19e135]:
+              - generic [ref=f19e136]: "1"
+              - generic [ref=f19e137]: Unavailable slots
+        - generic [ref=f19e139]:
+          - generic [ref=f19e140]:
+            - generic [ref=f19e141]:
+              - generic [ref=f19e142]:
+                - heading "Lot Occupancy Rate" [level=3] [ref=f19e143]
+                - paragraph [ref=f19e144]: Ratio of occupied and reserved capacity
+              - generic [ref=f19e145]:
+                - generic [ref=f19e146]: 60%
+                - text: utilized
+            - generic [ref=f19e147]:
+              - 'generic "Occupied: 1" [ref=f19e148]'
+              - 'generic "Reserved: 2" [ref=f19e149]'
+              - 'generic "Backup: 1" [ref=f19e150]'
+              - 'generic "Maintenance: 1" [ref=f19e151]'
+            - generic [ref=f19e152]:
+              - generic [ref=f19e153]: Occupied (1)
+              - generic [ref=f19e156]: Reserved (2)
+              - generic [ref=f19e159]: Backup (1)
+              - generic [ref=f19e162]: Available (1)
+          - generic [ref=f19e165]:
+            - generic [ref=f19e166]:
+              - generic [ref=f19e167]:
+                - heading "Active Parking Operations" [level=3] [ref=f19e168]
+                - paragraph [ref=f19e169]: Vehicles currently in lot or confirmed for immediate check-in
+              - button "View all (0) →" [ref=f19e170]
+            - generic [ref=f19e171]: No active bookings currently in or arriving at this site.
+  - button "Open SmartParking AI" [ref=f19e173]

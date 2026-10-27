@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
 import { CheckInOut } from "../check-in-out/CheckInOut"
@@ -6,6 +7,7 @@ import { EmergencyPanel } from "../emergency/EmergencyPanel"
 import { SlotManagement } from "../parking-slots/SlotManagement"
 import { TicketManagement } from "../tickets/TicketManagement"
 import { OperatorAssignments } from "./OperatorAssignments"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { OperatorOverview } from "./OperatorOverview"
 import type { OperatorAccessRole, SupportTicket, AppNotification } from "../../../lib/types"
 import { DashboardSidebar, type DashboardNavGroup } from "../../../components/layout/DashboardSidebar"
@@ -23,12 +25,24 @@ export type OperatorTab =
   | "overview"
   | "checkin"
   | "checkout"
+  | "cashier"
   | "status"
   | "slots"
   | "tickets"
   | "emergency"
   | "assignments"
   | "finance"
+
+type ResourceState<T> = {
+  scope: string
+  data: T[]
+  loading: boolean
+  error: string
+}
+
+function requestError(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback
+}
 
 export function OperatorDashboard({
   accessRoleOverride,
@@ -50,11 +64,11 @@ export function OperatorDashboard({
 
   const [allLots, setAllLots] = useState<OperatorSite[]>([])
   const [activeSiteId, setActiveSiteId] = useState<string>("")
-  const [tickets, setTickets] = useState<SupportTicket[]>([])
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const [currentLotBookings, setCurrentLotBookings] = useState<Booking[]>([])
-  const [allReportBookings, setAllReportBookings] = useState<Booking[]>([])
-  const [dataError, setDataError] = useState("")
+  const [bookingsState, setBookingsState] = useState<ResourceState<Booking>>({ scope: "", data: [], loading: false, error: "" })
+  const [ticketsState, setTicketsState] = useState<ResourceState<SupportTicket>>({ scope: "", data: [], loading: false, error: "" })
+  const [notificationsState, setNotificationsState] = useState<ResourceState<AppNotification>>({ scope: "", data: [], loading: false, error: "" })
+  const [reportsState, setReportsState] = useState<ResourceState<Booking>>({ scope: "", data: [], loading: false, error: "" })
+  const [sitesError, setSitesError] = useState("")
   const [sitesLoading, setSitesLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -67,7 +81,7 @@ export function OperatorDashboard({
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail as OperatorTab
-      if (["overview", "checkin", "checkout", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
+      if (["overview", "checkin", "checkout", "cashier", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
         setTab(detail)
     }
     window.addEventListener("sp:dashboard-nav", onNavigate)
@@ -75,15 +89,22 @@ export function OperatorDashboard({
   }, [])
 
   useEffect(() => {
+    if (tab === "status" || tab === "slots") setRefreshKey((value) => value + 1)
+  }, [tab])
+
+  useEffect(() => {
     let active = true
     setSitesLoading(true)
-    setDataError("")
+    setSitesError("")
     loadOperatorSites(user)
       .then((sites) => {
         if (active) setAllLots(sites)
       })
       .catch((error) => {
-        if (active) setDataError(error instanceof Error ? error.message : "Could not load assigned parking sites.")
+        if (active) {
+          setAllLots([])
+          setSitesError(requestError(error, "Could not load assigned parking sites."))
+        }
       })
       .finally(() => {
         if (active) setSitesLoading(false)
@@ -91,7 +112,7 @@ export function OperatorDashboard({
     return () => {
       active = false
     }
-  }, [user])
+  }, [user, refreshKey])
 
   const ownerLots = allLots
 
@@ -103,56 +124,85 @@ export function OperatorDashboard({
     )
   }, [activeSiteId, ownerLots])
 
+  const resourceScope = `${selectedLot?.id ?? ""}:${refreshKey}`
+  const reportSiteIds = accessRole === "financial" ? ownerLots.map((site) => site.id) : []
+  const reportScope = `${accessRole}:${refreshKey}:${reportSiteIds.join(",")}`
+  const currentLotBookings = bookingsState.scope === resourceScope ? bookingsState.data : []
+  const tickets = ticketsState.scope === resourceScope ? ticketsState.data : []
+  const notifications = notificationsState.scope === resourceScope ? notificationsState.data : []
+  const allReportBookings = reportsState.scope === reportScope ? reportsState.data : []
+  const reportsLoading = reportSiteIds.length > 0 && (reportsState.scope !== reportScope || reportsState.loading)
+  const reportsError = reportsState.scope === reportScope ? reportsState.error : ""
+
+  const resourceStatus = [
+    ["Reservations", bookingsState],
+    ["Support tickets", ticketsState],
+    ["Notifications", notificationsState],
+  ] as const
+
   useEffect(() => {
-    if (!selectedLot) {
-      setCurrentLotBookings([])
-      setTickets([])
-      setNotifications([])
-      return
-    }
+    const initialState = { scope: resourceScope, data: [], loading: Boolean(selectedLot && accessRole === "operation"), error: "" }
+    setBookingsState(initialState)
+    setTicketsState(initialState)
+    setNotificationsState(initialState)
+    if (!selectedLot || accessRole !== "operation") return
     let active = true
-    setDataError("")
-    Promise.all([
+    Promise.allSettled([
       reservationApi.list(selectedLot.id),
       operatorOperationsApi.listTickets(selectedLot.id),
       operatorOperationsApi.listNotifications(selectedLot.id),
     ])
       .then(([bookings, nextTickets, nextNotifications]) => {
         if (!active) return
-        setCurrentLotBookings(bookings)
-        setTickets(nextTickets)
-        setNotifications(nextNotifications)
-      })
-      .catch((error) => {
-        if (active) setDataError(error instanceof Error ? error.message : "Could not load operator data.")
+        setBookingsState({
+          scope: resourceScope,
+          data: bookings.status === "fulfilled" ? bookings.value : [],
+          loading: false,
+          error: bookings.status === "rejected" ? requestError(bookings.reason, "Could not load reservations.") : "",
+        })
+        setTicketsState({
+          scope: resourceScope,
+          data: nextTickets.status === "fulfilled" ? nextTickets.value : [],
+          loading: false,
+          error: nextTickets.status === "rejected" ? requestError(nextTickets.reason, "Could not load support tickets.") : "",
+        })
+        setNotificationsState({
+          scope: resourceScope,
+          data: nextNotifications.status === "fulfilled" ? nextNotifications.value : [],
+          loading: false,
+          error: nextNotifications.status === "rejected" ? requestError(nextNotifications.reason, "Could not load notifications.") : "",
+        })
       })
     return () => {
       active = false
     }
-  }, [selectedLot?.id, refreshKey])
+  }, [accessRole, selectedLot?.id, refreshKey])
 
   useEffect(() => {
-    const reportSites = accessRole === "financial" ? ownerLots : selectedLot ? [selectedLot] : []
-    if (!reportSites.length) {
-      setAllReportBookings([])
-      return
-    }
+    setReportsState({ scope: reportScope, data: [], loading: reportSiteIds.length > 0, error: "" })
+    if (accessRole !== "financial" || !reportSiteIds.length) return
     let active = true
-    Promise.all(reportSites.map((site) => reservationApi.list(site.id)))
-      .then((bookings) => {
-        if (active) setAllReportBookings(bookings.flat())
-      })
-      .catch((error) => {
-        if (active) setDataError(error instanceof Error ? error.message : "Could not load reservation reports.")
+    Promise.allSettled(reportSiteIds.map((siteId) => reservationApi.list(siteId)))
+      .then((results) => {
+        if (!active) return
+        const failure = results.find((result) => result.status === "rejected")
+        setReportsState({
+          scope: reportScope,
+          data: failure ? [] : results.flatMap((result) => result.status === "fulfilled" ? result.value : []),
+          loading: false,
+          error: failure && failure.status === "rejected"
+            ? requestError(failure.reason, "Could not load reservation reports.")
+            : "",
+        })
       })
     return () => {
       active = false
     }
-  }, [accessRole, ownerLots, selectedLot?.id, refreshKey])
+  }, [accessRole, ownerLots, refreshKey])
 
   // Cashier role shortcut view
   if (accessRole === "cashier") {
-    return <CashierPOS lot={selectedLot} onDataChanged={() => setRefreshKey((value) => value + 1)} />
+    return <CashierPOS key={selectedLot?.id ?? "none"} lot={selectedLot} sitesLoading={sitesLoading} sitesError={sitesError} onDataChanged={() => setRefreshKey((value) => value + 1)} />
   }
 
   // Financial reconciliation metrics
@@ -209,6 +259,13 @@ export function OperatorDashboard({
                   setTargetPlateQuery("")
                   setTab("checkout")
                 },
+              },
+              {
+                id: "cashier",
+                label: "Cashier View",
+                icon: "banknote",
+                active: tab === "cashier",
+                onClick: () => setTab("cashier"),
               },
               {
                 id: "status",
@@ -273,13 +330,32 @@ export function OperatorDashboard({
   return (
     <DashboardSidebar groups={sidebarGroups}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
-        {dataError && (
+        {tab !== "cashier" && sitesError && (
           <div role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
-            {dataError}
+            {sitesError}
           </div>
         )}
-        {sitesLoading && (
+        {tab !== "cashier" && sitesLoading && (
           <p role="status" className="mb-5 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>
+        )}
+        {accessRole === "operation" && tab !== "cashier" && selectedLot && resourceStatus.map(([label, state]) => (
+          state.scope !== resourceScope || state.loading ? (
+            <p key={label} role="status" className="mb-3 text-sm text-[var(--muted)]">Loading {label.toLowerCase()}…</p>
+          ) : state.error ? (
+            <div key={label} role="alert" className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
+              {label}: {state.error}
+            </div>
+          ) : null
+        ))}
+        {accessRole === "financial" && reportsError && (
+          <div role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
+            {reportsError}
+          </div>
+        )}
+        {(tab === "status" || tab === "slots") && (
+          <div className="mb-4 flex justify-end">
+            <button type="button" className="btn-outline px-3 py-1.5 text-xs" disabled={sitesLoading} onClick={() => setRefreshKey((value) => value + 1)}>Refresh sites and slots</button>
+          </div>
         )}
 
         {/* Site Switcher Header (When multiple lots or all sites assigned) */}
@@ -294,7 +370,7 @@ export function OperatorDashboard({
                 (Assigned to {ownerLots.length} sites)
               </span>
             </div>
-            <select
+            <RoundedSelect
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs font-semibold text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={selectedLot?.id ?? ""}
               onChange={(e) => setActiveSiteId(e.target.value)}
@@ -304,12 +380,12 @@ export function OperatorDashboard({
                   {lot.name} ({lot.totalSlots} slots)
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           </div>
         )}
 
         {/* Tab View Container */}
-        <div className="animate-in">
+        <div key={tab} className="animate-in">
           {/* TAB 1: OVERVIEW */}
           {accessRole === "operation" && tab === "overview" && (
             <OperatorOverview
@@ -332,6 +408,10 @@ export function OperatorDashboard({
               initialPlateQuery={targetPlateQuery}
               onDataChanged={() => setRefreshKey((value) => value + 1)}
             />
+          )}
+
+          {accessRole === "operation" && tab === "cashier" && (
+            <CashierPOS key={selectedLot?.id ?? "none"} lot={selectedLot} sitesLoading={sitesLoading} sitesError={sitesError} onDataChanged={() => setRefreshKey((value) => value + 1)} readOnly />
           )}
 
           {/* TAB 3: LOT STATUS & 3D STRUCTURE */}
@@ -362,20 +442,16 @@ export function OperatorDashboard({
           {/* TAB 8: FINANCIAL REPORTS */}
           {accessRole === "financial" && tab === "finance" && (
             <section className="mx-auto w-full max-w-5xl space-y-6">
-              <header>
-                <p className="text-sm font-medium text-[var(--primary)]">
-                  {user?.role === "owner" || user?.operatorSiteId === "all"
-                    ? "All Assigned Sites"
-                    : (selectedLot?.name ?? "Assigned parking lot")}
-                </p>
-                <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">
-                  Financial Reports & Reconciliation
-                </h1>
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  Completed booking revenue, collection channels, and reconciliation registry.
-                </p>
-              </header>
+              <PageHeader eyebrow={user?.role === "owner" || user?.operatorSiteId === "all" ? "All Assigned Sites" : (selectedLot?.name ?? "Assigned parking lot")} title="Financial Reports & Reconciliation" description="Completed booking revenue, collection channels, and reconciliation registry." />
 
+              {!sitesLoading && !sitesError && reportSiteIds.length === 0 && (
+                <p className="text-sm text-[var(--muted)]">No assigned parking sites are available.</p>
+              )}
+              {!sitesLoading && reportsLoading && (
+                <p role="status" className="text-sm text-[var(--muted)]">Loading reservation reports…</p>
+              )}
+
+              {!sitesLoading && !sitesError && !reportsLoading && !reportsError && reportSiteIds.length > 0 && (<>
               <div className="grid gap-4 sm:grid-cols-3">
                 <FinanceMetric
                   label="Completed Bookings"
@@ -383,7 +459,7 @@ export function OperatorDashboard({
                 />
                 <FinanceMetric
                   label="Total Recorded Revenue"
-                  value={`${totalRevenue.toLocaleString("vi-VN")} ₫`}
+                  value={`${totalRevenue.toLocaleString("vi-VN")} VND`}
                 />
                 <FinanceMetric
                   label="Pending Settlement"
@@ -400,7 +476,7 @@ export function OperatorDashboard({
                       <th className="px-4 py-3 font-medium">Booking ID</th>
                       <th className="px-4 py-3 font-medium">Vehicle Plate</th>
                       <th className="px-4 py-3 font-medium">Payment Method</th>
-                      <th className="px-4 py-3 text-right font-medium">Amount (₫)</th>
+                      <th className="px-4 py-3 text-right font-medium">Amount (VND)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
@@ -420,7 +496,7 @@ export function OperatorDashboard({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-[var(--fg)]">
-                          {b.amount.toLocaleString("vi-VN")} ₫
+                          {b.amount.toLocaleString("vi-VN")} VND
                         </td>
                       </tr>
                     ))}
@@ -434,6 +510,7 @@ export function OperatorDashboard({
                   </tbody>
                 </table>
               </div>
+              </>)}
             </section>
           )}
         </div>
@@ -445,18 +522,24 @@ export function OperatorDashboard({
 function FinanceMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-[var(--fg)]">{value}</p>
+      <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--fg)]">{value}</p>
     </div>
   )
 }
 
 function CashierPOS({
   lot,
+  sitesLoading,
+  sitesError,
   onDataChanged,
+  readOnly = false,
 }: {
   lot: OperatorSite | null
+  sitesLoading: boolean
+  sitesError: string
   onDataChanged: () => void
+  readOnly?: boolean
 }) {
   const [plate, setPlate] = useState("")
   const [booking, setBooking] = useState<Booking | null>(null)
@@ -465,6 +548,7 @@ function CashierPOS({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (sitesLoading || sitesError) return
     if (!lot) {
       setFeedback({ type: "error", message: "No assigned parking site is available." })
       return
@@ -475,6 +559,7 @@ function CashierPOS({
     }
     setBusy(true)
     setFeedback(null)
+    setBooking(null)
     try {
       const result = await reservationApi.lookup(lot.id, plate.trim())
       if (result.status !== "checked-in") {
@@ -491,7 +576,7 @@ function CashierPOS({
   }
 
   async function completeCheckout() {
-    if (!lot || !booking || busy) return
+    if (readOnly || !lot || !booking || booking.lotId !== lot.id || busy || sitesLoading || sitesError) return
     setBusy(true)
     setFeedback(null)
     try {
@@ -507,16 +592,24 @@ function CashierPOS({
     }
   }
 
+  const Container = readOnly ? "div" : "main"
+
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-60px)] w-full max-w-xl items-center px-5 py-10">
+    <Container className={readOnly ? "mx-auto flex w-full max-w-xl items-start py-4 sm:py-8" : "mx-auto flex min-h-[calc(100vh-60px)] w-full max-w-xl items-center px-5 py-10"}>
       <section className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-wider text-[var(--primary)]">{lot?.name ?? "No assigned site"}</p>
-        <h1 className="mt-1 text-2xl font-bold text-[var(--fg)]">
-          Cashier POS Terminal
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Look up the active parking session and confirm its checkout. Payment collection is not simulated.
-        </p>
+        <PageHeader eyebrow={lot?.name ?? "No assigned site"} title={readOnly ? "Cashier View" : "Cashier POS Terminal"} description={readOnly ? "Look up the active parking session and view its recorded payment details." : "Look up the active parking session and confirm its checkout. Payment collection is not simulated."} />
+
+        {sitesLoading && (
+          <p role="status" className="mt-4 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>
+        )}
+        {sitesError && (
+          <div role="alert" className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
+            {sitesError}
+          </div>
+        )}
+        {!sitesLoading && !sitesError && !lot && (
+          <p role="status" className="mt-4 text-sm text-[var(--muted)]">No assigned parking site is available.</p>
+        )}
 
         {feedback && (
           <div role={feedback.type === "error" ? "alert" : "status"} className={`mt-4 rounded-xl border p-3.5 text-xs font-medium ${feedback.type === "error" ? "border-red-500/30 bg-red-500/10 text-red-600" : "border-green-500/30 bg-green-500/10 text-green-600"}`}>
@@ -533,15 +626,15 @@ function CashierPOS({
               onChange={(event) => setPlate(event.target.value)}
               placeholder="e.g. 51A-123.45"
               required
-              disabled={!lot || busy}
+              disabled={!lot || busy || sitesLoading || Boolean(sitesError)}
             />
           </label>
-          <button type="submit" className="btn-primary w-full justify-center py-2.5 text-sm mt-2" disabled={!lot || busy}>
+          <button type="submit" className="btn-primary w-full justify-center py-2.5 text-sm mt-2" disabled={!lot || busy || sitesLoading || Boolean(sitesError)}>
             <UntitledIcon name="search" size={16} /> {busy ? "Checking…" : "Find active session"}
           </button>
         </form>
 
-        {booking && (
+        {booking && !sitesLoading && !sitesError && booking.lotId === lot?.id && (
           <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong className="font-mono text-lg text-[var(--fg)]">{booking.licensePlate}</strong>
@@ -550,15 +643,17 @@ function CashierPOS({
             <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
               <div><dt className="text-[var(--muted)]">Reservation</dt><dd className="mt-1 font-mono text-[var(--fg)]">{booking.id}</dd></div>
               <div><dt className="text-[var(--muted)]">Slot</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.slotNumber}</dd></div>
-              <div><dt className="text-[var(--muted)]">Recorded amount</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.amount.toLocaleString("vi-VN")} ₫</dd></div>
+              <div><dt className="text-[var(--muted)]">Recorded amount</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.amount.toLocaleString("vi-VN")} VND</dd></div>
               <div><dt className="text-[var(--muted)]">Payment status</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.paymentStatus ?? "unknown"}</dd></div>
             </dl>
-            <button type="button" className="btn-primary mt-4 w-full justify-center" onClick={() => void completeCheckout()} disabled={busy}>
-              <UntitledIcon name="check-circle" size={16} /> Confirm vehicle checkout
-            </button>
+            {!readOnly && (
+              <button type="button" className="btn-primary mt-4 w-full justify-center" onClick={() => void completeCheckout()} disabled={busy}>
+                <UntitledIcon name="check-circle" size={16} /> Confirm vehicle checkout
+              </button>
+            )}
           </div>
         )}
       </section>
-    </main>
+    </Container>
   )
 }

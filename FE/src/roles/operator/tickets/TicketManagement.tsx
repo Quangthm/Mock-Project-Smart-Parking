@@ -1,5 +1,7 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi } from "../../../lib/operatorApi"
 import type { SupportTicket } from "../../../lib/types"
 
@@ -86,15 +88,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--fg)]">
-          Support Ticket Management
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Review, investigate, and resolve support requests submitted by drivers in real-time.
-        </p>
-      </div>
+      <PageHeader title="Support Ticket Management" description="Review, investigate, and resolve support requests submitted by drivers in real-time." />
 
       {/* Feedback Banner */}
       {loadError && (
@@ -184,7 +178,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
-          <select
+          <RoundedSelect
             className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -193,7 +187,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
             <option value="open">Open Only</option>
             <option value="in-progress">In Progress</option>
             <option value="resolved">Resolved Only</option>
-          </select>
+          </RoundedSelect>
         </div>
 
         <span className="text-xs text-[var(--muted)]">

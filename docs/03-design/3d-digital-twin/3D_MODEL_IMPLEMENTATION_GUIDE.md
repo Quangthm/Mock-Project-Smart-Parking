@@ -2,13 +2,13 @@
 
 **Document Reference**: `3D_MODEL_IMPLEMENTATION_GUIDE.md`  
 **System Reference**: SmartPark / Parking Lot Management System  
-**Baseline Standard**: SmartPark SRS v0.9 (Performance SLA < 3s, Non-authoritative Digital Twin §3.2.3, BR-CAP-01, BR-VEH-03, C-23)  
-**Technical Architecture Reference**: SmartPark Solution Architecture v0.9 (3D WebGL Subsystem)  
+**Baseline Standard**: SmartPark SRS v1.0 (FR-MAP-01–04, FR-LOT-01–03, Performance SLA < 3s, Non-authoritative Digital Twin §3.2.3, C-23)  
+**Technical Architecture Reference**: SmartPark Solution Architecture v1.0 (Facility & Visualization + Parking Operations Domains)  
 **Target Audience**: Frontend Engineers, 3D Artists, UI/UX Designers, Solution Architects, Project Managers  
 **Language**: English (Official Technical Reference)  
 **Status**: Approved for Implementation  
-**Version**: `v1.2.0` (SRS v0.9 Canonical Baseline)  
-**Last Updated**: 2026-10-07  
+**Version**: `v1.3.0` (SRS v1.0 Canonical Baseline)  
+**Last Updated**: 2026-10-19  
 
 ---
 
@@ -41,7 +41,7 @@
 25. [Performance Optimization (Measured Benchmarks & Leak Tests)](#25-performance-optimization-measured-benchmarks--leak-tests)
 26. [Responsive & Browser Considerations](#26-responsive--browser-considerations)
 27. [Error Handling & Fallbacks](#27-error-handling--fallbacks)
-28. [Testing & Profiling](#28-testing--profiling)
+28: [Testing & Profiling](#28-testing--profiling)
 29. [Troubleshooting Guide](#29-troubleshooting-guide)
 30. [Asset Governance, Provenance & Stable-ID Rules (SPARK-185)](#30-asset-governance-provenance--stable-id-rules-spark-185)
 31. [Deployment & CDN Configuration](#31-deployment--cdn-configuration)
@@ -58,9 +58,9 @@
 | :--- | :--- |
 | **Document ID** | `DOC-3D-IMPL-001` |
 | **Title** | SmartPark 3D Digital Twin Master Model Implementation Guide |
-| **Version** | `v1.2.0` (SRS v0.9 Canonical Baseline) |
+| **Version** | `v1.3.0` (SRS v1.0 Canonical Baseline) |
 | **Primary System** | SmartPark Parking Lot Management & Reservation System |
-| **Source Standards** | SmartPark SRS v0.9, Solution Architecture v0.9 |
+| **Source Standards** | SmartPark SRS v1.0, Solution Architecture v1.0 |
 | **Primary Authors** | Antigravity AI Architecture Team & Lead Frontend Engineers |
 | **Review / Sign-off** | Project Manager, Tech Lead, UI/UX Lead |
 
@@ -124,11 +124,15 @@ This guide governs all 3D digital twin assets deployed across SmartPark:
 * **Subterranean Garage**: `underground_parking_lot.glb` (2 underground floors: Basement 1 `Floor_B1`, Basement 2 `Floor_B2`, street portal, inter-level ramps).
 * **Dynamic Vehicle Models**: `car_model.glb` (Passenger sedan), `motorcycle_model.glb` (Electric/gas 2-wheeler).
 
+> [!NOTE]
+> **EV Charging Architectural Asset Scope (SRS v1.0 Section 8 & FR-LOT-02)**:
+> Dedicated EV parking stalls and VinFast battery station geometries are authored as static architectural visual elements to enhance 3D realism. Per SmartPark SRS v1.0 (§8 and `modules/03-discovery-visualization.md:9`), **transactional EV charging sessions and power management are explicitly deferred as Future / outside MVP scope**.
+
 ### 2.3. Architectural Roadmap: Phase 1 MVP vs. Phase 2 Commercial SaaS
 To ensure the SmartPark platform avoids custom code re-engineering for future clients while delivering immediate MVP value, this implementation enforces a two-phase architecture:
 * **Phase 1 (Current MVP Baseline — Standardized Catalog)**:
-  * SmartPark provides 3 verified facility archetypes (Parking House, Outdoor, Underground).
-  * Facility Owners select an archetype during onboarding (SRS FR-LOT-01 / FR-LOT-02).
+  * SmartPark provides 3 verified facility archetypes (Parking House, Outdoor, Underground). Fixed 3D models remain versioned deployment assets (SRS v1.0 FR-LOT-01, FR-LOT-02, FR-LOT-03).
+  * Facility Owners select an archetype during onboarding.
   * The frontend runtime uses a generic, rule-based Three.js engine that treats all models uniformly.
 * **Phase 2 (Post-MVP — Commercial SaaS & Multi-Tenant Self-Service)**:
   * Enterprise B2B clients (malls, airports, hospitals) upload their own bespoke 3D models via the Owner Portal.
@@ -141,7 +145,7 @@ This document serves as the formal specification contract given to developers an
 2. **Hierarchy Contract (§6.2)**: Strict 2-tier scene tree allows instant floor pagination without traversing thousands of individual meshes.
 3. **Performance & Compression Contract (§9, §25)**: Strict file size ($\le 25\text{ MB}$ raw, $\le 8\text{ MB}$ Draco) and draw call budgets ($\le 250$) guaranteeing the **< 3.0s initial render SLA**.
 4. **PBR Material & Design Token Contract (§16)**: Dynamic runtime shader colorization eliminates the grey clay artifact of raw `.glb` exports without requiring manual material re-baking.
-5. **Non-Authoritative State Contract (§7, §20)**: Complete decoupling of 3D rendering from business transactions, adhering strictly to SRS §3.2.3.
+5. **Non-Authoritative State Contract (§7, §20)**: Complete decoupling of 3D rendering from business transactions, adhering strictly to SRS v1.0 FR-MAP-02 and §3.2.3.
 
 ---
 
@@ -158,16 +162,16 @@ Before starting implementation, ensure your development workstation meets the fo
 
 ## 4. TECHNOLOGY STACK
 
-The 3D visualization layer is built upon industry-standard, lightweight web technologies:
+The 3D visualization layer is built upon industry-standard, lightweight web technologies. The table below distinguishes between **Implemented** dependencies currently in `FE/package.json` and **Recommended / Optional** architectural enhancements:
 
-| Component | Technology | Rationale |
-| :--- | :--- | :--- |
-| **UI Framework** | **React / Next.js (TypeScript)** | Declarative UI state, reactive hooks, robust micro-frontend modularity. |
-| **3D WebGL Engine** | **Three.js (`three` r160+)** | Industry-standard WebGL abstraction, extensive documentation, tree-shakeable. |
-| **Geometry Decompression** | **Google Draco (WebAssembly)** | 75–80% network payload reduction decoded asynchronously on Web Workers. |
-| **Cinematic Motion** | **GSAP (GreenSock)** | Sub-pixel camera flight, floor transitions, and pulsing emissive highlights. |
-| **Real-Time Data Bus** | **STOMP over WebSocket** | Sub-second state synchronization with SmartPark microservices. |
-| **Model Authoring** | **Spline / Blender** | Scene assembly, coordinate alignment, and `.glb` binary export. |
+| Component | Technology | Implementation Status | Rationale |
+| :--- | :--- | :--- | :--- |
+| **UI Framework** | **React 19 + Vite 8 (TypeScript)** | **IMPLEMENTED** (`FE/`) | Declarative UI state, reactive hooks, ultra-fast Vite HMR build toolchain. *(Note: Next.js is not used).* |
+| **3D WebGL Engine** | **Three.js (`three` v0.186+)** | **IMPLEMENTED** (`FE/`) | Industry-standard WebGL2 abstraction, tree-shakeable, robust scene graph management. |
+| **Animation & Motion** | **Native `requestAnimationFrame` + Three.js Math** | **IMPLEMENTED** (`FE/`) | Zero-dependency frame loop, math-based pulse animations. *(GSAP is an optional enhancement for future complex camera paths).* |
+| **Real-Time Data Bus** | **ASP.NET Core SignalR** | **TARGET ARCHITECTURE** | Native .NET 10 microservice push channel (`/hubs/parking-lot`). Replaces legacy STOMP/raw WebSocket proposals. |
+| **Geometry Decompression** | **Google Draco (WebAssembly)** | **RECOMMENDED OPTIMIZATION** *(Optional)* | 70–80% network payload reduction. *(Currently optional: v1.0 GLB models are loaded directly with standard GLTFLoader).* |
+| **Model Authoring** | **Blender 5.2.2 LTS** | **IMPLEMENTED PRODUCTION PIPELINE** | Clean origin pivots, PBR textures, optimized hierarchy, GLB binary export. |
 
 ---
 
@@ -229,13 +233,13 @@ flowchart TD
         SlotSvc["Slot Management & Allocation"]
         TeleSvc["EV & Battery Telemetry"]
         GateSvc["Access Gate Control"]
-        WSGateway["WebSocket Gateway (/topic/lots)"]
+        SignalRHub["SignalR Hub (/hubs/parking-lot)"]
     end
 
     subgraph WebClient ["SmartPark Web Application"]
         subgraph StateLayer ["State & Communication"]
-            REST["REST Client (Initial Setup)"]
-            WSSub["WebSocket Subscriber"]
+            REST["REST Client (Initial Setup & Reconnect)"]
+            SignalRSub["SignalR Subscriber"]
             AppStore["Zustand / Redux Store"]
         end
 
@@ -254,10 +258,10 @@ flowchart TD
         end
     end
 
-    Backend -->|REST Handshake| REST
-    WSGateway -->|Live Telemetry Events| WSSub
+    Backend -->|REST Handshake & Snapshot Recovery| REST
+    SignalRHub -->|Live Telemetry Events| SignalRSub
     REST --> AppStore
-    WSSub --> AppStore
+    SignalRSub --> AppStore
     AppStore --> FloorCtrl
     AppStore --> VehicleInstancer
     SceneMgr --> RaycastMgr
@@ -266,7 +270,7 @@ flowchart TD
 ```
 
 > [!IMPORTANT]
-> **SRS §3.2.3 Non-Authoritative Rule**: The 3D Digital Twin never commits business decisions. It visualizes authoritative backend state and translates user clicks into intent events dispatched to backend APIs.
+> **SRS v1.0 §3.2.3 & FR-MAP-02 Non-Authoritative Rule**: The 3D Digital Twin never commits business decisions. It visualizes authoritative backend state and translates user clicks into intent events dispatched to backend APIs.
 
 ---
 
@@ -278,7 +282,7 @@ In accordance with the repository's Clean Architecture layout — where the Fron
 Mock-Project-Smart-Parking/
 ├── FE/                                   # Unified React Web Frontend (Vite + TypeScript)
 │   ├── public/                           # Static runtime assets served directly by Vite
-│   │   ├── draco/                        # WebAssembly geometry decoding runtime files
+│   │   ├── draco/                        # WebAssembly geometry decoding runtime files (Optional)
 │   │   │   ├── draco_decoder.wasm        # Compiled binary WebAssembly KD-tree decompression engine
 │   │   │   ├── draco_decoder.js          # Web Worker thread orchestrator
 │   │   │   └── draco_wasm_wrapper.js     # Legacy browser compatibility wrapper
@@ -298,20 +302,20 @@ Mock-Project-Smart-Parking/
 │       ├── services/
 │       │   └── 3d/
 │       │       ├── ModelLoaderService.ts         # Singleton GLTF + Draco loader with memory cache
-│       │       ├── FloorPaginationController.ts  # Floor isolation & GSAP cinematic camera flight
+│       │       ├── FloorPaginationController.ts  # Floor isolation & camera flight
 │       │       ├── ColorMaterialService.ts       # Fallback PBR auto-colorizer for untextured/clay models
 │       │       ├── InstancedVehicleRenderer.ts   # High-efficiency car & motorcycle instancing (1 draw call)
-│       │       ├── MemoryDisposalService.ts      # Zero-byte WebGL context & buffer cleanup
+│       │       ├── MemoryDisposalService.ts      # Comprehensive WebGL context, geometry & texture cleanup
 │       │       └── InteractionManager.ts         # Throttled raycasting engine (60 FPS hover/click)
 │       ├── types/
 │       │   └── 3d.ts                             # TypeScript interfaces, DTOs & state contracts
 │       └── constants/
-│           └── 3d-palette.ts                     # PBR design tokens & SRS v0.9 reservation status codes
+│           └── 3d-palette.ts                     # PBR design tokens & SRS v1.0 reservation status codes
 └── src/
-    └── Services/                                 # Authoritative Backend .NET Microservices
-        ├── ParkingService/                       # Owns slot inventory, spatial hierarchy & WebSocket topics
-        ├── ReservationService/                   # Owns booking lifecycle & active parking sessions
-        └── IoTService/                           # Ingests camera LPR & physical slot sensor telemetries
+    └── Services/                                 # Authoritative Backend .NET Microservices (Solution Architecture v1.0)
+        ├── ParkingService/                       # Implements Facility & Visualization (structure/layout) and Parking Operations read projections
+        ├── ReservationService/                   # Implements Parking Operations (booking lifecycle & active allocations)
+        └── IoTService/                           # Implements IoT & Recognition (camera LPR & physical sensor telemetries)
 ```
 
 > [!NOTE]
@@ -389,14 +393,21 @@ To replace theoretical calculations with empirical engineering data, benchmarks 
 Execute the following package installation in the web frontend root (`FE/`):
 
 ```bash
-cd FE
-npm install three @types/three three-stdlib gsap
+# Core 3D engine is already installed in FE/package.json:
+# "three": "^0.186.1", "@types/three": "^0.186.0"
+
+# Optional enhancements (only if advanced path tweening is needed):
+# npm install gsap three-stdlib
 ```
 
-### 10.2. Draco WebAssembly Decoding Runtime Configuration
+### 10.2. Draco WebAssembly Decoding Runtime Configuration [RECOMMENDED OPTIMIZATION — OPTIONAL]
+
+> [!NOTE]
+> **MVP v1.0 Runtime Status**: In the current SmartPark v1.0 MVP, the 3 archetype GLB models load efficiently with standard `GLTFLoader` without Draco decoding overhead. The Draco configuration below is **optional / recommended** for high-latency mobile networks or future Phase 2 model ingestion.
+
 Google Draco compresses 3D geometry buffers (vertices, normals, UVs) by $70\text{--}80\%$. Because Draco decompression is computationally intensive, Three.js offloads decoding to **Web Workers running compiled WebAssembly binary code off the main browser thread**. 
 
-These decoding binaries cannot be bundled into Webpack/Vite's JavaScript chunks and **must be served as static public files**:
+These decoding binaries cannot be bundled into Webpack/Vite's JavaScript chunks and **must be served as static public files** if Draco models are deployed:
 
 | Draco Runtime File | File Type | Role & Technical Architecture |
 | :--- | :--- | :--- |
@@ -404,22 +415,13 @@ These decoding binaries cannot be bundled into Webpack/Vite's JavaScript chunks 
 | `draco_decoder.js` | JavaScript Worker | Thread orchestrator and Web Worker messaging handler communicating with Three.js. |
 | `draco_wasm_wrapper.js`| JavaScript Wrapper | Compatibility bootstrap layer handling WASM instantiation across diverse browser environments. |
 
-#### Automated Setup Command
+#### Optional Setup Command (If Draco-compressed GLBs are used)
 Copy the Draco WebAssembly runtime files directly from `three` package into `FE/public/draco/`:
 
 ```powershell
 # Windows PowerShell command (Run from repository root or FE/)
 New-Item -ItemType Directory -Force -Path "FE/public/draco"
 Copy-Item "FE/node_modules/three/examples/jsm/libs/draco/gltf/*" "FE/public/draco/"
-```
-
-Or configure an automated script in `FE/package.json` to ensure Draco binaries are copied automatically during CI/CD build:
-```json
-{
-  "scripts": {
-    "postinstall": "copyfiles -u 6 \"node_modules/three/examples/jsm/libs/draco/gltf/*\" public/draco/"
-  }
-}
 ```
 
 In client code, configure `DRACOLoader` with an absolute origin URL path:
@@ -1305,35 +1307,44 @@ In accordance with **SRS BR-CAP-01**, motorcycles are tracked via an **aggregate
 
 ---
 
-## 20. BACKEND DATA INTEGRATION & STALE RECONNECTION
+## 20. BACKEND DATA INTEGRATION & SIGNALR REALTIME RECONNECTION
 
-The frontend subscribes to real-time WebSocket topics emitted by the SmartPark backend:
-* **Topic**: `/topic/lots/{lotId}/slot-events`
+The frontend connects to the authoritative ASP.NET Core **SignalR Hub** exposed by the backend:
+* **SignalR Hub Endpoint**: `/hubs/parking-lot`
+* **Hub Group**: `lot_{lotId}`
+* **Realtime Event**: `SlotStateChanged`
 * **Canonical Event Payload (SRS v0.9 §3.2.2 Orthogonal Schema)**:
 ```json
 {
   "eventType": "SLOT_STATE_CHANGED",
   "lotId": "f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f",
-  "slotId": "B1_EV_Car_003",
+  "slotCode": "B1-A-003",
   "floor": "Floor_B1",
   "physicalState": "OCCUPIED",
   "reservationState": "RESERVED",
-  "vehicleType": "AUTOMOBILE",
+  "vehicleType": "CAR",
   "sessionType": "EV_CHARGING",
   "isEvCharging": true,
-  "timestamp": "2026-10-07T16:00:00Z"
+  "sourceVersion": 482,
+  "timestamp": "2026-10-12T16:00:00Z"
 }
 ```
 
-### 20.1. Stale Data & WebSocket Reconnection Policy (SPARK-186)
+### 20.1. Stale Data & SignalR Reconnection Policy (SPARK-186 / SPARK-228)
 To satisfy the SRS v0.9 §3.2.3 non-authoritative boundary during network degradation:
-* **Heartbeat Ping/Pong**: Client sends heartbeat ping every $15\text{ seconds}$.
-* **Stale Telemetry Threshold**: If no message is received for $> 30\text{ seconds}$, the 3D canvas enters `STALE_DATA` mode:
-  * All slot emissive halos dim to $30\%$ opacity.
+* **Heartbeat Ping/Pong**: Client validates connection liveness with the SignalR hub every $15\text{ seconds}$.
+* **Stale Telemetry Threshold**: If no telemetry or ping is received for $> 30\text{ seconds}$, the 3D canvas enters `STALE_DATA` mode:
+  * All slot emissive halos dim to $30\%$ opacity and transition to warning amber/grey hatching.
   * A semi-transparent HUD overlay displays: `"⚠️ Live Telemetry Interrupted — Reconnecting..."`.
-  * Clicks on slots trigger a fallback tooltip directing the user to refresh or use the 2D authoritative booking view.
-* **Exponential Backoff Reconnect**: The STOMP client attempts reconnections at $1\text{s}, 2\text{s}, 4\text{s}, 8\text{s}, 16\text{s}$, capped at $30\text{s}$.
-* **State Reconciliation Snapshot**: Upon successful reconnection, the client dispatches a single REST call (`GET /api/v1/lots/{lotId}/slots`) to fetch the full authoritative snapshot before resuming real-time event tweening.
+  * Missing, invalid, or stale state is visibly marked `UNKNOWN` / `STALE`. **It is strictly prohibited to default to `AVAILABLE`.**
+* **Exponential Backoff Reconnect**: The SignalR client attempts automatic reconnects at $0\text{s}, 2\text{s}, 10\text{s}, 30\text{s}$.
+* **Authoritative Snapshot Recovery Protocol**:
+  > [!IMPORTANT]
+  > **Authoritative Reconnect Rule**: Upon successful SignalR reconnection, the client **must NOT attempt to patch local state from missed incremental messages**. Instead, it immediately calls the authoritative snapshot endpoint:
+  > ```text
+  > GET /api/parking-lots/{lotId}/operational-layout
+  > ```
+  > The local `SlotMappingRegistry` reconciles the full 3D scene from this authoritative snapshot before resuming real-time event processing.
 
 ---
 
@@ -1343,19 +1354,34 @@ When state payloads arrive, update visual indicators cleanly without modifying t
 
 ```typescript
 // services/3d/ColorMaterialService.ts
-export type PhysicalState = 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
-export type ReservationState = 'UNRESERVED' | 'RESERVED' | 'PROTECTED';
+// Orthogonal 2-Axis Types (SRS v0.9 §3.2.2)
+export type PhysicalState = 
+  | 'AVAILABLE' 
+  | 'OCCUPIED' 
+  | 'UNKNOWN' 
+  | 'MAINTENANCE' 
+  | 'UNAVAILABLE';
+
+export type ReservationState = 
+  | 'NOT_RESERVED' 
+  | 'RESERVED' 
+  | 'PROTECTED' 
+  | 'BACKUP';
 
 export interface SlotVisualState {
+  slotCode: string;
   physical: PhysicalState;
   reservation: ReservationState;
   sessionType?: VehicleSessionType;
+  sourceVersion?: number;
+  isStale?: boolean;
 }
 
 /**
  * Updates visual status without destroying or overwriting slot floor textures.
- * - Occupancy is displayed by spawning vehicle proxies with 'car_color status'.
- * - Reservation/Protection is displayed via non-destructive perimeter outline / halo.
+ * - Channel A (Physical): Occupancy is displayed by spawning vehicle proxies with 'car_color status'.
+ * - Channel B (Reservation/Protection): Displayed via non-destructive perimeter outline / halo.
+ * - Missing/Stale: Rendered as UNKNOWN / STALE warning, NEVER defaulted to free capacity.
  */
 export function updateSlotVisualState(
   slotMesh: THREE.Mesh,
@@ -1462,48 +1488,50 @@ const y = (-(screenPos.y * 0.5) + 0.5) * canvasHeight;
 
 ---
 
-## 25. PERFORMANCE OPTIMIZATION (MEASURED BENCHMARKS & LEAK TESTS)
+## 25. PERFORMANCE OPTIMIZATION (DESIGN TARGETS & GPU DISPOSAL AUDIT)
+
+> [!NOTE]
+> **Performance Verification & Reproducibility Notice (SPARK-186)**:
+> The metrics below represent **architectural design targets and simulated lab benchmarks** calculated from Blender model optimization budgets. In accordance with SmartPark QA standards, measured production claims require an attached reproducible profiling report containing: commit SHA, model hash, Chrome/browser version, client CPU/GPU hardware profile, and recorded Performance trace.
 
 ```
 +---------------------------------------------------------------------------------------------------------------+
-|  Performance Parameter               SLA Target          Measured Production Achievement (Chrome Profiler)   |
+|  Performance Parameter               SLA Target          Design Target / Lab Benchmark Estimate               |
 +---------------------------------------------------------------------------------------------------------------+
-|  Initial Time-to-Interactive (TTI)   < 3.0 seconds       874 ms (Indoor), 1,018 ms (Outdoor), 1,462 ms (Under)|
-|  Runtime Frame Rate                  Stable 60 FPS       60.0 FPS avg (16.6 ms frame budget maintained)       |
-|  Active Draw Calls per Viewport      < 250 calls         62 calls (Outdoor), 94 (Indoor G), 118 (Under B1)    |
-|  Peak WebGL Geometry Memory          < 35 MB VRAM        21.4 MB (Indoor), 18.2 MB (Outdoor), 28.6 MB (Under) |
-|  Repeated Mount/Unmount Memory Leak  Zero Byte Leak      10 Cycles Verified (Heap delta < 1.1 MB, GC neutral) |
+|  Initial Time-to-Interactive (TTI)   < 3.0 seconds       Target < 1.5s (Outdoor/Indoor), < 2.0s (Underground) |
+|  Runtime Frame Rate                  Stable 60 FPS       Target 60.0 FPS avg (16.6 ms frame budget)           |
+|  Active Draw Calls per Viewport      < 250 calls         Target < 70 calls (Outdoor), < 120 (Multi-floor)     |
+|  Peak WebGL Geometry Memory          < 35 MB VRAM        Target < 30 MB VRAM                                  |
+|  Repeated Mount/Unmount Memory Leak  Zero Byte Leak      Target Heap delta < 1.0 MB (GC neutral)              |
 +---------------------------------------------------------------------------------------------------------------+
 ```
 
-### 25.1. 10-Cycle Repeated Mount / Unmount Memory Leak Audit (SPARK-186)
-To verify that navigating between 2D list views and the 3D viewer does not leak WebGL GPU contexts or system memory, an automated stress test performed 10 consecutive mount/unmount cycles on `SmartPark3DViewer`:
-
-| Cycle # | Action Executed | JS Heap Size (MB) | Three.js Geometries | Three.js Textures | GPU Draw Calls | Memory Verdict |
-| :---: | :--- | :--- | :--- | :--- | :--- | :--- |
-| **0** | Baseline (Empty Page) | **41.2 MB** | 0 | 0 | 0 calls | Baseline clean |
-| **1** | Mount `underground_parking_lot` | **58.6 MB** | 433 | 0 | 118 calls | Buffers allocated |
-| **1** | Unmount (`dispose()` called) | **42.1 MB** | 0 | 0 | 0 calls | VRAM fully released |
-| **3** | Mount `indoor_parking_lot` | **57.4 MB** | 467 | 0 | 94 calls | Buffers allocated |
-| **3** | Unmount (`dispose()` called) | **42.4 MB** | 0 | 0 | 0 calls | VRAM fully released |
-| **5** | Mount `outdoor_parking_lot` | **54.8 MB** | 322 | 0 | 62 calls | Buffers allocated |
-| **5** | Unmount (`dispose()` called) | **42.5 MB** | 0 | 0 | 0 calls | VRAM fully released |
-| **10**| Final Unmount + Browser GC | **41.8 MB** | 0 | 0 | 0 calls | **0.6 MB Net (PASS)**|
+### 25.1. Repeated Mount / Unmount GPU Resource Disposal (SPARK-186)
+To verify that navigating between 2D list views and the 3D viewer does not leak WebGL GPU contexts or system memory, the unmount routine must thoroughly dispose of geometry, materials, and textures:
 
 ```typescript
-// services/3d/MemoryDisposalService.ts - Mandatory disposal routine
+// services/3d/MemoryDisposalService.ts - Comprehensive GPU disposal routine
 export function disposeThreeScene(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
   scene.traverse((obj) => {
     if ((obj as THREE.Mesh).isMesh) {
       const mesh = obj as THREE.Mesh;
-      mesh.geometry.dispose();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((mat) => mat.dispose());
-      } else {
-        mesh.material.dispose();
+      if (mesh.geometry) {
+        mesh.geometry.dispose();
+      }
+      if (mesh.material) {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((mat) => {
+          // Dispose textures attached to material channels
+          ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap'].forEach((key) => {
+            const texture = (mat as any)[key] as THREE.Texture | undefined;
+            if (texture) texture.dispose();
+          });
+          mat.dispose();
+        });
       }
     }
   });
+
   renderer.dispose();
   renderer.forceContextLoss();
 }
@@ -1522,18 +1550,20 @@ export function disposeThreeScene(scene: THREE.Scene, renderer: THREE.WebGLRende
 
 * **WebGL Detection**: Verify `window.WebGLRenderingContext` before mounting.
 * **Context Loss Graceful Handling**: Listen for `webglcontextlost` and pause the render loop; restore scene on `webglcontextrestored`.
-* **Fallback Mode**: If WebGL is unavailable or crashes, display a high-contrast 2D SVG parking map.
+* **Procedural Fallback Visibility**: If model loading fails, transition to procedural lot or 2D SVG map with a visible banner `"⚠️ 3D Facility Model Unavailable — Showing Diagrammatic View"`. Never misrepresent procedural fallback slots as authoritative backend slots.
 
 ---
 
-## 28. TESTING & PROFILING
+## 28. TESTING & PROFILING (MANUAL REPRODUCIBLE AUDIT)
 
-* **Performance Auditing**: Use Chrome DevTools Performance panel to verify that `requestAnimationFrame` execution stays under $16\text{ ms}$ per frame.
-* **Three.js Info Inspection**: Log `renderer.info.render.calls` to ensure draw calls do not exceed 250 in any floor view.
-* **Automated CI Validation Command**:
-```bash
-npm run test:3d-performance
+* **Performance Auditing**: Use Chrome DevTools **Performance** panel to record a 10-second interaction profile; verify that `requestAnimationFrame` execution stays under $16\text{ ms}$ per frame.
+* **GPU Memory & Draw Call Inspection**: At runtime, log `renderer.info.render.calls` and `renderer.info.memory.geometries` to console:
+```typescript
+console.log('Active Draw Calls:', renderer.info.render.calls);
+console.log('Allocated Geometries:', renderer.info.memory.geometries);
+console.log('Allocated Textures:', renderer.info.memory.textures);
 ```
+* **Memory Leak Audit**: In Chrome DevTools **Memory** tab, take Heap Snapshots before mounting, during 3D inspection, and after navigating away (with manual garbage collection triggered). Verify that detached DOM nodes and Three.js buffers return to baseline.
 
 ---
 

@@ -19,6 +19,7 @@ interface ApiUser {
   fullName: string
   email: string
   role: Role
+  onboardingComplete?: boolean
 }
 
 interface LoginSession {
@@ -46,6 +47,7 @@ export class AuthApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message)
   }
@@ -67,6 +69,7 @@ function toUser(account: ApiUser): User {
     email: account.email,
     name: account.fullName,
     role: account.role,
+    onboardingComplete: account.onboardingComplete ?? cached?.onboardingComplete,
 
     password: "",
     accountStatus: "active",
@@ -119,6 +122,7 @@ export async function request<T>(
   if (!response.ok) {
     if (
       response.status === 401 &&
+      token &&
       !["/login", "/logout", "/otp/login", "/otp/request"].includes(path) &&
       token === sessionStorage.getItem(tokenKey)
     ) {
@@ -142,7 +146,7 @@ export async function request<T>(
         ? "Your session has expired. Please sign in again."
         : "Authentication request failed.")
 
-    throw new AuthApiError(message, response.status)
+    throw new AuthApiError(message, response.status, payload?.code)
   }
 
   return payload as T

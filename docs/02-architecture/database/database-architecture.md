@@ -1,37 +1,80 @@
 # SmartPark Database Architecture
 
 ## 1. Overview
-SmartPark uses a **Database-per-Service** microservices architecture. There is no single monolithic database. Each microservice completely owns its persistence layer, enforcing strict service boundaries. Cross-service data references are handled logically via UUIDs rather than physical PostgreSQL foreign keys.
 
-The architecture consists of 6 distinct databases:
-1. **User Service DB** (`01-user-service-db.sql`): Manages authentication, identity, contextual accounts, roles, registered vehicles, and onboarding workflows (Driver OTP registrations, Owner applications, and Operator grants).
-2. **Parking Service DB** (`02-parking-service-db.sql`): Manages the physical parking infrastructure, spatial units, capacity, hardware mapping, pricing rules, access routing paths, and operator support/incident/audit/notification data (`02.2-parking-operator-operations.sql`).
-3. **Reservation & Session Service DB** (`03-reservation-session-service-db.sql`): The transactional core managing dynamic capacity allocations, reservations, active parking sessions, and gate entry/exit image evidence.
-4. **Payment Service DB** (`04-payment-service-db.sql`): Handles payment orders, transactions, billing invoices, and refund lifecycles.
-5. **Notification Service DB** (`05-notification-service-db.sql`): Manages notification templates and delivery logs (Email/SMS/Push).
-6. **IoT Service DB** (`06-iot-service-db.sql`): Stores high-volume telemetry, device statuses, and Python AI gate recognition events (`lpr_events`).
+SmartPark uses a **Database-per-Service** architecture. The recorded deployment profile has **6 physical PostgreSQL databases** and **7 base DDL files**, because the logical Operations service is split across two databases (`03a` → parking, `03b` → reservation) under T4 decision **D1**.
 
-## 2. Multi-Tenancy & Security Boundary (RLS)
-The database is designed with **Row-Level Security (RLS)** in mind. 
-- `tenant_id` is intentionally denormalized across almost all business tables.
-- **Composite Foreign Keys** are used extensively (e.g., `FOREIGN KEY (parent_id, tenant_id, site_id)`) to guarantee that child records cannot cross tenant or site boundaries.
-- This creates an impenetrable structural hierarchy where a parking slot, a transaction, or an IoT event is securely locked to its specific tenant context.
+| Database | Service | Base DDL | Deployment overlays | Port |
+|---|---|---|---|---|
+| `smartpark_user` | User & Access | `01-user-access-service-db.sql` | — | 5441 |
+| `smartpark_facility` | Facility + Parking Operations (03a) | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | 5442 |
+| `smartpark_operations` | Reservation Operations (03b) | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | 5443 |
+| `smartpark_payment` | Payment & Pricing | `04-payment-pricing-service-db.sql` | — | 5444 |
+| `smartpark_notification` | Notification & Audit | `05-notification-audit-service-db.sql` | — | 5445 |
+| `smartpark_iot` | IoT & Recognition | `06-iot-recognition-service-db.sql` | — | 5446 |
 
-## 3. Spatial Hierarchy
-The Parking Service models facilities using a flexible hierarchy: `parking_sites -> spatial_units -> parking_slots`.
-- Avoids rigid `building -> floor -> zone` hardcoding.
-- Uses a **Materialized Path** (`path TEXT`) to optimize hierarchical subtree queries without requiring complex recursive CTEs.
-- Enforces strict site containment using `UNIQUE(id, tenant_id, site_id)`.
+This recorded physical topology includes deliberate compatibility debt; it is not a new ownership decision. The v1.1 target retains [service ownership](../service-boundaries/ownership-and-events.md) and [DB25–DB33 alignment work](alignment-backlog.md#v11-schema-and-seed-alignment-pending). User owns tenant identity/review, Facility configuration, Operations accepted occupancy/claims/discovery/coverage, Payment tariffs/financial terms and IoT raw observations. Cross-service references are **logical UUIDs**; there is no physical foreign key across databases. The overlays are deployment composition for the live BE, not additional services.
 
-## 4. Hard Invariants & Enterprise Concurrency
-To ensure data integrity under high concurrent loads, the databases enforce "hard invariants" natively via SQL, minimizing reliance solely on application-level locks:
-- **Anti-Double Booking:** Uses PostgreSQL `EXCLUDE USING gist` with `TSTZRANGE` to mathematically guarantee that no two overlapping reservations can claim the same specific parking slot.
-- **Capacity Concurrency:** Uses `CHECK (current_reserved_count <= max_reservation_quota)` to prevent zone-level overbooking.
-- **Idempotency:** Payment webhooks and transactions enforce uniqueness (e.g., `UNIQUE(provider, provider_event_id)` and `idempotency_key`) to prevent duplicate billing on network retries.
-- **Financial Correctness:** Strict `CHECK (amount >= 0)` and formula constraints ensure money values cannot be corrupted.
-- **State Validation:** Status and type columns are guarded by inline `CHECK (status IN (...))` constraints to prevent invalid state transitions from application bugs.
+## 2. Multi-tenancy & security boundary
 
-## 5. Decoupled Lifecycles
-The database cleanly separates distinct dimensions of state:
-- **Physical vs Logical State:** A slot has a `physical_state` (Occupied/Available) driven by IoT, and a separate `reservation_state` (Reserved/Protected) driven by business logic.
-- **Auditability:** Tables maintain `created_at` and `updated_at` (to be managed by application lifecycle hooks), with Soft Delete (`deleted_at`) applied to sensitive identities while retaining historical integrity.
+- `tenant_id` is intentionally denormalized across most business tables so a service can enforce tenant scope without a cross-DB JOIN.
+- **Row-Level Security is not enabled** in the deployed schema. The schema stores `tenant_id` for application scoping, but enabling RLS requires explicit policies and roles as a separate step.
+- Deployed tables use **simple intra-database foreign keys**; the schema does not rely on composite `(id, tenant_id, site_id)` foreign keys for tenant isolation. Cross-tenant authorization is enforced by application validation and logical IDs.
+- No database contains a foreign key to another service's database.
+
+## 3. Spatial hierarchy
+
+The Facility database models physical infrastructure as:
+
+```text
+parking_sites -> spatial_units -> parking_slots
+```
+
+- `spatial_units` supports `ZONE`, `FLOOR`, and `BLOCK` through `unit_type` and a recursive `parent_id`.
+- `path TEXT` stores a materialized path for subtree queries; it is maintained by the application.
+- Active-name uniqueness is enforced by `uq_active_unit_name_ci` on `(site_id, parent_id, lower(name)) WHERE deleted_at IS NULL`.
+- Active-slot uniqueness is enforced by `uq_active_slot_code_ci` on `(spatial_unit_id, upper(slot_code)) WHERE deleted_at IS NULL`; the parking overlay adds `uq_site_slot_code_ci` on `(tenant_id, site_id, upper(slot_code))` so identifiers stay reserved after soft delete.
+- Static capacity lives in `spatial_unit_capacities` (`max_capacity` only). Dynamic counters live in `site_capacity_pools` in the Operations database.
+
+## 4. Hard invariants & concurrency
+
+- **Reservation double-booking:** `reservations` uses `EXCLUDE USING gist` on `(tenant_id, site_id, normalized_plate, tstzrange(expected_start_time, expected_end_time))` for statuses `CONFIRMED`, `ALLOCATED`, and `PARKING`.
+- **Slot allocation double-booking:** `slot_allocations` uses `EXCLUDE USING gist` on `slot_id` and the allocated time range. Pooled-capacity allocation is handled by the Reservation capacity ledger, not by this table.
+- **Monthly-pass overlap:** `monthly_passes` uses `EXCLUDE USING gist` per vehicle and validity range.
+- **Capacity:** the `site_capacity_pools` overlay enforces `current_reserved_count >= 0`, `current_reserved_count <= max_reservation_quota`, and `max_reservation_quota <= total_capacity`. It also stores `pending_payment_count`, `occupied_count`, `protected_count`, and `backup_count`.
+- **Payment idempotency:** `payment_orders.idempotency_key` is unique; `provider_webhooks` is unique on `(provider, provider_event_id)`; `payment_transactions` has a partial unique index on `(payment_method, gateway_transaction_id)` where `gateway_transaction_id IS NOT NULL`; `invoices.invoice_number` is unique.
+- **Audit retention:** `structure_slot_audit` and `structure_change_audit` use `RESTRICT`/`SET NULL` instead of `CASCADE`; `audit_logs` is append-only by design.
+- **State validation:** status and type columns use inline `CHECK` constraints.
+
+## 5. State lifecycles
+
+- **Physical state:** `parking_slots.physical_state` is one of `AVAILABLE`, `OCCUPIED`, `UNKNOWN`, `MAINTENANCE`, `UNAVAILABLE`.
+- **Reservation projection:** the deployed `parking_slots` also carries `supported_vehicle_type` and `reservation_state` (`PROTECTED`, `RESERVED`, `BACKUP`, or `NULL`). These are T4-approved runtime columns (**D4/P1**) read and written by ParkingService; Operations/Reservation remain authoritative for reservation state. When the projection and Operations disagree, Operations wins.
+- **Confirmation time:** `reservations.confirmed_at` exists in base `03b`; the `reservation-confirmation-time` overlay adds the trigger that stamps it.
+- **Soft delete:** identities and physical resources use `deleted_at`; audit records are retained. D11/D12 additionally require explicit dependency handling, atomic same-lot deactivation and retained vehicle-binding history; existing cascades/columns are schema evidence, not proof of those behaviors (DB29/DB30).
+
+## 6. Deployment artifacts & deviations
+
+Runtime truth is defined by:
+
+1. `scripts/database/microservices/*.sql` — 7 base files.
+2. `scripts/database/overlay/*.sql` — 8 overlays.
+3. `compose.schema-integration.yml` — 6 DB containers and mount order.
+4. `scripts/apply-workflow-migrations.ps1` and `setup.ps1` — migration/probe orchestration.
+
+The design baseline is `arch/database-schema` @ `9a13499`. The deployed branch deliberately differs in these T4-approved points:
+
+| Mã | Deviation | Lý do |
+|---|---|---|
+| D1 | Split `03` into `03a` (parking) + `03b` (reservation); 6 physical DBs | Keep live BE data access unchanged |
+| D2 | Keep `uq_active_vehicle_plate`; BE maps `23505` to HTTP 409 | SRS invariant + correct API behavior |
+| D3/D6 | Operator tables and a BE-shape `support_tickets` in parking overlay | `/api/operator/*` works on a fresh DB |
+| D4 | 7 role seeds; 2 `parking_slots` runtime columns; `unit_id`/`count` renames | Live BE reads/writes these names |
+| D5 | `tenants` canonical in `01`, local copy in parking | ParkingService joins in one transaction |
+| D7 | Recreate `site_capacity_pools` in reservation overlay | Shape was lost in the arch split |
+
+Full evidence: `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md` and `10-db-docs-deployment-alignment.md`.
+
+## 7. v1.1 implementation boundary
+
+Preserve the documented columns/defaults until separately approved schema work. `ACTIVE` is not proof of approval, completed provisioning or operational opening; yearly support cannot be inferred from a monthly table. DB25–DB33 define the target gaps. Development reset/seed waits for documentation approval and compatible implementation, with environment/owner/scripts/date TBD under DB31; no execution occurs here.

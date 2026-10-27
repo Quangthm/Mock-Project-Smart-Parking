@@ -1,5 +1,9 @@
 # Workflow upgrades — 08/10/2026
 
+> **Historical arch workflow — not part of the deployed 6-DB profile.** The current runner blocks legacy `05.1–05.9` and `integration/01–03`; equivalent behavior now lives in base `01`/`02`/`03a`/`03b` plus the 8 overlays. Do not follow the commands below on `feature/db-hybrid-srs-v1`; see `README.md` and `schema-integration.md`.
+
+> **T4-B2 naming note:** this dated note is kept for history, but the target database names below are shown with their current names. At the time of this workflow (2026-10-08), the same databases were named `smartpark_parking` and `smartpark_reservation` (containers `parking-db`/`reservation-db`, volumes `parking-schema-data`/`reservation-schema-data`). Those old names were superseded by T4-B2 and appear here only as historical context.
+
 Companion code release on `develop`: `feat(workflows): complete auth, vehicle and parking flows with QA handoff`.
 
 Apply these service-specific upgrades after the canonical microservice baseline and `integration/01`, `02`, `03` overlays. They are not the legacy monolith migrations despite the `05.*` filename prefix.
@@ -7,8 +11,8 @@ Apply these service-specific upgrades after the canonical microservice baseline 
 | Upgrade under `scripts/database/` | Target DB | Purpose |
 | --- | --- | --- |
 | `05.8-Account-Workflow-Vehicles.sql` | `smartpark_user` | Contact normalization/verification, current permissions, auth challenges, encrypted delivery outbox, MFA, vehicle mappings, Operator grant constraints |
-| `05.9-Parking-Backup-Operations.sql` | `smartpark_parking` | Backup capacity policies, idempotent operations and physical-commit marker, slot/structure audit |
-| `05.10-Reservation-Confirmation-Time.sql` | `smartpark_reservation` | Actual confirmation timestamps; historical unknown confirmation remains unknown |
+| `05.9-Parking-Backup-Operations.sql` | `smartpark_facility` | Backup capacity policies, idempotent operations and physical-commit marker, slot/structure audit |
+| `05.10-Reservation-Confirmation-Time.sql` | `smartpark_operations` | Actual confirmation timestamps; historical unknown confirmation remains unknown |
 
 The matching code checkout also contains byte-identical copies because its migration runner and integration tests currently load upgrades from the code checkout. These are the same upgrades: do not apply the branch copies twice as separate migrations. Compare SHA-256 file hashes before deployment if either branch changes.
 

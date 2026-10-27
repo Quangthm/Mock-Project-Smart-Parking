@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { request } from "../../../lib/authApi"
 
@@ -80,25 +81,17 @@ export function Applications() {
   const reviewed = apps.filter((a) => a.status !== "pending")
 
   return (
-    <div>
-      <h2
-        style={{
-          fontFamily: "Outfit",
-          fontWeight: 700,
-          fontSize: "1.3rem",
-          marginBottom: "1.5rem",
-          color: "var(--fg)",
-        }}
-      >
-        Owner Partnership Applications
-      </h2>
-      <button
-        className="btn-secondary"
-        disabled={loading || !!busy}
-        onClick={() => setReload((n) => n + 1)}
-      >
-        Refresh applications
-      </button>
+    <div className="admin-applications">
+      <div className="admin-applications-toolbar">
+        <PageHeader title="Owner Partnership Applications" variant="compact" />
+        <button
+          className="btn-secondary"
+          disabled={loading || !!busy}
+          onClick={() => setReload((n) => n + 1)}
+        >
+          Refresh applications
+        </button>
+      </div>
       {loading && <p role="status">Loading applications...</p>}
       {error && (
         <p role="alert" style={{ color: "#dc2626" }}>
@@ -107,7 +100,7 @@ export function Applications() {
       )}
       {!loading && !error && apps.length === 0 && <p>No applications yet.</p>}
       {pending.length > 0 && (
-        <div style={{ marginBottom: "2rem" }}>
+        <section className="application-section">
           <h3
             style={{
               display: "flex",
@@ -132,10 +125,10 @@ export function Applications() {
             {pending.map((app) => (
               <div
                 key={app.id}
-                className="card"
+                className="card application-card"
                 style={{ border: "1.5px solid #fde68a" }}
               >
-                <div
+                <div className="application-card-header"
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -147,7 +140,7 @@ export function Applications() {
                   <div>
                     <div
                       style={{
-                        fontFamily: "Outfit",
+                        fontFamily: "Be Vietnam Pro",
                         fontWeight: 700,
                         fontSize: "0.95rem",
                         color: "var(--fg)",
@@ -168,9 +161,30 @@ export function Applications() {
                         ? "Verified"
                         : "Awaiting verification"}
                     </div>
+                    <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: "0.4rem" }}>
+                      {app.lotSetupComplete && app.lotSetup ? (
+                        <>
+                          <strong>Parking lot:</strong> {app.lotSetup.name} · {app.lotSetup.address}
+                          <br />
+                          {app.lotSetup.totalSlots} slots · {app.lotSetup.floors} floor(s) ·
+                          {" "}{app.lotSetup.hourlyRate.toLocaleString("en-US")} VND/hour
+                          <details style={{ marginTop: "0.35rem" }}>
+                            <summary style={{ cursor: "pointer" }}>View lot setup</summary>
+                            <div>Type: {app.lotSetup.lotType.replace("-", " ")}</div>
+                            <div>3D model: {app.lotSetup.modelFileName}</div>
+                            <div>Devices: {app.lotSetup.devices.map((device) => device.label).join(", ") || "None"}</div>
+                            <div>Daily: {app.lotSetup.dailyRate.toLocaleString("en-US")} VND · Night: {app.lotSetup.nightRate.toLocaleString("en-US")} VND</div>
+                            <div>Monthly: {app.lotSetup.subscriptionMonthly.toLocaleString("en-US")} VND · Yearly: {app.lotSetup.subscriptionYearly.toLocaleString("en-US")} VND</div>
+                            <div>Grace period: {app.lotSetup.gracePeriodMinutes} minutes · Policy: {app.lotSetup.policyAccepted ? "Accepted" : "Not accepted"}</div>
+                          </details>
+                        </>
+                      ) : (
+                        "Parking lot setup incomplete"
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div
+                <div className="application-review-form"
                   style={{
                     display: "flex",
                     gap: "0.625rem",
@@ -178,7 +192,7 @@ export function Applications() {
                     flexWrap: "wrap",
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: "200px" }}>
+                  <div className="application-review-note" style={{ flex: 1, minWidth: "200px" }}>
                     <label className="label">Review Note (optional)</label>
                     <input
                       className="input"
@@ -193,9 +207,11 @@ export function Applications() {
                       placeholder="Add a note..."
                     />
                   </div>
+                  <div className="application-review-actions">
                   <button
-                    disabled={!!busy || loading || !app.contactVerified}
+                    disabled={!!busy || loading || !app.contactVerified || !app.lotSetupComplete || !app.lotSetup}
                     onClick={() => review(app, "approved")}
+                    className="application-approve"
                     style={{
                       padding: "0.5rem 1rem",
                       background: "#22c55e",
@@ -214,6 +230,7 @@ export function Applications() {
                   <button
                     disabled={!!busy || loading}
                     onClick={() => review(app, "rejected")}
+                    className="application-reject"
                     style={{
                       padding: "0.5rem 1rem",
                       background: "#fee2e2",
@@ -229,13 +246,14 @@ export function Applications() {
                       <UntitledIcon name="x" size={16} /> Reject
                     </>
                   </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
-      <div>
+      <section className="application-section application-reviewed">
         <h3
           style={{
             fontSize: "0.9rem",
@@ -252,7 +270,7 @@ export function Applications() {
           {reviewed.map((app) => (
             <div
               key={app.id}
-              className="card"
+              className="card application-reviewed-card"
               style={{
                 padding: "0.75rem 1rem",
                 display: "flex",
@@ -322,7 +340,7 @@ export function Applications() {
             </div>
           ))}
         </div>
-      </div>
+      </section>
     </div>
   )
 }

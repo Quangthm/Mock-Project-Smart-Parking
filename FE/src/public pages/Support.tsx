@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui/PageHeader"
 import { useState } from "react"
 
 import { useApp } from "../context/AppContext"
@@ -45,17 +46,12 @@ export function Support() {
     <div
       style={{ maxWidth: "900px", margin: "0 auto", padding: "3rem 1.5rem" }}
     >
-      <h1 className="section-title" style={{ marginBottom: "0.5rem" }}>
-        Help & Support
-      </h1>
-      <p className="section-sub" style={{ marginBottom: "3rem" }}>
-        Contact our team for help with your parking experience.
-      </p>
+      <PageHeader variant="default" align="start" title={<>Help & Support</>} description={<>Contact our team for help with your parking experience.</>} />
       {/* Contact form */}
       <section>
         <h2
           style={{
-            fontFamily: "Outfit",
+            fontFamily: "Be Vietnam Pro",
             fontWeight: 700,
             fontSize: "1.25rem",
             marginBottom: "1.25rem",
@@ -67,20 +63,20 @@ export function Support() {
         {sent ? (
           <div
             style={{
-              background: "#f0fdf4",
-              border: "1px solid #86efac",
+              background: "var(--status-available-bg)",
+              border: "1px solid var(--available)",
               borderRadius: "var(--radius)",
               padding: "1.5rem",
               textAlign: "center",
             }}
           >
-            <div style={{ color: "#16a34a", marginBottom: "0.5rem" }}>
+            <div style={{ color: "var(--available)", marginBottom: "0.5rem" }}>
               <UntitledIcon name="check-circle" size={28} />
             </div>
-            <p style={{ color: "#166534", fontWeight: 600 }}>
+            <p style={{ color: "var(--fg)", fontWeight: 600 }}>
               Ticket submitted successfully!
             </p>
-            <p style={{ color: "#166534", fontSize: "0.875rem" }}>
+            <p style={{ color: "var(--muted)", fontSize: "1rem" }}>
               We'll respond within 24 hours via email.
             </p>
             <button
@@ -98,9 +94,12 @@ export function Support() {
             style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
           >
             <div>
-              <label className="label">Subject</label>
+              <label className="label" htmlFor="support-subject">Subject</label>
               <input
+                id="support-subject"
                 className="input"
+                name="subject"
+                autoComplete="off"
                 value={form.subject}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, subject: e.target.value }))
@@ -110,9 +109,12 @@ export function Support() {
               />
             </div>
             <div>
-              <label className="label">Message</label>
+              <label className="label" htmlFor="support-message">Message</label>
               <textarea
+                id="support-message"
                 className="input"
+                name="message"
+                autoComplete="off"
                 rows={5}
                 value={form.message}
                 onChange={(e) =>
@@ -154,13 +156,13 @@ export function Support() {
             value: "support.smartparkingvn@gmail.com",
           },
         ].map((c) => (
-          <div key={c.label} style={{ textAlign: "center" }}>
+          <div key={c.label} style={{ textAlign: "center", minWidth: 0 }}>
             <div style={{ color: "var(--primary)", marginBottom: "0.25rem" }}>
               <UntitledIcon name={c.icon} size={22} />
             </div>
             <div
               style={{
-                fontSize: "0.8rem",
+                fontSize: "1rem",
                 color: "var(--muted)",
                 marginBottom: "0.2rem",
               }}
@@ -171,7 +173,8 @@ export function Support() {
               style={{
                 fontWeight: 600,
                 color: "var(--fg)",
-                fontSize: "0.9rem",
+                fontSize: "1rem",
+                overflowWrap: "anywhere",
               }}
             >
               {c.value}

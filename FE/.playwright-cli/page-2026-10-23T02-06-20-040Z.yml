@@ -1,0 +1,159 @@
+- generic [ref=f1e3]:
+  - link "Skip to main content" [ref=f1e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation "Main navigation" [ref=f1e5]:
+    - generic [ref=f1e6]:
+      - button "SmartParking home" [ref=f1e7] [cursor=pointer]:
+        - img "Smart Parking" [ref=f1e8]
+      - generic [ref=f1e12]:
+        - button "Home" [ref=f1e13] [cursor=pointer]
+        - button "Pricing" [ref=f1e14] [cursor=pointer]
+        - button "Support" [ref=f1e15] [cursor=pointer]
+      - generic [ref=f1e16]:
+        - button "Switch to Dark Mode" [ref=f1e17] [cursor=pointer]
+        - button "Sign In" [ref=f1e21] [cursor=pointer]
+        - button "Sign Up" [ref=f1e22] [cursor=pointer]
+  - main [ref=f1e23]:
+    - generic [ref=f1e25]:
+      - generic [ref=f1e26]:
+        - generic [ref=f1e27]:
+          - generic [ref=f1e28]: PARKING, MOVING FORWARD
+          - heading [level=1] [ref=f1e30]:
+            - text: Less searching.
+            - emphasis [ref=f1e31]: More going.
+          - paragraph [ref=f1e32]: Find a space, book it, and arrive with confidence. SmartParking brings drivers and parking teams together in one clear flow.
+          - generic [ref=f1e33]:
+            - button "Find parking" [ref=f1e34] [cursor=pointer]
+            - button "For parking partners" [ref=f1e39] [cursor=pointer]
+          - generic "How SmartParking works" [ref=f1e41]:
+            - generic [ref=f1e42]:
+              - strong [ref=f1e43]: "01"
+              - generic [ref=f1e44]: Discover nearby
+            - generic [ref=f1e45]:
+              - strong [ref=f1e46]: "02"
+              - generic [ref=f1e47]: Reserve a space
+            - generic [ref=f1e48]:
+              - strong [ref=f1e49]: "03"
+              - generic [ref=f1e50]: Arrive and park
+        - img "Illustration of a parking structure with available, reserved, and occupied spaces" [ref=f1e51]:
+          - generic [ref=f1e78]:
+            - strong [ref=f1e79]: Find your space
+            - generic [ref=f1e80]: Nearby lots at a glance
+          - generic [ref=f1e83]:
+            - strong [ref=f1e84]: Ready when you are
+            - generic [ref=f1e85]: Book · Enter · Go
+      - generic [ref=f1e86]:
+        - generic [ref=f1e87]:
+          - generic [ref=f1e88]: ONE PLATFORM, EVERY JOURNEY
+          - heading "Parking that works for everyone." [level=2] [ref=f1e89]: Parking that worksfor everyone.
+          - paragraph [ref=f1e90]: A calmer way to park, with the tools to run each lot well.
+        - generic [ref=f1e91]:
+          - article [ref=f1e92]:
+            - generic [ref=f1e96]: "01"
+            - heading "More time for the road" [level=3] [ref=f1e97]
+            - paragraph [ref=f1e98]: See nearby options and reserve a space before you arrive.
+          - article [ref=f1e99]:
+            - generic [ref=f1e104]: "02"
+            - heading "Clear payments" [level=3] [ref=f1e105]
+            - paragraph [ref=f1e106]: Review your booking and payment details in one place.
+          - article [ref=f1e107]:
+            - generic [ref=f1e112]: "03"
+            - heading "One view of your lots" [level=3] [ref=f1e113]
+            - paragraph [ref=f1e114]: Owners can follow occupancy and revenue from their dashboard.
+          - article [ref=f1e115]:
+            - generic [ref=f1e120]: "04"
+            - heading "Smoother operations" [level=3] [ref=f1e121]
+            - paragraph [ref=f1e122]: Operators can manage arrivals, spaces, and incidents as they happen.
+      - generic [ref=f1e123]:
+        - generic [ref=f1e124]:
+          - generic [ref=f1e125]: FROM ARRIVAL TO EXIT
+          - heading "One easy route through parking." [level=2] [ref=f1e126]
+          - paragraph [ref=f1e127]: Every step is connected, so you always know what comes next.
+        - generic [ref=f1e128]:
+          - article [ref=f1e129]:
+            - generic [ref=f1e130]: "01"
+            - heading "Find a lot" [level=3] [ref=f1e135]
+            - paragraph [ref=f1e136]: Search nearby parking lots on the map by your current location.
+          - article [ref=f1e137]:
+            - generic [ref=f1e138]: "02"
+            - heading "Choose a slot" [level=3] [ref=f1e142]
+            - paragraph [ref=f1e143]: View real-time slot availability and pick the best spot.
+          - article [ref=f1e144]:
+            - generic [ref=f1e145]: "03"
+            - heading "Book" [level=3] [ref=f1e150]
+            - paragraph [ref=f1e151]: Enter your license plate and confirm your booking details.
+          - article [ref=f1e152]:
+            - generic [ref=f1e153]: "04"
+            - heading "Pay" [level=3] [ref=f1e158]
+            - paragraph [ref=f1e159]: Secure payment with OTP verification via SMS or email.
+          - article [ref=f1e160]:
+            - generic [ref=f1e161]: "05"
+            - heading "Check in" [level=3] [ref=f1e166]
+            - paragraph [ref=f1e167]: Show your booking QR code at the barrier to enter.
+          - article [ref=f1e168]:
+            - generic [ref=f1e169]: "06"
+            - heading "Check out" [level=3] [ref=f1e174]
+            - paragraph [ref=f1e175]: Drive out when you're ready. Your invoice is sent by email and SMS.
+      - generic [ref=f1e176]:
+        - generic [ref=f1e177]:
+          - generic [ref=f1e178]: PAY YOUR WAY
+          - heading "Familiar ways to pay." [level=2] [ref=f1e179]
+          - paragraph [ref=f1e180]: Review payment and refund details before you confirm a booking.
+        - generic [ref=f1e181]:
+          - generic [ref=f1e182]: Visa / Mastercard
+          - generic [ref=f1e184]: Apple Pay
+          - generic [ref=f1e186]: MoMo
+          - generic [ref=f1e188]: VNPAY
+          - generic [ref=f1e190]: ZaloPay
+          - generic [ref=f1e192]: QR Code
+      - generic [ref=f1e194]:
+        - generic [ref=f1e195]: YOUR SPACE IS OUT THERE
+        - heading "Ready when you are." [level=2] [ref=f1e196]
+        - paragraph [ref=f1e197]: Start your next trip with one less thing to think about.
+        - generic [ref=f1e198]:
+          - button "Get started" [ref=f1e199] [cursor=pointer]
+          - button "View pricing" [ref=f1e204] [cursor=pointer]
+  - contentinfo [ref=f1e206]:
+    - generic [ref=f1e207]:
+      - generic [ref=f1e208]:
+        - generic [ref=f1e209]:
+          - generic [ref=f1e210]:
+            - img "Smart Parking" [ref=f1e211]
+            - generic [ref=f1e215]:
+              - generic [ref=f1e216]: Smart
+              - generic [ref=f1e217]: Parking
+          - paragraph [ref=f1e218]: Smart parking solutions for drivers and businesses. Find, book, and manage parking with ease.
+          - generic [ref=f1e219]:
+            - button "Facebook" [ref=f1e220] [cursor=pointer]: f
+            - button "LinkedIn" [ref=f1e221] [cursor=pointer]: in
+            - button "YouTube" [ref=f1e222] [cursor=pointer]: ▶
+        - generic [ref=f1e223]:
+          - heading "Information" [level=4] [ref=f1e224]
+          - generic [ref=f1e225]:
+            - button "About Us" [ref=f1e226] [cursor=pointer]
+            - button "Affiliates" [ref=f1e227] [cursor=pointer]
+            - button "Careers" [ref=f1e228] [cursor=pointer]
+        - generic [ref=f1e229]:
+          - heading "For Business" [level=4] [ref=f1e230]
+          - generic [ref=f1e231]:
+            - button "Become a Partner" [ref=f1e232] [cursor=pointer]
+            - button "Business Accounts" [ref=f1e233] [cursor=pointer]
+        - generic [ref=f1e234]:
+          - heading "Support" [level=4] [ref=f1e235]
+          - generic [ref=f1e236]:
+            - button "FAQ" [ref=f1e237] [cursor=pointer]
+            - button "Contact" [ref=f1e238] [cursor=pointer]
+            - button "Report an Issue" [ref=f1e239] [cursor=pointer]
+        - generic [ref=f1e240]:
+          - heading "Contact" [level=4] [ref=f1e241]
+          - generic [ref=f1e242]:
+            - generic [ref=f1e243]: Smart Hub Building, 17 Le Duan Street, District 1, Ho Chi Minh City
+            - generic [ref=f1e247]: "Driver: 1900-xxxx"
+            - generic [ref=f1e250]: "Business: 090xxxxxxx"
+            - generic [ref=f1e253]: support.smartparkingvn@gmail.com
+      - generic [ref=f1e257]:
+        - paragraph [ref=f1e258]: This product is for educational purposes.
+        - generic [ref=f1e259]:
+          - button "Terms of Service" [ref=f1e260] [cursor=pointer]
+          - button "Privacy Policy" [ref=f1e261] [cursor=pointer]
+          - button "Payment & Refund" [ref=f1e262] [cursor=pointer]

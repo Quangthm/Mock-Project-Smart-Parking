@@ -1,6 +1,8 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useRef, useMemo } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { store } from "../../../lib/store"
 
@@ -9,6 +11,10 @@ import type { LotPolicyPdf, ParkingLot } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
+
+import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+
+import { digitsOnly } from "../../../lib/groupedDigits"
 
 type DepositMode = "percentage" | "fixed"
 
@@ -62,9 +68,16 @@ export function PolicySettings({
 }: PolicySettingsProps = {}) {
   const { user } = useApp()
 
-  const [policy, setPolicy] = useState<PolicyState>(() =>
-    user ? (store.getOwnerPolicy(user.id) ?? initialPolicy) : initialPolicy,
-  )
+  const [policy, setPolicy] = useState<PolicyState>(() => {
+    const stored = user ? store.getOwnerPolicy(user.id) : null
+    return stored
+      ? {
+          ...stored,
+          dayRate: digitsOnly(String(stored.dayRate)),
+          nightRate: digitsOnly(String(stored.nightRate)),
+        }
+      : initialPolicy
+  })
 
   const [dayHours, setDayHours] = useState("8")
 
@@ -115,7 +128,7 @@ export function PolicySettings({
         setCurrentPdf({
           ...ownerPdf,
           lotId: selectedLotId,
-          title: `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+          title: `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
         })
       } else {
         setCurrentPdf(lotPdf)
@@ -150,7 +163,7 @@ export function PolicySettings({
         title:
           selectedLotId === "all"
             ? "System-wide Parking Operations Policy"
-            : `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+            : `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
         summaryText: `Official updated rules for ${lot?.name || "all of the owner's parking sites"}.`,
       }
 
@@ -180,7 +193,7 @@ export function PolicySettings({
         "driver",
         "POLICY_UPDATED",
         "Parking Policy Updated",
-        `Parking site ${lot?.name || "SmartPark"} has updated its operations policy document.`,
+        `Parking site ${lot?.name || "SmartParking"} has updated its operations policy document.`,
       )
     }
 
@@ -205,7 +218,7 @@ export function PolicySettings({
           setCurrentPdf({
             ...ownerPdf,
             lotId: selectedLotId,
-            title: `Parking Policies & Rules: ${lot?.name || "SmartPark"}`,
+            title: `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
           })
         } else {
           const fallback = store.getLotPolicyPdf(selectedLotId, user.id)
@@ -223,7 +236,7 @@ export function PolicySettings({
     const lot = ownerLots.find((l) => l.id === selectedLotId) ||
       ownerLots[0] || {
         id: "sample",
-        name: "SmartPark Sample Parking Site",
+        name: "SmartParking Sample Parking Site",
         address: "72 Lê Thánh Tôn, Quận 1, TP.HCM",
         type: "basement",
         slots: [],
@@ -313,19 +326,7 @@ export function PolicySettings({
       className="mx-auto w-full max-w-5xl space-y-6"
       aria-labelledby="policy-settings-title"
     >
-      <header>
-        <p className="text-sm font-medium text-[var(--primary)]">Owner tools</p>
-        <h1
-          id="policy-settings-title"
-          className="mt-1 text-2xl font-bold text-[var(--fg)]"
-        >
-          Policy Settings
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Configure pricing, deposit rules, and upload official PDF policy
-          documents for your parking lots.
-        </p>
-      </header>
+      <PageHeader id="policy-settings-title" eyebrow="Owner tools" title="Policy Settings" description="Configure pricing, deposit rules, and upload official PDF policy documents for your parking lots." />
 
       {pdfNotice && (
         <div
@@ -365,7 +366,7 @@ export function PolicySettings({
             >
               Applies to:
             </label>
-            <select
+            <RoundedSelect
               id="policy-lot-scope"
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none"
               value={selectedLotId}
@@ -377,7 +378,7 @@ export function PolicySettings({
                   {lot.name}
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           </div>
         </div>
 
@@ -393,7 +394,7 @@ export function PolicySettings({
                   {currentPdf?.fileName ||
                     `Chinh_Sach_Quy_Dinh_${(
                       ownerLots.find((l) => l.id === selectedLotId)?.name ||
-                      "SmartPark"
+                      "SmartParking"
                     ).replace(/\s+/g, "_")}.pdf`}
                 </span>
                 <span
@@ -405,7 +406,7 @@ export function PolicySettings({
                 >
                   {currentPdf?.fileData
                     ? "Uploaded File"
-                    : "Default SmartPark Document"}
+                    : "Default SmartParking Document"}
                 </span>
               </div>
               <p className="mt-1 text-xs text-[var(--muted)]">
@@ -477,7 +478,7 @@ export function PolicySettings({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--bg)]/50 text-xs uppercase tracking-wide text-[var(--muted)]">
+              <tr className="border-b border-[var(--border)] text-sm text-[var(--muted)]">
                 <th className="px-5 py-3 font-semibold">Policy</th>
                 <th className="px-5 py-3 font-semibold">Enabled</th>
                 <th className="px-5 py-3 font-semibold">Configuration</th>
@@ -508,28 +509,22 @@ export function PolicySettings({
                   {policy.pricingEnabled ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Day Rate (₫ / hour)
-                        <input
+                        Day Rate (VND / hour)
+                        <GroupedNumberInput
                           className={inputClass}
-                          type="number"
-                          min="0"
-                          step="1000"
                           value={policy.dayRate}
-                          onChange={(event) =>
-                            updatePolicy("dayRate", event.target.value)
+                          onValueChange={(digits) =>
+                            updatePolicy("dayRate", digits)
                           }
                         />
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Night Rate (₫ / hour)
-                        <input
+                        Night Rate (VND / hour)
+                        <GroupedNumberInput
                           className={inputClass}
-                          type="number"
-                          min="0"
-                          step="1000"
                           value={policy.nightRate}
-                          onChange={(event) =>
-                            updatePolicy("nightRate", event.target.value)
+                          onValueChange={(digits) =>
+                            updatePolicy("nightRate", digits)
                           }
                         />
                       </label>
@@ -566,7 +561,7 @@ export function PolicySettings({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
                         Deposit type
-                        <select
+                        <RoundedSelect
                           className={inputClass}
                           value={policy.depositMode}
                           onChange={(event) =>
@@ -577,13 +572,13 @@ export function PolicySettings({
                           }
                         >
                           <option value="percentage">Percentage (%)</option>
-                          <option value="fixed">Fixed amount (₫)</option>
-                        </select>
+                          <option value="fixed">Fixed amount (VND)</option>
+                        </RoundedSelect>
                       </label>
                       <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
                         {policy.depositMode === "percentage"
                           ? "Deposit Percentage (%)"
-                          : "Deposit Amount (₫)"}
+                          : "Deposit Amount (VND)"}
                         <input
                           className={inputClass}
                           type="number"
@@ -713,7 +708,7 @@ function PreviewAmount({
           emphasized ? "text-[var(--primary)]" : "text-[var(--fg)]"
         }`}
       >
-        {Math.round(amount).toLocaleString("en-US")} ₫
+        {Math.round(amount).toLocaleString("vi-VN")} VND
       </p>
     </div>
   )

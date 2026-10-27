@@ -5,7 +5,7 @@ namespace SmartParking.ParkingService.API;
 
 internal static class OperatorOperationsEndpoints
 {
-    public static async Task MapOperatorOperationsAsync(this WebApplication app)
+    public static void MapOperatorOperations(this WebApplication app)
     {
         app.MapGet("/api/operator/sites/{siteId:guid}/tickets", async (
             Guid siteId,
@@ -136,9 +136,7 @@ internal static class OperatorOperationsEndpoints
                 : Results.NotFound(new { success = false, code = "NOTIFICATION_NOT_FOUND", message = "Notification was not found." });
         });
 
-        using var serviceScope = app.Services.CreateScope();
-        await serviceScope.ServiceProvider.GetRequiredService<OperatorOperationsStore>()
-            .EnsureSchemaAsync(CancellationToken.None);
+        // Schema reconciliation is an explicit deployment prerequisite, not startup DDL.
     }
 }
 

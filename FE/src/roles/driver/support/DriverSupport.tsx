@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext"
 import { driverData as store } from "../data/data"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { PageHeader } from "../../../components/ui/PageHeader"
 
 // Support form
 
@@ -13,7 +14,6 @@ export function DriverSupport() {
 
   const [form, setForm] = useState({ subject: "", message: "" })
 
-  const [bookingId, setBookingId] = useState("")
 
   const [sent, setSent] = useState(false)
 
@@ -31,7 +31,6 @@ export function DriverSupport() {
 
       message: form.message,
 
-      bookingId: bookingId || undefined,
     })
 
     store.createNotification({
@@ -53,9 +52,7 @@ export function DriverSupport() {
         <div style={{ color: "#16a34a", marginBottom: "0.5rem" }}>
           <UntitledIcon name="check-circle" size={32} />
         </div>
-        <p style={{ color: "#22c55e", fontWeight: 600 }}>
-          Support ticket submitted!
-        </p>
+        <PageHeader title="Support ticket submitted!" variant="compact" align="center" />
         <button
           className="btn-outline"
           style={{ marginTop: "1rem" }}
@@ -85,21 +82,7 @@ export function DriverSupport() {
         gap: "1rem",
       }}
     >
-      <h3
-        style={{
-          fontFamily: "Outfit",
-
-          fontWeight: 700,
-
-          fontSize: "1.1rem",
-
-          color: "var(--fg)",
-
-          margin: 0,
-        }}
-      >
-        Support & Appeals
-      </h3>
+      <PageHeader title="Support & Appeals" variant="compact" />
       <div>
         <label className="label">Subject</label>
         <input
@@ -109,21 +92,6 @@ export function DriverSupport() {
           placeholder="e.g. Incorrect charge, appeal"
           required
         />
-      </div>
-      <div>
-        <label className="label">Related Booking (optional)</label>
-        <select
-          className="input"
-          value={bookingId}
-          onChange={(e) => setBookingId(e.target.value)}
-        >
-          <option value="">No related booking</option>
-          {store.getBookingsByDriver(user?.id ?? "").map((booking) => (
-            <option key={booking.id} value={booking.id}>
-              {booking.id} · {booking.lotName}
-            </option>
-          ))}
-        </select>
       </div>
       <div>
         <label className="label">Message</label>
