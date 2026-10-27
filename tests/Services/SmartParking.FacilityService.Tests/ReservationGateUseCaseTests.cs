@@ -1,8 +1,8 @@
-using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
-using SmartParking.ReservationService.Application.Common.Interfaces.Services;
-using SmartParking.ReservationService.Application.Common.Models.Exceptions;
-using SmartParking.ReservationService.Application.DTOs;
-using SmartParking.ReservationService.Application.Usecase.ReservationGate;
+using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
+using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
+using SmartParking.OperationService.Application.DTOs;
+using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.FacilityService.Tests;
 

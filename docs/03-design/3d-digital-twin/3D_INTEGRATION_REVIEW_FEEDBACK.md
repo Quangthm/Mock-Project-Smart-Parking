@@ -33,7 +33,7 @@ Sau khi rà soát và đối chiếu chéo với **SmartPark SRS v0.9**, **Solut
 ### 2.1. ❌ Ảo giác về việc phân chia dịch vụ thành "Facility & Visualization" và "Parking Operations"
 
 > [!NOTE]
-> **Ghi chú chuyển tiếp kiến trúc (v1.1 / Fix2FA):** Nhận định kỹ thuật tại mục 2.1 này là biên bản lịch sử ghi nhận ngày 12/10/2026 dựa trên hiện trạng codebase và tài liệu v0.9 cũ. Kể từ quyết định **V11-09** (SRS v1.1) và branch refactor `Fix2FA`, kiến trúc 6 dịch vụ đã chính thức phê duyệt phân tách **Facility Service** (quản trị hạ tầng/spatial layout/3D model) và **Parking Operations** (quản trị phiên/occupancy). Hiện tại mã nguồn `src/Services/ParkingService` đang trong quá trình chuyển đổi hoàn tất sang `src/Services/FacilityService`.
+> **Ghi chú chuyển tiếp kiến trúc (v1.1 / Fix2FA):** Nhận định kỹ thuật tại mục 2.1 này là biên bản lịch sử ghi nhận ngày 12/10/2026 dựa trên hiện trạng codebase và tài liệu v0.9 cũ. Kể từ quyết định **V11-09** (SRS v1.1) và branch refactor `Fix2FA`, kiến trúc 6 dịch vụ đã chính thức phê duyệt phân tách **Facility Service** (quản trị hạ tầng/spatial layout/3D model) và **Parking Operations** (quản trị phiên/occupancy). Trên branch `Fix2FA`, mã nguồn đã đổi tên hoàn tất sang `src/Services/FacilityService` (`SmartParking.FacilityService.*`).
 
 
 * **Nhận xét của AI PM (Mục 1, 2, 9, 10, 28):**
@@ -42,7 +42,7 @@ Sau khi rà soát và đối chiếu chéo với **SmartPark SRS v0.9**, **Solut
   1. **Quy hoạch 6 microservices chính thức của SmartPark** (theo `SmartPark_Solution_Architecture_v0.9.md (lưu trữ tại docs/archive/ và được kế thừa tại smartpark-solution-architecture-v1.1.md)` §3.4) bao gồm:
      - **`UserService`** *(Đã có code)*: Quản trị tài khoản, quyền hạn, phương tiện đã đăng ký.
      - **`FacilityService`** *(Đã có code)*: Quản trị toàn bộ hạ tầng vật lý bãi đỗ (`parking_sites`, `spatial_units`), vị trí đỗ (`parking_slots`), và **trạng thái vận hành vật lý của slot** (`physical_state`).
-     - **`ReservationService`** *(Đã có code)*: Quản trị đặt chỗ, vòng đời giữ chỗ, ưu tiên phân bổ và rào cản bảo vệ.
+     - **`OperationService`** *(Đã có code)*: Quản trị đặt chỗ, vòng đời giữ chỗ, ưu tiên phân bổ và rào cản bảo vệ.
      - **`IoTService`** *(Sắp triển khai theo roadmap)*: Thu thập telemetry cảm biến vật lý và camera LPR, gửi sự kiện đồng bộ về `FacilityService`.
      - **`PaymentService`** *(Sắp triển khai theo roadmap)*: Xử lý giao dịch thanh toán và đối soát cổng thanh toán.
      - **`NotificationService`** *(Sắp triển khai theo roadmap)*: Quản lý thông báo thời gian thực và tin nhắn người dùng.

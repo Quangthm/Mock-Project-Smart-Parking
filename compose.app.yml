@@ -75,7 +75,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
-        SERVICE: ReservationService
+        SERVICE: OperationService
     image: smartpark/reservation-service:local
     environment:
       <<: *backend-env

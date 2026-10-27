@@ -314,7 +314,7 @@ Mock-Project-Smart-Parking/
 └── src/
     └── Services/                                 # Authoritative Backend .NET Microservices
         ├── FacilityService/                       # Owns slot inventory, spatial hierarchy & WebSocket topics
-        ├── ReservationService/                   # Owns booking lifecycle & active parking sessions
+        ├── OperationService/                   # Owns booking lifecycle & active parking sessions
         └── IoTService/                           # Ingests camera LPR & physical slot sensor telemetries
 ```
 

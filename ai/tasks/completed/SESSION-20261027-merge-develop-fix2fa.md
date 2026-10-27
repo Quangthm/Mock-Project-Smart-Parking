@@ -56,3 +56,11 @@
 - Read AGENTS.md, ai/AGENTS.md, ai/rule.md and FE/AGENTS.md.
 - Never include local secrets or generated validation output in commits.
 - See tests/README.md for isolated PostgreSQL/RabbitMQ test setup.
+
+## Follow-up — FacilityService naming (2026-10-27)
+- User requested FacilityService naming consistent with Fix2FA.
+- Verified source/test paths, namespaces, project names and solution references already use FacilityService.
+- Updated nine current documentation/context files imported from develop to use FacilityService and describe the rename as completed.
+- Preserved historical records and existing Fix2FA compatibility identifiers (UserSecretsId, configuration keys, Docker aliases) to retain local environment compatibility.
+- Verification: dotnet build SmartParking.slnx --no-restore --nologo --verbosity quiet passed with 0 warnings/errors; tracked source/test paths and all solution project paths verified; git diff --check passed.
+- Documentation follow-up remains uncommitted; merge commit f7a6dbfa remains intact.

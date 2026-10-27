@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -24,7 +24,7 @@
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Infrastructure\SmartParking.UserService.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.API\SmartParking.UserService.API.csproj" />
     <ProjectReference Include="../../../src/Services/FacilityService/SmartParking.FacilityService.API/SmartParking.FacilityService.API.csproj" />
-    <ProjectReference Include="../../../src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
+    <ProjectReference Include="../../../src/Services/OperationService/SmartParking.OperationService.API/SmartParking.OperationService.API.csproj" />
   </ItemGroup>
 
 </Project>

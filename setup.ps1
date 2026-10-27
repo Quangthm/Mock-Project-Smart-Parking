@@ -456,7 +456,7 @@ $existingByService = @{}
 $projectByService = @{}
 foreach ($service in @('User','Parking','Reservation')) {
     # Keep existing connection/configuration keys while resolving the renamed project.
-    $projectService = if ($service -eq 'Parking') { 'Facility' } else { $service }
+    $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
     $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
     $projectByService[$service] = $projectDir
     [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${projectService}Service.API.csproj") -Raw
@@ -659,7 +659,7 @@ if (!$SkipDatabase) {
     }
 }
 
-Write-Host '[5/7] Configuring user-secrets for User, Facility, Reservation...' -ForegroundColor Cyan
+Write-Host '[5/7] Configuring user-secrets for User, Facility, Operation...' -ForegroundColor Cyan
 if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation')) {
     $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
@@ -783,7 +783,7 @@ if (!$SkipRestore) {
     & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
 }
-$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Facility and Reservation.'
+$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Facility and Operation.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
 if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

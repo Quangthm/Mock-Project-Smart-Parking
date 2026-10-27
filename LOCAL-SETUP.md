@@ -46,7 +46,7 @@ Checklist trước khi setup:
 1. Tạo `.env` từ `.env.example`; **giữ nguyên** giá trị đã cấu hình, chỉ sinh phần còn thiếu (password PostgreSQL, service key, password Admin/owner/operator).
 2. Dựng **6 PostgreSQL DB** theo `compose.schema-integration.yml` (`user`, `facility`, `operations`, `payment`, `notification`, `iot`).
 3. Probe authentication từng DB và áp workflow migration đúng trạng thái schema.
-4. Đồng bộ user-secrets cho User/Parking/Reservation theo `.env` ở `[5/7]`.
+4. Đồng bộ user-secrets cho User/Facility/Operation theo `.env` ở `[5/7]`.
 5. Dựng SonarQube (mặc định) và restore solution ở `[7/7]`.
 6. **Không tự chạy API hoặc frontend** — sau setup mới chuyển sang [mục 3](#3-run-application).
 
@@ -90,7 +90,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 ```powershell
 .\scripts\run-app-service.ps1 -Service User
 .\scripts\run-app-service.ps1 -Service Facility
-.\scripts\run-app-service.ps1 -Service Reservation
+.\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Frontend
 .\scripts\run-app-service.ps1 -Service All        # cả 4 container
 ```
@@ -102,7 +102,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 | `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
-> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** ParkingService (dùng `facility-db` trên port 5442) đang được đổi tên thành FacilityService trong branch `Fix2FA` theo SRS v1.1 (quyết định V11-09). Tương tự, ReservationService (dùng `operations-db` trên port 5443) sẽ hợp nhất vào Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
+> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** Mã nguồn trên branch `Fix2FA` đã dùng `FacilityService` tại `src/Services/FacilityService/` (dùng `facility-db` trên port 5442) theo SRS v1.1 (quyết định V11-09). `OperationService` tại `src/Services/OperationService/` dùng `operations-db` trên port 5443 và triển khai luồng Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
 
 - Mỗi lệnh build image nếu cần, chạy đúng một service và mở một cửa sổ CMD theo dõi log.
 - `-NoBuild` chạy nhanh khi image đã có; `-NoLogWindow` cho CI/automation.
@@ -110,7 +110,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 - Dừng stack (giữ volume): `.\scripts\stop-app-service.ps1 -Service All`.
 - Log một service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
 
-Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`FacilityService`/`ReservationService`).
+Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`FacilityService`/`OperationService`).
 
 > **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055` đang bị runner host chiếm, dừng runner host trước khi chạy container.
 
@@ -127,7 +127,7 @@ Mở ba terminal PowerShell riêng tại repo:
 ```
 
 ```powershell
-.\scripts\run-schema-service.ps1 -Service Reservation
+.\scripts\run-schema-service.ps1 -Service Operation
 ```
 
 Runner dùng `.env` cho connection string, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port `5035/5045/5055`.
@@ -136,7 +136,7 @@ Runner dùng `.env` cho connection string, shared service key, Admin/owner/opera
 | --- | --- | --- | --- |
 | User | http://localhost:5035 | 5441 | smartpark_user |
 | Facility | http://localhost:5045 | 5442 | smartpark_facility |
-| Reservation | http://localhost:5055 | 5443 | smartpark_operations |
+| Operation | http://localhost:5055 | 5443 | smartpark_operations |
 | Payment | — | 5444 | smartpark_payment |
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
@@ -371,3 +371,9 @@ Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skill
 - [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
+
+### OperationService (đổi tên từ ReservationService)
+
+Mã nguồn, project và namespace dùng tên OperationService. Chạy bằng -Service Operation; -Service Reservation vẫn là alias tương thích. Giữ UserSecretsId SmartParking.ReservationService.API.LocalDevelopment, các khóa ConnectionStrings:Reservation / Services:Reservation và biến SMARTPARK_*RESERVATION*. Compose vẫn dùng service/image reservation-service để tương thích môi trường hiện có; build arg là OperationService. Port API 5055, database smartpark_operations và các HTTP route giữ nguyên.
+
+Sau khi pull, chạy dotnet restore SmartParking.slnx và dotnet build SmartParking.slnx. Với Docker, chạy scripts/run-app-service.ps1 -Service Operation để build lại image; không dùng -NoBuild cho lần đầu sau đổi tên.

@@ -1,6 +1,6 @@
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Domain;
-using ReservationDomain = SmartParking.ReservationService.Domain;
+using ReservationDomain = SmartParking.OperationService.Domain;
 
 namespace SmartParking.FacilityService.Tests;
 

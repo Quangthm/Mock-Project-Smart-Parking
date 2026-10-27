@@ -8,12 +8,12 @@
     <Project Path="src/Services/FacilityService/SmartParking.FacilityService.Infrastructure/SmartParking.FacilityService.Infrastructure.csproj" />
     <Project Path="src/Services/FacilityService/SmartParking.FacilityService.Persistence/SmartParking.FacilityService.Persistence.csproj" />
   </Folder>
-  <Folder Name="/src/Services/ReservationService/">
-    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Infrastructure/SmartParking.ReservationService.Infrastructure.csproj" />
-    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Application/SmartParking.ReservationService.Application.csproj" />
-    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Domain/SmartParking.ReservationService.Domain.csproj" />
-    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.API/SmartParking.ReservationService.API.csproj" />
-    <Project Path="src/Services/ReservationService/SmartParking.ReservationService.Persistence/SmartParking.ReservationService.Persistence.csproj" />
+  <Folder Name="/src/Services/OperationService/">
+    <Project Path="src/Services/OperationService/SmartParking.OperationService.Infrastructure/SmartParking.OperationService.Infrastructure.csproj" />
+    <Project Path="src/Services/OperationService/SmartParking.OperationService.Application/SmartParking.OperationService.Application.csproj" />
+    <Project Path="src/Services/OperationService/SmartParking.OperationService.Domain/SmartParking.OperationService.Domain.csproj" />
+    <Project Path="src/Services/OperationService/SmartParking.OperationService.API/SmartParking.OperationService.API.csproj" />
+    <Project Path="src/Services/OperationService/SmartParking.OperationService.Persistence/SmartParking.OperationService.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Services/UserService/">
     <Project Path="src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj" />

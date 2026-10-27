@@ -1,10 +1,12 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Payment','Notification','Iot')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
     [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$ProjectName = 'smartpark-schema'
 )
 $ErrorActionPreference = 'Stop'
+# Existing schema maps retain Reservation as their compatibility key.
+if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $codeRoot = Split-Path $PSScriptRoot -Parent
 $composeFile = Join-Path $SchemaRoot 'compose.schema-integration.yml'
 if (!(Test-Path -LiteralPath $composeFile -PathType Leaf)) { throw 'SchemaRoot must contain the canonical schema compose file.' }

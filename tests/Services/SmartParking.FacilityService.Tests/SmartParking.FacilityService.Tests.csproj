@@ -7,6 +7,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <Using Include="Xunit" />
     <ProjectReference Include="../../../src/Services/FacilityService/SmartParking.FacilityService.Persistence/SmartParking.FacilityService.Persistence.csproj" />
-    <ProjectReference Include="../../../src/Services/ReservationService/SmartParking.ReservationService.Persistence/SmartParking.ReservationService.Persistence.csproj" />
+    <ProjectReference Include="../../../src/Services/OperationService/SmartParking.OperationService.Persistence/SmartParking.OperationService.Persistence.csproj" />
   </ItemGroup>
 </Project>

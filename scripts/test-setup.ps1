@@ -24,8 +24,9 @@ function dotnet {
     if ($args[0] -eq '--version') { $global:LASTEXITCODE = 0; return '10.0.302' }
     if ($args[0] -eq 'user-secrets') {
         $project = $args[[Array]::IndexOf($args, '--project') + 1]
-        $service = @('User','Facility','Reservation') | Where-Object { $project -match "${_}Service.API$" }
+        $service = @('User','Facility','Operation') | Where-Object { $project -match "${_}Service.API$" }
         if ($service -eq 'Facility') { $service = 'Parking' }
+        if ($service -eq 'Operation') { $service = 'Reservation' }
         if (!$global:setupTestSecretMaps.ContainsKey($service)) { $global:setupTestSecretMaps[$service] = @{} }
         if ($args[1] -eq 'remove') {
             $null = $global:setupTestSecretMaps[$service].Remove($args[2])
@@ -49,7 +50,7 @@ function New-Fixture($name) {
     foreach ($file in @('setup.ps1','.env.example','scripts/load-env.ps1')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $fixture $file) }
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'FE/.env.example') -Destination (Join-Path $fixture 'FE/.env.example')
     foreach ($service in @('User','Parking','Reservation')) {
-        $projectService = if ($service -eq 'Parking') { 'Facility' } else { $service }
+        $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
         $project = Join-Path $fixture "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
         New-Item -ItemType Directory -Force -Path $project | Out-Null
         [IO.File]::WriteAllText((Join-Path $project "SmartParking.${projectService}Service.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")

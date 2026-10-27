@@ -1,9 +1,11 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Reservation')][string]$Service
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
 # Parking remains an alias so existing scripts and configuration continue to work.
 if ($Service -eq 'Facility') { $Service = 'Parking' }
+# Keep Reservation configuration keys and database settings compatible.
+if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
 
@@ -94,7 +96,7 @@ if ($Service -eq 'User') {
         $env:Workflow__KeyDirectory = $keyDirectory
     }
 }
-$projectService = if ($Service -eq 'Parking') { 'Facility' } else { $Service }
+$projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $Service } }
 $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
 if ($LASTEXITCODE -ne 0) { throw "${projectService}Service exited with code $LASTEXITCODE" }

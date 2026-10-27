@@ -20,8 +20,8 @@
 | Runtime | .NET 10 (`net10.0`) | all `*.csproj` |
 | Backend framework | ASP.NET Core Web API | `Microsoft.NET.Sdk.Web` |
 | UserService | Clean Architecture (5 projects) + EF Core 10.0.12 + MediatR 14.2.0 + FluentValidation 12.1.1 + AutoMapper 16.2.0 + BCrypt.Net-Next 4.2.0 | `src/Services/UserService/*` |
-| ParkingService | Clean Architecture (5 projects) + raw Npgsql 10.0.3 + Minimal APIs | `src/Services/ParkingService/*` |
-| ReservationService | 2 projects (API + Persistence) + raw Npgsql 10.0.3 | `src/Services/ReservationService/*` |
+| FacilityService | Clean Architecture (5 projects) + raw Npgsql 10.0.3 + Minimal APIs | `src/Services/FacilityService/*` |
+| OperationService | Clean Architecture (5 projects) + EF Core 10 + MediatR + PostgreSQL | `src/Services/OperationService/*` |
 | Database | PostgreSQL (service-owned schemas) | `docker-compose.yml`, `docs/02-architecture/database/` |
 | Frontend | React 19 + react-router-dom 7.18.4 + Vite 8.0.5 + TypeScript 5.7 + Tailwind CSS 4.0 + Three.js 0.186.1 + @maptiler/sdk 4.1.0 + recharts 3.10.1 | `FE/package.json` |
 | Backend tests | xUnit 2.9.3 + Microsoft.NET.Test.Sdk 17.14.1 + coverlet 6.0.4 | `tests/Services/*` |
@@ -48,8 +48,8 @@
 | Service | Owns | Projects |
 |---|---|---|
 | UserService | Identity, auth, users, roles, driver registration, OTP, owner registration/approval, operator provisioning, admin user management | API, Application, Domain, Infrastructure, Persistence |
-| ParkingService | Parking structures, slots, sites, operator/site management | API, Application, Domain, Infrastructure, Persistence |
-| ReservationService | Reservations, allocation/conflict logic | API, Persistence |
+| FacilityService | Parking structures, slots, sites, operator/site management | API, Application, Domain, Infrastructure, Persistence |
+| OperationService | Reservations, allocation/conflict logic | API, Application, Domain, Infrastructure, Persistence |
 
 - Each service owns its persistence boundary. No cross-service database access.
 - `payment-db`, `notification-db`, `iot-db` schemas exist in the database design documentation but have **no service project** yet. Do not assume these databases are operationally available.
@@ -163,11 +163,11 @@ Before reporting a change complete:
 | # | Topic | Docs say | Repo reality | Business/technical risk | Required agent behavior | Resolution status |
 |---|---|---|---|---|---|---|
 | 1 | Messaging | Kafka (Solution Architecture doc) | RabbitMQ is the current direction; no Kafka/MassTransit code exists (only a stub constant) | Using Kafka APIs/contracts when only RabbitMQ is planned would create dead code and wrong dependencies | Follow RabbitMQ direction; flag any Kafka references as stale | Unresolved — Kafka references remain in architecture docs |
-| 2 | `ai/context/current-state.md` | CQRS/EF/Postgres listed as deferred | Implemented in UserService and ParkingService | Treating implemented features as deferred wastes effort re-implementing them | Treat current-state deferred list as stale for these items; verify against code | Partially resolved — current-state.md updated 2026-10-12 |
+| 2 | `ai/context/current-state.md` | CQRS/EF/Postgres listed as deferred | Implemented in UserService and FacilityService | Treating implemented features as deferred wastes effort re-implementing them | Treat current-state deferred list as stale for these items; verify against code | Partially resolved — current-state.md updated 2026-10-12 |
 | 3 | UI library | Material UI (Solution Architecture doc) | Not present in `FE/package.json` (Tailwind CSS only) | Adding MUI would conflict with existing Tailwind setup | Do not add MUI; use Tailwind CSS | Unresolved — MUI references remain in architecture docs |
 | 4 | Gateway / SignalR / MQTT / Redis / payment / LPR / AI | Present in architecture and SRS documents | Not implemented; UI mockups and scaffold only | Assuming these exist leads to broken integrations | Do not assume they exist; verify before depending on them | Unresolved — planned components |
 | 5 | CI SDK version | Not specified | `.gitlab-ci.yml` uses `dotnet/sdk:7.0`; project targets `net10.0` | CI builds will fail on target framework mismatch | Flag mismatch; do not "fix" CI without explicit approval | Unresolved |
-| 6 | ReservationService layers | 5 layers (architecture docs) | Only API + Persistence projects exist | Assuming Application/Domain/Infrastructure layers exist leads to import errors | Do not assume missing layers exist; check project structure | Unresolved |
+| 6 | OperationService layers | 5 layers (architecture docs) | API, Application, Domain, Infrastructure and Persistence projects exist; EF Core + MediatR | Using obsolete two-project paths causes build failures | Use src/Services/OperationService and SmartParking.OperationService.* | Resolved — verified 2026-10-27 |
 | 7 | UserService namespaces | Not specified | Mixed `UserService.*` vs `SmartParking.UserService.*` namespace conventions | Inconsistent namespaces cause build errors when adding references | Match the namespace convention of the surrounding file | Unresolved |
 
 ---
