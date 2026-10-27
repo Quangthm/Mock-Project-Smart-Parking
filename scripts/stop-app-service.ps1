@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('User','Parking','Reservation','Frontend','All')][string]$Service = 'All'
+    [ValidateSet('User','Parking','Reservation','Payment','Frontend','All')][string]$Service = 'All'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -16,6 +16,7 @@ $map = @{
     User        = 'user-service'
     Parking     = 'parking-service'
     Reservation = 'reservation-service'
+    Payment     = 'payment-service'
     Frontend    = 'frontend'
 }
 
