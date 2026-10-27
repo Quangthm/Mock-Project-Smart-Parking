@@ -15,7 +15,8 @@ import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
 
 import { digitsOnly } from "../../../lib/groupedDigits"
-import { deleteOwnerPolicySectionDocument, deleteOwnerPolicySectionText, getOwnerPolicySectionDocuments, getOwnerPolicySectionTexts, ownerPolicySections, saveOwnerPolicySectionDocument, saveOwnerPolicySectionText, starterOwnerPolicyText, type OwnerPolicySectionDocuments, type OwnerPolicySectionId, type OwnerPolicySectionTexts } from "../../../lib/policySections"
+import { extractOwnerPolicyPdfSections } from "../../../lib/ownerPolicyPdfTemplate"
+import { deleteOwnerPolicySectionDocument, deleteOwnerPolicySectionText, getOwnerPolicySectionDocuments, getOwnerPolicySectionTexts, ownerPolicySections, saveOwnerPolicySectionText, starterOwnerPolicyText, type OwnerPolicySectionDocuments, type OwnerPolicySectionId, type OwnerPolicySectionTexts } from "../../../lib/policySections"
 
 type DepositMode = "percentage" | "fixed"
 
@@ -109,6 +110,7 @@ export function PolicySettings({
   const [sectionDocuments, setSectionDocuments] = useState<OwnerPolicySectionDocuments>(() => user ? getOwnerPolicySectionDocuments(user.id, externalSiteId || "all") : {})
   const [sectionTexts, setSectionTexts] = useState<OwnerPolicySectionTexts>(() => user ? getOwnerPolicySectionTexts(user.id, externalSiteId || "all") : {})
   const [sectionDrafts, setSectionDrafts] = useState<Record<OwnerPolicySectionId, string>>(() => policyDrafts(user?.id ?? "", externalSiteId || "all"))
+  const [importedSectionIds, setImportedSectionIds] = useState<OwnerPolicySectionId[]>([])
   const [previewLot, setPreviewLot] = useState<ParkingLot | null>(null)
   const [previewSource, setPreviewSource] = useState<"owner" | "platform">("owner")
   const [previewPlatformSection, setPreviewPlatformSection] = useState<"terms" | "privacy" | "payment-refund">("terms")
@@ -132,6 +134,7 @@ export function PolicySettings({
       setSectionDocuments(getOwnerPolicySectionDocuments(user.id, selectedLotId))
       setSectionTexts(getOwnerPolicySectionTexts(user.id, selectedLotId))
       setSectionDrafts(policyDrafts(user.id, selectedLotId))
+      setImportedSectionIds([])
     }
     if (selectedLotId === "all") {
       const ownerPdf = user ? store.getOwnerPolicyPdf(user.id) : null
@@ -152,9 +155,10 @@ export function PolicySettings({
     }
   }, [selectedLotId, user, ownerLots])
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !user) return
+    e.currentTarget.value = ""
 
     if (
       !file.type.includes("pdf") &&
@@ -163,6 +167,15 @@ export function PolicySettings({
       setPdfNotice("Please select a valid PDF file (.pdf).")
       return
     }
+
+    let importedSections: Partial<Record<OwnerPolicySectionId, string>> = {}
+    try {
+      importedSections = extractOwnerPolicyPdfSections(await file.arrayBuffer())
+    } catch {
+      setPdfNotice("The PDF could not be read. Select it again.")
+      return
+    }
+    const importedIds = Object.keys(importedSections) as OwnerPolicySectionId[]
 
     const reader = new FileReader()
     reader.onload = (event) => {
@@ -195,9 +208,13 @@ export function PolicySettings({
       }
 
       setCurrentPdf(payload)
-      setPdfNotice(
-        `Uploaded "${file.name}". Drivers using this browser profile can read it.`,
-      )
+      if (importedIds.length) {
+        setSectionDrafts(current => ({ ...current, ...importedSections }))
+        setImportedSectionIds(importedIds)
+      }
+      setPdfNotice(importedIds.length
+        ? `Uploaded "${file.name}". ${importedIds.length} template sections were loaded as drafts. Review and save each section to publish its text.`
+        : `Uploaded "${file.name}". Drivers can view the PDF; use the SmartParking template to import editable sections.`)
       setTimeout(() => setPdfNotice(null), 5000)
 
       store.addAuditLog({
@@ -218,6 +235,7 @@ export function PolicySettings({
       )
     }
 
+    reader.onerror = () => setPdfNotice("The PDF could not be read. Select it again.")
     reader.readAsDataURL(file)
   }
 
@@ -253,37 +271,6 @@ export function PolicySettings({
     }
   }
 
-  function handleSectionUpload(section: OwnerPolicySectionId, file: File | undefined) {
-    if (!file || !user) return
-    if (!file.type.includes("pdf") && !file.name.toLowerCase().endsWith(".pdf")) {
-      setPdfNotice("Select a PDF file for this policy section.")
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const definition = ownerPolicySections.find(item => item.id === section)!
-      const document: LotPolicyPdf = {
-        lotId: selectedLotId === "all" ? undefined : selectedLotId,
-        ownerId: user.id,
-        fileName: file.name,
-        fileSize: `${Math.round(file.size / 1024)} KB`,
-        fileData: String(reader.result),
-        uploadedAt: new Date().toISOString(),
-        title: definition.title,
-        summaryText: definition.description,
-      }
-      try {
-        saveOwnerPolicySectionDocument(user.id, selectedLotId, section, document)
-        setSectionDocuments(getOwnerPolicySectionDocuments(user.id, selectedLotId))
-        setPdfNotice(`${definition.title} uploaded for ${selectedLotId === "all" ? "all sites" : "this site"}.`)
-      } catch {
-        setPdfNotice("The PDF could not be saved in this browser. Try a smaller file.")
-      }
-    }
-    reader.onerror = () => setPdfNotice("The PDF could not be read. Select it again.")
-    reader.readAsDataURL(file)
-  }
-
   function handleSectionDelete(section: OwnerPolicySectionId) {
     if (!user || !confirm(`Remove the ${ownerPolicySections.find(item => item.id === section)?.title} PDF?`)) return
     deleteOwnerPolicySectionDocument(user.id, selectedLotId, section)
@@ -298,6 +285,7 @@ export function PolicySettings({
     try {
       saveOwnerPolicySectionText(user.id, selectedLotId, section, content)
       setSectionTexts(getOwnerPolicySectionTexts(user.id, selectedLotId))
+      setImportedSectionIds(current => current.filter(id => id !== section))
       setPdfNotice(`${ownerPolicySections.find(item => item.id === section)?.title} saved for ${selectedLotId === "all" ? "all sites" : "this site"}.`)
     } catch {
       setPdfNotice("The policy text could not be saved in this browser. Try again.")
@@ -377,6 +365,11 @@ export function PolicySettings({
     setPolicy((current) => ({ ...current, [key]: value }))
   }
 
+  function stepRate(key: "dayRate" | "nightRate", direction: -1 | 1) {
+    const current = Number(policy[key]) || 0
+    updatePolicy(key, String(Math.max(0, Math.round(current / 1000) * 1000 + direction * 1000)))
+  }
+
   function savePolicy() {
     if (!user) return
 
@@ -429,14 +422,14 @@ export function PolicySettings({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-[var(--fg)]">
-                Owner Policies · Existing General PDF
+                Owner Policies · Single PDF
               </h2>
               <span className="rounded px-2 py-0.5 text-xs font-semibold bg-blue-500/15 text-blue-500">
                 Owner document
               </span>
             </div>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Existing general PDFs remain available. Use the shorter topic-specific documents below for new policy content.
+              Complete the Owner policy template, upload one PDF, then review the imported section drafts below.
             </p>
           </div>
 
@@ -473,7 +466,7 @@ export function PolicySettings({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm text-[var(--fg)]">
-                  {currentPdf?.fileData ? currentPdf.fileName : "No general owner PDF uploaded"}
+                  {currentPdf?.fileData ? currentPdf.fileName : "Owner policy PDF template"}
                 </span>
                 <span
                   className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
@@ -484,7 +477,7 @@ export function PolicySettings({
                 >
                   {currentPdf?.fileData
                     ? "Uploaded File"
-                    : "Not uploaded"}
+                    : "Template ready"}
                 </span>
               </div>
               {currentPdf?.fileData && <p className="mt-1 text-xs text-[var(--muted)]">{currentPdf.fileSize ? `Size: ${currentPdf.fileSize} · ` : ""}Updated: {new Date(currentPdf.uploadedAt).toLocaleDateString("en-US")}</p>}
@@ -535,6 +528,13 @@ export function PolicySettings({
           </div>
         </div>
 
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+            <div><h3 className="text-sm font-semibold text-[var(--fg)]">{currentPdf?.fileData ? "Current Owner PDF" : "Owner policy PDF template"}</h3>{!currentPdf?.fileData && <p className="mt-1 text-xs text-[var(--muted)]">Complete this starter PDF, then upload it to publish your Owner policy.</p>}</div>
+            <a className="btn-outline inline-flex items-center gap-2 no-underline" href="/templates/owner-policy-template.pdf" download="smartparking-owner-policy-template.pdf"><UntitledIcon name="download" size={15} /> Download template</a>
+          </div>
+          <iframe className="h-[360px] w-full bg-[var(--card)] sm:h-[480px]" title={currentPdf?.fileData ? "Current Owner policy PDF" : "Owner policy PDF template"} src={currentPdf?.fileData || "/templates/owner-policy-template.pdf"} />
+        </div>
         <p className="text-xs text-[var(--muted)] flex items-center gap-1.5">
           <UntitledIcon name="check" size={13} />
           Owner PDFs saved in this browser appear in the Driver policy viewer for the same browser profile.
@@ -543,7 +543,8 @@ export function PolicySettings({
 
       <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="owner-policy-sections-heading">
         <h2 id="owner-policy-sections-heading" className="text-lg font-semibold text-[var(--fg)]">Owner Policies by Section</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">Edit the starter text directly on this page, then save each section. You can also attach a short PDF. Site-specific content takes priority over the all-sites version.</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">Edit the starter text directly on this page, then save each section. Site-specific content takes priority over the all-sites version.</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">Saved text is visible to Drivers in this browser profile.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           {ownerPolicySections.map(section => {
             const document = sectionDocuments[section.id]
@@ -555,15 +556,9 @@ export function PolicySettings({
               <p className="mt-1 text-sm text-[var(--muted)]">{section.description}</p>
               <label htmlFor={`owner-policy-text-${section.id}`} className="mt-4 block text-sm font-semibold text-[var(--fg)]">Policy text</label>
               <textarea id={`owner-policy-text-${section.id}`} className="input mt-2 min-h-36 w-full resize-y rounded-xl text-sm leading-6" rows={5} value={sectionDrafts[section.id]} onChange={event => setSectionDrafts(current => ({ ...current, [section.id]: event.target.value }))} aria-describedby={`owner-policy-state-${section.id}`} />
-              <p id={`owner-policy-state-${section.id}`} className="mt-1 text-xs text-[var(--muted)]">{savedText ? inheritedText ? "Published from all sites; save to override for this site." : "Saved text is visible to Drivers in this browser profile." : "Starter draft · not visible to Drivers until saved."}</p>
+              <p id={`owner-policy-state-${section.id}`} className="mt-1 text-xs text-[var(--muted)]">{importedSectionIds.includes(section.id) ? "Imported from PDF · review and save to publish this text." : savedText ? inheritedText ? "Published from all sites; save to override for this site." : "Saved for this scope." : "Starter draft · not visible to Drivers until saved."}</p>
               <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn-primary" onClick={() => handleSectionTextSave(section.id)}>Save section text</button>{savedText && !inheritedText && <button type="button" className="btn-ghost" onClick={() => handleSectionTextDelete(section.id)}>Remove saved text</button>}</div>
-              <div className="my-4 border-t border-[var(--border)]" />
-              <p className="mt-3 break-all text-sm text-[var(--fg)]">{document ? document.fileName : "No PDF uploaded"}{inherited && <span className="ml-2 text-[var(--muted)]">· From all sites</span>}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <label className="btn-secondary cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]"><span>{document ? "Replace PDF" : "Upload PDF"}</span><input className="sr-only" type="file" accept=".pdf,application/pdf" aria-label={`Upload ${section.title} PDF`} onChange={event => { handleSectionUpload(section.id, event.target.files?.[0]); event.target.value = "" }} /></label>
-                {document?.fileData && <a className="btn-outline no-underline" href={document.fileData} target="_blank" rel="noopener noreferrer">View PDF</a>}
-                {document && !inherited && <button type="button" className="btn-ghost" onClick={() => handleSectionDelete(section.id)}>Remove</button>}
-              </div>
+              {document?.fileData && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4"><span className="text-xs text-[var(--muted)]">Previously attached section PDF{inherited ? " · From all sites" : ""}</span><a className="btn-outline no-underline" href={document.fileData} target="_blank" rel="noopener noreferrer">View PDF</a>{!inherited && <button type="button" className="btn-ghost" onClick={() => handleSectionDelete(section.id)}>Remove</button>}</div>}
             </article>
           })}
         </div>
@@ -612,26 +607,14 @@ export function PolicySettings({
                 <td className="px-5 py-4">
                   {policy.pricingEnabled ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Day Rate (VND / hour)
-                        <GroupedNumberInput
-                          className={inputClass}
-                          value={policy.dayRate}
-                          onValueChange={(digits) =>
-                            updatePolicy("dayRate", digits)
-                          }
-                        />
-                      </label>
-                      <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Night Rate (VND / hour)
-                        <GroupedNumberInput
-                          className={inputClass}
-                          value={policy.nightRate}
-                          onValueChange={(digits) =>
-                            updatePolicy("nightRate", digits)
-                          }
-                        />
-                      </label>
+                      <div className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
+                        <span className="block">Day Rate (VND / hour)</span>
+                        <div className="flex items-center gap-2"><button type="button" className="btn-outline shrink-0" aria-label="Decrease day rate by 1,000 VND" onClick={() => stepRate("dayRate", -1)} disabled={Number(policy.dayRate) <= 0}>−</button><span className="min-w-0 flex-1"><GroupedNumberInput className={inputClass} ariaLabel="Day rate in VND per hour" step={1000} value={policy.dayRate} onValueChange={(digits) => updatePolicy("dayRate", digits.slice(0, 9))} /></span><button type="button" className="btn-outline shrink-0" aria-label="Increase day rate by 1,000 VND" onClick={() => stepRate("dayRate", 1)}>+</button></div>
+                      </div>
+                      <div className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
+                        <span className="block">Night Rate (VND / hour)</span>
+                        <div className="flex items-center gap-2"><button type="button" className="btn-outline shrink-0" aria-label="Decrease night rate by 1,000 VND" onClick={() => stepRate("nightRate", -1)} disabled={Number(policy.nightRate) <= 0}>−</button><span className="min-w-0 flex-1"><GroupedNumberInput className={inputClass} ariaLabel="Night rate in VND per hour" step={1000} value={policy.nightRate} onValueChange={(digits) => updatePolicy("nightRate", digits.slice(0, 9))} /></span><button type="button" className="btn-outline shrink-0" aria-label="Increase night rate by 1,000 VND" onClick={() => stepRate("nightRate", 1)}>+</button></div>
+                      </div>
                     </div>
                   ) : (
                     <span className="text-sm text-[var(--muted)]">
@@ -690,13 +673,15 @@ export function PolicySettings({
                           max={
                             policy.depositMode === "percentage"
                               ? 100
-                              : undefined
+                              : 999999000
                           }
                           step={policy.depositMode === "percentage" ? 1 : 1000}
                           value={policy.depositValue}
-                          onChange={(event) =>
-                            updatePolicy("depositValue", event.target.value)
-                          }
+                          onChange={(event) => {
+                            const digits = event.target.value.replace(/\D/g, "")
+                            updatePolicy("depositValue", policy.depositMode === "percentage" ? (digits ? String(Math.min(100, Number(digits))) : "") : digits.slice(0, 9))
+                          }}
+                          onBlur={() => { if (policy.depositMode === "fixed") updatePolicy("depositValue", String(Math.min(999999000, Math.round((Number(policy.depositValue) || 0) / 1000) * 1000))) }}
                         />
                       </label>
                     </div>

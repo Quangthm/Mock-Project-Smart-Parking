@@ -1,10 +1,12 @@
-import { useState, useId, useMemo, type FormEvent } from "react"
+import { useState, useId, useMemo, useEffect, useRef, type FormEvent } from "react"
 import { parkingApi, type Site } from "../../../lib/parkingApi"
 import { AuthApiError } from "../../../lib/authApi"
 import { ownerData as store } from "../data/data"
 import { useApp } from "../../../context/AppContext"
 import type { LotType } from "../../../lib/types"
-import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
+import { ALLOWED_PARKING_MODELS, validateModelUpload } from "../../../lib/3d/parking3DConfig"
+import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { deleteOwnerModel, loadOwnerModelUrl, saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
 
 export const LOT_TYPE_INFO: Record<LotType, {
   icon: string
@@ -83,6 +85,46 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     if (site?.name.toLowerCase().includes("tầng") || site?.name.toLowerCase().includes("storey")) return "multi-storey"
     return "outdoor"
   })
+  const [customModelUrl, setCustomModelUrl] = useState<string | null>(null)
+  const [customModelFileName, setCustomModelFileName] = useState<string | null>(null)
+  const [customModelFile, setCustomModelFile] = useState<File | null>(null)
+  const modelChoiceChangedRef = useRef(false)
+  const [modelError, setModelError] = useState("")
+  const activeModelUrl = customModelUrl ?? ALLOWED_PARKING_MODELS[lotType].path
+  const modelCapacity = useModelCarCapacity(activeModelUrl)
+
+  useEffect(() => {
+    if (!site?.id) return
+    let active = true
+    loadOwnerModelUrl(site.id).then(url => {
+      if (!active || !url || modelChoiceChangedRef.current) return
+      setCustomModelUrl(url)
+      setCustomModelFileName(store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === site.id)?.modelFileName ?? "Owner model.glb")
+    }).catch(() => {})
+    return () => { active = false }
+  }, [site?.id, user?.id])
+
+  function chooseLotType(type: LotType) {
+    if (type === lotType) return
+    modelChoiceChangedRef.current = true
+    setLotType(type)
+    setCustomModelUrl(null)
+    setCustomModelFileName(null)
+    setCustomModelFile(null)
+    setModelError("")
+  }
+
+  function uploadModel(file: File | undefined) {
+    if (!file) return
+    const result = validateModelUpload(file.name, lotType)
+    if (!result.isValid && !file.name.toLowerCase().endsWith(".glb")) { setModelError("Choose a GLB parking model."); return }
+    modelChoiceChangedRef.current = true
+    setModelError("")
+    if (result.modelDef && result.modelDef.lotType !== lotType) setLotType(result.modelDef.lotType)
+    setCustomModelUrl(URL.createObjectURL(file))
+    setCustomModelFileName(file.name)
+    setCustomModelFile(file)
+  }
 
   // Address Parsing
   const [selectedCity, setSelectedCity] = useState(draft?.selectedCity ?? CITIES[0].code)
@@ -94,7 +136,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     code: site?.code ?? "",
     name: site?.name ?? "",
     address: site?.address ?? "",
-    totalSlots: site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "50",
+    totalSlots: site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "30",
     floors: "1",
     latitude: site?.latitude ?? CITIES[0].defaultLat,
     longitude: site?.longitude ?? CITIES[0].defaultLng,
@@ -164,8 +206,17 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       return
     }
 
-    const totalSlotsNum = parseInt(form.totalSlots, 10) || 50
+    const totalSlotsNum = parseInt(form.totalSlots, 10)
     const floorsNum = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
+
+    if (modelCapacity.capacity === null) {
+      setError(modelCapacity.error || "Checking the 3D model's car bay capacity. Please wait.")
+      return
+    }
+    if (!Number.isInteger(totalSlotsNum) || totalSlotsNum < 1 || totalSlotsNum > modelCapacity.capacity) {
+      setError(`Planned car spaces must be between 1 and ${modelCapacity.capacity}, the number of bays in this 3D model.`)
+      return
+    }
 
     setError("")
     setBusy(true)
@@ -187,6 +238,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
         // Also sync local store lot
         try {
           const cachedLot = store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id)
+          if (!customModelFile && cachedLot?.type && cachedLot.type !== lotType) await deleteOwnerModel(site.id).catch(() => {})
+          const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
           store.saveLot({
             // Local UI cache timestamp; this is not the backend site creation time.
             createdAt: cachedLot?.createdAt ?? new Date().toISOString(),
@@ -197,8 +250,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             address: finalAddress,
             totalSlots: totalSlotsNum,
             floors: floorsNum,
-            modelUrl: activeModelDef.path,
-            modelFileName: activeModelDef.fileName,
+            modelUrl: savedModelUrl ?? (cachedLot?.type === lotType ? cachedLot.modelUrl : activeModelUrl),
+            modelFileName: customModelFileName ?? (cachedLot?.type === lotType ? cachedLot.modelFileName : activeModelDef.fileName),
             slots: store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id)?.slots ?? [],
             devices: Object.entries(devices).filter(([, v]) => v).map(([k]) => ({
               type: k as any,
@@ -242,6 +295,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
 
         // Also persist to owner store for visual lot manager
         try {
+          const savedModelUrl = customModelFile ? await saveOwnerModel(createdSite.id, customModelFile).catch(() => null) : null
           store.saveLot({
             id: createdSite.id,
             createdAt: new Date().toISOString(),
@@ -251,8 +305,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             address: finalAddress,
             totalSlots: totalSlotsNum,
             floors: floorsNum,
-            modelUrl: activeModelDef.path,
-            modelFileName: activeModelDef.fileName,
+            modelUrl: savedModelUrl ?? activeModelUrl,
+            modelFileName: customModelFileName ?? activeModelDef.fileName,
             slots: [],
             devices: Object.entries(devices).filter(([, v]) => v).map(([k]) => ({
               type: k as any,
@@ -307,9 +361,9 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   }
 
   return {
-    formId, lotType, setLotType, selectedCity, district, setDistrict,
+    formId, lotType, chooseLotType, selectedCity, district, setDistrict,
     streetAddress, setStreetAddress, isManualCode, form, setForm,
-    devices, setDevices, busy, error, computedCode, fullAddress,
+    devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   }
 }

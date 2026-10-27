@@ -304,17 +304,17 @@ export function OperatorDashboard({
       setTab("checkin")
       return
     }
-    if (nextTab === "status" && payload) {
-      switch (payload) {
-        case "available":
-        case "occupied":
-        case "reserved":
-        case "backup":
-        case "maintenance":
-          setTargetSlotStatus(payload)
-          setTab("status")
-          return
-      }
+    const VALID_SLOT_STATUS_MAP: Record<string, SlotStatusFilter> = {
+      available: "available",
+      occupied: "occupied",
+      reserved: "reserved",
+      backup: "backup",
+      maintenance: "maintenance",
+    }
+    if (nextTab === "status" && payload && payload in VALID_SLOT_STATUS_MAP) {
+      setTargetSlotStatus(VALID_SLOT_STATUS_MAP[payload])
+      setTab("status")
+      return
     }
     setTab(nextTab as OperatorTab)
   }

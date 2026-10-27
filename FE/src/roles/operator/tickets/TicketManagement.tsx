@@ -118,12 +118,21 @@ export function TicketManagement({ siteId }: { siteId: string }) {
     }
   }
 
+  const TICKET_STATUS_FILTER_PREDICATES: Record<string, (t: SupportTicket) => boolean> = {
+    approved: (t) => ticketPresentation(t).decision === "approved",
+    rejected: (t) => ticketPresentation(t).decision === "rejected",
+    open: (t) => t.status === "open",
+    "in-progress": (t) => t.status === "in-progress",
+    resolved: (t) => t.status === "resolved",
+  }
+
   // Filtered tickets
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
-      if (statusFilter === "approved" || statusFilter === "rejected") {
-        if (ticketPresentation(t).decision !== statusFilter) return false
-      } else if (statusFilter !== "all" && t.status !== statusFilter) return false
+      if (statusFilter !== "all") {
+        const predicate = TICKET_STATUS_FILTER_PREDICATES[statusFilter]
+        if (predicate && !predicate(t)) return false
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase()
         const matchSubject = t.subject.toLowerCase().includes(q)

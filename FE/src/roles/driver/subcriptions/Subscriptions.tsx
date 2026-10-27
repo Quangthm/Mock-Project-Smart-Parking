@@ -53,6 +53,7 @@ export function Subscriptions() {
 
   const [tabMode, setTabMode] = useState<TabMode>("store")
   const [passPage, setPassPage] = useState(1)
+  const [storePage, setStorePage] = useState(1)
 
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -145,6 +146,11 @@ export function Subscriptions() {
       return true
     })
   }, [lots, searchQuery, filterTag, users])
+  const storePageCount = Math.max(1, Math.ceil(displayLots.length / passesPerPage))
+  const currentStorePage = Math.min(storePage, storePageCount)
+  const visibleDisplayLots = displayLots.slice((currentStorePage - 1) * passesPerPage, currentStorePage * passesPerPage)
+
+  useEffect(() => setStorePage(1), [searchQuery, filterTag])
 
   function handleOpenLotDetail(lot: ParkingLot) {
     setSelectedLotForDetail(lot)
@@ -623,7 +629,7 @@ export function Subscriptions() {
               gap: "1.25rem",
             }}
           >
-            {displayLots.map((lot) => {
+            {visibleDisplayLots.map((lot) => {
               const enterprise = getLotEnterprise(lot, users)
 
               const distance = getLotDistance(lot)
@@ -950,6 +956,15 @@ export function Subscriptions() {
               )
             })}
           </div>
+
+          {storePageCount > 1 && <nav className="driver-passes-pagination" aria-label="Pass marketplace pages">
+            <span>Showing {(currentStorePage - 1) * passesPerPage + 1}–{Math.min(currentStorePage * passesPerPage, displayLots.length)} of {displayLots.length} parking hubs</span>
+            <div>
+              <button type="button" className="btn-outline" disabled={currentStorePage === 1} onClick={() => setStorePage(Math.max(1, currentStorePage - 1))}>Previous</button>
+              <span aria-current="page">Page {currentStorePage} of {storePageCount}</span>
+              <button type="button" className="btn-outline" disabled={currentStorePage === storePageCount} onClick={() => setStorePage(Math.min(storePageCount, currentStorePage + 1))}>Next</button>
+            </div>
+          </nav>}
 
           {displayLots.length === 0 && (
             <div

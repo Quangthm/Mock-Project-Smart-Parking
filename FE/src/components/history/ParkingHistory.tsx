@@ -59,12 +59,16 @@ function statusLabel(status: string) {
   return status.replace(/[_-]/g, " ").toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
+const STATUS_TONE_MAP: Record<string, "completed" | "active" | "neutral" | "attention" | "pending"> = {
+  COMPLETED: "completed",
+  ACTIVE: "active",
+  CANCELLED: "neutral",
+  DISPUTED: "attention",
+  OVERSTAYED: "attention",
+}
+
 function statusTone(status: string) {
-  if (status === "COMPLETED") return "completed"
-  if (status === "ACTIVE") return "active"
-  if (status === "CANCELLED") return "neutral"
-  if (status === "DISPUTED" || status === "OVERSTAYED") return "attention"
-  return "pending"
+  return STATUS_TONE_MAP[status] ?? "pending"
 }
 
 function normalizePlate(value: string) {
@@ -195,7 +199,14 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
 }
 
 function Status({ status }: { status: string }) {
+  const TONE_ICON_MAP: Record<string, "check-circle" | "car" | "alert" | "x" | "clock"> = {
+    completed: "check-circle",
+    active: "car",
+    attention: "alert",
+    neutral: "x",
+    pending: "clock",
+  }
   const tone = statusTone(status)
-  const icon = tone === "completed" ? "check-circle" : tone === "active" ? "car" : tone === "attention" ? "alert" : tone === "neutral" ? "x" : "clock"
+  const icon = TONE_ICON_MAP[tone] ?? "clock"
   return <span className={`parking-history-status is-${tone}`}><UntitledIcon name={icon} size={14} />{statusLabel(status)}</span>
 }

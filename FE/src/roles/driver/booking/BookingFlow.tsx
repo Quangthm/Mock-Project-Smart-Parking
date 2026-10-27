@@ -306,7 +306,12 @@ export function BookingFlow({
       </div>
       <div className="booking-flow-steps" aria-label="Booking progress">
         {["Select Slot", "Time & Vehicle", "Payment"].map((label, index) => {
-          const currentIndex = step === "slot" ? 0 : step === "details" ? 1 : 2
+          const STEP_INDEX_MAP: Record<string, number> = {
+            slot: 0,
+            details: 1,
+            payment: 2,
+          }
+          const currentIndex = STEP_INDEX_MAP[step] ?? 0
 
           return (
             <div key={label} className="booking-flow-step">

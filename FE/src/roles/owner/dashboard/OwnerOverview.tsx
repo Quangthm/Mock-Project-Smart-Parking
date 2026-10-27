@@ -68,7 +68,7 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
   return (
     <section className="space-y-6">
       <div className="management-title-row">
-        <PageHeader eyebrow={selectedSiteId === 'all' ? `${overview.siteCount} sites` : 'Filtered site view'} title="Owner Overview" description="Combined performance for the selected parking sites." />
+        <PageHeader title="Owner Overview" description="Combined performance for the selected parking sites." />
         <label className="management-site-filter"><span>Site</span><RoundedSelect className="input" value={selectedSiteId} onChange={event => onSiteChange(event.target.value)}><option value="all">All Sites</option>{sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}</RoundedSelect></label>
       </div>
       <div className="owner-overview-canvas management-dashboard-grid">

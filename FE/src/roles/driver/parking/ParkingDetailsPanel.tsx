@@ -48,9 +48,22 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
       </div>
       <div className="find-parking-details-scroll">
         <p className="find-parking-details-address"><UntitledIcon name="map-pin" size={16} />{lot.address}</p>
-        <span className={`find-parking-status${available === null ? " is-unknown" : available > 0 ? " is-available" : " is-full"}`}>
-          {lot.status !== "active" ? "Unavailable" : available === null ? "Availability unknown" : available > 0 ? "Available" : "Full"}
-        </span>
+        {(() => {
+          const AVAILABILITY_STATUS_MAP: Record<string, { className: string; label: string }> = {
+            unknown: { className: "is-unknown", label: "Availability unknown" },
+            available: { className: "is-available", label: "Available" },
+            full: { className: "is-full", label: "Full" },
+          }
+          const statusKey = available === null ? "unknown" : available > 0 ? "available" : "full"
+          const statusInfo = lot.status !== "active"
+            ? { className: "is-unknown", label: "Unavailable" }
+            : (AVAILABILITY_STATUS_MAP[statusKey] ?? AVAILABILITY_STATUS_MAP.unknown)
+          return (
+            <span className={`find-parking-status ${statusInfo.className}`}>
+              {statusInfo.label}
+            </span>
+          )
+        })()}
 
         <div className="find-parking-details-section">
           <h3>Parking spaces</h3>

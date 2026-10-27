@@ -2,6 +2,7 @@ import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { ownerData as store } from '../data/data';
+import { store as appStore } from '../../../lib/store';
 import type { Booking, ParkingLot } from '../../../lib/types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { UntitledIcon } from '../../../components/icon/UntitledIcon';
@@ -30,9 +31,13 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
   const { user } = useApp();
   const [search, setSearch] = useState('');
   const [filterMethod, setFilterMethod] = useState('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+  const [customerFilter, setCustomerFilter] = useState('all');
+  const [passFilter, setPassFilter] = useState('all');
   const [lotFilter, setLotFilter] = useState(selectedSiteId);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const activeFilterCount = [lotFilter !== 'all', Boolean(dateFrom), Boolean(dateTo), filterMethod !== 'all', paymentStatusFilter !== 'all', customerFilter !== 'all', passFilter !== 'all'].filter(Boolean).length;
 
   useEffect(() => setLotFilter(selectedSiteId), [selectedSiteId]);
 
@@ -44,9 +49,17 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
     if (invalidRange) return [];
     return lots.flatMap(l => store.getBookingsByLot(l.id)).filter(booking => {
       const date = (booking.completedAt ?? booking.createdAt).slice(0, 10);
-      return (!dateFrom || date >= dateFrom) && (!dateTo || date <= dateTo);
+      const systemCustomer = Boolean(booking.driverId?.trim());
+      const hasPass = systemCustomer && appStore.getPassesByDriver(booking.driverId).some(pass =>
+        pass.lotId === booking.lotId && pass.purchasedAt <= booking.startTime && pass.expiresAt >= booking.startTime,
+      );
+      return (!dateFrom || date >= dateFrom) && (!dateTo || date <= dateTo)
+        && (filterMethod === 'all' || (booking.paymentMethod ?? 'unknown') === filterMethod)
+        && (paymentStatusFilter === 'all' || (booking.paymentStatus ?? 'unknown') === paymentStatusFilter)
+        && (customerFilter === 'all' || (customerFilter === 'system' ? systemCustomer : !systemCustomer))
+        && (passFilter === 'all' || (passFilter === 'with-pass' ? hasPass : !hasPass));
     });
-  }, [lots, dateFrom, dateTo, invalidRange]);
+  }, [lots, dateFrom, dateTo, invalidRange, filterMethod, paymentStatusFilter, customerFilter, passFilter]);
 
   const completedBookings = useMemo(() => {
     return allBookings.filter(b => b.status === 'completed');
@@ -69,22 +82,33 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
     return completedBookings.filter(b => {
       const q = search.trim().toLowerCase();
       const matchQuery = !q || b.id.toLowerCase().includes(q) || b.licensePlate.toLowerCase().includes(q) || b.lotName.toLowerCase().includes(q);
-      const matchMethod = filterMethod === 'all' || (b.paymentMethod ?? 'unknown') === filterMethod;
-      return matchQuery && matchMethod;
+      return matchQuery;
     });
-  }, [completedBookings, search, filterMethod]);
+  }, [completedBookings, search]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <PageHeader eyebrow={lotFilter === 'all' ? `All Sites (${lots.length})` : (lots[0]?.name ?? 'Selected Site')} title="Financial & Revenue Center" description="Revenue, settlement, and loss exposure for your parking sites." />
 
-      <section className="card grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Financial filters">
+      <section className="card p-5" aria-label="Financial filters">
+        <details className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg text-sm font-semibold text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)] [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2"><UntitledIcon name="filter" size={17} /> Filters {activeFilterCount > 0 && <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-xs text-[var(--accent-fg)] tabular-nums">{activeFilterCount} active</span>}{invalidRange && <span className="text-xs text-[var(--badge-danger-strong)]">Invalid dates</span>}</span>
+            <span aria-hidden="true" className="text-[var(--muted)] transition-transform group-open:rotate-180"><UntitledIcon name="chevron-down" size={18} /></span>
+          </summary>
+          <div className="mt-4 grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2 xl:grid-cols-3">
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Parking lot<RoundedSelect className="input" value={lotFilter} onChange={event => setLotFilter(event.target.value)}><option value="all">All parking lots</option>{ownerLots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}</RoundedSelect></label>
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">From date<input className="input" type="date" value={dateFrom} max={dateTo || undefined} onChange={event => setDateFrom(event.target.value)} /></label>
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">To date<input className="input" type="date" value={dateTo} min={dateFrom || undefined} onChange={event => setDateTo(event.target.value)} /></label>
-        <div className="flex items-end"><button type="button" className="btn-outline w-full justify-center" onClick={() => { setLotFilter('all'); setDateFrom(''); setDateTo(''); setSearch(''); setFilterMethod('all') }}>Clear filters</button></div>
-        {invalidRange && <p role="alert" className="text-sm text-[var(--badge-danger-strong)] sm:col-span-2 xl:col-span-4">The start date must be on or before the end date.</p>}
-        <p className="text-xs text-[var(--muted)] sm:col-span-2 xl:col-span-4">Dates use the completion date when available, otherwise the booking creation date.</p>
+        <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Payment method<RoundedSelect className="input" value={filterMethod} onChange={event => setFilterMethod(event.target.value)}><option value="all">All payment methods</option><option value="momo">MoMo</option><option value="vnpay">VNPay</option><option value="zalopay">ZaloPay</option><option value="visa">Visa / Card</option><option value="applepay">Apple Pay</option><option value="qr">VietQR</option><option value="unknown">Not recorded</option></RoundedSelect></label>
+        <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Payment status<RoundedSelect className="input" value={paymentStatusFilter} onChange={event => setPaymentStatusFilter(event.target.value)}><option value="all">All payment statuses</option><option value="paid">Paid</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="unknown">Not recorded</option></RoundedSelect></label>
+        <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Customer type<RoundedSelect className="input" value={customerFilter} onChange={event => setCustomerFilter(event.target.value)}><option value="all">All customers</option><option value="system">System account</option><option value="walk-in">Walk-in</option></RoundedSelect></label>
+        <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Parking pass<RoundedSelect className="input" value={passFilter} onChange={event => setPassFilter(event.target.value)}><option value="all">All bookings</option><option value="with-pass">Driver held an active pass</option><option value="without-pass">No active pass found</option></RoundedSelect></label>
+        <div className="flex items-end"><button type="button" className="btn-outline w-full justify-center" onClick={() => { setLotFilter('all'); setDateFrom(''); setDateTo(''); setSearch(''); setFilterMethod('all'); setPaymentStatusFilter('all'); setCustomerFilter('all'); setPassFilter('all') }}>Clear filters</button></div>
+        {invalidRange && <p role="alert" className="text-sm text-[var(--badge-danger-strong)] sm:col-span-2 xl:col-span-3">The start date must be on or before the end date.</p>}
+        <p className="text-xs text-[var(--muted)] sm:col-span-2 xl:col-span-3">Dates use completion time when available. Customer type uses the booking account ID; pass filtering checks whether a pass was active at the booking start, since pass usage is not recorded on bookings.</p>
+          </div>
+        </details>
       </section>
 
       {/* KPI METRIC CARDS */}
@@ -113,7 +137,13 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4"><p className="text-sm text-[var(--muted)]">Refunds</p><strong className="mt-2 block text-xl text-[var(--fg)]">Not tracked</strong><small className="text-[var(--muted)]">Refund transactions are not available in the current data.</small></div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4"><p className="text-sm text-[var(--muted)]">Other losses · failed payments</p><strong className="mt-2 block text-xl tabular-nums text-[var(--fg)]">{failedPaymentExposure.toLocaleString('vi-VN')} VND</strong><small className="text-[var(--muted)]">{failedPaymentRecords.length} failed payments</small></div>
         </div>
-        <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b border-[var(--border)] text-[var(--muted)]"><th className="py-3 pr-4">Booking</th><th className="py-3 pr-4">Parking lot</th><th className="py-3 pr-4">Category</th><th className="py-3 text-right">Value at risk</th></tr></thead><tbody>{[...cancellationRecords.map(booking => ({ booking, category: 'Cancellation' })), ...failedPaymentRecords.map(booking => ({ booking, category: 'Failed payment' }))].map(({ booking, category }) => <tr key={booking.id} className="border-b border-[var(--border)]"><td className="py-3 pr-4 font-medium">{booking.id}</td><td className="py-3 pr-4">{booking.lotName}</td><td className="py-3 pr-4">{category}</td><td className="py-3 text-right tabular-nums">{booking.amount.toLocaleString('vi-VN')} VND</td></tr>)}{cancellationRecords.length + failedPaymentRecords.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-[var(--muted)]">No cancellation or failed payment records match these filters.</td></tr>}</tbody></table></div>
+        <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full min-w-[680px] table-fixed text-left text-sm">
+            <colgroup><col className="w-[22%]" /><col className="w-[32%]" /><col className="w-[22%]" /><col className="w-[24%]" /></colgroup>
+            <thead className="bg-[var(--bg)] text-[var(--muted)]"><tr className="border-b border-[var(--border)]"><th scope="col" className="px-4 py-3 font-semibold">Booking</th><th scope="col" className="px-4 py-3 font-semibold">Parking lot</th><th scope="col" className="px-4 py-3 font-semibold">Category</th><th scope="col" className="px-4 py-3 text-right font-semibold">Value at risk</th></tr></thead>
+            <tbody>{[...cancellationRecords.map(booking => ({ booking, category: 'Cancellation' })), ...failedPaymentRecords.map(booking => ({ booking, category: 'Failed payment' }))].map(({ booking, category }) => <tr key={booking.id} className="border-b border-[var(--border)] last:border-b-0"><td className="break-all px-4 py-3 font-medium tabular-nums">{booking.id}</td><td className="break-words px-4 py-3">{booking.lotName}</td><td className="px-4 py-3">{category}</td><td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">{booking.amount.toLocaleString('vi-VN')} VND</td></tr>)}{cancellationRecords.length + failedPaymentRecords.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-[var(--muted)]">No cancellation or failed payment records match these filters.</td></tr>}</tbody>
+          </table>
+        </div>
       </section>
 
       {/* REVENUE TREND CHART */}
@@ -179,21 +209,6 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
               onChange={e => setSearch(e.target.value)}
               style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', width: 220 }}
             />
-            <RoundedSelect
-              className="input"
-              aria-label="Filter by payment method"
-              value={filterMethod}
-              onChange={e => setFilterMethod(e.target.value)}
-              style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', width: 'auto' }}
-            >
-              <option value="all">All Payment Methods</option>
-              <option value="momo">MoMo</option>
-              <option value="vnpay">VNPay</option>
-              <option value="zalopay">ZaloPay</option>
-              <option value="visa">Visa / Card</option>
-              <option value="applepay">Apple Pay</option>
-              <option value="qr">VietQR</option>
-            </RoundedSelect>
           </div>
         </div>
 

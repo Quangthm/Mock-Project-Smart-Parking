@@ -40,25 +40,19 @@ export function PaymentDetailModal({
     }, 600)
   }
 
+  const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
+    qr: "VietQR Bank Transfer",
+    momo: "MoMo E-Wallet",
+    vnpay: "VNPAY Gateway",
+    visa: "Credit / Debit Card (Visa/Mastercard)",
+    applepay: "Apple Pay",
+    zalopay: "ZaloPay E-Wallet",
+  }
+
   const getMethodLabel = (
     method: PaymentTransactionRecord["paymentMethod"],
   ) => {
-    switch (method) {
-      case "qr":
-        return "VietQR Bank Transfer"
-      case "momo":
-        return "MoMo E-Wallet"
-      case "vnpay":
-        return "VNPAY Gateway"
-      case "visa":
-        return "Credit / Debit Card (Visa/Mastercard)"
-      case "applepay":
-        return "Apple Pay"
-      case "zalopay":
-        return "ZaloPay E-Wallet"
-      default:
-        return method
-    }
+    return PAYMENT_METHOD_LABEL_MAP[method] ?? method
   }
 
   // Itemized Pricing Breakdown calculation (standard Vietnam VAT 8%)

@@ -40,15 +40,16 @@ export function SpaceDetailModal({
 
   if (!space) return null
 
+  const STATUS_TO_PHYSICAL: Record<SpaceStatus, PhysicalState> = {
+    occupied: "OCCUPIED",
+    maintenance: "MAINTENANCE",
+    disabled: "UNAVAILABLE",
+    available: "AVAILABLE",
+    reserved: "AVAILABLE",
+  }
+
   const physical: PhysicalState =
-    space.physicalState ||
-    (space.status === "occupied"
-      ? "OCCUPIED"
-      : space.status === "maintenance"
-        ? "MAINTENANCE"
-        : space.status === "disabled"
-          ? "UNAVAILABLE"
-          : "AVAILABLE")
+    space.physicalState || STATUS_TO_PHYSICAL[space.status] || "AVAILABLE"
 
   const reservation: ReservationProtectionState =
     space.reservationState ||
@@ -62,96 +63,88 @@ export function SpaceDetailModal({
             ? "RESERVED"
             : "NONE")
 
+  const PHYSICAL_BADGE_CONFIG: Record<PhysicalState, { label: string; icon: string; color: string; bg: string; border: string }> = {
+    AVAILABLE: {
+      label: "Physically Vacant",
+      icon: "check-circle",
+      color: "#16a34a",
+      bg: "#22c55e15",
+      border: "#22c55e40",
+    },
+    OCCUPIED: {
+      label: "Physically Occupied",
+      icon: "car",
+      color: "#dc2626",
+      bg: "#ef444415",
+      border: "#ef444440",
+    },
+    MAINTENANCE: {
+      label: "Under Maintenance",
+      icon: "wrench",
+      color: "#ea580c",
+      bg: "#f9731615",
+      border: "#f9731640",
+    },
+    UNAVAILABLE: {
+      label: "Out of Service",
+      icon: "x",
+      color: "#64748b",
+      bg: "#64748b15",
+      border: "#64748b40",
+    },
+    UNKNOWN: {
+      label: "Condition Unknown",
+      icon: "alert",
+      color: "#eab308",
+      bg: "#eab30815",
+      border: "#eab30840",
+    },
+  }
+
+  const RESERVATION_BADGE_CONFIG: Record<ReservationProtectionState, { label: string; icon: string; color: string; bg: string; border: string }> = {
+    PROTECTED: {
+      label: "Protected Hold",
+      icon: "shield",
+      color: "var(--reserved)",
+      bg: "var(--status-reserved-bg)",
+      border: "var(--reserved)",
+    },
+    RESERVED: {
+      label: "Confirmed Booking",
+      icon: "clock",
+      color: "#d97706",
+      bg: "#f59e0b15",
+      border: "#f59e0b40",
+    },
+    PENDING_PAYMENT: {
+      label: "Pending Payment Hold",
+      icon: "banknote",
+      color: "#ca8a04",
+      bg: "#eab30815",
+      border: "#eab30840",
+    },
+    BACKUP: {
+      label: "Designated Backup",
+      icon: "shield",
+      color: "var(--maintenance)",
+      bg: "var(--status-maintenance-bg)",
+      border: "var(--maintenance)",
+    },
+    NONE: {
+      label: "Open / Unreserved",
+      icon: "check",
+      color: "var(--muted)",
+      bg: "var(--bg)",
+      border: "var(--border)",
+    },
+  }
+
   const getPhysicalBadge = (state: PhysicalState) => {
-    switch (state) {
-      case "AVAILABLE":
-        return {
-          label: "Physically Vacant",
-          icon: "check-circle",
-          color: "#16a34a",
-          bg: "#22c55e15",
-          border: "#22c55e40",
-        }
-      case "OCCUPIED":
-        return {
-          label: "Physically Occupied",
-          icon: "car",
-          color: "#dc2626",
-          bg: "#ef444415",
-          border: "#ef444440",
-        }
-      case "MAINTENANCE":
-        return {
-          label: "Under Maintenance",
-          icon: "wrench",
-          color: "#ea580c",
-          bg: "#f9731615",
-          border: "#f9731640",
-        }
-      case "UNAVAILABLE":
-        return {
-          label: "Out of Service",
-          icon: "x",
-          color: "#64748b",
-          bg: "#64748b15",
-          border: "#64748b40",
-        }
-      case "UNKNOWN":
-      default:
-        return {
-          label: "Condition Unknown",
-          icon: "alert",
-          color: "#eab308",
-          bg: "#eab30815",
-          border: "#eab30840",
-        }
-    }
+    return PHYSICAL_BADGE_CONFIG[state] ?? PHYSICAL_BADGE_CONFIG.UNKNOWN
   }
 
   const getReservationBadge = (res: ReservationProtectionState) => {
-    switch (res) {
-      case "PROTECTED":
-        return {
-          label: "Protected Hold",
-          icon: "shield",
-          color: "var(--reserved)",
-          bg: "var(--status-reserved-bg)",
-          border: "var(--reserved)",
-        }
-      case "RESERVED":
-        return {
-          label: "Confirmed Booking",
-          icon: "clock",
-          color: "#d97706",
-          bg: "#f59e0b15",
-          border: "#f59e0b40",
-        }
-      case "PENDING_PAYMENT":
-        return {
-          label: "Pending Payment Hold",
-          icon: "banknote",
-          color: "#ca8a04",
-          bg: "#eab30815",
-          border: "#eab30840",
-        }
-      case "BACKUP":
-        return {
-          label: "Designated Backup",
-          icon: "shield",
-          color: "var(--maintenance)",
-          bg: "var(--status-maintenance-bg)",
-          border: "var(--maintenance)",
-        }
-      case "NONE":
-      default:
-        return {
-          label: "Open / Unreserved",
-          icon: "check",
-          color: "var(--muted)",
-          bg: "var(--bg)",
-          border: "var(--border)",
-        }
-    }
+    return RESERVATION_BADGE_CONFIG[res] ?? RESERVATION_BADGE_CONFIG.NONE
   }
 
   const pBadge = getPhysicalBadge(physical)
