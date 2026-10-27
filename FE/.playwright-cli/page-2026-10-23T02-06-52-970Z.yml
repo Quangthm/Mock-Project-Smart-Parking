@@ -1,0 +1,94 @@
+- generic [ref=f1e3]:
+  - link "Skip to main content" [ref=f1e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation "Main navigation" [ref=f1e5]:
+    - generic [ref=f1e6]:
+      - button "SmartParking home" [ref=f1e7] [cursor=pointer]:
+        - img "Smart Parking" [ref=f1e8]
+        - generic [ref=f1e264]:
+          - generic [ref=f1e265]: Smart
+          - generic [ref=f1e266]: Parking
+      - generic [ref=f1e12]:
+        - button "Home" [ref=f1e13] [cursor=pointer]
+        - button "Pricing" [ref=f1e14] [cursor=pointer]
+        - button "Support" [ref=f1e15] [cursor=pointer]
+      - generic [ref=f1e16]:
+        - button "Switch to Dark Mode" [ref=f1e17] [cursor=pointer]
+        - button "Sign In" [ref=f1e21] [cursor=pointer]
+        - button "Sign Up" [active] [ref=f1e22] [cursor=pointer]
+  - main [ref=f1e23]:
+    - generic [ref=f1e269]:
+      - generic [ref=f1e270]:
+        - img "Smart Parking" [ref=f1e271]
+        - generic [ref=f1e276]:
+          - heading "Create Account" [level=1] [ref=f1e278]
+          - paragraph [ref=f1e279]: Join SmartParking today
+      - generic [ref=f1e280]:
+        - button "Driver" [ref=f1e281] [cursor=pointer]
+        - button "Business" [ref=f1e285] [cursor=pointer]
+      - generic [ref=f1e289]:
+        - generic [ref=f1e290]:
+          - generic [ref=f1e291]: Full Name
+          - textbox "Your full name" [ref=f1e292]
+        - generic [ref=f1e293]:
+          - generic [ref=f1e294]: Email
+          - textbox "you@example.com" [ref=f1e295]
+        - generic [ref=f1e296]:
+          - generic [ref=f1e297]: Phone Number
+          - textbox "09xx-xxx-xxx" [ref=f1e298]
+        - generic [ref=f1e299]:
+          - generic [ref=f1e300]: Password (optional; leave blank to use OTP sign-in)
+          - generic [ref=f1e301]:
+            - textbox "Optional, 8–15 characters" [ref=f1e302]
+            - button "Show password" [ref=f1e303] [cursor=pointer]
+        - generic [ref=f1e306]:
+          - generic [ref=f1e307]: Confirm Password
+          - textbox "Repeat your password" [ref=f1e308]
+        - button "Create Driver Account" [ref=f1e309] [cursor=pointer]
+        - paragraph [ref=f1e310]:
+          - text: Already have an account?
+          - button "Sign In" [ref=f1e311] [cursor=pointer]
+  - contentinfo [ref=f1e206]:
+    - generic [ref=f1e207]:
+      - generic [ref=f1e208]:
+        - generic [ref=f1e209]:
+          - generic [ref=f1e210]:
+            - img "Smart Parking" [ref=f1e211]
+            - generic [ref=f1e215]:
+              - generic [ref=f1e216]: Smart
+              - generic [ref=f1e217]: Parking
+          - paragraph [ref=f1e218]: Smart parking solutions for drivers and businesses. Find, book, and manage parking with ease.
+          - generic [ref=f1e219]:
+            - button "Facebook" [ref=f1e220] [cursor=pointer]: f
+            - button "LinkedIn" [ref=f1e221] [cursor=pointer]: in
+            - button "YouTube" [ref=f1e222] [cursor=pointer]: ▶
+        - generic [ref=f1e223]:
+          - heading "Information" [level=4] [ref=f1e224]
+          - generic [ref=f1e225]:
+            - button "About Us" [ref=f1e226] [cursor=pointer]
+            - button "Affiliates" [ref=f1e227] [cursor=pointer]
+            - button "Careers" [ref=f1e228] [cursor=pointer]
+        - generic [ref=f1e229]:
+          - heading "For Business" [level=4] [ref=f1e230]
+          - generic [ref=f1e231]:
+            - button "Become a Partner" [ref=f1e232] [cursor=pointer]
+            - button "Business Accounts" [ref=f1e233] [cursor=pointer]
+        - generic [ref=f1e234]:
+          - heading "Support" [level=4] [ref=f1e235]
+          - generic [ref=f1e236]:
+            - button "FAQ" [ref=f1e237] [cursor=pointer]
+            - button "Contact" [ref=f1e238] [cursor=pointer]
+            - button "Report an Issue" [ref=f1e239] [cursor=pointer]
+        - generic [ref=f1e240]:
+          - heading "Contact" [level=4] [ref=f1e241]
+          - generic [ref=f1e242]:
+            - generic [ref=f1e243]: Smart Hub Building, 17 Le Duan Street, District 1, Ho Chi Minh City
+            - generic [ref=f1e247]: "Driver: 1900-xxxx"
+            - generic [ref=f1e250]: "Business: 090xxxxxxx"
+            - generic [ref=f1e253]: support.smartparkingvn@gmail.com
+      - generic [ref=f1e257]:
+        - paragraph [ref=f1e258]: This product is for educational purposes.
+        - generic [ref=f1e259]:
+          - button "Terms of Service" [ref=f1e260] [cursor=pointer]
+          - button "Privacy Policy" [ref=f1e261] [cursor=pointer]
+          - button "Payment & Refund" [ref=f1e262] [cursor=pointer]

@@ -17,8 +17,8 @@ Maintained inventories: [FR trace matrix](01-requirements/requirements-traceabil
 
 Read the two project-wide overviews first, then follow their links for detailed contracts:
 
-- [Consolidated SRS — v1.1 (stable filename) — product scope and business direction](01-requirements/srs/smartpark-srs-v1.0.md)
-- [Solution Architecture — v1.1 (stable filename) — ownership and technical direction](02-architecture/solution-architecture/smartpark-solution-architecture-v1.0.md)
+- [Consolidated SRS v1.1 — product scope and business direction](01-requirements/srs/smartpark-srs-v1.1.md)
+- [Solution Architecture v1.1 — ownership and technical direction](02-architecture/solution-architecture/smartpark-solution-architecture-v1.1.md)
 
 - [SRS reading index](01-requirements/srs/README.md)
 - [Business rules and policy catalogue](01-requirements/business-rules/README.md)

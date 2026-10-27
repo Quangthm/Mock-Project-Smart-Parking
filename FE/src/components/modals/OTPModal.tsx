@@ -74,7 +74,7 @@ export function OTPModal({ contact, onSuccess, onFailLock, onClose }: Props) {
         >
           <h3
             style={{
-              fontFamily: "Outfit",
+              fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
               fontSize: "1.2rem",
               margin: 0,

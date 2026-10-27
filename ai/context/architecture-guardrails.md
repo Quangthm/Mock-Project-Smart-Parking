@@ -1,6 +1,7 @@
 # SmartPark AI Agent Architecture Guardrails
 
 **Status:** WORKING
+**Last Updated:** 2026-10-12
 **Purpose:** Rules AI coding/review agents must follow unless a newer confirmed project decision explicitly changes them.
 
 ## Architecture
@@ -31,7 +32,7 @@ Infrastructure → Application + Domain
 API → Application + implementation projects for composition/wiring
 ```
 
-Controllers should normally interact with the Application layer through MediatR/`ISender`. Controllers should not directly depend on `DbContext`, repository implementations, PostgreSQL, Kafka, payment providers, or other infrastructure implementations.
+Controllers should normally interact with the Application layer through MediatR/`ISender`. Controllers should not directly depend on `DbContext`, repository implementations, PostgreSQL, RabbitMQ, payment providers, or other infrastructure implementations.
 
 ### Data ownership
 
@@ -39,6 +40,12 @@ Controllers should normally interact with the Application layer through MediatR/
 - Do not share a database context across microservices.
 - Do not directly query another service's database.
 - Cross-service communication uses synchronous APIs when an immediate response is required and RabbitMQ (via MassTransit with Outbox/Inbox pattern) when asynchronous processing/loose coupling provides a meaningful benefit.
+- Cross-service communication uses synchronous APIs when an immediate response is required and RabbitMQ when asynchronous processing/loose coupling provides a meaningful benefit.
+
+### API design and contracts
+
+- API designs must use the canonical template at [`docs/03-design/api/api-design-template.md`](../../docs/03-design/api/api-design-template.md).
+- Contract changes must specify route, HTTP method, authentication/authorization, request/response models, validation errors, and observable state/retry outcomes without exposing live secrets.
 
 ## CQRS direction
 
@@ -66,16 +73,16 @@ Persistence / Infrastructure implementation
 
 Do not add deferred infrastructure merely to make a milestone appear larger.
 
-## Message Broker rule
+## Messaging rule (RabbitMQ)
 
-RabbitMQ / MassTransit is not automatically required for every operation.
+RabbitMQ is the current messaging direction; Kafka is not used. A broker is not automatically required for every operation.
 
 For any proposed event-driven interaction, record:
 
 1. Why asynchronous communication is needed.
 2. Which service owns the event.
 3. Which services consume it.
-4. Failure behavior when RabbitMQ or a consumer is unavailable.
+4. Failure behavior when the broker or a consumer is unavailable.
 5. Whether eventual consistency is acceptable.
 6. Whether a simpler synchronous interaction is sufficient for the MVP.
 

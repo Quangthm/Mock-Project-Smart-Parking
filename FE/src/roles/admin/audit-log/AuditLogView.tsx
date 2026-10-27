@@ -22,7 +22,7 @@ export function AuditLogView() {
     admin: "#ef4444",
     owner: "#f59e0b",
     driver: "#2563eb",
-    operator: "#a855f7",
+    operator: "var(--muted)",
   }
 
   return (

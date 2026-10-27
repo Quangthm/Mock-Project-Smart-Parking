@@ -82,7 +82,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [view, setView] = useState<View>(initialView)
 
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      const saved = localStorage.getItem("sp_theme")
+      if (saved === "light" || saved === "dark") return saved
+    } catch {
+      /* The system preference still works when storage is unavailable. */
+    }
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  })
 
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false)
 
@@ -99,12 +107,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     store.init()
 
-    const savedTheme =
-      localStorage.getItem("sp_theme") as "light" | "dark" || "light"
+    const savedTheme = localStorage.getItem("sp_theme")
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+    const initialTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : systemTheme.matches ? "dark" : "light"
+    setTheme(initialTheme)
+    document.documentElement.classList.toggle("dark", initialTheme === "dark")
 
-    setTheme(savedTheme)
-
-    if (savedTheme === "dark") document.documentElement.classList.add("dark")
+    const followSystemTheme = (event: MediaQueryListEvent) => {
+      if (localStorage.getItem("sp_theme")) return
+      setTheme(event.matches ? "dark" : "light")
+      document.documentElement.classList.toggle("dark", event.matches)
+    }
+    systemTheme.addEventListener("change", followSystemTheme)
 
     const savedAccent = localStorage.getItem("sp_accent") || "blue"
 
@@ -170,6 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => {
       active = false
+      systemTheme.removeEventListener("change", followSystemTheme)
       window.removeEventListener(authExpiredEvent, expire)
     }
   }, [])
@@ -218,6 +235,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (next === "dark") document.documentElement.classList.add("dark")
     else document.documentElement.classList.remove("dark")
   }
+
+  useEffect(() => {
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    if (themeMeta) themeMeta.content = theme === "dark" ? "#151C1B" : "#F5F7F5"
+  }, [theme])
 
   const setAccentColor = (color: string) => {
     setAccentColorState(color)

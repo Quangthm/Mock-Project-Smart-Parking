@@ -1,8 +1,9 @@
 # SmartPark AI Agent Project Context
 
 **Status:** WORKING
-**Last Updated:** 2026-10-01
+**Last Updated:** 2026-10-12
 **Purpose:** Minimum shared context an AI development agent should read before making project changes.
+**Verified facts:** `ai/architecture-reference.md` (stack, service map, Conflict Register).
 
 ## Project
 
@@ -13,25 +14,27 @@ SmartPark is a configurable smart parking management and reservation platform fo
 ```text
 Client
   ↓
-API Gateway
+API Gateway (planned — not implemented)
   ↓
 Microservices
   ↓
 Service-owned persistence
 ```
 
-Current direction includes synchronous API communication where an immediate response is required and RabbitMQ (via MassTransit) only where asynchronous/event-driven communication provides a real benefit.
+Current direction includes synchronous API communication where an immediate response is required and RabbitMQ only where asynchronous/event-driven communication provides a real benefit. Kafka is **not** used (see Conflict Register in `ai/architecture-reference.md`).
+
+> **Verified reality (2026-10-12):** 3 services are implemented (UserService, ParkingService, ReservationService). No API Gateway, no messaging broker, no SignalR/MQTT/Redis exist in code yet.
 
 ## Current technology direction
 
 - Backend: ASP.NET Core / .NET 10
-- Frontend: ReactJS
-- UI/styling: TailwindCSS + Material UI
-- Database: PostgreSQL
+- Frontend: React 19 + Vite + TypeScript
+- UI/styling: TailwindCSS (Material UI is **not** used — see Conflict Register)
+- Database: PostgreSQL (EF Core in UserService; raw Npgsql in ParkingService/ReservationService)
 - Containerization: Docker
-- Messaging/event layer: RabbitMQ + MassTransit (Outbox/Inbox pattern) when justified
+- Messaging/event layer: RabbitMQ when justified (Kafka is not used)
 - 3D parking visualization: Three.js
-- AI: chatbot, recommendation, and image-recognition capabilities are in MVP scope, but model/provider selection and some implementation details remain deferred.
+- AI: chatbot, recommendation, and image-recognition capabilities are in MVP scope, but model/provider selection and some implementation details remain deferred. In the repo, the chatbot is a disabled scaffold and LPR/CV exists only as UI mockup.
 
 ## Current repository direction
 

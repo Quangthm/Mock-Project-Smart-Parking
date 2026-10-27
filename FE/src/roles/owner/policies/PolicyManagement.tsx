@@ -23,7 +23,7 @@ export function PolicyManagement() {
     <div>
       <h3
         style={{
-          fontFamily: "Outfit",
+          fontFamily: "Be Vietnam Pro",
           fontWeight: 700,
           fontSize: "1.05rem",
           marginBottom: "1.25rem",

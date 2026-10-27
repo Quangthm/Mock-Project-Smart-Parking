@@ -1,11 +1,15 @@
 import { useState, useMemo, useEffect } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
-import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
 import { AuthApiError } from "../../../lib/authApi"
-import { reservationApi, type OperatorSite, type WalkInParkingSession } from "../../../lib/operatorApi"
+import {
+  reservationApi,
+  type OperatorSite,
+  type ParkingSessionHistoryEntry,
+  type WalkInParkingSession,
+} from "../../../lib/operatorApi"
 import { PlateScanPanel } from "./PlateScanPanel"
-import type { Booking, BookingStatus } from "../../../lib/types"
+import type { Booking } from "../../../lib/types"
 
 type GateAction = "check-in" | "check-out"
 type QuickGateResult =
@@ -34,13 +38,14 @@ export function CheckInOut({
 
   // Table filters & search
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | BookingStatus>("all")
-  const [vehicleTypeFilter, setVehicleTypeFilter] = useState<"all" | "car" | "motorcycle">("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
 
-  // Selected booking for detailed view modal
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [selectedSession, setSelectedSession] = useState<ParkingSessionHistoryEntry | null>(null)
+  const [historyRefresh, setHistoryRefresh] = useState(0)
+  const [durationClock, setDurationClock] = useState(() => Date.now())
 
   // Confirmation modal state for check-in / check-out
   const [confirmingAction, setConfirmingAction] = useState<{
@@ -54,40 +59,58 @@ export function CheckInOut({
     message: string
   } | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
-  const [bookingsLoading, setBookingsLoading] = useState(false)
-  const [bookingsError, setBookingsError] = useState("")
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [sessionsError, setSessionsError] = useState("")
 
-  // All bookings for the selected lot
-  const [bookings, setBookings] = useState<Booking[]>([])
+  const [sessions, setSessions] = useState<ParkingSessionHistoryEntry[]>([])
+
+  useEffect(() => {
+    setDurationClock(Date.now())
+    if (!selectedSession || selectedSession.exitTime) return
+
+    const timer = window.setInterval(() => setDurationClock(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [selectedSession?.id, selectedSession?.entryTime, selectedSession?.exitTime])
 
   function slotLabel(booking: Booking) {
     return lot?.slots.find((slot) => slot.id === booking.slotId)?.number ?? booking.slotNumber
   }
 
+  function sessionSlotLabel(session: ParkingSessionHistoryEntry) {
+    return (
+      lot?.slots.find((slot) => slot.id === session.currentSlotId)?.number ??
+      session.slotNumber ??
+      "—"
+    )
+  }
+
   useEffect(() => {
     if (!lot) {
-      setBookings([])
+      setSessions([])
+      setSelectedSession(null)
       return
     }
     let active = true
-    setBookingsLoading(true)
-    setBookingsError("")
+    setSessions([])
+    setSelectedSession(null)
+    setSessionsLoading(true)
+    setSessionsError("")
     reservationApi
-      .list(lot.id)
+      .listParkingSessions(lot.id)
       .then((items) => {
-        if (active) setBookings(items)
+        if (active) setSessions(items)
       })
       .catch((error) => {
         if (active)
-          setBookingsError(error instanceof Error ? error.message : "Could not load reservations.")
+          setSessionsError(error instanceof Error ? error.message : "Could not load parking history.")
       })
       .finally(() => {
-        if (active) setBookingsLoading(false)
+        if (active) setSessionsLoading(false)
       })
     return () => {
       active = false
     }
-  }, [lot?.id])
+  }, [lot?.id, historyRefresh])
 
   useEffect(() => {
     if (initialPlateQuery && lot) {
@@ -198,9 +221,7 @@ export function CheckInOut({
         ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
         : await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate, imageData)
 
-      setBookings((current) =>
-        current.map((item) => item.id === updatedBooking.id ? updatedBooking : item),
-      )
+      setHistoryRefresh((current) => current + 1)
       setActionFeedback({
         type: "success",
         message: `${action === "check-in" ? "Check-in" : "Check-out"} completed for ${updatedBooking.licensePlate} (${slotLabel(updatedBooking)}).`,
@@ -244,6 +265,7 @@ export function CheckInOut({
         if (!result.session) throw new Error("The active walk-in session was not found.")
         session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
       }
+      setHistoryRefresh((current) => current + 1)
       setActionFeedback({
         type: "success",
         message: action === "check-in"
@@ -265,45 +287,37 @@ export function CheckInOut({
     }
   }
 
-  // Filtered Bookings for the Table
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((b) => {
-      if (statusFilter !== "all" && b.status !== statusFilter) return false
-      if (vehicleTypeFilter !== "all") {
-        const slot = lot?.slots.find((item) => item.id === b.slotId)
-        if (!slot) return false
-        const isMoto = slot.vehicleType.toLowerCase().includes("motorcycle")
-        if (vehicleTypeFilter === "motorcycle" && !isMoto) return false
-        if (vehicleTypeFilter === "car" && isMoto) return false
-      }
+  const filteredSessions = useMemo(() => {
+    return sessions.filter((session) => {
+      if (statusFilter !== "all" && session.status !== statusFilter) return false
+      if (vehicleTypeFilter !== "all" && session.vehicleType !== vehicleTypeFilter) return false
       if (searchQuery.trim()) {
         const q = searchQuery.replace(/[^a-z0-9]/gi, "").toUpperCase()
-        if (q && !b.licensePlate.replace(/[^a-z0-9]/gi, "").toUpperCase().includes(q)) return false
+        const plate = session.originalPlate ?? session.normalizedPlate ?? ""
+        if (q && !plate.replace(/[^a-z0-9]/gi, "").toUpperCase().includes(q)) return false
       }
       return true
     })
-  }, [bookings, lot, statusFilter, vehicleTypeFilter, searchQuery])
+  }, [sessions, statusFilter, vehicleTypeFilter, searchQuery])
 
-  // Pagination calculation
-  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / itemsPerPage))
+  const totalPages = Math.max(1, Math.ceil(filteredSessions.length / itemsPerPage))
   useEffect(() => setCurrentPage((page) => Math.min(page, totalPages)), [totalPages])
-  const paginatedBookings = useMemo(() => {
+  const paginatedSessions = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
-    return filteredBookings.slice(start, start + itemsPerPage)
-  }, [filteredBookings, currentPage])
+    return filteredSessions.slice(start, start + itemsPerPage)
+  }, [filteredSessions, currentPage])
 
-  const getStatusBadge = (status: BookingStatus) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case "confirmed":
-        return { label: "Confirmed", bg: "bg-blue-500/10", text: "text-blue-600", border: "border-blue-500/20" }
-      case "checked-in":
-        return { label: "Parked / In-Use", bg: "bg-red-500/10", text: "text-red-600", border: "border-red-500/20" }
-      case "completed":
-        return { label: "Completed", bg: "bg-green-500/10", text: "text-green-600", border: "border-green-500/20" }
-      case "pending":
+      case "ACTIVE":
+        return { label: "Active", bg: "bg-green-500/10", text: "text-green-600", border: "border-green-500/20" }
+      case "PENDING_PAYMENT":
         return { label: "Pending Payment", bg: "bg-amber-500/10", text: "text-amber-600", border: "border-amber-500/20" }
-      case "cancelled":
-        return { label: "Cancelled", bg: "bg-slate-500/10", text: "text-slate-500", border: "border-slate-500/20" }
+      case "COMPLETED":
+        return { label: "Completed", bg: "bg-green-500/10", text: "text-green-600", border: "border-green-500/20" }
+      case "OVERSTAYED":
+      case "DISPUTED":
+        return { label: status.replace(/_/g, " "), bg: "bg-amber-500/10", text: "text-amber-600", border: "border-amber-500/20" }
       default:
         return { label: status, bg: "bg-gray-500/10", text: "text-gray-500", border: "border-gray-500/20" }
     }
@@ -413,7 +427,7 @@ export function CheckInOut({
             className="btn-primary justify-center px-6 py-2.5 text-sm sm:shrink-0"
             onClick={() => handleQuickSearch()}
           >
-            <UntitledIcon name="search" size={16} /> {mode === "check-in" ? "Find Check-In" : "Find Check-Out"}
+            <UntitledIcon name="search" size={16} /> {mode === "check-in" ? "Check-In" : "Check-Out"}
           </button>
         </div>
       </div>
@@ -552,7 +566,7 @@ export function CheckInOut({
           <div>
             <h2 className="text-base font-bold text-[var(--fg)]">Parking History</h2>
             <p className="text-xs text-[var(--muted)]">
-              Showing {filteredBookings.length} bookings for {lot.name}
+              Showing {filteredSessions.length} parking sessions for {lot.name}
             </p>
           </div>
 
@@ -577,40 +591,41 @@ export function CheckInOut({
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as "all" | BookingStatus)
+                setStatusFilter(e.target.value)
                 setCurrentPage(1)
               }}
             >
               <option value="all">All Statuses</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="checked-in">Parked (Checked-In)</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending Payment</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="ACTIVE">Active</option>
+              <option value="PENDING_PAYMENT">Pending Payment</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="OVERSTAYED">Overstayed</option>
+              <option value="DISPUTED">Disputed</option>
             </select>
 
             <select
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={vehicleTypeFilter}
               onChange={(e) => {
-                setVehicleTypeFilter(e.target.value as "all" | "car" | "motorcycle")
+                setVehicleTypeFilter(e.target.value)
                 setCurrentPage(1)
               }}
             >
               <option value="all">All Vehicles</option>
-              <option value="car">Car (Ô tô)</option>
-              <option value="motorcycle">Motorcycle (Xe máy)</option>
+              <option value="CAR">Car (Ô tô)</option>
+              <option value="MOTORCYCLE">Motorcycle (Xe máy)</option>
+              <option value="OVERSIZED">Oversized</option>
             </select>
           </div>
         </div>
 
-        {bookingsError && (
+        {sessionsError && (
           <div role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600">
-            {bookingsError}
+            {sessionsError}
           </div>
         )}
-        {bookingsLoading && (
-          <p role="status" className="mb-4 text-xs text-[var(--muted)]">Loading reservations…</p>
+        {sessionsLoading && (
+          <p role="status" className="mb-4 text-xs text-[var(--muted)]">Loading parking history…</p>
         )}
 
         {/* Table Content */}
@@ -618,51 +633,40 @@ export function CheckInOut({
           <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="border-b border-[var(--border)] bg-[var(--card)] text-[var(--muted)] font-semibold">
               <tr>
-                <th className="px-4 py-3">Booking ID</th>
+                <th className="px-4 py-3">User Name</th>
                 <th className="px-4 py-3">Vehicle Plate</th>
                 <th className="px-4 py-3">Slot</th>
-                <th className="px-4 py-3">Schedule Window</th>
-                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Vehicle Type</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Gate Actions</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3 text-right">Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {paginatedBookings.length === 0 ? (
+              {paginatedSessions.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted)]">
-                    {searchQuery.trim() ? "No parking history matches that license plate." : "No bookings found matching the selected filters."}
+                    {searchQuery.trim() ? "No parking history matches that license plate." : "No parking sessions found matching the selected filters."}
                   </td>
                 </tr>
               ) : (
-                paginatedBookings.map((b) => {
-                  const badge = getStatusBadge(b.status)
+                paginatedSessions.map((session) => {
+                  const badge = getStatusBadge(session.status)
                   return (
-                    <tr key={b.id} className="hover:bg-[var(--card)]/50 transition">
-                      <td className="px-4 py-3 font-mono text-[var(--muted)]">
-                        {b.id}
+                    <tr key={session.id} className="cursor-pointer hover:bg-[var(--card)]/50 transition" onClick={() => setSelectedSession(session)}>
+                      <td className="px-4 py-3 text-[var(--muted)]">
+                        {session.accountId ? <span title={session.accountId}>Account {session.accountId.slice(0, 8)}</span> : "—"}
                       </td>
                       <td className="px-4 py-3 font-semibold text-[var(--fg)]">
                         <span className="font-mono bg-[var(--card)] px-2 py-0.5 rounded border border-[var(--border)]">
-                          {b.licensePlate}
+                          {session.originalPlate || session.normalizedPlate || "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-bold text-[var(--fg)]">
-                        {slotLabel(b)}
+                        {sessionSlotLabel(session)}
                       </td>
                       <td className="px-4 py-3 text-[var(--muted)]">
-                        <div>
-                          {new Date(b.startTime).toLocaleDateString([], { month: "short", day: "numeric" })}
-                        </div>
-                        <div className="text-[11px]">
-                          {new Date(b.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} –{" "}
-                          {new Date(b.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-[var(--fg)]">
-                        {b.paymentStatus
-                          ? `${b.amount.toLocaleString("vi-VN")} VND`
-                          : "Managed by Payment Service"}
+                        {session.vehicleType.replace(/_/g, " ")}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -671,32 +675,20 @@ export function CheckInOut({
                           {badge.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right space-x-1.5">
+                      <td className="px-4 py-3 text-[var(--muted)]">
+                        {session.reservationId ? "Reserved" : "Walk-in"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2"
-                          onClick={() => setSelectedBooking(b)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelectedSession(session)
+                          }}
                         >
                           Details
                         </button>
-                        {mode === "check-in" && b.status === "confirmed" && (
-                          <button
-                            type="button"
-                            className="text-[11px] py-1 px-2.5 rounded bg-green-600 hover:bg-green-700 text-white font-semibold transition"
-                            onClick={() => setConfirmingAction({ booking: b, action: "check-in" })}
-                          >
-                            Check-In
-                          </button>
-                        )}
-                        {mode === "check-out" && b.status === "checked-in" && (
-                          <button
-                            type="button"
-                            className="text-[11px] py-1 px-2.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
-                            onClick={() => setConfirmingAction({ booking: b, action: "check-out" })}
-                          >
-                            Check-Out
-                          </button>
-                        )}
                       </td>
                     </tr>
                   )
@@ -710,7 +702,7 @@ export function CheckInOut({
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between text-xs text-[var(--muted)]">
             <span>
-              Page {currentPage} of {totalPages} ({filteredBookings.length} total)
+              Page {currentPage} of {totalPages} ({filteredSessions.length} total)
             </span>
             <div className="flex gap-1.5">
               <button
@@ -734,127 +726,76 @@ export function CheckInOut({
         )}
       </div>
 
-      {/* MODAL 1: Booking Details Modal */}
-      {selectedBooking && (
+      {selectedSession && (
         <div
           role="presentation"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onMouseDown={(e) => e.target === e.currentTarget && setSelectedBooking(null)}
+          onMouseDown={(e) => e.target === e.currentTarget && setSelectedSession(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="booking-detail-title"
-            className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
+            aria-labelledby="session-detail-title"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
           >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary)]">
-                  Booking Inspection
+                  Parking Session
                 </span>
-                <h3 id="booking-detail-title" className="text-lg font-bold text-[var(--fg)]">
-                  #{selectedBooking.id}
+                <h3 id="session-detail-title" className="text-lg font-bold text-[var(--fg)]">
+                  #{selectedSession.id}
                 </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedBooking(null)}
+                onClick={() => setSelectedSession(null)}
                 className="h-8 w-8 rounded-full border border-[var(--border)] bg-[var(--bg)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--fg)]"
               >
                 <UntitledIcon name="x" size={16} />
               </button>
             </div>
 
-            <div className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
-                <div>
-                  <span className="text-xs text-[var(--muted)] block">License Plate</span>
-                  <span className="font-mono font-bold text-base text-[var(--fg)]">
-                    {selectedBooking.licensePlate}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs text-[var(--muted)] block">Allocated Slot</span>
-                  <span className="font-bold text-base text-[var(--primary)]">
-                    {slotLabel(selectedBooking)}
-                  </span>
-                </div>
+            <div className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs sm:grid-cols-2">
+                <SessionField label="Reservation ID" value={selectedSession.reservationId} />
+                <SessionField label="Tenant ID" value={selectedSession.tenantId} />
+                <SessionField label="Site ID" value={selectedSession.siteId} />
+                <SessionField label="Access Item ID" value={selectedSession.accessItemId} />
+                <SessionField label="Account ID" value={selectedSession.accountId} />
+                <SessionField label="Session Type" value={selectedSession.reservationId ? "Reserved" : "Walk-in"} />
+                <SessionField label="Slot" value={sessionSlotLabel(selectedSession)} />
+                <SessionField label="Original Plate" value={selectedSession.originalPlate} />
+                <SessionField label="Normalized Plate" value={selectedSession.normalizedPlate} />
+                <SessionField label="Vehicle Type" value={selectedSession.vehicleType} />
+                <SessionField label="Ticket Reference" value={selectedSession.ticketReference} />
+                <SessionField label="Session Status" value={selectedSession.status} />
+                <SessionField label="Entry Time" value={new Date(selectedSession.entryTime).toLocaleString()} />
+                <SessionField label="Exit Time" value={selectedSession.exitTime ? new Date(selectedSession.exitTime).toLocaleString() : null} />
+                <SessionField
+                  label="Parking Duration"
+                  value={formatParkingDuration(
+                    selectedSession.entryTime,
+                    selectedSession.exitTime ? new Date(selectedSession.exitTime).getTime() : durationClock,
+                  )}
+                  valueClassName="text-green-600"
+                />
+                <SessionField label="Created At" value={new Date(selectedSession.createdAt).toLocaleString()} />
               </div>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-[var(--muted)] block">Parking Site:</span>
-                  <span className="font-medium">{selectedBooking.lotName}</span>
-                </div>
-                <div>
-                  <span className="text-[var(--muted)] block">Driver ID:</span>
-                  <span className="font-mono">{selectedBooking.driverId}</span>
-                </div>
-                <div>
-                  <span className="text-[var(--muted)] block">Start Time:</span>
-                  <span className="font-medium">{new Date(selectedBooking.startTime).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-[var(--muted)] block">End Time:</span>
-                  <span className="font-medium">{new Date(selectedBooking.endTime).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-[var(--muted)] block">Payment Amount:</span>
-                  <span className="font-bold text-[var(--fg)]">
-                    {selectedBooking.paymentStatus
-                      ? `${selectedBooking.amount.toLocaleString("vi-VN")} VND`
-                      : "Managed by Payment Service"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[var(--muted)] block">Status:</span>
-                  <span className="font-bold uppercase text-[var(--primary)]">
-                    {selectedBooking.status}
-                  </span>
-                </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <EvidenceImage label="Check-in scan" image={selectedSession.entryImageUrl} />
+                <EvidenceImage label="Check-out scan" image={selectedSession.exitImageUrl} />
               </div>
-
-              {selectedBooking.completedAt && (
-                <div className="text-xs rounded border border-[var(--border)] bg-[var(--bg)] p-2 text-[var(--muted)]">
-                  Completed at: {new Date(selectedBooking.completedAt).toLocaleString()}
-                </div>
-              )}
             </div>
 
             <div className="mt-6 flex justify-end gap-2 border-t border-[var(--border)] pt-3">
               <button
                 type="button"
                 className="btn-outline text-xs py-1.5 px-3"
-                onClick={() => setSelectedBooking(null)}
+                onClick={() => setSelectedSession(null)}
               >
                 Close
               </button>
-              {mode === "check-in" && selectedBooking.status === "confirmed" && (
-                <button
-                  type="button"
-                  className="btn-primary text-xs py-1.5 px-3 bg-green-600 hover:bg-green-700"
-                  onClick={() => {
-                    const b = selectedBooking
-                    setSelectedBooking(null)
-                    setConfirmingAction({ booking: b, action: "check-in" })
-                  }}
-                >
-                  Proceed to Check-In
-                </button>
-              )}
-              {mode === "check-out" && selectedBooking.status === "checked-in" && (
-                <button
-                  type="button"
-                  className="btn-primary text-xs py-1.5 px-3 bg-blue-600 hover:bg-blue-700"
-                  onClick={() => {
-                    const b = selectedBooking
-                    setSelectedBooking(null)
-                    setConfirmingAction({ booking: b, action: "check-out" })
-                  }}
-                >
-                  Proceed to Check-Out
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -966,6 +907,36 @@ export function CheckInOut({
       )}
     </div>
   )
+}
+
+function SessionField({
+  label,
+  value,
+  valueClassName = "",
+}: {
+  label: string
+  value: string | null
+  valueClassName?: string
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="block text-[var(--muted)]">{label}</span>
+      <span className={`break-all font-medium ${valueClassName}`}>{value ?? "—"}</span>
+    </div>
+  )
+}
+
+function formatParkingDuration(entryTime: string, endTime: number) {
+  const start = new Date(entryTime).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(endTime)) return "—"
+
+  const totalSeconds = Math.max(0, Math.floor((endTime - start) / 1000))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const time = [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":")
+  return days > 0 ? `${days}d ${time}` : time
 }
 
 function EvidenceImage({ label, image }: { label: string; image: string | null }) {
