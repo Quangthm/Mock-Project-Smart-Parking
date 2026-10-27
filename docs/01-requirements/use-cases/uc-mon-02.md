@@ -1,9 +1,9 @@
-# UC-MON-02 — Buy a monthly/yearly pass and activate verified rights
+﻿# UC-MON-02 — Buy a monthly/yearly pass and activate verified rights
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Operations, Payment
 
-[Use-case index](README.md) · [SRS module](../srs/modules/07-monthly-passes.md)
+[Use-case index](README.md) Â· [SRS module](../srs/modules/07-monthly-passes.md)
 
 ## Goal
 
@@ -16,7 +16,7 @@ Eligible bound account/vehicle/location and reviewed plan.
 ## Main flow
 
 1. Select an explicitly enabled monthly/yearly product and reviewed product-specific terms. Monthly calculates immediate S=A or future local-midnight S with original anchor/[S,E); yearly covers 12 calendar months with boundary details specified under Q05.
-2. Create monthly order with unchanged 15-minute deadline and max three prepaid periods, or yearly order with at most one yearly period in advance and separately agreed deadline/policy. Neither holds parking capacity; annual months do not consume the monthly three-period limit.
+2. Create monthly order using effective `MONTHLY_PAYMENT_HOLD_DURATION` (default 15 minutes) and effective `MONTHLY_MAX_PREPAID_TERMS` (default 3), or yearly order with at most one yearly period in advance and separately agreed deadline/policy. Neither holds parking capacity; annual months do not consume the monthly effective prepaid-term limit.
 3. Verify full payment then commit entitlement before the product's accepted deadline; monthly strict A<H remains. Yearly deadline values are design-pending, not invented.
 4. Show independent order/money/entitlement states and invoice; pass alone protects zero spaces.
 

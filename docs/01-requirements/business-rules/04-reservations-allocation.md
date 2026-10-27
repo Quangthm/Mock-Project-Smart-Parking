@@ -1,20 +1,25 @@
-# Reservations Allocation — business rules RC1
+﻿# Reservations Allocation — business rules RC1
 
-[Rule index](README.md) · [SRS module](../srs/modules/04-reservations-allocation.md)
+[Rule index](README.md) Â· [SRS module](../srs/modules/04-reservations-allocation.md)
 
 ## BR-RES-01
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Authenticated Driver reviews bound vehicle, location, interval and enabled Specific Slot/Zone/Capacity mode. Specific Slot protects a preference on a best-effort basis, not an exact-slot guarantee. Backend validates accepted terms, current access, booking restrictions and compatible claims before acceptance. Allocation starts one hour before reservation start; late-created confirmed reservations are evaluated immediately by the same idempotent command. Preserve stable allocations. Ordinary priority is earlier start then confirmation; choose preferred slot, same zone, compatible fallback, nearest configured coordinates/stable resource tie. Exceptional loss after allocation uses physical arrival priority among affected claimants; genuine unresolved ties are logged Operator decisions.
+Authenticated Driver reviews bound vehicle, location, interval and enabled Specific Slot/Zone/Capacity mode. Specific Slot protects a preference on a best-effort basis, not an exact-slot guarantee. Backend validates accepted terms, current access, booking restrictions and compatible claims before acceptance. Allocation begins at `reservation_start - effective ALLOCATION_LEAD_TIME`; the confirmed default is 1 hour. Late-created confirmed reservations whose allocation point has passed are evaluated immediately by the same idempotent command. Resolve the effective value through the approved policy hierarchy. Preserve stable allocations. Ordinary priority is earlier start then confirmation; choose preferred slot, same zone, compatible fallback, nearest configured coordinates/stable resource tie. A requested/protected slot that is still occupied by an unrelated session does not fulfill the future reservation and never authorizes displacement; use established alternative/reallocation/conflict handling. Exceptional loss after allocation uses physical arrival priority among affected claimants; genuine unresolved ties are logged Operator decisions.
 
 **Trace:** FR-RES-03/13, FR-BAS-01/02; UC-RES-01, UC-RES-02
+
+**Examples:** with the 1-hour default, a 09:30 reservation has an 08:30 allocation point. The earlier SRS's 30-minute example remains explanatory only: Driver A 09:30–11:00 â†’ 09:00 allocation point; Driver B 10:00–12:00 â†’ 09:30 allocation point. If a reservation confirms after its calculated point, evaluate immediately.
+
+A slot may also be `OCCUPIED + PROTECTED`: Driver A can be the current occupant while Driver B's future reservation is protected. `OCCUPIED` does not identify Driver B and does not fulfill the reservation. If Driver A leaves, protection may remain; if Driver A remains when fulfillment needs the resource, recover/reallocate without displacement.
+
 
 ## BR-RES-02
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Minimum duration 15 minutes; maximum 24 hours; advance horizon 7 days; buffer 0. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights. Unspecified scalar override ranges stay locked.
+Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies with defaults 15 minutes, 24 hours, 7 days and 0. Resolve Admin default/bounds â†’ authorized Owner/lot override â†’ accepted context; RA-06 supersedes D02 locking for these listed numeric defaults without inventing bounds. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
 
 **Trace:** FR-RES-02; UC-RES-01
 
@@ -54,7 +59,7 @@ Inter-booking buffer defaults to 0 and is locked absent approved override bounds
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Apply guarded, versioned transitions PENDING_PAYMENT → CONFIRMED → ALLOCATED → PARKING → COMPLETED and explicit cancellation, unpaid expiry, rejection and no-show paths. Reallocation, refund, dispute and violation are linked histories/lifecycles, not replacements for physical state. Serialize conflicting payment/cancellation/arrival/expiry commands; see transition contracts.
+Apply guarded, versioned transitions PENDING_PAYMENT â†’ CONFIRMED â†’ ALLOCATED â†’ PARKING â†’ COMPLETED and explicit cancellation, unpaid expiry, rejection and no-show paths. Reallocation, refund, dispute and violation are linked histories/lifecycles, not replacements for physical state. Serialize conflicting payment/cancellation/arrival/expiry commands; see transition contracts.
 
 **Trace:** FR-RES-12; UC-RES-03
 
@@ -62,7 +67,7 @@ Apply guarded, versioned transitions PENDING_PAYMENT → CONFIRMED → ALLOCATED
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Allocation starts one hour before reservation start; late-created confirmed reservations are evaluated immediately by the same idempotent command. Preserve stable allocations. Ordinary priority is earlier start then confirmation; choose preferred slot, same zone, compatible fallback, nearest configured coordinates/stable resource tie. Exceptional loss after allocation uses physical arrival priority among affected claimants; genuine unresolved ties are logged Operator decisions. Driver may submit two accepted reallocation requests and enquire about reasons. Transport retries and invalid submissions do not count; system recovery does not consume the allowance. No refund solely because a conforming reallocation was accepted; independent fee/refund grounds remain. Recover lost capacity using conforming alternatives and established priority without displacing occupied/unaffected users. Refusal of a usable conforming alternative follows voluntary-cancellation terms; no feasible conforming alternative invokes facility-failure handling. Owner handles escalations; assigned Operator executes scoped recovery.
+Allocation begins at `reservation_start - effective ALLOCATION_LEAD_TIME`; the confirmed default is 1 hour. Late-created confirmed reservations whose allocation point has passed are evaluated immediately by the same idempotent command. Preserve stable allocations. Ordinary priority is earlier start then confirmation; choose preferred slot, same zone, compatible fallback, nearest configured coordinates/stable resource tie. An `OCCUPIED + RESERVED/PROTECTED` combination does not prove that the current occupant is the reservation claimant. If an unrelated occupant remains in a requested/protected slot when fulfillment needs it, do not mark the reservation fulfilled and do not displace the occupant; use compatible alternatives, reallocation and conflict handling. Exceptional loss after allocation uses physical arrival priority among affected claimants; genuine unresolved ties are logged Operator decisions. Driver may submit two accepted reallocation requests and enquire about reasons. Transport retries and invalid submissions do not count; system recovery does not consume the allowance. No refund solely because a conforming reallocation was accepted; independent fee/refund grounds remain. Recover lost capacity using conforming alternatives and established priority without displacing occupied/unaffected users. Refusal of a usable conforming alternative follows voluntary-cancellation terms; no feasible conforming alternative invokes facility-failure handling. Owner handles escalations; assigned Operator executes scoped recovery.
 
 **Trace:** FR-BAS-02/03/04; UC-RES-02
 
@@ -70,7 +75,7 @@ Allocation starts one hour before reservation start; late-created confirmed rese
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Expose a named, typed, scoped policy catalogue with units and effective values. Resolve Admin defaults/bounds → authorized Owner/lot override → supported specific scope → accepted context. Unset inherits; valid zero differs from disabled. D02 locks unspecified ranges at approved defaults while preserving explicitly approved choices. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting. Each entry includes unit/type, service owner, scope, default, bounds, editor, disabled/unset semantics, effective version and acceptance boundaries.
+Expose a named, typed, scoped policy catalogue with units and effective values. Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ supported specific scope â†’ accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. RA-06 confirms the listed reservation/monthly numeric values as configurable defaults rather than hard-coded constants, including minimum/maximum duration, advance horizon, inter-booking buffer, payment hold, protection window, allocation lead time, alternative offer duration, occupancy validity, reallocation limit and the listed monthly timing/limit policies. Admin defines default/bounds; authorized Owner scope may override within bounds. No missing numeric bounds are invented. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting. Each entry includes unit/type, service owner, scope, default, bounds, editor, disabled/unset semantics, effective version and acceptance boundaries.
 
 **Trace:** FR-POL-03/07; UC-POL-01
 

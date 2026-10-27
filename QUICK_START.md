@@ -279,6 +279,23 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 **Volume cũ (schema cũ hơn baseline hiện tại):** chạy `.\setup.ps1 -RecreateDb` để build lại 6 DB theo schema canonical; runner tự phân biệt DB trống / schema hiện tại / schema cũ và chỉ áp script khi cần. Chi tiết ở [LOCAL-SETUP.md](LOCAL-SETUP.md).
 
+**Frontend (Docker) — `[vite] (client) Pre-transform error: Failed to resolve import "<package>" from "src/..."`**
+
+- **Triệu chứng:** Container `smartpark-app-frontend-1` báo lỗi `Internal server error: Failed to resolve import "..."` hoặc `Pre-transform error: Failed to resolve import ... Does the file exist?` (ví dụ `motion/react`, `animejs`).
+- **Nguyên nhân:** Mã nguồn vừa thêm dependency mới vào `FE/package.json`, nhưng Docker Compose đang mount named volume `fe-node-modules` vào `/app/node_modules`. Docker giữ nguyên cache volume cũ từ các lần chạy trước chứ không tự động đồng bộ package mới.
+- **Cách xử lý:** Chọn một trong hai cách:
+  - **Cách 1 (Nhanh nhất — không cần restart):** Chạy `npm install` trực tiếp vào container đang chạy:
+    ```powershell
+    docker exec -it smartpark-app-frontend-1 npm install
+    ```
+  - **Cách 2 (Làm mới volume sạch):** Dừng frontend, xóa volume cache cũ và build/chạy lại:
+    ```powershell
+    docker compose -f compose.app.yml stop frontend
+    docker volume rm smartpark-app_fe-node-modules
+    .\scripts\run-app-service.ps1 -Service Frontend
+    ```
+  *(Nếu chạy frontend trên host bằng `npm run dev`, chỉ cần chạy `cd FE; npm install`)*
+
 > Khi gặp lỗi mới: **note lại dòng `[n/7]` (hoặc `[migrationIndex/6]`) + thông báo lỗi** vào mục này để dev sau tra cứu nhanh.
 
 ## 7. Advanced Options
