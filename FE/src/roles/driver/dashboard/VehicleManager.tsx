@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 
 import {
@@ -111,14 +112,14 @@ export function VehicleManager() {
         </label>
         <label className="label">
           Vehicle type
-          <select
+          <RoundedSelect
             className="input"
             value={form.vehicleType}
             onChange={(e) => setForm({ ...form, vehicleType: e.target.value as VehicleInput["vehicleType"] })}
           >
             <option>CAR</option>
             <option>MOTORCYCLE</option>
-          </select>
+          </RoundedSelect>
         </label>
         <label className="label">
           Vehicle image (HTTPS URL)

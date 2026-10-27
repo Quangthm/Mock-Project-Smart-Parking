@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { ownerData as store } from '../data/data';
@@ -146,7 +147,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
               onChange={e => setSearch(e.target.value)}
               style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', width: 220 }}
             />
-            <select
+            <RoundedSelect
               className="input"
               aria-label="Filter by payment method"
               value={filterMethod}
@@ -160,7 +161,7 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
               <option value="visa">Visa / Card</option>
               <option value="applepay">Apple Pay</option>
               <option value="qr">VietQR</option>
-            </select>
+            </RoundedSelect>
           </div>
         </div>
 

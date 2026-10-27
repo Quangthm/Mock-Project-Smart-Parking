@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -139,7 +140,7 @@ export function LotStatus({
           <span className="text-[var(--muted)] font-medium">Filters:</span>
 
           {/* Vehicle Type */}
-          <select
+          <RoundedSelect
             className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
             value={vehicleTypeFilter}
             onChange={(e) => setVehicleTypeFilter(e.target.value as "all" | "car" | "motorcycle")}
@@ -147,10 +148,10 @@ export function LotStatus({
             <option value="all">All Vehicle Types</option>
             <option value="car">Car</option>
             <option value="motorcycle">Motorcycle</option>
-          </select>
+          </RoundedSelect>
 
           {/* Status dimension */}
-          <select
+          <RoundedSelect
             className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -161,11 +162,11 @@ export function LotStatus({
             <option value="reserved">Reserved / Protected</option>
             <option value="backup">Designated Backup</option>
             <option value="maintenance">Maintenance / Disabled</option>
-          </select>
+          </RoundedSelect>
 
           {/* Zone Selector */}
           {availableZones.length > 0 && (
-            <select
+            <RoundedSelect
               className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
               value={selectedZone}
               onChange={(e) => setSelectedZone(e.target.value)}
@@ -176,7 +177,7 @@ export function LotStatus({
                   {z.name}
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           )}
 
           <span className="ml-auto text-xs text-[var(--muted)]">

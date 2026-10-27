@@ -1,8 +1,9 @@
-import { useEffect, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import { useApp } from "../../context/AppContext"
 import { UntitledIcon } from "../icon/UntitledIcon"
+import { scrollPageToTop } from "../../lib/scrollPageToTop"
 
 export type DashboardNavItem = {
   id: string
@@ -21,8 +22,10 @@ export function DashboardSidebar({ groups, children }: { groups: DashboardNavGro
   const { user } = useApp()
   const [hint, setHint] = useState<NavHint | null>(null)
   const [toolbar, setToolbar] = useState<Element | null>(null)
+  const activePage = groups.flatMap((group) => group.items).find((item) => item.active)?.id
 
   useEffect(() => { setToolbar(document.querySelector(".dashboard-topbar")) }, [])
+  useLayoutEffect(() => { scrollPageToTop() }, [activePage])
 
   function showHint(event: MouseEvent<HTMLButtonElement> | FocusEvent<HTMLButtonElement>, label: string) {
     const rect = event.currentTarget.getBoundingClientRect()

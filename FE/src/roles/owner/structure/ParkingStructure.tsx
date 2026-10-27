@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { parkingApi, type Site, type Slot, type Structure, type Unit } from "../../../lib/parkingApi"
 import { BackupCapacityPanel } from "../dashboard/BackupCapacityPanel"
@@ -192,10 +193,10 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     <section className="space-y-5 text-[var(--fg)]">
       <PageHeader title="Parking Structure" variant="compact" divider description="Manage floors, zones, blocks and parking slots." actions={<label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
           <span>Site</span>
-          <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
+          <RoundedSelect className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length || saving}>
             {!sites.length && <option value="">No sites available</option>}
             {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-          </select>
+          </RoundedSelect>
         </label>} />
 
       {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
@@ -221,7 +222,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
               {floors.map((floor) => <button key={floor.id} type="button" onClick={() => { setFloorFilter(floor.id); setUnitFilter("") }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${floorFilter === floor.id ? "bg-[var(--action)] text-[var(--action-fg)]" : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"}`}>{floor.name}</button>)}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Zone:</span><select className="input max-w-48 text-xs" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}><option value="">All locations</option>{visibleUnits.filter((unit) => unit.type !== "FLOOR").map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>
+              <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Zone:</span><RoundedSelect className="input max-w-48 text-xs" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}><option value="">All locations</option>{visibleUnits.filter((unit) => unit.type !== "FLOOR").map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>
               <button type="button" className="btn-outline px-2.5 py-1 text-xs" onClick={() => { setUnitForm((form) => ({ ...form, type: floorFilter ? "ZONE" : "FLOOR", parentId: floorFilter })); setCreateModal("unit") }}><UntitledIcon name="plus" size={12} /> Add unit</button>
               <button type="button" className="btn-primary px-2.5 py-1 text-xs" onClick={() => setCreateModal("slot")} disabled={!units.length}><UntitledIcon name="plus" size={12} /> Add slot</button>
             </div>
@@ -231,9 +232,9 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
             {createModal === "unit" ? <form onSubmit={addUnit} className="w-full max-w-lg space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
               <h2 className="font-semibold">Add floor, zone or block</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={labelClass}><span>Type</span><select className={inputClass} value={unitForm.type} onChange={(event) => setUnitForm((form) => ({ ...form, type: event.target.value, parentId: "" }))}>{unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                <label className={labelClass}><span>Type</span><RoundedSelect className={inputClass} value={unitForm.type} onChange={(event) => setUnitForm((form) => ({ ...form, type: event.target.value, parentId: "" }))}>{unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}</RoundedSelect></label>
                 <label className={labelClass}><span>Name</span><input className={inputClass} value={unitForm.name} onChange={(event) => setUnitForm((form) => ({ ...form, name: event.target.value }))} required /></label>
-                {unitForm.type !== "FLOOR" && <label className={labelClass}><span>Parent {unitForm.type === "ZONE" ? "(optional)" : "(required)"}</span><select className={inputClass} value={unitForm.parentId} onChange={(event) => setUnitForm((form) => ({ ...form, parentId: event.target.value }))} required={unitForm.type === "BLOCK"}><option value="">{unitForm.type === "ZONE" ? "Site root" : "Select a parent"}</option>{parentOptions.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>}
+                {unitForm.type !== "FLOOR" && <label className={labelClass}><span>Parent {unitForm.type === "ZONE" ? "(optional)" : "(required)"}</span><RoundedSelect className={inputClass} value={unitForm.parentId} onChange={(event) => setUnitForm((form) => ({ ...form, parentId: event.target.value }))} required={unitForm.type === "BLOCK"}><option value="">{unitForm.type === "ZONE" ? "Site root" : "Select a parent"}</option>{parentOptions.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>}
                 <label className={labelClass}><span>Capacity (0 = unlimited)</span><input className={inputClass} type="number" min="0" step="1" value={unitForm.capacity} onChange={(event) => setUnitForm((form) => ({ ...form, capacity: event.target.value }))} required /></label>
               </div>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
@@ -241,10 +242,10 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
             </form> : <form onSubmit={addSlot} className="w-full max-w-lg space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
               <h2 className="font-semibold">Add parking slot</h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={labelClass}><span>Location</span><select className={inputClass} value={slotForm.unitId} onChange={(event) => setSlotForm((form) => ({ ...form, unitId: event.target.value }))} required><option value="">Select a unit</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</select></label>
+                <label className={labelClass}><span>Location</span><RoundedSelect className={inputClass} value={slotForm.unitId} onChange={(event) => setSlotForm((form) => ({ ...form, unitId: event.target.value }))} required><option value="">Select a unit</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{location(unit.id)}</option>)}</RoundedSelect></label>
                 <label className={labelClass}><span>Slot code</span><input className={inputClass} value={slotForm.code} onChange={(event) => setSlotForm((form) => ({ ...form, code: event.target.value }))} required /></label>
-                <label className={labelClass}><span>Vehicle type</span><select className={inputClass} value={slotForm.vehicleType} onChange={(event) => setSlotForm((form) => ({ ...form, vehicleType: event.target.value }))}>{vehicleTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-                <label className={labelClass}><span>Slot type</span><select className={inputClass} value={slotForm.type} onChange={(event) => setSlotForm((form) => ({ ...form, type: event.target.value }))}>{slotTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                <label className={labelClass}><span>Vehicle type</span><RoundedSelect className={inputClass} value={slotForm.vehicleType} onChange={(event) => setSlotForm((form) => ({ ...form, vehicleType: event.target.value }))}>{vehicleTypes.map((type) => <option key={type} value={type}>{type}</option>)}</RoundedSelect></label>
+                <label className={labelClass}><span>Slot type</span><RoundedSelect className={inputClass} value={slotForm.type} onChange={(event) => setSlotForm((form) => ({ ...form, type: event.target.value }))}>{slotTypes.map((type) => <option key={type} value={type}>{type}</option>)}</RoundedSelect></label>
               </div>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
               <div className="flex justify-end gap-2"><button type="button" className="btn-outline" onClick={() => setCreateModal(null)} disabled={saving}>Cancel</button><button type="submit" className="btn-primary" disabled={saving || !units.length}>{saving ? "Saving…" : "Add slot"}</button></div>
@@ -259,7 +260,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
                 <input className="min-w-0 flex-1 bg-transparent text-xs text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by slot code…" />
               </label>
               <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><select className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}</select></label>
+                <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><span>Status</span><RoundedSelect className="input max-w-36 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All</option><option value="occupied">Occupied</option><option value="empty">Empty</option><option value="protected">Protected</option><option value="payment">Pending payment</option>{[...new Set(slots.map((slot) => slot.operationalStatus))].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}</RoundedSelect></label>
                 <span className="whitespace-nowrap text-[11px] text-[var(--muted)]">Showing <strong className="text-[var(--fg)]">{shownSlots.length}</strong> / {slots.length}</span>
               </div>
             </div>

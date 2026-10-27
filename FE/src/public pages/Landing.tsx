@@ -72,7 +72,7 @@ export function Landing() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: .7, ease: [.2, .7, .2, 1] }}
         >
-          <h1>Park Smart <em> Book Easy</em> Manage Better</h1>
+          <h1><span>Find your space</span><em>Book with ease</em><span>Park with Comfort</span></h1>
           <p>Find a space, book it, and arrive with confidence. SmartParking brings drivers and parking teams together in one clear flow.</p>
           <div className="hero-actions">
             <Button variant="primary" trailingIcon={<UntitledIcon name="arrow-right" size={18} />} onClick={() => setView("sign-in")}>Find parking</Button>

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -44,6 +45,14 @@ function isAvailable(slot: ParkingSlot) {
       !!slot.reservedUntil &&
       new Date(slot.reservedUntil).getTime() <= Date.now())
   )
+}
+
+function formatDuration(hours: number) {
+  const totalMinutes = Math.round(hours * 60)
+  const wholeHours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return [wholeHours ? `${wholeHours} hr${wholeHours === 1 ? "" : "s"}` : "", minutes ? `${minutes} min` : ""]
+    .filter(Boolean).join(" ")
 }
 
 export function BookingFlow({
@@ -585,7 +594,7 @@ export function BookingFlow({
             <dl className="booking-summary-list">
               <div><dt>Vehicle</dt><dd>{selectedVehicle ? `${selectedVehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} · ${formatVietnamesePlate(selectedVehicle)}` : vehicleLoading ? "Loading vehicles…" : "Choose in the next step"}</dd></div>
               <div><dt>Arrival</dt><dd>{startTime ? new Date(startTime).toLocaleString("vi-VN") : "Choose in the next step"}</dd></div>
-              <div><dt>Duration</dt><dd>{hours > 0 ? `${hours.toFixed(1)} hours` : "Choose in the next step"}</dd></div>
+              <div><dt>Duration</dt><dd>{hours > 0 ? formatDuration(hours) : "Choose in the next step"}</dd></div>
               <div><dt>Estimated price</dt><dd>{hours > 0 ? `${amount.toLocaleString("vi-VN")} VND` : "Available after choosing time"}</dd></div>
             </dl>
             {!selectedSlot && <p className="booking-summary-empty">Select an available space in the model or grid to continue.</p>}
@@ -639,7 +648,7 @@ export function BookingFlow({
               Vehicle
               {vehicleLoading && <span className="text-sm text-[var(--muted)]">Loading vehicles…</span>}
               {!vehicleLoading && vehicles.length > 0 && (
-                <select
+                <RoundedSelect
                   className="input"
                   value={selectedVehicleId}
                   onChange={(event) => setSelectedVehicleId(event.target.value)}
@@ -650,7 +659,7 @@ export function BookingFlow({
                       {formatVietnamesePlate(vehicle)}
                     </option>
                   ))}
-                </select>
+                </RoundedSelect>
               )}
             </label>
           {vehicleError && (
@@ -706,7 +715,7 @@ export function BookingFlow({
             >
               <label className="label">
                 Type
-                <select
+                <RoundedSelect
                   className="input"
                   value={vehicleForm.type}
                   onChange={(event) => {
@@ -719,7 +728,7 @@ export function BookingFlow({
                 >
                   <option value="motorcycle">Motorcycle</option>
                   <option value="car">Car</option>
-                </select>
+                </RoundedSelect>
               </label>
               <label className="label" style={{ gridColumn: "1 / -1" }}>
                 Vietnamese license plate
