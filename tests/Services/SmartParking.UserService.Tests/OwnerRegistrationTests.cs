@@ -35,33 +35,17 @@ public sealed class OwnerRegistrationTests
         }
         OwnerRegistrationDto Body(string email, string phone) => new() { FullName = "New Owner", BusinessName = "Company",
             Email = email, Phone = phone, Password = "Password@123", LotType = "basement", AgreedToPolicy = true };
-        OwnerLotSetupDto LotBody() => new() { Name = "Main Lot", Address = "123 Street", LotType = "basement",
-            TotalSlots = 100, Floors = 2, PolicyAccepted = true, HourlyRate = 15000, DailyRate = 100000, NightRate = 50000,
-            GracePeriodMinutes = 15, SubscriptionMonthly = 800000, SubscriptionYearly = 8000000 };
         async Task<OwnerApplicationDto> Register(string email, string phone)
         {
-            var result = await Run(s => s.RegisterAsync(Body(email, phone), default));
-            Assert.NotNull(result.SetupToken);
-            Assert.False(result.LotSetupComplete);
-            Assert.Null(result.Verification);
-
-            var setup = await Run(s => s.SubmitLotSetupAsync(new()
+            var result=await Run(s => s.RegisterAsync(Body(email, phone), default));
+            await using var db=new AppDbContext(options);
+            foreach(var challenge in new[]{result.Verification!})
             {
-                RegistrationId = result.Id,
-                SetupToken = result.SetupToken!,
-                Lot = LotBody()
-            }, default));
-            Assert.True(setup.LotSetupComplete);
-            Assert.NotNull(setup.Verification);
-
-            await using var db = new AppDbContext(options);
-            foreach (var challenge in new[] { setup.Verification! })
-            {
-                var delivery = await db.WorkflowDeliveries.SingleAsync(d => d.ChallengeId == challenge.ChallengeId);
-                var message = System.Text.Json.JsonSerializer.Deserialize<global::UserService.Application.Common.Interfaces.Services.WorkflowMessage>(new TestWorkflowProtector().Unprotect(delivery.ProtectedPayload))!;
-                await WorkflowTestSupport.Create(db, clock).VerifyOwnerAsync(challenge.ChallengeId, System.Text.RegularExpressions.Regex.Match(message.Body, @"\d{6}").Value, default);
+                var delivery=await db.WorkflowDeliveries.SingleAsync(d=>d.ChallengeId==challenge.ChallengeId);
+                var message=System.Text.Json.JsonSerializer.Deserialize<global::UserService.Application.Common.Interfaces.Services.WorkflowMessage>(new TestWorkflowProtector().Unprotect(delivery.ProtectedPayload))!;
+                await WorkflowTestSupport.Create(db,clock).VerifyOwnerAsync(challenge.ChallengeId,System.Text.RegularExpressions.Regex.Match(message.Body,@"\d{6}").Value,default);
             }
-            return setup;
+            return result;
         }
         Task<OwnerApplicationDto> Review(Guid id, string status) => Run(s => s.ReviewAsync(adminId, id,
             new() { Status = status, ReviewNote = " Reviewed " }, default));
@@ -105,10 +89,6 @@ public sealed class OwnerRegistrationTests
             }
             await Expect("CONTACT_EXISTS", () => Register("owner@example.com", "0922222222"));
             await Expect("CONTACT_EXISTS", () => Register("another@example.com", "0911111111"));
-            var incomplete = await Run(s => s.RegisterAsync(Body("incomplete@example.com", "0988888888"), default));
-            await Expect("SETUP_REQUIRED", () => Review(incomplete.Id, "approved"));
-            await Expect("INVALID_SETUP_TOKEN", () => Run(s => s.SubmitLotSetupAsync(new() { RegistrationId = incomplete.Id, SetupToken = "wrong", Lot = LotBody() }, default)));
-            await Expect("APPLICATION_NOT_FOUND", () => Run(s => s.SubmitLotSetupAsync(new() { RegistrationId = Guid.NewGuid(), SetupToken = "token", Lot = LotBody() }, default)));
             await Expect("FORBIDDEN", () => Run(s => s.ListAsync(pending.OwnerId, default)));
             await Expect("FORBIDDEN", () => Run(s => s.ReviewAsync(pending.OwnerId, pending.Id, new() { Status = "approved" }, default)));
             await Expect("APPLICATION_NOT_FOUND", () => Review(Guid.NewGuid(), "approved"));

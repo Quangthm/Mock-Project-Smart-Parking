@@ -72,8 +72,6 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         await using var tx=await db.Database.BeginTransactionAsync(ct);
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND status IN ('PENDING_VERIFICATION','PENDING_APPROVAL') AND (email={contact} OR phone={contact}) FOR UPDATE").SingleOrDefaultAsync(ct)
             ??throw Error("REGISTRATION_NOT_FOUND","Pending registration was not found.",404);
-        var app=await db.OwnerApplications.SingleOrDefaultAsync(a=>a.UserId==user.Id,ct);
-        if(app is not null && !app.LotSetupComplete) throw Error("SETUP_REQUIRED","Complete parking lot setup before recovering account.",400);
         var challenge=await db.AuthChallenges.SingleOrDefaultAsync(c=>c.UserId==user.Id && c.Purpose=="OWNER_CONTACT" && c.Channel=="email",ct)
             ??throw Error("REGISTRATION_NOT_FOUND","Pending Owner registration was not found.",404);
         // Recover registrations created under the old two-contact gate.
@@ -136,8 +134,6 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         var c=await LoadAsync(id,"OWNER_CONTACT",ct);
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").SingleAsync(ct);
         if(user.DeletedOn!=null || user.Status!=UserStatus.PendingVerification) throw Error("CHALLENGE_CLOSED","Account is no longer awaiting verification.",409);
-        var app=await db.OwnerApplications.SingleOrDefaultAsync(a=>a.UserId==user.Id,ct);
-        if(app is not null && !app.LotSetupComplete) throw Error("SETUP_REQUIRED","Complete parking lot setup before verifying account.",400);
         if(!await CheckAsync(c,code,ct)) {await tx.CommitAsync(ct);throw Error(c.LockedUntil!=null?"OTP_LOCKED":"OTP_INVALID","Invalid verification code.",c.LockedUntil!=null?423:400);}
         c.ConsumedAt=clock.GetUtcNow();c.CodeHash="";
         user.EmailVerifiedAt=clock.GetUtcNow();
@@ -158,8 +154,6 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         await using var tx=await db.Database.BeginTransactionAsync(ct);var c=await LoadAsync(id,"OWNER_CONTACT",ct);
         var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").SingleAsync(ct);
         if(user.Status!=UserStatus.PendingVerification || user.DeletedOn!=null) throw Error("CHALLENGE_CLOSED","Account is no longer awaiting verification.",409);
-        var app=await db.OwnerApplications.SingleOrDefaultAsync(a=>a.UserId==user.Id,ct);
-        if(app is not null && !app.LotSetupComplete) throw Error("SETUP_REQUIRED","Complete parking lot setup before requesting another code.",400);
         if(c.ResendAt>clock.GetUtcNow()) throw Error("OTP_COOLDOWN","Wait 60 seconds.",429);
         var code=RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
         while(passwords.Verify(code,c.CodeHash))code=RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");

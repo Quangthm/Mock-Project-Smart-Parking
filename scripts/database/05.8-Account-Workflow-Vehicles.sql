@@ -39,8 +39,4 @@ ALTER TABLE vehicles ALTER COLUMN original_plate TYPE VARCHAR(30);
 -- Records do not establish legal ownership; no claim/transfer workflow is added.
 DROP INDEX IF EXISTS uq_active_vehicle_plate;
 CREATE INDEX IF NOT EXISTS ix_active_vehicle_plate ON vehicles(normalized_plate) WHERE deleted_at IS NULL;
--- Add owner applications setup token and draft structure for Partner onboarding
-ALTER TABLE owner_applications ADD COLUMN IF NOT EXISTS setup_token VARCHAR(255);
-ALTER TABLE owner_applications ADD COLUMN IF NOT EXISTS draft_structure JSONB;
-ALTER TABLE owner_applications ADD COLUMN IF NOT EXISTS lot_setup_complete BOOLEAN NOT NULL DEFAULT FALSE;
 COMMIT;

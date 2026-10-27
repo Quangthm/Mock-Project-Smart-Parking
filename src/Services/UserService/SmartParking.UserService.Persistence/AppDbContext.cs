@@ -63,9 +63,6 @@ namespace UserService.Persistence
                 entity.Property(e => e.UserId).HasColumnName("user_id");
                 entity.Property(e => e.BusinessName).HasColumnName("business_name").HasMaxLength(255);
                 entity.Property(e => e.LotType).HasColumnName("lot_type").HasMaxLength(30);
-                entity.Property(e => e.SetupToken).HasColumnName("setup_token").HasMaxLength(255);
-                entity.Property(e => e.LotSetupComplete).HasColumnName("lot_setup_complete");
-                entity.Property(e => e.DraftStructure).HasColumnName("draft_structure").HasColumnType("jsonb");
                 entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20);
                 entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
                 entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");

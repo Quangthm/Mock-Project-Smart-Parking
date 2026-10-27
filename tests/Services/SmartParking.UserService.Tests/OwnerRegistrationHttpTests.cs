@@ -27,8 +27,6 @@ public sealed class OwnerRegistrationHttpTests
             "owner@example.com", "0911111111", "basement", "pending", DateTimeOffset.UtcNow, null, null, null);
         public Task<OwnerApplicationDto> RegisterAsync(OwnerRegistrationDto body, CancellationToken ct)
         { Calls++; return Task.FromResult(record); }
-        public Task<OwnerApplicationDto> SubmitLotSetupAsync(SubmitLotSetupRequestDto body, CancellationToken ct)
-        { Calls++; return Task.FromResult(record with { LotSetupComplete = true, LotSetup = body.Lot }); }
         public Task<IReadOnlyList<OwnerApplicationDto>> ListAsync(Guid adminId, CancellationToken ct)
         { Calls++; return Task.FromResult<IReadOnlyList<OwnerApplicationDto>>([record]); }
         public Task<OwnerApplicationDto> ReviewAsync(Guid adminId, Guid id, ReviewOwnerDto body, CancellationToken ct)
@@ -81,31 +79,6 @@ public sealed class OwnerRegistrationHttpTests
         Assert.False(data.TryGetProperty("password", out _));
         Assert.False(data.TryGetProperty("accessToken", out _));
         var id = data.GetProperty("id").GetGuid();
-
-        var lotResponse = await client.PostAsJsonAsync("/api/auth/register/owner/lot-setup", new SubmitLotSetupRequestDto
-        {
-            RegistrationId = id,
-            SetupToken = "test-token",
-            Lot = new()
-            {
-                Name = "Test Lot",
-                Address = "123 Street",
-                LotType = "basement",
-                TotalSlots = 100,
-                Floors = 2,
-                PolicyAccepted = true,
-                HourlyRate = 15000,
-                DailyRate = 100000,
-                NightRate = 50000,
-                GracePeriodMinutes = 15,
-                SubscriptionMonthly = 800000,
-                SubscriptionYearly = 8000000
-            }
-        });
-        Assert.Equal(HttpStatusCode.OK, lotResponse.StatusCode);
-        var lotData = (await lotResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
-        Assert.True(lotData.GetProperty("lotSetupComplete").GetBoolean());
-
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/owner-applications")).StatusCode);
         async Task Login()
         {
