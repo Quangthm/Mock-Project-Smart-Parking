@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
 using SmartParking.ReservationService.Application.Common.Models.Exceptions;
 using SmartParking.ReservationService.Application.DTOs;
@@ -83,7 +84,7 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
         if (vehicleType is not ("CAR" or "MOTORCYCLE"))
             throw new ReservationGateException(400, "INVALID_VEHICLE_TYPE", "Vehicle type must be CAR or MOTORCYCLE.");
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         await LockPlateAsync(siteId, normalizedPlate, ct);
         if (await db.ParkingSessions.AnyAsync(s => s.TenantId == tenantId && s.SiteId == siteId &&
             s.NormalizedPlate == normalizedPlate && s.ExitTime == null, ct))
@@ -105,10 +106,10 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
     public async Task<WalkInParkingSession> CheckOutWalkInAsync(
         Guid tenantId, Guid siteId, Guid sessionId, string plate, string? imageData, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var session = await db.ParkingSessions
-            .FromSqlInterpolated($"SELECT * FROM parking_sessions WHERE id = {sessionId} AND tenant_id = {tenantId} AND site_id = {siteId} AND reservation_id IS NULL FOR UPDATE")
-            .SingleOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(s => s.Id == sessionId && s.TenantId == tenantId &&
+                s.SiteId == siteId && s.ReservationId == null, ct);
         if (session is null)
             throw new ReservationGateException(404, "WALK_IN_SESSION_NOT_FOUND", "Active walk-in session was not found.");
         var storedPlate = session.OriginalPlate ?? session.NormalizedPlate ?? "";
@@ -155,10 +156,10 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
         Guid tenantId, Guid siteId, Guid actorId, Guid reservationId,
         string? recognizedPlate, string? imageData, bool checkIn, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var reservation = await db.Reservations
-            .FromSqlInterpolated($"SELECT * FROM reservations WHERE id = {reservationId} AND tenant_id = {tenantId} AND site_id = {siteId} FOR UPDATE")
-            .SingleOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(r => r.Id == reservationId && r.TenantId == tenantId &&
+                r.SiteId == siteId, ct);
         if (reservation is null)
             throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");
 
@@ -211,8 +212,9 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
         else
         {
             var session = await db.ParkingSessions
-                .FromSqlInterpolated($"SELECT * FROM parking_sessions WHERE reservation_id = {reservationId} AND tenant_id = {tenantId} AND site_id = {siteId} AND session_status = 'ACTIVE' FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefaultAsync(s => s.ReservationId == reservationId &&
+                    s.TenantId == tenantId && s.SiteId == siteId &&
+                    s.SessionStatus == "ACTIVE", ct);
             if (session is null)
                 throw new ReservationGateException(409, "ACTIVE_SESSION_NOT_FOUND", "No active parking session exists for this reservation.");
             session.ExitTime = now;
@@ -272,13 +274,13 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
             return new ReservationGateEntry(r.Id, r.AccountId, r.SiteId, r.SiteId.ToString(),
                 slotId, slotId?.ToString() ?? "Unassigned", r.OriginalPlate ?? r.NormalizedPlate ?? "",
                 MapStatus(r.Status), null, null, null, r.ExpectedStartTime, r.ExpectedEndTime,
-                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt);
+                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt,
+                r.VehicleType);
         }).ToArray();
     }
 
-    private Task<int> LockPlateAsync(Guid siteId, string plate, CancellationToken ct) =>
-        db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({$"{siteId:N}:{plate}"}, 0))", ct);
+    private static Task LockPlateAsync(Guid siteId, string plate, CancellationToken ct) =>
+        Task.CompletedTask;
 
     private static void VerifyPlate(string expected, string? recognized)
     {

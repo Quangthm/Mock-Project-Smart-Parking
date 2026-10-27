@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
+using Microsoft.EntityFrameworkCore;
 using SmartParking.ParkingService.Application;
 using SmartParking.ParkingService.Domain;
 using SmartParking.ParkingService.Persistence;
@@ -17,6 +18,9 @@ public static class ParkingHost
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Parking") ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking.")));
+        builder.Services.AddDbContext<ParkingDbContext>(options =>
+            options.UseNpgsql(builder.Configuration.GetConnectionString("Parking")
+                ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking.")));
         builder.Services.AddHttpContextAccessor();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false)));
         builder.Services.AddHttpClient<OwnerIdentityClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
@@ -74,25 +78,27 @@ public static class ParkingHost
                 await context.Response.WriteAsJsonAsync(new { success = false, code = e.Code, message = e.Message });
             }
         });
-        app.MapPut("/internal/tenants/{id:guid}", async (Guid id, TenantBody body, NpgsqlDataSource source, CancellationToken ct) =>
+        app.MapPut("/internal/tenants/{id:guid}", async (Guid id, TenantBody body, ParkingDbContext db, CancellationToken ct) =>
         {
             if (id == Guid.Empty || string.IsNullOrWhiteSpace(body.Name) || body.Name.Length > 255 || string.IsNullOrWhiteSpace(body.Email) || body.Email.Length > 255 || string.IsNullOrWhiteSpace(body.Phone) || body.Phone.Length > 20) return Results.BadRequest();
-            await using var db = await source.OpenConnectionAsync(ct);
-            await using var cmd = new NpgsqlCommand("INSERT INTO tenants(id,code,name,contact_email,contact_phone) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING", db);
-            cmd.Parameters.AddWithValue(id); cmd.Parameters.AddWithValue("T-" + id.ToString("N")); cmd.Parameters.AddWithValue(body.Name); cmd.Parameters.AddWithValue(body.Email); cmd.Parameters.AddWithValue(body.Phone);
-            await cmd.ExecuteNonQueryAsync(ct);
-            await using var check = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM tenants WHERE id=$1 AND name=$2 AND contact_email=$3 AND contact_phone=$4 AND status='ACTIVE' AND deleted_at IS NULL)", db);
-            check.Parameters.AddWithValue(id); check.Parameters.AddWithValue(body.Name); check.Parameters.AddWithValue(body.Email); check.Parameters.AddWithValue(body.Phone);
-            return (bool)(await check.ExecuteScalarAsync(ct))! ? Results.NoContent() : Results.Conflict();
+            var tenant = await db.Tenants.FindAsync([id], ct);
+            if (tenant is null)
+                db.Tenants.Add(new TenantEntity { Id = id, Code = "T-" + id.ToString("N"), Name = body.Name, Email = body.Email, Phone = body.Phone });
+            await db.SaveChangesAsync(ct);
+            tenant = await db.Tenants.AsNoTracking().SingleAsync(x => x.Id == id, ct);
+            return tenant.Name == body.Name && tenant.Email == body.Email && tenant.Phone == body.Phone &&
+                tenant.Status == "ACTIVE" && tenant.DeletedAt is null ? Results.NoContent() : Results.Conflict();
         });
-        app.MapPost("/internal/sites/validate", async (SiteValidation body, NpgsqlDataSource source, CancellationToken ct) =>
+        app.MapPost("/internal/sites/validate", async (SiteValidation body, ParkingDbContext db, CancellationToken ct) =>
         {
             if (body.SiteIds is null || body.TenantIds is null || body.SiteIds.Length > 100 || body.TenantIds.Length > 100) return Results.BadRequest();
-            await using var db = await source.OpenConnectionAsync(ct);
-            await using var cmd = new NpgsqlCommand("SELECT s.id,s.tenant_id FROM parking_sites s JOIN tenants t ON t.id=s.tenant_id WHERE s.id=ANY($1) AND s.tenant_id=ANY($2) AND s.status='ACTIVE' AND s.deleted_at IS NULL AND t.status='ACTIVE' AND t.deleted_at IS NULL ORDER BY s.id", db);
-            cmd.Parameters.AddWithValue(body.SiteIds); cmd.Parameters.AddWithValue(body.TenantIds);
-            var sites = new List<object>(); await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct)) sites.Add(new { id = reader.GetGuid(0), tenantId = reader.GetGuid(1) });
+            var sites = await (from site in db.ParkingSites.AsNoTracking()
+                join tenant in db.Tenants.AsNoTracking() on site.TenantId equals tenant.Id
+                where body.SiteIds.Contains(site.Id) && body.TenantIds.Contains(site.TenantId) &&
+                    site.Status == "ACTIVE" && site.DeletedAt == null &&
+                    tenant.Status == "ACTIVE" && tenant.DeletedAt == null
+                orderby site.Id
+                select new { id = site.Id, tenantId = site.TenantId }).ToListAsync(ct);
             return Results.Ok(sites);
         });
         app.MapPost("/internal/gate-sites/{siteId:guid}/slots/claim", async (

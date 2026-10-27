@@ -736,6 +736,7 @@ if ($settings['VITE_MAPTILER_API_KEY']) {
 $aiDefaults = [ordered]@{
     'VITE_AI_API_BASE_URL'      = 'http://localhost:5001'
     'VITE_AI_LIVE_API_BASE_URL' = 'http://localhost:5002'
+    'VITE_PAYMENT_API_BASE_URL' = 'http://localhost:5065'
 }
 if ($settings['VITE_AI_API_BASE_URL']) { $aiDefaults['VITE_AI_API_BASE_URL'] = $settings['VITE_AI_API_BASE_URL'] }
 if ($settings['VITE_AI_LIVE_API_BASE_URL']) { $aiDefaults['VITE_AI_LIVE_API_BASE_URL'] = $settings['VITE_AI_LIVE_API_BASE_URL'] }

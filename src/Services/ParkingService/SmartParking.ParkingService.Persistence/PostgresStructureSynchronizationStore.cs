@@ -1,43 +1,38 @@
-using Npgsql;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SmartParking.ParkingService.Application;
+using SmartParking.ParkingService.Domain;
 
 namespace SmartParking.ParkingService.Persistence;
 
-public sealed class PostgresStructureSynchronizationStore(NpgsqlDataSource source, ParkingGateConnectionPool gates)
+public sealed class PostgresStructureSynchronizationStore(ParkingDbContext db, ParkingGateConnectionPool gates)
     : IStructureSynchronizationStore
 {
     public async Task<IAsyncDisposable?> TryLockSiteAsync(Guid siteId, CancellationToken ct)
     {
         var lease = await gates.TryOpenAsync(ct);
         if (lease is null) return null;
-        var connection = lease.Connection;
         try
         {
             await using var command = new NpgsqlCommand(
-                "SELECT pg_try_advisory_lock(hashtextextended($1::text,2))", connection);
+                "SELECT pg_try_advisory_lock(hashtextextended($1::text,2))", lease.Connection);
             command.Parameters.AddWithValue(siteId);
-            if ((bool)(await command.ExecuteScalarAsync(ct))!)
-                return new SiteGate(lease, siteId);
+            if ((bool)(await command.ExecuteScalarAsync(ct))!) return new SiteGate(lease, siteId);
             await lease.DisposeAsync();
             return null;
         }
-        catch
-        {
-            await lease.DisposeAsync();
-            throw;
-        }
+        catch { await lease.DisposeAsync(); throw; }
     }
 
     private sealed class SiteGate(ParkingGateConnectionPool.ConnectionLease lease, Guid siteId) : IAsyncDisposable
     {
-        private NpgsqlConnection Connection => lease.Connection;
         public async ValueTask DisposeAsync()
         {
             try
             {
                 await using var command = new NpgsqlCommand(
-                    "SELECT pg_advisory_unlock(hashtextextended($1::text,2))", Connection);
+                    "SELECT pg_advisory_unlock(hashtextextended($1::text,2))", lease.Connection);
                 command.Parameters.AddWithValue(siteId);
                 await command.ExecuteNonQueryAsync();
             }
@@ -45,104 +40,59 @@ public sealed class PostgresStructureSynchronizationStore(NpgsqlDataSource sourc
         }
     }
 
+    private static StructureSynchronization Map(StructureSynchronizationEntity e) =>
+        new(e.Token, e.TenantId, e.SiteId, e.OperationId, e.State,
+            e.Outcome is null ? null : JsonSerializer.Deserialize<StructureOutcome>(e.Outcome, StructureSynchronizationJson.Options));
+
     public async Task PrepareAsync(StructureSynchronization synchronization, CancellationToken ct)
     {
-        await using var connection = await source.OpenConnectionAsync(ct);
-        // Check scope locally before creating a hold in another service.
-        await using var command = new NpgsqlCommand("""
-            INSERT INTO structure_synchronizations(token,tenant_id,site_id,operation_id,state)
-            SELECT $1,s.tenant_id,s.id,$4::uuid,'preparing' FROM parking_sites s
-            JOIN tenants t ON t.id=s.tenant_id
-            WHERE s.id=$3 AND s.tenant_id=$2 AND s.deleted_at IS NULL
-                AND t.status='ACTIVE' AND t.deleted_at IS NULL
-            """, connection);
-        command.Parameters.AddWithValue(synchronization.Token);
-        command.Parameters.AddWithValue(synchronization.TenantId);
-        command.Parameters.AddWithValue(synchronization.SiteId);
-        command.Parameters.Add(new NpgsqlParameter { Value = (object?)synchronization.OperationId ?? DBNull.Value });
-        if (await command.ExecuteNonQueryAsync(ct) != 1)
-            throw new SmartParking.ParkingService.Domain.StructureException(
-                "SITE_NOT_FOUND", "Site is not in the active tenant scope.");
-    }
-
-    public async Task<IReadOnlyList<StructureSynchronization>> PendingAsync(Guid? siteId, CancellationToken ct)
-    {
-        await using var connection = await source.OpenConnectionAsync(ct);
-        await using var command = new NpgsqlCommand("""
-            SELECT token,tenant_id,site_id,operation_id,state,outcome::text
-            FROM structure_synchronizations
-            WHERE state<>'completed' AND ($1::uuid IS NULL OR site_id=$1)
-            ORDER BY created_at,token
-            """, connection);
-        command.Parameters.Add(new NpgsqlParameter { Value = (object?)siteId ?? DBNull.Value });
-        var result = new List<StructureSynchronization>();
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
+        var valid = await (from site in db.ParkingSites
+            join tenant in db.Tenants on site.TenantId equals tenant.Id
+            where site.Id == synchronization.SiteId && site.TenantId == synchronization.TenantId &&
+                site.DeletedAt == null && tenant.Status == "ACTIVE" && tenant.DeletedAt == null
+            select site.Id).AnyAsync(ct);
+        if (!valid) throw new StructureException("SITE_NOT_FOUND", "Site is not in the active tenant scope.");
+        db.StructureSynchronizations.Add(new StructureSynchronizationEntity
         {
-            var outcome = reader.IsDBNull(5) ? null :
-                JsonSerializer.Deserialize<StructureOutcome>(reader.GetString(5), StructureSynchronizationJson.Options);
-            result.Add(new StructureSynchronization(
-                reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2),
-                reader.IsDBNull(3) ? null : reader.GetGuid(3), reader.GetString(4), outcome));
-        }
-        return result;
+            Token = synchronization.Token, TenantId = synchronization.TenantId, SiteId = synchronization.SiteId,
+            OperationId = synchronization.OperationId, State = "preparing", Outcome = null,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync(ct);
     }
 
+    public async Task<IReadOnlyList<StructureSynchronization>> PendingAsync(Guid? siteId, CancellationToken ct) =>
+        (await db.StructureSynchronizations.AsNoTracking()
+            .Where(x => x.State != "completed" && (siteId == null || x.SiteId == siteId))
+            .OrderBy(x => x.CreatedAt).ThenBy(x => x.Token).ToListAsync(ct)).Select(Map).ToList();
 
     public async Task<StructureSynchronization> FencePreparationAsync(Guid token, CancellationToken ct)
     {
-        await using var connection = await source.OpenConnectionAsync(ct);
-        // This UPDATE waits for an in-flight physical transaction that has already
-        // changed the same row to ready. If recovery wins first, CommitAsync can
-        // no longer change preparing -> ready, so all physical writes roll back.
-        await using (var fence = new NpgsqlCommand("""
-            UPDATE structure_synchronizations SET state='aborting',updated_at=now()
-            WHERE token=$1 AND state='preparing'
-            """, connection))
+        var row = await db.StructureSynchronizations.FirstOrDefaultAsync(x => x.Token == token, ct)
+            ?? throw new InvalidOperationException("Synchronization token does not exist.");
+        if (row.State == "preparing")
         {
-            fence.Parameters.AddWithValue(token);
-            await fence.ExecuteNonQueryAsync(ct);
+            row.State = "aborting";
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
         }
-
-        await using var command = new NpgsqlCommand("""
-            SELECT token,tenant_id,site_id,operation_id,state,outcome::text
-            FROM structure_synchronizations WHERE token=$1
-            """, connection);
-        command.Parameters.AddWithValue(token);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct))
-            throw new InvalidOperationException("Synchronization token does not exist.");
-
-        var outcome = reader.IsDBNull(5) ? null :
-            JsonSerializer.Deserialize<StructureOutcome>(reader.GetString(5), StructureSynchronizationJson.Options);
-        return new StructureSynchronization(
-            reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2),
-            reader.IsDBNull(3) ? null : reader.GetGuid(3), reader.GetString(4), outcome);
+        return Map(row);
     }
 
     public async Task AcknowledgeAsync(Guid token, CancellationToken ct)
     {
-        await using var connection = await source.OpenConnectionAsync(ct);
-        await using var transaction = await connection.BeginTransactionAsync(ct);
-        // A ready row proves the physical edit committed, so its operation may
-        // finish. An abandoned preparation must not finish an unexecuted operation.
-        await using (var operation = new NpgsqlCommand("""
-            UPDATE structure_operations o SET status='completed',reason=NULL,updated_at=now()
-            FROM structure_synchronizations s
-            WHERE s.token=$1 AND s.state='ready' AND o.id=s.operation_id
-                AND o.physical_committed AND o.site_id=s.site_id AND o.tenant_id=s.tenant_id
-            """, connection, transaction))
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var sync = await db.StructureSynchronizations.FirstOrDefaultAsync(x => x.Token == token, ct);
+        if (sync is null) return;
+        if (sync.State == "ready" && sync.OperationId is { } operationId)
         {
-            operation.Parameters.AddWithValue(token);
-            await operation.ExecuteNonQueryAsync(ct);
+            var operation = await db.StructureOperations.FirstOrDefaultAsync(x =>
+                x.Id == operationId && x.PhysicalCommitted && x.SiteId == sync.SiteId && x.TenantId == sync.TenantId, ct);
+            if (operation is not null) { operation.Status = "completed"; operation.Reason = null; operation.UpdatedAt = DateTimeOffset.UtcNow; }
         }
-        await using (var synchronization = new NpgsqlCommand(
-            "UPDATE structure_synchronizations SET state='completed',updated_at=now() WHERE token=$1",
-            connection, transaction))
-        {
-            synchronization.Parameters.AddWithValue(token);
-            await synchronization.ExecuteNonQueryAsync(ct);
-        }
+        sync.State = "completed";
+        sync.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
     }
 }

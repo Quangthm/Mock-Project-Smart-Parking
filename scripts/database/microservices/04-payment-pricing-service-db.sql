@@ -44,6 +44,92 @@ CREATE TABLE policy_revisions (
 CREATE INDEX idx_policy_revisions_lookup ON policy_revisions(policy_id, effective_from);
 CREATE INDEX idx_policy_revisions_scope ON policy_revisions(scope_type, scope_id);
 
+-- 2.1 DỮ LIỆU MẪU CHO MÔI TRƯỜNG DEV
+-- Đồng bộ với SmartPark Demo Site trong facility-db.
+INSERT INTO tariffs (
+    id, tenant_id, site_id, name, vehicle_type,
+    free_parking_grace_minutes, tariff_rules, is_active
+)
+VALUES
+(
+    'c0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000001',
+    'b0000000-0000-4000-8000-000000000001',
+    'SmartPark Demo Car Tariff',
+    'CAR',
+    15,
+    '{
+      "timeZoneId": "Asia/Ho_Chi_Minh",
+      "roundingMode": "HALF_UP_THOUSAND",
+      "timeBlocks": [
+        {"blockCode": "DAY_SHIFT", "startTime": "06:00", "endTime": "18:00", "ratePerHourVnd": 20000},
+        {"blockCode": "NIGHT_SHIFT", "startTime": "18:00", "endTime": "06:00", "ratePerHourVnd": 30000}
+      ]
+    }'::jsonb,
+    TRUE
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO tariffs (
+    id, tenant_id, site_id, name, vehicle_type,
+    free_parking_grace_minutes, tariff_rules, is_active
+)
+VALUES
+(
+    'c0000000-0000-4000-8000-000000000002',
+    'a0000000-0000-4000-8000-000000000001',
+    'b0000000-0000-4000-8000-000000000001',
+    'SmartPark Demo Motorcycle Tariff',
+    'MOTORCYCLE',
+    15,
+    '{
+      "timeZoneId": "Asia/Ho_Chi_Minh",
+      "roundingMode": "HALF_UP_THOUSAND",
+      "timeBlocks": [
+        {"blockCode": "DAY_SHIFT", "startTime": "06:00", "endTime": "18:00", "ratePerHourVnd": 10000},
+        {"blockCode": "NIGHT_SHIFT", "startTime": "18:00", "endTime": "06:00", "ratePerHourVnd": 15000}
+      ]
+    }'::jsonb,
+    TRUE
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO policy_revisions (
+    id, policy_id, policy_type, revision_number, effective_from,
+    scope_type, scope_id, policy_values, created_by
+)
+SELECT
+    'd0000000-0000-4000-8000-000000000001',
+    'c0000000-0000-4000-8000-000000000001',
+    'TARIFF',
+    1,
+    CURRENT_TIMESTAMP,
+    'SITE',
+    'b0000000-0000-4000-8000-000000000001',
+    t.tariff_rules,
+    'a0000000-0000-4000-8000-000000000001'
+FROM tariffs t
+WHERE t.id = 'c0000000-0000-4000-8000-000000000001'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO policy_revisions (
+    id, policy_id, policy_type, revision_number, effective_from,
+    scope_type, scope_id, policy_values, created_by
+)
+SELECT
+    'd0000000-0000-4000-8000-000000000002',
+    'c0000000-0000-4000-8000-000000000002',
+    'TARIFF',
+    1,
+    CURRENT_TIMESTAMP,
+    'SITE',
+    'b0000000-0000-4000-8000-000000000001',
+    t.tariff_rules,
+    'a0000000-0000-4000-8000-000000000001'
+FROM tariffs t
+WHERE t.id = 'c0000000-0000-4000-8000-000000000002'
+ON CONFLICT (id) DO NOTHING;
+
 -- 3. BẢNG ĐƠN HÀNG THANH TOÁN (PAYMENT ORDERS)
 CREATE TABLE payment_orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -72,6 +158,11 @@ CREATE INDEX idx_payment_orders_tenant_site ON payment_orders(tenant_id, site_id
 CREATE INDEX idx_payment_orders_account ON payment_orders(account_id);
 CREATE INDEX idx_payment_orders_reference ON payment_orders(reference_type, reference_id);
 CREATE INDEX idx_payment_orders_status ON payment_orders(status);
+-- Checkout is created before the gate transition. The order remains durable while
+-- the operator waits in payOS or refreshes the browser.
+CREATE INDEX idx_payment_orders_pending_checkout
+    ON payment_orders(site_id, status, expires_at)
+    WHERE status = 'PENDING';
 
 -- 4. BẢNG GIAO DỊCH DÒNG TIỀN (PAYMENT TRANSACTIONS)
 CREATE TABLE payment_transactions (
@@ -91,6 +182,11 @@ CREATE TABLE payment_transactions (
 CREATE INDEX idx_payment_transactions_order ON payment_transactions(payment_order_id);
 CREATE UNIQUE INDEX idx_provider_transaction_unique ON payment_transactions(payment_method, gateway_transaction_id) 
     WHERE gateway_transaction_id IS NOT NULL;
+-- A successful transaction is the durable prerequisite for ReservationService
+-- to complete a parking-session check-out. CASH and demo-payOS use this table too.
+CREATE INDEX idx_payment_transactions_pending_reconciliation
+    ON payment_transactions(payment_order_id, status)
+    WHERE status IN ('PENDING', 'UNKNOWN');
 
 -- 5. BẢNG HÓA ĐƠN KẾ TOÁN (INVOICES - HỖ TRỢ CẢ PHIÊN ĐỖ VÀ VÉ THÁNG/ĐẶT CHỖ)
 CREATE TABLE invoices (

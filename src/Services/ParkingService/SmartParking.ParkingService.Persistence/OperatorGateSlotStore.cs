@@ -1,11 +1,12 @@
 using Npgsql;
+using Microsoft.EntityFrameworkCore;
 using SmartParking.ParkingService.Domain;
 
 namespace SmartParking.ParkingService.Persistence;
 
 public sealed record OperatorGateSlot(Guid Id, string Code, string VehicleType);
 
-public sealed class OperatorGateSlotStore(NpgsqlDataSource source)
+public sealed class OperatorGateSlotStore(NpgsqlDataSource source, ParkingDbContext db)
 {
     public async Task<OperatorGateSlot> ClaimAvailableAsync(
         Guid tenantId,
@@ -71,16 +72,10 @@ public sealed class OperatorGateSlotStore(NpgsqlDataSource source)
 
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = new NpgsqlCommand("""
-            UPDATE parking_slots
-            SET physical_state = 'AVAILABLE', updated_at = now()
-            WHERE tenant_id = $1 AND site_id = $2 AND id = $3
-              AND physical_state = 'OCCUPIED'
-            """, db);
-        command.Parameters.AddWithValue(tenantId);
-        command.Parameters.AddWithValue(siteId);
-        command.Parameters.AddWithValue(slotId);
-        await command.ExecuteNonQueryAsync(ct);
+        await db.ParkingSlotsFull.Where(x => x.TenantId == tenantId && x.SiteId == siteId &&
+            x.Id == slotId && x.PhysicalState == "OCCUPIED")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.PhysicalState, "AVAILABLE")
+                .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow), ct);
     }
 }
