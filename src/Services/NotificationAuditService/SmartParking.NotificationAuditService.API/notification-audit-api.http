@@ -1,4 +1,7 @@
 @baseUrl = http://localhost:5068
+@driverId = 11111111-1111-1111-1111-111111111111
+@otherUserId = 22222222-2222-2222-2222-222222222222
+@notificationId = 33333333-3333-3333-3333-333333333333
 
 ### 1. Health Check (Happy Path)
 # Kiểm tra trạng thái hoạt động của Notification & Audit Service
@@ -9,3 +12,43 @@ Accept: application/json
 # Lấy OpenAPI v3 JSON Schema
 GET {{baseUrl}}/openapi/v1.json
 Accept: application/json
+
+### 3. Get Driver Notifications (Happy Path)
+# Lấy danh sách thông báo của tài xế hiện tại
+GET {{baseUrl}}/api/notifications?limit=20
+Accept: application/json
+X-User-Id: {{driverId}}
+X-User-Role: Driver
+
+### 4. Get Notification by ID (Happy Path)
+# Lấy chi tiết thông báo hợp lệ của tài xế
+GET {{baseUrl}}/api/notifications/{{notificationId}}
+Accept: application/json
+X-User-Id: {{driverId}}
+X-User-Role: Driver
+
+### 5. Retry Notification Delivery (Happy Path)
+# Thử lại việc chuyển phát thông báo đã thất bại
+POST {{baseUrl}}/api/notifications/{{notificationId}}/retry
+Accept: application/json
+X-User-Id: {{driverId}}
+X-User-Role: Driver
+
+### 6. Get Notifications without Auth Header (Validation/Auth Error - Expect 401)
+# Yêu cầu bị từ chối do thiếu định danh người dùng
+GET {{baseUrl}}/api/notifications
+Accept: application/json
+
+### 7. Get Notification by ID - Cross-User Disclosure Attempt (Expect 403 Forbidden)
+# Người dùng khác cố tình đọc thông báo không thuộc quyền sở hữu của mình
+GET {{baseUrl}}/api/notifications/{{notificationId}}
+Accept: application/json
+X-User-Id: {{otherUserId}}
+X-User-Role: Driver
+
+### 8. Retry Notification Delivery - Not Found (Expect 404 Not Found)
+# Thử lại một thông báo không tồn tại trong hệ thống
+POST {{baseUrl}}/api/notifications/00000000-0000-0000-0000-000000000000/retry
+Accept: application/json
+X-User-Id: {{driverId}}
+X-User-Role: Driver

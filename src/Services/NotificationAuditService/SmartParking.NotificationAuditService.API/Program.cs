@@ -1,9 +1,12 @@
 using System.Text.Json.Serialization;
 using SmartParking.NotificationAuditService.API.Middleware;
+using SmartParking.NotificationAuditService.API.Services;
 using SmartParking.NotificationAuditService.Application;
+using SmartParking.NotificationAuditService.Application.Common.Interfaces.Services;
 using SmartParking.NotificationAuditService.Infrastructure;
 using SmartParking.NotificationAuditService.Persistence;
 using SmartParking.NotificationAuditService.Persistence.Context;
+using SmartParking.NotificationAuditService.Persistence.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +17,8 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 
@@ -23,6 +28,23 @@ builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();
+
+// Seed default templates if database is accessible
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<NotificationAuditDbContext>();
+        if (await db.Database.CanConnectAsync())
+        {
+            await NotificationTemplateSeeder.SeedAsync(db);
+        }
+    }
+    catch
+    {
+        // Safe startup in offline/unit environment
+    }
+}
 
 // Configure the HTTP request pipeline
 app.UseMiddleware<ExceptionHandlingMiddleware>();

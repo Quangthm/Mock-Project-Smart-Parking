@@ -1,6 +1,8 @@
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.NotificationAuditService.Application.Common.Interfaces.Ports;
+using SmartParking.NotificationAuditService.Infrastructure.Adapters.Delivery;
 using SmartParking.NotificationAuditService.Infrastructure.Consumers;
 using SmartParking.NotificationAuditService.Infrastructure.Options;
 
@@ -14,6 +16,12 @@ public static class InfrastructureDependencyInjection
     {
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
 
+        // Delivery Adapters (Local Fixtures) & Dispatcher
+        services.AddScoped<INotificationChannelAdapter, InAppDeliveryAdapter>();
+        services.AddScoped<INotificationChannelAdapter, LocalEmailCaptureAdapter>();
+        services.AddScoped<INotificationChannelAdapter, LocalSmsFixtureAdapter>();
+        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+
         var useInMemory = configuration.GetValue<bool>("RabbitMQ:UseInMemory");
 
         services.AddMassTransit(x =>
@@ -21,6 +29,8 @@ public static class InfrastructureDependencyInjection
             x.SetKebabCaseEndpointNameFormatter();
 
             x.AddConsumer<AuditProjectionConsumer>();
+            x.AddConsumer<ReservationNotificationConsumer>();
+            x.AddConsumer<PaymentNotificationConsumer>();
 
             if (useInMemory)
             {

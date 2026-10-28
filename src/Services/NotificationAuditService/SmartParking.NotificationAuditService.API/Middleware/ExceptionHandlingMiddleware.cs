@@ -62,6 +62,24 @@ public sealed class ExceptionHandlingMiddleware
                 message = domainEx.Message;
                 break;
 
+            case NotificationForbiddenException forbiddenEx:
+                statusCode = (int)HttpStatusCode.Forbidden;
+                errorCode = "FORBIDDEN";
+                message = forbiddenEx.Message;
+                break;
+
+            case KeyNotFoundException notFoundEx:
+                statusCode = (int)HttpStatusCode.NotFound;
+                errorCode = "NOT_FOUND";
+                message = notFoundEx.Message;
+                break;
+
+            case UnauthorizedAccessException unauthorizedEx:
+                statusCode = (int)HttpStatusCode.Unauthorized;
+                errorCode = "UNAUTHORIZED";
+                message = unauthorizedEx.Message;
+                break;
+
             default:
                 _logger.LogError(exception, "Unhandled exception occurred");
                 statusCode = (int)HttpStatusCode.InternalServerError;
