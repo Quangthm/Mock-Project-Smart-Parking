@@ -64,16 +64,6 @@ public class CentralAuditProjectionConfiguration : IEntityTypeConfiguration<Cent
             .HasDefaultValueSql("CURRENT_TIMESTAMP")
             .IsRequired();
 
-        builder.Property(a => a.CreatedAt)
-            .HasColumnName("created_at")
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .IsRequired();
-
-        builder.Property(a => a.UpdatedAt)
-            .HasColumnName("updated_at")
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .IsRequired();
-
         builder.HasIndex(a => a.EventId)
             .IsUnique();
 

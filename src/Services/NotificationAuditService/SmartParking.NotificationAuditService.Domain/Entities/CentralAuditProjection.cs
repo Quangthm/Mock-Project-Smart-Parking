@@ -1,10 +1,10 @@
-using SmartParking.NotificationAuditService.Domain.Common;
 using SmartParking.NotificationAuditService.Domain.Exceptions;
 
 namespace SmartParking.NotificationAuditService.Domain.Entities;
 
-public class CentralAuditProjection : BaseEntity
+public class CentralAuditProjection
 {
+    public Guid Id { get; private set; } = Guid.NewGuid();
     public string OriginatingService { get; private set; } = string.Empty;
     public Guid EventId { get; private set; }
     public Guid ActorId { get; private set; }
@@ -56,9 +56,7 @@ public class CentralAuditProjection : BaseEntity
             ResourceId = resourceId,
             Details = string.IsNullOrWhiteSpace(details) ? "{}" : details.Trim(),
             OccurredAt = occurredAt,
-            ProjectedAt = DateTimeOffset.UtcNow,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
+            ProjectedAt = DateTimeOffset.UtcNow
         };
     }
 }

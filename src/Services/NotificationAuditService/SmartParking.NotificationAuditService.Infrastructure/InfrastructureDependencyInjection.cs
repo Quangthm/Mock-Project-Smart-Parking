@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.NotificationAuditService.Infrastructure.Consumers;
 using SmartParking.NotificationAuditService.Infrastructure.Options;
 
 namespace SmartParking.NotificationAuditService.Infrastructure;
@@ -18,6 +19,8 @@ public static class InfrastructureDependencyInjection
         services.AddMassTransit(x =>
         {
             x.SetKebabCaseEndpointNameFormatter();
+
+            x.AddConsumer<AuditProjectionConsumer>();
 
             if (useInMemory)
             {
