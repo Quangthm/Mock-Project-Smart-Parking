@@ -7,6 +7,7 @@ import { ThemeIcon } from "../icon/ThemeIcon"
 import { UntitledIcon } from "../icon/UntitledIcon"
 import { AccountSecurityPanel } from "../forms/AccountSecurityPanel"
 import { store } from "../../lib/store"
+import { scrollPageToTop } from "../../lib/scrollPageToTop"
 
 const rolePages: Record<string, { id: string; label: string }[]> = {
   driver: [
@@ -127,6 +128,8 @@ export function DashboardNavbar() {
 
   function navigate(id: string) {
     window.dispatchEvent(new CustomEvent("sp:dashboard-nav", { detail: id }))
+    scrollPageToTop()
+    requestAnimationFrame(scrollPageToTop)
     setDashboardMenuOpen(false)
     setPanel(null)
     setQuery("")
@@ -208,7 +211,7 @@ export function DashboardNavbar() {
                   </label>
                   <input
                     id="dashboard-search"
-                    className="input"
+                    className="input sp-search-input"
                     placeholder="Search pages and features"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}

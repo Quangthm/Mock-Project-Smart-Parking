@@ -14,6 +14,7 @@ export function NotificationBell({ userId }: { userId: string }) {
   const [toastQueue, setToastQueue] = useState<AppNotification[]>([])
 
   const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   const knownIdsRef = useRef(new Set(notifications.map((item) => item.id)))
 
@@ -37,12 +38,19 @@ export function NotificationBell({ userId }: { userId: string }) {
     const closeOnOutside = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && rootRef.current?.contains(document.activeElement)) {
+        setOpen(false)
+        triggerRef.current?.focus()
+      }
+    }
 
     window.addEventListener("sp-data-change", refresh)
 
     window.addEventListener("storage", refresh)
 
     document.addEventListener("mousedown", closeOnOutside)
+    document.addEventListener("keydown", closeOnEscape)
 
     return () => {
       window.removeEventListener("sp-data-change", refresh)
@@ -50,6 +58,7 @@ export function NotificationBell({ userId }: { userId: string }) {
       window.removeEventListener("storage", refresh)
 
       document.removeEventListener("mousedown", closeOnOutside)
+      document.removeEventListener("keydown", closeOnEscape)
     }
   }, [userId])
 
@@ -89,10 +98,13 @@ export function NotificationBell({ userId }: { userId: string }) {
         </div>
       )}
       <button
+        ref={triggerRef}
         type="button"
+        className="notification-trigger"
         onClick={() => setOpen((value) => !value)}
         aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
         aria-expanded={open}
+        aria-controls="smartparking-notification-panel"
         style={{
           position: "relative",
           background: "var(--card)",
@@ -125,6 +137,7 @@ export function NotificationBell({ userId }: { userId: string }) {
         </svg>
         {unread > 0 && (
           <span
+            className="notification-badge"
             style={{
               position: "absolute",
               top: -5,
@@ -144,10 +157,13 @@ export function NotificationBell({ userId }: { userId: string }) {
           </span>
         )}
       </button>
-      {open && (
         <section
+          id="smartparking-notification-panel"
           className="notification-pop-in"
           aria-label="Notifications"
+          data-open={open}
+          aria-hidden={!open}
+          inert={!open}
           style={{
             position: "absolute",
             right: 0,
@@ -158,7 +174,7 @@ export function NotificationBell({ userId }: { userId: string }) {
             zIndex: 200,
             background: "var(--bg)",
             border: "1px solid var(--border)",
-            borderRadius: "0.875rem",
+            borderRadius: "1.25rem",
             boxShadow: "0 16px 40px #0b162822",
             color: "var(--fg)",
           }}
@@ -205,6 +221,7 @@ export function NotificationBell({ userId }: { userId: string }) {
             notifications.map((item) => (
               <button
                 type="button"
+                className="notification-row"
                 key={item.id}
                 title={item.isRead ? "Read notification" : "Mark as read"}
                 aria-label={`${
@@ -274,7 +291,6 @@ export function NotificationBell({ userId }: { userId: string }) {
             ))
           )}
         </section>
-      )}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { useLotManagement } from "./useLotManagement"
@@ -41,8 +42,8 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-1">
-          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block">Available (Free)</span>
-          <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{summaryValue(totals.totalAvailable)}</span>
+          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block">Available Slots</span>
+          <span className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{summaryValue(totals.totalAvailable)}/{summaryValue(totals.totalCapacity)}</span>
           <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 block">Ready for parking</span>
         </div>
 
@@ -73,10 +74,13 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
 
       {/* Controls & Search Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
+        <div className="sp-search-field flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
+            type="search"
+            aria-label="Search parking lots by name, code, or address"
+            autoComplete="off"
             placeholder="Search lot by name, code, or address…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -95,7 +99,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-[var(--muted)]">Status:</span>
-            <select
+            <RoundedSelect
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
@@ -103,12 +107,12 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
               <option value="all">All Statuses</option>
               <option value="active">Active Only</option>
               <option value="inactive">Inactive Only</option>
-            </select>
+            </RoundedSelect>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="text-[var(--muted)]">Sort:</span>
-            <select
+            <RoundedSelect
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "name" | "capacity" | "occupancy")}
@@ -116,7 +120,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
               <option value="name">Lot Name</option>
               <option value="capacity">Total Capacity</option>
               <option value="occupancy">Occupancy Rate</option>
-            </select>
+            </RoundedSelect>
           </div>
         </div>
       </div>
@@ -134,7 +138,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                 <th className="px-4 py-3 font-semibold">Parking Facility</th>
                 <th className="px-3 py-3 font-semibold text-center">Status</th>
                 <th className="px-3 py-3 font-semibold text-right">Capacity</th>
-                <th className="px-3 py-3 font-semibold text-right">Available</th>
+                <th className="px-3 py-3 font-semibold text-right">Available / Capacity</th>
                 <th className="px-3 py-3 font-semibold text-right">Occupied</th>
                 <th className="px-3 py-3 font-semibold text-right">Reserved</th>
                 <th className="px-3 py-3 font-semibold text-right">Pending Pay</th>
@@ -184,7 +188,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
 
                     {/* Available Spots */}
                     <td className="px-3 py-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                      {metrics?.available ?? "—"}
+                      {metrics ? `${metrics.available.toLocaleString()}/${metrics.total.toLocaleString()}` : "—"}
                     </td>
 
                     {/* Occupied */}

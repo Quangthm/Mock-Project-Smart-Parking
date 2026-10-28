@@ -39,6 +39,7 @@ Controllers should normally interact with the Application layer through MediatR/
 - Each microservice owns its persistence boundary.
 - Do not share a database context across microservices.
 - Do not directly query another service's database.
+- Cross-service communication uses synchronous APIs when an immediate response is required and RabbitMQ (via MassTransit with Outbox/Inbox pattern) when asynchronous processing/loose coupling provides a meaningful benefit.
 - Cross-service communication uses synchronous APIs when an immediate response is required and RabbitMQ when asynchronous processing/loose coupling provides a meaningful benefit.
 
 ### API design and contracts

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useEffect, type FormEvent } from "react"
 import { createPortal } from "react-dom"
 import { operatorsApi, type Operator, type Site } from "../../../lib/parkingApi"
@@ -383,7 +384,7 @@ export function CreateOperatorForm({
             <label className="label" htmlFor="op-site">
               Site <span className="text-red-500">*</span>
             </label>
-            <select
+            <RoundedSelect
               id="op-site"
               className="input"
               value={form.siteId}
@@ -401,7 +402,7 @@ export function CreateOperatorForm({
                   {site.name} ({site.totalPhysicalCapacity} slots)
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
             {!sites.length && (
               <p role="status" className="mt-1 text-xs text-[var(--muted)]">
                 No active sites are available. Create an active site in Sites before creating this account.

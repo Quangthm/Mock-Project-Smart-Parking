@@ -8,6 +8,7 @@ import "./index.css"
 import "./theme.css"
 import "./workspace-layout.css"
 import "./ui-refinement.css"
+import "./motion.css"
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { createPortal } from "react-dom"
 import { SiteForm } from "./SiteForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -78,7 +79,7 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
                   <label className="label mb-1" htmlFor="assign-operator-select">
                     Select Operator:
                   </label>
-                  <select
+                  <RoundedSelect
                     id="assign-operator-select"
                     className="input"
                     value={assignModal.selectedOpId}
@@ -95,7 +96,7 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
                         {op.fullName} ({op.email})
                       </option>
                     ))}
-                  </select>
+                  </RoundedSelect>
                 </div>
 
                 {/* Information preview */}
