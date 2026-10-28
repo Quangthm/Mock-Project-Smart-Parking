@@ -1,0 +1,998 @@
+{
+  "info": {
+    "name": "SmartParking - SPARK-228 Operational Layout (manual verification)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "# SPARK-228 Operational Layout - manual end-to-end verification\n\nThis collection exercises the read path implemented for SPARK-228:\n\n- `GET {{parkingServiceUrl}}/api/parking-lots/{siteId}/operational-layout` (new dual-mode projection)\n- `GET {{parkingServiceUrl}}/api/parking-lots/{siteId}/operator-layout` (legacy aggregate, now SLOT_OVERRIDE-gated)\n- `GET {{parkingServiceUrl}}/api/parking-lots/{siteId}/structure` (owner-only regression)\n- `POST {{userServiceUrl}}/api/auth/login` and `GET {{userServiceUrl}}/api/auth/me` for role/token setup\n\n## Run order\n\nRun the folders top to bottom. Folder **00 - Setup (run first)** must run first: it stores every role token, the demo `siteId`, and (in later folders) the driver response used by the A7 comparison. The collection expects the companion environment file.\n\n## Default local ports (verified from launchSettings and compose)\n\n- UserService: `http://localhost:5035`\n- ParkingService: `http://localhost:5045`\n- ReservationService: `http://localhost:5055` (needed by the legacy `operator-layout` route and by Parking write paths)\n\n## Accounts\n\nUse the demo guidance in `SPARK-228-manual-test-guide.md`. The seeded driver is `driver@gmail.com / Password@123`; owner/operator/admin credentials come from `.env` (`SMARTPARK_OWNER_*`, `SMARTPARK_OPERATOR_*`, `SMARTPARK_ADMIN_*`). Do not commit real credentials or exported token values.\n\n## Data-dependent assertions\n\nThe demo site may have no `BACKUP` slot. Cases that look for telemetry-visible `BACKUP` log a SKIP note and fall back to shape assertions when none exists. The guide explains how to strengthen these by marking a free demo slot BACKUP through the existing operator endpoint."
+  },
+  "item": [
+    {
+      "name": "00 - Setup (run first)",
+      "description": "Logs in each role, stores tokens in the environment, and captures the demo siteId. Run this folder before any other folder.",
+      "item": [
+        {
+          "name": "0.1 Login Driver",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('role is driver', () => pm.expect(body.data.user.role).to.eql('driver'));",
+                  "pm.environment.set('driverToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login. Use the seeded demo driver: driver@gmail.com / Password@123. Stores `driverToken`."
+          }
+        },
+        {
+          "name": "0.2 Login Owner (demo tenant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('role is owner', () => pm.expect(body.data.user.role).to.eql('owner'));",
+                  "pm.environment.set('ownerToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_OWNER_EMAIL/PASSWORD from .env. Stores `ownerToken`."
+          }
+        },
+        {
+          "name": "0.3 Login Operator (with SLOT_OVERRIDE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('role is operator', () => pm.expect(body.data.user.role).to.eql('operator'));",
+                  "pm.environment.set('operatorToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{operatorPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_OPERATOR_EMAIL/PASSWORD. This account must be assigned to the demo site and carry SLOT_OVERRIDE; scripts/seed-demo-site.ps1 grants it. Stores `operatorToken`."
+          }
+        },
+        {
+          "name": "0.4 Login Operator (without SLOT_OVERRIDE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('role is operator', () => pm.expect(body.data.user.role).to.eql('operator'));",
+                  "pm.environment.set('operatorNoOverrideToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorNoOverrideEmail}}\",\n  \"password\": \"{{operatorNoOverridePassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login for an operator assigned to the same site but without SLOT_OVERRIDE. Create it with the owner via POST /api/users and permissions such as [DEVICE_STATUS_VIEW]. Stores `operatorNoOverrideToken`."
+          }
+        },
+        {
+          "name": "0.5 Login Owner (other tenant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('role is owner', () => pm.expect(body.data.user.role).to.eql('owner'));",
+                  "pm.environment.set('ownerOtherTenantToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerOtherTenantEmail}}\",\n  \"password\": \"{{ownerOtherTenantPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login for an approved Owner in a different tenant. See the manual guide for the registration/approval path. Stores `ownerOtherTenantToken`."
+          }
+        },
+        {
+          "name": "0.6 Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('role is admin', () => pm.expect(body.data.user.role).to.eql('admin'));",
+                  "pm.environment.set('adminToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_ADMIN_EMAIL/PASSWORD. Stores `adminToken`."
+          }
+        },
+        {
+          "name": "0.7 List owned sites and capture siteId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('site list is a non-empty array', () => pm.expect(body.data).to.be.an('array').that.is.not.empty);",
+                  "pm.environment.set('siteId', body.data[0].id);",
+                  "pm.environment.set('siteCode', body.data[0].code);",
+                  "console.log('Captured siteId=' + body.data[0].id + ' siteCode=' + body.data[0].code);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots",
+            "description": "GET /api/parking-lots with the demo Owner token. It returns owned sites; the first `data[].id` becomes `siteId`. Run `scripts/seed-demo-site.ps1` so the demo site (DEMO-HQ) exists."
+          }
+        },
+        {
+          "name": "0.8 Preflight: expiredToken is configured",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get('expiredToken');",
+                  "pm.test('expiredToken configured (see manual guide)', () => pm.expect(token).to.be.a('string').and.not.empty);",
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "console.log('Expired-token acquisition is documented in SPARK-228-manual-test-guide.md; a random or revoked token is not an expiry proof.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{expiredToken}}" }
+            ],
+            "url": "{{userServiceUrl}}/api/auth/me",
+            "description": "Manual prerequisite. Obtain a genuinely expired access token (access lifetime is 24h: AccessTokenService.LifetimeSeconds = 86400), or have a backend developer mint a token with a past `exp` using the Development signing key. Do not use a random string (case 2.1 covers malformed tokens) or a logged-out token as an expiry proof."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Anonymous (200 Sanitized)",
+      "description": "Anonymous callers get the sanitized projection. No Authorization header on these requests.",
+      "item": [
+        {
+          "name": "1.1 Anonymous operational layout (200 Sanitized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('contractVersion 1.2.0', () => pm.expect(body.data.contractVersion).to.eql('1.2.0'));",
+                  "pm.test('stalenessThresholdSeconds 30', () => pm.expect(body.data.stalenessThresholdSeconds).to.eql(30));",
+                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
+                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));",
+                  "pm.test('UNKNOWN is not bookable', () => pm.expect(body.data.slots.filter(s => s.physicalState === 'UNKNOWN').every(s => s.isBookable === false)).to.eql(true));",
+                  "pm.test('freshness fields present', () => { pm.expect(body.data.generatedAt).to.be.a('string'); pm.expect(body.data.isFresh).to.be.a('boolean'); });",
+                  "pm.test('Cache-Control has all three directives', () => { const cc = (pm.response.headers.get('Cache-Control') || '').toLowerCase(); pm.expect(cc).to.include('no-store'); pm.expect(cc).to.include('no-cache'); pm.expect(cc).to.include('must-revalidate'); });",
+                  "pm.test('Vary includes Authorization', () => { const vary = (pm.response.headers.get('Vary') || '').toLowerCase().split(/\\s*,\\s*/); pm.expect(vary).to.include('authorization'); });",
+                  "if (body.data.slots.length > 0) pm.environment.set('floorCode', body.data.slots[0].floorCode);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "GET /api/parking-lots/{siteId}/operational-layout without Authorization. Expects 200 sanitized: no BACKUP, sessionType/operatorContext null, Cache-Control and Vary headers set. Also captures the first real `floorCode` for folder 06."
+          }
+        },
+        {
+          "name": "1.2 Anonymous unknown site (404 SITE_NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('SITE_NOT_FOUND', () => pm.expect(body.code).to.eql('SITE_NOT_FOUND'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/00000000-0000-0000-0000-00000000dead/operational-layout",
+            "description": "GET with a valid but non-existent UUID. StructureException SITE_NOT_FOUND maps to 404."
+          }
+        },
+        {
+          "name": "1.3 Anonymous malformed GUID (routing 404, empty body)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('routing-level HTTP 404', () => pm.response.to.have.status(404));",
+                  "pm.test('empty body is expected for an unmatched route constraint', () => pm.expect(pm.response.text().trim()).to.eql(''));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/not-a-guid/operational-layout",
+            "description": "The route is declared as `{id:guid}`. A malformed segment does not match any endpoint, so ASP.NET returns a routing-level 404 with an empty body. This is expected, not a contract error."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Auth failures",
+      "description": "ParkingService forwards the bearer token to UserService /api/auth/me; invalid or expired sessions become 401 UNAUTHENTICATED.",
+      "item": [
+        {
+          "name": "2.1 Invalid bearer token (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer not-a-real-token" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "A malformed bearer is rejected by UserService; ParkingService maps the identity failure to 401 UNAUTHENTICATED."
+          }
+        },
+        {
+          "name": "2.2 Expired token (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get('expiredToken');",
+                  "pm.test('expiredToken configured', () => pm.expect(token).to.be.a('string').and.not.empty);",
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{expiredToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Uses the genuinely expired token provisioned for the environment. See the manual guide: wait for the 24h access lifetime or mint a past-exp token with the Development signing key."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Driver (200 Sanitized)",
+      "description": "Driver role resolves to Sanitized visibility and cannot see BACKUP/session/operator data or owner-only aggregate keys.",
+      "item": [
+        {
+          "name": "3.1 Driver operational layout (200 Sanitized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('contractVersion 1.2.0', () => pm.expect(body.data.contractVersion).to.eql('1.2.0'));",
+                  "pm.test('siteName present', () => pm.expect(body.data.siteName).to.be.a('string').and.not.empty);",
+                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
+                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));",
+                  "pm.test('UNKNOWN is not bookable', () => pm.expect(body.data.slots.filter(s => s.physicalState === 'UNKNOWN').every(s => s.isBookable === false)).to.eql(true));",
+                  "const forbidden = ['tenantId', 'units', 'paths', 'backupPolicies', 'capacityViews'];",
+                  "const hasKey = (value, key) => { if (!value || typeof value !== 'object') return false; if (Array.isArray(value)) return value.some(item => hasKey(item, key)); return Object.prototype.hasOwnProperty.call(value, key) || Object.values(value).some(item => hasKey(item, key)); };",
+                  "forbidden.forEach(key => pm.test('data has no ' + key, () => pm.expect(hasKey(body.data, key)).to.eql(false)));",
+                  "pm.environment.set('driverResponseBody', JSON.stringify(body));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Driver token. Sanitized invariants plus a recursive check that owner-only aggregate keys (tenantId, units, paths, backupPolicies, capacityViews) are absent. Stores `driverResponseBody` for the A7 comparison."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Operator",
+      "description": "SLOT_OVERRIDE grants Telemetry visibility. An assigned operator without SLOT_OVERRIDE falls back to Sanitized (200, never 403).",
+      "item": [
+        {
+          "name": "4.1 Operator with SLOT_OVERRIDE (200 Telemetry)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('metrics is object', () => pm.expect(body.data.metrics).to.be.an('object'));",
+                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));",
+                  "pm.test('UNKNOWN is not bookable', () => pm.expect(body.data.slots.filter(s => s.physicalState === 'UNKNOWN').every(s => s.isBookable === false)).to.eql(true));",
+                  "const backupCount = body.data.slots.filter(s => s.reservationState === 'BACKUP').length;",
+                  "pm.test('BACKUP visible when seeded (data-dependent)', () => {",
+                  "  if (backupCount === 0) { console.log('SKIP: no BACKUP slots at this site; asserting shape only.'); pm.expect(body.data.slots).to.be.an('array'); return; }",
+                  "  pm.expect(backupCount).to.be.greaterThan(0);",
+                  "  const driver = JSON.parse(pm.environment.get('driverResponseBody') || '{}');",
+                  "  const driverBackups = ((driver.data && driver.data.slots) || []).filter(s => s.reservationState === 'BACKUP').length;",
+                  "  pm.expect(driverBackups).to.eql(0);",
+                  "});",
+                  "pm.environment.set('operatorTelemetryBody', JSON.stringify(body));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Operator token with SLOT_OVERRIDE at this site. Telemetry may expose BACKUP; the assertion is tolerant when the seed has none. Stores `operatorTelemetryBody` for owner/admin comparison."
+          }
+        },
+        {
+          "name": "4.2 Operator telemetry metrics relation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const slotsReserved = body.data.slots.filter(s => s.reservationState === 'RESERVED').length;",
+                  "const backups = body.data.slots.filter(s => s.reservationState === 'BACKUP').length;",
+                  "console.log('Telemetry metrics.reservedCount=' + body.data.metrics.reservedCount + ' slots RESERVED=' + slotsReserved + ' slots BACKUP=' + backups);",
+                  "pm.test('telemetry reservedCount <= slot-level RESERVED', () => pm.expect(body.data.metrics.reservedCount).to.be.at.most(slotsReserved));",
+                  "pm.test('metrics and zone capacities are present', () => { pm.expect(body.data.metrics.motorcycleCapacity).to.be.an('object'); pm.expect(body.data.metrics.zoneCapacities).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Telemetry source: `reservedCount` counts genuine RESERVED from the full row set; BACKUP remains BACKUP in slots[]. Unfiltered telemetry therefore has reservedCount <= slot RESERVED count (equal when no filter changes the set). The <= relation also holds if a filter is added later."
+          }
+        },
+        {
+          "name": "4.3 Operator without SLOT_OVERRIDE (200 Sanitized, not 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 (not 403)', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
+                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorNoOverrideToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Assigned operator without SLOT_OVERRIDE. LayoutCallerResolver catches FORBIDDEN from slot-scope and falls back to Sanitized visibility; the read still returns 200."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Owner / Admin",
+      "description": "Matching Owner and Admin resolve to Telemetry. An Owner from another tenant gets a Sanitized 200, not 403.",
+      "item": [
+        {
+          "name": "5.1 Owner matching tenant (200 Telemetry)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));",
+                  "const backupCount = body.data.slots.filter(s => s.reservationState === 'BACKUP').length;",
+                  "pm.test('BACKUP visible when seeded (data-dependent)', () => {",
+                  "  if (backupCount === 0) { console.log('SKIP: no BACKUP slots at this site; asserting shape only.'); return; }",
+                  "  pm.expect(backupCount).to.be.greaterThan(0);",
+                  "});",
+                  "const operator = JSON.parse(pm.environment.get('operatorTelemetryBody') || '{}');",
+                  "pm.test('owner view matches operator telemetry', () => {",
+                  "  if (!operator.data) { console.log('SKIP: operator telemetry not captured.'); return; }",
+                  "  pm.expect(body.data.slots.map(s => s.reservationState)).to.eql(operator.data.slots.map(s => s.reservationState));",
+                  "  pm.expect(body.data.metrics).to.eql(operator.data.metrics);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Owner token whose tenant owns {{siteId}}. `/api/auth/owner-scope` succeeds and LayoutCallerResolver grants Telemetry. Compares against the operator telemetry snapshot."
+          }
+        },
+        {
+          "name": "5.2 Owner of another tenant (200 Sanitized, not 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get('ownerOtherTenantToken');",
+                  "pm.test('ownerOtherTenantToken configured', () => pm.expect(token).to.be.a('string').and.not.empty);",
+                  "pm.test('HTTP 200 (not 403)', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerOtherTenantToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Owner from a different tenant. ParkingStructureService catches SITE_NOT_FOUND for a tenant-scoped Owner and retries with no tenant restriction + Sanitized visibility, so the public site is visible and 403 is not returned."
+          }
+        },
+        {
+          "name": "5.3 Admin (200 Telemetry)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));",
+                  "const operator = JSON.parse(pm.environment.get('operatorTelemetryBody') || '{}');",
+                  "pm.test('admin view matches operator telemetry', () => {",
+                  "  if (!operator.data) { console.log('SKIP: operator telemetry not captured.'); return; }",
+                  "  pm.expect(body.data.slots.map(s => s.reservationState)).to.eql(operator.data.slots.map(s => s.reservationState));",
+                  "  pm.expect(body.data.metrics).to.eql(operator.data.metrics);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Admin resolves to Telemetry. Compares against the operator telemetry snapshot."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Filters",
+      "description": "vehicleType and floor filter slots[] only; metrics are computed before filtering and must not change.",
+      "item": [
+        {
+          "name": "6.1 vehicleType=CAR (metrics unchanged)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('all visible slots are CAR', () => pm.expect(body.data.slots.every(s => s.supportedVehicleType === 'CAR')).to.eql(true));",
+                  "const baseline = JSON.parse(pm.environment.get('driverResponseBody') || '{}');",
+                  "pm.test('unfiltered baseline captured', () => pm.expect(baseline.data).to.be.an('object'));",
+                  "pm.test('filter cannot add slots', () => pm.expect(body.data.slots.length).to.be.at.most(baseline.data.slots.length));",
+                  "pm.test('metrics are filter-independent', () => pm.expect(body.data.metrics).to.eql(baseline.data.metrics));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout?vehicleType=CAR",
+            "description": "Filter by CAR. The reader computes metrics over the full projected row set before applying the filter, so metrics must deep-equal the unfiltered driver response captured in 3.1."
+          }
+        },
+        {
+          "name": "6.2 vehicleType=BOGUS (400 INVALID_VEHICLE_TYPE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_VEHICLE_TYPE', () => pm.expect(body.code).to.eql('INVALID_VEHICLE_TYPE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout?vehicleType=BOGUS",
+            "description": "Enum.TryParse is case-sensitive; an unknown value returns 400 INVALID_VEHICLE_TYPE before the reader is called."
+          }
+        },
+        {
+          "name": "6.3 floor=<real floorCode> (filtered slots)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const floor = pm.environment.get('floorCode');",
+                  "pm.test('floorCode captured from 1.1', () => pm.expect(floor).to.be.a('string').and.not.empty);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('all visible slots match floor', () => pm.expect(body.data.slots.every(s => s.floorCode === floor)).to.eql(true));",
+                  "const baseline = JSON.parse(pm.environment.get('driverResponseBody') || '{}');",
+                  "pm.test('metrics are filter-independent', () => pm.expect(body.data.metrics).to.eql(baseline.data.metrics));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout?floor={{floorCode}}",
+            "description": "Uses the real floorCode captured from the anonymous response. All returned slots must have that floorCode; metrics must match the unfiltered baseline."
+          }
+        },
+        {
+          "name": "6.4 floor=__NOPE__ (400 INVALID_FLOOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_FLOOR', () => pm.expect(body.code).to.eql('INVALID_FLOOR'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout?floor=__NOPE__",
+            "description": "The reader rejects an unknown floor with StructureException INVALID_FLOOR, mapped to 400 by the middleware."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - A7 redaction proof (two-token)",
+      "description": "Driver (Sanitized) immediately followed by Operator (Telemetry) against the same site. The operator script reads the driver body saved in 7.1.",
+      "item": [
+        {
+          "name": "7.1 Driver snapshot for A7 comparison",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
+                  "pm.environment.set('driverResponseBody', JSON.stringify(body));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Driver view captured immediately before the operator request. Saves `driverResponseBody`."
+          }
+        },
+        {
+          "name": "7.2 Operator vs Driver: only redaction fields differ",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const telemetry = pm.response.json();",
+                  "const driver = JSON.parse(pm.environment.get('driverResponseBody') || '{}');",
+                  "pm.test('driver snapshot available', () => pm.expect(driver.data).to.be.an('object'));",
+                  "pm.test('same slot count', () => pm.expect(telemetry.data.slots.length).to.eql(driver.data.slots.length));",
+                  "pm.test('same slotId order', () => pm.expect(telemetry.data.slots.map(s => s.slotId)).to.eql(driver.data.slots.map(s => s.slotId)));",
+                  "const allowed = new Set(['reservationState', 'sessionType', 'features', 'operatorContext']);",
+                  "pm.test('only allowed per-slot fields differ', () => {",
+                  "  const diffs = [];",
+                  "  telemetry.data.slots.forEach((opSlot, index) => {",
+                  "    const driverSlot = driver.data.slots[index];",
+                  "    const keys = new Set([...Object.keys(opSlot), ...Object.keys(driverSlot)]);",
+                  "    keys.forEach(key => { if (!allowed.has(key) && JSON.stringify(opSlot[key]) !== JSON.stringify(driverSlot[key])) diffs.push(index + '.' + key); });",
+                  "  });",
+                  "  pm.expect(diffs, diffs.join(', ')).to.have.lengthOf(0);",
+                  "});",
+                  "const backups = telemetry.data.slots.filter(s => s.reservationState === 'BACKUP').length;",
+                  "pm.test('non-masked metric scalars match', () => {",
+                  "  ['totalPhysicalCapacity', 'occupiedCount', 'availableCarSlots'].forEach(key => pm.expect(telemetry.data.metrics[key]).to.eql(driver.data.metrics[key]));",
+                  "  pm.expect(telemetry.data.metrics.motorcycleCapacity).to.eql(driver.data.metrics.motorcycleCapacity);",
+                  "});",
+                  "pm.test('masked reservedCount = telemetry genuine RESERVED + BACKUP', () => pm.expect(driver.data.metrics.reservedCount).to.eql(telemetry.data.metrics.reservedCount + backups));",
+                  "pm.test('masked zone counts = telemetry zone count + BACKUP in zone', () => {",
+                  "  driver.data.metrics.zoneCapacities.forEach(sanitizedZone => {",
+                  "    const telemetryZone = telemetry.data.metrics.zoneCapacities.find(z => z.zoneCode === sanitizedZone.zoneCode);",
+                  "    const backupsInZone = telemetry.data.slots.filter(s => s.zoneCode === sanitizedZone.zoneCode && s.reservationState === 'BACKUP').length;",
+                  "    pm.expect(sanitizedZone.zoneOnlyReservedCount).to.eql(telemetryZone.zoneOnlyReservedCount + backupsInZone);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+            "description": "Compares the operator Telemetry payload with the driver Sanitized snapshot. Slot count and slotId order must match; only reservationState/sessionType/features/operatorContext may differ. IMPORTANT: metrics are NOT fully identical by design: Sanitized `reservedCount` is the masked count (genuine RESERVED + BACKUP) while Telemetry counts only genuine RESERVED. The test pins that relation instead of literal equality. All other metric scalars and motorcycle capacity must match."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Legacy + regression",
+      "description": "Legacy operator-layout is still gated by SLOT_OVERRIDE and returns the raw aggregate. /structure remains owner-only.",
+      "item": [
+        {
+          "name": "8.1 Legacy operator-layout without token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operator-layout",
+            "description": "SlotOperatorClient rejects a missing bearer before calling UserService."
+          }
+        },
+        {
+          "name": "8.2 Legacy operator-layout with Driver token (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operator-layout",
+            "description": "The UserService slot-scope endpoint is operator-only; a driver token yields 403, which ParkingService maps to FORBIDDEN."
+          }
+        },
+        {
+          "name": "8.3 Legacy operator-layout with operator lacking SLOT_OVERRIDE (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorNoOverrideToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operator-layout",
+            "description": "Contrast with 4.3: the new operational-layout falls back to Sanitized, but the legacy route still requires SLOT_OVERRIDE and returns 403."
+          }
+        },
+        {
+          "name": "8.4 Legacy operator-layout with SLOT_OVERRIDE (200 legacy shape)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('legacy aggregate keys', () => {",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "  pm.expect(body.data.slots).to.be.an('array');",
+                  "  pm.expect(body.data.slots[0]).to.have.property('code');",
+                  "  pm.expect(body.data).to.have.property('capacityViews');",
+                  "});",
+                  "pm.test('not the new projection', () => pm.expect(body.data).not.to.have.property('contractVersion'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operator-layout",
+            "description": "Legacy ParkingStructure payload (site/units/slots/paths/backupPolicies/capacityViews), not the operational-layout DTO. Requires ReservationService for the commitment snapshot."
+          }
+        },
+        {
+          "name": "8.5 Structure with Owner token (200 regression)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('owner aggregate shape', () => { pm.expect(body.data.site).to.be.an('object'); pm.expect(body.data.slots).to.be.an('array'); pm.expect(body.data).to.have.property('capacityViews'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/structure",
+            "description": "Owner-only aggregate regression. Unchanged by SPARK-228. Requires ReservationService for the commitment snapshot."
+          }
+        },
+        {
+          "name": "8.6 Structure without token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/structure",
+            "description": "OwnerIdentityClient rejects a missing bearer with UNAUTHENTICATED, mapped to 401."
+          }
+        }
+      ]
+    }
+  ]
+}

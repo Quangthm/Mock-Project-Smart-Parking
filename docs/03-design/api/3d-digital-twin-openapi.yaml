@@ -387,12 +387,10 @@ components:
           type: string
           example: Floor_G
         zoneCode:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: Zone_A
         rowCode:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: Row_01
         supportedVehicleType:
           $ref: '#/components/schemas/SupportedVehicleType'
@@ -403,8 +401,9 @@ components:
         reservationState:
           $ref: '#/components/schemas/ReservationState'
         sessionType:
-          $ref: '#/components/schemas/SessionType'
-          nullable: true
+          anyOf:
+            - $ref: '#/components/schemas/SessionType'
+            - type: 'null'
           description: Active session classification determining vehicle proxy PBR chassis color. Null for Driver/Guest.
           example: STANDARD
         isEvCharging:
@@ -415,8 +414,7 @@ components:
           description: True if bay is physically AVAILABLE and UNRESERVED. Forced to false if physicalState is UNKNOWN or reservationState is BACKUP.
           example: true
         coordinates3d:
-          type: object
-          nullable: true
+          type: [object, "null"]
           properties:
             x:
               type: number
@@ -431,8 +429,7 @@ components:
               format: float
               example: -5.30
         features:
-          type: object
-          nullable: true
+          type: [object, "null"]
           properties:
             covered:
               type: boolean
@@ -441,27 +438,22 @@ components:
               type: boolean
               example: false
             chargerPowerKw:
-              type: number
+              type: [number, "null"]
               format: float
-              nullable: true
               example: 22.0
         operatorContext:
-          type: object
-          nullable: true
+          type: [object, "null"]
           description: Operational metadata included for authorized Site Operators, Owners, and Admins; redacted for public drivers.
           properties:
             activeSessionId:
-              type: string
+              type: [string, "null"]
               format: uuid
-              nullable: true
               example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
             maskedPlate:
-              type: string
-              nullable: true
+              type: [string, "null"]
               example: "30A-*****.89"
             approachingReservation:
-              type: object
-              nullable: true
+              type: [object, "null"]
               description: Context for incoming reservation, including reallocation tracking (SPARK-244 / US-O03).
               properties:
                 reservationId:
@@ -481,8 +473,7 @@ components:
                   description: True if allocatedSlotCode differs from requestedSlotCode.
                   example: true
                 reallocationReason:
-                  type: string
-                  nullable: true
+                  type: [string, "null"]
                   example: OCCUPIED_OVERSTAY_DISPLACEMENT
                 expectedArrivalTime:
                   type: string
@@ -606,9 +597,8 @@ components:
               type: boolean
               example: false
             chargerPowerKw:
-              type: number
+              type: [number, "null"]
               format: float
-              nullable: true
               example: 22.0
 
     MotorcycleCapacityIngestDto:

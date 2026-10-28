@@ -9,4 +9,8 @@
     <ProjectReference Include="../../../src/Services/ParkingService/SmartParking.ParkingService.Persistence/SmartParking.ParkingService.Persistence.csproj" />
     <ProjectReference Include="../../../src/Services/ReservationService/SmartParking.ReservationService.Persistence/SmartParking.ReservationService.Persistence.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\FE\src\fixtures\slots-operational-fixture.json" Link="fixtures\slots-operational-fixture.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\FE\src\fixtures\slots-operational-stale-fixture.json" Link="fixtures\slots-operational-stale-fixture.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

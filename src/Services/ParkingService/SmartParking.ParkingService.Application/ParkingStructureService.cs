@@ -35,7 +35,9 @@ public sealed class ParkingStructureService(
     ISlotOperatorAuthorizer operators,
     IStructureCommitments commitments,
     IStructureSynchronizationStore synchronizationStore,
-    StructureSynchronizationService synchronization)
+    StructureSynchronizationService synchronization,
+    IOperationalLayoutReader? operationalLayouts = null,
+    ILayoutCallerResolver? callerResolver = null)
 {
     public async Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct = default)
     {
@@ -57,8 +59,53 @@ public sealed class ParkingStructureService(
     public Task<ParkingStructure> GetAsync(OwnerScope owner, Guid siteId, CancellationToken ct = default)
         => ReadAsync(owner, siteId, false, ct);
 
-    public Task<ParkingStructure> ReadOperationalAsync(OwnerScope actor, Guid siteId, CancellationToken ct)
-        => ReadAsync(actor, siteId, true, ct);
+    public async Task<OperationalLayoutProjectionDto> ReadOperationalAsync(
+        Guid siteId, VehicleType? vehicleType, string? floor, CancellationToken ct)
+    {
+        if (callerResolver is null || operationalLayouts is null)
+            throw new InvalidOperationException("Operational layout dependencies are not registered.");
+
+        var caller = await callerResolver.ResolveAsync(siteId, ct);
+        var visibility = caller.IsSiteTelemetryGranted
+            ? LayoutVisibility.Telemetry
+            : LayoutVisibility.Sanitized;
+        var scope = ScopeFor(caller);
+
+        // This read path never takes an edit hold or a ReservationService snapshot; the
+        // projection reads parking_slots.reservation_state directly.
+        OperationalLayoutReadResult result;
+        try
+        {
+            result = await operationalLayouts.ReadAsync(scope, siteId, vehicleType, floor, ct);
+        }
+        catch (StructureException error) when (
+            caller.Kind == LayoutCallerKind.Owner &&
+            caller.TenantIds.Count > 0 &&
+            error.Code == "SITE_NOT_FOUND")
+        {
+            // An owner scoped to another tenant still gets the sanitized public view.
+            result = await operationalLayouts.ReadAsync(
+                new LayoutReadScope(null, false), siteId, vehicleType, floor, ct);
+            visibility = LayoutVisibility.Sanitized;
+        }
+
+        // Single choke point: this is the only projection return and it is always redacted.
+        return OperationalLayoutRedaction.Apply(
+            result.Layout,
+            visibility,
+            result.MaskedReservedCount,
+            result.MaskedZoneReservedCounts);
+    }
+
+    private static LayoutReadScope ScopeFor(LayoutCaller caller) => caller.Kind switch
+    {
+        LayoutCallerKind.Admin => new(null, true),
+        LayoutCallerKind.Owner when caller.TenantIds.Count > 0 => new(caller.TenantIds, true),
+        LayoutCallerKind.Owner => new(null, false),
+        LayoutCallerKind.Operator when caller.IsSiteTelemetryGranted && caller.TenantIds.Count > 0
+            => new(caller.TenantIds, true),
+        _ => new(null, false)
+    };
 
     private async Task<ParkingStructure> ReadAsync(OwnerScope actor, Guid siteId, bool operational, CancellationToken ct)
     {

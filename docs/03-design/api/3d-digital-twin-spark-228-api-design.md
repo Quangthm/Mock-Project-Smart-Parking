@@ -210,7 +210,7 @@ Một trường hợp phức tạp xảy ra khi: Xe A đang đỗ tại Slot X (
 To prevent high-frequency Driver snapshot queries and real-time push synchronization on API-01 from taking exclusive locks or blocking structure edits, the system strictly separates read transactions from mutation holds:
 
 1. **Read Projection Path (API-01 / API-02)**:
-   * Calls `commitments.ReadSnapshotAsync(tenantId, siteId, ct)` $\rightarrow$ `POST internal/structure/{siteId}/snapshot`.
+   * Reads `parking_slots.reservation_state` directly through `IOperationalLayoutReader` (no `ReservationService` snapshot, no `POST internal/structure/{siteId}/snapshot`, no edit hold).
    * **Zero Lock Contention**: Acquires **NO** edit hold in `StructureEditHolds`. Runs a non-blocking PostgreSQL transaction under `REPEATABLE READ`.
    * Multiple concurrent Drivers can read the operational layout simultaneously without interfering with each other or with incoming bookings.
 2. **Batch Ingestion Write Path (API-03)**:
@@ -225,7 +225,7 @@ To prevent high-frequency Driver snapshot queries and real-time push synchroniza
 ```mermaid
 flowchart TD
     subgraph ReadPath ["API-01: Operational Read Path (Non-Blocking)"]
-        R1["Driver / Operator GET Layout"] --> R2["POST internal/structure/siteId/snapshot"]
+        R1["Driver / Operator GET Layout"] --> R2["Direct read of parking_slots.reservation_state (no snapshot)"]
         R2 --> R3["PostgreSQL Read-Only REPEATABLE READ"]
         R3 --> R4["Return 200 OK Projection DTO"]
     end
@@ -253,8 +253,9 @@ flowchart TD
 * **Transport**: HTTP/1.1 and HTTP/2 JSON over TLS
 * **Caching**: `Cache-Control: no-store, no-cache, must-revalidate`
 * **Route Migration Strategy & Coexistence**:
-  * **Legacy Route**: `GET /api/parking-lots/{id}/operator-layout` (registered in `Program.cs:142`) remains active with its legacy structural payload to guarantee zero regression for existing components (`OperatorBackupPanel.tsx`).
-  * **Canonical 3D Digital Twin Route**: `GET /api/parking-lots/{id}/operational-layout` (registered in `Program.cs:165`) is the authoritative specification for 3D Digital Twin visualization. It serves both anonymous/authenticated Drivers (Sanitized Projection) and authorized Site Operators / Owners (Full Operational Telemetry) via role-based projection.
+  * **Legacy Route**: `GET /api/parking-lots/{id}/operator-layout` (registered in `Program.cs:203`, handler through `Program.cs:209`) remains active with its legacy raw structural aggregate to guarantee zero regression for existing components (`OperatorBackupPanel.tsx`). It is gated by `ISlotOperatorAuthorizer.ScopeAsync`, so the caller requires `SLOT_OVERRIDE` for the site.
+  * **Canonical 3D Digital Twin Route**: `GET /api/parking-lots/{id}/operational-layout` (registered in `Program.cs:145`, handler through `Program.cs:180`) is the authoritative specification for 3D Digital Twin visualization. It serves both anonymous/authenticated Drivers (Sanitized Projection) and authorized Site Operators / Owners (Full Operational Telemetry) via role-based projection.
+  * **Payload distinction**: `/operational-layout` returns the `OperationalLayoutProjectionDto` contract projection, while `/operator-layout` returns the legacy raw aggregate and requires `SLOT_OVERRIDE`.
   * `OperatorBackupPanel.tsx` will be migrated to this clean dual-mode endpoint in a subsequent sprint task.
 
 ### 4.2. Request Specification
@@ -282,8 +283,9 @@ flowchart TD
 3. **Case C: Header Present and Valid**:
    * Decodes JWT claims:
      * If role is `Driver` $\implies$ returns HTTP `200 OK` with Sanitized Projection.
-     * If role is `Operator` with active assignment or `SLOT_OVERRIDE` $\implies$ returns HTTP `200 OK` with Full Operational Telemetry.
-     * If role is `Operator` without site assignment $\implies$ returns HTTP `200 OK` with Sanitized Projection (cannot view internal telemetry of unauthorized lots).
+     * If role is `Operator` with an active assignment at the site **and** `SLOT_OVERRIDE` granted for that site $\implies$ returns HTTP `200 OK` with Full Operational Telemetry. `SLOT_OVERRIDE` is the permission that denotes lot-level operational authority (it also gates the write capability **Mark Operational Backup Slot** in the §5.1 RBAC matrix), so telemetry is gated on it rather than on assignment alone.
+     * If role is `Operator` **without** `SLOT_OVERRIDE` for that site (with or without an active assignment) $\implies$ returns HTTP `200 OK` with Sanitized Projection (cannot view internal telemetry of unauthorized lots).
+     * **Behaviour change**: an Operator without `SLOT_OVERRIDE` now receives a sanitized `200 OK` instead of the previous `403 Forbidden`, which the endpoint returned to every non-`SLOT_OVERRIDE` operator.
      * If role is `Owner` (matching site tenant) $\implies$ returns HTTP `200 OK` with Full Structural Metrics.
      * If role is `Admin` $\implies$ returns HTTP `200 OK` with Full Telemetry.
 
@@ -464,6 +466,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | **`400 Bad Request`** | `MALFORMED_JSON` | Body cannot be parsed as valid JSON. | `{"success": false, "code": "MALFORMED_JSON", "message": "Malformed request body."}` | Correct JSON syntax and retry. |
 | **`400 Bad Request`** | `INVALID_IDEMPOTENCY_KEY` | Missing or non-UUID `Idempotency-Key` header. | `{"success": false, "code": "INVALID_IDEMPOTENCY_KEY", "message": "Idempotency-Key must be a valid UUID v4."}` | Provide a valid UUID v4 header. |
+| **`400 Bad Request`** | `INVALID_FLOOR` | `floor` query filter does not match any floor code of the target site. | `{"success": false, "code": "INVALID_FLOOR", "message": "Unknown floor code."}` | Omit `floor` or pass a floor code returned by the layout projection. |
 | **`401 Unauthorized`** | `UNAUTHENTICATED` | Missing, expired, or invalid JWT Bearer token. | `{"success": false, "code": "UNAUTHENTICATED", "message": "Authentication required."}` | Refresh authentication tokens and re-login. |
 | **`403 Forbidden`** | `FORBIDDEN` | Caller lacks ownership of tenant or site scope. | `{"success": false, "code": "FORBIDDEN", "message": "Access to target facility denied."}` | Request appropriate role permissions. |
 | **`404 Not Found`** | `SITE_NOT_FOUND` | Site UUID does not exist or is soft-deleted. | `{"success": false, "code": "SITE_NOT_FOUND", "message": "Parking site was not found."}` | Verify target parking lot ID. |
@@ -477,6 +480,7 @@ flowchart TD
 | **`422 Unprocessable Content`** | `INVALID_ASSET_URL` | Model asset URL is not HTTPS or not in approved storage domains. | `{"success": false, "code": "INVALID_ASSET_URL", "message": "Asset URL must belong to approved storage CDN."}` | Point to an authorized CDN URL. |
 | **`422 Unprocessable Content`** | `VALIDATION_FAILED` | Request failed schema or domain validation rules. | `{"success": false, "code": "VALIDATION_FAILED", "message": "Validation failed.", "errors": [{"field": "slots[0].slotCode", "code": "DUPLICATE_CODE"}]}` | Fix invalid payload fields as detailed in error list. |
 | **`503 Service Unavailable`** | `COMMITMENTS_UNAVAILABLE`| Downstream `ReservationService` is unreachable during commitment check. | `{"success": false, "code": "COMMITMENTS_UNAVAILABLE", "message": "Reservation synchronization is pending; retry after recovery."}` | Retry request with exponential backoff. |
+| **`503 Service Unavailable`** | `IDENTITY_UNAVAILABLE`| Identity/operator authority (`api/auth/me` or operator site scope) is unreachable or returned an invalid identity response. | `{"success": false, "code": "IDENTITY_UNAVAILABLE", "message": "Identity service is unavailable."}` | Retry with exponential backoff; if persistent, check identity service health. |
 
 ---
 
