@@ -4,8 +4,8 @@
 **Prepared by:** Independent Backend/API Review (orchestrator review pass, 6 verification rounds)
 **Prepared for:** Project Lead / PM
 **Requested decision:** Approve the SPARK-228 implementation baseline (scope + contract + baseline re-alignment)
-**Status:** `AWAITING SIGN-OFF` — see §7 pre-circulation checklist (contract edits closed 2026-10-26; commits + SHAs pending)
-**Package commit:** `________________` (to be filled after the two changesets in §7 are committed)
+**Status:** `READY TO CIRCULATE` — see §7 pre-circulation checklist (all items closed 2026-10-27)
+**Package commits:** `f22959f6` (3D contract split) · `112ea5cc` (RabbitMQ + legacy compose removal) · `1f97dc75` (requirements / decision-log sync)
 
 ---
 
@@ -120,7 +120,7 @@ Defects found and corrected during review (highlights): a fictional `DISABLED` r
 - [x] `3d-digital-twin-api-design.md` §12 Test Suite 1B — **CLOSED**: SPARK-244 AC-3 relabelled to "Allocation/Claim State vs Physical Occupancy vs Visualization State" (no "Payment").
 - [x] `3d-digital-twin-api-design.md` §12 Test Suite 1B — **CLOSED**: AC-10 no longer cites the driver-redaction case; it records the missing mutation-authority test as an explicit gap owned by the SPARK-244 delta pass.
 - [x] Re-ran the consistency audit after the three edits: 20/20 state combinations, 48 slots, 0 `isBookable` mismatches, 0 BOM, 0 U+FFFD across hub + both extracts.
-- [ ] Commit two changesets separately (Reservation/Pass documentation 2026-10-25 | 3D Twin hub + SPARK-228/SPARK-244 extracts + fixtures) and record both SHAs in the header.
+- [x] Committed as three changesets and recorded the SHAs in the header: `f22959f6` (3D Twin hub + SPARK-228/SPARK-244 extracts + openapi + memo + fixtures), `112ea5cc` (RabbitMQ service + legacy single-database compose removal + `scripts/database/README.md`), `1f97dc75` (requirements, 3D design notes, decision log, PM explainers).
 
 ---
 
