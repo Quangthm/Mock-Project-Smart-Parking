@@ -1,9 +1,9 @@
-﻿# UC-RES-02 — Allocate, queue and reallocate reservations
+# UC-RES-02 — Allocate, queue and reallocate reservations
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Operations scheduler, assigned Operator, Driver
 
-[Use-case index](README.md) Â· [SRS module](../srs/modules/04-reservations-allocation.md)
+[Use-case index](README.md) · [SRS module](../srs/modules/04-reservations-allocation.md)
 
 ## Goal
 

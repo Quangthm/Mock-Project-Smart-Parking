@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -187,7 +188,7 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
             <form onSubmit={reportIncident} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-[var(--fg)] mb-1">Incident Classification</label>
-                <select
+                <RoundedSelect
                   className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
                   value={form.type}
                   onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
@@ -197,7 +198,7 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
                   <option value="overtime">Overstay / Expired Session (Amber Alert)</option>
                   <option value="damage">Vehicle Damage / Hazard</option>
                   <option value="other">Other Operational Incident</option>
-                </select>
+                </RoundedSelect>
               </div>
 
               <div>

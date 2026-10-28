@@ -1,4 +1,4 @@
-﻿# Acceptance scenarios — v1.1 documentation review candidate
+# Acceptance scenarios — v1.1 documentation review candidate
 
 **ALL NOT RUN.** This file specifies expected outcomes; documentation checks are not product acceptance. Execute with actual build/commit, machine/resources, dataset distribution, provider/fixture modes, timestamps and retained evidence.
 
@@ -34,7 +34,7 @@
 | AC-028 | D05 | Alternative acceptance one tick before /exact expiry | Before succeeds if guarded; equality expired; underlying right separate | NOT RUN |
 | AC-029 | D06 | Arrival at cutoff; delayed authoritative proof after no-show | Timely; audited correction, compatible recovery/no displacement or failure handling | NOT RUN |
 | AC-030 | DEF12 | Ordinary payment succeeds after hold expiry, capacity free/taken | Atomic reacquisition / reconciliation-refund, never conflicting resurrection | NOT RUN |
-| AC-031 | M01 | Jan31â†’Feb28/29â†’Mar31 | Original anchor/timezone retained; not30-day period | NOT RUN |
+| AC-031 | M01 | Jan31→Feb28/29→Mar31 | Original anchor/timezone retained; not30-day period | NOT RUN |
 | AC-032 | M02 | Monthly paidAt beforeH but entitlement commit atH | No activation; reconcile/refund; no backdating | NOT RUN |
 | AC-033 | M04 | Available-only pass at full lot/outside/expiry while parked | No guaranteed entry; outside deduction0; expiry preserves occupied fact | NOT RUN |
 | AC-034 | M05 | Multiple paid-period cancellation refunds and rounding cap | Per-period actual unused fraction/rate; sum then round once; remaining collected-money cap wins | NOT RUN |
@@ -73,12 +73,12 @@ PAY-01 supersedes the earlier one-real-payment-sandbox requirement with controll
 | Warm-up | 2 minutes | Exclude warm-up from steady-state percentile reporting. |
 | Steady workload | 20 concurrent users for 10 minutes | Declare search/availability, detail reads and operational/reservation command proportions and pacing. |
 | Burst | 50 concurrent users for 1 minute | Report separately from steady state; do not average away burst failures. |
-| Core API latency | p95 â‰¤500 ms | Core read/write endpoint classes reported separately; external-provider work separately measured. |
+| Core API latency | p95 ≤500 ms | Core read/write endpoint classes reported separately; external-provider work separately measured. |
 | Unexpected errors | <1% | Expected business conflicts separated; report their frequency rather than hiding them. |
-| SignalR freshness | p95 â‰¤2 seconds under healthy local profile | Define origin-commit-to-authorized-client-update measurement and report reconnect recovery separately. |
-| Restart recovery | â‰¤5 minutes | Preserve acknowledged local transactions and durable recovery intents; demonstrate reconciliation without duplicate financial/capacity effects. |
-| Backup schedule / RPO | Daily backup; backup RPO â‰¤24 hours | Backup-loss tolerance is separate from ordinary-restart durability. Failed/overdue backup must be visible. |
-| Restore | â‰¤30 minutes | Restore into declared clean local target and verify core data/relationships and recoverable workflows. Define recovery dataset/configuration scope. |
+| SignalR freshness | p95 ≤2 seconds under healthy local profile | Define origin-commit-to-authorized-client-update measurement and report reconnect recovery separately. |
+| Restart recovery | ≤5 minutes | Preserve acknowledged local transactions and durable recovery intents; demonstrate reconciliation without duplicate financial/capacity effects. |
+| Backup schedule / RPO | Daily backup; backup RPO ≤24 hours | Backup-loss tolerance is separate from ordinary-restart durability. Failed/overdue backup must be visible. |
+| Restore | ≤30 minutes | Restore into declared clean local target and verify core data/relationships and recoverable workflows. Define recovery dataset/configuration scope. |
 
 No incompatible double capacity commitment, duplicate collection/refund or unauthorized access is acceptable merely because aggregate latency/error targets pass. Scope provider upload/payment/AI latency separately. Record production, sandbox (if separately used) and fixture modes and actual timings; unexecuted tests stay NOT RUN. These are local mock-project objectives, not production SLOs or claims of achieved throughput.
 
@@ -141,7 +141,7 @@ Technical design-pending values are prerequisites to execution, not invented fix
 | AC-077 | V11-06, D03 | FR-AUTH-05 | Seed exactly one Admin; attempt Admin registration and exempt other roles | Only seeded Admin exempt from simulation; no Admin registration route; Operators/Drivers/Owners cannot inherit exemption. | NOT RUN |
 | AC-078 | V11-02 | FR-AUTH-05, BR-PRIV-01 | Admin replaces initial pending agreement, then attempts non-document edit, additional-lot edit and finalized edit | Only initial pending uploaded documents replaceable. Preserve original and each replacement with actor/time/reason. Other edits rejected. | NOT RUN |
 | AC-079 | V11-02 | FR-AUTH-05 | Concurrent agreement replacement and approval use an old reviewed revision | Approval binds reviewed document/application version; stale review conflicts rather than approving unseen replacement. Final state/version immutable. | NOT RUN |
-| AC-080 | V11-02, D10 | FR-AUTH-05, FR-RPT-01 | Approve after replacement; applicant does not perform in-app re-acceptance | Outcome is Approved and notification says â€œYour application was approved with some modificationsâ€. No third outcome/corrections/re-acceptance workflow. | NOT RUN |
+| AC-080 | V11-02, D10 | FR-AUTH-05, FR-RPT-01 | Approve after replacement; applicant does not perform in-app re-acceptance | Outcome is Approved and notification says “Your application was approved with some modifications”. No third outcome/corrections/re-acceptance workflow. | NOT RUN |
 | AC-081 | V11-04, V11-07, V11-09 | FR-AUTH-05, FR-LOT-01 | Approval commits; provisioning times out/fails, is retried and receives duplicate outcome | Keep approved review plus visible pending/failed/unknown provisioning; one tenant/first lot; retry uses same identity. Failed provisioning is not rejection and Owner need not recreate first lot. User owns identity/organization/membership/review, Facility configuration, Operations accepted occupancy/claims/discovery/plan coverage, Payment financial terms and IoT raw observations/integrations; application snapshots do not transfer authority. | NOT RUN |
 | AC-082 | V11-04, V11-07, V11-11, D07 | FR-AUTH-02, FR-BAS-08 | Owner login before review, during failed provisioning, after successful provisioning while lot is still unopened, and with enabled TOTP | Safe validated reasons block normal session until approval and provisioning success. Required MFA challenge remains; completed login returns necessary tokens, authorized profile retrieval is separate. | NOT RUN |
 | AC-083 | V11-05 | FR-LOT-01 | Approved Owner submits additional lot; Admin rejects it | Separate review required; reject leaves Owner and other approved lots usable; no automatic lot approval and no initial-application document-edit permission. | NOT RUN |

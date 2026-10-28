@@ -1,10 +1,10 @@
-﻿# Monthly and Yearly Driver Parking Products — SRS v1.1
+# Monthly and Yearly Driver Parking Products — SRS v1.1
 
-[Requirements index](../README.md) Â· [Traceability](../../requirements-traceability/README.md)
+[Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
 **Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
-Canonical parking-product business rules are M-01–M-0— in the linked rule file; stable monthly filenames/IDs now also carry the approved yearly extension. These are Driver parking products, not an Owner platform subscription. Owners explicitly enable monthly and/or yearly products per lot, separately from their prices. A yearly pass covers 12 consecutive calendar months, with at most one yearly period purchased in advance; `MONTHLY_MAX_PREPAID_TERMS` is configurable with a default of three prepaid monthly periods. Separate configurable yearly policies, including potentially different refund rates, require specified values before sale; no monthly rate or renewal default is silently copied to yearly. Operations owns rights/plan definition; Payment owns prices/orders/paid financial periods. Available-only; no capacity guarantee, sales cap or automatic renewal.
+Canonical parking-product business rules are M-01–M-09 in the linked rule file; stable monthly filenames/IDs now also carry the approved yearly extension. These are Driver parking products, not an Owner platform subscription. Owners explicitly enable monthly and/or yearly products per lot, separately from their prices. A yearly pass covers 12 consecutive calendar months, with at most one yearly period purchased in advance; `MONTHLY_MAX_PREPAID_TERMS` is configurable with a default of three prepaid monthly periods. Separate configurable yearly policies, including potentially different refund rates, require specified values before sale; no monthly rate or renewal default is silently copied to yearly. Operations owns rights/plan definition; Payment owns prices/orders/paid financial periods. Available-only; no capacity guarantee, sales cap or automatic renewal.
 
 Before voluntary cancellation, show affected future reservations whose accepted price depends on coverage being cancelled and require Driver explicitly cancel them first (A-01). Do not auto-cancel, reprice or charge them. Recheck dependencies atomically with accepted cancellation; if a new dependency wins the race, return blockers for Driver resolution. Driver may rebook at ordinary prices subject to capacity. Owner handles cancellation; Payment refunds monthly products per M-05 and yearly products using their separately accepted policy, without inventing a yearly percentage. Failure/closure follows its separate approved rules; no release of occupied capacity.
 
@@ -76,7 +76,7 @@ Operator validates account, vehicle, state, timestamps and resources per visit; 
 
 Exclude valid ordinary day/night covered intervals from money, but evaluate the 15-minute exemption against whole session to accepted checkout. Never restart grace at monthly or yearly coverage boundaries. Separate service fees remain separate; no EV charging feature is implied. Covered 60 + uncovered 10 minutes charges only the uncovered 10.
 
-### FR-MON-0—
+### FR-MON-09
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Payment Provider  
@@ -124,7 +124,7 @@ Owner views scoped collected/refunded money; Operator sees only necessary operat
 
 For monthly and yearly products, at E stop coverage/new entry entitlement, not physical occupancy. Apply eligible monthly/yearly coverage before calculating ordinary reservation minimum: zero-price reservation confirms without payment with normal claims/cap checks; positive price uses approved prepayment. Prevent incompatible overlapping reservations and double charges; enforce A-01 dependency guard for voluntary cancellation.
 
-[Canonical M-01–M-0— rules](../../business-rules/07-monthly-passes.md).
+[Canonical M-01–M-09 rules](../../business-rules/07-monthly-passes.md).
 
 
 Design/implementation owners and exit criteria: [V11-DES-05 (Q05)](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

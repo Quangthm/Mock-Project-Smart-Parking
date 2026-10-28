@@ -260,11 +260,11 @@ If an approved lot override resolves a different effective value, protection sta
 
 The archived v0.9 SRS already established:
 
-- Allocation Time = Reservation Start âˆ’ Allocation Lead Time.
+- Allocation Time = Reservation Start − Allocation Lead Time.
 - Allocation Lead Time as a configurable policy concept.
 - Physical state and reservation/protection state as separate dimensions.
 - `OCCUPIED + PROTECTED`.
-- `AVAILABLE + RESERVED â†’ OCCUPIED + RESERVED`.
+- `AVAILABLE + RESERVED → OCCUPIED + RESERVED`.
 - Reservation Protection Window examples.
 - Occupancy Validity Timespan as a projection concept.
 

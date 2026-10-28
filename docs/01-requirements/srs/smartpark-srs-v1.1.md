@@ -1,6 +1,6 @@
-﻿# SmartPark — Consolidated SRS v1.1
+# SmartPark — Consolidated SRS v1.1
 
-**v1.1 documentation review candidate based on approved decisions Â· Updated 25 October 2026**
+**v1.1 documentation review candidate based on approved decisions · Updated 25 October 2026**
 The preceding v1.0 RC3 baseline was a review candidate, not a signed release. The [approved decision register](../../05-project-management/decision-log/2026-10-20-approved-v1.1-changes.md) governs the v1.1 update; the [25 October reservation/allocation state clarification](../../05-project-management/decision-log/2026-10-25-reservation-allocation-state-clarification.md) supersedes only the affected allocation/projection/example wording. Implementation and [acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md) remain **NOT RUN/not assessed**, not product acceptance.
 
 ## 1. Purpose and how to use this document
@@ -29,7 +29,7 @@ Authority: explicit approved amendments and the synchronized active baseline gov
 
 Owner-created Operators remain pending until email activation, verified contact and mandatory consented VNeID simulation; password setup is optional, with scoped assignment and no Admin approval per hire. Simulation is also mandatory for Driver/Owner registration, clearly labelled and not government verification. Per the [21 October V11-06 clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md), the fake API returns a GUID substitute tied to the user and persisted in the User & Access database; it is not a government identity number or an authentication token. The sole seeded Admin is exempt, with no Admin registration route or role management. Removing a grant blocks future protected actions while retaining history. Recovery does not approve an Owner, unblock an account or grant a role.
 
-Details: [complete action-by-role matrix](permissions.md) Â· [identity and access requirements](modules/01-identity-access.md).
+Details: [complete action-by-role matrix](permissions.md) · [identity and access requirements](modules/01-identity-access.md).
 
 ## 3. Functional scope at a glance
 
@@ -52,7 +52,7 @@ Existing requirement/rule/use-case/story IDs remain stable; maintained catalogue
 
 **Partner Registration:** Keep the Owner role and immediately persist pending identity/application. Complete consented simulation and save first-lot setup plus actual agreement uploads before email OTP/verification, then Admin reviews the combined application. Setup/verification/resend credentials are restricted; application ID alone is not authorization. Email verification is mandatory for review; phone need only be verified before phone OTP login.
 
-**Initial review:** Admin may replace only uploaded agreement/policy documents while the initial application is pending, preserving original/replacement versions, actor/time/reason and concurrency-safe approval binding. No other fields or additional-lot documents may be edited. Approval/rejection are the only final immutable outcomes; no in-app corrections/re-acceptance. Modified-document approval emails â€œYour application was approved with some modificationsâ€. Rejection records a safe reason and prevents repeat initial registration with that email.
+**Initial review:** Admin may replace only uploaded agreement/policy documents while the initial application is pending, preserving original/replacement versions, actor/time/reason and concurrency-safe approval binding. No other fields or additional-lot documents may be edited. Approval/rejection are the only final immutable outcomes; no in-app corrections/re-acceptance. Modified-document approval emails “Your application was approved with some modifications”. Rejection records a safe reason and prevents repeat initial registration with that email.
 
 **Provisioning and later lots:** Approval is distinct from pending/failed/unknown/successful provisioning; retry uses stable identities and cannot duplicate sites. Normal Owner login waits for successful initial provisioning; never ask the Owner to recreate the first lot. Approved activation does not open parking: Facility configuration and Operations readiness are still required. Each additional lot has independent review; rejection leaves Owner/other lots unaffected. Draft as new creates a distinct proposal, even with identical content, while request retry remains idempotent. Final rejected history is never reopened.
 
@@ -83,12 +83,12 @@ The diagram distinguishes facts; it does not authorize departure without the req
 | Topic | Main direction | Examples and exact rules |
 |---|---|---|
 | Capacity safety | Never commit incompatible overlapping claims or displace an occupied vehicle. Physical status and reservation/protection are separate. `OCCUPIED` does not identify the reservation holder: current occupant and reservation claimant may be the same or different, and fulfillment requires authoritative session/allocation/reservation linkage. Occupancy Validity Timespan defaults to 4 hours for projection only; expiry never frees a vehicle. UNKNOWN is not freely allocatable; overlapping occupied/protected/backup coverage is counted once. | [Capacity rules](../business-rules/02-facility-capacity.md) |
-| Booking defaults | Configurable defaults: minimum 15 minutes, maximum 24 hours, advance booking 7 days and inter-booking buffer 0. Runtime validation uses the resolved effective values under Admin default/bounds â†’ authorized Owner/lot override. No numeric override bounds are invented here. No active-booking cap by default; an enabled cap remains lot/account-scoped and counts pending-payment, confirmed and allocated bookings. | [Policy catalogue: bounds and authority](../business-rules/policy-catalogue.md) |
+| Booking defaults | Configurable defaults: minimum 15 minutes, maximum 24 hours, advance booking 7 days and inter-booking buffer 0. Runtime validation uses the resolved effective values under Admin default/bounds → authorized Owner/lot override. No numeric override bounds are invented here. No active-booking cap by default; an enabled cap remains lot/account-scoped and counts pending-payment, confirmed and allocated bookings. | [Policy catalogue: bounds and authority](../business-rules/policy-catalogue.md) |
 | Allocation and lateness | Allocation begins at `reservation_start - effective ALLOCATION_LEAD_TIME`; default 1 hour. Protection uses the effective `RESERVATION_PROTECTION_WINDOW`; default 4 hours. Alternative offers use effective duration; default 5 minutes. Driver reallocation uses the effective accepted-request limit; default 2. Late-created confirmed reservations whose allocation point has passed are evaluated immediately. Protect compatible claims; preserve stable allocations. If a protected/requested slot remains occupied by an unrelated session, do not treat the reservation as fulfilled or displace the occupant; apply compatible alternative/reallocation/conflict handling. Optional late tolerance and no-show use authoritative arrival evidence. Offer acceptance must occur strictly before expiry. | [Reservation/allocation rules](../business-rules/04-reservations-allocation.md) |
 | Ordinary session exemption | A whole ordinary session up to 15 minutes is free. Once exceeded, charge the full applicable uncovered duration, without subtracting 15 minutes. Covered time counts toward elapsed duration but is never charged. | [Pricing rules](../business-rules/06-pricing-payments.md) |
 | Reserved minimum and prepayment | A completed reserved visit owes its disclosed coverage-adjusted booked minimum plus eligible extras, even for a short physical stay. Prepayment is credited once. Owner chooses full payment (default), percentage >0–100%, or positive fixed deposit with no policy upper cap. | [Money examples and settlement](modules/06-pricing-payments.md) |
 | Rounding and zero-price bookings | Sum unrounded values, then round once half-up to the nearest 1,000 VND. A positive-price deposit rounding to zero is invalid; genuinely zero-priced monthly-covered reservations explicitly confirm without payment. | [Calculation rules](../business-rules/06-pricing-payments.md) |
-| Cancellation and no-show | Refund accepted percentages of eligible money actually collected. Do not collect an unpaid remainder as a penalty. Default ordinary bands: â‰¥30 minutes 100%; â‰¥15 and <30 minutes 50%; <15 minutes 0%; no-show 0%, subject to lifecycle eligibility. | [Refund table and examples](modules/06-pricing-payments.md) |
+| Cancellation and no-show | Refund accepted percentages of eligible money actually collected. Do not collect an unpaid remainder as a penalty. Default ordinary bands: ≥30 minutes 100%; ≥15 and <30 minutes 50%; <15 minutes 0%; no-show 0%, subject to lifecycle eligibility. | [Refund table and examples](modules/06-pricing-payments.md) |
 | Refund execution | Surplus creates one refund obligation; covered checkout may complete before payout. Approval is not payout proof. Unsupported online refunds remain pending/reconciled; no silent cash fallback. | [Refund rules](../business-rules/06-pricing-payments.md) and [appeals/refunds](../use-cases/uc-inc-02.md) |
 | Monthly/yearly products | Calendar-based, available-only fee coverage with distinct advance limits and accepted financial policy; no guaranteed slot/capacity or automatic renewal. Cancel dependent future reservations explicitly before voluntary pass cancellation. | [M-01–M-09 and examples](../business-rules/07-monthly-passes.md) |
 | Facility closure | Temporary closure keeps the pass active and refunds verified unavailable intervals once. Permanent closure cancels remaining coverage and refunds eligible unused value. No automatic extension. | [Monthly closure handling](modules/07-monthly-passes.md) |
@@ -112,7 +112,7 @@ Support is asynchronous. Assigned Operators handle lot matters; Admin handles pl
 
 Initial Partner agreement uploads are User-owned, versioned restricted assets with protected reads; arbitrary document URLs grant nothing. Exact upload formats/limits, retention classification and additional simulation fields/consent/completion evidence encoding remain Q01/Q02 design work; the simulated GUID return, user association and database persistence are approved requirements. Evidence is accessed through authorized owning-service routes. Images have a maximum 30-day retention class; financial documents retain seven years from issuance; conversations retain 90 days from the last message, unaffected by administrative reads. Holds and other retention classes follow the detailed contract rather than a single blanket deletion rule.
 
-Details: [TOTP and account recovery](authentication-recovery.md) Â· [Media/retention/holds](modules/09-file-media.md) Â· [Support/audit/reporting](modules/08-notifications-reporting.md) Â· [legal reference status](reference/legal-source-register.md).
+Details: [TOTP and account recovery](authentication-recovery.md) · [Media/retention/holds](modules/09-file-media.md) · [Support/audit/reporting](modules/08-notifications-reporting.md) · [legal reference status](reference/legal-source-register.md).
 
 ## 7. Integrations and acceptance expectations
 
@@ -126,11 +126,11 @@ Email capture/SMS fixtures, deterministic hardware events, manual map fallback a
 
 | Local quality objective | Approved baseline |
 |---|---|
-| Core API latency | p95 â‰¤500 ms; provider work separately measured |
+| Core API latency | p95 ≤500 ms; provider work separately measured |
 | Unexpected errors | <1%; expected business conflicts reported separately |
-| Healthy SignalR freshness | p95 â‰¤2 seconds |
+| Healthy SignalR freshness | p95 ≤2 seconds |
 | Workload | 20 concurrent users for 10 minutes; separate 50-user, one-minute burst |
-| Recovery | Restart â‰¤5 minutes; daily backup/RPO â‰¤24 hours; restore â‰¤30 minutes |
+| Recovery | Restart ≤5 minutes; daily backup/RPO ≤24 hours; restore ≤30 minutes |
 | Invariants | No incompatible double commitment, duplicate financial effect or unauthorized access is excused by aggregate targets |
 
 These are local mock-project targets, not achieved results or production SLOs. See [full local recipe and evidence requirements](modules/11-quality-deployment.md), [acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md) and [payOS test plan](../../04-testing/payment-integration/payos-test-plan.md).

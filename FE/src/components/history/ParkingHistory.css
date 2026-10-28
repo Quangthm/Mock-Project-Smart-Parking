@@ -1,0 +1,92 @@
+.parking-history { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--card); color: var(--fg); }
+.parking-history-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; }
+.parking-history-header h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; font-weight: 700; }
+.parking-history-header p { margin: 5px 0 0; color: var(--muted); font-size: .875rem; line-height: 1.5; }
+.parking-history-total { flex: none; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.parking-history-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 24px 20px; }
+.parking-history-search { display: flex; flex: 1 1 240px; align-items: center; gap: 9px; min-width: 0; min-height: 44px; padding: 0 13px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--muted); }
+.parking-history-select:focus-within { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 2px; }
+.parking-history-search input { min-width: 0; width: 100%; height: 42px; border: 0; outline: 0; background: transparent; color: var(--fg); font: inherit; font-size: .875rem; }
+.parking-history-search input::placeholder { color: var(--muted); opacity: 1; }
+.parking-history-select { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--muted); font-size: .8125rem; }
+.parking-history-select select { min-height: 40px; max-width: 180px; border: 0; outline: 0; background: transparent; color: var(--fg); font: inherit; font-size: .875rem; cursor: pointer; }
+.parking-history-table-wrap { width: 100%; overflow-x: auto; }
+.parking-history-table { width: 100%; border-collapse: collapse; text-align: left; }
+.parking-history-table th { padding: 11px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--card); color: var(--muted); font-size: .75rem; font-weight: 650; white-space: nowrap; }
+.parking-history-table td { min-width: 0; padding: 13px 16px; border-bottom: 1px solid var(--border); font-size: .875rem; vertical-align: middle; }
+.parking-history-table tr:last-child td { border-bottom: 0; }
+.parking-history-table tbody tr:hover td { background: var(--raised); }
+.parking-history-table td:first-child, .parking-history-table th:first-child { padding-left: 24px; }
+.parking-history-table td:last-child, .parking-history-table th:last-child { padding-right: 24px; text-align: right; }
+.parking-history-table td:nth-child(3), .parking-history-table td:nth-child(4), .parking-history-table th:nth-child(3), .parking-history-table th:nth-child(4) { text-align: right; }
+.parking-history-table strong, .parking-history-table small { display: block; }
+.parking-history-plate { color: var(--fg); font-size: .9375rem; font-weight: 700; letter-spacing: .015em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.parking-history-table small { margin-top: 3px; color: var(--muted); font-size: .75rem; }
+.parking-history-place { max-width: 24ch; overflow: hidden; color: var(--fg); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.parking-history-number { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.parking-history-status { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 10px; border: 1px solid currentColor; border-radius: 999px; font-size: .75rem; font-weight: 650; line-height: 1.1; white-space: nowrap; }
+.parking-history-status.is-completed { color: var(--badge-success-fg); background: var(--status-available-bg); }
+.parking-history-status.is-active { color: var(--badge-primary-fg); background: var(--active); }
+.parking-history-status.is-pending { color: var(--badge-warning-fg); background: var(--status-reserved-bg); }
+.parking-history-status.is-attention { color: var(--badge-danger-strong); background: var(--status-occupied-bg); }
+.parking-history-status.is-neutral { color: var(--muted); background: var(--raised); }
+.parking-history-details { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: .8125rem; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.parking-history-details:hover { border-color: var(--primary); color: var(--primary); }
+.parking-history-details:focus-visible, .parking-history-pagination button:focus-visible, .parking-history-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.parking-history-cards { display: none; }
+.parking-history-empty, .parking-history-message { display: flex; align-items: center; gap: 10px; margin: 0 24px 24px; padding: 20px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); font-size: .875rem; }
+.parking-history-empty { flex-direction: column; gap: 7px; padding: 38px 20px; text-align: center; }
+.parking-history-empty strong { color: var(--fg); font-size: 1rem; }
+.parking-history-empty p { margin: 0; }
+.parking-history-message.is-error { border-style: solid; border-color: var(--badge-danger-strong); color: var(--badge-danger-strong); }
+.parking-history-message.is-error button { flex: none; min-height: 44px; margin-left: auto; padding: 0 12px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 650; cursor: pointer; }
+.parking-history-message.is-error button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.parking-history-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.parking-history-pagination > div { display: flex; gap: 8px; }
+.parking-history-pagination button { min-height: 44px; padding: 0 15px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-weight: 650; cursor: pointer; }
+.parking-history-pagination button:hover:not(:disabled) { background: var(--raised); }
+.parking-history-pagination button:disabled { opacity: .5; cursor: not-allowed; }
+.parking-history-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: #0c1714b8; }
+.parking-history-dialog { width: min(680px, 100%); max-height: min(88dvh, 800px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 20px; background: var(--card); color: var(--fg); box-shadow: 0 24px 72px #0005; }
+.parking-history-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px; border-bottom: 1px solid var(--border); }
+.parking-history-dialog-header p { margin: 0 0 5px; color: var(--primary); font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.parking-history-dialog-header h3 { margin: 0; overflow-wrap: anywhere; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.parking-history-dialog-header span { display: block; margin-top: 5px; color: var(--muted); font-size: .875rem; }
+.parking-history-close { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 50%; background: var(--bg); color: var(--fg); cursor: pointer; }
+.parking-history-close:hover { background: var(--raised); }
+.parking-history-dialog-content { display: grid; gap: 20px; padding: 24px; }
+.parking-history-dialog-content > .parking-history-status { justify-self: start; }
+.parking-history-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.parking-history-detail-grid > div { min-width: 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.parking-history-detail-grid dt { color: var(--muted); font-size: .75rem; }
+.parking-history-detail-grid dd { margin: 5px 0 0; overflow-wrap: anywhere; font-size: .875rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.parking-history-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.parking-history-evidence h4 { margin: 0 0 8px; font-size: .875rem; }
+.parking-history-evidence img, .parking-history-evidence p { width: 100%; height: 150px; margin: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); object-fit: contain; }
+.parking-history-evidence p { display: grid; place-items: center; padding: 16px; color: var(--muted); font-size: .8125rem; text-align: center; }
+@media (max-width: 760px) {
+  .parking-history-header { padding: 20px 18px 16px; }
+  .parking-history-filters { padding: 0 18px 18px; }
+  .parking-history-search { flex-basis: 100%; }
+  .parking-history-select { flex: 1 1 140px; justify-content: space-between; }
+  .parking-history-select select { max-width: 120px; }
+  .parking-history-table-wrap { display: none; }
+  .parking-history-cards { display: grid; gap: 10px; padding: 0 18px 18px; }
+  .parking-history-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); }
+  .parking-history-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .parking-history-card-top > div { display: grid; min-width: 0; gap: 3px; }
+  .parking-history-card-top > div > span { overflow: hidden; color: var(--muted); font-size: .8125rem; text-overflow: ellipsis; white-space: nowrap; }
+  .parking-history-card dl { display: grid; grid-template-columns: 1fr 1.5fr; gap: 14px; margin: 16px 0 8px; }
+  .parking-history-card dt { color: var(--muted); font-size: .75rem; }
+  .parking-history-card dd { margin: 4px 0 0; font-size: .8125rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .parking-history-card .parking-history-details { width: 100%; margin-top: 10px; }
+  .parking-history-pagination { padding-inline: 18px; }
+}
+@media (max-width: 430px) {
+  .parking-history-header { align-items: flex-start; }
+  .parking-history-total { display: none; }
+  .parking-history-card-top { flex-wrap: wrap; }
+  .parking-history-card-top .parking-history-status { margin-top: 4px; }
+  .parking-history-detail-grid, .parking-history-evidence { grid-template-columns: minmax(0, 1fr); }
+  .parking-history-dialog-header, .parking-history-dialog-content { padding: 18px; }
+}

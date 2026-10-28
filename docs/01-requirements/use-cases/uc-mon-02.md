@@ -1,9 +1,9 @@
-﻿# UC-MON-02 — Buy a monthly/yearly pass and activate verified rights
+# UC-MON-02 — Buy a monthly/yearly pass and activate verified rights
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Operations, Payment
 
-[Use-case index](README.md) Â· [SRS module](../srs/modules/07-monthly-passes.md)
+[Use-case index](README.md) · [SRS module](../srs/modules/07-monthly-passes.md)
 
 ## Goal
 

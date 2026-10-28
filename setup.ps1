@@ -454,7 +454,7 @@ function Invoke-AiCameraSetup {
 # Read existing secrets without printing their values or invoking `list`.
 $existingByService = @{}
 $projectByService = @{}
-foreach ($service in @('User','Parking','Reservation')) {
+foreach ($service in @('User','Parking','Reservation','Payment')) {
     $projectDir = Join-Path $taskRoot "src/Services/${service}Service/SmartParking.${service}Service.API"
     $projectByService[$service] = $projectDir
     [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${service}Service.API.csproj") -Raw
@@ -494,7 +494,7 @@ if ($CredentialMode -eq 'Team') {
     foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { throw "Team file must configure $name." }
     }
-    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL')) {
+    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { continue }
         if ($settings[$name] -and $settings[$name] -notlike 'replace-with-*' -and $settings[$name] -cne $team[$name]) {
             throw "Team/local conflict for $name. Existing configuration was preserved; reconcile it explicitly before retrying."
@@ -523,7 +523,7 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
         } else {
             # Reuse an existing local PostgreSQL password when configuring an old volume.
             $passwords = @()
-            foreach ($service in @('User','Parking','Reservation')) {
+            foreach ($service in @('User','Parking','Reservation','Payment')) {
                 $connection = $existingByService[$service]["ConnectionStrings:$service"]
                 $extracted = Get-SecretConnectionStringPassword $connection
                 if ($extracted) { $passwords += $extracted }
@@ -583,7 +583,7 @@ foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTP
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
 if ($settings['VITE_MAPTILER_API_KEY'] -match "[\r\n']") { throw 'Configure MapTiler key directly in FE/.env.' }
-foreach ($service in @('USER','PARKING','RESERVATION')) {
+foreach ($service in @('USER','PARKING','RESERVATION','PAYMENT')) {
     $name = "SMARTPARK_SERVICE_${service}_URL"
     if ($settings[$name]) {
         $uri = $null
@@ -644,8 +644,7 @@ if (!$SkipDatabase) {
         # Container env is used internally; credentials never become command arguments.
         # Send shell code through stdin: PowerShell 5.1 strips native argument quotes.
         # The trailing comment also consumes its Windows CRLF line terminator.
-        $probe = 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q -c "SELECT 1" # local authentication probe'
-        $probe | & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile exec -T $container sh -s | Out-Null
+        & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile exec -T $container sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q -c "SELECT 1"' | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "$service database authentication failed. Restore the password used to initialize this volume; no data was reset." }
         # Runner status lines print green; psql command chatter prints dim gray.
         $runnerOutput = & (Join-Path $taskRoot 'scripts/apply-workflow-migrations.ps1') -Service $service -SchemaRoot $taskRoot -EnvPath $envFile
@@ -657,8 +656,8 @@ if (!$SkipDatabase) {
     }
 }
 
-Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation...' -ForegroundColor Cyan
-if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation')) {
+Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation, Payment...' -ForegroundColor Cyan
+if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment')) {
     $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
     $password = $settings['SMARTPARK_DEV_PASSWORD'].Replace('"','""')
@@ -667,9 +666,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
         'Services:User' = 'http://localhost:5035/'
         'Services:Parking' = 'http://localhost:5045/'
         'Services:Reservation' = 'http://localhost:5055/'
+        'Services:Payment' = 'http://localhost:5065/'
     }
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
-    foreach ($remoteService in @('User','Parking','Reservation')) {
+    foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
         if ($url) { $desired["Services:$remoteService"] = $url }
     }
@@ -690,6 +690,17 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
         }
         if ($settings['SMARTPARK_JWT_PRIVATE_KEY_PEM']) { $desired['Jwt:PrivateKeyPem'] = $settings['SMARTPARK_JWT_PRIVATE_KEY_PEM'] }
     }
+    if ($service -eq 'Payment') {
+        # PaymentService resolves the reservation API through Services:ReservationService:BaseUrl.
+        $reservationUrl = $settings['SMARTPARK_SERVICE_RESERVATION_URL']
+        if (!$reservationUrl) { $reservationUrl = 'http://localhost:5055/' }
+        $desired['Services:ReservationService:BaseUrl'] = $reservationUrl
+        # Empty payOS values keep the sandbox emulation; keys are never removed automatically.
+        if ($settings['SMARTPARK_PAYOS_CLIENT_ID']) { $desired['PayOs:ClientId'] = $settings['SMARTPARK_PAYOS_CLIENT_ID'] }
+        if ($settings['SMARTPARK_PAYOS_API_KEY']) { $desired['PayOs:ApiKey'] = $settings['SMARTPARK_PAYOS_API_KEY'] }
+        if ($settings['SMARTPARK_PAYOS_CHECKSUM_KEY']) { $desired['PayOs:ChecksumKey'] = $settings['SMARTPARK_PAYOS_CHECKSUM_KEY'] }
+        if ($settings['SMARTPARK_PAYOS_BASE_URL']) { $desired['PayOs:BaseUrl'] = $settings['SMARTPARK_PAYOS_BASE_URL'] }
+    }
     $toSync = @{}
     foreach ($name in $desired.Keys) {
         if (!$existingByService[$service].ContainsKey($name) -or $existingByService[$service][$name] -cne $desired[$name]) {
@@ -705,12 +716,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
         Write-Warning 'DevelopmentAdmin:Password differs between user-secrets and .env; user-secrets will be overwritten to match .env. Setup does not change the Admin password already seeded in the database — if Admin login fails afterwards, restore the old password in .env or rerun with -RecreateDb.'
     }
     if ($toSync.Count) {
-        $previousEncoding = $OutputEncoding
-        try {
-            $OutputEncoding = New-Object Text.UTF8Encoding($false)
-            $toSync | ConvertTo-Json | & dotnet user-secrets set --project $projectByService[$service] | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service." }
-        } finally { $OutputEncoding = $previousEncoding }
+        foreach ($name in $toSync.Keys) {
+            & dotnet user-secrets set $name $toSync[$name] --project $projectByService[$service] | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service ($name)." }
+        }
     }
     foreach ($name in $removable) {
         & dotnet user-secrets remove $name --project $projectByService[$service] | Out-Null
@@ -718,7 +727,7 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation'))
     }
     Write-Host "$service configuration ready ($($toSync.Count) synced, $($removable.Count) removed)." -ForegroundColor Green
 } }
-Write-Host '[6/7] Preparing frontend environment (FE/.env, MapTiler, AI endpoints)...' -ForegroundColor Cyan
+Write-Host '[6/7] Preparing frontend environment (FE/.env, MapTiler, API base URLs)...' -ForegroundColor Cyan
 $frontendTemplate = Join-Path $taskRoot 'FE/.env.example'
 $frontendEnv = Join-Path $taskRoot 'FE/.env'
 if ((Test-Path $frontendTemplate) -and !(Test-Path $frontendEnv)) { Copy-Item $frontendTemplate $frontendEnv }
@@ -734,31 +743,32 @@ if ($settings['VITE_MAPTILER_API_KEY']) {
         Write-Warning 'FE/.env has a different MapTiler key; existing frontend configuration was preserved.'
     }
 }
-# AI endpoints (python-ai): main.py serves the REST API, main_live.py the live stream.
-# Fill FE/.env only when its values are empty; existing frontend values are preserved.
-$aiDefaults = [ordered]@{
+# Backend/AI endpoints written into FE/.env when empty; existing frontend values are preserved.
+$frontendDefaults = [ordered]@{
     'VITE_AI_API_BASE_URL'      = 'http://localhost:5001'
     'VITE_AI_LIVE_API_BASE_URL' = 'http://localhost:5002'
+    'VITE_PAYMENT_API_BASE_URL' = 'http://localhost:5065'
 }
-if ($settings['VITE_AI_API_BASE_URL']) { $aiDefaults['VITE_AI_API_BASE_URL'] = $settings['VITE_AI_API_BASE_URL'] }
-if ($settings['VITE_AI_LIVE_API_BASE_URL']) { $aiDefaults['VITE_AI_LIVE_API_BASE_URL'] = $settings['VITE_AI_LIVE_API_BASE_URL'] }
+if ($settings['VITE_AI_API_BASE_URL']) { $frontendDefaults['VITE_AI_API_BASE_URL'] = $settings['VITE_AI_API_BASE_URL'] }
+if ($settings['VITE_AI_LIVE_API_BASE_URL']) { $frontendDefaults['VITE_AI_LIVE_API_BASE_URL'] = $settings['VITE_AI_LIVE_API_BASE_URL'] }
+if ($settings['VITE_PAYMENT_API_BASE_URL']) { $frontendDefaults['VITE_PAYMENT_API_BASE_URL'] = $settings['VITE_PAYMENT_API_BASE_URL'] }
 if (Test-Path -LiteralPath $frontendEnv -PathType Leaf) {
     $frontendSettings = & (Join-Path $taskRoot 'scripts/load-env.ps1') -EnvPath $frontendEnv -NoExport
-    $aiMissing = @{}
-    foreach ($name in $aiDefaults.Keys) {
-        $value = $aiDefaults[$name]
+    $frontendMissing = @{}
+    foreach ($name in $frontendDefaults.Keys) {
+        $value = $frontendDefaults[$name]
         if ($value -match "[\r\n']") { throw "Configure $name directly in FE/.env." }
-        if (!$frontendSettings[$name]) { $aiMissing[$name] = $value }
+        if (!$frontendSettings[$name]) { $frontendMissing[$name] = $value }
         elseif ($frontendSettings[$name] -cne $value) { Write-Warning "FE/.env has a different $name; existing frontend configuration was preserved." }
     }
-    if ($aiMissing.Count) {
+    if ($frontendMissing.Count) {
         $frontendLines = @(Get-Content -LiteralPath $frontendEnv -Encoding UTF8)
-        foreach ($name in $aiMissing.Keys) {
+        foreach ($name in $frontendMissing.Keys) {
             $frontendLines = @($frontendLines | Where-Object { $_ -notmatch ('^\s*' + [regex]::Escape($name) + '\s*=') })
-            $frontendLines += "$name='$($aiMissing[$name])'"
+            $frontendLines += "$name='$($frontendMissing[$name])'"
         }
         [IO.File]::WriteAllLines($frontendEnv, $frontendLines, (New-Object Text.UTF8Encoding($false)))
-        Write-Host 'Configured AI endpoint URLs in FE/.env; existing values were preserved.' -ForegroundColor Green
+        Write-Host 'Configured frontend API endpoint URLs in FE/.env; existing values were preserved.' -ForegroundColor Green
     }
 }
 if ($sonarEnabled -and !$SkipDatabase) {
@@ -781,7 +791,7 @@ if (!$SkipRestore) {
     & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
 }
-$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Parking and Reservation.'
+$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Parking, Reservation and Payment.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
 if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

@@ -22,9 +22,17 @@
     <Project Path="src/Services/UserService/SmartParking.UserService.Infrastructure/SmartParking.UserService.Infrastructure.csproj" />
     <Project Path="src/Services/UserService/SmartParking.UserService.Persistence/SmartParking.UserService.Persistence.csproj" />
   </Folder>
+  <Folder Name="/src/Services/PaymentService/">
+    <Project Path="src/Services/PaymentService/SmartParking.PaymentService.API/SmartParking.PaymentService.API.csproj" />
+    <Project Path="src/Services/PaymentService/SmartParking.PaymentService.Application/SmartParking.PaymentService.Application.csproj" />
+    <Project Path="src/Services/PaymentService/SmartParking.PaymentService.Domain/SmartParking.PaymentService.Domain.csproj" />
+    <Project Path="src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/SmartParking.PaymentService.Infrastructure.csproj" />
+    <Project Path="src/Services/PaymentService/SmartParking.PaymentService.Persistence/SmartParking.PaymentService.Persistence.csproj" />
+  </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/Services/">
     <Project Path="tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj" />
+    <Project Path="tests/Services/SmartParking.PaymentService.Tests/SmartParking.PaymentService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
   </Folder>
 </Solution>

@@ -9,7 +9,7 @@ Hướng dẫn onboarding cho dev mới. Làm theo thứ tự: **Prerequisites �
 ```powershell
 git branch --show-current          # xác nhận đang ở branch làm việc
 .\setup.ps1                        # dựng DB + cấu hình credential + SonarQube
-.\scripts\run-app-service.ps1 -Service All   # chạy 4 container app (BE + FE)
+.\scripts\run-app-service.ps1 -Service All   # chạy 5 container app (BE + FE)
 # Mở http://localhost:5173
 ```
 
@@ -25,7 +25,7 @@ Checklist trước khi setup:
 - [ ] **Node.js + npm** nếu chạy frontend trực tiếp trên host (FE dùng Vite 8). Docker app stack dùng Node 22 trong image, không cần cài Node trên host.
 - [ ] **Git** và checkout đúng branch: `git branch --show-current`.
 - [ ] **Port đang rảnh** (xem bảng đầy đủ ở [mục 7](#7-advanced-options)):
-  - API: `5035`, `5045`, `5055` · FE: `5173` · SonarQube: `9000`
+  - API: `5035`, `5045`, `5055`, `5065` · FE: `5173` · SonarQube: `9000`
   - DB: `5441`–`5446` · AI (tùy chọn): `5001`, `5002`
 
 ### Thuật ngữ nhanh cho người mới
@@ -53,8 +53,8 @@ Checklist trước khi setup:
 | `[2/7]` | Dùng lại credential đã có, chỉ sinh giá trị còn thiếu. |
 | `[3/7]` | Validate service key (≥32 ký tự), policy password (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt) và 6 port DB. |
 | `[4/7]` | Dựng 6 DB `user`, `facility`, `operations`, `payment`, `notification`, `iot`, probe authentication, áp migration. |
-| `[5/7]` | Đồng bộ user-secrets cho User/Parking/Reservation theo `.env`. |
-| `[6/7]` | Chuẩn bị `FE/.env`, MapTiler, AI endpoints; khởi động SonarQube (mặc định). |
+| `[5/7]` | Đồng bộ user-secrets cho User/Parking/Reservation/Payment theo `.env`. |
+| `[6/7]` | Chuẩn bị `FE/.env`, MapTiler, API base URLs; khởi động SonarQube (mặc định). |
 | `[7/7]` | `dotnet restore`. |
 
 Mặc định `CredentialMode = Local`: credential trong `.env`/user-secrets được **dùng lại**, chỉ sinh khi thiếu. Setup kết thúc bằng dòng `Setup complete...` khi mọi bước pass.
@@ -73,18 +73,19 @@ Không commit `.env`, file Team credential, user-secrets hoặc thư mục workf
 
 ## 3. Run Application
 
-Chọn **một** trong hai cách; không chạy đồng thời cả hai vì cùng dùng port `5035/5045/5055`.
+Chọn **một** trong hai cách; không chạy đồng thời cả hai vì cùng dùng port `5035/5045/5055/5065`.
 
 ### Cách A — Docker app stack (khuyến nghị cho onboarding)
 
-Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose project `smartpark-app` dùng external network `smartpark-schema_default` và DB hostname `user-db`/`facility-db`/`operations-db`.
+Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose project `smartpark-app` dùng external network `smartpark-schema_default` và DB hostname `user-db`/`facility-db`/`operations-db`/`payment-db`.
 
 ```powershell
 .\scripts\run-app-service.ps1 -Service User       # 1 service, mở CMD log riêng
 .\scripts\run-app-service.ps1 -Service Parking
 .\scripts\run-app-service.ps1 -Service Reservation
+.\scripts\run-app-service.ps1 -Service Payment
 .\scripts\run-app-service.ps1 -Service Frontend
-.\scripts\run-app-service.ps1 -Service All        # cả 4 container
+.\scripts\run-app-service.ps1 -Service All        # cả 5 container
 ```
 
 | Container | URL | Ghi chú |
@@ -92,11 +93,12 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | `smartpark-app-user-service-1` | http://localhost:5035/health | Seed admin/owner/operator khi start |
 | `smartpark-app-parking-service-1` | http://localhost:5045/health | Dùng `facility-db` |
 | `smartpark-app-reservation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
+| `smartpark-app-payment-service-1` | http://localhost:5065/health | Dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
 > **Lưu ý chuyển tiếp v1.1 / Fix2FA:** ParkingService (dùng `facility-db` trên port 5442) đang được đổi tên thành FacilityService trong branch `Fix2FA` theo SRS v1.1 (quyết định V11-09). Tương tự, ReservationService (dùng `operations-db` trên port 5443) sẽ hợp nhất vào Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
 
-- Lần đầu build 4 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
+- Lần đầu build 5 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
 - `-NoBuild` bỏ qua bước build khi image đã có; `-NoLogWindow` không mở cửa sổ CMD (dùng cho CI/automation).
 - Có thể double-click `scripts\run-*-service.cmd` hoặc `scripts\run-all-apps.cmd`.
 - Dừng stack (giữ nguyên volume): `.\scripts\stop-app-service.ps1 -Service All`.
@@ -104,7 +106,7 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 
 ### Cách B — Runner trên host (Visual Studio / `dotnet run`)
 
-Mở 3 terminal PowerShell tại repo root, mỗi terminal chạy một API:
+Mở 4 terminal PowerShell tại repo root, mỗi terminal chạy một API:
 
 ```powershell
 .\scripts\run-schema-service.ps1 -Service User
@@ -112,6 +114,8 @@ Mở 3 terminal PowerShell tại repo root, mỗi terminal chạy một API:
 .\scripts\run-schema-service.ps1 -Service Parking
 # Terminal khác:
 .\scripts\run-schema-service.ps1 -Service Reservation
+# Terminal khác:
+.\scripts\run-schema-service.ps1 -Service Payment
 ```
 
 Runner nạp `.env` vào process (connection string, service key, credential admin/owner/operator), nên không cần user-secrets. Khi chạy trực tiếp từ Visual Studio, dùng user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` để đồng bộ lại.
@@ -138,12 +142,13 @@ Checklist xác nhận môi trường chạy đúng:
   docker compose --project-name smartpark-schema --env-file .env -f compose.schema-integration.yml ps
   ```
 
-- [ ] **3 API trả health 200**
+- [ ] **4 API trả health 200**
 
   ```powershell
   Invoke-WebRequest http://localhost:5035/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5045/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5055/health -UseBasicParsing
+  Invoke-WebRequest http://localhost:5065/health -UseBasicParsing
   ```
 
 - [ ] **FE mở được** tại http://localhost:5173.
@@ -209,7 +214,7 @@ Khi nhiều dev cần dùng chung credential, leader cung cấp **file credentia
 ```
 
 - File Team bắt buộc có: `SMARTPARK_DEV_PASSWORD`, `SMARTPARK_SERVICE_KEY` (≥32 ký tự), `SMARTPARK_ADMIN_PASSWORD` (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt).
-- Có thể kèm: `SONAR_DB_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`, `VITE_MAPTILER_API_KEY`, `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_PARKING_URL`, `SMARTPARK_SERVICE_RESERVATION_URL`.
+- Có thể kèm: `SONAR_DB_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`, `VITE_MAPTILER_API_KEY`, `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_PARKING_URL`, `SMARTPARK_SERVICE_RESERVATION_URL`, `SMARTPARK_SERVICE_PAYMENT_URL`.
 - File Team **không thay thế** toàn bộ `.env`: port, SMTP và cấu hình riêng trên máy vẫn giữ nguyên.
 - Setup dừng nếu credential Team khác cấu hình local đã có (`Team/local conflict`); cấu hình hiện tại được giữ nguyên, phải reconcile thủ công rồi chạy lại.
 - Không commit file Team hoặc secret thật.
@@ -319,7 +324,7 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 ### 7.2 Credentials, user-secrets và DB volume
 
-- **Local reuse:** setup dùng lại credential đã có trong `.env`/user-secrets; chỉ sinh khi thiếu. Ba API dùng cùng service key trên máy này.
+- **Local reuse:** setup dùng lại credential đã có trong `.env`/user-secrets; chỉ sinh khi thiếu. Các API dùng cùng service key trên máy này.
 - **`Team/local conflict`:** setup dừng nếu credential Team khác cấu hình local đã có; không tự ghi đè để tránh phá môi trường đang chạy.
 - **`[5/7]` ghi đè user-secrets:** mỗi lần chạy setup, user-secrets được đồng bộ theo `.env` — giá trị lệch bị ghi đè, khóa optional (JWT PEM, SMTP) không còn trong `.env` bị xóa. Muốn giữ user-secrets cũ thì dùng `-SkipUserSecrets` + runner, **không** chạy trực tiếp từ Visual Studio.
 - **Password volume DB:** đổi password trong `.env` **không** đổi password đã init trong PostgreSQL volume. Nếu volume cũ có password khác, phải khôi phục password gốc trong `.env`; chỉ `-RecreateDb` mới tạo lại DB với password mới (kèm mất dữ liệu).
@@ -329,14 +334,14 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 | Thành phần | Port | Ghi chú |
 | --- | --- | --- |
-| User/Parking/Reservation API | `5035` / `5045` / `5055` | Docker app stack bind `127.0.0.1` |
+| User/Parking/Reservation/Payment API | `5035` / `5045` / `5055` / `5065` | Docker app stack bind `127.0.0.1` |
 | User/Parking/Reservation DB | `5441` / `5442` / `5443` | Bind loopback (`127.0.0.1`) |
 | Payment/Notification/IoT DB | `5444` / `5445` / `5446` | Bind loopback (`127.0.0.1`) |
 | `ai-rest` / `ai-live` | `5001` / `5002` | Chỉ dựng bằng `.\setup.ps1 -WithAiCamera` |
 | Frontend (Vite) | `5173` | Host hoặc Docker |
 | SonarQube UI | `9000` | Mặc định của setup |
 
-DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng. Cấu hình URL qua `SMARTPARK_SERVICE_USER_URL` / `SMARTPARK_SERVICE_PARKING_URL` / `SMARTPARK_SERVICE_RESERVATION_URL`.
+DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng. Cấu hình URL qua `SMARTPARK_SERVICE_USER_URL` / `SMARTPARK_SERVICE_PARKING_URL` / `SMARTPARK_SERVICE_RESERVATION_URL` / `SMARTPARK_SERVICE_PAYMENT_URL`.
 
 ### 7.4 DB volume và migration
 
@@ -354,6 +359,7 @@ DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập �
 | Giá trị container dùng (`SMARTPARK_SERVICE_KEY`, password admin/owner/operator) | `.\scripts\run-app-service.ps1 -Service All -NoBuild` — recreate container với env mới, không cần build image |
 | Giá trị runner host dùng (mọi key trong `.env`) | Restart `.\scripts\run-schema-service.ps1 -Service X` (runner đọc `.env` mỗi lần start) |
 | Chạy Visual Studio/`dotnet run` (user-secrets) | `.\setup.ps1 -SkipDatabase -SkipRestore` — bước `[5/7]` ghi đè user-secrets lệch |
+| `SMARTPARK_PAYOS_*` (PaymentService) | `.\scripts\run-app-service.ps1 -Service Payment -NoBuild` (container) hoặc rerun `.\setup.ps1 -SkipDatabase -SkipRestore` (user-secrets). Rỗng = sandbox emulation. |
 | Port DB `SMARTPARK_DB_*_PORT` | `.\setup.ps1 -SkipRestore` rồi restart runner |
 | MapTiler / AI key cho FE | Sửa trực tiếp `FE/.env` + restart Vite — setup không ghi đè file đã có giá trị |
 | `VITE_*` của FE container / port trong compose | Sửa `compose.app.yml` rồi chạy lại runner |

@@ -300,8 +300,8 @@ export function DriverDashboard() {
                   aria-label="Close profile window"
                   onClick={() => setProfileSection(null)}
                   style={{
-                    width: 34,
-                    height: 34,
+                    width: 44,
+                    height: 44,
                     border: "1px solid var(--border)",
                     borderRadius: "50%",
                     background: "var(--card)",
@@ -471,7 +471,7 @@ export function DriverDashboard() {
         ) : (
           <>
             {tab === "home" && homePanel !== "find" && (
-              <div className="animate-in">
+              <div key={homePanel} className="animate-in">
                 {homePanel === "bookings" ? (
                   <section className="driver-bookings-page">
                     <PageHeader title="Bookings" variant="compact" />

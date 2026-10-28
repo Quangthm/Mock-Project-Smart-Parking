@@ -337,6 +337,7 @@ The following retained prototype example illustrates two independent render dime
 
 `RESERVED` and `PROTECTED` remain mutually exclusive values of the existing `reservationState` projection. No split enum or database migration is required by this clarification.
 
+
 ### 3.3. Field Definitions
 
 | JSON Field | Data Type | Mandatory | Description & Mapping Target |
@@ -350,7 +351,7 @@ The following retained prototype example illustrates two independent render dime
 | `supportedVehicleType` | `string` (Enum) | Yes | `CAR` \| `MOTORCYCLE` \| `OVERSIZED`. |
 | `slotType` | `string` (Enum) | Yes | `STANDARD` \| `EV` \| `DISABLED` \| `VIP`. |
 | `physicalState` | `string` (Enum) | Yes | Operations-accepted physical condition/projection; `OCCUPIED` means a vehicle is present/treated as occupied, not that it is the reservation claimant. Raw sensor/manual inputs require authoritative reconciliation. |
-| `reservationState` | `string` (Enum) / `null` | No | Operations-owned protection projection; transitional `ReservationService` is not a new ownership decision. |
+| `reservationState` | `string` (Enum) / `null` | No | Operations-owned mutually exclusive reservation/protection projection (`RESERVED`, `PROTECTED`, `BACKUP`); independent from physical occupant identity. Transitional `ReservationService` is not a new ownership decision. |
 | `sessionType` | `string` (Enum) / `null` | No | Active session classification used by `car_color status`. |
 | `isEvCharging` | `boolean` | Yes | Flag indicating whether vehicle is actively drawing power. |
 | `updatedAt` | `string` (ISO 8601) | Yes | Last state modification time for staleness detection. |
@@ -362,7 +363,7 @@ In strict accordance with **SmartPark SRS v1.0 §5 (Capacity Safety)** and **FR-
 | Physical State Code | Operational Semantics | Channel A Visualization (3D Proxy) |
 | :--- | :--- | :--- |
 | **`AVAILABLE`** | Bay is physically empty; booking/admission still requires Operations authorization and compatible availability. | No vehicle proxy rendered. Slot pavement decals remain visible. |
-| **`OCCUPIED`** | A vehicle is physically present in the stall. | **Spawn 3D Proxy Vehicle** (`car_model_blender.glb`) with `car_color status`. |
+| **`OCCUPIED`** | A vehicle is physically present/accepted as occupied. This state does not identify whether that vehicle belongs to the reservation claimant. | **Spawn 3D Proxy Vehicle** (`car_model_blender.glb`) with `car_color status`. |
 | **`UNKNOWN`** | Sensor is disconnected or telemetry is ambiguous. | Render warning marker / semi-transparent hologram. **Never infer `AVAILABLE`**. |
 | **`MAINTENANCE`** | Bay is closed for cleaning, repairs, or re-striping. | Spawn 3D hazard cone / barrier proxy. Inactive for selection. |
 | **`UNAVAILABLE`** | Bay is unavailable according to accepted configuration/operational state; no permanent-decommission inference. | Darkened surface tint; excluded from navigation. |
@@ -374,18 +375,21 @@ Reservation and protection are Operations-owned business dimensions and are **co
 | Reservation State Code | Business Semantics | Channel B Visualization (Perimeter Halo) |
 | :--- | :--- | :--- |
 | `null` / `UNRESERVED` | No displayed active protection; this alone does not establish walk-in availability. | Emissive outline off (`emissiveIntensity: 0.0`). |
-| **`RESERVED`** | Accepted reservation projection; exact claim/payment state remains in Operations and Payment. | **Pulsing Amber Perimeter Halo** (`#F59E0B`, pulse $0.65$). |
-| **`PROTECTED`** | Accepted reservation protection under the authoritative policy/claim contract. | **Steady Cyan Perimeter Halo** (`#06B6D4`, intensity $0.85$). |
+| **`RESERVED`** | Accepted reservation projection; exact claim/payment state and whether the current physical occupant matches that claimant remain in Operations. | **Pulsing Amber Perimeter Halo** (`#F59E0B`, pulse $0.65$). |
+| **`PROTECTED`** | Accepted reservation protection under the authoritative policy/claim contract. The slot may simultaneously be occupied by an unrelated current session. | **Steady Cyan Perimeter Halo** (`#06B6D4`, intensity $0.85$). |
 | **`BACKUP`** | Configured backup/protection projection; not a new customer entitlement. | **Steady Purple Perimeter Halo** (`#8B5CF6`, intensity $0.70$). |
 
 ### 3.6. State Precedence & Separation Invariants
 
-1. **Orthogonal Non-Interference**: Channel A (`physicalState`) and Channel B (`reservationState`) must never overwrite each other. A bay can simultaneously be `AVAILABLE + RESERVED` (driver has not arrived yet) or `OCCUPIED + RESERVED` (driver has parked in their assigned bay).
-2. **Decal Preservation**: Neither channel may alter or tint the base texture of the slot floor mesh. Enterprise pavement markings remain 100% visible.
-3. **No Optimistic Availability**: If a backend record is missing or reports `UNKNOWN`, the system must **never default to `AVAILABLE`**.
-4. **Invalid Value Rejection**: Unrecognized enum strings (e.g. `"FREE"`, `"TAKEN"`) must be logged as data errors and displayed as `UNKNOWN`.
-5. **Precision Integrity (FR-MAP-03 & BR-CAP-01)**: Show vehicle location only to the precision actually recorded for its session. In aggregate capacity zones (such as motorcycle zones where spaces are pooled rather than individually numbered), the system must never invent or snap to a non-existent individual numbered slot.
-6. **EV Charging Scope Boundary**: In accordance with SRS v1.0 Section 8 & FR-LOT-02, EV dynamic charging infrastructure is outside MVP scope; EV slot meshes (`PARKING_EV_*`) are rendered for visual reference and static layout only.
+1. **Orthogonal Non-Interference**: Channel A (`physicalState`) and Channel B (`reservationState`) must never overwrite each other. A bay can simultaneously be `AVAILABLE + RESERVED`, `AVAILABLE + PROTECTED`, `OCCUPIED + RESERVED`, or `OCCUPIED + PROTECTED`.
+2. **Occupant/Claimant Non-Inference**: `OCCUPIED + RESERVED/PROTECTED` does not establish whether the current occupant is the reservation claimant. The two may be the same or different. A reservation-linked actual entry is established only by authorized Operations session/allocation/reservation linkage. If an unrelated occupant remains when the future reservation needs the resource, the visualization must not show the reservation as fulfilled; backend recovery/reallocation governs.
+3. **Privacy-Safe Relationship Display**: Ordinary viewers see independent physical and reservation/protection channels. If an authorized Operations projection explicitly establishes same/different relationship, the UI may communicate it without exposing another Driver's identity.
+4. **Occupancy Projection**: `OCCUPANCY_VALIDITY_TIMESPAN` is configurable; its default is 4 hours. Rendering/availability uses the resolved effective value. A currently occupied slot can remain projected occupied across a future booking interval unless newer authoritative evidence changes it. Projection expiry never frees the physical slot.
+5. **Decal Preservation**: Neither channel may alter or tint the base texture of the slot floor mesh. Enterprise pavement markings remain 100% visible.
+6. **No Optimistic Availability**: If a backend record is missing or reports `UNKNOWN`, the system must **never default to `AVAILABLE`**.
+7. **Invalid Value Rejection**: Unrecognized enum strings (e.g. `"FREE"`, `"TAKEN"`) must be logged as data errors and displayed as `UNKNOWN`.
+8. **Precision Integrity (FR-MAP-03 & BR-CAP-01)**: Show vehicle location only to the precision actually recorded for its session. In aggregate capacity zones (such as motorcycle zones where spaces are pooled rather than individually numbered), the system must never invent or snap to a non-existent individual numbered slot.
+9. **EV Charging Scope Boundary**: In accordance with SRS v1.0 Section 8 & FR-LOT-02, EV dynamic charging infrastructure is outside MVP scope; EV slot meshes (`PARKING_EV_*`) are rendered for visual reference and static layout only.
 
 ---
 

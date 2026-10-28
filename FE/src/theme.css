@@ -537,7 +537,7 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
 .landing-section { padding: clamp(72px, 8vw, 130px) var(--space-page); }
 .landing-section-heading { max-width: 1240px; margin: 0 auto 38px; }
 .landing-section-heading .landing-kicker, .landing-final .landing-kicker { color: var(--primary); }
-.landing-section-heading h2, .landing-final h2 { max-width: 18ch; margin: 15px 0 12px; color: var(--fg); font-size: clamp(2.25rem, 4.2vw, 4.2rem); line-height: 1.1; letter-spacing: -.055em; }
+.landing-section-heading h2, .landing-final h2 { max-width: 18ch; margin: 15px 0 12px; color: var(--fg); font-size: clamp(1.875rem, 3.2vw, 3rem); line-height: 1.14; letter-spacing: -.055em; }
 .landing-section-heading p, .landing-final p { max-width: 52ch; margin: 0; color: var(--muted); font-size: 1rem; line-height: 1.7; }
 .landing-benefits { background: var(--bg); }
 .landing-benefit-grid, .landing-journey-grid, .landing-payment-grid { display: grid; max-width: 1240px; margin: 0 auto; gap: 14px; }

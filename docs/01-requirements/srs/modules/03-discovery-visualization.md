@@ -12,7 +12,7 @@ Selecting a lot shows important details and an explicit button to open its inter
 
 Owner configures lot/floor/zone/row/space identifiers, access paths, compatible vehicle categories, category-specific pools and map associations. Support outdoor, multi-floor building and multi-floor basement templates; outdoor has no artificial floor. Car and motorcycle capacities are not interchangeable. Fixed 3D templates are deployment assets. No automatic mixed-category area conversion or EV charging in MVP.
 
-2D/3D displays backend state, requested versus allocated location and only recorded precision. Show stale/disconnected status and reload authorized state after reconnect. A displayed slot creates no guarantee. Driver interface supports discovery/reservation/own visit/payment/help; Operator shows approaching/waiting vehicles, open sessions, allocation and emergencies; Owner shows configuration, staff and reports; Admin shows approvals, integration/security and audit. Role visibility grants no extra command permission.
+2D/3D displays backend state, requested versus allocated location and only recorded precision. Physical state and Reservation / Protection State remain independent display channels. A slot may therefore appear as `OCCUPIED + RESERVED` or `OCCUPIED + PROTECTED`; this combination does not prove whether the current occupant is the reservation holder. The relation is shown only when an authorized Operations projection establishes it, and another Driver's identity is not exposed merely to explain that the occupants differ. For selected future intervals, the view may show current/projected occupation under Occupancy Validity Timespan together with a reservation/protection overlay. Show stale/disconnected status and reload authorized state after reconnect. A displayed slot creates no guarantee. Driver interface supports discovery/reservation/own visit/payment/help; Operator shows approaching/waiting vehicles, open sessions, allocation and emergencies; Owner shows configuration, staff and reports; Admin shows approvals, integration/security and audit. Role visibility grants no extra command permission.
 
 ## Functional requirements
 
@@ -46,7 +46,7 @@ Selecting a lot shows important details and an explicit button to open its inter
 **Actors:** Driver, Operator, Owner  
 **Stories:** US-D16, US-O03
 
-Open the internal 2D/3D lot page from the selected MapTiler lot detail, preserving identity/category/interval. 2D/3D state visualization and backend authority follow the domain contract; show requested and actual allocated positions distinctly. Booking revalidates backend rights/capacity; model selection alone commits nothing.
+Open the internal 2D/3D lot page from the selected MapTiler lot detail, preserving identity/category/interval. 2D/3D state visualization and backend authority follow the domain contract; show requested and actual allocated positions distinctly. Render physical state independently from the mutually exclusive Reservation / Protection State projection. `OCCUPIED` never identifies the reservation claimant by itself: `OCCUPIED + RESERVED/PROTECTED` may involve the same Driver or different Drivers. Only authorized Operations session/allocation/reservation linkage may establish that relationship; do not expose another Driver's identity to ordinary viewers. Booking revalidates backend rights/capacity; model selection alone commits nothing.
 
 ### FR-MAP-03
 

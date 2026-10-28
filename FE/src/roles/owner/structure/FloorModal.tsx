@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useEffect, type FormEvent } from "react"
 import { createPortal } from "react-dom"
 
@@ -247,7 +248,7 @@ export function FloorModal({
             >
               Floor Operating Status
             </label>
-            <select
+            <RoundedSelect
               className="input"
               value={status}
               onChange={(e) =>
@@ -260,7 +261,7 @@ export function FloorModal({
               <option value="inactive">
                 Inactive (Closed / Under renovation)
               </option>
-            </select>
+            </RoundedSelect>
           </div>
 
           {error && (

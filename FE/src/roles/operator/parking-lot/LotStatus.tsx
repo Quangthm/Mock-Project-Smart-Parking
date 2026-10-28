@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -139,7 +140,7 @@ export function LotStatus({
           <span className="text-[var(--muted)] font-medium">Filters:</span>
 
           {/* Vehicle Type */}
-          <select
+          <RoundedSelect
             className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
             value={vehicleTypeFilter}
             onChange={(e) => setVehicleTypeFilter(e.target.value as "all" | "car" | "motorcycle")}
@@ -147,10 +148,10 @@ export function LotStatus({
             <option value="all">All Vehicle Types</option>
             <option value="car">Car</option>
             <option value="motorcycle">Motorcycle</option>
-          </select>
+          </RoundedSelect>
 
           {/* Status dimension */}
-          <select
+          <RoundedSelect
             className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -161,11 +162,11 @@ export function LotStatus({
             <option value="reserved">Reserved / Protected</option>
             <option value="backup">Designated Backup</option>
             <option value="maintenance">Maintenance / Disabled</option>
-          </select>
+          </RoundedSelect>
 
           {/* Zone Selector */}
           {availableZones.length > 0 && (
-            <select
+            <RoundedSelect
               className="rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]"
               value={selectedZone}
               onChange={(e) => setSelectedZone(e.target.value)}
@@ -176,7 +177,7 @@ export function LotStatus({
                   {z.name}
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           )}
 
           <span className="ml-auto text-xs text-[var(--muted)]">
@@ -251,8 +252,15 @@ export function LotStatus({
           ) : (
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
               {filteredSlots.map((slot) => {
+                const SLOT_STATUS_KIND_MAP: Record<string, ParkingStatusKind> = {
+                  occupied: "occupied",
+                  reserved: "reserved",
+                  maintenance: "maintenance",
+                  disabled: "maintenance",
+                  available: "available",
+                }
                 const isSelected = inspectedSlot?.id === slot.id
-                const status: ParkingStatusKind = slot.status === "occupied" ? "occupied" : slot.status === "reserved" ? "reserved" : slot.status === "maintenance" || slot.status === "disabled" ? "maintenance" : "available"
+                const status: ParkingStatusKind = SLOT_STATUS_KIND_MAP[slot.status] ?? "available"
 
                 return (
                   <button
@@ -311,14 +319,19 @@ export function LotStatus({
                       <td className="px-4 py-3 font-semibold">
                         <span
                           className={`rounded px-2 py-0.5 text-[10px] uppercase ${
-                            slot.status === "occupied"
-                              ? "bg-red-500/10 text-red-600"
-                              : slot.status === "available"
-                                ? "bg-green-500/10 text-green-600"
-                                : "bg-slate-500/10 text-slate-600"
+                            ({
+                              occupied: "bg-red-500/10 text-red-600",
+                              available: "bg-green-500/10 text-green-600",
+                              maintenance: "bg-slate-500/10 text-slate-600",
+                              disabled: "bg-slate-500/10 text-slate-600",
+                            } as Record<string, string>)[slot.status] ?? "bg-slate-500/10 text-slate-600"
                           }`}
                         >
-                          {slot.status === "occupied" ? "Physically Occupied" : slot.status === "maintenance" ? "Maintenance" : "Vacant"}
+                          {({
+                            occupied: "Physically Occupied",
+                            maintenance: "Maintenance",
+                            disabled: "Maintenance",
+                          } as Record<string, string>)[slot.status] ?? "Vacant"}
                         </span>
                       </td>
                       <td className="px-4 py-3">

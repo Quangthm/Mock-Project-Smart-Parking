@@ -33,27 +33,21 @@ export class SlotMaterialManager {
 
     const status = slot?.status || "available"
 
-    let targetColor = SLOT_STATUS_COLORS[status]
+    const isHighlighted = isSelected || isFocused
+    const targetColor = isHighlighted
+      ? SLOT_STATUS_COLORS.selected
+      : (SLOT_STATUS_COLORS[status] ?? SLOT_STATUS_COLORS.available)
 
-    let emissiveIntensity = 0.2
-
-    let opacity = 0.85
-
-    if (isSelected || isFocused) {
-      targetColor = SLOT_STATUS_COLORS.selected
-
-      emissiveIntensity = 0.6
-
-      opacity = 0.95
-    } else if (status === "occupied") {
-      opacity = 0.75
-
-      emissiveIntensity = 0.25
-    } else if (status === "reserved") {
-      opacity = 0.8
-
-      emissiveIntensity = 0.3
+    const STATUS_MATERIAL_CONFIG: Record<string, { opacity: number; emissiveIntensity: number }> = {
+      occupied: { opacity: 0.75, emissiveIntensity: 0.25 },
+      reserved: { opacity: 0.8, emissiveIntensity: 0.3 },
     }
+    const DEFAULT_MATERIAL_CONFIG = { opacity: 0.85, emissiveIntensity: 0.2 }
+    const HIGHLIGHT_MATERIAL_CONFIG = { opacity: 0.95, emissiveIntensity: 0.6 }
+
+    const { opacity, emissiveIntensity } = isHighlighted
+      ? HIGHLIGHT_MATERIAL_CONFIG
+      : (STATUS_MATERIAL_CONFIG[status] ?? DEFAULT_MATERIAL_CONFIG)
 
     // Get or create dedicated slot material
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 
 import {
   BrowserRouter,
@@ -61,6 +61,7 @@ import { Careers } from "./public pages/Careers"
 import { PendingApproval } from "./public pages/PendingApproval"
 
 import { getUserHomePath } from "./roles/operator/data/roleRoutes"
+import { scrollPageToTop } from "./lib/scrollPageToTop"
 
 function AppContent() {
   const { view, user, authReady, authError, accentColor } = useApp()
@@ -69,11 +70,22 @@ function AppContent() {
 
   const navigate = useNavigate()
 
+  useLayoutEffect(() => {
+    scrollPageToTop()
+  }, [location.pathname, view])
+
+  useEffect(() => {
+    const previous = window.history.scrollRestoration
+    window.history.scrollRestoration = "manual"
+    return () => { window.history.scrollRestoration = previous }
+  }, [])
+
   const isOperatorPath = [
     "/dashboard/finance",
     "/dashboard/operation",
     "/pos",
   ].includes(location.pathname)
+  const isEmailOtpPath = location.pathname === "/sign-in/email-otp"
 
   useEffect(() => {
     if (
@@ -86,18 +98,20 @@ function AppContent() {
     }
   }, [authReady, location.pathname, navigate, user, view])
 
-  const isDashboard =
+  const isDashboard = !isEmailOtpPath && (
     (user && ["driver", "owner", "operator", "admin"].includes(view)) ||
     isOperatorPath
+  )
 
   if (location.pathname === "/change-password") return <BootstrapPassword />
 
-  const usesDashboardNavbar =
+  const usesDashboardNavbar = !isEmailOtpPath && (
     ["driver", "owner", "operator", "admin"].includes(view) || isOperatorPath
+  )
 
   return (
     <div
-      className={isDashboard ? "dashboard-theme" : view === "sign-in" || view === "sign-up" ? "auth-route" : undefined}
+      className={isDashboard ? `dashboard-theme${view === "driver" ? " driver-theme" : ""}` : view === "sign-in" || view === "sign-up" || isEmailOtpPath ? "auth-route" : undefined}
       data-accent={accentColor}
       style={{
         minHeight: "100vh",
@@ -124,6 +138,7 @@ function AppContent() {
           <div key={`${location.pathname}-${view}`} className="animate-in">
             <Routes>
               <Route path="/" element={<LegacyView view={view} />} />
+              <Route path="/sign-in/email-otp" element={<SignIn flow="email-otp" />} />
               <Route
                 path="/dashboard/finance"
                 element={

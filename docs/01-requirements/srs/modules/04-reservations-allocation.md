@@ -1,6 +1,6 @@
-﻿# Reservations Allocation — SRS v1.1
+# Reservations Allocation — SRS v1.1
 
-[Requirements index](../README.md) Â· [Traceability](../../requirements-traceability/README.md)
+[Requirements index](../README.md) · [Traceability](../../requirements-traceability/README.md)
 
 **Status:** v1.1 documentation review candidate based on approved decisions, 20 October 2026; implementation/evidence not assessed. Existing requirement IDs and unrelated approved amendments remain in force.
 
@@ -10,7 +10,7 @@
 | RAPID_CANCELLATION_WINDOW | 15 minutes | Admin only | Counts cancellation timestamps, not whether booking creation also occurred inside the window. |
 | RAPID_CANCELLATION_RESTRICTION_DURATION | 3 hours | Admin only | Begins at triggering cancellation; another qualifying trigger extends to three hours from that event. |
 | DAILY_CANCELLATION_LIMIT | 5 | Admin only | Fifth qualifying cancellation is allowed; new bookings blocked for the remainder of that local day. Further existing reservations can still be cancelled. |
-| DAILY_CANCELLATION_TIMEZONE | Asia/Ho_Chi_Minh | Fixed baseline time basis | Calendar day is [00:00, next 00:00), not rolling 2— hours. |
+| DAILY_CANCELLATION_TIMEZONE | Asia/Ho_Chi_Minh | Fixed baseline time basis | Calendar day is [00:00, next 00:00), not rolling 24 hours. |
 | CANCELLATION_ALERT_THRESHOLD | 50 cancellations | Admin platform policy | Approved suspicious-volume threshold over the window below. |
 | CANCELLATION_ALERT_WINDOW | Rolling 30 days | Admin platform policy | Retain history and alert evidence; separately identified suspicious patterns can also raise alerts. |
 
@@ -28,7 +28,7 @@
 | Fifth at 23:00 also triggers three-hour rapid rule | Restricted until 02:00 next day, not merely midnight. |
 | Existing reservation cancelled while restricted | Allow if ordinary cancellation conditions hold; count once and evaluate trigger extension. |
 
-**Alert handling:** OPEN â†’ RESOLVED or SUPPRESSED (ignore is a recorded suppressed disposition). Store Admin actor/time/comments and retained linked evidence. Suppression does not delete events, end booking restrictions or stop collection. Implement deduplicated episodes and defined suppression duration; exact alert retrigger/suppression mechanics are design work, not a hidden permanent exemption.
+**Alert handling:** OPEN → RESOLVED or SUPPRESSED (ignore is a recorded suppressed disposition). Store Admin actor/time/comments and retained linked evidence. Suppression does not delete events, end booking restrictions or stop collection. Implement deduplicated episodes and defined suppression duration; exact alert retrigger/suppression mechanics are design work, not a hidden permanent exemption.
 
 **Technical ownership contract:** Operations owns cancellation facts and atomic booking eligibility/restriction enforcement; Admin configures global policy through authorized Operations APIs. Notification & Audit projects/delivers alerts and audit history. Keep enforcement authoritative in Operations even if an alert projection is delayed. User & Access owns actual authentication and current grants; do not misuse account-disabled for this restriction. UI shows the reason and effective unlock time.
 
@@ -66,7 +66,7 @@ Ordinary hold payment/expiry is serialized at Operations: a verified result that
 **Actors:** Owner  
 **Stories:** US-OW02
 
-Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ supported specific scope â†’ accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting.
+Resolve Admin defaults/bounds → authorized Owner/lot override → supported specific scope → accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting.
 
 ### FR-POL-02
 
@@ -74,7 +74,7 @@ Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ su
 **Actors:** Admin  
 **Stories:** US-A02
 
-Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ supported specific scope â†’ accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting.
+Resolve Admin defaults/bounds → authorized Owner/lot override → supported specific scope → accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting.
 
 ### FR-POL-03
 
@@ -84,7 +84,7 @@ Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ su
 
 Expose a named, typed, scoped policy catalogue with units and effective values.
 
-### FR-POL-0—
+### FR-POL-04
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Owner, Admin  
@@ -114,7 +114,7 @@ Present backend-resolved scope, price, prepayment, booked minimum, extra-use ter
 **Actors:** Admin, Owner  
 **Stories:** US-A02, US-OW02
 
-Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ supported specific scope â†’ accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting.
+Resolve Admin defaults/bounds → authorized Owner/lot override → supported specific scope → accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting.
 
 ### FR-POL-08
 
@@ -146,7 +146,7 @@ Authenticated Driver reviews bound vehicle, location, interval and enabled Speci
 **Actors:** Driver  
 **Stories:** US-D01
 
-Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies. Confirmed defaults are 15 minutes, 2— hours, 7 days and 0 respectively. Resolve Admin default/bounds â†’ authorized Owner/lot override â†’ accepted context; no numeric bounds are invented by RA-06. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
+Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies. Confirmed defaults are 15 minutes, 24 hours, 7 days and 0 respectively. Resolve Admin default/bounds → authorized Owner/lot override → accepted context; no numeric bounds are invented by RA-06. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
 
 ### FR-RES-03
 
@@ -156,7 +156,7 @@ Reservation minimum duration, maximum duration, advance horizon and inter-bookin
 
 Apply the baseline allocation/protection behavior together with the Specific Slot / Zone / Capacity reservation modes and Allocation Lead Time. These reservation modes are distinct from the underlying allocation and protection behavior.
 
-### FR-RES-0—
+### FR-RES-04
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Payment Provider  
@@ -226,7 +226,7 @@ Record verified gate arrival separately from entry, with source/event ID, actor,
 **Actors:** Driver, Operator, Payment Provider  
 **Stories:** US-D01, US-D10, US-O01
 
-Apply guarded, versioned transitions PENDING_PAYMENT â†’ CONFIRMED â†’ ALLOCATED â†’ PARKING â†’ COMPLETED and explicit cancellation, unpaid expiry, rejection and no-show paths. Reallocation, refund, dispute and violation are linked histories/lifecycles, not replacements for physical state. Serialize conflicting payment/cancellation/arrival/expiry commands; see transition contracts.
+Apply guarded, versioned transitions PENDING_PAYMENT → CONFIRMED → ALLOCATED → PARKING → COMPLETED and explicit cancellation, unpaid expiry, rejection and no-show paths. Reallocation, refund, dispute and violation are linked histories/lifecycles, not replacements for physical state. Serialize conflicting payment/cancellation/arrival/expiry commands; see transition contracts.
 
 ### FR-RES-13
 
@@ -260,10 +260,10 @@ Allocation begins at `reservation_start - effective ALLOCATION_LEAD_TIME`. The c
 
 Driver may submit accepted reallocation requests up to the effective `DRIVER_REALLOCATION_REQUEST_LIMIT` (default 2). Transport retries and invalid submissions do not count; system recovery does not consume the allowance. No refund solely because a conforming reallocation was accepted; independent fee/refund grounds remain.
 
-### FR-BAS-0—
+### FR-BAS-04
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Operator, Owner  
 **Stories:** US-D01, US-O05, US-OW02
 
-Use the effective `RESERVATION_PROTECTION_WINDOW` (default — hours), separate fixed backup and dynamic protection, compatible temporal claims and a conflict queue for affected claimants. Use the effective `OCCUPANCY_VALIDITY_TIMESPAN` (default — hours) for occupancy projection; it is never a timer to free a vehicle. A requested/protected slot may remain physically occupied by another Driver during that horizon; protection tracks the future claim without implying fulfillment or displacement. Protect requested preferences without promising impossible exact-slot admission.
+Use the effective `RESERVATION_PROTECTION_WINDOW` (default 4 hours), separate fixed backup and dynamic protection, compatible temporal claims and a conflict queue for affected claimants. Use the effective `OCCUPANCY_VALIDITY_TIMESPAN` (default 4 hours) for occupancy projection; it is never a timer to free a vehicle. A requested/protected slot may remain physically occupied by another Driver during that horizon; protection tracks the future claim without implying fulfillment or displacement. Protect requested preferences without promising impossible exact-slot admission.

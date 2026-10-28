@@ -16,8 +16,9 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import {
   ALLOWED_PARKING_MODELS,
   validateModelUpload,
-  ALLOWED_MODEL_FILE_NAMES,
 } from "../../../lib/3d/parking3DConfig"
+import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
 
 type OnboardStep = 1 | 2 | 3 | 4 | 5
 
@@ -139,8 +140,6 @@ export function OnboardingWizard({
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
 
-  const [ownerPolicyFile, setOwnerPolicyFile] = useState<string | null>(null)
-
   const [completionError, setCompletionError] = useState("")
 
   const [isCompleting, setIsCompleting] = useState(false)
@@ -152,6 +151,7 @@ export function OnboardingWizard({
   const [customModelFileName, setCustomModelFileName] = useState<string | null>(
     null,
   )
+  const [customModelFile, setCustomModelFile] = useState<File | null>(null)
 
   const [modelUploadError, setModelUploadError] = useState<string | null>(null)
 
@@ -160,6 +160,7 @@ export function OnboardingWizard({
   const activeModelUrl = customModelUrl || activeModelDef.path
 
   const activeModelFileName = customModelFileName || activeModelDef.fileName
+  const modelCapacity = useModelCarCapacity(activeModelUrl)
 
   function handleLotTypeSelect(type: LotType) {
     setLotType(type)
@@ -167,6 +168,7 @@ export function OnboardingWizard({
     setCustomModelUrl(null)
 
     setCustomModelFileName(null)
+    setCustomModelFile(null)
 
     setModelUploadError(null)
   }
@@ -178,10 +180,9 @@ export function OnboardingWizard({
 
     const validation = validateModelUpload(file.name, lotType)
 
-    if (!validation.isValid) {
+    if (!validation.isValid && !file.name.toLowerCase().endsWith(".glb")) {
       setModelUploadError(
-        validation.message ||
-          `File name "${file.name}" is invalid. Only outdoor_parking_lot.glb, indoor_parking_lot.glb, or underground_parking_lot.glb are supported.`,
+        "Choose a GLB 3D parking model.",
       )
 
       e.target.value = ""
@@ -200,6 +201,7 @@ export function OnboardingWizard({
     setCustomModelUrl(objectUrl)
 
     setCustomModelFileName(file.name)
+    setCustomModelFile(file)
   }
 
   async function handleComplete() {
@@ -229,9 +231,12 @@ export function OnboardingWizard({
         ? Number(lotConfig.floors)
         : 1
 
-      if (!Number.isInteger(totalSlots) || totalSlots < 1 || totalSlots > 2000 ||
+      if (modelCapacity.capacity === null) {
+        throw new Error(modelCapacity.error || "Checking the selected 3D model's car bay capacity. Please wait.")
+      }
+      if (!Number.isInteger(totalSlots) || totalSlots < 1 || totalSlots > modelCapacity.capacity ||
           !Number.isInteger(floors) || floors < 1 || floors > 20) {
-        throw new Error("Enter valid parking slot and floor counts.")
+        throw new Error(`Enter 1–${modelCapacity.capacity} car spaces, matching the selected 3D model, and a valid floor count.`)
       }
 
       const numericPricing = {
@@ -283,6 +288,8 @@ export function OnboardingWizard({
         throw new Error("The server did not return a valid site ID. Please try again.")
       }
 
+      const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
+
       const lot: ParkingLot = {
         id: site.id,
         createdAt: new Date().toISOString(),
@@ -295,7 +302,7 @@ export function OnboardingWizard({
 
         floors,
 
-        modelUrl: activeModelUrl,
+        modelUrl: savedModelUrl ?? activeModelUrl,
 
         modelFileName: activeModelFileName,
 
@@ -619,7 +626,7 @@ export function OnboardingWizard({
                 <strong style={{ color: "var(--primary)" }}>
                   3D Model Requirements:
                 </strong>{" "}
-                Only these three model files are supported:
+                The supplied models are:
                 <span
                   style={{
                     fontWeight: 600,
@@ -656,7 +663,7 @@ export function OnboardingWizard({
                 >
                   underground_parking_lot.glb
                 </span>
-                .
+                . Your own GLB is also accepted when its car bays have recognizable names, such as Slot_001 or CarParkingSpace_001.
               </div>
 
               {modelUploadError && (
@@ -815,12 +822,12 @@ export function OnboardingWizard({
                 }}
               >
                 <div>
-                  <label className="label">Total Parking Slots *</label>
+                  <label className="label">Planned Car Spaces *</label>
                   <input
                     className="input"
                     type="number"
                     min={1}
-                    max={2000}
+                    max={modelCapacity.capacity ?? undefined}
                     value={lotConfig.totalSlots}
                     placeholder="e.g. 50"
                     onChange={(e) =>
@@ -830,6 +837,7 @@ export function OnboardingWizard({
                       }))
                     }
                   />
+                  <p className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error || (modelCapacity.capacity === null ? "Checking car bays in the selected 3D model…" : `Maximum ${modelCapacity.capacity} car spaces in this model.`)}</p>
                 </div>
                 {LOT_TYPE_INFO[lotType].hasFloors && (
                   <div>
@@ -1027,9 +1035,10 @@ export function OnboardingWizard({
                   ) : (
                     <GroupedNumberInput
                       className="input"
+                      step={1000}
                       value={pricing[f.key]}
                       onValueChange={(digits) =>
-                        setPricing((p) => ({ ...p, [f.key]: digits }))
+                        setPricing((p) => ({ ...p, [f.key]: digits.slice(0, 9) }))
                       }
                     />
                   )}
@@ -1128,46 +1137,8 @@ export function OnboardingWizard({
                   alignItems: "center",
                 }}
               >
-                <button
-                  className="btn-outline"
-                  style={{ fontSize: "0.82rem", padding: "0.4rem 0.75rem" }}
-                  onClick={() =>
-                    alert("Policy template downloaded (simulated)")
-                  }
-                >
-                  <>
-                    <UntitledIcon name="file" size={15} /> Download Template
-                  </>
-                </button>
-                <label style={{ cursor: "pointer" }}>
-                  <span
-                    className="btn-primary"
-                    style={{ fontSize: "0.82rem", padding: "0.4rem 0.75rem" }}
-                  >
-                    <>
-                      <UntitledIcon name="file" size={15} /> Upload Policy
-                    </>
-                  </span>
-                  <input
-                    type="file"
-                    accept=".pdf,.docx"
-                    style={{ display: "none" }}
-                    onChange={() => setOwnerPolicyFile("policy_uploaded.pdf")}
-                  />
-                </label>
-                {ownerPolicyFile && (
-                  <span
-                    style={{
-                      fontSize: "0.78rem",
-                      color: "#22c55e",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
-                    <UntitledIcon name="check" size={14} /> {ownerPolicyFile}
-                  </span>
-                )}
+                <a className="btn-outline inline-flex items-center gap-2 no-underline" href="/templates/owner-policy-template.pdf" download="smartparking-owner-policy-template.pdf"><UntitledIcon name="file" size={15} /> Download Owner PDF template</a>
+                <span className="text-xs text-[var(--muted)]">Upload the completed PDF in Policy Settings after this site is created.</span>
               </div>
             </div>}
 
@@ -1285,7 +1256,7 @@ export function OnboardingWizard({
             <p className="mt-3 text-xs text-[var(--muted)]">
               {registration
                 ? "Your lot will remain inactive until email verification and Admin approval."
-                : "Activation creates your site. Add floors, zones, and parking slots in Parking Structure next; operators will see slots saved there."}
+                : "Activation creates your site. Review its 3D model and live capacity in Parking Structure next."}
             </p>
             {completionError && (
               <p
@@ -1307,28 +1278,9 @@ export function OnboardingWizard({
 }
 
 export function BusinessLotSetupPage() {
-  const { setView } = useApp()
-  const [registration] = useState<{
-    id: string
-    email: string
-    lotType: LotType
-    setupToken?: string
-  } | null>(() => {
-    try {
-      const pending = JSON.parse(
-        sessionStorage.getItem("sp_pending_owner_registration") ??
-          localStorage.getItem("sp_pending_owner_registration") ?? "null",
-      )
-      return pending?.id && pending?.email && pending?.lotType &&
-        pending?.lotSetupComplete !== true
-        ? pending
-        : null
-    } catch {
-      return null
-    }
-  })
+  const { setView, pendingOwnerSetup, setPendingOwnerSetup } = useApp()
 
-  if (!registration) {
+  if (!pendingOwnerSetup?.id || !pendingOwnerSetup.email || !pendingOwnerSetup.lotType) {
     return (
       <div className="card mx-auto my-12 max-w-lg text-center">
         <PageHeader title="No Business registration in progress" variant="compact" align="center" />
@@ -1343,9 +1295,9 @@ export function BusinessLotSetupPage() {
   return (
     <OnboardingWizard
       registration={{
-        id: registration.id,
-        setupToken: registration.setupToken,
-        lotType: registration.lotType,
+        id: pendingOwnerSetup.id,
+        setupToken: pendingOwnerSetup.setupToken,
+        lotType: pendingOwnerSetup.lotType,
         onComplete: (application) => {
           sessionStorage.setItem(
             "sp_pending_owner_registration",
@@ -1357,6 +1309,7 @@ export function BusinessLotSetupPage() {
               verification: application.verification,
             }),
           )
+          setPendingOwnerSetup(null)
           setView("sign-up")
         },
       }}

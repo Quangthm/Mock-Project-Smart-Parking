@@ -1,9 +1,9 @@
-﻿# UC-MON-03 — Renew, expire or repurchase a monthly/yearly pass
+# UC-MON-03 — Renew, expire or repurchase a monthly/yearly pass
 
 **Status:** CONFIRMED — implementation pending / not assessed  
 **Actors:** Driver, Operations, Payment
 
-[Use-case index](README.md) Â· [SRS module](../srs/modules/07-monthly-passes.md)
+[Use-case index](README.md) · [SRS module](../srs/modules/07-monthly-passes.md)
 
 ## Goal
 
@@ -22,7 +22,7 @@ Existing paid periods or expired prior pass.
 
 ## Alternatives and failures
 
-Jan31â†’Feb28/29â†’Mar31; no fixed 30-day month. Late money/UNKNOWN follows reconciliation, not backdated coverage.
+Jan31→Feb28/29→Mar31; no fixed 30-day month. Late money/UNKNOWN follows reconciliation, not backdated coverage.
 
 ## Postconditions
 

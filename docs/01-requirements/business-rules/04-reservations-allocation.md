@@ -1,6 +1,6 @@
-﻿# Reservations Allocation — business rules RC1
+# Reservations Allocation — business rules RC1
 
-[Rule index](README.md) Â· [SRS module](../srs/modules/04-reservations-allocation.md)
+[Rule index](README.md) · [SRS module](../srs/modules/04-reservations-allocation.md)
 
 ## BR-RES-01
 
@@ -10,7 +10,7 @@ Authenticated Driver reviews bound vehicle, location, interval and enabled Speci
 
 **Trace:** FR-RES-03/13, FR-BAS-01/02; UC-RES-01, UC-RES-02
 
-**Examples:** with the 1-hour default, a 09:30 reservation has an 08:30 allocation point. The earlier SRS's 30-minute example remains explanatory only: Driver A 09:30–11:00 â†’ 09:00 allocation point; Driver B 10:00–12:00 â†’ 09:30 allocation point. If a reservation confirms after its calculated point, evaluate immediately.
+**Examples:** with the 1-hour default, a 09:30 reservation has an 08:30 allocation point. The earlier SRS's 30-minute example remains explanatory only: Driver A 09:30–11:00 → 09:00 allocation point; Driver B 10:00–12:00 → 09:30 allocation point. If a reservation confirms after its calculated point, evaluate immediately.
 
 A slot may also be `OCCUPIED + PROTECTED`: Driver A can be the current occupant while Driver B's future reservation is protected. `OCCUPIED` does not identify Driver B and does not fulfill the reservation. If Driver A leaves, protection may remain; if Driver A remains when fulfillment needs the resource, recover/reallocate without displacement.
 
@@ -19,7 +19,7 @@ A slot may also be `OCCUPIED + PROTECTED`: Driver A can be the current occupant 
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies with defaults 15 minutes, 24 hours, 7 days and 0. Resolve Admin default/bounds â†’ authorized Owner/lot override â†’ accepted context; RA-06 supersedes D02 locking for these listed numeric defaults without inventing bounds. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
+Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies with defaults 15 minutes, 24 hours, 7 days and 0. Resolve Admin default/bounds → authorized Owner/lot override → accepted context; RA-06 supersedes D02 locking for these listed numeric defaults without inventing bounds. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
 
 **Trace:** FR-RES-02; UC-RES-01
 
@@ -59,7 +59,7 @@ Inter-booking buffer defaults to 0 and is locked absent approved override bounds
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Apply guarded, versioned transitions PENDING_PAYMENT â†’ CONFIRMED â†’ ALLOCATED â†’ PARKING â†’ COMPLETED and explicit cancellation, unpaid expiry, rejection and no-show paths. Reallocation, refund, dispute and violation are linked histories/lifecycles, not replacements for physical state. Serialize conflicting payment/cancellation/arrival/expiry commands; see transition contracts.
+Apply guarded, versioned transitions PENDING_PAYMENT → CONFIRMED → ALLOCATED → PARKING → COMPLETED and explicit cancellation, unpaid expiry, rejection and no-show paths. Reallocation, refund, dispute and violation are linked histories/lifecycles, not replacements for physical state. Serialize conflicting payment/cancellation/arrival/expiry commands; see transition contracts.
 
 **Trace:** FR-RES-12; UC-RES-03
 
@@ -75,7 +75,7 @@ Allocation begins at `reservation_start - effective ALLOCATION_LEAD_TIME`; the c
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Expose a named, typed, scoped policy catalogue with units and effective values. Resolve Admin defaults/bounds â†’ authorized Owner/lot override â†’ supported specific scope â†’ accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. RA-06 confirms the listed reservation/monthly numeric values as configurable defaults rather than hard-coded constants, including minimum/maximum duration, advance horizon, inter-booking buffer, payment hold, protection window, allocation lead time, alternative offer duration, occupancy validity, reallocation limit and the listed monthly timing/limit policies. Admin defines default/bounds; authorized Owner scope may override within bounds. No missing numeric bounds are invented. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting. Each entry includes unit/type, service owner, scope, default, bounds, editor, disabled/unset semantics, effective version and acceptance boundaries.
+Expose a named, typed, scoped policy catalogue with units and effective values. Resolve Admin defaults/bounds → authorized Owner/lot override → supported specific scope → accepted context. Unset inherits; valid zero differs from disabled. D02 locking remains for policies not superseded by RA-06; the numeric defaults listed by RA-06 are configurable within Admin-defined bounds. RA-06 confirms the listed reservation/monthly numeric values as configurable defaults rather than hard-coded constants, including minimum/maximum duration, advance horizon, inter-booking buffer, payment hold, protection window, allocation lead time, alternative offer duration, occupancy validity, reallocation limit and the listed monthly timing/limit policies. Admin defines default/bounds; authorized Owner scope may override within bounds. No missing numeric bounds are invented. Required commercial configuration blocks sale when missing. No new Owner permission follows from a visible setting. Each entry includes unit/type, service owner, scope, default, bounds, editor, disabled/unset semantics, effective version and acceptance boundaries.
 
 **Trace:** FR-POL-03/07; UC-POL-01
 
