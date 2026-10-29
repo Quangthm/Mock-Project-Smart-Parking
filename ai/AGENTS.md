@@ -22,7 +22,7 @@
   - `src/Services/IoTService`: Python AI service (`python-ai/`) for license plate recognition & CCTV stream ingestion.
   *(Note: ASP.NET Core microservices feature service-specific application and persistence patterns; consult `ai/architecture-reference.md` before making service-specific assumptions).*
 - **Frontend App:** `FE/` (React 19, Vite 8, TypeScript 5.7, Tailwind CSS v4, Three.js 0.186.1, MapTiler 4.1.0; see `FE/AGENTS.md`).
-- **Database & Persistence:** PostgreSQL with service-owned schemas (`docker-compose.yml`, `compose.schema-integration.yml`, `scripts/database/`).
+- **Database & Persistence:** PostgreSQL with service-owned schemas (`compose.schema-integration.yml`, `compose.schema-integration.yml`, `scripts/database/`).
 - **Test Projects:** Backend tests under `tests/Services/` (xUnit), Frontend tests under `tests/frontend/` (node:test).
 - **Instruction & Skills System:**
   - Operational Router: `ai/AGENTS.md`

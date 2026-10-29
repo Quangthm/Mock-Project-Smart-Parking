@@ -2,8 +2,8 @@
 -- Run against the explicitly selected User database, never a default connection:
 -- psql --dbname=<reviewed-connection-or-service> -v ON_ERROR_STOP=1 -f scripts/database/verify-user-access-schema.sql
 -- This script creates, changes and deletes no schema or application data.
--- Clean-install order: 01-user-access-service-db.sql, then separately reviewed
--- 13-own-profile-session-account.sql, then 14-user-profile-outbox.sql, then this check.
+-- Fresh install: consolidated 01-user-access-service-db.sql, then this check.
+-- Historical 13/14 upgrades are separate reviewed operations on existing databases.
 BEGIN READ ONLY;
 SET LOCAL search_path = public, pg_catalog;
 
@@ -187,7 +187,7 @@ BEGIN
         RAISE EXCEPTION USING
             MESSAGE = 'User & Access schema prerequisites are not satisfied',
             DETAIL = array_to_string(failures, E'\n'),
-            HINT = 'For a reviewed fresh development database, create canonical 01-user-access-service-db.sql, then manually apply 13-own-profile-session-account.sql and 14-user-profile-outbox.sql in that order; rerun verify-user-access-schema.sql with ON_ERROR_STOP=1. Existing databases require operator review; do not rerun base/14 blindly or backfill legacy session accounts. This verifier made no changes.';
+            HINT = 'For an empty database initialize consolidated 01-user-access-service-db.sql once; rerun verify-user-access-schema.sql with ON_ERROR_STOP=1. Existing databases require operator review; do not rerun base/14 blindly or backfill legacy session accounts. This verifier made no changes.';
     END IF;
     RAISE NOTICE 'PASS: User & Access direct-role, session binding and outbox schema prerequisites verified; no changes made.';
 END
