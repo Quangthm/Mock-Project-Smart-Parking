@@ -1,642 +1,89 @@
-import { useState, useEffect } from "react"
-import type { ParkingLot, LotPolicyPdf } from "../../lib/types"
+import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import type { ParkingLot } from "../../lib/types"
 import { store } from "../../lib/store"
+import { getOwnerPolicySectionDocuments, getOwnerPolicySectionTexts, ownerPolicySections, type OwnerPolicySectionId } from "../../lib/policySections"
+import { TermsOfService } from "../../public pages/policies/TermsOfService"
+import { PrivacyPolicy } from "../../public pages/policies/PrivacyPolicy"
+import { PaymentRefund } from "../../public pages/policies/PaymentRefund"
 import { UntitledIcon } from "../icon/UntitledIcon"
 
-interface LotPolicyModalProps {
-  lot: ParkingLot
-  onClose: () => void
-}
+type OwnerSection = "general" | OwnerPolicySectionId
+type PlatformSection = "terms" | "privacy" | "payment-refund"
 
-export function LotPolicyModal({ lot, onClose }: LotPolicyModalProps) {
-  const [policyPdf, setPolicyPdf] = useState<LotPolicyPdf | null>(() => {
-    return store.getLotPolicyPdf(lot.id)
+export function LotPolicyModal({ lot, onClose, initialSource = "owner", initialPlatformSection = "terms" }: { lot: ParkingLot; onClose: () => void; initialSource?: "owner" | "platform"; initialPlatformSection?: PlatformSection }) {
+  const [source, setSource] = useState<"owner" | "platform">(initialSource)
+  const [ownerSection, setOwnerSection] = useState<OwnerSection>(() => {
+    if (store.getLotPolicyPdf(lot.id, lot.ownerId)?.fileData) return "general"
+    const texts = getOwnerPolicySectionTexts(lot.ownerId, lot.id)
+    const documents = getOwnerPolicySectionDocuments(lot.ownerId, lot.id)
+    return ownerPolicySections.find(section => texts[section.id]?.content || documents[section.id]?.fileData)?.id ?? "general"
   })
-
-  const [activeTab, setActiveTab] = useState<"document" | "summary">("document")
+  const [platformSection, setPlatformSection] = useState<PlatformSection>(initialPlatformSection)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const ownerDocuments = getOwnerPolicySectionDocuments(lot.ownerId, lot.id)
+  const ownerTexts = getOwnerPolicySectionTexts(lot.ownerId, lot.id)
+  const generalDocument = store.getLotPolicyPdf(lot.id, lot.ownerId)
+  const selectedDocument = ownerSection === "general" ? generalDocument : ownerDocuments[ownerSection]
+  const selectedText = ownerSection === "general" ? null : ownerTexts[ownerSection]
+  const selectedTitle = ownerSection === "general" ? "General owner policy" : ownerPolicySections.find(section => section.id === ownerSection)?.title
 
   useEffect(() => {
-    const fresh = store.getLotPolicyPdf(lot.id)
-    if (fresh) setPolicyPdf(fresh)
-  }, [lot.id])
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    closeRef.current?.focus()
+    return () => { document.body.style.overflow = previousOverflow; previousFocus?.focus() }
+  }, [])
 
-  const documentTitle =
-    policyPdf?.title || `Parking Policies & Rules: ${lot.name}`
-  const fileName =
-    policyPdf?.fileName ||
-    `Parking_Policy_${lot.name.replace(/\s+/g, "_")}.pdf`
-  const hasUploadedPdf = Boolean(
-    policyPdf?.fileData &&
-      policyPdf.fileData.startsWith("data:application/pdf"),
-  )
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") { onClose(); return }
+    if (event.key !== "Tab" || !dialogRef.current) return
+    const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], iframe"))
+    if (!focusable.length) return
+    if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable[focusable.length - 1].focus() }
+    else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) { event.preventDefault(); focusable[0].focus() }
+  }
 
-  // Fallback printable simulated document data URL if no custom file uploaded
-  const downloadUrl = hasUploadedPdf
-    ? policyPdf!.fileData
-    : `data:text/plain;charset=utf-8,${encodeURIComponent(
-        `SMARTPARK - PARKING OPERATIONS POLICY\n\n` +
-          `Site: ${lot.name}\n` +
-          `Address: ${lot.address}\n` +
-          `Type: ${lot.type}\n` +
-          `Updated: ${new Date(policyPdf?.uploadedAt || lot.createdAt).toLocaleDateString("en-US")}\n\n` +
-          `1. OPERATING HOURS AND RATES:\n` +
-          `- Daytime rate: ${lot.hourlyRate.toLocaleString("vi-VN")} VND/hour\n` +
-          `- Nighttime rate: ${lot.nightRate.toLocaleString("vi-VN")} VND/hour\n` +
-          `- Free grace period: First ${lot.gracePeriodMinutes || 15} minutes after entry\n\n` +
-          `2. RESERVATION PROTECTION (SRS v0.9):\n` +
-          `- Reservation protection window: 60 minutes from the scheduled arrival time\n` +
-          `- Allocation lead time: Up to 15 minutes before arrival\n` +
-          `- Reservation deposit: 20% of the estimated total\n\n` +
-          `3. CANCELLATIONS AND REFUNDS:\n` +
-          `- Cancel at least 30 minutes before arrival: 100% deposit refund to the driver's wallet\n` +
-          `- Failure to arrive before the protection window ends: Marked NO_SHOW and the space is released\n\n` +
-          `4. SAFETY AND RESPONSIBILITY:\n` +
-          `- Follow signs and the 10 km/h speed limit on site\n` +
-          `- Do not leave valuables in your vehicle. The site is not responsible for undeclared personal belongings.`,
-      )}`
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 999,
-        background: "rgba(0, 0, 0, 0.7)",
-        backdropFilter: "blur(4px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="policy-modal-title"
-    >
-      <div
-        className="card animate-in"
-        style={{
-          width: "100%",
-          maxWidth: "760px",
-          maxHeight: "90vh",
-          display: "flex",
-          flexDirection: "column",
-          gap: "1rem",
-          padding: "1.25rem 1.5rem",
-          overflow: "hidden",
-          borderRadius: "0.85rem",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            borderBottom: "1px solid var(--border)",
-            paddingBottom: "0.85rem",
-          }}
-        >
-          <div
-            style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
-          >
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "8px",
-                background: "rgba(37, 99, 235, 0.12)",
-                color: "var(--primary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <UntitledIcon name="file" size={22} />
-            </div>
-            <div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-              >
-                <h3
-                  id="policy-modal-title"
-                  style={{
-                    fontFamily: "Be Vietnam Pro",
-                    fontWeight: 700,
-                    fontSize: "1.15rem",
-                    margin: 0,
-                    color: "var(--fg)",
-                  }}
-                >
-                  Parking Policies & Rules
-                </h3>
-                <span
-                  style={{
-                    fontSize: "0.72rem",
-                    fontWeight: 600,
-                    padding: "0.15rem 0.5rem",
-                    borderRadius: "4px",
-                    background: hasUploadedPdf
-                      ? "rgba(34, 197, 94, 0.15)"
-                      : "rgba(59, 130, 246, 0.15)",
-                    color: hasUploadedPdf ? "#16a34a" : "var(--primary)",
-                  }}
-                >
-                  {hasUploadedPdf ? "Official PDF" : "Default Document"}
-                </span>
-              </div>
-              <p
-                style={{
-                  margin: "0.2rem 0 0",
-                  fontSize: "0.8rem",
-                  color: "var(--muted)",
-                }}
-              >
-                {lot.name} · {lot.address}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--muted)",
-              cursor: "pointer",
-              padding: "4px",
-              display: "flex",
-            }}
-          >
-            <UntitledIcon name="x" size={20} />
-          </button>
-        </div>
-
-        {/* Tab Controls */}
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            borderBottom: "1px solid var(--border)",
-            paddingBottom: "0.5rem",
-          }}
-        >
-          <button
-            type="button"
-            className={activeTab === "document" ? "btn-primary" : "btn-outline"}
-            onClick={() => setActiveTab("document")}
-            style={{ padding: "0.35rem 0.8rem", fontSize: "0.8rem" }}
-          >
-            <UntitledIcon name="file" size={14} /> Policy Document (PDF)
-          </button>
-          <button
-            type="button"
-            className={activeTab === "summary" ? "btn-primary" : "btn-outline"}
-            onClick={() => setActiveTab("summary")}
-            style={{ padding: "0.35rem 0.8rem", fontSize: "0.8rem" }}
-          >
-            <UntitledIcon name="check" size={14} /> Quick Summary
-          </button>
-        </div>
-
-        {/* Content Body */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "1rem",
-            paddingRight: "0.25rem",
-          }}
-        >
-          {activeTab === "document" ? (
-            hasUploadedPdf ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.75rem",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    fontSize: "0.8rem",
-                    color: "var(--muted)",
-                  }}
-                >
-                  <span>
-                    Attachment:{" "}
-                    <strong style={{ color: "var(--fg)" }}>{fileName}</strong> (
-                    {policyPdf?.fileSize || "PDF"})
-                  </span>
-                  <span>
-                    Updated:{" "}
-                    {new Date(
-                      policyPdf?.uploadedAt || Date.now(),
-                    ).toLocaleDateString("en-US")}
-                  </span>
-                </div>
-                <iframe
-                  src={policyPdf?.fileData}
-                  title="Parking policy document"
-                  style={{
-                    width: "100%",
-                    height: "440px",
-                    border: "1px solid var(--border)",
-                    borderRadius: "0.5rem",
-                    background: "#ffffff",
-                  }}
-                />
-              </div>
-            ) : (
-              /* Professional Structured Document View */
-              <div
-                style={{
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  padding: "1.5rem",
-                  fontFamily: "'Inter', sans-serif",
-                  fontSize: "0.85rem",
-                  lineHeight: 1.6,
-                  color: "var(--fg)",
-                  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.1)",
-                }}
-              >
-                <div
-                  style={{
-                    textAlign: "center",
-                    borderBottom: "1.5px double var(--border)",
-                    paddingBottom: "1rem",
-                    marginBottom: "1.25rem",
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.75rem",
-                      textTransform: "uppercase",
-                      letterSpacing: "1px",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    SMARTPARK SMART PARKING MANAGEMENT
-                  </p>
-                  <h4
-                    style={{
-                      margin: "0.35rem 0",
-                      fontSize: "1.2rem",
-                      fontWeight: 700,
-                      color: "var(--fg)",
-                    }}
-                  >
-                    {documentTitle}
-                  </h4>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.78rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    Site: <strong>{lot.name}</strong> · Address: {lot.address}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "1rem",
-                  }}
-                >
-                  <div>
-                    <h5
-                      style={{
-                        margin: "0 0 0.35rem",
-                        fontSize: "0.92rem",
-                        fontWeight: 700,
-                        color: "var(--primary)",
-                      }}
-                    >
-                      Section 1. Operating Hours & Service Rates
-                    </h5>
-                    <p style={{ margin: 0 }}>
-                      - Open 24/7 for vehicles registered through SmartParking.
-                      <br />- Daytime rate (06:00 - 22:00):{" "}
-                      <strong>
-                        {lot.hourlyRate.toLocaleString("vi-VN")} VND/hour
-                      </strong>
-                      .<br />- Nighttime rate (22:00 - 06:00 the next day):{" "}
-                      <strong>
-                        {lot.nightRate.toLocaleString("vi-VN")} VND/hour
-                      </strong>
-                      .<br />- Grace period: The first{" "}
-                      <strong>{lot.gracePeriodMinutes || 15} minutes</strong> are
-                      free for entry processing or turning around.
-                    </p>
-                  </div>
-
-                  <div>
-                    <h5
-                      style={{
-                        margin: "0 0 0.35rem",
-                        fontSize: "0.92rem",
-                        fontWeight: 700,
-                        color: "var(--primary)",
-                      }}
-                    >
-                      Section 2. Reservations & Protection
-                      (Reservation Protection Window)
-                    </h5>
-                    <p style={{ margin: 0 }}>
-                      - <strong>Reservation Protection Window</strong>: The space
-                      is held for <strong>60 minutes</strong> from the scheduled arrival time.
-                      <br />- Deposit: Pay <strong>20%</strong> of the estimated
-                      total to confirm the reservation.
-                      <br />- Allocation lead time: The system finalizes the
-                      assigned space at least 15 minutes before arrival.
-                    </p>
-                  </div>
-
-                  <div>
-                    <h5
-                      style={{
-                        margin: "0 0 0.35rem",
-                        fontSize: "0.92rem",
-                        fontWeight: 700,
-                        color: "var(--primary)",
-                      }}
-                    >
-                      Section 3. Cancellation & No-show Policy
-                    </h5>
-                    <p style={{ margin: 0 }}>
-                      - Cancel at least 30 minutes before arrival: Receive a{" "}
-                      <strong>100%</strong> deposit refund.
-                      <br />- Cancel within 30 minutes of arrival: A fee equal to
-                      one hour of parking is deducted.
-                      <br />- No arrival within the 60-minute protection window:
-                      The space is released for walk-ins and the deposit is non-refundable.
-                    </p>
-                  </div>
-
-                  <div>
-                    <h5
-                      style={{
-                        margin: "0 0 0.35rem",
-                        fontSize: "0.92rem",
-                        fontWeight: 700,
-                        color: "var(--primary)",
-                      }}
-                    >
-                      Section 4. Safety & Vehicle Responsibility
-                    </h5>
-                    <p style={{ margin: 0 }}>
-                      - Follow signs, lane markings, and the 10 km/h speed limit.
-                      <br />- Keep your valuables safe. Contact site management
-                      for technical issues, disputes, or surveillance footage.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-          ) : (
-            /* Summary Grid */
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "0.75rem",
-              }}
-            >
-              <div
-                style={{
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  padding: "0.85rem",
-                }}
-              >
-                <div
-                  style={{
-                    color: "var(--muted)",
-                    fontSize: "0.75rem",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  Daytime Rate
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.1rem",
-                    fontWeight: 700,
-                    color: "var(--fg)",
-                  }}
-                >
-                  {lot.hourlyRate.toLocaleString("vi-VN")} VND/h
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    color: "var(--muted)",
-                    marginTop: "0.2rem",
-                  }}
-                >
-                  Hours: 06:00 – 22:00
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  padding: "0.85rem",
-                }}
-              >
-                <div
-                  style={{
-                    color: "var(--muted)",
-                    fontSize: "0.75rem",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  Nighttime Rate
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.1rem",
-                    fontWeight: 700,
-                    color: "var(--fg)",
-                  }}
-                >
-                  {lot.nightRate.toLocaleString("vi-VN")} VND/h
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    color: "var(--muted)",
-                    marginTop: "0.2rem",
-                  }}
-                >
-                  Hours: 22:00 – 06:00
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  padding: "0.85rem",
-                }}
-              >
-                <div
-                  style={{
-                    color: "var(--muted)",
-                    fontSize: "0.75rem",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  Reservation Protection (SRS)
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.1rem",
-                    fontWeight: 700,
-                    color: "var(--fg)",
-                  }}
-                >
-                  60 Minutes
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    color: "var(--muted)",
-                    marginTop: "0.2rem",
-                  }}
-                >
-                  Reservation Protection Window
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  padding: "0.85rem",
-                }}
-              >
-                <div
-                  style={{
-                    color: "var(--muted)",
-                    fontSize: "0.75rem",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  Grace Period
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.1rem",
-                    fontWeight: 700,
-                    color: "#22c55e",
-                  }}
-                >
-                  {lot.gracePeriodMinutes || 15} Minutes
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    color: "var(--muted)",
-                    marginTop: "0.2rem",
-                  }}
-                >
-                  Free Entry and Exit
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: "var(--bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.5rem",
-                  padding: "0.85rem",
-                  gridColumn: "1 / -1",
-                }}
-              >
-                <div
-                  style={{
-                    color: "var(--muted)",
-                    fontSize: "0.75rem",
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  Deposits & Refunds
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.85rem",
-                    color: "var(--fg)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  ✓ Pay a <strong>20%</strong> deposit to confirm a reservation.
-                  <br />✓ Receive a <strong>100%</strong> deposit refund when
-                  cancelling at least 30 minutes before arrival.
-                  <br />✓ Automatic reallocation is supported if the space
-                  requires unexpected maintenance.
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderTop: "1px solid var(--border)",
-            paddingTop: "0.75rem",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-          }}
-        >
-          <a
-            href={downloadUrl}
-            download={fileName}
-            className="btn-primary"
-            style={{
-              textDecoration: "none",
-              fontSize: "0.84rem",
-              padding: "0.45rem 0.9rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.4rem",
-            }}
-          >
-            <UntitledIcon name="download" size={15} /> Download Policy Document
-          </a>
-
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={onClose}
-            style={{ fontSize: "0.84rem", padding: "0.45rem 1rem" }}
-          >
-            Close
-          </button>
-        </div>
+  return createPortal(<div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="policy-modal-title" onKeyDown={handleKeyDown} className="flex max-h-[92dvh] w-full max-w-5xl min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] shadow-2xl">
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5">
+        <div className="min-w-0"><h2 id="policy-modal-title" className="text-xl font-semibold">Parking policies</h2><p className="mt-1 break-words text-sm text-[var(--muted)]">{lot.name} · Owner documents and SmartParking platform documents</p></div>
+        <button ref={closeRef} type="button" className="icon-button shrink-0" aria-label="Close parking policies" onClick={onClose}><UntitledIcon name="x" size={20} /></button>
+      </header>
+      <div className="flex flex-wrap gap-2 border-b border-[var(--border)] px-5 py-3" role="group" aria-label="Policy source">
+        <button type="button" className={source === "owner" ? "btn-primary" : "btn-outline"} aria-pressed={source === "owner"} onClick={() => setSource("owner")}>Owner Policies</button>
+        <button type="button" className={source === "platform" ? "btn-primary" : "btn-outline"} aria-pressed={source === "platform"} onClick={() => setSource("platform")}>Platform Policies</button>
+      </div>
+      <div className="min-h-0 overflow-y-auto overscroll-contain p-5">
+        {source === "owner" ? <div className="grid min-w-0 gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
+          <nav className="flex flex-wrap content-start gap-2 md:flex-col" aria-label="Owner policy sections">
+            {([{ id: "general", title: "General policy" }, ...ownerPolicySections] as const).map(section => <button key={section.id} type="button" className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-semibold ${ownerSection === section.id ? "border-[var(--primary)] bg-[var(--active)] text-[var(--fg)]" : "border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]"}`} aria-current={ownerSection === section.id ? "true" : undefined} onClick={() => setOwnerSection(section.id)}>{section.title}</button>)}
+          </nav>
+          <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 sm:p-5" aria-live="polite">
+            <p className="text-xs font-semibold text-[var(--primary)]">OWNER POLICY</p>
+            <h3 className="mt-1 text-lg font-semibold">{selectedTitle}</h3>
+            {selectedText?.content && <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><p className="text-xs font-semibold text-[var(--muted)]">{selectedText.lotId ? "This parking site" : "All owner sites"} · Saved policy text</p><p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[var(--fg)]">{selectedText.content}</p></div>}
+            {selectedDocument?.fileData ? <>
+              <p className="mt-2 break-all text-sm text-[var(--muted)]">{selectedDocument.fileName} · Updated {new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(selectedDocument.uploadedAt))}</p>
+              <iframe className="mt-4 h-[55dvh] w-full rounded-lg border border-[var(--border)] bg-white" src={selectedDocument.fileData} title={`${selectedTitle} PDF`} />
+              <a className="btn-outline mt-4 inline-flex no-underline" href={selectedDocument.fileData} download={selectedDocument.fileName}>Download PDF</a>
+            </> : ownerSection === "general" ? <>
+              <p className="mt-2 text-sm text-[var(--muted)]">The owner has not uploaded a general policy PDF for this site. These are the site's currently listed rates.</p>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-[var(--border)] p-3"><dt className="text-sm text-[var(--muted)]">Daytime rate</dt><dd className="mt-1 font-semibold tabular-nums">{lot.hourlyRate.toLocaleString("vi-VN")} VND/hour</dd></div><div className="rounded-lg border border-[var(--border)] p-3"><dt className="text-sm text-[var(--muted)]">Nighttime rate</dt><dd className="mt-1 font-semibold tabular-nums">{lot.nightRate.toLocaleString("vi-VN")} VND/hour</dd></div></dl>
+            </> : <p className="mt-3 text-sm text-[var(--muted)]">{selectedText?.content ? "No PDF is attached to this section." : "No owner policy has been saved for this section. Check the other sections or contact the parking site for details."}</p>}
+          </section>
+        </div> : <div className="grid min-w-0 gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
+          <nav className="flex flex-wrap content-start gap-2 md:flex-col" aria-label="Platform policy sections">
+            {([{ id: "terms", title: "Terms of Service" }, { id: "privacy", title: "Privacy Policy" }, { id: "payment-refund", title: "Payment & Refund" }] as const).map(section => <button key={section.id} type="button" className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-semibold ${platformSection === section.id ? "border-[var(--primary)] bg-[var(--active)] text-[var(--fg)]" : "border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]"}`} aria-current={platformSection === section.id ? "true" : undefined} onClick={() => setPlatformSection(section.id)}>{section.title}</button>)}
+          </nav>
+          <section className="min-w-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)]" aria-label="SmartParking platform policy">
+            <p className="px-5 pt-4 text-xs font-semibold text-[var(--primary)]">SMARTPARKING PLATFORM POLICY</p>
+            {platformSection === "terms" ? <TermsOfService /> : platformSection === "privacy" ? <PrivacyPolicy /> : <PaymentRefund />}
+          </section>
+        </div>}
       </div>
     </div>
-  )
+  </div>, document.body)
 }

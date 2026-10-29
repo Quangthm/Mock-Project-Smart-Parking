@@ -1,4 +1,3 @@
-import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { parkingApi, operatorsApi, type Site, type Operator } from '../../../lib/parkingApi';
@@ -80,12 +79,6 @@ export function OwnerDashboard() {
           <>
         {loading && <p role="status">Loading owner sites…</p>}
         {error && <div role="alert" className="owner-workspace-error">{error} <button className="btn-outline" onClick={() => setSiteRefresh(value => value + 1)}>Retry</button></div>}
-        {tab === 'finance' && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <div><p className="text-sm font-medium text-[var(--muted)]">Multiple sites</p><p className="mt-1 font-semibold text-[var(--fg)]">Filter Owner Dashboard</p></div>
-            <label className="flex items-center gap-3 text-sm font-medium text-[var(--fg)]"><span>Site</span><RoundedSelect className="input min-w-[210px]" value={selectedSiteId} onChange={event => setSelectedSiteId(event.target.value)}><option value="all">All Sites</option>{sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}</RoundedSelect></label>
-          </div>
-        )}
         <div key={tab} className="animate-in">
           {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} sites={sites} operators={operators} />}
           {tab === 'sites' && <SiteManagement onSiteCreated={(site, created) => { if (created) { setSetupSiteId(site.id); setSelectedSiteId(site.id); setTab('structure'); } setSiteRefresh(value => value + 1); }} />}
