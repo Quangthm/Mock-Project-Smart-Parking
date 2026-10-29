@@ -17,6 +17,7 @@ public static class PersistenceDependencyInjection
         {
             var config = configuration ?? serviceProvider.GetService<IConfiguration>();
             var connectionString = config?.GetConnectionString("NotificationAudit")
+                                   ?? config?.GetConnectionString("Notification")
                                    ?? config?.GetConnectionString("DefaultConnection");
 
             if (string.IsNullOrWhiteSpace(connectionString))

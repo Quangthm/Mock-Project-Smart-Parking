@@ -9,7 +9,7 @@ Hướng dẫn onboarding cho dev mới. Làm theo thứ tự: **Prerequisites �
 ```powershell
 git branch --show-current          # xác nhận đang ở branch làm việc
 .\setup.ps1                        # dựng DB + cấu hình credential + SonarQube
-.\scripts\run-app-service.ps1 -Service All   # chạy 5 container app (BE + FE)
+.\scripts\run-app-service.ps1 -Service All   # chạy 6 container app (BE + FE)
 # Mở http://localhost:5173
 ```
 
@@ -25,7 +25,7 @@ Checklist trước khi setup:
 - [ ] **Node.js + npm** nếu chạy frontend trực tiếp trên host (FE dùng Vite 8). Docker app stack dùng Node 22 trong image, không cần cài Node trên host.
 - [ ] **Git** và checkout đúng branch: `git branch --show-current`.
 - [ ] **Port đang rảnh** (xem bảng đầy đủ ở [mục 7](#7-advanced-options)):
-  - API: `5035`, `5045`, `5055`, `5065` · FE: `5173` · SonarQube: `9000`
+  - API: `5035`, `5045`, `5055`, `5065`, `5068` · FE: `5173` · SonarQube: `9000`
   - DB: `5441`–`5446` · AI (tùy chọn): `5001`, `5002`
 
 ### Thuật ngữ nhanh cho người mới
@@ -73,19 +73,20 @@ Không commit `.env`, file Team credential, user-secrets hoặc thư mục workf
 
 ## 3. Run Application
 
-Chọn **một** trong hai cách; không chạy đồng thời cả hai vì cùng dùng port `5035/5045/5055/5065`.
+Chọn **một** trong hai cách; không chạy đồng thời cả hai vì cùng dùng port `5035/5045/5055/5065/5068`.
 
 ### Cách A — Docker app stack (khuyến nghị cho onboarding)
 
-Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose project `smartpark-app` dùng external network `smartpark-schema_default` và DB hostname `user-db`/`facility-db`/`operations-db`/`payment-db`.
+Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose project `smartpark-app` dùng external network `smartpark-schema_default` và DB hostname `user-db`/`facility-db`/`operations-db`/`payment-db`/`notification-db`.
 
 ```powershell
 .\scripts\run-app-service.ps1 -Service User       # 1 service, mở CMD log riêng
 .\scripts\run-app-service.ps1 -Service Parking
 .\scripts\run-app-service.ps1 -Service Reservation
 .\scripts\run-app-service.ps1 -Service Payment
+.\scripts\run-app-service.ps1 -Service Notification
 .\scripts\run-app-service.ps1 -Service Frontend
-.\scripts\run-app-service.ps1 -Service All        # cả 5 container
+.\scripts\run-app-service.ps1 -Service All        # cả 6 container
 ```
 
 | Container | URL | Ghi chú |
@@ -94,11 +95,12 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | `smartpark-app-parking-service-1` | http://localhost:5045/health | Dùng `facility-db` |
 | `smartpark-app-reservation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065/health | Dùng `payment-db`; PayOS rỗng = sandbox emulation |
+| `smartpark-app-notification-service-1` | http://localhost:5068/health | Dùng `notification-db` |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
 > **Lưu ý chuyển tiếp v1.1 / Fix2FA:** ParkingService (dùng `facility-db` trên port 5442) đang được đổi tên thành FacilityService trong branch `Fix2FA` theo SRS v1.1 (quyết định V11-09). Tương tự, ReservationService (dùng `operations-db` trên port 5443) sẽ hợp nhất vào Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
 
-- Lần đầu build 5 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
+- Lần đầu build 6 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
 - `-NoBuild` bỏ qua bước build khi image đã có; `-NoLogWindow` không mở cửa sổ CMD (dùng cho CI/automation).
 - Có thể double-click `scripts\run-*-service.cmd` hoặc `scripts\run-all-apps.cmd`.
 - Dừng stack (giữ nguyên volume): `.\scripts\stop-app-service.ps1 -Service All`.
@@ -142,13 +144,14 @@ Checklist xác nhận môi trường chạy đúng:
   docker compose --project-name smartpark-schema --env-file .env -f compose.schema-integration.yml ps
   ```
 
-- [ ] **4 API trả health 200**
+- [ ] **5 API trả health 200**
 
   ```powershell
   Invoke-WebRequest http://localhost:5035/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5045/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5055/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5065/health -UseBasicParsing
+  Invoke-WebRequest http://localhost:5068/health -UseBasicParsing
   ```
 
 - [ ] **FE mở được** tại http://localhost:5173.
@@ -317,14 +320,14 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 | Thành phần | Port | Ghi chú |
 | --- | --- | --- |
-| User/Parking/Reservation/Payment API | `5035` / `5045` / `5055` / `5065` | Docker app stack bind `127.0.0.1` |
+| User/Parking/Reservation/Payment/Notification API | `5035` / `5045` / `5055` / `5065` / `5068` | Docker app stack bind `127.0.0.1` |
 | User/Parking/Reservation DB | `5441` / `5442` / `5443` | Bind loopback (`127.0.0.1`) |
 | Payment/Notification/IoT DB | `5444` / `5445` / `5446` | Bind loopback (`127.0.0.1`) |
 | `ai-rest` / `ai-live` | `5001` / `5002` | Chỉ dựng bằng `.\setup.ps1 -WithAiCamera` |
 | Frontend (Vite) | `5173` | Host hoặc Docker |
 | SonarQube UI | `9000` | Mặc định của setup |
 
-DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng. Cấu hình URL qua `SMARTPARK_SERVICE_USER_URL` / `SMARTPARK_SERVICE_PARKING_URL` / `SMARTPARK_SERVICE_RESERVATION_URL` / `SMARTPARK_SERVICE_PAYMENT_URL`.
+DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng. Cấu hình URL qua `SMARTPARK_SERVICE_USER_URL` / `SMARTPARK_SERVICE_PARKING_URL` / `SMARTPARK_SERVICE_RESERVATION_URL` / `SMARTPARK_SERVICE_PAYMENT_URL` / `SMARTPARK_SERVICE_NOTIFICATION_URL`.
 
 ### 7.4 DB volume và migration
 
@@ -342,7 +345,8 @@ DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập �
 | Giá trị container dùng (`SMARTPARK_SERVICE_KEY`, password admin/owner/operator) | `.\scripts\run-app-service.ps1 -Service All -NoBuild` — recreate container với env mới, không cần build image |
 | Giá trị runner host dùng (mọi key trong `.env`) | Restart `.\scripts\run-schema-service.ps1 -Service X` (runner đọc `.env` mỗi lần start) |
 | Chạy Visual Studio/`dotnet run` (user-secrets) | `.\setup.ps1 -SkipDatabase -SkipRestore` — bước `[5/7]` ghi đè user-secrets lệch |
-| `SMARTPARK_PAYOS_*` (PaymentService) | `.\scripts\run-app-service.ps1 -Service Payment -NoBuild` (container) hoặc rerun `.\setup.ps1 -SkipDatabase -SkipRestore` (user-secrets). Rỗng = sandbox emulation. |
+| `SMARTPARK_PAYOS_*` (PaymentService) | `.\scripts\run-app-service.ps1 -Service Payment
+.\scripts\run-app-service.ps1 -Service Notification -NoBuild` (container) hoặc rerun `.\setup.ps1 -SkipDatabase -SkipRestore` (user-secrets). Rỗng = sandbox emulation. |
 | Port DB `SMARTPARK_DB_*_PORT` | `.\setup.ps1 -SkipRestore` rồi restart runner |
 | MapTiler / AI key cho FE | Sửa trực tiếp `FE/.env` + restart Vite — setup không ghi đè file đã có giá trị |
 | `VITE_*` của FE container / port trong compose | Sửa `compose.app.yml` rồi chạy lại runner |

@@ -7,6 +7,8 @@ x-backend-env: &backend-env
   Services__User: http://user-service:8080/
   Services__Parking: http://parking-service:8080/
   Services__Reservation: http://reservation-service:8080/
+  Services__Payment: http://payment-service:8080/
+  Services__Notification: http://notification-service:8080/
 
 x-healthcheck: &healthcheck
   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
@@ -108,6 +110,26 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
+  notification-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        SERVICE: NotificationAuditService
+    image: smartpark/notification-service:local
+    environment:
+      <<: *backend-env
+      ConnectionStrings__Notification: "Host=notification-db;Port=5432;Database=smartpark_notification;Username=smartpark_notification;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      ConnectionStrings__NotificationAudit: "Host=notification-db;Port=5432;Database=smartpark_notification;Username=smartpark_notification;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      # Fallback to MassTransit InMemory when RabbitMQ broker is not present
+      RabbitMQ__UseInMemory: "true"
+    ports:
+      - "127.0.0.1:5068:8080"
+    networks:
+      - smartpark
+    healthcheck: *healthcheck
+    restart: "no"
+
   frontend:
     build:
       context: ./FE
@@ -118,6 +140,7 @@ services:
       VITE_PARKING_API_BASE_URL: http://localhost:5045
       VITE_RESERVATION_API_BASE_URL: http://localhost:5055
       VITE_PAYMENT_API_BASE_URL: http://localhost:5065
+      VITE_NOTIFICATION_API_BASE_URL: http://localhost:5068
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
       CHOKIDAR_USEPOLLING: "true"

@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Payment','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Payment','Notification','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -46,11 +46,12 @@ $map = @{
     User        = 'user-service'
     Parking     = 'parking-service'
     Reservation = 'reservation-service'
-    Payment     = 'payment-service'
+    Payment      = 'payment-service'
+    Notification = 'notification-service'
     Frontend    = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','parking-service','reservation-service','payment-service','frontend')
+    @('user-service','parking-service','reservation-service','payment-service','notification-service','frontend')
 } else {
     @($map[$Service])
 }
@@ -124,6 +125,7 @@ Write-Host '  User        http://localhost:5035/health'
 Write-Host '  Parking     http://localhost:5045/health'
 Write-Host '  Reservation http://localhost:5055/health'
 Write-Host '  Payment     http://localhost:5065/health'
+Write-Host '  Notification http://localhost:5068/health'
 Write-Host '  Frontend    http://localhost:5173'
 Write-Host ''
 

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$SkipDatabase, [switch]$SkipRestore, [switch]$SkipUserSecrets, [switch]$RecreateDb,
     [ValidateSet('Local','Team')][string]$CredentialMode = 'Local',
     [string]$TeamEnvPath, [switch]$SkipSonarQube, [switch]$NonInteractive,
@@ -454,10 +454,11 @@ function Invoke-AiCameraSetup {
 # Read existing secrets without printing their values or invoking `list`.
 $existingByService = @{}
 $projectByService = @{}
-foreach ($service in @('User','Parking','Reservation','Payment')) {
-    $projectDir = Join-Path $taskRoot "src/Services/${service}Service/SmartParking.${service}Service.API"
+foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
+    $serviceFolder = if ($service -eq 'Notification') { 'NotificationAuditService' } else { "${service}Service" }
+    $projectDir = Join-Path $taskRoot "src/Services/$serviceFolder/SmartParking.${serviceFolder}.API"
     $projectByService[$service] = $projectDir
-    [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${service}Service.API.csproj") -Raw
+    [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${serviceFolder}.API.csproj") -Raw
     $secretId = [string](@($projectXml.Project.PropertyGroup.UserSecretsId | Where-Object { $_ })[0])
     $secretFile = Join-Path ([Environment]::GetFolderPath('ApplicationData')) "Microsoft/UserSecrets/$secretId/secrets.json"
     $existing = @{}
@@ -494,7 +495,7 @@ if ($CredentialMode -eq 'Team') {
     foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { throw "Team file must configure $name." }
     }
-    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL')) {
+    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL','SMARTPARK_SERVICE_NOTIFICATION_URL')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { continue }
         if ($settings[$name] -and $settings[$name] -notlike 'replace-with-*' -and $settings[$name] -cne $team[$name]) {
             throw "Team/local conflict for $name. Existing configuration was preserved; reconcile it explicitly before retrying."
@@ -523,7 +524,7 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
         } else {
             # Reuse an existing local PostgreSQL password when configuring an old volume.
             $passwords = @()
-            foreach ($service in @('User','Parking','Reservation','Payment')) {
+            foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
                 $connection = $existingByService[$service]["ConnectionStrings:$service"]
                 $extracted = Get-SecretConnectionStringPassword $connection
                 if ($extracted) { $passwords += $extracted }
@@ -583,7 +584,7 @@ foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTP
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
 if ($settings['VITE_MAPTILER_API_KEY'] -match "[\r\n']") { throw 'Configure MapTiler key directly in FE/.env.' }
-foreach ($service in @('USER','PARKING','RESERVATION','PAYMENT')) {
+foreach ($service in @('USER','PARKING','RESERVATION','PAYMENT','NOTIFICATION')) {
     $name = "SMARTPARK_SERVICE_${service}_URL"
     if ($settings[$name]) {
         $uri = $null
@@ -656,8 +657,8 @@ if (!$SkipDatabase) {
     }
 }
 
-Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation, Payment...' -ForegroundColor Cyan
-if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment')) {
+Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation, Payment, Notification...' -ForegroundColor Cyan
+if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
     $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
     $password = $settings['SMARTPARK_DEV_PASSWORD'].Replace('"','""')
@@ -667,9 +668,11 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         'Services:Parking' = 'http://localhost:5045/'
         'Services:Reservation' = 'http://localhost:5055/'
         'Services:Payment' = 'http://localhost:5065/'
+        'Services:Notification' = 'http://localhost:5068/'
     }
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
-    foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
+    if ($service -eq 'Notification') { $desired['ConnectionStrings:NotificationAudit'] = $desired['ConnectionStrings:Notification'] }
+    foreach ($remoteService in @('User','Parking','Reservation','Payment','Notification')) {
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
         if ($url) { $desired["Services:$remoteService"] = $url }
     }
@@ -747,11 +750,13 @@ if ($settings['VITE_MAPTILER_API_KEY']) {
 $frontendDefaults = [ordered]@{
     'VITE_AI_API_BASE_URL'      = 'http://localhost:5001'
     'VITE_AI_LIVE_API_BASE_URL' = 'http://localhost:5002'
-    'VITE_PAYMENT_API_BASE_URL' = 'http://localhost:5065'
+    'VITE_PAYMENT_API_BASE_URL'      = 'http://localhost:5065'
+    'VITE_NOTIFICATION_API_BASE_URL' = 'http://localhost:5068'
 }
 if ($settings['VITE_AI_API_BASE_URL']) { $frontendDefaults['VITE_AI_API_BASE_URL'] = $settings['VITE_AI_API_BASE_URL'] }
 if ($settings['VITE_AI_LIVE_API_BASE_URL']) { $frontendDefaults['VITE_AI_LIVE_API_BASE_URL'] = $settings['VITE_AI_LIVE_API_BASE_URL'] }
 if ($settings['VITE_PAYMENT_API_BASE_URL']) { $frontendDefaults['VITE_PAYMENT_API_BASE_URL'] = $settings['VITE_PAYMENT_API_BASE_URL'] }
+if ($settings['VITE_NOTIFICATION_API_BASE_URL']) { $frontendDefaults['VITE_NOTIFICATION_API_BASE_URL'] = $settings['VITE_NOTIFICATION_API_BASE_URL'] }
 if (Test-Path -LiteralPath $frontendEnv -PathType Leaf) {
     $frontendSettings = & (Join-Path $taskRoot 'scripts/load-env.ps1') -EnvPath $frontendEnv -NoExport
     $frontendMissing = @{}
@@ -791,7 +796,7 @@ if (!$SkipRestore) {
     & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
 }
-$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Parking, Reservation and Payment.'
+$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Parking, Reservation, Payment and Notification.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
 if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

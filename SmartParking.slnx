@@ -29,8 +29,16 @@
     <Project Path="src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/SmartParking.PaymentService.Infrastructure.csproj" />
     <Project Path="src/Services/PaymentService/SmartParking.PaymentService.Persistence/SmartParking.PaymentService.Persistence.csproj" />
   </Folder>
+  <Folder Name="/src/Services/NotificationAuditService/">
+    <Project Path="src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API/SmartParking.NotificationAuditService.API.csproj" />
+    <Project Path="src/Services/NotificationAuditService/SmartParking.NotificationAuditService.Application/SmartParking.NotificationAuditService.Application.csproj" />
+    <Project Path="src/Services/NotificationAuditService/SmartParking.NotificationAuditService.Domain/SmartParking.NotificationAuditService.Domain.csproj" />
+    <Project Path="src/Services/NotificationAuditService/SmartParking.NotificationAuditService.Infrastructure/SmartParking.NotificationAuditService.Infrastructure.csproj" />
+    <Project Path="src/Services/NotificationAuditService/SmartParking.NotificationAuditService.Persistence/SmartParking.NotificationAuditService.Persistence.csproj" />
+  </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/Services/">
+    <Project Path="tests/Services/SmartParking.NotificationAuditService.Tests/SmartParking.NotificationAuditService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.PaymentService.Tests/SmartParking.PaymentService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
