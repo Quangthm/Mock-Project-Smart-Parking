@@ -1,9 +1,15 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi } from "../../../lib/operatorApi"
 import type { SupportTicket } from "../../../lib/types"
+import { store } from "../../../lib/store"
+import { formatTicketDecision, ticketPresentation } from "../../../lib/ticketPresentation"
+import "../../../booking-support.css"
+
+const localTicketsForSite = (siteId: string) => store.getTickets().filter(ticket => !ticket.siteId || ticket.siteId === siteId)
+const newestFirst = (items: SupportTicket[]) => items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
 export function TicketManagement({ siteId }: { siteId: string }) {
   const [tickets, setTickets] = useState<SupportTicket[]>([])
@@ -12,10 +18,40 @@ export function TicketManagement({ siteId }: { siteId: string }) {
   const [busyTicketId, setBusyTicketId] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "in-progress" | "resolved">("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "in-progress" | "resolved" | "approved" | "rejected">("all")
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
-  const [resolutionNote, setResolutionNote] = useState("")
+  const [decision, setDecision] = useState<"approved" | "rejected">("approved")
+  const [decisionReason, setDecisionReason] = useState("")
+  const [decisionDetail, setDecisionDetail] = useState("")
   const [actionFeedback, setActionFeedback] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!selectedTicket) return
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    closeRef.current?.focus()
+    return () => returnFocusRef.current?.focus()
+  }, [selectedTicket?.id])
+
+  function handleDialogKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") { setSelectedTicket(null); return }
+    if (event.key !== "Tab") return
+    const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled)')
+    if (!controls?.length) return
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+
+  function openTicket(ticket: SupportTicket) {
+    setSelectedTicket(ticket)
+    setDecision("approved")
+    setDecisionReason("")
+    setDecisionDetail("")
+  }
 
   useEffect(() => {
     if (!siteId) {
@@ -29,10 +65,13 @@ export function TicketManagement({ siteId }: { siteId: string }) {
     setLoadError("")
     operatorOperationsApi.listTickets(siteId)
       .then((result) => {
-        if (active) setTickets(result)
+        if (active) setTickets(newestFirst([...result, ...localTicketsForSite(siteId).filter(local => !result.some(server => server.id === local.id))]))
       })
       .catch((error: unknown) => {
-        if (active) setLoadError(error instanceof Error ? error.message : "Could not load support tickets.")
+        if (active) {
+          setTickets(newestFirst(localTicketsForSite(siteId)))
+          setLoadError(error instanceof Error ? error.message : "Could not load server tickets. Local tickets remain available.")
+        }
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -42,20 +81,36 @@ export function TicketManagement({ siteId }: { siteId: string }) {
     }
   }, [siteId])
 
+  useEffect(() => {
+    const refreshLocal = () => setTickets(current => {
+      const serverTickets = current.filter(ticket => !store.getTickets().some(local => local.id === ticket.id))
+      return newestFirst([...serverTickets, ...localTicketsForSite(siteId)])
+    })
+    window.addEventListener("sp-data-change", refreshLocal)
+    return () => window.removeEventListener("sp-data-change", refreshLocal)
+  }, [siteId])
+
   async function updateTicket(
     ticket: SupportTicket,
     status: SupportTicket["status"],
     note?: string,
+    ticketDecision?: "approved" | "rejected",
   ) {
     if (!siteId || busyTicketId) return
     setBusyTicketId(ticket.id)
     setLoadError("")
     try {
-      const updated = await operatorOperationsApi.updateTicket(siteId, ticket.id, status, note)
+      const local = store.getTickets().find(item => item.id === ticket.id)
+      const updated = local
+        ? { ...local, status, decision: ticketDecision, resolutionNote: note }
+        : await operatorOperationsApi.updateTicket(siteId, ticket.id, status, note)
+      if (local) store.saveTicket(updated)
       setTickets((current) => current.map((item) => item.id === ticket.id ? updated : item))
       if (selectedTicket?.id === ticket.id) setSelectedTicket(updated)
-      setActionFeedback(`Ticket #${ticket.id} updated to ${status.toUpperCase()}.`)
-      setResolutionNote("")
+      setActionFeedback(`Ticket #${ticket.id} ${ticketDecision || `updated to ${status}`}.`)
+      if (local && ticketDecision) store.createNotification({ recipientId: ticket.userId, recipientRole: "driver", type: "TICKET_RESOLVED", title: `Ticket ${ticketDecision}`, message: note || "Your ticket was reviewed.", relatedEntityId: ticket.id })
+      setDecisionReason("")
+      setDecisionDetail("")
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Could not update the support ticket.")
     } finally {
@@ -63,10 +118,21 @@ export function TicketManagement({ siteId }: { siteId: string }) {
     }
   }
 
+  const TICKET_STATUS_FILTER_PREDICATES: Record<string, (t: SupportTicket) => boolean> = {
+    approved: (t) => ticketPresentation(t).decision === "approved",
+    rejected: (t) => ticketPresentation(t).decision === "rejected",
+    open: (t) => t.status === "open",
+    "in-progress": (t) => t.status === "in-progress",
+    resolved: (t) => t.status === "resolved",
+  }
+
   // Filtered tickets
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
-      if (statusFilter !== "all" && t.status !== statusFilter) return false
+      if (statusFilter !== "all") {
+        const predicate = TICKET_STATUS_FILTER_PREDICATES[statusFilter]
+        if (predicate && !predicate(t)) return false
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase()
         const matchSubject = t.subject.toLowerCase().includes(q)
@@ -87,7 +153,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
   const resolvedCount = tickets.filter((t) => t.status === "resolved").length
 
   return (
-    <div className="space-y-6">
+    <div className="operator-ticket-management space-y-6">
       <PageHeader title="Support Ticket Management" description="Review, investigate, and resolve support requests submitted by drivers in real-time." />
 
       {/* Feedback Banner */}
@@ -102,7 +168,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         </div>
       )}
       {actionFeedback && (
-        <div className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-600 font-medium">
+        <div role="status" className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-600 font-medium">
           <div className="flex items-center gap-2">
             <UntitledIcon name="check-circle" size={16} />
             <span>{actionFeedback}</span>
@@ -122,7 +188,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         <button
           type="button"
           onClick={() => setStatusFilter("open")}
-          className={`rounded-xl border p-4 text-left transition ${
+          className={`rounded-xl border p-4 text-left transition-colors ${
             statusFilter === "open"
               ? "border-blue-500 bg-blue-500/5 ring-1 ring-blue-500"
               : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]"
@@ -138,7 +204,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         <button
           type="button"
           onClick={() => setStatusFilter("in-progress")}
-          className={`rounded-xl border p-4 text-left transition ${
+          className={`rounded-xl border p-4 text-left transition-colors ${
             statusFilter === "in-progress"
               ? "border-amber-500 bg-amber-500/5 ring-1 ring-amber-500"
               : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]"
@@ -154,14 +220,14 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         <button
           type="button"
           onClick={() => setStatusFilter("resolved")}
-          className={`rounded-xl border p-4 text-left transition ${
+          className={`rounded-xl border p-4 text-left transition-colors ${
             statusFilter === "resolved"
               ? "border-green-500 bg-green-500/5 ring-1 ring-green-500"
               : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]"
           }`}
         >
           <div className="flex items-center justify-between text-xs font-semibold text-green-600">
-            <span>Resolved</span>
+            <span>Decided / Resolved</span>
             <span className="h-2 w-2 rounded-full bg-green-500" />
           </div>
           <div className="mt-2 text-2xl font-bold text-[var(--fg)]">{resolvedCount}</div>
@@ -171,14 +237,19 @@ export function TicketManagement({ siteId }: { siteId: string }) {
       {/* Search & Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
         <div className="flex flex-wrap items-center gap-2 flex-1">
+          <label className="sr-only" htmlFor="operator-ticket-search">Search support tickets</label>
           <input
-            className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)] w-full sm:w-64"
-            placeholder="Search tickets by subject, driver, or ID..."
+            id="operator-ticket-search"
+            name="ticketSearch"
+            autoComplete="off"
+            className="sp-search-input w-full px-3 sm:w-64"
+            placeholder="Search tickets by subject, driver, or ID…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
           <RoundedSelect
+            aria-label="Filter ticket status"
             className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -187,6 +258,8 @@ export function TicketManagement({ siteId }: { siteId: string }) {
             <option value="open">Open Only</option>
             <option value="in-progress">In Progress</option>
             <option value="resolved">Resolved Only</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
           </RoundedSelect>
         </div>
 
@@ -205,7 +278,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
           filteredTickets.map((ticket) => (
             <article
               key={ticket.id}
-              className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[var(--primary)]/60"
+              className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:border-[var(--primary)]/60"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
@@ -225,42 +298,36 @@ export function TicketManagement({ siteId }: { siteId: string }) {
 
                 <div className="flex items-center gap-2">
                   {ticket.bookingId && (
-                    <span className="rounded bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 text-[10px] font-mono font-medium text-[var(--muted)]">
+                    <span className="rounded bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 text-xs font-mono font-medium text-[var(--muted)]">
                       Booking #{ticket.bookingId}
                     </span>
                   )}
                   <span
-                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                      ticket.status === "resolved"
-                        ? "bg-green-500/15 text-green-600"
-                        : ticket.status === "in-progress"
-                          ? "bg-amber-500/15 text-amber-600"
-                          : "bg-blue-500/15 text-blue-600"
-                    }`}
+                    className={`ticket-decision is-${ticketPresentation(ticket).decision || ticket.status}`}
                   >
-                    {ticket.status}
+                    {ticketPresentation(ticket).statusLabel}
                   </span>
                 </div>
               </div>
 
               <p className="mt-3 text-xs text-[var(--fg)] line-clamp-2 leading-relaxed">
-                {ticket.message}
+                  {ticketPresentation(ticket).inquiry}
               </p>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
                 <button
                   type="button"
                   className="btn-outline text-xs py-1 px-3"
-                  onClick={() => setSelectedTicket(ticket)}
+                  onClick={() => openTicket(ticket)}
                 >
-                  View Details & History
+                  View details
                 </button>
 
                 <div className="flex items-center gap-2">
                   {ticket.status === "open" && (
                     <button
                       type="button"
-                      className="text-xs font-semibold text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 rounded px-2.5 py-1 transition"
+                      className="text-xs font-semibold text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 rounded px-2.5 py-1 transition-colors"
                       disabled={busyTicketId !== null}
                       onClick={() => void updateTicket(ticket, "in-progress")}
                     >
@@ -270,11 +337,11 @@ export function TicketManagement({ siteId }: { siteId: string }) {
                   {ticket.status !== "resolved" && (
                     <button
                       type="button"
-                      className="text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded px-3 py-1 transition"
+                      className="text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded px-3 py-1 transition-colors"
                       disabled={busyTicketId !== null}
-                      onClick={() => setSelectedTicket(ticket)}
+                      onClick={() => openTicket(ticket)}
                     >
-                      Resolve Ticket
+                      Review ticket
                     </button>
                   )}
                 </div>
@@ -292,10 +359,12 @@ export function TicketManagement({ siteId }: { siteId: string }) {
           onMouseDown={(e) => e.target === e.currentTarget && setSelectedTicket(null)}
         >
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="ticket-modal-title"
-            className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
+            onKeyDown={handleDialogKeyDown}
+            className="w-full max-w-lg max-h-[88dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
           >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <div>
@@ -307,9 +376,11 @@ export function TicketManagement({ siteId }: { siteId: string }) {
                 </h3>
               </div>
               <button
+                ref={closeRef}
                 type="button"
                 onClick={() => setSelectedTicket(null)}
-                className="h-8 w-8 rounded-full border border-[var(--border)] bg-[var(--bg)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--fg)]"
+                className="h-11 w-11 rounded-full border border-[var(--border)] bg-[var(--bg)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--fg)]"
+                aria-label="Close ticket details"
               >
                 <UntitledIcon name="x" size={16} />
               </button>
@@ -340,7 +411,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">Current Status:</span>
                   <span className="font-bold uppercase text-[var(--primary)]">
-                    {selectedTicket.status}
+                    {ticketPresentation(selectedTicket).statusLabel}
                   </span>
                 </div>
               </div>
@@ -350,22 +421,22 @@ export function TicketManagement({ siteId }: { siteId: string }) {
                   Driver Inquiry Message:
                 </span>
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-xs whitespace-pre-wrap leading-relaxed">
-                  {selectedTicket.message}
+                  {ticketPresentation(selectedTicket).inquiry}
                 </div>
               </div>
 
+              {ticketPresentation(selectedTicket).note && <div className="operator-ticket-existing-response"><strong>Operator response</strong><p>{ticketPresentation(selectedTicket).note}</p></div>}
+
               {selectedTicket.status !== "resolved" && (
-                <div>
-                  <label className="text-xs font-semibold text-[var(--muted)] block mb-1">
-                    Add Operator Resolution Note:
-                  </label>
-                  <textarea
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
-                    rows={3}
-                    placeholder="Describe resolution steps taken (e.g. Barrier restarted, slot reassigned, fee confirmed)..."
-                    value={resolutionNote}
-                    onChange={(e) => setResolutionNote(e.target.value)}
-                  />
+                <div className="operator-ticket-decision-form">
+                  <fieldset><legend>Decision</legend><div className="operator-ticket-decision-options">
+                    <label><input type="radio" name="ticket-decision" checked={decision === "approved"} onChange={() => setDecision("approved")} />Approve</label>
+                    <label><input type="radio" name="ticket-decision" checked={decision === "rejected"} onChange={() => setDecision("rejected")} />Reject</label>
+                  </div></fieldset>
+                  <label htmlFor="operator-ticket-reason">Reason for {decision === "approved" ? "approval" : "rejection"}</label>
+                  <textarea id="operator-ticket-reason" name="decisionReason" autoComplete="off" className="input" rows={2} maxLength={900} placeholder="Explain why this ticket is approved or rejected…" value={decisionReason} onChange={event => setDecisionReason(event.target.value)} />
+                  <label htmlFor="operator-ticket-detail">{decision === "approved" ? "What was fixed" : "Outstanding issue"}</label>
+                  <textarea id="operator-ticket-detail" name="decisionDetail" autoComplete="off" className="input" rows={2} maxLength={900} placeholder={decision === "approved" ? "Describe the completed fix…" : "Explain what remains unresolved or prevents approval…"} value={decisionDetail} onChange={event => setDecisionDetail(event.target.value)} />
                 </div>
               )}
             </div>
@@ -393,11 +464,11 @@ export function TicketManagement({ siteId }: { siteId: string }) {
               {selectedTicket.status !== "resolved" && (
                 <button
                   type="button"
-                  className="btn-primary text-xs py-1.5 px-4 bg-green-600 hover:bg-green-700"
-                  disabled={busyTicketId !== null}
-                  onClick={() => void updateTicket(selectedTicket, "resolved", resolutionNote)}
+                  className="btn-primary"
+                  disabled={busyTicketId !== null || !decisionReason.trim() || !decisionDetail.trim()}
+                  onClick={() => void updateTicket(selectedTicket, "resolved", formatTicketDecision(decision, decisionReason, decisionDetail), decision)}
                 >
-                  {busyTicketId === selectedTicket.id ? "Saving…" : "Resolve Ticket"}
+                  {busyTicketId === selectedTicket.id ? "Saving…" : decision === "approved" ? "Approve ticket" : "Reject ticket"}
                 </button>
               )}
             </div>

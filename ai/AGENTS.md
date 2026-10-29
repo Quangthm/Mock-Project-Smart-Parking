@@ -1,6 +1,6 @@
 # SmartPark — AI Agent Instructions
 
-> **Thin operational router.** Routes agents to the right context for the current task. Architecture facts live in `ai/architecture-reference.md`; operational workflow & 5 core skills in `ai/rule.md`. Read them when directed — do not duplicate them here.
+> **Thin operational router.** Routes agents to the right context for the current task. Shared coding implementation conventions live in `docs/07-skills/SmartPark-Coding-Skill-v1.0.md`; architecture facts live in `ai/architecture-reference.md`; operational workflow rules live in `ai/rule.md`. Read them when directed — do not duplicate them here.
 
 ## Core operating principles
 
@@ -8,7 +8,7 @@
 2. **Lazy-load context progressively (Tiered Loading).** Use the routing table below. Do not preload every file into context.
 3. **Single source of truth.** Each fact has one canonical owner. If sources disagree, consult the Conflict Register in `ai/architecture-reference.md`.
 4. **Verify before claiming.** Mark unverified work `[UNVERIFIED]`. Classify unknowns as `OPEN`, `DEFERRED`, or `PROPOSED`.
-5. **Follow 5 Core Skills.** Commit, PR, Session logging, .env configuration, and Coding practices must strictly follow `ai/rule.md`.
+5. **Use the correct canonical skill.** Commit, PR, Session logging and `.env` workflows follow the applicable rules in `ai/rule.md`. **All coding/implementation/review tasks MUST load `docs/07-skills/SmartPark-Coding-Skill-v1.0.md` as the primary implementation convention.** Rule 5 in `ai/rule.md` may supplement execution workflow, but must not override a newer approved coding convention in the shared skill.
 6. **Minimal footprint.** Do only the requested task. No unrequested packages, abstractions, or "while I'm here" refactors.
 7. **Protect user work & secrets.** Never revert uncommitted user changes or commit/print secrets (`.env`, connection strings).
 
@@ -26,7 +26,8 @@
 - **Test Projects:** Backend tests under `tests/Services/` (xUnit), Frontend tests under `tests/frontend/` (node:test).
 - **Instruction & Skills System:**
   - Operational Router: `ai/AGENTS.md`
-  - 5 Core Skills & Execution Rules: `ai/rule.md`
+  - Shared Coding Implementation Convention: `docs/07-skills/SmartPark-Coding-Skill-v1.0.md`
+  - Operational Skills & Execution Rules: `ai/rule.md`
   - Architecture Reference & Conflict Register: `ai/architecture-reference.md`
   - Detailed Skill Guides: `docs/07-skills/`
   - Task Sessions: `ai/tasks/active/` and `ai/tasks/completed/`
@@ -35,8 +36,8 @@
 
 Loading context follows a 3-tier strategy:
 - **Tier 1 (Quick routing):** Read `ai/AGENTS.md` to identify task category and minimal scope.
-- **Tier 2 (Core rules):** Read the specific rule in `ai/rule.md` for standard tasks (Commit, PR, Session, .env, Coding).
-- **Tier 3 (Detailed references):** Load detailed skills in `docs/07-skills/`, architecture reference, or session history only when the task is complex, ambiguous, or high-risk.
+- **Tier 2 (Core rules):** For coding, load `docs/07-skills/SmartPark-Coding-Skill-v1.0.md` first; for Commit, PR, Session and `.env`, load the applicable `ai/rule.md` rule. Coding tasks may also load Rule 5 for execution workflow, but the shared coding skill owns implementation conventions.
+- **Tier 3 (Detailed references):** Load architecture/service/feature references, scoped `AGENTS.md`, detailed skills, or session history when the task requires them.
 
 | When your task involves… | Tier 2: You MUST read… | Tier 3: Detailed reference (when needed) | Skip reading… (unless boundary crossed) |
 |---|---|---|---|
@@ -44,12 +45,12 @@ Loading context follows a 3-tier strategy:
 | **Pull Request (PR)** | Rule 2 in `ai/rule.md` | `docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md` | Unrelated backend/frontend code |
 | **Session Tracking / Task Record** | Rule 3 in `ai/rule.md` | `docs/07-skills/SmartParking_Session_SKILL_v1.0.md`; active session in `ai/tasks/active/` | Deep implementation code |
 | **Environment / .env / Compose / Ports** | Rule 4 in `ai/rule.md` | `docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md`; `.env.example` | Unrelated business logic docs |
-| **Coding (Backend / Service / Database)** | Rule 5 in `ai/rule.md` | `ai/architecture-reference.md`; `ai/context/architecture-guardrails.md`; affected source & tests | Frontend-specific docs |
-| **Frontend-only changes** | `FE/AGENTS.md` | Relevant FE components, stores, styles & tests | Backend architecture docs, DB scripts |
-| **Architecture or API contract changes** | `ai/architecture-reference.md` | `docs/02-architecture/`; `docs/03-design/api/` (template: `docs/03-design/api/api-design-template.md`); `ai/context/architecture-guardrails.md`; affected contracts | Unrelated service code |
-| **Build / test / CI failures** | Verification commands below | Failing build/test output; affected project `.csproj` or config | Architecture docs, unless diagnosing root cause |
-| **Security / auth / secrets** | Safety rules below; `ai/context/architecture-guardrails.md` | Affected auth implementations & policies | Unrelated service docs |
-| **Unknown or cross-cutting tasks** | Start with smallest context | Investigate repo; load `ai/context/project-context.md` & `ai/architecture-reference.md` | Nothing is unconditionally skipped |
+| **Coding (Backend / Service / Database)** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`**; Rule 5 in `ai/rule.md` for execution workflow | `ai/architecture-reference.md`; `ai/context/architecture-guardrails.md`; applicable SRS/use-case/API/service-boundary docs; affected source & tests | Frontend-specific docs |
+| **Frontend-only changes** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + `FE/AGENTS.md` | Relevant FE requirements/components/stores/styles/tests | Backend architecture/DB docs unless the frontend change crosses that boundary |
+| **Architecture or API contract changes** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + `ai/architecture-reference.md` | `docs/02-architecture/`; `docs/03-design/api/` (template: `docs/03-design/api/api-design-template.md`); `ai/context/architecture-guardrails.md`; affected contracts | Unrelated service code |
+| **Build / test / CI failures** | Verification commands below | Failing build/test output; affected project `.csproj` or config; coding skill when a code change is required | Architecture docs, unless diagnosing root cause |
+| **Security / auth / secrets** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + Safety rules below | `ai/context/architecture-guardrails.md`; affected auth implementations & policies | Unrelated service docs |
+| **Unknown or cross-cutting tasks** | Start with smallest context; load the shared coding skill before making code changes | Investigate repo; load `ai/context/project-context.md`, `ai/architecture-reference.md` and relevant contracts | Nothing is unconditionally skipped |
 
 > **Conditional skips are not prohibitions.** Always load additional context when evidence shows the task crosses a previously assumed boundary.
 
@@ -68,10 +69,11 @@ Loading context follows a 3-tier strategy:
 | Pull Request guide | `docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md` |
 | Session tracking | `docs/07-skills/SmartParking_Session_SKILL_v1.0.md` |
 | Environment config | `docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md` |
+| Shared coding implementation convention | `docs/07-skills/SmartPark-Coding-Skill-v1.0.md` |
 | Verified architecture & Conflict Register | `ai/architecture-reference.md` |
-| Operational rules & 5 Skills | `ai/rule.md` |
+| Operational workflow rules | `ai/rule.md` |
 
-**Precedence principle:** The SRS is authoritative for requirements. Context files, handoffs, and decision records interpret it; they do not replace it. If code and documentation disagree, check `ai/architecture-reference.md` (§8 Conflict Register) to determine verified repo reality.
+**Precedence principle:** The SRS is authoritative for product requirements. `ai/architecture-reference.md` and approved architecture/service-boundary documents govern architecture/ownership facts. `docs/07-skills/SmartPark-Coding-Skill-v1.0.md` is the primary shared implementation convention for coding/review work. `ai/rule.md` governs operational workflow. Scoped `AGENTS.md` and approved feature/API contracts add task-specific constraints. If these sources materially conflict, do not silently choose a direction: use the Conflict Register and the coding skill's architecture/direction approval gate.
 
 ## Safety rules
 
@@ -109,6 +111,7 @@ node --test tests/frontend/*.test.cjs          # frontend tests
 
 ## Session state & Task records
 
-Operational rules, 5 Core Skills, and task logging protocol: → `ai/rule.md`
+Shared coding implementation convention: → `docs/07-skills/SmartPark-Coding-Skill-v1.0.md`
+Operational rules and task logging protocol: → `ai/rule.md`
 Active task sessions: → `ai/tasks/active/`
 Completed task sessions: → `ai/tasks/completed/`

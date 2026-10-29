@@ -216,7 +216,7 @@ export function DashboardNavbar() {
                   </label>
                   <input
                     id="dashboard-search"
-                    className="input"
+                    className="input sp-search-input"
                     placeholder="Search pages and features"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}

@@ -11,6 +11,8 @@ interface GroupedNumberInputProps {
   value: string
   placeholder?: string
   onValueChange: (digits: string) => void
+  step?: number
+  ariaLabel?: string
 }
 
 export function GroupedNumberInput({
@@ -18,6 +20,8 @@ export function GroupedNumberInput({
   value,
   placeholder,
   onValueChange,
+  step,
+  ariaLabel,
 }: GroupedNumberInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingCaret = useRef<number | null>(null)
@@ -26,7 +30,7 @@ export function GroupedNumberInput({
 
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return
-    if (document.activeElement === inputRef.current) {
+    if (inputRef.current && document.activeElement === inputRef.current) {
       inputRef.current.setSelectionRange(pendingCaret.current, pendingCaret.current)
     }
     pendingCaret.current = null
@@ -56,7 +60,19 @@ export function GroupedNumberInput({
     onValueChange(nextDigits)
   }
 
+  const STEP_DIRECTION_MAP: Record<string, number> = {
+    ArrowUp: 1,
+    ArrowDown: -1,
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const direction = STEP_DIRECTION_MAP[event.key]
+    if (step && direction !== undefined) {
+      const current = Number(value) || 0
+      onValueChange(String(Math.max(0, Math.round(current / step) * step + direction * step)))
+      event.preventDefault()
+      return
+    }
     const input = event.currentTarget
     const start = input.selectionStart ?? 0
     const end = input.selectionEnd ?? start
@@ -138,6 +154,7 @@ export function GroupedNumberInput({
     <input
       ref={inputRef}
       className={className}
+      aria-label={ariaLabel}
       type="text"
       inputMode="numeric"
       pattern="[0-9,]*"
@@ -148,6 +165,7 @@ export function GroupedNumberInput({
       onBlur={handleBlur}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
+      onBlur={step ? () => onValueChange(String(Math.max(0, Math.round((Number(value) || 0) / step) * step))) : undefined}
     />
   )
 }

@@ -8,7 +8,7 @@ Tài liệu onboarding chi tiết cho môi trường local. Happy path nằm ở
 # Mở terminal tại root checkout vừa clone
 git branch --show-current          # nhánh làm việc mặc định: develop
 .\setup.ps1                        # dựng DB + credential + SonarQube + restore
-.\scripts\run-app-service.ps1 -Service All   # chạy 4 container BE + FE
+.\scripts\run-app-service.ps1 -Service All   # chạy 5 container BE + FE
 # Mở http://localhost:5173
 ```
 
@@ -20,7 +20,7 @@ Checklist trước khi setup:
 - [ ] **Docker Desktop đang chạy**, Docker Compose hỗ trợ `up --wait` (v2.17+).
 - [ ] **Node.js + npm** nếu chạy frontend trực tiếp trên host. Docker app stack dùng Node 22 trong image, không cần cài Node trên host.
 - [ ] **Git** và đúng branch: `git branch --show-current` (mặc định `develop`).
-- [ ] **Port rảnh:** API `5035/5045/5055`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
+- [ ] **Port rảnh:** API `5035/5045/5055/5065`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
 
 `setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Lệnh cũ `.\scripts\setup-local.ps1` vẫn dùng được: script shim này in warning rồi forward toàn bộ tham số sang `setup.ps1` ở repo root.
 
@@ -46,7 +46,7 @@ Checklist trước khi setup:
 1. Tạo `.env` từ `.env.example`; **giữ nguyên** giá trị đã cấu hình, chỉ sinh phần còn thiếu (password PostgreSQL, service key, password Admin/owner/operator).
 2. Dựng **6 PostgreSQL DB** theo `compose.schema-integration.yml` (`user`, `facility`, `operations`, `payment`, `notification`, `iot`).
 3. Probe authentication từng DB và áp workflow migration đúng trạng thái schema.
-4. Đồng bộ user-secrets cho User/Facility/Operation theo `.env` ở `[5/7]`.
+4. Đồng bộ user-secrets cho User/Facility/Operation/Payment theo `.env` ở `[5/7]`.
 5. Dựng SonarQube (mặc định) và restore solution ở `[7/7]`.
 6. **Không tự chạy API hoặc frontend** — sau setup mới chuyển sang [mục 3](#3-run-application).
 
@@ -81,7 +81,7 @@ Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner
 
 ## 3. Run Application
 
-Chọn **một** trong hai cách; không chạy đồng thời vì cùng dùng port `5035/5045/5055`.
+Chọn **một** trong hai cách; không chạy đồng thời vì cùng dùng port `5035/5045/5055/5065`.
 
 ### 3.1 Docker app stack (BE + FE)
 
@@ -91,8 +91,9 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 .\scripts\run-app-service.ps1 -Service User
 .\scripts\run-app-service.ps1 -Service Facility
 .\scripts\run-app-service.ps1 -Service Operation
+.\scripts\run-app-service.ps1 -Service Payment
 .\scripts\run-app-service.ps1 -Service Frontend
-.\scripts\run-app-service.ps1 -Service All        # cả 4 container
+.\scripts\run-app-service.ps1 -Service All        # cả 5 container
 ```
 
 | Container | Host URL | Ghi chú |
@@ -100,6 +101,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 | `smartpark-app-user-service-1` | http://localhost:5035 | `/health`; seed admin/owner/operator khi start |
 | `smartpark-app-parking-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
 | `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
+| `smartpark-app-payment-service-1` | http://localhost:5065 | `/health`; dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
 > **Lưu ý chuyển tiếp v1.1 / Fix2FA:** Mã nguồn trên branch `Fix2FA` đã dùng `FacilityService` tại `src/Services/FacilityService/` (dùng `facility-db` trên port 5442) theo SRS v1.1 (quyết định V11-09). `OperationService` tại `src/Services/OperationService/` dùng `operations-db` trên port 5443 và triển khai luồng Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
@@ -110,13 +112,13 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 - Dừng stack (giữ volume): `.\scripts\stop-app-service.ps1 -Service All`.
 - Log một service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
 
-Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`FacilityService`/`OperationService`).
+Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`FacilityService`/`OperationService`/`PaymentService`).
 
-> **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055` đang bị runner host chiếm, dừng runner host trước khi chạy container.
+> **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055/5065` đang bị runner host chiếm, dừng runner host trước khi chạy container.
 
 ### 3.2 Runner trên host (Visual Studio / `dotnet run`)
 
-Mở ba terminal PowerShell riêng tại repo:
+Mở bốn terminal PowerShell riêng tại repo:
 
 ```powershell
 .\scripts\run-schema-service.ps1 -Service User
@@ -130,14 +132,18 @@ Mở ba terminal PowerShell riêng tại repo:
 .\scripts\run-schema-service.ps1 -Service Operation
 ```
 
-Runner dùng `.env` cho connection string, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; ba API giữ port `5035/5045/5055`.
+```powershell
+.\scripts\run-schema-service.ps1 -Service Payment
+```
+
+Runner dùng `.env` cho connection string, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; các API giữ port `5035/5045/5055/5065`.
 
 | Service | HTTP API | PostgreSQL host port | Database |
 | --- | --- | --- | --- |
 | User | http://localhost:5035 | 5441 | smartpark_user |
 | Facility | http://localhost:5045 | 5442 | smartpark_facility |
 | Operation | http://localhost:5055 | 5443 | smartpark_operations |
-| Payment | — | 5444 | smartpark_payment |
+| Payment | http://localhost:5065 | 5444 | smartpark_payment |
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
 
@@ -163,12 +169,13 @@ Checklist sau khi setup và chạy app:
   docker compose --env-file .env -f compose.schema-integration.yml ps
   ```
 
-- [ ] **3 API health 200** (khi runner/container đã chạy):
+- [ ] **4 API health 200** (khi runner/container đã chạy):
 
   ```powershell
   Invoke-WebRequest http://localhost:5035/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5045/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5055/health -UseBasicParsing
+  Invoke-WebRequest http://localhost:5065/health -UseBasicParsing
   ```
 
 - [ ] **FE mở được** tại http://localhost:5173.
@@ -236,8 +243,8 @@ Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvP
 
 **Lỗi `Invalid port` ở `[3/7]` hoặc DB/API không lên**
 
-- **Nguyên nhân:** port `5441–5446`, `5035/5045/5055` bị chiếm.
-- **Cách xử lý:** kiểm tra process đang giữ port; đổi port DB bằng `SMARTPARK_DB_*_PORT` trong `.env` (ba API giữ `5035/5045/5055`).
+- **Nguyên nhân:** port `5441–5446`, `5035/5045/5055/5065` bị chiếm.
+- **Cách xử lý:** kiểm tra process đang giữ port; đổi port DB bằng `SMARTPARK_DB_*_PORT` trong `.env` (các API giữ `5035/5045/5055/5065`).
 
 **`authentication failed` khi probe DB hoặc chạy API**
 

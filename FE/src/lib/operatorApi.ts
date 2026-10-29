@@ -1,4 +1,6 @@
 import { request } from "./authApi"
+import { store } from "./store"
+import { loadOwnerModelUrl } from "./3d/ownerModelStorage"
 import {
   operatorsApi,
   parkingApi,
@@ -128,6 +130,7 @@ export interface OperatorAuditEvent {
 }
 
 function siteFromStructure(structure: Structure): OperatorSite {
+  const ownerModel = store.getLots().find(lot => lot.id === structure.site.id)
   const floorUnits = structure.units.filter((unit) => unit.type === "FLOOR")
   const unitsById = new Map(structure.units.map((unit) => [unit.id, unit]))
   const floorNumbers = new Map(floorUnits.map((unit, index) => [unit.id, index + 1]))
@@ -147,6 +150,8 @@ function siteFromStructure(structure: Structure): OperatorSite {
     tenantId: structure.site.tenantId,
     code: structure.site.code,
     name: structure.site.name,
+    modelUrl: ownerModel?.modelUrl?.startsWith("blob:") ? undefined : ownerModel?.modelUrl,
+    modelFileName: ownerModel?.modelFileName,
     address: structure.site.address,
     latitude: structure.site.latitude,
     longitude: structure.site.longitude,
@@ -189,14 +194,22 @@ export async function loadOperatorSites(user: User | null): Promise<OperatorSite
   if (user.role === "owner") {
     const sites = await parkingApi.list()
     const structures = await Promise.all(sites.map((site) => parkingApi.structure(site.id)))
-    return structures.map(siteFromStructure)
+    return Promise.all(structures.map(async structure => {
+      const site = siteFromStructure(structure)
+      const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
+      return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+    }))
   }
 
   const assignments = await operatorsApi.assignments()
   const structures = await Promise.all(
     assignments.map((assignment) => parkingApi.operatorLayout(assignment.siteId)),
   )
-  return structures.map(siteFromStructure)
+  return Promise.all(structures.map(async structure => {
+    const site = siteFromStructure(structure)
+    const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
+    return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+  }))
 }
 
 function toBooking(reservation: GateReservation): Booking {
@@ -222,25 +235,20 @@ function toBooking(reservation: GateReservation): Booking {
   }
 }
 
+const PAYMENT_METHOD_MAP: Record<string, PaymentMethod> = {
+  VNPAY: "vnpay",
+  MOMO: "momo",
+  ZALOPAY: "zalopay",
+  VISA: "visa",
+  CREDIT_CARD: "visa",
+  APPLEPAY: "applepay",
+  APPLE_PAY: "applepay",
+  QR: "qr",
+}
+
 function mapPaymentMethod(method: string | null): PaymentMethod | undefined {
-  switch (method?.toUpperCase()) {
-    case "VNPAY":
-      return "vnpay"
-    case "MOMO":
-      return "momo"
-    case "ZALOPAY":
-      return "zalopay"
-    case "VISA":
-    case "CREDIT_CARD":
-      return "visa"
-    case "APPLEPAY":
-    case "APPLE_PAY":
-      return "applepay"
-    case "QR":
-      return "qr"
-    default:
-      return undefined
-  }
+  if (!method) return undefined
+  return PAYMENT_METHOD_MAP[method.toUpperCase()]
 }
 
 async function reservationRequest<T>(

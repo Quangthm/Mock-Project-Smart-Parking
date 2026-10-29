@@ -87,6 +87,30 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
+  payment-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        SERVICE: PaymentService
+    image: smartpark/payment-service:local
+    environment:
+      <<: *backend-env
+      ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      # PaymentService reads Services:ReservationService:BaseUrl (not Services:Reservation).
+      Services__ReservationService__BaseUrl: http://reservation-service:8080/
+      # Empty PayOS credentials keep the local sandbox emulation (fake checkout link/QR).
+      PayOs__ClientId: ${SMARTPARK_PAYOS_CLIENT_ID:-}
+      PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}
+      PayOs__ChecksumKey: ${SMARTPARK_PAYOS_CHECKSUM_KEY:-}
+      PayOs__BaseUrl: ${SMARTPARK_PAYOS_BASE_URL:-https://api-merchant.payos.vn}
+    ports:
+      - "127.0.0.1:5065:8080"
+    networks:
+      - smartpark
+    healthcheck: *healthcheck
+    restart: "no"
+
   frontend:
     build:
       context: ./FE
@@ -96,6 +120,7 @@ services:
       VITE_API_BASE_URL: http://localhost:5035
       VITE_PARKING_API_BASE_URL: http://localhost:5045
       VITE_RESERVATION_API_BASE_URL: http://localhost:5055
+      VITE_PAYMENT_API_BASE_URL: http://localhost:5065
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
       CHOKIDAR_USEPOLLING: "true"

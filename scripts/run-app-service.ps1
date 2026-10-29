@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -48,10 +48,11 @@ $map = @{
     User        = 'user-service'
     Parking     = 'parking-service'
     Operation   = 'reservation-service'
+    Payment     = 'payment-service'
     Frontend    = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','parking-service','reservation-service','frontend')
+    @('user-service','parking-service','reservation-service','payment-service','frontend')
 } else {
     @($map[$Service])
 }
@@ -124,6 +125,7 @@ Write-Host 'SmartPark app containers are running:' -ForegroundColor Green
 Write-Host '  User        http://localhost:5035/health'
 Write-Host '  Facility    http://localhost:5045/health'
 Write-Host '  Operation   http://localhost:5055/health'
+Write-Host '  Payment     http://localhost:5065/health'
 Write-Host '  Frontend    http://localhost:5173'
 Write-Host ''
 

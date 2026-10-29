@@ -124,6 +124,10 @@ coverage*.xml
 TestResults/
 *.trx
 *.local.runsettings
+
+# Agents
+.agents/*
+
 # =========================
 # Python / IoT AI
 # =========================

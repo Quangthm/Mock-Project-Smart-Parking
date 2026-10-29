@@ -151,7 +151,7 @@ export function useLotManagement(siteFilterId = "all") {
 
   // Aggregated totals across all lots
   const totals = useMemo(() => {
-    return data.reduce(
+    return filteredData.reduce(
       (acc, curr) => ({
         totalSites: acc.totalSites + 1,
         totalCapacity: acc.totalCapacity + (curr.metrics?.total ?? 0),
@@ -171,8 +171,8 @@ export function useLotManagement(siteFilterId = "all") {
         totalBackup: 0,
       },
     )
-  }, [data])
-  const hasUnknownCapacity = data.some((item) => !item.metrics)
+  }, [filteredData])
+  const hasUnknownCapacity = filteredData.some((item) => !item.metrics)
   const summaryValue = (value: number) => hasUnknownCapacity ? "—" : value.toLocaleString()
 
   function handleNavigateToStructure(siteId: string) {
