@@ -1,4 +1,4 @@
-﻿namespace UserService.Application.DTOs
+namespace UserService.Application.DTOs
 {
     /// <summary>
     /// User session data transfer object.
@@ -14,6 +14,8 @@
         public int ExpiresIn { get; set; }
 
         public UserInfoDto? User { get; set; }
+
+        public int? RecoveryCodesRemaining { get; set; }
     }
 
     public class UserInfoDto
@@ -23,6 +25,8 @@
         public string FullName { get; set; } = string.Empty;
 
         public string Email { get; set; } = string.Empty;
+
+        public bool OnboardingComplete { get; set; }
 
         public string Role { get; set; } = string.Empty;
     }

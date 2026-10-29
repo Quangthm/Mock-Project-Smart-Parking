@@ -213,6 +213,9 @@ export interface OperatorAssignment {
 }
 
 export const operatorsApi = {
+  async reissueInvitation(id: string) {
+    return request(`/${encodeURIComponent(id)}/invitation`, "POST", undefined, "/api/operators")
+  },
   async assignments() {
     return (
       await request<Response<OperatorAssignment[]>>(
@@ -238,7 +241,6 @@ export const operatorsApi = {
   async create(body: {
     fullName: string
     email: string
-    password: string
     siteIds: string[]
     permissions: string[]
   }) {
@@ -253,6 +255,7 @@ export const operatorsApi = {
 
     return result.data
   },
+
 
   async remove(operatorId: string) {
     await request<void>(`/${operatorId}`, "DELETE", undefined, "/api/operators")

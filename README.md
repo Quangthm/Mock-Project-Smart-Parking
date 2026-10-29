@@ -1,5 +1,7 @@
 ## Introduction
 
+Hướng dẫn chạy test PostgreSQL bằng Visual Studio hoặc terminal: [tests/README.md](tests/README.md).
+
 This is a simple pipeline example for a .NET Core application, showing just
 how easy it is to get up and running with .NET development using GitLab.
 

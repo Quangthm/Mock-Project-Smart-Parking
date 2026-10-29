@@ -4,7 +4,7 @@ Tài liệu này ghi lại các vấn đề nằm ngoài phạm vi sửa state v
 
 ## Quyền Owner với Financial Reports
 
-Front-End cho Owner mở `/dashboard/finance` (`src/App.tsx`), nhưng trang lập báo cáo qua `reservationApi.list(siteId)` (`src/roles/operator/dashboard/OperatorDashboard.tsx`). Reservation API kiểm tra quyền qua `/api/operators/site-scope`, yêu cầu role `operator` (`../src/Services/ReservationService/SmartParking.ReservationService.API/OperatorIdentityClient.cs` và `../src/Services/UserService/SmartParking.UserService.API/Controllers/OperatorsController.cs`). Vì vậy không thể giả định token Owner đọc được Reservations. Front-End hiện hiển thị lỗi request và ẩn tổng số cũ hoặc chưa đầy đủ. Việc cấp quyền xem báo cáo cho Owner cần quyết định về authorization hoặc API ở Back-End.
+Front-End cho Owner mở `/dashboard/finance` (`src/App.tsx`), nhưng trang lập báo cáo qua `reservationApi.list(siteId)` (`src/roles/operator/dashboard/OperatorDashboard.tsx`). Reservation API kiểm tra quyền qua `/api/operators/site-scope`, yêu cầu role `operator` (`../src/Services/OperationService/SmartParking.OperationService.API/OperatorIdentityClient.cs` và `../src/Services/UserService/SmartParking.UserService.API/Controllers/OperatorsController.cs`). Vì vậy không thể giả định token Owner đọc được Reservations. Front-End hiện hiển thị lỗi request và ẩn tổng số cũ hoặc chưa đầy đủ. Việc cấp quyền xem báo cáo cho Owner cần quyết định về authorization hoặc API ở Back-End.
 
 ## Định nghĩa Reports và Settlement
 

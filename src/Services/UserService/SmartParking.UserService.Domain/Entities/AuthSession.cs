@@ -10,4 +10,5 @@ public sealed class AuthSession
     public DateTimeOffset ExpiresAt { get; set; }
     public bool IsRevoked { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? LastRefreshedAt { get; set; }
 }

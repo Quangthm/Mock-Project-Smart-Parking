@@ -5,17 +5,23 @@ const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('../../FE/node_modules/typescript');
 
-function load(file, imports) {
-  const source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8').replace('import.meta.env.VITE_PARKING_API_BASE_URL', 'undefined');
-  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const context = { exports: {}, Error, require: name => {
+function load(file, imports = {}, globals = {}) {
+  const source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8')
+    .replace(/import\.meta\.env\.VITE_\w+/g, 'undefined');
+  const javascript = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const context = { exports: {}, Error, ...globals, require(name) {
+    if (name.endsWith("/ui/RoundedSelect")) return { RoundedSelect: "select" };
+    if (name.endsWith("/ui/PageHeader")) return { PageHeader: "page-header" };
+    if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" };
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];
-  }, document: { body: {} }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-  window: { addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, confirm: () => true } };
-  vm.runInNewContext(js, context);
+  } };
+  vm.runInNewContext(javascript, context);
   return context.exports;
 }
+
 const site = { id: '12345678-1234-1234-1234-123456789012', name: 'Real site', isActive: true, status: 'ACTIVE' };
 const operator = { id: 'operator-id', fullName: 'Staff', email: 'staff@example.com', status: 'active', siteIds: [site.id], permissions: ['DEVICE_STATUS_VIEW'] };
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -33,8 +39,7 @@ function hooks() {
       const i = cursor++;
       if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;
       return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }];
-    }, useEffect(effect) { effects.push(effect); },
-    useMemo: factory => factory(), useRef: initial => ({ current: initial }), useId: () => 'form-id' },
+    }, useEffect(effect) { effects.push(effect); }, useMemo(compute) { return compute(); } },
     runtime: { jsx, jsxs: jsx },
     reset() { slots.length = 0; effects.length = 0; cursor = 0; },
     render(fn, props) { cursor = 0; return fn(props); }, effects,
@@ -45,147 +50,164 @@ function nodes(tree) {
   const children = tree.props?.children;
   return [tree, ...[children].flat(Infinity).flatMap(nodes)];
 }
-// PageHeader renders its title and actions as children; mirror that so nodes() can reach toolbar buttons.
-const PageHeader = ({ title, description, actions }) => ({
-  type: 'header', props: { children: [title, description, actions].filter(Boolean) },
-});
-function formFixture(sites = [site]) {
-  const h = hooks(), pending = deferred(), calls = [], created = [];
-  const api = load('lib/parkingApi.ts', { './authApi': { request: (...args) => { calls.push(args); return pending.promise; } } });
-  const component = load('roles/owner/operators/CreateOperatorForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: node => node }, '../../../lib/parkingApi': api, '../../../lib/signInContact': load('lib/signInContact.ts', {}),
-    // Presentational controls and icons; they carry no state used by the provisioning assertions.
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/forms/PasswordVisibilityIcon': { PasswordVisibilityIcon: 'password-icon' },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' } }).CreateOperatorForm;
-  const render = () => h.render(component, { sites, onCreated: value => created.push(value), onCancel() {} });
+const permissions = ['DEVICE_STATUS_VIEW', 'DEVICE_MANAGE', 'CASH_COLLECT', 'APPEAL_REVIEW', 'SLOT_OVERRIDE'];
+
+function fixture({ sites = [site], existingOperators = [], failureMessage, pendingResponse } = {}) {
+  const state = [], requests = [], created = [];
+  let cursor = 0;
+  const react = {
+    useState(initial) {
+      const index = cursor++;
+      if (!(index in state)) state[index] = initial;
+      return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
+    },
+    useEffect() {},
+  };
+  const jsx = (type, props) => ({ type, props });
+  const storage = new Map([['sp_access_token', 'owner-token'], ['sp_access_expires_at', '9999999999999']]);
+  const auth = load('lib/authApi.ts', { './store': { store: {} } }, {
+    AbortSignal,
+    sessionStorage: { getItem: key => storage.get(key) ?? null },
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      if (pendingResponse) await pendingResponse.promise;
+      return {
+        ok: !failureMessage, status: failureMessage ? 409 : 200,
+        json: async () => failureMessage
+          ? { success: false, message: failureMessage }
+          : { success: true, data: { id: 'operator-id', ...JSON.parse(options.body) } },
+      };
+    },
+  });
+  const api = load('lib/parkingApi.ts', { './authApi': auth });
+  const { CreateOperatorForm } = load('roles/owner/operators/CreateOperatorForm.tsx', {
+    react, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    'react-dom': { createPortal: content => content },
+    '../../../lib/parkingApi': api,
+    '../../../lib/signInContact': load('lib/signInContact.ts'),
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+  }, { document: { body: {} } });
+  const render = () => { cursor = 0; return CreateOperatorForm({ isOpen: true, sites, existingOperators, onCreated: value => created.push(value), onClose() {} }); };
   const change = (id, value) => nodes(render()).find(node => node.props?.id === id).props.onChange({ target: { value } });
-  change('operator-name', ' Staff '); change('operator-email', ' staff@example.com '); change('operator-password', 'Password@123');
-  return { render, change, calls, created, pending, submit: () => render().props.onSubmit({ preventDefault() {} }) };
+  const submit = () => nodes(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  const submitButton = () => nodes(render()).find(node => node.props?.type === 'submit');
+  change('op-full-name', ' Staff ');
+  change('op-email', ' STAFF@example.com ');
+  return { render, change, submit, submitButton, requests, created };
 }
 
-test('owner form sends backend create request, awaits commit and never imports local user storage', async () => {
-  const f = formFixture();
-  const task = f.submit();
-  assert.equal(f.created.length, 0);
-  assert.equal(f.calls.length, 1);
-  assert.equal(f.calls[0][1], 'POST'); assert.equal(f.calls[0][3], '/api/users');
-  assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0][2])), { fullName: 'Staff', email: 'staff@example.com', password: 'Password@123', siteIds: [site.id], permissions: ['DEVICE_STATUS_VIEW'] });
-  assert.equal(nodes(f.render()).find(node => node.type === 'fieldset').props.disabled, true);
-  await f.submit(); assert.equal(f.calls.length, 1);
-  f.pending.resolve({ success: true, data: operator }); await task;
-  assert.equal(f.created[0].id, operator.id);
-  assert.equal(nodes(f.render()).find(node => node.props?.id === 'operator-password').props.value, '');
+test('name, email and site submit through the real API serializer without a password', async () => {
+  const secondSite = { ...site, id: 'second-site' };
+  const pendingResponse = deferred();
+  const form = fixture({ sites: [site, secondSite], pendingResponse });
+  form.change('op-site', secondSite.id);
+  assert.equal(form.submitButton().props.disabled, false);
+  assert.equal(nodes(form.render()).filter(node => node.type === 'input').length, 2);
+  assert.equal(nodes(form.render()).some(node => node.props?.type === 'password'), false);
+  const submission = form.submit();
+  assert.equal(form.submitButton().props.disabled, true);
+  await form.submit();
+  assert.equal(form.created.length, 0);
+  pendingResponse.resolve();
+  await submission;
+  assert.equal(form.requests.length, 1);
+  const { url, options } = form.requests[0];
+  assert.equal(url, 'http://localhost:5035/api/users');
+  assert.equal(options.method, 'POST');
+  assert.deepEqual(JSON.parse(options.body), {
+    fullName: 'Staff', email: 'staff@example.com', siteIds: [secondSite.id], permissions,
+  });
+  assert.equal(form.created.length, 1);
+  assert.equal(nodes(form.render()).find(node => node.props?.id === 'op-full-name').props.value, '');
+  assert.equal(form.submitButton().props.disabled, true);
 });
 
-for (const message of ['Email is already registered.', 'Cannot reach the authentication server. Please try again.', 'Every assigned site must be active and owned by this Owner.']) {
-  test(`create failure stays in form and exposes backend error: ${message}`, async () => {
-    const f = formFixture(); const task = f.submit();
-    f.pending.reject(new Error(message)); await task;
-    assert.equal(f.created.length, 0);
-    assert.equal(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, message);
-    assert.equal(nodes(f.render()).find(node => node.type === 'fieldset').props.disabled, false);
-  });
-}
-
-for (const email of ['a@example', 'a..b@example.com', 'a@example..com', '0912345678']) {
-  test(`operator creation rejects malformed email before sending request: ${email}`, async () => {
-    const f = formFixture(); f.change('operator-email', email); await f.submit();
-    assert.equal(f.calls.length, 0); assert.equal(f.created.length, 0);
-    assert.equal(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, 'Enter a valid email address.');
-    f.change('operator-email', ' staff+test@example.com ');
-    const task = f.submit();
-    assert.equal(f.calls[0][2].email, 'staff+test@example.com');
-    f.pending.resolve({ success: true, data: operator }); await task;
-    assert.equal(f.created.length, 1);
-  });
-}
-
-test('All Sites expands to real IDs, never the mock all identifier', async () => {
-  const second = { ...site, id: '22345678-1234-1234-1234-123456789012' };
-  const f = formFixture([site, second]); f.change('operator-site', 'all');
-  const task = f.submit();
-  assert.deepEqual(Array.from(f.calls[0][2].siteIds), [site.id, second.id]);
-  f.pending.resolve({ success: true, data: operator }); await task;
+test('missing name, malformed email, and unknown site still prevent requests', async () => {
+  for (const [id, value] of [['op-full-name', ' '], ['op-email', 'a@example'], ['op-email', 'a..b@example.com'], ['op-email', 'a@example..com'], ['op-email', '0912345678'], ['op-site', 'unknown']]) {
+    const form = fixture();
+    form.change(id, value);
+    await form.submit();
+    assert.equal(form.requests.length, 0);
+    assert.equal(form.created.length, 0);
+  }
+  assert.equal(fixture({ sites: [] }).submitButton().props.disabled, true);
 });
 
-for (const password of ['weakpass', 'Password@12345678']) {
-  test(`invalid password is rejected before sending request: ${password}`, async () => {
-    const f = formFixture(); f.change('operator-password', password); await f.submit();
-    assert.equal(f.calls.length, 0); assert.equal(f.created.length, 0);
-    assert.match(nodes(f.render()).find(node => node.props?.role === 'alert').props.children, /8–15/);
+test('duplicate email from loaded operators prevents a request', async () => {
+  const form = fixture({ existingOperators: [{ email: 'staff@example.com' }] });
+  await form.submit();
+  assert.equal(form.requests.length, 0);
+  assert.ok(nodes(form.render()).some(node => node.props?.children === 'This email is already assigned to an existing operator.'));
+});
+
+for (const failureMessage of ['Email is already registered.', 'Cannot reach the authentication server. Please try again.', 'Every assigned site must be active and owned by this Owner.']) {
+  test(`server rejection keeps operator form editable: ${failureMessage}`, async () => {
+    const form = fixture({ failureMessage });
+    await form.submit();
+    assert.equal(form.requests.length, 1);
+    assert.equal(form.created.length, 0);
+    assert.equal(form.submitButton().props.disabled, false);
+    const expectedMessage = failureMessage === 'Email is already registered.'
+      ? 'This email is already registered in the system.' : failureMessage;
+    assert.ok(nodes(form.render()).some(node => node.props?.children === expectedMessage));
   });
 }
 
-test('mock or missing site cannot create an account', async () => {
-  const f = formFixture(); f.change('operator-site', 'local-mock-site'); await f.submit();
-  assert.equal(f.calls.length, 0);
+test('operator form permits retry after correcting an invalid email', async () => {
+  const form = fixture();
+  form.change('op-email', 'invalid');
+  await form.submit();
+  assert.equal(form.requests.length, 0);
+  form.change('op-email', ' staff+test@example.com ');
+  await form.submit();
+  assert.equal(JSON.parse(form.requests[0].options.body).email, 'staff+test@example.com');
+  assert.equal(form.created.length, 1);
 });
 
 test('operator screen loads backend list and active real sites, updates with committed account', async () => {
   const h = hooks();
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (path, method, body, prefix) => ({ success: true, data: prefix === '/api/operators' ? [operator] : [site, { ...site, id: 'inactive', isActive: false }] }) } });
   const component = load('roles/owner/operators/OperatorManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: node => node }, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    // Presentational controls and icons; they carry no state used by the provisioning assertions.
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/ui/PageHeader': { PageHeader },
+    react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: content => content }, '../../../lib/operatorLive': { watchOperators: () => () => {} }, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
     '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' }, '../parking-lots/SiteForm': { SiteForm: 'site-form' }, '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
   }).OperatorManagement;
   const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() {} });
-  render(); h.effects[0](); await settle();
+  render(); h.effects.slice().forEach(effect => effect()); await settle();
   assert.ok(nodes(render()).some(node => node.props?.children === operator.fullName));
-  nodes(render()).find(node => node.type === 'button' && node.props.className === 'btn-primary').props.onClick();
+  nodes(render()).find(node => node.type === 'button' && node.props.className?.includes('btn-primary')).props.onClick();
   const form = nodes(render()).find(node => node.type === 'create-form');
   assert.deepEqual(Array.from(form.props.sites, value => value.id), [site.id]);
   form.props.onCreated({ ...operator, id: 'new-id', fullName: 'New Staff' });
   assert.ok(nodes(render()).some(node => node.props?.children === 'New Staff'));
-  assert.ok(!nodes(render()).some(node => node.type === 'create-form'));
+  assert.equal(nodes(render()).find(node => node.type === 'create-form').props.isOpen, false);
 });
 
-test('New Operator stays clickable with zero sites and moves to operator form after creating a real site', async () => {
-  const h = hooks(), calls = [];
-  const api = load('lib/parkingApi.ts', { './authApi': { request: async (...args) => { calls.push(args); return { success: true, data: [] }; } } });
+test('Create Operator opens with zero sites and passes the empty list to the form', async () => {
+  const h = hooks();
+  const api = load('lib/parkingApi.ts', { './authApi': { request: async () => ({ success: true, data: [] }) } });
   const component = load('roles/owner/operators/OperatorManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: node => node }, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    // Presentational controls and icons; they carry no state used by the provisioning assertions.
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/ui/PageHeader': { PageHeader },
-    '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' }, '../parking-lots/SiteForm': { SiteForm: 'site-form' },
+    react: h.react, 'react/jsx-runtime': h.runtime,
+    'react-dom': { createPortal: content => content },
+    '../../../lib/operatorLive': { watchOperators: () => () => {} },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
   }).OperatorManagement;
-  let changed = 0;
-  const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() { changed++; } });
-  render(); h.effects[0](); await settle();
-  const button = nodes(render()).find(node => node.type === 'button' && node.props.className === 'btn-primary');
+  const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() {} });
+  render(); h.effects.slice().forEach(effect => effect()); await settle();
+  const button = nodes(render()).find(node => node.type === 'button' && node.props.className?.includes('btn-primary'));
   assert.equal(button.props.disabled, false);
   button.props.onClick();
-  const siteForm = nodes(render()).find(node => node.type === 'site-form');
-  assert.ok(siteForm);
-  assert.equal(nodes(render()).some(node => node.type === 'create-form'), false);
-  siteForm.props.onSaved(site);
-  const operatorForm = nodes(render()).find(node => node.type === 'create-form');
-  assert.deepEqual(Array.from(operatorForm.props.sites, site => site.id), [site.id]);
-  assert.equal(changed, 1);
+  const form = nodes(render()).find(node => node.type === 'create-form');
+  assert.equal(form.props.isOpen, true);
+  assert.equal(form.props.sites.length, 0);
 });
 
 for (const success of [true, false]) {
   test(`site form ${success ? 'waits for committed backend site' : 'keeps form and shows server failure'}`, async () => {
     const h = hooks(), pending = deferred(), calls = [], saved = [];
     const api = load('lib/parkingApi.ts', { './authApi': { request: (...args) => { calls.push(args); return pending.promise; } } });
-    // The form logic lives in useSiteForm; load it for real and stub only its leaf integrations.
-    const formDeps = {
-      react: h.react, '../../../lib/parkingApi': api,
-      '../../../lib/authApi': { AuthApiError: class AuthApiError extends Error {} },
-      '../data/data': { ownerData: { getLotsByOwner: () => [], saveLot() {} } },
-      '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-      '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
-      // Model-capacity probing is not part of these provisioning assertions.
-      '../../../lib/3d/modelSlotCapacity': { useModelCarCapacity: () => ({ capacity: null, error: '' }) },
-      '../../../lib/3d/ownerModelStorage': { deleteOwnerModel: async () => {}, loadOwnerModelUrl: async () => null, saveOwnerModel: async () => null },
-    };
-    const component = load('roles/owner/parking-lots/SiteForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api,
-      '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' }, '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
-      './useSiteForm': load('roles/owner/parking-lots/useSiteForm.ts', formDeps) }).SiteForm;
+    const component = load('roles/owner/parking-lots/SiteForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api }).SiteForm;
     const render = () => h.render(component, { onSaved: site => saved.push(site), onCancel() {} });
     for (const [id, value] of [['site-code', ' ABC '], ['site-name', ' abc '], ['site-address', ' Address ']]) {
       nodes(render()).find(node => node.props?.id === id).props.onChange({ target: { value } });
@@ -208,22 +230,8 @@ test('Sites screen reads real sites and operator memberships instead of local fi
   const h = hooks();
   const realSite = { ...site, code: 'ABC', address: 'Address', totalPhysicalCapacity: 0 };
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (path, method, body, prefix) => ({ success: true, data: prefix === '/api/operators' ? [operator] : [realSite] }) } });
-  // SiteManagement delegates to a real data hook and a real dialogs module; only the presentational leaves are stubbed.
-  const dialogsDeps = {
-    react: h.react, 'react/jsx-runtime': h.runtime,
-    'react-dom': { createPortal: node => node },
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
-    './SiteForm': { SiteForm: 'site-form' },
-  };
-  const managementDeps = { react: h.react, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) }, '../../../lib/parkingApi': api };
   const component = load('roles/owner/parking-lots/SiteManagement.tsx', {
     react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/ui/PageHeader': { PageHeader },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
-    './SiteManagementDialogs': load('roles/owner/parking-lots/SiteManagementDialogs.tsx', dialogsDeps),
-    './useSiteManagement': load('roles/owner/parking-lots/useSiteManagement.ts', managementDeps),
     '../../../lib/parkingApi': api, './SiteForm': { SiteForm: 'site-form' },
   }).SiteManagement;
   const render = () => h.render(component, { onSiteCreated() {} });
@@ -249,8 +257,6 @@ test('Owner dashboard shares backend sites with overview, structure and refreshe
     '../operators/OperatorManagement': { OperatorManagement: 'operators' },
     '../policies/PolicySettings': { PolicySettings: 'policies' },
     '../parking-lots/SiteManagement': { SiteManagement: 'sites' },
-    // Lot management is a separate screen, not exercised by the dashboard assertions.
-    '../parking-lots/LotManagement': { LotManagement: 'lot-management' },
     '../revenue/RevenueDashboard': { RevenueDashboard: 'revenue' },
     '../structure/ParkingStructure': { ParkingStructure: 'structure' },
     '../../../components/layout/DashboardSidebar': { DashboardSidebar: 'sidebar' },
@@ -288,18 +294,7 @@ function structureFixture(failUnit = false) {
     }
     return { success: true, data: JSON.parse(JSON.stringify(layout)) };
   } } });
-  // Presentational panels, 3D viewer and data hooks are stubbed; the unit/slot form logic stays real.
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api,
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/ui/PageHeader': { PageHeader: 'page-header' },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
-    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup-capacity' },
-    '../../../components/3d/Parking3DViewer': { Parking3DViewer: 'parking-3d-viewer' },
-    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../data/data': { ownerData: { getLotsByOwner: () => [] } },
-    '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
-    '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null },
-  }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api }).ParkingStructure;
   const outer = outerHooks.render(component, { sites: [site], selectedSiteId: 'all' });
   const editor = nodes(outer).find(node => typeof node.type === 'function');
   h.reset();
@@ -341,17 +336,7 @@ test('failed structure mutation reports error and does not report saved state', 
 
 test('empty backend site list never displays mock parking structure', () => {
   const h = hooks();
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {},
-    // Presentational shell and data hooks; these cases never reach the API.
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/ui/PageHeader': { PageHeader: 'page-header' },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
-    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup-capacity' },
-    '../../../components/3d/Parking3DViewer': { Parking3DViewer: 'parking-3d-viewer' },
-    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../data/data': { ownerData: { getLotsByOwner: () => [] } },
-    '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
-    '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null } }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {} }).ParkingStructure;
   const tree = h.render(component, { sites: [], selectedSiteId: 'all' });
   assert.ok(nodes(tree).some(node => node.props?.children === 'No sites found. Create a site in Sites first.'));
   assert.equal(nodes(tree).some(node => typeof node.type === 'function'), false);
@@ -359,17 +344,7 @@ test('empty backend site list never displays mock parking structure', () => {
 
 test('structure site selector can change sites after entering from a filtered dashboard', () => {
   const h = hooks();
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {},
-    // Presentational shell and data hooks; these cases never reach the API.
-    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
-    '../../../components/ui/PageHeader': { PageHeader: 'page-header' },
-    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
-    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup-capacity' },
-    '../../../components/3d/Parking3DViewer': { Parking3DViewer: 'parking-3d-viewer' },
-    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../data/data': { ownerData: { getLotsByOwner: () => [] } },
-    '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
-    '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null } }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {} }).ParkingStructure;
   const props = { sites: [site, { ...site, id: 'second-site' }], selectedSiteId: site.id };
   let tree = h.render(component, props);
   const select = nodes(tree).find(node => node.type === 'select');

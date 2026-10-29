@@ -2,7 +2,10 @@ import { useState, useId } from "react"
 
 import { useApp } from "../../../context/AppContext"
 import { parkingApi } from "../../../lib/parkingApi"
-import { ownerApi, type OwnerApplicationRecord, type OwnerLotSetup } from "../../../lib/ownerApi"
+import { ownerApi, type OwnerLotSetup } from "../../../lib/ownerApi"
+import { AuthApiError } from "../../../lib/authApi"
+import { restoreOwnerRegistration, ownerRegistrationStage, type PendingOwnerRegistration } from "../../../lib/ownerRegistration"
+import { OwnerRegistrationRecovery } from "../../authentications/Sign Up/OwnerRegistrationRecovery"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { formatGroupedDigits } from "../../../lib/groupedDigits"
@@ -103,12 +106,15 @@ export function OnboardingWizard({
   onComplete?: (lot: ParkingLot) => void
   registration?: {
     id: string
+    email: string
     setupToken?: string
     lotType: LotType
-    onComplete: (application: OwnerApplicationRecord) => void
+    onComplete: (application: PendingOwnerRegistration) => void
   }
 }) {
-  const { user, setUser } = useApp()
+  const { user, setUser, setView } = useApp()
+  const [setupToken, setSetupToken] = useState(registration?.setupToken)
+  const [needsSetupRecovery, setNeedsSetupRecovery] = useState(false)
 
   const [step, setStep] = useState<OnboardStep>(1)
 
@@ -130,12 +136,12 @@ export function OnboardingWizard({
   })
 
   const [pricing, setPricing] = useState({
-    hourlyRate: "15000",
-    dailyRate: "100000",
-    nightRate: "50000",
-    gracePeriodMinutes: 15,
-    subscriptionMonthly: "800000",
-    subscriptionYearly: "8000000",
+    hourlyRate: "",
+    dailyRate: "",
+    nightRate: "",
+    gracePeriodMinutes: "15",
+    subscriptionMonthly: "",
+    subscriptionYearly: "",
   })
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
@@ -240,12 +246,12 @@ export function OnboardingWizard({
       }
 
       const numericPricing = {
-        hourlyRate: Number(pricing.hourlyRate || 0),
-        dailyRate: Number(pricing.dailyRate || 0),
-        nightRate: Number(pricing.nightRate || 0),
-        gracePeriodMinutes: pricing.gracePeriodMinutes,
-        subscriptionMonthly: Number(pricing.subscriptionMonthly || 0),
-        subscriptionYearly: Number(pricing.subscriptionYearly || 0),
+        hourlyRate: Number(pricing.hourlyRate || 15000),
+        dailyRate: Number(pricing.dailyRate || 100000),
+        nightRate: Number(pricing.nightRate || 50000),
+        gracePeriodMinutes: Number(pricing.gracePeriodMinutes || 15),
+        subscriptionMonthly: Number(pricing.subscriptionMonthly || 800000),
+        subscriptionYearly: Number(pricing.subscriptionYearly || 8000000),
       }
       if (Object.values(numericPricing).some((value) =>
         !Number.isSafeInteger(value) || value < 0)) {
@@ -272,7 +278,7 @@ export function OnboardingWizard({
         }
         const application = await ownerApi.submitLotSetup(
           registration.id,
-          registration.setupToken ?? "",
+          setupToken ?? "",
           setup,
         )
         registration.onComplete(application)
@@ -358,6 +364,8 @@ export function OnboardingWizard({
         )
       }
     } catch (error) {
+      if (registration && error instanceof AuthApiError && error.code === "SETUP_TOKEN_INVALID")
+        setNeedsSetupRecovery(true)
       setCompletionError(
         error instanceof Error
           ? error.message
@@ -376,17 +384,27 @@ export function OnboardingWizard({
     "Confirm",
   ]
 
+  if (registration && needsSetupRecovery) {
+    return <OwnerRegistrationRecovery registration={{ email: registration.email }}
+      onRecovered={(application) => {
+        sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(application))
+        if (ownerRegistrationStage(application) === "setup") {
+          setSetupToken(application.setupToken)
+          setNeedsSetupRecovery(false)
+          setCompletionError("")
+        } else if (ownerRegistrationStage(application) === "verification") {
+          registration.onComplete(application)
+        }
+      }} onBack={() => setView("sign-in")} />
+  }
+
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1rem" }}>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
         <PageHeader title="Set Up Your Parking Lot" variant="compact" align="center" description={registration
           ? "Set up your lot before verifying your email and submitting it for Admin review."
           : "Complete setup to start accepting bookings."} />
-        {registration && !registration.setupToken && (
-          <p role="status" style={{ color: "#b45309", fontSize: "0.85rem", marginTop: "0.75rem" }}>
-            The server has not enabled saving parking lot setup before approval yet.
-          </p>
-        )}
+
       </div>
 
       {/* Step progress */}
@@ -830,6 +848,7 @@ export function OnboardingWizard({
                     max={modelCapacity.capacity ?? undefined}
                     value={lotConfig.totalSlots}
                     placeholder="e.g. 50"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) =>
                       setLotConfig((c) => ({
                         ...c,
@@ -849,6 +868,7 @@ export function OnboardingWizard({
                       max={20}
                       value={lotConfig.floors}
                       placeholder="e.g. 3"
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         setLotConfig((c) => ({ ...c, floors: e.target.value }))
                       }
@@ -1005,17 +1025,36 @@ export function OnboardingWizard({
               }}
             >
               {([
-                { label: "Hourly Rate (VND)", key: "hourlyRate" },
-
-                { label: "Daily Rate (VND)", key: "dailyRate" },
-
-                { label: "Night Rate (VND)", key: "nightRate" },
-
-                { label: "Grace Period (min)", key: "gracePeriodMinutes" },
-
-                { label: "Monthly Pass (VND)", key: "subscriptionMonthly" },
-
-                { label: "Annual Pass (VND)", key: "subscriptionYearly" },
+                {
+                  label: "Hourly Rate (VND)",
+                  key: "hourlyRate",
+                  placeholder: "15,000",
+                },
+                {
+                  label: "Daily Rate (VND)",
+                  key: "dailyRate",
+                  placeholder: "100,000",
+                },
+                {
+                  label: "Night Rate (VND)",
+                  key: "nightRate",
+                  placeholder: "50,000",
+                },
+                {
+                  label: "Grace Period (min)",
+                  key: "gracePeriodMinutes",
+                  placeholder: "15",
+                },
+                {
+                  label: "Monthly Pass (VND)",
+                  key: "subscriptionMonthly",
+                  placeholder: "800,000",
+                },
+                {
+                  label: "Annual Pass (VND)",
+                  key: "subscriptionYearly",
+                  placeholder: "8,000,000",
+                },
               ] as const).map((f) => (
                 <div key={f.key}>
                   <label className="label">{f.label}</label>
@@ -1024,17 +1063,20 @@ export function OnboardingWizard({
                       className="input"
                       type="number"
                       min={0}
+                      placeholder={f.placeholder}
                       value={pricing.gracePeriodMinutes}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         setPricing((p) => ({
                           ...p,
-                          gracePeriodMinutes: parseFloat(e.target.value) || 0,
+                          gracePeriodMinutes: e.target.value,
                         }))
                       }
                     />
                   ) : (
                     <GroupedNumberInput
                       className="input"
+                      placeholder={f.placeholder}
                       step={1000}
                       value={pricing[f.key]}
                       onValueChange={(digits) =>
@@ -1206,27 +1248,27 @@ export function OnboardingWizard({
               />
               <Row
                 label="Hourly Rate"
-                value={`${formatGroupedDigits(pricing.hourlyRate || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.hourlyRate || "15000")} VND`}
               />
               <Row
                 label="Daily Rate"
-                value={`${formatGroupedDigits(pricing.dailyRate || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.dailyRate || "100000")} VND`}
               />
               <Row
                 label="Night Rate"
-                value={`${formatGroupedDigits(pricing.nightRate || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.nightRate || "50000")} VND`}
               />
               <Row
                 label="Monthly Pass"
-                value={`${formatGroupedDigits(pricing.subscriptionMonthly || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.subscriptionMonthly || "800000")} VND`}
               />
               <Row
                 label="Annual Pass"
-                value={`${formatGroupedDigits(pricing.subscriptionYearly || "0")} VND`}
+                value={`${formatGroupedDigits(pricing.subscriptionYearly || "8000000")} VND`}
               />
               <Row
                 label="Grace Period"
-                value={`${pricing.gracePeriodMinutes} minutes`}
+                value={`${pricing.gracePeriodMinutes || "15"} minutes`}
               />
             </div>
             <div style={{ display: "flex", gap: "0.75rem" }}>
@@ -1278,9 +1320,10 @@ export function OnboardingWizard({
 }
 
 export function BusinessLotSetupPage() {
-  const { setView, pendingOwnerSetup, setPendingOwnerSetup } = useApp()
+  const { setView } = useApp()
+  const [registration] = useState(restoreOwnerRegistration)
 
-  if (!pendingOwnerSetup?.id || !pendingOwnerSetup.email || !pendingOwnerSetup.lotType) {
+  if (!registration) {
     return (
       <div className="card mx-auto my-12 max-w-lg text-center">
         <PageHeader title="No Business registration in progress" variant="compact" align="center" />
@@ -1292,12 +1335,21 @@ export function BusinessLotSetupPage() {
     )
   }
 
+  if (ownerRegistrationStage(registration) !== "setup") {
+    return <OwnerRegistrationRecovery registration={registration}
+      onRecovered={(application) => {
+        sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(application))
+        setView("sign-up")
+      }} onBack={() => setView("sign-in")} />
+  }
+
   return (
     <OnboardingWizard
       registration={{
-        id: pendingOwnerSetup.id,
-        setupToken: pendingOwnerSetup.setupToken,
-        lotType: pendingOwnerSetup.lotType,
+        id: registration.id!,
+        email: registration.email,
+        setupToken: registration.setupToken,
+        lotType: registration.lotType!,
         onComplete: (application) => {
           sessionStorage.setItem(
             "sp_pending_owner_registration",
@@ -1309,7 +1361,6 @@ export function BusinessLotSetupPage() {
               verification: application.verification,
             }),
           )
-          setPendingOwnerSetup(null)
           setView("sign-up")
         },
       }}

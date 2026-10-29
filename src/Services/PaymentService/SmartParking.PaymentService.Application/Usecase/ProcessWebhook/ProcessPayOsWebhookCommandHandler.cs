@@ -71,7 +71,6 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         {
             _logger.LogWarning("PaymentOrder with OrderCode {OrderCode} not found for webhook event {EventId}.", parseResult.OrderCode, eventId);
             existingWebhook.MarkFailed();
-            _webhookRepository.Update(existingWebhook);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             return new ProcessPayOsWebhookResult(false, $"Không tìm thấy đơn hàng tương ứng với orderCode {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
@@ -84,7 +83,6 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
                 order.OrderCode, order.FinalAmount, parseResult.AmountVnd);
 
             existingWebhook.MarkFailed();
-            _webhookRepository.Update(existingWebhook);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             return new ProcessPayOsWebhookResult(false, "Số tiền thanh toán không khớp với đơn hàng (AMOUNT_MISMATCH).", "AMOUNT_MISMATCH");
@@ -114,10 +112,6 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             tx.MarkSuccess(parseResult.GatewayTransactionId, parseResult.TransactionTime);
             order.MarkPaid(parseResult.TransactionTime);
             existingWebhook.MarkProcessed();
-
-            _transactionRepository.Update(tx);
-            _orderRepository.Update(order);
-            _webhookRepository.Update(existingWebhook);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Successfully processed payOS payment webhook for OrderCode {OrderCode}, TxId {TxId}.", order.OrderCode, tx.Id);
