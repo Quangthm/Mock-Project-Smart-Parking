@@ -1076,6 +1076,7 @@ export function OnboardingWizard({
                   ) : (
                     <GroupedNumberInput
                       className="input"
+                      placeholder={f.placeholder}
                       step={1000}
                       value={pricing[f.key]}
                       onValueChange={(digits) =>

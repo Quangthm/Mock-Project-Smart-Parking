@@ -32,6 +32,7 @@
   <Folder Name="/tests/" />
   <Folder Name="/tests/Services/">
     <Project Path="tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj" />
+    <Project Path="tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.PaymentService.Tests/SmartParking.PaymentService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
   </Folder>
@@ -39,5 +40,4 @@
     <Project Path="src/Services/IoTService/SmartParking.IoTService.Application/SmartParking.IoTService.Application.csproj" />
     <Project Path="src/Services/IoTService/SmartParking.IoTService.Infrastructure/SmartParking.IoTService.Infrastructure.csproj" />
   </Folder>
-  <Project Path="tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj" />
 </Solution>
