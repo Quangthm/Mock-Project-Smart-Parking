@@ -45,26 +45,7 @@ CREATE TABLE tenants (
 CREATE UNIQUE INDEX uq_active_tenant_code ON tenants (code) WHERE deleted_at IS NULL;
 CREATE INDEX idx_tenants_status ON tenants (status);
 
--- 3. BẢNG TÀI KHOẢN NGƯỜI DÙNG PHÂN THEO NGỮ CẢNH (ACCOUNTS)
-CREATE TABLE accounts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL, 
-    -- Cross-domain Logical Reference to FacilityDb
-    site_id UUID, 
-    
-    permissions TEXT[],
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
-);
-CREATE INDEX idx_accounts_user_id ON accounts (user_id);
-CREATE INDEX idx_accounts_tenant_id ON accounts (tenant_id);
-CREATE INDEX idx_accounts_site_id ON accounts (site_id);
-CREATE INDEX idx_accounts_status ON accounts (status);
-
--- 4. BẢNG DANH MỤC VAI TRÒ (ROLES)
+-- 3. BẢNG DANH MỤC VAI TRÒ (ROLES)
 CREATE TABLE roles (
     code VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -72,25 +53,37 @@ CREATE TABLE roles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT INTO roles (code, name) VALUES 
+INSERT INTO roles (code, name) VALUES
 ('ADMIN', 'System Administrator'),
 ('DRIVER', 'Driver'),
 ('OWNER', 'Owner'),
 ('OPERATOR', 'Site Operator / Attendant'),
 ('BUSINESS_OWNER', 'Business Owner'),
 ('SITE_OPERATOR', 'Site Operator'),
-('PLATFORM_ADMIN', 'Platform Administrator') 
+('PLATFORM_ADMIN', 'Platform Administrator')
 ON CONFLICT DO NOTHING;
--- DEVIATION (T4-approved): runtime role codes used by UserService (OwnerRegistrationService.cs:40, OperatorProvisioningService.cs:83, UserManagementService.cs:22)
+-- Runtime aliases remain supported by the existing Owner/Operator/Admin workflows.
 
--- 5. BẢNG PHÂN VAI TRÒ CHO TÀI KHOẢN (ACCOUNT ROLES)
-CREATE TABLE account_roles (
-    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+-- 4. BẢNG TÀI KHOẢN NGƯỜI DÙNG PHÂN THEO NGỮ CẢNH (ACCOUNTS)
+CREATE TABLE accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_code VARCHAR(50) NOT NULL REFERENCES roles(code) ON DELETE RESTRICT,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+    -- Cross-domain Logical Reference to FacilityDb
+    site_id UUID,
+
+    permissions TEXT[],
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (account_id, role_code)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ
 );
-CREATE INDEX idx_account_roles_role_code ON account_roles (role_code);
+CREATE INDEX idx_accounts_user_id ON accounts (user_id);
+CREATE INDEX idx_accounts_role_code ON accounts (role_code);
+CREATE INDEX idx_accounts_tenant_id ON accounts (tenant_id);
+CREATE INDEX idx_accounts_site_id ON accounts (site_id);
+CREATE INDEX idx_accounts_status ON accounts (status);
 
 -- 6. BẢNG PHƯƠNG TIỆN (VEHICLES)
 CREATE TABLE vehicles (

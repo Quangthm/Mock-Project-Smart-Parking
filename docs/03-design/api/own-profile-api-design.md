@@ -101,7 +101,9 @@ There is no `{ reference }` avatar shape, upload/delete success, or profile alia
 
 New sessions select the eligible Account with the lowest Account ID under the implementation's stable GUID ordering. The selected Account ID is stored immutably and signed into `account_id`; `sub` remains User ID and `jti` identifies the exact access token. Refresh retains the Account and original refresh expiry. Account switching is deferred. Legacy sessions lacking binding cannot authenticate through the updated Bearer path or refresh; sign in again. No account association is guessed or backfilled.
 
-Authorization uses current roles, not `Accounts.Permissions`. The latter remains outside this slice for future removal. An active second Account cannot authorize a request through a locked/revoked first Account. Token role claims alone grant nothing; authoritative current roles must match.
+Each Account has exactly one role through required `accounts.role_code -> roles.code`. Profile authorization uses that current role, not `Accounts.Permissions`; operational permission storage remains in use by other operations. An active second Account cannot authorize a request through a locked/revoked first Account. Token role claims alone grant nothing; the authoritative current role must match.
+
+The reusable Application `ICurrentAccessService` applies the same current-account/session policy to Bearer validation and protected use cases. Profile reads use `RequireAsync`; name writes use `LockAsync` inside their unit-of-work transaction. Persistence `ICurrentAccessStore` supplies fresh state and locks User, exact Account, referenced Role and exact session. The Account lock protects direct role reassignment; the shared Role lock protects the referenced catalogue row. Role/permission decisions and resource-scope checks remain separate, and this consolidation changes no profile HTTP fields or event contract.
 
 ### Validation and error responses
 

@@ -6,10 +6,12 @@ using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
 using UserService.Application.Usecase.Login;
 using UserService.Infrastructure.Services;
+using UserService.Application.Authorization;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SmartParking.UserService.Tests;
 
-internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, IProfileAccessStore
+internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, ICurrentAccessStore
 {
     private static readonly string PasswordHash = new BcryptPasswordService().Hash("Password@123");
     public TestClock Clock { get; } = new();
@@ -18,7 +20,7 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, IProfileAc
     {
         Id = Guid.Parse("11111111-1111-1111-1111-111111111111"), Email = "driver@gmail.com", FullName = "Demo Driver",
         PasswordHash = PasswordHash, Status = UserStatus.Active,
-        Accounts = [new Account { AccountRoles = [new AccountRole { RoleCode = "DRIVER" }] }]
+        Accounts = [new Account { RoleCode = "DRIVER" }]
     };
     public AuthenticationPolicy Policy { get; } = new();
     public JwtOptions Options { get; } = new() { Issuer = "test-issuer", Audience = "test-audience" };
@@ -36,7 +38,6 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, IProfileAc
             account.Id = Guid.Parse("22222222-2222-2222-2222-222222222222");
             account.UserId = User.Id!.Value;
             account.User = User;
-            foreach (var role in account.AccountRoles) role.AccountId = account.Id.Value;
         }
         Sessions = new(Clock);
         Keys = new(Options, true);
@@ -44,14 +45,14 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, IProfileAc
         Auth = new(Tokens, Sessions, Policy, Clock);
         Login = new(this, new BcryptPasswordService(), Auth, Policy, Clock);
     }
-    public Task<ProfileAccessState?> LoadCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
+    public Task<CurrentAccessState?> LoadCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
     {
         var account = User.Accounts.SingleOrDefault(a => a.Id == accountId);
         var session = Sessions.Snapshot.SingleOrDefault(s => s.AccessTokenId == accessTokenId);
         return Task.FromResult(account is null || session is null ? null
-            : new ProfileAccessState(User, account, session, account.AccountRoles.Select(r => r.RoleCode).ToArray()));
+            : new CurrentAccessState(User, account, session, account.RoleCode));
     }
-    public Task<ProfileAccessState?> LockCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken) =>
+    public Task<CurrentAccessState?> LockCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken) =>
         LoadCurrentAsync(accountId, accessTokenId, cancellationToken);
     public Task<LoginResult> SignIn(string password = "Password@123", string email = "driver@gmail.com") =>
         Login.Handle(new LoginCommand { Email = email, Password = password }, default);
@@ -76,6 +77,12 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, IProfileAc
     public IQueryable<User> QueryIncludingDeleted() => Query();
     public void Remove(User entity) { }
     public void Update(User entity) { }
+}
+
+internal static class TestAccess
+{
+    public static ICurrentAccessService Service(ICurrentAccessStore store, ICurrentActor actor, TimeProvider clock) =>
+        new CurrentAccessService(store, actor, clock, NullLogger<CurrentAccessService>.Instance);
 }
 
 internal sealed class TestCurrentActor(Guid? userId, string? role = null, Guid? accountId = null, Guid? accessTokenId = null) : ICurrentActor

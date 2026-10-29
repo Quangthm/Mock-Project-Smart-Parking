@@ -49,8 +49,9 @@ public sealed class OwnerRegistrationHttpTests
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
+        TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
-        builder.Services.AddSingleton<IProfileAccessStore>(fixture);
+        builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
         builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
@@ -97,13 +98,13 @@ public sealed class OwnerRegistrationHttpTests
         await Login();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/owner-applications")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PatchAsJsonAsync($"/api/owner-applications/{id}/review", new { status = "approved" })).StatusCode);
-        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "PLATFORM_ADMIN";
+        fixture.User.Accounts.Single().RoleCode = "PLATFORM_ADMIN";
         await Login();
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/owner-applications")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync($"/api/owner-applications/{id}/review", new { status = "active" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PatchAsJsonAsync($"/api/owner-applications/{id}/review", new { status = "approved", reviewNote = "OK" })).StatusCode);
         Assert.Equal(fixture.User.Id, registrations.Reviewer);
-        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "BUSINESS_OWNER";
+        fixture.User.Accounts.Single().RoleCode = "BUSINESS_OWNER";
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/owner-applications")).StatusCode);
     }
 }

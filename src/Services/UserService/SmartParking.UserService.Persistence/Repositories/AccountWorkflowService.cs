@@ -13,7 +13,8 @@ using UserService.Application.Services;
 
 namespace UserService.Persistence.Repositories;
 
-public sealed class AccountWorkflowService(AppDbContext db, IPasswordService passwords, IWorkflowProtector protector, TimeProvider clock) : IMfaPolicy,IAccountWorkflows
+public sealed class AccountWorkflowService(AppDbContext db, IPasswordService passwords, IWorkflowProtector protector, TimeProvider clock,
+    IAccountAuthorizationService authorization) : IMfaPolicy,IAccountWorkflows
 {
     private static AuthException Error(string code, string message, int status=400) => new(code,message,status);
     public static void Validate(object body)
@@ -29,20 +30,6 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
         if(value.StartsWith("+84")) return "0"+value[3..];
         if(value.StartsWith("84") && value.Length==11) return "0"+value[2..];
         return value;
-    }
-    public static async Task RequirePermissionAsync(AppDbContext db, Guid id, string permission, CancellationToken ct)
-    {
-        // Shared locks remain held by a caller's transaction until the action commits.
-        var rows=await db.Database.SqlQuery<Guid>($"""
-            SELECT a.id AS "Value" FROM accounts a JOIN users u ON u.id=a.user_id
-            JOIN account_roles r ON r.account_id=a.id
-            WHERE u.id={id} AND u.status='ACTIVE' AND u.deleted_at IS NULL AND a.status='ACTIVE' AND a.deleted_at IS NULL
-            AND (({permission}='ACCOUNT_ADMIN' AND r.role_code IN ('ADMIN','PLATFORM_ADMIN'))
-              OR ({permission} IN ('OPERATOR_MANAGE','PARKING_MANAGE','BACKUP_CONFIGURE','BACKUP_MARK') AND r.role_code='BUSINESS_OWNER'))
-            AND ((a.permissions IS NULL AND {permission}<>'BACKUP_MARK') OR {permission}=ANY(a.permissions))
-            ORDER BY a.id FOR SHARE OF u,a,r
-            """).ToListAsync(ct);
-        if(rows.Count==0) throw Error("FORBIDDEN","Current action permission is required.",403);
     }
     public async Task<Guid> QueueAsync(Guid userId, Guid actorId, string kind, WorkflowMessage message, CancellationToken ct, Guid? challengeId=null)
     {
@@ -89,7 +76,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     {
         contact=Contact(contact);
         await using var tx=await db.Database.BeginTransactionAsync(ct);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND (lower(email)={contact} OR phone={contact}) FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleOrDefaultAsync(ct);
+        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND (lower(email)={contact} OR phone={contact}) FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.Role).SingleOrDefaultAsync(ct);
         if(user is not null)await db.Entry(user).ReloadAsync(ct);
         if(user?.Status==UserStatus.Locked && user.LockedUntil is {} until && until<=clock.GetUtcNow())
         {user.Status=UserStatus.Active;user.LockedUntil=null;user.FailedLoginAttempts=0;}
@@ -166,7 +153,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     public async Task<UserSessionDto> CompleteLoginAsync(CompleteOtpLoginDto body,AuthSessionService sessions,CancellationToken ct)
     {
         Validate(body);await using var tx=await db.Database.BeginTransactionAsync(ct);var c=await LoadAsync(body.ChallengeId,"LOGIN",ct);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleAsync(ct);
+        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={c.UserId} FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.Role).SingleAsync(ct);
         if(user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
         if(user.Status!=UserStatus.Active || AccessTokenService.CurrentRole(user) is null)throw SignInErrors.ForStatus(user.Status);
         if(!await CheckAsync(c,body.Code,ct)) {await tx.CommitAsync(ct);throw Error(c.LockedUntil!=null?"OTP_LOCKED":"OTP_INVALID","Invalid code.",c.LockedUntil!=null?423:400);}
@@ -199,8 +186,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     public async Task<object> SetupMfaAsync(Guid id,CancellationToken ct)
     {
         await using var tx=await db.Database.BeginTransactionAsync(ct);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR UPDATE").SingleAsync(ct);
-        if(user.Status!=UserStatus.Active || user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
+        var user=(await authorization.RequireOwnSecurityAsync(id,ct)).User;
         var existing=await db.MfaCredentials.FindAsync([id],ct);
         if(existing?.Enabled==true)throw Error("MFA_ALREADY_ENABLED","MFA is already enabled.",409);
         var secret=Base32(RandomNumberGenerator.GetBytes(20));var m=existing??new MfaCredential{UserId=id};
@@ -211,8 +197,7 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     public async Task EnableMfaAsync(Guid id,string code,CancellationToken ct)
     {
         await using var tx=await db.Database.BeginTransactionAsync(ct);
-        var user=await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR SHARE").SingleAsync(ct);
-        if(user.Status!=UserStatus.Active || user.DeletedOn!=null)throw Error("AUTH_FAILED","Account access is blocked.",401);
+        await authorization.RequireOwnSecurityAsync(id,ct);
         var m=await db.MfaCredentials.FromSqlInterpolated($"SELECT * FROM mfa_credentials WHERE user_id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
         if(m is null || !CheckTotp(m,code)){await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);throw Error("MFA_INVALID","Invalid authenticator code.");}
         m.Enabled=true;await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
@@ -246,9 +231,10 @@ public sealed class AccountWorkflowService(AppDbContext db, IPasswordService pas
     public async Task<object> DeliveryAsync(Guid actor,Guid id,bool retry,CancellationToken ct)
     {
         await using var tx=await db.Database.BeginTransactionAsync(ct);
+        await authorization.RequireOwnSecurityAsync(actor,ct);
         var d=await db.WorkflowDeliveries.FromSqlInterpolated($"SELECT * FROM workflow_deliveries WHERE id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
-        if(d is null || d.ActorId!=actor)throw Error("DELIVERY_NOT_FOUND","Delivery was not found.",404);
-        await RequirePermissionAsync(db,actor,d.Kind=="OPERATOR_ONBOARDING"?"OPERATOR_MANAGE":"ACCOUNT_ADMIN",ct);
+        if(d is null)throw Error("DELIVERY_NOT_FOUND","Delivery was not found.",404);
+        await authorization.RequireDeliveryAsync(actor,d,ct);
         if(retry && d.Status=="failed") {d.Status="pending";d.RetryAt=null;await db.SaveChangesAsync(ct);}
         await tx.CommitAsync(ct);return new {d.Id,d.Kind,d.Status,d.Attempts,d.SentAt};
     }

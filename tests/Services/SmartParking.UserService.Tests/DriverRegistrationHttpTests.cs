@@ -43,10 +43,11 @@ public sealed class DriverRegistrationHttpTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         var fixture = new AuthTestFixture();
+        TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
-        builder.Services.AddSingleton<IProfileAccessStore>(fixture);
+        builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
         builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();

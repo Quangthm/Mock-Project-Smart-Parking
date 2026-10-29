@@ -37,6 +37,7 @@ public sealed class DomainEntitiesAndUseCasesTests
         {
             Id = accountId,
             UserId = userId,
+            RoleCode = "DRIVER",
             TenantId = tenantId,
             SiteId = siteId,
             Status = "ACTIVE",
@@ -58,32 +59,6 @@ public sealed class DomainEntitiesAndUseCasesTests
         Assert.Equal(siteId, account.SiteId);
         Assert.Equal("ACTIVE", account.Status);
         Assert.Equal(2, account.Permissions!.Length);
-    }
-
-    [Fact]
-    public void RoleAndAccountRole_SetAndGetProperties()
-    {
-        var role = new Role
-        {
-            Code = "DRIVER",
-            Name = "Driver Role",
-            Description = "Standard parking user"
-        };
-
-        var accountRole = new AccountRole
-        {
-            AccountId = Guid.NewGuid(),
-            RoleCode = "DRIVER",
-            Role = role
-        };
-
-        role.AccountRoles.Add(accountRole);
-
-        Assert.Equal("DRIVER", role.Code);
-        Assert.Equal("Driver Role", role.Name);
-        Assert.Equal("Standard parking user", role.Description);
-        Assert.Single(role.AccountRoles);
-        Assert.Equal("DRIVER", accountRole.RoleCode);
     }
 
     [Fact]

@@ -14,7 +14,9 @@ internal sealed class TestWorkflowProtector:IWorkflowProtector
 }
 internal static class WorkflowTestSupport
 {
-    public static AccountWorkflowService Create(AppDbContext db,TimeProvider clock)=>new(db,new BcryptPasswordService(),new TestWorkflowProtector(),clock);
+    public static AccountWorkflowService Create(AppDbContext db,TimeProvider clock,
+        IAccountAuthorizationService? authorization = null)=>new(db,new BcryptPasswordService(),new TestWorkflowProtector(),clock,
+            authorization ?? TestAuthorization.Anonymous(db, clock));
 }
 
 internal static class ServiceSchema

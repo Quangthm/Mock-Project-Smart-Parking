@@ -66,20 +66,18 @@ SELECT
   (SELECT count(DISTINCT a.id)
      FROM users u
      JOIN accounts a ON a.user_id = u.id
-     JOIN account_roles r ON r.account_id = a.id
     WHERE lower(u.email) = lower(:'owner_email')
       AND u.deleted_at IS NULL
       AND a.deleted_at IS NULL
-      AND r.role_code = 'BUSINESS_OWNER')::text
+      AND a.role_code = 'BUSINESS_OWNER')::text
   || '|' ||
   (SELECT count(DISTINCT a.id)
      FROM users u
      JOIN accounts a ON a.user_id = u.id
-     JOIN account_roles r ON r.account_id = a.id
     WHERE lower(u.email) = lower(:'operator_email')
       AND u.deleted_at IS NULL
       AND a.deleted_at IS NULL
-      AND r.role_code = 'SITE_OPERATOR')::text;
+      AND a.role_code = 'SITE_OPERATOR')::text;
 '@
 $checkArgs = $composeArgs + @(
     'exec', '-T', 'user-db', 'psql', '-U', 'smartpark_user', '-d', 'smartpark_user',

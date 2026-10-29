@@ -2,23 +2,22 @@ using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
-using UserService.Application.Services;
 
-namespace UserService.Application.Profiles;
+namespace UserService.Application.Authorization;
 
 /// <summary>
-/// The current-access rule every own-profile operation applies.
+/// Shared current-account and session rules, independent of operation permissions and resource scope.
 /// </summary>
 /// <remarks>
 /// A valid access token is not evidence that the account may still act: the account may have
 /// been disabled, deleted or stripped of its role since the token was issued. The check is
 /// therefore made against the authoritative record, never against the token claims.
 /// </remarks>
-public static class OwnProfileAccess
+public static class CurrentAccessPolicy
 {
     public static AuthException Forbidden() => new("FORBIDDEN", "Current account access is required.", 403);
 
-    public static string RequireCurrentAccess(ProfileAccessState? state, ICurrentActor actor, TimeProvider clock)
+    public static CurrentAccessContext RequireCurrentAccess(CurrentAccessState? state, ICurrentActor actor, TimeProvider clock)
     {
         var now = clock.GetUtcNow();
         if (state is null || actor.UserId is null || actor.AccountId is null || actor.AccessTokenId is null
@@ -33,10 +32,10 @@ public static class OwnProfileAccess
             || state.Account.DeletedOn is not null || state.Account.Status != "ACTIVE")
             throw Forbidden();
 
-        // Operational Accounts.Permissions deliberately has no bearing on own-profile access.
-        var role = state.RoleCodes.Order(StringComparer.Ordinal).Select(AccessTokenService.MapRole)
-            .FirstOrDefault(role => role is not null) ?? throw Forbidden();
+        // Operational permissions and resource scope are checked separately by each use case.
+        if (state.RoleCode != state.Account.RoleCode) throw Forbidden();
+        var role = AccessRoles.Map(state.RoleCode) ?? throw Forbidden();
         if (actor.Role != role) throw Forbidden();
-        return role;
+        return new(state.User, state.Account, state.Session, state.RoleCode!, role);
     }
 }

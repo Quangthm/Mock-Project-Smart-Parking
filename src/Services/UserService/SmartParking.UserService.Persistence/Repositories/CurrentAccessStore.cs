@@ -9,12 +9,12 @@ using UserService.Application.Common.Models.Exceptions;
 namespace UserService.Persistence.Repositories;
 
 /// <summary>
-/// Coordinates profile saves with updates/deletes of the authoritative authorization rows.
-/// Lock order is User, Account, AccountRole (role code), then the exact session.
+/// Coordinates protected writes with changes to authoritative authorization rows.
+/// Lock order is User, Account, referenced Role, then the exact session.
 /// </summary>
-public sealed class ProfileAccessStore(AppDbContext db) : IProfileAccessStore
+public sealed class CurrentAccessStore(AppDbContext db) : ICurrentAccessStore
 {
-    public async Task<ProfileAccessState?> LoadCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
+    public async Task<CurrentAccessState?> LoadCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
     {
         var account = await db.Accounts.AsNoTracking().SingleOrDefaultAsync(a => a.Id == accountId, cancellationToken);
         if (account is null) return null;
@@ -22,17 +22,17 @@ public sealed class ProfileAccessStore(AppDbContext db) : IProfileAccessStore
         var session = await db.AuthSessions.AsNoTracking()
             .SingleOrDefaultAsync(s => s.AccessTokenId == accessTokenId, cancellationToken);
         if (user is null || session is null) return null;
-        var roles = await db.AccountRoles.AsNoTracking().Where(r => r.AccountId == accountId)
-            .OrderBy(r => r.RoleCode).Select(r => r.RoleCode).ToArrayAsync(cancellationToken);
-        return new(user, account, session, roles);
+        var roleCode = await db.Roles.AsNoTracking().Where(r => r.Code == account.RoleCode)
+            .Select(r => r.Code).SingleOrDefaultAsync(cancellationToken);
+        return new(user, account, session, roleCode);
     }
 
-    public async Task<ProfileAccessState?> LockCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
+    public async Task<CurrentAccessState?> LockCurrentAsync(Guid accountId, Guid accessTokenId, CancellationToken cancellationToken)
     {
         var transaction = db.Database.CurrentTransaction
-            ?? throw new InvalidOperationException("Profile authorization locks require a unit-of-work transaction.");
+            ?? throw new InvalidOperationException("Authorization locks require a unit-of-work transaction.");
         if (transaction.GetDbTransaction().IsolationLevel != IsolationLevel.ReadCommitted)
-            throw new InvalidOperationException("Profile authorization requires ReadCommitted isolation.");
+            throw new InvalidOperationException("Authorization requires ReadCommitted isolation.");
 
         try
         {
@@ -49,9 +49,11 @@ public sealed class ProfileAccessStore(AppDbContext db) : IProfileAccessStore
             var account = await db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE id = {accountId} FOR UPDATE")
                 .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
             if (account is null || account.UserId != userId.Value) return null;
-            var roles = await db.AccountRoles.FromSqlInterpolated(
-                    $"SELECT * FROM account_roles WHERE account_id = {accountId} ORDER BY role_code FOR UPDATE")
-                .AsNoTracking().ToArrayAsync(cancellationToken);
+            // Account locks protect reassignment. Share the catalogue row so unrelated
+            // accounts with the same role do not serialize their writes unnecessarily.
+            var role = await db.Roles.FromSqlInterpolated(
+                    $"SELECT * FROM roles WHERE code = {account.RoleCode} FOR SHARE")
+                .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
             var session = await db.AuthSessions.FromSqlInterpolated(
                     $"SELECT * FROM user_refresh_tokens WHERE access_token_id = {accessTokenId} FOR UPDATE")
                 .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
@@ -69,18 +71,19 @@ public sealed class ProfileAccessStore(AppDbContext db) : IProfileAccessStore
             else
             {
                 if (tracked.State != EntityState.Unchanged)
-                    throw new InvalidOperationException("The profile User must have no pending mutations before authorization.");
+                    throw new InvalidOperationException("The current User must have no pending mutations before authorization.");
                 await tracked.ReloadAsync(cancellationToken);
                 user = tracked.Entity;
             }
 
             // Detached Account/Session/role values are intentional: policy must not inspect an
             // earlier tracked navigation graph that relationship fixup could reintroduce.
-            return new(user, account, session, roles.Select(r => r.RoleCode).ToArray());
+            return new(user, account, session, role?.Code);
         }
         catch (PostgresException exception) when (exception.SqlState is
             PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure)
         {
+            // Retain the existing public guarded-write conflict contract after generalizing the store.
             throw new ProfileAccessConflictException(exception);
         }
     }

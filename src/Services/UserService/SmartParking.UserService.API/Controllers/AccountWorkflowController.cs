@@ -1,15 +1,15 @@
-using System.IdentityModel.Tokens.Jwt;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs;
 using UserService.Application.Services;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Usecase.Management;
 namespace UserService.API.Controllers;
 
 [ApiController,Route("api/auth"),ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSessionService sessions):ControllerBase
+public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSessionService sessions,IMediator mediator):ControllerBase
 {
-    private Guid Actor=>Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
     [AllowAnonymous,HttpPost("otp/request"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> RequestOtp(OtpLoginDto body,CancellationToken ct)=>Ok(new{success=true,data=await workflows.RequestLoginAsync(body.Contact,ct)});
     [AllowAnonymous,HttpPost("otp/login"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
@@ -23,19 +23,18 @@ public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSe
     [AllowAnonymous,HttpPost("bootstrap-password"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> ChangePassword(ChangeBootstrapPasswordDto body,CancellationToken ct){await workflows.ChangeBootstrapPasswordAsync(body,ct);return Ok(new{success=true});}
     [Authorize,HttpPost("mfa/setup")]
-    public async Task<IActionResult> Setup(CancellationToken ct)=>Ok(new{success=true,data=await workflows.SetupMfaAsync(Actor,ct)});
+    public async Task<IActionResult> Setup(CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new SetupOwnMfaCommand(),ct)});
     [Authorize,HttpPost("mfa/enable")]
-    public async Task<IActionResult> Enable(VerifyDriverOtpDto body,CancellationToken ct){await workflows.EnableMfaAsync(Actor,body.Code,ct);return Ok(new{success=true});}
+    public async Task<IActionResult> Enable(VerifyDriverOtpDto body,CancellationToken ct){await mediator.Send(new EnableOwnMfaCommand(body.Code),ct);return Ok(new{success=true});}
     [Authorize,HttpGet("deliveries/{id:guid}")]
-    public async Task<IActionResult> Delivery(Guid id,CancellationToken ct)=>Ok(new{success=true,data=await workflows.DeliveryAsync(Actor,id,false,ct)});
+    public async Task<IActionResult> Delivery(Guid id,CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new GetWorkflowDeliveryQuery(id),ct)});
     [Authorize,HttpPost("deliveries/{id:guid}/retry")]
-    public async Task<IActionResult> Retry(Guid id,CancellationToken ct)=>Ok(new{success=true,data=await workflows.DeliveryAsync(Actor,id,true,ct)});
+    public async Task<IActionResult> Retry(Guid id,CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new RetryWorkflowDeliveryCommand(id),ct)});
 }
-[ApiController,Authorize(Roles="driver"),Route("api/vehicles"),ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class VehiclesController(IVehicleRegistration vehicles):ControllerBase
+[ApiController,Authorize,Route("api/vehicles"),ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
+public sealed class VehiclesController(IMediator mediator):ControllerBase
 {
-    private Guid Actor=>Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
-    [HttpGet] public async Task<IActionResult> List(CancellationToken ct)=>Ok(new{success=true,data=await vehicles.ListAsync(Actor,ct)});
-    [HttpPost] public async Task<IActionResult> Create(VehicleDto body,CancellationToken ct){var v=await vehicles.SaveAsync(Actor,null,body,ct);return StatusCode(201,new{success=true,data=v});}
-    [HttpPatch("{id:guid}")] public async Task<IActionResult> Update(Guid id,VehicleDto body,CancellationToken ct)=>Ok(new{success=true,data=await vehicles.SaveAsync(Actor,id,body,ct)});
+    [HttpGet] public async Task<IActionResult> List(CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new ListOwnVehiclesQuery(),ct)});
+    [HttpPost] public async Task<IActionResult> Create(VehicleDto body,CancellationToken ct){var v=await mediator.Send(new SaveOwnVehicleCommand(null,body),ct);return StatusCode(201,new{success=true,data=v});}
+    [HttpPatch("{id:guid}")] public async Task<IActionResult> Update(Guid id,VehicleDto body,CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new SaveOwnVehicleCommand(id,body),ct)});
 }

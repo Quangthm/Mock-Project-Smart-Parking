@@ -119,7 +119,7 @@ public sealed class ProfileOutboxTests
         await using (var db = fixture.Open())
         {
             db.Accounts.Add(new Account { Id = accountId, UserId = userId,
-                AccountRoles = [new AccountRole { AccountId = accountId, RoleCode = "DRIVER" }] });
+                RoleCode = "DRIVER" });
             db.AuthSessions.Add(new AuthSession
             {
                 Id = Guid.NewGuid(), UserId = userId, AccountId = accountId, AccessTokenId = tokenId,
@@ -135,7 +135,8 @@ public sealed class ProfileOutboxTests
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var actor = new TestCurrentActor(userId, "driver", accountId, tokenId);
             var handler = new UpdateOwnProfileCommandHandler(new UnitOfWork(db, new UserRepository(db)),
-                new ProfileAccessStore(db), actor, scope.ServiceProvider.GetRequiredService<IEventPublisher>(), TimeProvider.System);
+                TestAccess.Service(new CurrentAccessStore(db), actor, TimeProvider.System), actor,
+                scope.ServiceProvider.GetRequiredService<IEventPublisher>(), TimeProvider.System);
             await handler.Handle(new UpdateOwnProfileCommand(name), default);
         }
         await SaveAsync("  After  ");

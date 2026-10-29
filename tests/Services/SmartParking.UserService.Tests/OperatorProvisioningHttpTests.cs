@@ -30,7 +30,6 @@ public sealed class OperatorProvisioningHttpTests
             return Task.FromResult(new OperatorDto(Guid.NewGuid(), body.FullName, body.Email,
                 "operator", "active", ownerId, body.SiteIds, body.Permissions));
         }
-        public Task<bool> HasPermissionAsync(Guid operatorId, Guid siteId, string permission, CancellationToken ct) => Task.FromResult(false);
         public Task<IReadOnlyList<OperatorDto>> ListAsync(Guid ownerId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorDto>>([]);
         public Task<IReadOnlyList<OperatorAssignment>> AssignmentsAsync(Guid operatorId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorAssignment>>([]);
     }
@@ -47,8 +46,9 @@ public sealed class OperatorProvisioningHttpTests
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture(); var operators = new Operators();
+        TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
-        builder.Services.AddSingleton<IProfileAccessStore>(fixture);
+        builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
         builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
@@ -64,7 +64,8 @@ public sealed class OperatorProvisioningHttpTests
             Password = "Password@123", SiteIds = [Guid.NewGuid()], Permissions = ["DEVICE_MANAGE"] };
         async Task Login(string role)
         {
-            fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = role;
+            fixture.User.Accounts.Single().RoleCode = role;
+            fixture.User.Accounts.Single().TenantId = role == "BUSINESS_OWNER" ? Guid.NewGuid() : null;
             var r = await client.PostAsJsonAsync("/api/auth/login", new { email = "driver@gmail.com", password = "Password@123" });
             Assert.Equal(HttpStatusCode.OK, r.StatusCode);
             var token = (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("accessToken").GetString();

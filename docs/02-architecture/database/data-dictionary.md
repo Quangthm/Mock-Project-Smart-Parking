@@ -1,28 +1,27 @@
 # SmartPark Data Dictionary — Recorded Deployment Profile
 
-This dictionary summarizes the recorded data structures of branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays. It preserves the schema evidence, including T4-approved deviations from the arch design baseline; this documentation update did not query a running database. Target v1.1 gaps are [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending), not newly deployed fields.
+This dictionary preserves the recorded deployment profile of branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays, including T4-approved deviations. The User & Access section additionally reflects the current approved one-role-per-Account clean-install schema and the separate SPARK-248 session/outbox setup. These are repository definitions, not a claim that a development database has been reset. Other v1.1 gaps remain [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending).
 
 ## 1. Global persistence strategies
 
 - **UTC:** all `TIMESTAMPTZ` values are stored in UTC; presentation converts to the site's local timezone.
-- **GUIDs:** primary keys use `UUIDv4` (`uuid_generate_v4()`); tests may use fixed UUIDs.
+- **GUIDs:** entity identifiers generally use `UUIDv4` (`uuid_generate_v4()`); tests may use fixed UUIDs. `roles.code` is a `VARCHAR(50)` business primary key, not a UUID.
 - **Tenant scope:** `tenant_id` is denormalized on most business tables. Cross-database references (`tenant_id`, `site_id`, `account_id`, `slot_id`, `reservation_id`) are **logical UUIDs**, not physical FKs.
 - **RLS:** Row-Level Security is **not enabled** in the deployed schema. It must be enabled with explicit policies if required.
 - **Soft delete:** identities and physical resources use `deleted_at`; audit tables retain history via `RESTRICT`/`SET NULL`.
 
 ## 2. User & Access DB (`smartpark_user`)
 
-Base: `01-user-access-service-db.sql`; no overlays.
+Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship. Apply the existing separate scripts [`13-own-profile-session-account.sql`](../../../scripts/database/microservices/13-own-profile-session-account.sql) then [`14-user-profile-outbox.sql`](../../../scripts/database/microservices/14-user-profile-outbox.sql) for the current SPARK-248 runtime, as described in the [profile deployment guide](../../04-testing/own-profile-outbox.md). They are not folded into the base schema.
 
 | Table | Key columns / rules |
 |---|---|
 | `users` | `id`, `phone`, `email`, `password_hash`, `full_name`, `company_name`, `status` (`ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_APPROVAL`, `PENDING_VERIFICATION`, `REJECTED`), `failed_login_attempts`, `locked_until` |
 | `tenants` | Organization root; `code`, `name`, `contact_email`, `contact_phone`, `tax_code`, `status` (`ACTIVE`, `INACTIVE`, `SUSPENDED`) |
-| `accounts` | Contextual account; `user_id`, nullable `tenant_id`/`site_id`, `permissions`, `status`; one user may have multiple accounts |
-| `roles` | **7 seeded codes:** `DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN` |
-| `account_roles` | PK `(account_id, role_code)`; FKs to `accounts.id` (CASCADE) and `roles.code` (RESTRICT) |
+| `accounts` | Contextual account; `user_id`, required `role_code VARCHAR(50)` FK to `roles.code` with `ON DELETE RESTRICT`, nullable `tenant_id`/`site_id`, `permissions`, `status`; one user may have multiple accounts, each with exactly one role. Nonunique `idx_accounts_role_code` allows many accounts to share a role |
+| `roles` | `code VARCHAR(50)` PK; **7 seeded codes:** `DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN` |
 | `vehicles` | `account_id`, `original_plate`, `normalized_plate`, `vehicle_type`; active-plate uniqueness via `uq_active_vehicle_plate` |
-| `user_refresh_tokens` | Refresh-token lifecycle; `access_token_id` unique for strict revocation |
+| `user_refresh_tokens` | Refresh-token lifecycle; unique `token_hash` and `access_token_id`. Script 13 adds nullable legacy `account_id` and composite FK `(account_id,user_id) → accounts(id,user_id)` with restrictive deletion; trigger freezes both binding identifiers. New sessions always bind an Account; legacy NULL bindings require new login |
 | `driver_registrations` | OTP hash, channel, expiry, failed attempts |
 | `system_terms_and_conditions` | Versioned legal terms |
 | `owner_applications` | Owner onboarding; `status` (`pending`, `approved`, `rejected`), review fields, `tenant_id` |
@@ -32,6 +31,8 @@ Base: `01-user-access-service-db.sql`; no overlays.
 | `mfa_credentials` | TOTP/MFA credentials |
 
 Runtime role mapping: `PLATFORM_ADMIN`/`ADMIN` → admin; `BUSINESS_OWNER`/`OWNER` → owner; `SITE_OPERATOR`/`OPERATOR` → operator; `DRIVER` → driver.
+
+The authenticated session's exact Account remains authoritative. Current access rechecks User, Account, Role and session state; action permissions and resource membership are separate checks. `accounts.permissions` and `operator_grants.permissions` retain their existing ownership and semantics. Role codes do not grant implicit Admin access to Owner/Operator resources. Account creation/bootstrap supplies `role_code` directly; the Admin seed receives `ADMIN`. Account creation time remains `accounts.created_at`, with no separate role-assignment timestamp.
 
 ## 3. Facility & Parking DB (`smartpark_facility`)
 

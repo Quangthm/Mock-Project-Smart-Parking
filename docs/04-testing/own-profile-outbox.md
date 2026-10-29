@@ -15,8 +15,8 @@ User & Access owns the versioned event; Notification & Audit owns the eventual p
 The repository uses reviewed SQL feature scripts; there is no existing EF migration/snapshot workflow to extend. `AppDbContext` calls MassTransit's `AddTransactionalOutboxEntities()`. The proposed SQL is generated from that exact model with **MassTransit 8.5.7, EF Core 10.0.12, and Npgsql EF Core 10.0.3**. The equality test detects incompatible table/index drift.
 
 1. Stop/restrict the old application version's writes during a coordinated deployment. Review and back up the explicitly selected User & Access database. Do not use a default connection or another service database.
-2. Apply [13-own-profile-session-account.sql](../../scripts/database/microservices/13-own-profile-session-account.sql), then [14-user-profile-outbox.sql](../../scripts/database/microservices/14-user-profile-outbox.sql), to that selected database through the team's normal manual deployment process. The latter is a one-time, transactional create script; a second application is expected to fail rather than silently accept a different schema.
-3. Deploy this application with `Messaging__OutboxDeliveryEnabled=false`. Legacy sessions without immutable AccountId must sign in again. No startup migration or schema fallback exists.
+2. For a clean database, first run the canonical [01-user-access-service-db.sql](../../scripts/database/microservices/01-user-access-service-db.sql), then apply the separate [13-own-profile-session-account.sql](../../scripts/database/microservices/13-own-profile-session-account.sql) and [14-user-profile-outbox.sql](../../scripts/database/microservices/14-user-profile-outbox.sql) in that order through the team's normal manual deployment process. For an existing database, inspect its schema and review the applicable scripts first. Script 14 is a one-time, transactional create script; a second application is expected to fail rather than silently accept a different schema. The role simplification is represented directly in base01, with no role ALTER migration.
+3. Run the read-only [verify-user-access-schema.sql](../../scripts/database/verify-user-access-schema.sql) with `psql -v ON_ERROR_STOP=1` against that explicitly selected database. It verifies direct role constraints, session ownership and immutability, token uniqueness, and framework outbox columns/constraints/indexes. Only then deploy this application with `Messaging__OutboxDeliveryEnabled=false`. Legacy sessions without immutable AccountId must sign in again. No startup migration or schema fallback exists.
 4. Provision and verify the durable RabbitMQ topology independently of any consumer, as described below. Review queue policies and capacity.
 5. Set the broker configuration, then enable `Messaging__OutboxDeliveryEnabled=true` and restart/recreate the User Service through the documented runner. Verify pending records drain and messages accumulate in the durable audit queue while the consumer is absent.
 6. Deploy a future idempotent Audit consumer independently. It must consume this queue and persist deduplication and audit records atomically. It is not part of this task.
@@ -30,6 +30,16 @@ The repository uses reviewed SQL feature scripts; there is no existing EF migrat
 The model also includes framework `LockId` and nullable byte-array `RowVersion` fields, all addresses/content fields, both OutboxMessage foreign keys, and the framework nullability. Do not replace it with a reduced two-table schema. `workflow_deliveries` remains the existing encrypted OTP/email workflow storage and is unrelated.
 
 Missing outbox tables cause the real endpoint to fail safely; there is no direct publish, dropped-event, or fake-success fallback. Missing session binding schema also prevents the new code from operating correctly. Deployment of both scripts is a prerequisite.
+
+The ordinary `compose.schema-integration.yml` User database initialization and `apply-workflow-migrations.ps1 -Service User` execute base01 only. Their base checks do not establish current UserService readiness: they do not apply scripts 13/14. The runner now makes that limitation explicit. A missing `user_refresh_tokens.account_id` therefore requires deployment reconciliation, not a fallback to User-only sessions. Script 13 binds `(account_id, user_id)` to the same Account owner and protects both identifiers from subsequent updates; nullable legacy bindings remain unchanged.
+
+Example verification using a locally configured libpq service (credentials stay out of the command):
+
+```powershell
+psql --dbname="service=smartpark-user-reviewed" -v ON_ERROR_STOP=1 -f scripts/database/verify-user-access-schema.sql
+```
+
+Configure that service for the explicitly reviewed User database first. The verifier runs in a read-only transaction, raises an error listing missing/incompatible definitions, and performs no schema repair, reset, backfill or automatic deployment. The developer remains responsible for any approved development reset/recreation.
 
 **Rollback is not routine deletion.** Disable delivery and stop writes as needed, preserve schema and pending events, and choose a compatible application rollback. Dropping outbox tables or deleting pending rows destroys undelivered facts and requires a separate reviewed recovery/export decision. Never run a destructive rollback merely to uninstall this feature.
 

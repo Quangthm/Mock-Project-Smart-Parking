@@ -2,9 +2,9 @@
 
 > **Service**: User & Access Service (`UserDb`)  
 > **Database file**: [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql)  
-> **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); v1.1 target gaps: [DB25–DB27, DB30–DB33](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). No new deployed columns are claimed.
+> **Schema baseline**: Recorded v1.0 RC3 (Commit `6165024`, replacing v0.9), updated for the approved v1.1 one-role-per-Account clean-install model. This describes repository definitions, not an executed development database reset. Other v1.1 target gaps remain [DB25–DB27, DB30–DB33](../alignment-backlog.md#v11-schema-and-seed-alignment-pending).
 > **Message Broker**: RabbitMQ + MassTransit  
-> **Scope**: Quản lý định danh con người (`users`), tổ chức/doanh nghiệp (`tenants`), tài khoản theo ngữ cảnh (`accounts`), phân quyền RBAC (`roles`, `account_roles`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), phân quyền vận hành bãi (`operator_grants`), xác thực nâng cao (`auth_challenges`, `workflow_deliveries`), và MFA/TOTP (`mfa_credentials`).
+> **Scope**: Quản lý định danh con người (`users`), tổ chức/doanh nghiệp (`tenants`), tài khoản theo ngữ cảnh (`accounts`), vai trò trực tiếp (`accounts.role_code` → `roles.code`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), phân quyền vận hành bãi (`operator_grants`), xác thực nâng cao (`auth_challenges`, `workflow_deliveries`), và MFA/TOTP (`mfa_credentials`).
 
 ## v1.1 simulated identity target (DB26)
 
@@ -16,8 +16,8 @@ The [21 October V11-06 clarification](../../../05-project-management/decision-lo
 |---|---|
 | Database vật lý | `smartpark_user` (PostgreSQL 16, port `5441`) |
 | Base DDL | [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql) |
-| Overlay | Không |
-| Deployment status | Khớp base arch `9a13499`, ngoại trừ 3 role seed bổ sung (D4/U1) |
+| Separate runtime setup | Base → [`13-own-profile-session-account.sql`](../../../../scripts/database/microservices/13-own-profile-session-account.sql) → [`14-user-profile-outbox.sql`](../../../../scripts/database/microservices/14-user-profile-outbox.sql); giữ nguyên các script riêng theo [hướng dẫn SPARK-248](../../../04-testing/own-profile-outbox.md) |
+| Deployment status | Base hiện tạo trực tiếp `accounts.role_code`; người vận hành thực hiện reset/recreate development DB sau khi review. Không có ALTER migration cho thay đổi role |
 | Runtime deviation | `roles` seed 7 mã thay vì 4 mã SRS; xem §5 |
 
 ---
@@ -32,9 +32,8 @@ Client → API Gateway (JWT RS256)
           User Service DB
           ┌───────────────┐
           │ users         │ ← Định danh con người
-          │ accounts      │ ← Ngữ cảnh vận hành (tenant/site)
+          │ accounts      │ ← Ngữ cảnh vận hành (tenant/site), role_code → roles.code
           │ roles         │ ← Danh mục vai trò
-          │ account_roles │ ← Gán vai trò cho account
           │ vehicles      │ ← Phương tiện của driver
           │ user_refresh_tokens │ ← Token lifecycle
           │ driver_registrations│ ← OTP đăng ký
@@ -45,7 +44,7 @@ Client → API Gateway (JWT RS256)
 
 **Nguyên tắc dữ liệu:**
 - `users` = bản thể con người, tồn tại độc lập.
-- `accounts` = bản thể vận hành, gắn với tenant/site, một `user` có thể có nhiều `account`.
+- `accounts` = bản thể vận hành, gắn với tenant/site, một `user` có thể có nhiều `account`; mỗi `account` có đúng một vai trò qua `role_code` bắt buộc.
 - Tất cả cross-service references (đến Parking Service, Reservation Service…) sử dụng **Logical ID** lưu dưới dạng `UUID`, không enforce bằng FK vật lý.
 
 ---
@@ -152,7 +151,7 @@ Quản lý thông tin **pháp nhân doanh nghiệp hoặc đơn vị vận hành
 
 ### 3.1 Mục đích nghiệp vụ
 
-Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận hành**. Một người (user) có thể có nhiều account gắn với các tenant/site khác nhau. Ví dụ: một cá nhân vừa là Driver (account không gắn tenant) vừa là Operator của Parking Lot A (account gắn `tenant_id` của A). Bảng này là đơn vị phân quyền — `account_roles` và `operator_grants` đều tham chiếu đến `accounts.id`, không phải `users.id`.
+Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận hành**. Một người (user) có thể có nhiều account gắn với các tenant/site khác nhau. Ví dụ: một cá nhân vừa là Driver (account không gắn tenant) vừa là Operator của Parking Lot A (account gắn `tenant_id` của A). Mỗi Account có đúng một Role qua `accounts.role_code`; `operator_grants` tham chiếu đến `accounts.id`, không phải `users.id`. Account gắn với session là nguồn quyền hiện tại; account khác của cùng User không thay thế được account đã bị khóa, vô hiệu hóa, xóa hoặc đổi role.
 
 ### 3.2 Traceability Mapping
 
@@ -169,8 +168,9 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
-| `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh account; đây là ID được dùng trong `account_roles`, `operator_grants`, `vehicles`, và là `account_id` được lưu dưới dạng Logical ID ở Reservation/Payment Service | Tự sinh bởi `uuid_generate_v4()` | FR-AUTH-02; FR-AUTH-06 |
+| `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh account; đây là ID được dùng trong `operator_grants`, `vehicles`, session binding, và là `account_id` được lưu dưới dạng Logical ID ở Reservation/Payment Service | Tự sinh bởi `uuid_generate_v4()` | FR-AUTH-02; FR-AUTH-06 |
 | `user_id` | `UUID NOT NULL` | FK vật lý đến `users.id`; liên kết account với con người sở hữu nó | Gán bằng `users.id` của user đang đăng nhập/được tạo tài khoản | FR-AUTH-02 |
+| `role_code` | `VARCHAR(50) NOT NULL` | Một vai trò duy nhất của Account; FK đến `roles.code` với `ON DELETE RESTRICT`; không unique | Gán trực tiếp khi tạo account trong registration/provisioning/bootstrap | FR-AUTH-04; FR-AUTH-05; FR-AUTH-06 |
 | `tenant_id` | `UUID NULL` | **FK nội bộ** trỏ đến `tenants.id` trong UserDb (`ON DELETE SET NULL`). `NULL` với Driver account (không thuộc tenant nào). Khác `NULL` với Owner/Operator account | Gán khi duyệt Owner application hoặc khi Owner tạo Operator account; đảm bảo tính toàn vẹn tổ chức | §2.3.1; FR-AUTH-04 |
 | `site_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `parking_sites.id` trong Parking Service DB. Dùng để giới hạn scope của Operator vào một site cụ thể. `NULL` với Owner account (scope toàn tenant) | Được gán khi Owner assign Operator vào site cụ thể | §2.3.1 (OPERATOR_MANAGE scope) |
 | `permissions` | `TEXT[] NULL` | Danh sách quyền hạn bổ sung hoặc bị ghi đè của tài khoản | Cập nhật bởi Admin/Owner khi gán quyền | FR-AUTH-06 |
@@ -184,10 +184,13 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
 | `FK_accounts_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa luôn toàn bộ account của user đó |
+| `accounts_role_code_fkey` | `FOREIGN KEY (role_code) REFERENCES roles(code) ON DELETE RESTRICT` | Không cho xóa Role đang được Account tham chiếu; Account bắt buộc có một Role hợp lệ |
 | `chk_accounts_status` | `CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL'))` | Giới hạn trạng thái account hợp lệ |
 | `idx_accounts_user_id` | `user_id` | Tra cứu nhanh toàn bộ account của một user |
+| `idx_accounts_role_code` | `role_code` (nonunique) | Tra cứu Account theo Role; nhiều Account được phép dùng cùng Role |
 | `idx_accounts_tenant_id` | `tenant_id` | Liệt kê toàn bộ account thuộc một tenant (dùng khi Owner/Admin quản lý) |
 | `idx_accounts_site_id` | `site_id` | Liệt kê account Operator được gắn vào một site cụ thể |
+| `AK_accounts_id_user_id` (script 13) | `UNIQUE (id, user_id)` | Principal key cho composite session ownership FK; không giới hạn số Account của một User |
 
 ### 4.5 Ghi chú Quan hệ & Cross-service
 
@@ -201,7 +204,7 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 
 ### 4.1 Mục đích nghiệp vụ
 
-Lưu định nghĩa chuẩn (master data) các vai trò trong hệ thống. Đây là bảng tĩnh, được seed **7 mã** khi deploy: 4 mã actor theo SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) và 3 mã runtime bổ sung (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng trong luồng Owner/Operator/Admin. Ba mã bổ sung là deviation đã được phê tại T4 (D4/U1) và là bắt buộc vì `account_roles.role_code` có FK tới `roles.code`.
+Lưu định nghĩa chuẩn (master data) các vai trò trong hệ thống. Đây là bảng tĩnh, được seed **7 mã** khi deploy: 4 mã actor theo SRS (`DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`) và 3 mã runtime bổ sung (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) do UserService dùng trong luồng Owner/Operator/Admin. Ba mã bổ sung là deviation đã được phê tại T4 (D4/U1) và được giữ nguyên. `accounts.role_code` có FK trực tiếp tới `roles.code`; Role không có UUID identity.
 
 | SRS actor (§2.3) | Runtime role code(s) | Nơi dùng |
 |---|---|---|
@@ -210,14 +213,14 @@ Lưu định nghĩa chuẩn (master data) các vai trò trong hệ thống. Đâ
 | Owner | `OWNER`, `BUSINESS_OWNER` | `BUSINESS_OWNER` do `OwnerRegistrationService` gán |
 | Admin | `ADMIN`, `PLATFORM_ADMIN` | `PLATFORM_ADMIN` dùng trong UserManagement/AccessToken |
 
-The recorded role table and aliases remain schema facts. D05 excludes MVP role management; assignment is fixed by approved registration/activation, with no elevation/demotion endpoint. Exactly one seeded Admin is protected (DB26).
+The recorded role table and aliases remain schema facts. D05 excludes MVP role management; assignment is fixed by approved registration/activation, with no elevation/demotion endpoint. The Admin bootstrap assigns `ADMIN` directly to its Account. The single seeded Admin product requirement remains under DB26; this role refactor does not add a new singleton constraint or redesign bootstrap behavior.
 
 ### 4.2 Traceability Mapping
 
 | Mã yêu cầu | Loại | Nội dung liên quan |
 |---|---|---|
 | **FR-AUTH-03** | C | Chỉ role phù hợp mới được phép thực hiện profile-edit |
-| **FR-AUTH-06** | C | Mỗi protected operation kiểm tra `role_code` qua `account_roles` để enforce permission |
+| **FR-AUTH-06** | C | Mỗi protected operation kiểm tra `accounts.role_code`, current access state, permission và resource scope tương ứng |
 | **§2.3** | — | Định nghĩa 4 actor: Driver, Operator, Owner, Admin. Runtime dùng 7 role code: 4 mã actor gốc + 3 alias (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) |
 | **§2.3.1** | — | Permission matrix xác định capability của từng role |
 
@@ -225,7 +228,7 @@ The recorded role table and aliases remain schema facts. D05 excludes MVP role m
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
-| `code` | `VARCHAR(50) PK` | Mã định danh vai trò; dùng làm khóa chính để join với `account_roles`. Ví dụ: `'DRIVER'`, `'OPERATOR'`, `'OWNER'`, `'ADMIN'`, `'BUSINESS_OWNER'`, `'SITE_OPERATOR'`, `'PLATFORM_ADMIN'` | Seed cứng khi deploy; không do user tạo ra | FR-AUTH-06; §2.3 |
+| `code` | `VARCHAR(50) PK` | Mã định danh vai trò; được `accounts.role_code` tham chiếu trực tiếp. Ví dụ: `'DRIVER'`, `'OPERATOR'`, `'OWNER'`, `'ADMIN'`, `'BUSINESS_OWNER'`, `'SITE_OPERATOR'`, `'PLATFORM_ADMIN'` | Seed cứng khi deploy; không do user tạo ra | FR-AUTH-06; §2.3 |
 | `name` | `VARCHAR(100) NOT NULL` | Tên hiển thị của vai trò. Ví dụ: `'Tài xế'`, `'Nhân viên vận hành'`, `'Chủ bãi đỗ xe'`, `'Quản trị hệ thống'` | Seed cứng khi deploy | §2.3 |
 | `description` | `TEXT NULL` | Mô tả chi tiết trách nhiệm và quyền hạn của vai trò; dùng cho mục đích tài liệu hóa | Seed cứng khi deploy | §2.3.1 (Permission Matrix) |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo bản ghi role | Tự sinh bởi database | — |
@@ -233,38 +236,15 @@ The recorded role table and aliases remain schema facts. D05 excludes MVP role m
 
 ---
 
-## 6. Bảng `account_roles` — Gán vai trò cho tài khoản
+## 6. Quan hệ Account → Role và kiểm tra quyền
 
-### 5.1 Mục đích nghiệp vụ
+Quan hệ là **Account N : 1 Role**: mỗi Account bắt buộc có đúng một `role_code`, nhiều Account được dùng cùng một Role. User vẫn có thể có nhiều Account cho các ngữ cảnh tenant/site khác nhau. Schema clean-install không có bảng trung gian hoặc timestamp gán role riêng; `accounts.created_at` tiếp tục là thời điểm tạo Account.
 
-Bảng junction thực hiện quan hệ nhiều-nhiều giữa `accounts` và `roles`. Một account có thể có nhiều role trong ngữ cảnh của mình. Đây là bảng được tra cứu tại **mỗi protected request** để xác định quyền của người dùng.
+Registration, provisioning và bootstrap ghi `role_code` cùng Account. SQL seed giữ nguyên 7 Role code; Driver dùng `DRIVER`, Owner provisioning dùng `BUSINESS_OWNER`, Operator provisioning dùng `SITE_OPERATOR`, Admin bootstrap dùng `ADMIN`. Các Account/tenant/site/grant liên quan tiếp tục giữ quan hệ hiện có.
 
-### 5.2 Traceability Mapping
+Luồng protected request dùng `ICurrentActor` → `ICurrentAccessService` → `CurrentAccessContext`. Persistence trả về trạng thái User, đúng Account gắn với session, Role hiện tại và session; Application quyết định tính hợp lệ, role/token consistency, action permission và resource scope. Mutation được bảo vệ giữ thứ tự khóa **User → Account → Role → Session**; khóa Account bảo vệ `role_code`, không cần khóa một bản ghi gán role riêng. Xem [SPARK-248 implementation review](../../../04-testing/own-profile-review.md).
 
-| Mã yêu cầu | Loại | Nội dung liên quan |
-|---|---|---|
-| **FR-AUTH-06** | C | Kiểm tra `account_roles` tại mỗi request để lấy danh sách role hiện tại của account |
-| **FR-AUTH-04** | R | Owner gán role OPERATOR cho account mới tạo |
-| **FR-AUTH-05** | C | Existing Owner role may be bound to a pending account immediately; normal Owner access requires combined approval and successful provisioning (DB25–DB27) |
-| **§2.3.1** | — | Fixed role assignment remains audited — `created_at` records assignment; no MVP role-management feature |
-
-### 5.3 Bảng thuộc tính chi tiết
-
-| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
-|---|---|---|---|---|
-| `account_id` | `UUID NOT NULL` | FK đến account được gán role | Gán bằng `accounts.id` tương ứng | FR-AUTH-06 |
-| `role_code` | `VARCHAR(50) NOT NULL` | FK đến mã vai trò | Gán bằng `roles.code` tương ứng | FR-AUTH-06 |
-| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm gán role cho account; phục vụ audit trail cho fixed assignment; no role-management authorization | Tự sinh bởi database tại INSERT | §2.3.1; §4.3 (Audit log 7 năm) |
-
-**Primary Key**: `(account_id, role_code)` — một account không thể có cùng một role hai lần.
-
-### 5.4 Constraints & Indexes
-
-| Tên / Index | Định nghĩa / Cột | Ý nghĩa |
-|---|---|---|
-| `FK_account_roles_accounts` | `REFERENCES accounts(id) ON DELETE CASCADE` | Xóa account thì xóa luôn toàn bộ role assignment của account đó |
-| `FK_account_roles_roles` | `REFERENCES roles(code) ON DELETE RESTRICT` | Không cho xóa role nếu vẫn còn assignment; bảo vệ tính toàn vẹn của cấu hình phân quyền |
-| `idx_account_roles_role_code` | `role_code` | Tra cứu ngược: tìm toàn bộ account đang giữ một role cụ thể (dùng khi Admin quản lý) |
+`accounts.permissions` và `operator_grants.permissions` vẫn là các permission array hiện có. Role không thay thế kiểm tra quyền hành động hoặc tenant/site/lot scope. Một Account khác cùng User chỉ được tham gia scope theo quy tắc membership cùng User/cùng Role rõ ràng và quyền/grant riêng; không được cứu một session-bound Account không còn hợp lệ hoặc cho mượn Role khác. Admin không tự động có quyền vận hành hay tài chính. Own-profile dùng current access cho tất cả role được hỗ trợ; role/status/permissions không được tự sửa qua profile.
 
 ---
 
@@ -337,6 +317,8 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 - Hỗ trợ revocation: khi logout, `is_revoked = true` để invalidate token ngay lập tức mà không cần đợi hết hạn.
 - Liên kết device/IP để phát hiện đăng nhập bất thường.
 
+Base01 định nghĩa vòng đời token. Script 13 bổ sung binding `(account_id, user_id)` tới đúng Account và chủ sở hữu; cả hai giá trị bất biến sau khi tạo session. Session mới bắt buộc được Application gắn Account. Cột `account_id` vẫn nullable để giữ nguyên legacy rows; các session thiếu binding phải đăng nhập lại và không được backfill bằng cách đoán Account. Script 14/outbox và read-only verifier là prerequisite riêng như §0.
+
 ### 7.2 Traceability Mapping
 
 | Mã yêu cầu | Loại | Nội dung liên quan |
@@ -351,7 +333,8 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh duy nhất của bản ghi token | Tự sinh bởi `uuid_generate_v4()` | — |
-| `user_id` | `UUID NOT NULL` | FK đến user sở hữu token. User đăng xuất/bị xóa → xóa token | Gán bằng `users.id` của user đang đăng nhập | FR-AUTH-02 |
+| `user_id` | `UUID NOT NULL` | FK đến user sở hữu token, đồng thời thuộc composite Account ownership FK của script 13; bất biến sau khi tạo session | Gán bằng `users.id` của user đang đăng nhập | FR-AUTH-02 |
+| `account_id` (script 13) | `UUID NULL` | Account chính xác gắn session; cùng `user_id` tham chiếu `accounts(id,user_id)`. NULL chỉ tương thích lưu trữ legacy session không còn dùng để truy cập | Application chọn Account hợp lệ khi login; refresh giữ nguyên binding | FR-AUTH-02; FR-AUTH-06 |
 | `token_hash` | `VARCHAR(255) NOT NULL` | Giá trị băm của Refresh Token (plain-text Refresh Token **không** được lưu) | Sinh bởi Application: `SHA-256(raw_refresh_token)` | §4.3 (Security) |
 | `device_info` | `VARCHAR(255) NULL` | Thông tin thiết bị (user-agent string, tên thiết bị). Dùng để hiển thị danh sách session | Trích xuất từ HTTP `User-Agent` header | §4.3 (Security monitoring) |
 | `ip_address` | `VARCHAR(45) NULL` | IP của client tại thời điểm đăng nhập | Trích xuất từ request tại API Gateway / Application | §4.3 |
@@ -367,6 +350,9 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
 | `FK_user_refresh_tokens_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa toàn bộ token |
+| `FK_user_refresh_tokens_accounts_account_id_user_id` (script 13) | `FOREIGN KEY (account_id, user_id) REFERENCES accounts(id, user_id) ON DELETE RESTRICT` | Không cho session gắn Account của User khác; không xóa Account đang được session tham chiếu |
+| `IX_user_refresh_tokens_account_id_user_id` (script 13) | `(account_id, user_id)` | Tra cứu binding và hỗ trợ FK |
+| `tr_auth_session_account_binding` (script 13) | `BEFORE UPDATE OF account_id, user_id` | Từ chối thay đổi Account/User binding, kể cả NULL legacy; không chặn token rotation/revocation hợp lệ |
 | `uq_user_refresh_tokens_hash` | `UNIQUE(token_hash)` | Unique token hash |
 | `uq_user_refresh_tokens_access` | `UNIQUE(access_token_id)` | Unique access token ID |
 | `chk_expires_at_valid` | `CHECK (expires_at > created_at)` | Đảm bảo token không bao giờ được tạo với `expires_at` trong quá khứ |
@@ -684,8 +670,7 @@ tenants (1) ──── (0..N) owner_applications  [tenant_id FK nội bộ]
 
 system_terms_and_conditions (1) ──── (0..N) owner_applications  [terms_id]
 
-accounts (1) ──── (N) account_roles
-accounts (N) ──── (N) roles  [qua account_roles]
+accounts (N) ──── (1) roles  [role_code → code, NOT NULL, ON DELETE RESTRICT]
 accounts (1) ──── (N) vehicles  [account_id trong vehicles]
 accounts (1) ──── (0..1) operator_grants
 

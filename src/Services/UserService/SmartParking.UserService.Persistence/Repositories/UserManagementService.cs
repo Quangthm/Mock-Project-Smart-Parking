@@ -5,10 +5,11 @@ using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
+using UserService.Application.Authorization;
 
 namespace UserService.Persistence.Repositories;
 
-public sealed class UserManagementService(AppDbContext db, TimeProvider clock) : IUserManagementService
+public sealed class UserManagementService(AppDbContext db, TimeProvider clock, IAccountAuthorizationService authorization) : IUserManagementService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
     private static void Validate(object body)
@@ -17,23 +18,15 @@ public sealed class UserManagementService(AppDbContext db, TimeProvider clock) :
         if (!Validator.TryValidateObject(body, new ValidationContext(body), errors, true))
             throw Error("VALIDATION_FAILED", string.Join(" ", errors.Select(e => e.ErrorMessage)));
     }
-    private static string? Role(string code) => code.ToUpperInvariant() switch
-    {
-        "PLATFORM_ADMIN" or "ADMIN" => "admin", "BUSINESS_OWNER" or "OWNER" => "owner",
-        "SITE_OPERATOR" or "OPERATOR" => "operator", "DRIVER" => "driver", _ => null
-    };
     private static ManagedUserDto Result(User u) => new(u.Id!.Value, u.FullName, u.Email, u.Phone,
-        u.Accounts.Where(a => a.DeletedOn == null).SelectMany(a => a.AccountRoles)
-            .Select(r => Role(r.RoleCode)).OfType<string>().Distinct().Order().ToArray(),
+        u.Accounts.Where(a => a.DeletedOn == null)
+            .Select(a => AccessRoles.Map(a.RoleCode)).OfType<string>().Distinct().Order().ToArray(),
         char.ToLowerInvariant(u.Status.ToString()[0]) + u.Status.ToString()[1..], u.CreatedOn, u.LockedUntil);
     private IQueryable<User> Users => db.Users.Where(u => u.DeletedOn == null)
-        .Include(u => u.Accounts).ThenInclude(a => a.AccountRoles);
+        .Include(u => u.Accounts);
     private async Task RequireAdmin(Guid id, CancellationToken ct)
     {
-        if (!await db.Users.AnyAsync(u => u.Id == id && u.DeletedOn == null && u.Status == UserStatus.Active &&
-            u.Accounts.Any(a => a.DeletedOn == null && a.Status == "ACTIVE" &&
-                a.AccountRoles.Any(r => r.RoleCode == "PLATFORM_ADMIN" || r.RoleCode == "ADMIN")), ct))
-            throw Error("FORBIDDEN", "Active Admin access is required.", 403);
+        await authorization.RequireAdminAsync(id, db.Database.CurrentTransaction is not null, ct);
     }
     public async Task<ManagedUsersPage> ListAsync(Guid adminId, UserSearchDto query, CancellationToken ct)
     {
@@ -55,7 +48,7 @@ public sealed class UserManagementService(AppDbContext db, TimeProvider clock) :
         {
             string[] codes = query.Role switch { "admin" => ["PLATFORM_ADMIN", "ADMIN"],
                 "owner" => ["BUSINESS_OWNER", "OWNER"], "operator" => ["SITE_OPERATOR", "OPERATOR"], _ => ["DRIVER"] };
-            users = users.Where(u => u.Accounts.Any(a => a.DeletedOn == null && a.AccountRoles.Any(r => codes.Contains(r.RoleCode))));
+            users = users.Where(u => u.Accounts.Any(a => a.DeletedOn == null && codes.Contains(a.RoleCode)));
         }
         var total = await users.CountAsync(ct);
         var offset = (long)(query.Page - 1) * query.PageSize;
@@ -81,7 +74,7 @@ public sealed class UserManagementService(AppDbContext db, TimeProvider clock) :
         // A lock does not refresh an entity already tracked during authentication.
         if (user is not null) await db.Entry(user).ReloadAsync(ct);
         if (user == null || user.DeletedOn != null) throw Error("USER_NOT_FOUND", "User was not found.", 404);
-        await db.Entry(user).Collection(u => u.Accounts).Query().Include(a => a.AccountRoles).LoadAsync(ct);
+        await db.Entry(user).Collection(u => u.Accounts).LoadAsync(ct);
         if (id == adminId || Result(user).Roles.Contains("admin"))
             throw Error("ADMIN_ACCOUNT_PROTECTED", "Admin accounts cannot be changed through user management.", 409);
         if (user.Status != UserStatus.Active && user.Status != UserStatus.Locked)

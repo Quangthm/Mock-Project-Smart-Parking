@@ -10,7 +10,8 @@ using UserService.Application.DTOs;
 namespace UserService.Application.Services;
 
 public sealed class VehicleRegistrationService(
-    IVehicleRepository vehicles, IUnitOfWork unitOfWork, TimeProvider clock) : IVehicleRegistration
+    IVehicleRepository vehicles, IUnitOfWork unitOfWork, TimeProvider clock,
+    IAccountAuthorizationService authorization) : IVehicleRegistration
 {
     public static string NormalizePlate(string raw, string type)
     {
@@ -21,10 +22,7 @@ public sealed class VehicleRegistrationService(
 
     private async Task<Guid[]> RequireDriverAsync(Guid actor, CancellationToken ct)
     {
-        var accounts = await vehicles.LockActiveDriverAccountsAsync(actor, ct);
-        if (accounts.Length == 0)
-            throw new AuthException("FORBIDDEN", "Current Driver access is required.", 403);
-        return accounts;
+        return await authorization.DriverAccountsAsync(actor, ct);
     }
 
     public async Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid actor, CancellationToken ct)

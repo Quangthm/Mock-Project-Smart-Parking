@@ -30,13 +30,23 @@ public sealed class AuthAccountBindingTests
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(next.AccessToken!));
     }
 
-    [Fact]
-    public async Task AnotherActiveAccountCannotRescueRefreshThroughLockedBoundAccount()
+    [Theory]
+    [InlineData("locked")]
+    [InlineData("inactive")]
+    [InlineData("deleted")]
+    [InlineData("owner-mismatch")]
+    [InlineData("unsupported-role")]
+    public async Task AnotherActiveAccountCannotRescueRefreshThroughIneligibleBoundAccount(string reason)
     {
         var f = new AuthTestFixture();
         await f.SignIn();
         var old = Assert.Single(f.Sessions.Snapshot);
-        f.User.Accounts.Single().Status = "LOCKED";
+        var bound = f.User.Accounts.Single();
+        if (reason == "locked") bound.Status = "LOCKED";
+        if (reason == "inactive") bound.Status = "INACTIVE";
+        if (reason == "deleted") bound.DeletedOn = f.Clock.Now;
+        if (reason == "owner-mismatch") bound.UserId = Guid.NewGuid();
+        if (reason == "unsupported-role") bound.RoleCode = "UNKNOWN";
         f.User.Accounts.Add(Account(f, "33333333-3333-3333-3333-333333333333", "DRIVER"));
         Assert.Equal("INVALID_TOKEN", (await Assert.ThrowsAsync<AuthException>(
             () => f.Auth.RotateAsync(f.User, old, default))).Code);
@@ -71,6 +81,6 @@ public sealed class AuthAccountBindingTests
     private static Account Account(AuthTestFixture f, string id, string role) => new()
     {
         Id = Guid.Parse(id), UserId = f.User.Id!.Value, User = f.User,
-        AccountRoles = [new AccountRole { AccountId = Guid.Parse(id), RoleCode = role }]
+        RoleCode = role
     };
 }

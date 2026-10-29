@@ -97,7 +97,10 @@ foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
     if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') { throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts." }
 }
-if ($state -eq 'current') {
+if ($Service -eq 'User') {
+    Write-Output 'User base relations verified only; this does not establish current runtime readiness.'
+    Write-Output 'Before starting UserService, manually review/apply 13-own-profile-session-account.sql then 14-user-profile-outbox.sql as needed, and run scripts/database/verify-user-access-schema.sql with psql ON_ERROR_STOP=1. Existing deployments must be inspected before reapplying feature scripts; no feature script was applied by this runner.'
+} elseif ($state -eq 'current') {
     Write-Output "$Service schema already current; verified required relations, nothing to apply."
 } else {
     Write-Output "$Service workflow migrations applied."

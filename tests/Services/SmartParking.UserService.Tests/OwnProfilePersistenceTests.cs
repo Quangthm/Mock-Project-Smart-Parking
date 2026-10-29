@@ -32,7 +32,7 @@ public sealed class OwnProfilePersistenceTests
 
         await using (var db = fixture.Open())
         {
-            var user = await db.Users.Include(u => u.Accounts).ThenInclude(a => a.AccountRoles).SingleAsync();
+            var user = await db.Users.Include(u => u.Accounts).ThenInclude(a => a.Role).SingleAsync();
             Assert.Equal("Nguyễn  An", user.FullName);
             Assert.Equal(seeded.Avatar, user.AvatarUrl);
             Assert.Equal("profile@example.test", user.Email);
@@ -51,10 +51,10 @@ public sealed class OwnProfilePersistenceTests
             {
                 Assert.Equal("ACTIVE", account.Status);
                 Assert.Empty(account.Permissions!);
-                Assert.Equal("DRIVER", Assert.Single(account.AccountRoles).RoleCode);
+                Assert.Equal("DRIVER", account.RoleCode);
             });
             Assert.Equal(2, await db.AuthSessions.CountAsync(s => !s.IsRevoked && s.AccountId != null));
-            var throughOtherAccount = await new GetOwnProfileQueryHandler(new ProfileAccessStore(db), seeded.OtherActor, clock)
+            var throughOtherAccount = await new GetOwnProfileQueryHandler(TestAccess.Service(new CurrentAccessStore(db), seeded.OtherActor, clock))
                 .Handle(new GetOwnProfileQuery(), default);
             Assert.Equal("Nguyễn  An", throughOtherAccount.FullName);
             Assert.Equal(seeded.Avatar, throughOtherAccount.AvatarUrl);
@@ -110,7 +110,7 @@ public sealed class OwnProfilePersistenceTests
 
     private static UpdateOwnProfileCommandHandler Handler(AppDbContext db, TestCurrentActor actor,
         IEventPublisher events, TimeProvider clock) =>
-        new(new UnitOfWork(db, new UserRepository(db)), new ProfileAccessStore(db), actor, events, clock);
+        new(new UnitOfWork(db, new UserRepository(db)), TestAccess.Service(new CurrentAccessStore(db), actor, clock), actor, events, clock);
 
     private static async Task<(TestCurrentActor Actor, TestCurrentActor OtherActor, string Avatar)> SeedAsync(
         UserServiceDatabaseFixture fixture, TestClock clock)
@@ -131,7 +131,7 @@ public sealed class OwnProfilePersistenceTests
             Accounts = new[] { accountId, otherAccountId }.Select(id => new Account
             {
                 Id = id, UserId = userId, Status = "ACTIVE", Permissions = [],
-                AccountRoles = [new AccountRole { AccountId = id, RoleCode = "DRIVER" }]
+                RoleCode = "DRIVER"
             }).ToArray()
         });
         foreach (var (account, token) in new[] { (accountId, tokenId), (otherAccountId, otherTokenId) })

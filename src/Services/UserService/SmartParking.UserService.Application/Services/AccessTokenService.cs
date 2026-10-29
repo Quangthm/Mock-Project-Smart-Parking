@@ -4,6 +4,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
+using UserService.Application.Authorization;
 
 namespace UserService.Application.Services;
 
@@ -27,17 +28,7 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
 
     public static string? CurrentRole(User user) => SelectLoginAccount(user) is { } account ? CurrentRole(account) : null;
 
-    public static string? CurrentRole(Account account) => account.AccountRoles.OrderBy(r => r.RoleCode, StringComparer.Ordinal)
-        .Select(r => MapRole(r.RoleCode)).FirstOrDefault(r => r is not null);
-
-    public static string? MapRole(string code) => code.ToUpperInvariant() switch
-        {
-            "PLATFORM_ADMIN" or "ADMIN" => "admin",
-            "BUSINESS_OWNER" or "OWNER" => "owner",
-            "SITE_OPERATOR" or "OPERATOR" => "operator",
-            "DRIVER" => "driver",
-            _ => null
-        };
+    public static string? CurrentRole(Account account) => AccessRoles.Map(account.RoleCode);
 
     public string GenerateAccessToken(User user, Account account, Guid accessTokenId, DateTimeOffset expiresAt)
     {

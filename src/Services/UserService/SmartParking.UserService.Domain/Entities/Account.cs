@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UserService.Domain.Base;
 
 namespace SmartParking.UserService.Domain.Entities
@@ -7,6 +6,7 @@ namespace SmartParking.UserService.Domain.Entities
     public class Account : BaseEntity
     {
         public Guid UserId { get; set; }
+        public string RoleCode { get; set; } = string.Empty;
         
         
         public Guid? TenantId { get; set; }
@@ -21,6 +21,6 @@ namespace SmartParking.UserService.Domain.Entities
 
         public User User { get; set; } = null!;
         
-        public ICollection<AccountRole> AccountRoles { get; set; } = [];
+        public Role Role { get; set; } = null!;
     }
 }

@@ -57,6 +57,8 @@ public static class ApiErrorResponseExtensions
 
         services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
         {
+            // The DI bearer adapter owns these callbacks when current-account checks are enabled.
+            if (options.EventsType == typeof(UserService.API.Services.CurrentAccountBearerEvents)) return;
             options.Events ??= new JwtBearerEvents();
             var previousChallenge = options.Events.OnChallenge;
             options.Events.OnChallenge = async context =>

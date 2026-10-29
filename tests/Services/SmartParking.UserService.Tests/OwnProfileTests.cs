@@ -51,7 +51,7 @@ public sealed class OwnProfileTests
         f.User.Phone = "+84912345678";
         f.User.Accounts.Single().Permissions = [];
         var password = f.User.PasswordHash;
-        var handler = new UpdateOwnProfileCommandHandler(f, f, actor, events, f.Clock);
+        var handler = new UpdateOwnProfileCommandHandler(f, TestAccess.Service(f, actor, f.Clock), actor, events, f.Clock);
         var response = await handler.Handle(new("  Nguyễn  An  "), default);
         Assert.Equal("Nguyễn  An", response.FullName);
         Assert.Equal(f.User.AvatarUrl, response.AvatarUrl);
@@ -77,9 +77,9 @@ public sealed class OwnProfileTests
         var actor = await ActorAsync(f);
         var events = new RecordingProfilePublisher();
         f.User.Accounts.Add(new Account { Id = Guid.NewGuid(), UserId = f.User.Id!.Value,
-            Status = "ACTIVE", AccountRoles = [new AccountRole { RoleCode = "DRIVER" }] });
+            Status = "ACTIVE", RoleCode = "DRIVER" });
         f.User.Accounts.First().Status = "LOCKED";
-        var handler = new UpdateOwnProfileCommandHandler(f, f, actor, events, f.Clock);
+        var handler = new UpdateOwnProfileCommandHandler(f, TestAccess.Service(f, actor, f.Clock), actor, events, f.Clock);
         Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => handler.Handle(new("After"), default))).Code);
         f.User.Accounts.First().Status = "ACTIVE";
         var session = f.Sessions.Snapshot.Single();
@@ -132,7 +132,7 @@ public sealed class OwnProfileTests
         Assert.Equal("driver@gmail.com", f.User.Email);
         Assert.Null(f.User.Phone);
         Assert.Equal(UserStatus.Active, f.User.Status);
-        Assert.Equal("DRIVER", f.User.Accounts.Single().AccountRoles.Single().RoleCode);
+        Assert.Equal("DRIVER", f.User.Accounts.Single().RoleCode);
         Assert.Null(f.User.Accounts.Single().Permissions);
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.DeleteAsync("/api/auth/me/avatar")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync("/api/profile/me")).StatusCode);
@@ -178,7 +178,7 @@ public sealed class OwnProfileTests
         await host.AuthenticateAsync();
         host.Fixture.User.Accounts.Single().Status = "LOCKED";
         host.Fixture.User.Accounts.Add(new Account { Id = Guid.NewGuid(), UserId = host.Fixture.User.Id!.Value,
-            Status = "ACTIVE", AccountRoles = [new AccountRole { RoleCode = "DRIVER" }] });
+            Status = "ACTIVE", RoleCode = "DRIVER" });
         await Denied();
         Assert.Empty(host.Events.Events);
     }
@@ -188,6 +188,20 @@ public sealed class OwnProfileTests
         await fixture.Auth.CreateAsync(fixture.User, default);
         var session = fixture.Sessions.Snapshot.Last();
         return new(fixture.User.Id, "driver", session.AccountId, session.AccessTokenId);
+    }
+
+    [Fact]
+    public async Task StaleRoleClaimCannotReadOrUpdateWithAnActiveSession()
+    {
+        await using var host = await ProfileHost.StartAsync();
+        await host.AuthenticateAsync();
+        host.Fixture.User.Accounts.Single().RoleCode = "BUSINESS_OWNER";
+        Assert.False(host.Fixture.Sessions.Snapshot.Single().IsRevoked);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await host.Client.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await host.Client.PatchAsJsonAsync("/api/auth/me", new { fullName = "Must Not Save" })).StatusCode);
+        Assert.Equal("Demo Driver", host.Fixture.User.FullName);
+        Assert.Empty(host.Events.Events);
     }
 
     private sealed class ProfileHost(WebApplication app, AuthTestFixture fixture, RecordingProfilePublisher events) : IAsyncDisposable
@@ -208,10 +222,11 @@ public sealed class OwnProfileTests
             builder.Services.AddJWTAuthentication(builder.Configuration, true);
             builder.Services.AddAuthorization();
             var f = new AuthTestFixture();
-            f.User.Accounts.Single().AccountRoles.Single().RoleCode = role;
+            TestAuthorization.AddServices(builder.Services, f);
+            f.User.Accounts.Single().RoleCode = role;
             var publisher = new RecordingProfilePublisher();
             builder.Services.AddSingleton<IUnitOfWork>(f);
-            builder.Services.AddSingleton<IProfileAccessStore>(f);
+            builder.Services.AddSingleton<ICurrentAccessStore>(f);
             builder.Services.AddSingleton<IAuthSessionStore>(f.Sessions);
             builder.Services.AddSingleton<IEventPublisher>(publisher);
             builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();

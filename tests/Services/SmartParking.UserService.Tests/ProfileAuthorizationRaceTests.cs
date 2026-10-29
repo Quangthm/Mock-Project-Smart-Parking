@@ -20,7 +20,7 @@ public sealed class ProfileAuthorizationRaceTests
     {
         await using var fixture = await Database.CreateAsync();
         await using var profile = fixture.Context();
-        var staleUser = await profile.Users.Include(u => u.Accounts).ThenInclude(a => a.AccountRoles)
+        var staleUser = await profile.Users.Include(u => u.Accounts).ThenInclude(a => a.Role)
             .SingleAsync(u => u.Id == fixture.UserId);
         await profile.AuthSessions.SingleAsync(s => s.Id == fixture.SessionId);
         await using (var revoke = fixture.Context())
@@ -32,7 +32,7 @@ public sealed class ProfileAuthorizationRaceTests
         }
         await using (var tx = await profile.Database.BeginTransactionAsync())
         {
-            var state = await new ProfileAccessStore(profile).LockCurrentAsync(fixture.AccountId, fixture.TokenId, default);
+            var state = await new CurrentAccessStore(profile).LockCurrentAsync(fixture.AccountId, fixture.TokenId, default);
             Assert.NotNull(state);
             Assert.Same(staleUser, state.User);
             Assert.Equal("Fresh Name", state.User.FullName);
@@ -64,7 +64,7 @@ public sealed class ProfileAuthorizationRaceTests
             await profile.Database.OpenConnectionAsync();
             var pid = ((NpgsqlConnection)profile.Database.GetDbConnection()).ProcessID;
             // Preload the same tracked aggregate authentication used historically.
-            await profile.Users.Include(u => u.Accounts).ThenInclude(a => a.AccountRoles)
+            await profile.Users.Include(u => u.Accounts).ThenInclude(a => a.Role)
                 .SingleAsync(u => u.Id == fixture.UserId);
             var events = new CapturedEvents();
             var pending = Handler(profile, fixture, events).Handle(new UpdateOwnProfileCommand("Must Not Save"), default);
@@ -115,7 +115,7 @@ public sealed class ProfileAuthorizationRaceTests
         await using (var setup = fixture.Context())
         {
             setup.Accounts.Add(new Account { Id = otherAccountId, UserId = fixture.UserId,
-                AccountRoles = [new AccountRole { AccountId = otherAccountId, RoleCode = "DRIVER" }] });
+                RoleCode = "DRIVER" });
             setup.AuthSessions.Add(fixture.Session(otherAccountId, otherTokenId));
             await setup.SaveChangesAsync();
         }
@@ -129,8 +129,9 @@ public sealed class ProfileAuthorizationRaceTests
         await second.Database.OpenConnectionAsync();
         var pid = ((NpgsqlConnection)second.Database.GetDbConnection()).ProcessID;
         var secondEvents = new CapturedEvents();
+        var secondActor = new TestCurrentActor(fixture.UserId, "driver", otherAccountId, otherTokenId);
         var secondHandler = new UpdateOwnProfileCommandHandler(new UnitOfWork(second, new UserRepository(second)),
-            new ProfileAccessStore(second), new TestCurrentActor(fixture.UserId, "driver", otherAccountId, otherTokenId),
+            TestAccess.Service(new CurrentAccessStore(second), secondActor, fixture.Clock), secondActor,
             secondEvents, fixture.Clock);
         var pending = secondHandler.Handle(new UpdateOwnProfileCommand("Last Name"), default);
         await fixture.WaitForLockAsync(pid);
@@ -141,7 +142,7 @@ public sealed class ProfileAuthorizationRaceTests
         Assert.Equal(otherAccountId, Assert.Single(secondEvents.Messages).ActorAccountId);
         await using var verify = fixture.Context();
         foreach (var pair in new[] { (fixture.AccountId, fixture.TokenId), (otherAccountId, otherTokenId) })
-            Assert.Equal("Last Name", (await new ProfileAccessStore(verify).LoadCurrentAsync(pair.Item1, pair.Item2, default))!.User.FullName);
+            Assert.Equal("Last Name", (await new CurrentAccessStore(verify).LoadCurrentAsync(pair.Item1, pair.Item2, default))!.User.FullName);
     }
 
     [PostgresFact]
@@ -166,7 +167,8 @@ public sealed class ProfileAuthorizationRaceTests
         Invalidation.Session => new PostgresAuthSessionStore(db, fixture.Clock).RevokeAsync(fixture.TokenId, fixture.UserId, "refresh-hash", default),
         Invalidation.SessionRotation => Rotate(db, fixture),
         Invalidation.Account => db.Accounts.Where(a => a.Id == fixture.AccountId).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, "LOCKED")),
-        Invalidation.Role => db.AccountRoles.Where(r => r.AccountId == fixture.AccountId).ExecuteDeleteAsync(),
+        Invalidation.Role => db.Accounts.Where(a => a.Id == fixture.AccountId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.RoleCode, "BUSINESS_OWNER")),
         _ => db.Users.Where(u => u.Id == fixture.UserId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UserStatus.Locked))
     };
 
@@ -177,9 +179,12 @@ public sealed class ProfileAuthorizationRaceTests
             .RotateAsync(previous, Guid.NewGuid(), "rotated-hash", fixture.Clock.Now.AddHours(1), default));
     }
 
-    private static UpdateOwnProfileCommandHandler Handler(AppDbContext db, Database fixture, IEventPublisher events) =>
-        new(new UnitOfWork(db, new UserRepository(db)), new ProfileAccessStore(db),
-            new TestCurrentActor(fixture.UserId, "driver", fixture.AccountId, fixture.TokenId), events, fixture.Clock);
+    private static UpdateOwnProfileCommandHandler Handler(AppDbContext db, Database fixture, IEventPublisher events)
+    {
+        var actor = new TestCurrentActor(fixture.UserId, "driver", fixture.AccountId, fixture.TokenId);
+        return new(new UnitOfWork(db, new UserRepository(db)),
+            TestAccess.Service(new CurrentAccessStore(db), actor, fixture.Clock), actor, events, fixture.Clock);
+    }
 
     // The real transactional outbox is tested separately. This seam pauses the real handler
     // after authoritative locks, so PostgreSQL lock observation controls the race deterministically.
@@ -234,7 +239,7 @@ public sealed class ProfileAuthorizationRaceTests
                     Id = fixture.UserId, FullName = "Original Name", Status = UserStatus.Active,
                     Email = "profile-race@example.test", PasswordHash = "unused",
                     Accounts = [new Account { Id = fixture.AccountId, UserId = fixture.UserId,
-                        AccountRoles = [new AccountRole { AccountId = fixture.AccountId, RoleCode = "DRIVER" }] }]
+                        RoleCode = "DRIVER" }]
                 });
                 db.AuthSessions.Add(fixture.Session(fixture.AccountId, fixture.TokenId));
                 await db.SaveChangesAsync();

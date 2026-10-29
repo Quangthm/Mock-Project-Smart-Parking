@@ -2,10 +2,12 @@
 
 26 October 2026 · working-tree review, no commit or deployment. Contract decisions were approved by the user on 24 October. Executed verification evidence is maintained in the [task record](../../ai/tasks/completed/TASK-SPARK-248-SESSION-20261024.md).
 
+The code-flow descriptions below include the subsequent direct-role/current-access consolidation. The 26 October results remain historical SPARK-248 evidence; verification of the consolidation is tracked separately in the [current task record](../../ai/tasks/active/SESSION-20261027-account-role-authorization.md).
+
 ## Review first
 
 1. [API contract](../03-design/api/own-profile-api-design.md): exact routes, input/output, Unicode semantics, legacy-session compatibility and changed-only event.
-2. [ProfileAccessStore](../../src/Services/UserService/SmartParking.UserService.Persistence/Repositories/ProfileAccessStore.cs) and [OwnProfileAccess](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/OwnProfileAccess.cs): SQL synchronization is in Persistence; current-access policy is in Application.
+2. [CurrentAccessStore](../../src/Services/UserService/SmartParking.UserService.Persistence/Repositories/CurrentAccessStore.cs), [CurrentAccessService](../../src/Services/UserService/SmartParking.UserService.Application/Authorization/CurrentAccessService.cs) and [CurrentAccessPolicy](../../src/Services/UserService/SmartParking.UserService.Application/Authorization/CurrentAccessPolicy.cs): SQL synchronization is in Persistence; reusable current-access orchestration and policy are in Application.
 3. [UpdateOwnProfileCommandHandler](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/Commands/UpdateOwnProfileCommand.cs): narrowly change the tracked User and record the event before one unit-of-work save/commit.
 4. [Outbox deployment guide](own-profile-outbox.md): schema, routing, capture-only operation, retries and operational limits.
 
@@ -14,12 +16,12 @@
 | Step | Actual file / symbol | Responsibility and outcome |
 | --- | --- | --- |
 | Composition | [Program.cs / UserHost.BuildAsync](../../src/Services/UserService/SmartParking.UserService.API/Program.cs) | Registers Application, scoped Persistence, messaging and HTTP adapters; middleware order is routing → completion/exception/status handling → authentication → authorization → limiter → controllers. No startup schema migration. |
-| Bearer verification | [ApiAuthenticationExtensions.AddJWTAuthentication](../../src/Services/UserService/SmartParking.UserService.API/Extensions/ApiAuthenticationExtensions.cs) | Verifies signed token, then matches `sub`, `account_id`, `jti` to the persisted session and current account/user/role policy. Ineligible credentials fail the Bearer challenge. |
+| Bearer verification | [ApiAuthenticationExtensions.AddJWTAuthentication](../../src/Services/UserService/SmartParking.UserService.API/Extensions/ApiAuthenticationExtensions.cs), [CurrentAccountBearerEvents](../../src/Services/UserService/SmartParking.UserService.API/Services/CurrentAccountBearerEvents.cs) | Verifies signed token, then the DI events adapter passes `sub`, `account_id`, `jti` and role to `ICurrentAccessService.ValidateAsync`. The shared Application policy checks persisted session/account/user/role. Ineligible credentials fail the Bearer challenge. |
 | Current caller | [HttpCurrentActor](../../src/Services/UserService/SmartParking.UserService.API/Services/HttpCurrentActor.cs) | Adapts only the authenticated principal to the inward-owned `ICurrentActor`; carries server trace/request correlation. No body identifier chooses the target. |
 | HTTP input | [ProfileController.Get / Update](../../src/Services/UserService/SmartParking.UserService.API/Controllers/ProfileController.cs) | GET/PATCH `/api/auth/me`; explicit `UpdateOwnProfileRequest.FullName` → command mapping; dispatch through `IMediator` with request cancellation. No repository/DbContext dependency. |
 | Validation | [ValidationBehavior.Handle](../../src/Services/UserService/SmartParking.UserService.Application/Common/Behaviors/ValidationBehavior.cs), [UpdateOwnProfileValidator](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/Commands/UpdateOwnProfileValidator.cs) | Runs `ValidateAsync` sequentially with cancellation and a separate validation context per validator. This avoids concurrent scoped DbContext use and duplicate failure accumulation. |
-| Read | [GetOwnProfileQueryHandler.Handle](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/Queries/GetOwnProfileQuery.cs) | Uses `IProfileAccessStore.LoadCurrentAsync` for fresh detached state and Application policy, then maps the exact Account's role and shared User profile. |
-| Guarded update | [UpdateOwnProfileCommandHandler.Handle](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/Commands/UpdateOwnProfileCommand.cs) | Opens UoW transaction, obtains fresh state through `LockCurrentAsync`, applies `OwnProfileAccess`, then calls `User.UpdateFullName`. No provider SQL in the handler. |
+| Read | [GetOwnProfileQueryHandler.Handle](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/Queries/GetOwnProfileQuery.cs) | Calls `ICurrentAccessService.RequireAsync`, which reads fresh state through `ICurrentAccessStore.LoadCurrentAsync` and applies `CurrentAccessPolicy`; maps the exact Account's role and shared User profile. |
+| Guarded update | [UpdateOwnProfileCommandHandler.Handle](../../src/Services/UserService/SmartParking.UserService.Application/Profiles/Commands/UpdateOwnProfileCommand.cs) | Opens UoW transaction and calls `ICurrentAccessService.LockAsync`, which reads locked fresh state and applies the same policy, then calls `User.UpdateFullName`. No provider SQL in the handler. |
 | Domain invariant | [ProfileName](../../src/Services/UserService/SmartParking.UserService.Domain/ValueObjects/ProfileName.cs), [User.UpdateFullName](../../src/Services/UserService/SmartParking.UserService.Domain/Entities/User.cs) | Requires a nonblank valid scalar sequence, rejects controls, trims edges and counts at most 255 Unicode scalars. Internal spacing and Unicode form remain unchanged. Non-HTTP callers of the mutation are protected too. |
 | Event capture | [MassTransitEventPublisher.PublishAsync](../../src/Services/UserService/SmartParking.UserService.Infrastructure/Messaging/MassTransitEventPublisher.cs), [ProfileOutboxRegistration.AddProfileOutbox](../../src/Services/UserService/SmartParking.UserService.Persistence/ProfileOutboxRegistration.cs) | Application's publisher port resolves a scoped `IPublishEndpoint` replaced by the EF Bus Outbox provider for the same `AppDbContext`. This call captures the outgoing event and performs no broker call while the profile guard is held. |
 | Commit and response | `IUnitOfWork.SaveChangesAsync` → transaction commit → `OwnProfileResponse.From` → `ApiResponseFactory.Success(...).ToActionResult()` | Changed name plus event are durable together. The response reports the persisted supported fields. A normalized no-op performs no event publication. |
@@ -32,15 +34,15 @@ New session issuance uses `AuthSessionService.CreateAsync` → `AccessTokenServi
 
 The required meaning is serial ordering: an invalidator that wins the relevant database order prevents the profile write; a previously committed authorized name change is not retroactively cancelled.
 
-`ProfileAccessStore.LockCurrentAsync` requires a ReadCommitted transaction and acquires:
+`CurrentAccessStore.LockCurrentAsync` requires a ReadCommitted transaction and acquires:
 
 ```text
-shared User → exact Account → AccountRole rows ordered by role_code → exact session identified by jti
+User FOR UPDATE → exact Account FOR UPDATE → referenced Role FOR SHARE → exact session FOR UPDATE
 ```
 
 The first Account-to-User lookup is only a hint. Ownership is checked again after User and Account locks. Authoritative Account, role and session values are read without tracking; an already-tracked unchanged User is explicitly reloaded. A dirty tracked User is rejected rather than cleared or silently overwritten. No blanket `ChangeTracker.Clear()` is used.
 
-`OwnProfileAccess.RequireCurrentAccess` verifies matching User/Account/session identity, active/deleted/lock state, session expiries and current supported role. The role must match the authenticated claim; the claim does not grant authority by itself. `Accounts.Permissions` is intentionally not consulted under the user's explicit role-only direction.
+`CurrentAccessPolicy.RequireCurrentAccess` verifies matching User/Account/session identity, active/deleted/lock state, session expiries and the single supported role referenced by `accounts.role_code`. The role must match the authenticated claim; the claim does not grant authority by itself. `Accounts.Permissions` is intentionally not consulted for this shared eligibility check or own-profile access. Operational actions evaluate their existing role/permission and resource-scope rules separately in Application.
 
 Multiple Accounts sharing a User serialize name mutations on the same User lock. Current values are reloaded before mutation, preserving last-write-wins without ETags or name-version conflicts. Lock wait is bounded at five seconds. Known lock/deadlock/serialization failures become `ProfileAccessConflictException`; they are not blindly retried, and no retry follows an unknown commit outcome.
 
@@ -56,9 +58,9 @@ Multiple Accounts sharing a User serialize name mutations on the same User lock.
 | `PostgresAuthSessionStore.RotateAsync`: token rotation | Compare-and-swap UPDATE of the exact session row; no later parent lock. Rotation-first makes the old jti unusable; profile-first forces rotation to wait. |
 | `OwnerRegistrationService.ReviewAsync`: pending User/account activation or rejection | Application row → User → Accounts. Profile does not lock application rows and cannot authorize a pending User. User reload added. Existing external provisioning inside this pending-only workflow is not part of the profile transaction. |
 | Driver/Owner registration verification/recovery and provisioning/seed | Operate on new/pending identities or acquire the User row before activation; cannot grant a pending identity profile access. They do not bypass active-profile security invalidation. |
-| Direct Account status/ownership/deletion or role update/removal | UPDATE/DELETE contends on the exact locked authoritative row. Role insertion's foreign-key check also contends with the Account FOR UPDATE lock. No active-account role-management/lock endpoint was found to add here. Future multirow writers must preserve the same parent-to-child order. |
+| Direct Account status/ownership/deletion or role reassignment | UPDATE/DELETE contends on the exact locked Account row, including `role_code` changes. The referenced Role is held FOR SHARE, so different accounts using that role may proceed concurrently while catalogue mutation/deletion waits. The required FK prevents missing assignments and deletion of a referenced role. No role-management endpoint is added. Future multirow writers must preserve the same parent-to-child order. |
 
-The guarantee is bounded to these authoritative User-service rows and audited writers; it is not a claim about arbitrary future migrations or external databases. The same `AppDbContext` owns Users, Accounts, AccountRoles and AuthSessions and is wired to one service-owned User connection. No shared deployed database was queried to infer configuration.
+The guarantee is bounded to these authoritative User-service rows and audited writers; it is not a claim about arbitrary future migrations or external databases. The same `AppDbContext` owns Users, Accounts, Roles and AuthSessions and is wired to one service-owned User connection. Each Account has one Role; a User may retain several scoped Accounts. No shared deployed database was queried to infer configuration.
 
 ## Failure and logging paths
 
@@ -66,7 +68,7 @@ The guarantee is bounded to these authoritative User-service rows and audited wr
 | --- | --- |
 | Validator exception | `ApiExceptionHandler` → immutable `ApiExceptionMapper` → `ApiErrorWriter` |
 | MVC malformed JSON/type/model-state failure | `ApiErrorResponseExtensions.InvalidModelStateResponseFactory` → `ApiErrorActionResult` → same writer |
-| Bearer challenge/forbid | Chained JwtBearer callbacks preserve prior handling and `WWW-Authenticate: Bearer` |
+| Bearer challenge/forbid | Constructor-injected `CurrentAccountBearerEvents` delegates to the shared `ApiErrorWriter`, preserving `WWW-Authenticate: Bearer`; standalone hosts without that adapter retain the existing chained callbacks |
 | Empty framework 404/405/415 and configured 429 | Status-code pages use the same status-to-envelope factory |
 | Failure-as-value action | `ApiResponse.ToActionResult` preserves the selected HTTP status |
 | Unknown failure | Safe 500 body; no exception message, SQL, stack or Source |
@@ -76,13 +78,15 @@ The mapper uses **exact runtime types**; derived types require explicit registra
 
 `RequestCompletionMiddleware` logs method, route template, elapsed time, actual status, server correlation, abort and propagated-failure flags through `ILogger`. It omits actor identifiers because no approved actor logging policy was found, and omits raw path/query/body/profile names/tokens. `ApiExceptionHandler` owns one sanitized diagnostic for handled unexpected errors; .NET 10 handled diagnostics suppression is configured explicitly. Unhandled started-response failures remain framework-owned and are propagated; this review does not claim that all framework/provider logs are rewritten or sanitized by the custom handler.
 
+The consolidated `CurrentAccessService` separately logs meaningful denied access decisions using `ILogger<CurrentAccessService>`, the safe Account ID and decision code. It does not log session IDs, tokens, contacts, credentials or exception stacks. Operational authorization uses the same safe decision logging convention. Unexpected exceptions still flow to the centralized handler rather than being logged and rethrown at every layer.
+
 The writer leaves success file/image/stream responses alone and produces no body for HEAD/204/304. It never treats `HasStarted` as a successful recovery from a caught exception.
 
 ## Event delivery and deployment
 
 See [own-profile-outbox.md](own-profile-outbox.md) for exact configuration and reproducible commands.
 
-- Manually review/deploy [13-own-profile-session-account.sql](../../scripts/database/microservices/13-own-profile-session-account.sql) before account-bound code, then [14-user-profile-outbox.sql](../../scripts/database/microservices/14-user-profile-outbox.sql). No shared database is modified by this task and no startup auto-migration is added.
+- Manually review/deploy [13-own-profile-session-account.sql](../../scripts/database/microservices/13-own-profile-session-account.sql) after the current clean-install base and before account-bound code, then [14-user-profile-outbox.sql](../../scripts/database/microservices/14-user-profile-outbox.sql). Run [verify-user-access-schema.sql](../../scripts/database/verify-user-access-schema.sql) read-only before deployment. Ordinary Compose/setup initializes base01 only; its base check does not prove session/outbox readiness. No shared database is modified by this task and no startup auto-migration is added.
 - The framework model retains all three supported tables and exact indexes; no custom relay or reduced schema. Existing `workflow_deliveries` is not reused as an audit outbox.
 - Start in delivery-disabled capture mode until the durable event exchange, queue and binding are independently provisioned. The mode calls actual MassTransit `DisableDeliveryService()`; capture remains persistent.
 - API success means name/event commit, not Audit completion. Broker outage leaves committed delivery state pending. Required outbox storage failure rolls back the mutation.

@@ -7,6 +7,7 @@ using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
 using UserService.Application.Usecase.ValidateAccessToken;
+using UserService.Application.Authorization;
 
 namespace UserService.Application;
 
@@ -24,6 +25,8 @@ public static class ApplicationDependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddScoped<IAccessTokenService, AccessTokenService>();
         services.AddScoped<AuthSessionService>();
+        services.AddScoped<ICurrentAccessService, CurrentAccessService>();
+        services.AddScoped<IAccountAuthorizationService, AccountAuthorizationService>();
         services.AddScoped<IVehicleRegistration, VehicleRegistrationService>();
         var policy = configuration.GetSection("AuthenticationPolicy").Get<AuthenticationPolicy>() ?? new();
         if (policy.MaxFailedLoginAttempts < 1 || policy.LockoutMinutes < 1 || policy.RefreshTokenDays < 1)

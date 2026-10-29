@@ -135,7 +135,7 @@ public sealed class DriverWorkflowTests
             Assert.Equal("driver@example.test", user.Email); Assert.Equal("0911223344", user.Phone);
             Assert.Equal("", user.PasswordHash); Assert.Equal("email", registration.Channel);
             Assert.Equal(UserStatus.PendingVerification, user.Status);
-            Assert.Equal("DRIVER", (await db.AccountRoles.SingleAsync()).RoleCode);
+            Assert.Equal("DRIVER", (await db.Accounts.SingleAsync()).RoleCode);
             Assert.Empty(await db.AuthSessions.ToArrayAsync());
             Assert.Equal(registration.RegistrationId, (await service.RecoverAsync("DRIVER@EXAMPLE.TEST", default)).RegistrationId);
             code = await CodeAsync(db, userId);

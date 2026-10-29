@@ -49,8 +49,8 @@ public sealed class PostgresAuthTests
                 PasswordHash = passwords.Hash("Replacement@123"), Status = UserStatus.Active,
                 CreatedOn = DateTimeOffset.UtcNow
             });
-            // The replacement account has the same role; the old user remains as deleted history.
-            foreach (var account in await db.Accounts.ToListAsync()) account.UserId = replacementId;
+            // A replacement identity gets its own account; historic ownership is not reassigned.
+            db.Accounts.Add(new Account { Id = Guid.NewGuid(), UserId = replacementId, RoleCode = "DRIVER" });
             await db.SaveChangesAsync();
             db.ChangeTracker.Clear();
             var users = new UserRepository(db);
@@ -179,7 +179,10 @@ public sealed class PostgresAuthTests
                 Assert.Equal(expires, (await db.AuthSessions.AsNoTracking().SingleAsync(s => s.Id == snapshot.Id)).ExpiresAt);
                 var id = Guid.Parse(new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(second.AccessToken).Id);
                 Assert.False(await store.RevokeAsync(id, userId, "wrong-hash", default));
-                await new LogoutCommandHandler(store).Handle(new(id, userId, second.RefreshToken), default);
+                var session = (await store.FindByRefreshHashAsync(AuthSessionService.HashRefreshToken(second.RefreshToken!), default))!;
+                var actor = new TestCurrentActor(userId, "driver", session.AccountId, id);
+                await new LogoutCommandHandler(store, TestAccess.Service(new CurrentAccessStore(db), actor, clock))
+                    .Handle(new(second.RefreshToken), default);
             }
             await using (var db = new AppDbContext(options))
             {

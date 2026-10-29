@@ -40,7 +40,8 @@ public sealed class OwnerRegistrationTests
         async Task<T> Run<T>(Func<OwnerRegistrationService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock)));
+            var authorization = await TestAuthorization.ForUserAsync(db, clock, adminId, directory);
+            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock,authorization), authorization));
         }
         OwnerRegistrationDto Body(string email, string phone) => new() { FullName = "New Owner", BusinessName = "Company",
             Email = email, Phone = phone, Password = "Password@123", LotType = "basement", AgreedToPolicy = true };
@@ -70,7 +71,7 @@ public sealed class OwnerRegistrationTests
                     db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.Add(new User { Id = adminId, FullName = "Admin", Phone = "0900000000", Email = "admin@example.com",
                     PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
-                    Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] });
+                    Accounts = [new Account { Id = Guid.NewGuid(), RoleCode = "PLATFORM_ADMIN" }] });
                 await db.SaveChangesAsync();
                 var root = new DirectoryInfo(AppContext.BaseDirectory);
                 while (root != null && !File.Exists(Path.Combine(root.FullName, "SmartParking.slnx"))) root = root.Parent;

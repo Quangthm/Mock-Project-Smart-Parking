@@ -48,14 +48,16 @@ public sealed class VehicleRegistrationTests
         Assert.Equal("INVALID_PLATE", Assert.Throws<AuthException>(() => VehicleRegistrationService.NormalizePlate(raw, type)).Code);
     }
 
-    private static VehicleRegistrationService Service(AppDbContext db) =>
-        new(new VehicleRepository(db), new UnitOfWork(db, new UserRepository(db)), TimeProvider.System);
+    private static async Task<VehicleRegistrationService> Service(AppDbContext db, User driver) =>
+        new(new VehicleRepository(db), new UnitOfWork(db, new UserRepository(db)), TimeProvider.System,
+            await TestAuthorization.ForUserAsync(db, TimeProvider.System, driver.Id!.Value,
+                accountId: driver.Accounts.First(a => a.RoleCode == "DRIVER").Id));
 
     private static User Driver(string email) => new()
     {
         Id = Guid.NewGuid(), FullName = "Driver", Email = email, Status = UserStatus.Active,
         PasswordHash = new BcryptPasswordService().Hash("Password@123"),
-        Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "DRIVER" }] }]
+        Accounts = [new Account { Id = Guid.NewGuid(), RoleCode = "DRIVER" }]
     };
     private static VehicleDto Vehicle(string plate = " 51a-123.45 ", string type = "CAR") => new()
     { Plate = plate, VehicleType = type, ImageReference = "https://images.example.test/vehicle.jpg" };
@@ -68,28 +70,29 @@ public sealed class VehicleRegistrationTests
         await using (var db = fixture.Open())
         {
             db.Users.Add(driver); await db.SaveChangesAsync();
-            id = (await Service(db).SaveAsync(driver.Id!.Value, null, Vehicle(), default)).Id;
+            id = (await (await Service(db, driver)).SaveAsync(driver.Id!.Value, null, Vehicle(), default)).Id;
         }
         foreach (var invalid in new[] { Vehicle("invalid"), Vehicle("51A12345", "BICYCLE"),
             new VehicleDto { Plate = "51A12345", VehicleType = "CAR" },
             new VehicleDto { Plate = "51A12345", VehicleType = "CAR", ImageReference = "http://images.example.test/car.jpg" } })
         {
             await using var db = fixture.Open();
-            await Assert.ThrowsAsync<AuthException>(() => Service(db).SaveAsync(driver.Id!.Value, id, invalid, default));
+            var service = await Service(db, driver);
+            await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(driver.Id!.Value, id, invalid, default));
         }
         foreach (var state in new[] { UserStatus.PendingVerification, UserStatus.Locked, UserStatus.Inactive })
         {
             await using (var db = fixture.Open()) { await db.Users.ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, state)); }
             await using var check = fixture.Open();
-            var service = Service(check);
+            var service = await Service(check, driver);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.ListAsync(driver.Id!.Value, default))).Code);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(driver.Id!.Value, id, Vehicle("51B54321"), default))).Code);
         }
         await using (var db = fixture.Open())
         {
             await db.Users.ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UserStatus.Active));
-            await db.AccountRoles.ExecuteDeleteAsync();
-            var service = Service(db);
+            await db.Accounts.ExecuteUpdateAsync(s => s.SetProperty(a => a.RoleCode, "OWNER"));
+            var service = await Service(db, driver);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.ListAsync(driver.Id!.Value, default))).Code);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(driver.Id!.Value, null, Vehicle(), default))).Code);
         }
@@ -110,18 +113,19 @@ public sealed class VehicleRegistrationTests
         Guid first;
         await using (var db = fixture.Open())
         {
-            var service = Service(db);
+            var service = await Service(db, a);
             first = (await service.SaveAsync(a.Id!.Value, null, Vehicle(), default)).Id;
             await service.SaveAsync(a.Id.Value, null, Vehicle("59-x1 123.45", "MOTORCYCLE"), default);
-            Assert.Empty(await service.ListAsync(b.Id!.Value, default));
-            Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(b.Id.Value, first, Vehicle(), default))).Code);
+            var otherService = await Service(db, b);
+            Assert.Empty(await otherService.ListAsync(b.Id!.Value, default));
+            Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => otherService.SaveAsync(b.Id.Value, first, Vehicle(), default))).Code);
             // FR-VEH-02 remains OPEN: duplicate canonical values grant no access to another account.
-            await service.SaveAsync(b.Id.Value, null, Vehicle("51A12345"), default);
-            Assert.Single(await service.ListAsync(b.Id.Value, default));
+            await otherService.SaveAsync(b.Id.Value, null, Vehicle("51A12345"), default);
+            Assert.Single(await otherService.ListAsync(b.Id.Value, default));
         }
         await using (var db = fixture.Open())
         {
-            var service = Service(db);
+            var service = await Service(db, a);
             var list = await service.ListAsync(a.Id!.Value, default);
             Assert.Equal(2, list.Count);
             var stored = Assert.Single(list, v => v.Id == first);
@@ -140,7 +144,7 @@ public sealed class VehicleRegistrationTests
             Assert.Equal("https://images.example.test/updated-motorcycle.jpg", updated.ImageReference);
             Assert.Equal(a.Accounts.Single().Id, updated.AccountId);
             await db.RegisteredVehicles.Where(v => v.Id == first).ExecuteUpdateAsync(s => s.SetProperty(v => v.DeletedAt, DateTimeOffset.UtcNow));
-            var service = Service(db);
+            var service = await Service(db, a);
             Assert.Single(await service.ListAsync(a.Id!.Value, default));
             Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(a.Id.Value, first, Vehicle(), default))).Code);
             Assert.Equal(3, await db.RegisteredVehicles.CountAsync());
@@ -209,7 +213,7 @@ public sealed class VehicleRegistrationTests
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
         var driver = Driver("scope@example.test");
         var driverAccount = driver.Accounts.Single();
-        var otherAccount = new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "BUSINESS_OWNER" }] };
+        var otherAccount = new Account { Id = Guid.NewGuid(), RoleCode = "BUSINESS_OWNER" };
         driver.Accounts.Add(otherAccount);
         var emptyPlateId = Guid.NewGuid();
         await using (var db = fixture.Open())
@@ -219,7 +223,7 @@ public sealed class VehicleRegistrationTests
                 new RegisteredVehicle { Id = emptyPlateId, AccountId = driverAccount.Id, RawPlate = "", CanonicalPlate = "", VehicleType = "CAR", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow },
                 new RegisteredVehicle { Id = Guid.NewGuid(), AccountId = otherAccount.Id, RawPlate = "51B54321", CanonicalPlate = "51B54321", VehicleType = "CAR", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync();
-            var service = Service(db);
+            var service = await Service(db, driver);
             Assert.Empty(await service.ListAsync(driver.Id!.Value, default));
             Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(driver.Id.Value, emptyPlateId, Vehicle(), default))).Code);
             var saved = await service.SaveAsync(driver.Id.Value, null, Vehicle(), default);
@@ -229,14 +233,14 @@ public sealed class VehicleRegistrationTests
         {
             await using var db = fixture.Open();
             await db.Accounts.Where(a => a.Id == driverAccount.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, state));
-            var service = Service(db);
+            var service = await Service(db, driver);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.ListAsync(driver.Id!.Value, default))).Code);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(driver.Id!.Value, null, Vehicle(), default))).Code);
         }
         await using (var db = fixture.Open())
         {
             await db.Accounts.Where(a => a.Id == driverAccount.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, "ACTIVE").SetProperty(a => a.DeletedOn, DateTimeOffset.UtcNow));
-            var service = Service(db);
+            var service = await Service(db, driver);
             Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<AuthException>(() => service.ListAsync(driver.Id!.Value, default))).Code);
             await db.Accounts.Where(a => a.Id == driverAccount.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.DeletedOn, (DateTimeOffset?)null));
             await db.Users.Where(u => u.Id == driver.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.DeletedOn, DateTimeOffset.UtcNow));
