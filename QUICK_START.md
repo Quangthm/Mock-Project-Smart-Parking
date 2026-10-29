@@ -53,8 +53,8 @@ Checklist trước khi setup:
 | `[2/7]` | Dùng lại credential đã có, chỉ sinh giá trị còn thiếu. |
 | `[3/7]` | Validate service key (≥32 ký tự), policy password (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt) và 6 port DB. |
 | `[4/7]` | Dựng 6 DB `user`, `facility`, `operations`, `payment`, `notification`, `iot`, probe authentication, áp migration. |
-| `[5/7]` | Đồng bộ user-secrets cho User/Parking/Reservation/Payment theo `.env`. |
-| `[6/7]` | Chuẩn bị `FE/.env`, MapTiler, API base URLs; khởi động SonarQube (mặc định). |
+| `[5/7]` | Đồng bộ user-secrets cho User/Facility/Operation/Payment theo `.env`. |
+| `[6/7]` | Chuẩn bị `FE/.env`, MapTiler, AI endpoints; khởi động SonarQube (mặc định). |
 | `[7/7]` | `dotnet restore`. |
 
 Mặc định `CredentialMode = Local`: credential trong `.env`/user-secrets được **dùng lại**, chỉ sinh khi thiếu. Setup kết thúc bằng dòng `Setup complete...` khi mọi bước pass.
@@ -82,7 +82,7 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 ```powershell
 .\scripts\run-app-service.ps1 -Service User       # 1 service, mở CMD log riêng
 .\scripts\run-app-service.ps1 -Service Parking
-.\scripts\run-app-service.ps1 -Service Reservation
+.\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Payment
 .\scripts\run-app-service.ps1 -Service Frontend
 .\scripts\run-app-service.ps1 -Service All        # cả 5 container
@@ -96,7 +96,7 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | `smartpark-app-payment-service-1` | http://localhost:5065/health | Dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
-> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** ParkingService (dùng `facility-db` trên port 5442) đang được đổi tên thành FacilityService trong branch `Fix2FA` theo SRS v1.1 (quyết định V11-09). Tương tự, ReservationService (dùng `operations-db` trên port 5443) sẽ hợp nhất vào Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
+> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** Mã nguồn trên branch `Fix2FA` đã dùng `FacilityService` tại `src/Services/FacilityService/` (dùng `facility-db` trên port 5442) theo SRS v1.1 (quyết định V11-09). `OperationService` tại `src/Services/OperationService/` dùng `operations-db` trên port 5443 và triển khai luồng Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
 
 - Lần đầu build 5 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
 - `-NoBuild` bỏ qua bước build khi image đã có; `-NoLogWindow` không mở cửa sổ CMD (dùng cho CI/automation).
@@ -113,7 +113,7 @@ Mở 4 terminal PowerShell tại repo root, mỗi terminal chạy một API:
 # Terminal khác:
 .\scripts\run-schema-service.ps1 -Service Parking
 # Terminal khác:
-.\scripts\run-schema-service.ps1 -Service Reservation
+.\scripts\run-schema-service.ps1 -Service Operation
 # Terminal khác:
 .\scripts\run-schema-service.ps1 -Service Payment
 ```
@@ -317,8 +317,8 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 | Thành phần | Port | Ghi chú |
 | --- | --- | --- |
-| User/Parking/Reservation/Payment API | `5035` / `5045` / `5055` / `5065` | Docker app stack bind `127.0.0.1` |
-| User/Parking/Reservation DB | `5441` / `5442` / `5443` | Bind loopback (`127.0.0.1`) |
+| User/Parking/Operation/Payment API | `5035` / `5045` / `5055` / `5065` | Docker app stack bind `127.0.0.1` |
+| User/Parking/Operation DB | `5441` / `5442` / `5443` | Bind loopback (`127.0.0.1`) |
 | Payment/Notification/IoT DB | `5444` / `5445` / `5446` | Bind loopback (`127.0.0.1`) |
 | `ai-rest` / `ai-live` | `5001` / `5002` | Chỉ dựng bằng `.\setup.ps1 -WithAiCamera` |
 | Frontend (Vite) | `5173` | Host hoặc Docker |

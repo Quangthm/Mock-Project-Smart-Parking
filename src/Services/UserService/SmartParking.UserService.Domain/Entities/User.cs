@@ -14,6 +14,8 @@ public class User : BaseEntity
     public string PasswordHash { get; set; } = string.Empty;
 
     public string FullName { get; set; } = string.Empty;
+    public bool OnboardingComplete { get; set; }
+    public long AccessVersion { get; set; }
     public string? CompanyName { get; set; }
     public DateTimeOffset? EmailVerifiedAt { get; set; }
     public DateTimeOffset? PhoneVerifiedAt { get; set; }

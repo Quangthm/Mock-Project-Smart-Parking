@@ -17,8 +17,8 @@
 - **Root Solution:** `SmartParking.slnx` (.NET 10 Web API microservices under `src/Services/`).
 - **Backend Services:**
   - `src/Services/UserService`: 5-layer Clean Architecture (API, Application, Domain, Infrastructure, Persistence) + EF Core 10 + MediatR + PostgreSQL.
-  - `src/Services/ParkingService` (evolving to **FacilityService** in `Fix2FA`): 5 projects (API, Application, Domain, Infrastructure, Persistence) + raw Npgsql (Minimal APIs & endpoints).
-  - `src/Services/ReservationService` (domain authority aligned to **Parking Operations** in SRS v1.1): 4 projects (API, Application, Domain, Persistence) + raw Npgsql.
+  - `src/Services/FacilityService`: 5 projects (API, Application, Domain, Infrastructure, Persistence) + raw Npgsql (Minimal APIs & endpoints).
+  - `src/Services/OperationService` (domain authority aligned to **Parking Operations** in SRS v1.1): 5 projects (API, Application, Domain, Infrastructure, Persistence) + EF Core 10 + MediatR + PostgreSQL.
   - `src/Services/IoTService`: Python AI service (`python-ai/`) for license plate recognition & CCTV stream ingestion.
   *(Note: ASP.NET Core microservices feature service-specific application and persistence patterns; consult `ai/architecture-reference.md` before making service-specific assumptions).*
 - **Frontend App:** `FE/` (React 19, Vite 8, TypeScript 5.7, Tailwind CSS v4, Three.js 0.186.1, MapTiler 4.1.0; see `FE/AGENTS.md`).

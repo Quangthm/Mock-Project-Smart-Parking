@@ -21,7 +21,7 @@ public sealed class RefreshCommandHandler(IUnitOfWork unitOfWork, IAuthSessionSt
         if (session is null || session.IsRevoked || session.ExpiresAt <= clock.GetUtcNow())
             throw AuthException.InvalidToken();
         var user = await unitOfWork.UserRepository.GetByIdWithRolesAsync(session.UserId, cancellationToken);
-        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active || user.LockedUntil > clock.GetUtcNow())
+        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active || user.LockedUntil > clock.GetUtcNow() || AccountRolePolicy.CurrentRole(user) is null)
             throw AuthException.InvalidToken();
         // RotateAsync validates only the persisted session's Account and its current role.
         // Login account selection must never participate in refresh authorization.

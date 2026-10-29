@@ -13,7 +13,7 @@ namespace UserService.Application;
 
 public static class ApplicationDependencyInjection
 {
-    public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddApplicationServices(this IServiceCollection services, AuthenticationPolicy policy)
     {
         services.AddMediatR(cfg =>
         {
@@ -23,15 +23,26 @@ public static class ApplicationDependencyInjection
         services.AddValidatorsFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
         services.AddAutoMapper(cfg => cfg.AddMaps(typeof(ApplicationDependencyInjection).Assembly));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-        services.AddScoped<IAccessTokenService, AccessTokenService>();
         services.AddScoped<AuthSessionService>();
         services.AddScoped<ICurrentAccessService, CurrentAccessService>();
         services.AddScoped<IAccountAuthorizationService, AccountAuthorizationService>();
+        services.AddScoped<IOperatorInvitationFactory, OperatorInvitationFactory>();
         services.AddScoped<IVehicleRegistration, VehicleRegistrationService>();
-        var policy = configuration.GetSection("AuthenticationPolicy").Get<AuthenticationPolicy>() ?? new();
         if (policy.MaxFailedLoginAttempts < 1 || policy.LockoutMinutes < 1 || policy.RefreshTokenDays < 1)
             throw new InvalidOperationException("Authentication policy values must be positive.");
         services.AddSingleton(policy);
+        return services;
+    }
+
+    public static IServiceCollection AddIdentityWorkflowServices(this IServiceCollection services)
+    {
+        services.AddScoped<IDriverRegistrationService, DriverRegistrationService>();
+        services.AddScoped<DriverRegistrationService>();
+        services.AddScoped<IOwnerRegistrationService, OwnerRegistrationService>();
+        services.AddScoped<IUserManagementService, UserManagementService>();
+        services.AddScoped<AccountWorkflowService>();
+        services.AddScoped<IAccountWorkflows>(sp=>sp.GetRequiredService<AccountWorkflowService>());
+        services.AddScoped<IMfaPolicy>(sp=>sp.GetRequiredService<AccountWorkflowService>());
         return services;
     }
 

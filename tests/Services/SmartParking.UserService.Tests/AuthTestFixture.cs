@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
@@ -129,11 +130,11 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     {
         lock (gate)
         {
-            if (!items.TryGetValue(old.Id, out var s) || s.IsRevoked || s.ExpiresAt <= clock.Now
+            if (!items.TryGetValue(old.Id, out var s) || !SessionLifetime.CanRefresh(s, clock.Now)
                 || s.TokenHash != old.TokenHash || s.AccessTokenId != old.AccessTokenId || s.UserId != old.UserId)
                 return Task.FromResult(false);
             if (s.AccountId is null || s.AccountId != old.AccountId) return Task.FromResult(false);
-            s.AccessTokenId = id; s.TokenHash = hash; s.AccessExpiresAt = expires;
+            s.AccessTokenId = id; s.TokenHash = hash; s.AccessExpiresAt = expires; s.LastRefreshedAt = clock.Now;
             return Task.FromResult(true);
         }
     }
@@ -151,7 +152,8 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     }
     private static AuthSession Clone(AuthSession s) => new()
     {
-        Id = s.Id, UserId = s.UserId, AccountId = s.AccountId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
-        AccessExpiresAt = s.AccessExpiresAt, ExpiresAt = s.ExpiresAt, CreatedAt = s.CreatedAt, IsRevoked = s.IsRevoked
+        Id = s.Id, UserId = s.UserId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
+        AccessExpiresAt = s.AccessExpiresAt, ExpiresAt = s.ExpiresAt, CreatedAt = s.CreatedAt, IsRevoked = s.IsRevoked,
+        LastRefreshedAt = s.LastRefreshedAt
     };
 }

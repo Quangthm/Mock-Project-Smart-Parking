@@ -455,9 +455,11 @@ function Invoke-AiCameraSetup {
 $existingByService = @{}
 $projectByService = @{}
 foreach ($service in @('User','Parking','Reservation','Payment')) {
-    $projectDir = Join-Path $taskRoot "src/Services/${service}Service/SmartParking.${service}Service.API"
+    # Keep existing connection/configuration keys while resolving the renamed project.
+    $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
+    $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
     $projectByService[$service] = $projectDir
-    [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${service}Service.API.csproj") -Raw
+    [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${projectService}Service.API.csproj") -Raw
     $secretId = [string](@($projectXml.Project.PropertyGroup.UserSecretsId | Where-Object { $_ })[0])
     $secretFile = Join-Path ([Environment]::GetFolderPath('ApplicationData')) "Microsoft/UserSecrets/$secretId/secrets.json"
     $existing = @{}
@@ -656,7 +658,7 @@ if (!$SkipDatabase) {
     }
 }
 
-Write-Host '[5/7] Configuring user-secrets for User, Parking, Reservation, Payment...' -ForegroundColor Cyan
+Write-Host '[5/7] Configuring user-secrets for User, Facility, Operation, Payment...' -ForegroundColor Cyan
 if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment')) {
     $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
@@ -791,7 +793,7 @@ if (!$SkipRestore) {
     & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
 }
-$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Parking, Reservation and Payment.'
+$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Facility, Operation and Payment.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
 if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

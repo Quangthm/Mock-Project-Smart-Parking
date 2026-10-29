@@ -2,7 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs;
-using UserService.Application.Usecase.Management;
+using MediatR;
+using UserService.Application.Usecase.IdentityAccess;
 
 namespace UserService.API.Controllers;
 
@@ -23,6 +24,11 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
         Ok(new { success = true, data = await mediator.Send(new SetManagedUserStatusCommand(id, body), ct) });
 
     [HttpPost]
-    public async Task<IActionResult> CreateOperator([FromBody] CreateOperatorDto body, CancellationToken ct) =>
-        StatusCode(201, new { success = true, data = await mediator.Send(new CreateOperatorCommand(body), ct) });
+    [Authorize(Roles = "owner")]
+    public async Task<IActionResult> CreateOperator([FromBody] CreateOperatorDto body,
+        [FromServices] ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new CreateOperatorCommand(ActorId, body), ct);
+        return StatusCode(201, new { success = true, data = result });
+    }
 }

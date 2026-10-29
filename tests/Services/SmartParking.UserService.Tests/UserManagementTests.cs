@@ -1,3 +1,6 @@
+using UserService.API;
+using Microsoft.Extensions.Configuration;
+using UserService.Infrastructure.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -24,7 +27,6 @@ using UserService.Application.Services;
 using UserService.Application.Common.Models.JwT;
 using UserService.Application.Usecase.Login;
 using UserService.Application.Usecase.Session;
-using UserService.Infrastructure.Services;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 
@@ -56,7 +58,12 @@ public sealed class UserManagementTests
         builder.Services.AddApiErrorResponses();
         builder.Services.AddApplicationServices(builder.Configuration);
         builder.Services.AddApiCurrentActor();
+        builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
+        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();

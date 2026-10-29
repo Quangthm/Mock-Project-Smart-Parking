@@ -24,7 +24,9 @@ function dotnet {
     if ($args[0] -eq '--version') { $global:LASTEXITCODE = 0; return '10.0.302' }
     if ($args[0] -eq 'user-secrets') {
         $project = $args[[Array]::IndexOf($args, '--project') + 1]
-        $service = @('User','Parking','Reservation','Payment') | Where-Object { $project -match "${_}Service.API$" }
+        $service = @('User','Facility','Operation','Payment') | Where-Object { $project -match "${_}Service.API$" }
+        if ($service -eq 'Facility') { $service = 'Parking' }
+        if ($service -eq 'Operation') { $service = 'Reservation' }
         if (!$global:setupTestSecretMaps.ContainsKey($service)) { $global:setupTestSecretMaps[$service] = @{} }
         if ($args[1] -eq 'remove') {
             $null = $global:setupTestSecretMaps[$service].Remove($args[2])
@@ -48,9 +50,10 @@ function New-Fixture($name) {
     foreach ($file in @('setup.ps1','.env.example','scripts/load-env.ps1')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $fixture $file) }
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'FE/.env.example') -Destination (Join-Path $fixture 'FE/.env.example')
     foreach ($service in @('User','Parking','Reservation','Payment')) {
-        $project = Join-Path $fixture "src/Services/${service}Service/SmartParking.${service}Service.API"
+        $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
+        $project = Join-Path $fixture "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
         New-Item -ItemType Directory -Force -Path $project | Out-Null
-        [IO.File]::WriteAllText((Join-Path $project "SmartParking.${service}Service.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
+        [IO.File]::WriteAllText((Join-Path $project "SmartParking.${projectService}Service.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
     }
     return $fixture
 }
@@ -72,6 +75,8 @@ Assert-Setup ([Convert]::ToBase64String($localBytes) -eq [Convert]::ToBase64Stri
 Assert-Setup ($global:setupTestSecretWrites -eq $writes) 'Rerun rewrote existing secrets.'
 $key = $global:setupTestSecretMaps['User']['Services:Key']
 Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key']) 'Local service keys differ.'
+Assert-Setup ($global:setupTestSecretMaps['Parking']['ConnectionStrings:Parking'] -match 'Database=smartpark_facility;Username=smartpark_facility;') 'Facility database mapping differs from compose.'
+Assert-Setup ($global:setupTestSecretMaps['Reservation']['ConnectionStrings:Reservation'] -match 'Database=smartpark_operations;Username=smartpark_operations;') 'Operations database mapping differs from compose.'
 $global:setupTestSecretMaps = @{}
 $teamFile = Join-Path $testRoot 'team-private.env'
 [IO.File]::WriteAllText($teamFile, "SMARTPARK_DEV_PASSWORD=review-team-password`nSMARTPARK_SERVICE_KEY=review-team-service-key-at-least-32-characters`nSMARTPARK_ADMIN_PASSWORD=Review@123`nVITE_MAPTILER_API_KEY=review-map-key`nSMARTPARK_SERVICE_PARKING_URL=http://parking.example.test:5045/`n")

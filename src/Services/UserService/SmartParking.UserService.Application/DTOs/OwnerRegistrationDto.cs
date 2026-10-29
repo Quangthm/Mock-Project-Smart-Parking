@@ -27,4 +27,6 @@ public sealed class ReviewOwnerDto
 
 public sealed record OwnerApplicationDto(Guid Id, Guid OwnerId, string OwnerName, string BusinessName,
     string Email, string Phone, string LotType, string Status, DateTimeOffset SubmittedAt,
-    DateTimeOffset? ReviewedAt, Guid? ReviewedBy, string? ReviewNote, bool ContactVerified=false, ChallengeResult? Verification=null, Guid? DeliveryId=null,string? DeliveryStatus=null);
+    DateTimeOffset? ReviewedAt, Guid? ReviewedBy, string? ReviewNote, bool ContactVerified=false, ChallengeResult? Verification=null, Guid? DeliveryId=null,string? DeliveryStatus=null,
+    bool LotSetupComplete=false, OwnerLotSetupDto? LotSetup=null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? SetupToken=null);

@@ -11,6 +11,7 @@ import {
 } from "../../../lib/parkingApi"
 import { CreateOperatorForm } from "./CreateOperatorForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { watchOperators } from "../../../lib/operatorLive"
 
 export function OperatorManagement({
   selectedSiteId,
@@ -29,6 +30,18 @@ export function OperatorManagement({
   const [reload, setReload] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSite, setFilterSite] = useState(selectedSiteId)
+  const [inviting, setInviting] = useState<string | null>(null)
+  useEffect(() => watchOperators(() => setReload(value => value + 1)), [user?.id])
+
+  async function resendInvitation(id: string) {
+    setInviting(id)
+    setError("")
+    try {
+      await operatorsApi.reissueInvitation(id)
+      setMessage("A new activation invitation is queued. Previous links are no longer valid.")
+    } catch (err) { setError(err instanceof Error ? err.message : "Cannot send invitation.") }
+    finally { setInviting(null) }
+  }
 
   // Reassign Site State & Confirmation
   const [transferOp, setTransferOp] = useState<Operator | null>(null)
@@ -72,13 +85,13 @@ export function OperatorManagement({
 
   function onCreated(operator: Operator) {
     setOperators((current) =>
-      [...current, operator].sort((a, b) =>
+      current.some(existing => existing.id === operator.id) ? current : [...current, operator].sort((a, b) =>
         a.fullName.localeCompare(b.fullName),
       ),
     )
     setShowCreate(false)
     setMessage(
-      `Account created for ${operator.email}. The operator can sign in with this email and the password you provided.`,
+      `Invitation queued for ${operator.email}. The operator must verify their email and choose their own password before signing in.`,
     )
     onOperatorsChanged()
   }
@@ -281,6 +294,12 @@ export function OperatorManagement({
 
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {op.status === "pending_verification" && (
+                          <button type="button" className="btn-outline text-[11px] py-1 px-2.5"
+                            disabled={inviting !== null} onClick={() => void resendInvitation(op.id)}>
+                            {inviting === op.id ? "Sending…" : "Resend invitation"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2.5"

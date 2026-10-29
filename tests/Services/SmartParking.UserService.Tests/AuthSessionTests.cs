@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.UserService.Domain.Enum;
 using System.IdentityModel.Tokens.Jwt;
@@ -6,14 +7,28 @@ using System.Text;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.Services;
 using UserService.Application.Usecase.Session;
-using UserService.Infrastructure.Services;
 
 namespace SmartParking.UserService.Tests;
 
 public sealed class AuthSessionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OwnerSessionsAndMeUsePersistedOnboardingState(bool complete)
+    {
+        var fixture = new AuthTestFixture();
+        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "BUSINESS_OWNER";
+        fixture.User.OnboardingComplete = complete;
+        var result = await fixture.SignIn();
+        Assert.True(result.IsSuccess);
+        Assert.Equal(complete, result.Session!.User!.OnboardingComplete);
+        var current = await new GetCurrentUserQueryHandler(fixture).Handle(new(fixture.User.Id!.Value), default);
+        Assert.Equal(complete, current!.OnboardingComplete);
+    }
+
     [Fact]
-    public async Task Login_IssuesRs256BearerOneHourAndRealRefreshToken()
+    public async Task Login_IssuesRs256BearerFifteenMinutesAndRealRefreshToken()
     {
         var f = new AuthTestFixture();
         var result = await f.SignIn();
@@ -21,11 +36,11 @@ public sealed class AuthSessionTests
         Assert.Equal(f.User.Id, result.Session!.User!.UserId);
         Assert.Equal("driver", result.Session.User.Role);
         Assert.Equal("Bearer", result.Session.TokenType);
-        Assert.Equal(86400, result.Session.ExpiresIn);
+        Assert.Equal(900, result.Session.ExpiresIn);
         Assert.NotEmpty(result.Session.RefreshToken!);
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.Session.AccessToken);
         Assert.Equal("RS256", jwt.Header.Alg);
-        Assert.Equal(86400, (jwt.ValidTo - jwt.ValidFrom).TotalSeconds);
+        Assert.Equal(900, (jwt.ValidTo - jwt.ValidFrom).TotalSeconds);
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(result.Session.AccessToken!));
         var stored = Assert.Single(f.Sessions.Snapshot);
         Assert.NotEqual(result.Session.RefreshToken, stored.TokenHash);

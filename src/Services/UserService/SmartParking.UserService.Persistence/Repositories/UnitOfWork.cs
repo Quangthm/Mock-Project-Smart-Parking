@@ -1,5 +1,8 @@
 using UserService.Application.Common.Interfaces.Persistence;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using UserService.Application.Common.Models.Exceptions;
 
 namespace UserService.Persistence.Repositories;
 
@@ -27,6 +30,11 @@ public class UnitOfWork : IUnitOfWork
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return await this.dbContext.SaveChangesAsync(cancellationToken);
+        try { return await this.dbContext.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+            { SqlState: "23505", ConstraintName: "uq_active_user_email_normalized" })
+        {
+            throw new AuthException("EMAIL_EXISTS", "Email is already registered.", 409);
+        }
     }
 }

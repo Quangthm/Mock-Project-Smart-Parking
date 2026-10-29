@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.UserService.Domain.Entities;
@@ -6,7 +7,6 @@ using UserService.Application.Common.Models.JwT;
 using UserService.Application.Services;
 using UserService.Application.Usecase.Login;
 using UserService.Application.Usecase.Session;
-using UserService.Infrastructure.Services;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 

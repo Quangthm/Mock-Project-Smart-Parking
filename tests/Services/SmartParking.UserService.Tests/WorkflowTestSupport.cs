@@ -1,3 +1,4 @@
+using UserService.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
@@ -55,9 +56,13 @@ internal static class ServiceSchema
     }
     public static async Task ApplyFeaturesAsync(AppDbContext db)
     {
-        var sql=await File.ReadAllTextAsync(FeaturePath("05.8-Account-Workflow-Vehicles.sql"));
         await db.Database.OpenConnectionAsync();
-        await using var cmd=new NpgsqlCommand(sql,(NpgsqlConnection)db.Database.GetDbConnection());await cmd.ExecuteNonQueryAsync();
+        foreach (var file in new[] { "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
+        {
+            var sql = await File.ReadAllTextAsync(FeaturePath(file));
+            await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
+            await cmd.ExecuteNonQueryAsync();
+        }
         await db.Database.CloseConnectionAsync();
         foreach (var file in new[] { "microservices/13-own-profile-session-account.sql", "microservices/14-user-profile-outbox.sql" })
         {
@@ -72,13 +77,19 @@ internal static class ServiceSchema
 internal sealed class TestParkingDirectory : IParkingDirectory
 {
     public bool Unavailable { get; set; }
+    public bool LoseProvisionResponse { get; set; }
     public Dictionary<Guid,Guid> Sites { get; } = [];
     public HashSet<Guid> InactiveSites { get; } = [];
     public HashSet<Guid> InactiveTenants { get; } = [];
     public HashSet<Guid> Provisioned { get; } = [];
-    // The parking service owns the tenants table in production; a database-backed test has to
-    // emulate that write, otherwise the account tenant reference fails its foreign key.
-    public Func<Guid,string,string,string,CancellationToken,Task>? OnProvision { get; set; }
+    public Task ProvisionOwnerSiteAsync(Guid applicationId, Guid tenantId, string name, string email, string phone,
+        global::UserService.Application.DTOs.OwnerLotSetupDto lot, CancellationToken ct)
+    {
+        if (Unavailable) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE", "Unavailable", 503);
+        lock (Provisioned) { Provisioned.Add(tenantId); Sites[applicationId] = tenantId; }
+        if (LoseProvisionResponse) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE", "Lost response", 503);
+        return Task.CompletedTask;
+    }
     public Task ProvisionTenantAsync(Guid id,string name,string email,string phone,CancellationToken ct)
     {
         if(Unavailable) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE","Unavailable",503);

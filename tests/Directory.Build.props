@@ -1,0 +1,6 @@
+<Project>
+  <!-- Share the machine-local settings between Test Explorer and dotnet test. -->
+  <PropertyGroup Condition="'$(RunSettingsFilePath)' == '' And Exists('$(MSBuildThisFileDirectory)../smartpark.local.runsettings')">
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)../smartpark.local.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>

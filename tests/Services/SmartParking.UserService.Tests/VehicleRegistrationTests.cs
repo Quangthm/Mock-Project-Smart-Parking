@@ -105,7 +105,7 @@ public sealed class VehicleRegistrationTests
     }
 
     [PostgresFact]
-    public async Task PersistenceOwnershipUpdatesAndOpenDuplicatePolicy()
+    public async Task PersistenceOwnershipUpdatesAndDuplicatePlateConflict()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
         var a = Driver("a@example.test"); var b = Driver("b@example.test");
@@ -116,12 +116,21 @@ public sealed class VehicleRegistrationTests
             var service = await Service(db, a);
             first = (await service.SaveAsync(a.Id!.Value, null, Vehicle(), default)).Id;
             await service.SaveAsync(a.Id.Value, null, Vehicle("59-x1 123.45", "MOTORCYCLE"), default);
-            var otherService = await Service(db, b);
-            Assert.Empty(await otherService.ListAsync(b.Id!.Value, default));
-            Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => otherService.SaveAsync(b.Id.Value, first, Vehicle(), default))).Code);
-            // FR-VEH-02 remains OPEN: duplicate canonical values grant no access to another account.
-            await otherService.SaveAsync(b.Id.Value, null, Vehicle("51A12345"), default);
-            Assert.Single(await otherService.ListAsync(b.Id.Value, default));
+            Assert.Empty(await service.ListAsync(b.Id!.Value, default));
+            Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(b.Id.Value, first, Vehicle(), default))).Code);
+            // Architecture decision D2 keeps unique active plates and maps duplicates to 409.
+            var duplicate = await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(b.Id.Value, null, Vehicle("51A12345"), default));
+            Assert.Equal("PLATE_EXISTS", duplicate.Code);
+            Assert.Equal(409, duplicate.StatusCode);
+        }
+        // Use a fresh context after the rejected write and verify no ownership changed.
+        await using (var db = fixture.Open())
+        {
+            var service = Service(db);
+            Assert.Empty(await service.ListAsync(b.Id!.Value, default));
+            Assert.Equal(2, await db.RegisteredVehicles.CountAsync());
+            await service.SaveAsync(b.Id.Value, null, Vehicle("51B67890"), default);
+            Assert.Single(await service.ListAsync(b.Id.Value, default));
         }
         await using (var db = fixture.Open())
         {
