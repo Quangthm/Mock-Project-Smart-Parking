@@ -6,8 +6,8 @@ Manual end-to-end verification for the Phase 1 operational-layout read path. Thi
 
 | File | Purpose |
 |---|---|
-| `SmartParking-OperationalLayout-SPARK-228.postman_collection.json` | 32 requests in 9 folders, Postman Collection v2.1.0 |
-| `SmartParking-OperationalLayout-SPARK-228.postman_environment.json` | Environment variables; placeholders only, no secrets |
+| `SmartParking-OperationalLayout-SPARK-228.postman_collection.json` | 33 requests in 9 folders, Postman Collection v2.1.0 |
+| `SmartParking-OperationalLayout-SPARK-228.postman_environment.json` | Environment variables; real demo emails, empty password slots, no secrets |
 | `SPARK-228-manual-test-guide.md` | This run-book |
 
 Collection schema URL: `https://schema.getpostman.com/json/collection/v2.1.0/collection.json`.
@@ -33,25 +33,25 @@ Ports are verified from `launchSettings.json` (User `5035`, Parking `5045`), `sc
 ./scripts/seed-demo-site.ps1
 ```
 
-The seed is idempotent and creates `DEMO-HQ` (`b0000000-0000-4000-8000-000000000001`), one floor, one zone, 8 slots, and assigns the demo operator to the site with all five delegable permissions, including `SLOT_OVERRIDE`.
+The seed is idempotent and creates `DEMO-HQ` (`b0000000-0000-4000-8000-000000000001`), one floor, one zone, 48 slots (36 `STANDARD` + 12 `EV`) and the static capacity pools, and assigns the demo operator to the site with all five delegable permissions, including `SLOT_OVERRIDE`. There are **no motorcycle slots**: motorcycle capacity is a zone-level capacity value (`MOTORCYCLE`, `max_capacity` on the zone), so motorcycle bays are not individually managed.
 
 ## 2. Accounts
 
-| Role | How to get it |
-|---|---|
-| Driver | Seeded by UserService: `driver@gmail.com` / `Password@123`. |
-| Owner (matching tenant) | `SMARTPARK_OWNER_EMAIL` / `SMARTPARK_OWNER_PASSWORD` in `.env`; `seed-demo-site.ps1` attaches the owner account to the demo tenant. |
-| Operator with `SLOT_OVERRIDE` | `SMARTPARK_OPERATOR_EMAIL` / `SMARTPARK_OPERATOR_PASSWORD`; `seed-demo-site.ps1` assigns the demo site and grants all permissions. |
-| Admin | `SMARTPARK_ADMIN_EMAIL` / `SMARTPARK_ADMIN_PASSWORD` from `.env` (seeded at UserService startup). |
-| Operator without `SLOT_OVERRIDE` | Create it as Owner (below). Use distinct `operatorNoOverrideEmail` / password variables. |
-| Owner of another tenant | Register/verify/approve a second owner, or use a pre-provisioned QA owner (below). |
-| Expired token | Obtain a genuinely expired access token (below); paste into `expiredToken`. |
+| Role | Account | Password source |
+|---|---|---|
+| Driver | `driver@gmail.com`, seeded by `DataSeeder.SeedAsync()` (user id `11111111-1111-1111-1111-111111111111`, role `DRIVER`, no tenant) | `Password@123`, already public in `DataSeeder.cs` |
+| Owner (demo tenant) | `owner@smartpark.local` (`DevelopmentOwner:Email`) | `.env` key `SMARTPARK_OWNER_PASSWORD` (`SMARTPARK_OWNER_EMAIL` supplies the email) |
+| Operator with `SLOT_OVERRIDE` | `operator@smartpark.local` (`DevelopmentOperator:Email`) | `.env` key `SMARTPARK_OPERATOR_PASSWORD` (`SMARTPARK_OPERATOR_EMAIL` supplies the email) |
+| Admin | `admin@smartpark.local` (`DevelopmentAdmin:Email`) | `.env` key `SMARTPARK_ADMIN_PASSWORD` (`SMARTPARK_ADMIN_EMAIL` supplies the email) |
+| Operator without `SLOT_OVERRIDE` | Created automatically by folder 00 request 0.7 and logged in by 0.8 | Generated at run time; no manual value needed |
+| Owner of another tenant (case 5.2) | None is seeded; create/approve one manually (§2.2) | Manual; leave `ownerOtherTenantEmail` empty to skip request 0.5 |
+| Expired token (case 2.2) | None is seeded; obtain one manually (§2.3) | Manual; leave `expiredToken` empty to skip request 0.9 |
 
-Do not export Tokens/Passwords into the repository. The environment file ships with `driver@example.test` and `replace-with-...` placeholders only.
+Do not export Tokens/Passwords into the repository. The environment file ships with the real demo emails plus the public driver password `Password@123`; `ownerPassword`, `operatorPassword` and `adminPassword` are intentionally empty because the values live in the root `.env`.
 
 ### 2.1 Create an operator without SLOT_OVERRIDE
 
-Owner token, UserService (`UsersController.cs:31–37` → `OperatorProvisioningService.cs:49–94`):
+Folder 00 does this automatically: request 0.7 calls `POST /api/users` with the owner token and request 0.8 logs in the generated account. To do it by hand, use the owner token against UserService (`UsersController.cs:31–37` → `OperatorProvisioningService.cs:49–94`):
 
 ```http
 POST {{userServiceUrl}}/api/users
@@ -93,7 +93,17 @@ The demo seed creates only one tenant. Use one of:
 1. **Existing QA owner in a second tenant** — set `ownerOtherTenantEmail` / password and login.
 2. **Register and approve a second owner** with the existing `assigned-workflows-2026-10-08.postman_collection.json` folders **03 Owner registration** and **04 Admin approval** (register → verify email → admin `PATCH /api/owner-applications/{id}/review` `approved`). Then login and use that token.
 
-Case 5.2 intentionally targets the demo site that the second owner does **not** own. The service catches `SITE_NOT_FOUND` for a tenant-scoped owner and retries an unrestricted, Sanitized read, so **200 Sanitized is the expected result, not 403**. If no second-tenant owner is available, mark 5.2 **Blocked** rather than substituting the same owner token.
+Case 5.2 intentionally targets the demo site that the second owner does **not** own. The service catches `SITE_NOT_FOUND` for a tenant-scoped owner and retries an unrestricted, Sanitized read, so **200 Sanitized is the expected result, not 403**. The created owner must belong to a **different tenant** and must **not** be assigned/site-scoped to the demo `{{siteId}}`; an owner of the demo tenant is not a valid substitute.
+
+**Do not point `ownerOtherTenantEmail` at the primary owner** (`ownerEmail`, i.e. `owner@smartpark.local`). The primary owner genuinely owns `{{siteId}}`, so the request returns Telemetry visibility and seeing `BACKUP` is correct behaviour — the test data, not the API, is wrong. Request 5.2 detects this degenerate setup and logs:
+
+```text
+SKIP: ownerOtherTenantEmail is empty or equals ownerEmail - case 5.2 requires a distinct second-tenant owner account (see SPARK-228-manual-test-guide.md section 2.2). A genuine owner of this site is expected to see BACKUP and unredacted fields, so the Sanitized assertions are not evaluated.
+```
+
+The request then asserts nothing and does not fail, so the folder still completes. That is a **Blocked** result for case 5.2, not a pass: create/approve a distinct second-tenant owner (options 1–2 above), re-run folder 00 request 0.5, then re-run 5.2.
+
+Request 0.5 logs `SKIP: ownerOtherTenantEmail is empty ...` and asserts nothing when `ownerOtherTenantEmail` / `ownerOtherTenantPassword` are unset, so the setup folder still completes.
 
 ### 2.3 Expired token (case 2.2)
 
@@ -104,17 +114,20 @@ Case 5.2 intentionally targets the demo site that the second owner does **not** 
 
 Do not use a random string for case 2.2 (case 2.1 already covers malformed tokens), and do not use a logged-out/revoked token as an “expired” proof. If neither option is possible, mark 2.2 **Blocked**.
 
+Request 0.9 logs `SKIP: expiredToken not configured ...` and asserts nothing when `expiredToken` is empty, so it does not fail the setup folder.
+
 ## 3. Configure and run in Postman
 
 1. Import both JSON files.
 2. Select **SmartParking - SPARK-228 Operational Layout (local)** as the active environment.
-3. Fill the placeholders locally:
-   - `driverEmail=driver@gmail.com`, `driverPassword=Password@123`.
-   - `ownerEmail` / `ownerPassword`, `operatorEmail` / `operatorPassword`, `adminEmail` / `adminPassword` from `.env`.
-   - `operatorNoOverrideEmail` / password, `ownerOtherTenantEmail` / password.
-   - `expiredToken` from §2.3.
+3. Fill the environment values locally (the environment already defaults to the real demo emails):
+   - `driverEmail=driver@gmail.com` and `driverPassword=Password@123` are the shipped defaults.
+   - `ownerPassword` ← `.env` `SMARTPARK_OWNER_PASSWORD`; `operatorPassword` ← `SMARTPARK_OPERATOR_PASSWORD`; `adminPassword` ← `SMARTPARK_ADMIN_PASSWORD`. If `.env` uses different `SMARTPARK_*_EMAIL` values, override `ownerEmail` / `operatorEmail` / `adminEmail` too.
+   - `operatorNoOverrideEmail` / `operatorNoOverridePassword` are generated by request 0.7; do not fill them.
+   - `ownerOtherTenantEmail` / `ownerOtherTenantPassword`: optional, only for case 5.2 (§2.2).
+   - `expiredToken`: optional, only for cases 0.9 / 2.2 (§2.3).
    - `parkingServiceUrl` / `userServiceUrl` already default to `http://localhost:5045` / `http://localhost:5035`.
-4. Run **00 - Setup** once and confirm 0.1–0.7 are green. This is mandatory: it stores all tokens, `siteId`, and `siteCode`.
+4. Run **00 - Setup** once. Confirm 0.1–0.4 and 0.6–0.8 are green; 0.5 and 0.9 log SKIP when their optional inputs are unset. This is mandatory: it stores all tokens, `siteId`, and `siteCode`.
 5. Run the full collection top-to-bottom. Folder order is intentional:
    - `00 Setup` → `01 Anonymous` → `02 Auth failures` → `03 Driver` → `04 Operator` → `05 Owner/Admin` → `06 Filters` → `07 A7 two-token` → `08 Legacy/regression`.
    - **7.1 must run before 7.2**: 7.1 saves `driverResponseBody`; 7.2 compares it with the operator response.
@@ -134,8 +147,6 @@ npx.cmd --yes --cache .cache/npm --package newman newman run `
   --env-var "ownerEmail=$($s['SMARTPARK_OWNER_EMAIL'])" --env-var "ownerPassword=$($s['SMARTPARK_OWNER_PASSWORD'])" `
   --env-var "operatorEmail=$($s['SMARTPARK_OPERATOR_EMAIL'])" --env-var "operatorPassword=$($s['SMARTPARK_OPERATOR_PASSWORD'])" `
   --env-var "adminEmail=$($s['SMARTPARK_ADMIN_EMAIL'])" --env-var "adminPassword=$($s['SMARTPARK_ADMIN_PASSWORD'])" `
-  --env-var "operatorNoOverrideEmail=$env:SPARK228_OPERATOR_NO_OVERRIDE_EMAIL" `
-  --env-var "operatorNoOverridePassword=$env:SPARK228_OPERATOR_NO_OVERRIDE_PASSWORD" `
   --env-var "ownerOtherTenantEmail=$env:SPARK228_OWNER_OTHER_EMAIL" `
   --env-var "ownerOtherTenantPassword=$env:SPARK228_OWNER_OTHER_PASSWORD" `
   --env-var "expiredToken=$env:SPARK228_EXPIRED_TOKEN"
@@ -159,21 +170,38 @@ Content-Type: application/json
 
 Get `<free-slotId>` from `GET /api/parking-lots/{{siteId}}/structure` (`data.slots[].id`) or from the operational response. Then rerun 3.1, 4.1, 5.1 and 7.1–7.2. Telemetry then shows `BACKUP`; Sanitized masks it to `RESERVED` while the metric stays masked. This mutates only the local demo site; the collection itself remains GET-only.
 
+### 3.3 Owner screen navigation (verified)
+
+Log in as the owner and open **Parking Structure** directly from the owner sidebar (**Parking management → Parking Structure**). The **Sites** tab opens site management; entering the site's structure/operator-layout entry also lands on the same **Parking Structure** view (`OwnerDashboard` renders `ParkingStructure`; `FE/src/App.tsx` routes the owner view to `OwnerDashboard`).
+
+### 3.4 F8: no write path from the 3D view
+
+This is the **no write path from the 3D view** check:
+
+1. Open DevTools → **Network** and clear it.
+2. Sign in as the operator (with `SLOT_OVERRIDE`) and open the 3D lot view for the demo site.
+3. Pan the view, rotate it, and select a bay.
+4. Confirm the 3D viewer exposes **no create/update/delete control** for slots or layout (no button, context-menu item, or drag action that mutates).
+5. Confirm the only layout request issued while panning/selecting is `GET /api/parking-lots/{id}/operational-layout`. The only other calls allowed are the identity/scope calls made when the session is established (login / `GET /api/auth/me`, `/api/operators/slot-scope`, `/api/auth/owner-scope`).
+6. Any `POST`/`PUT`/`PATCH`/`DELETE` to a parking-lot or slot route is an A6 failure of the read path.
+
 ## 4. Reading a FAIL
 
 Open the failed request → **Test Results** and read the assertion message. Common causes:
 
 | Symptom | Likely cause / fix |
 |---|---|
-| 0.1–0.6 return 401 | Placeholder credentials, wrong `.env` value, or account locked after 3 bad passwords (15 min). |
-| 0.7 returns 403 | Owner has no tenant membership. Start UserService once, then run `./scripts/seed-demo-site.ps1` again. |
+| 0.1–0.4 or 0.8 return 401 | Wrong `.env` password, email default not matching `.env`, or account locked after 3 bad passwords (15 min). The assertion message now includes the first 200 chars of the response body. |
+| 0.6 returns 401/403 | Owner login failed (fix 0.2), or the owner has no tenant membership / `OPERATOR_MANAGE`. Start UserService once, then run `./scripts/seed-demo-site.ps1` again. |
+| 0.7 returns 400/409 | `siteId` was not captured (0.6 failed) or the generated email collided; re-run folder 00. |
+| 0.5 / 0.9 log SKIP | Expected when the optional second-tenant owner / `expiredToken` are unset; cases 5.2 / 2.2 stay Blocked. |
 | 1.1/3.1 fail on `Cache-Control`/`Vary` | Wrong ParkingService build or a proxy stripping headers; check `Program.cs:153–154`. |
 | 4.1 passes shape but logs “SKIP: no BACKUP” | Demo seed has no BACKUP. Use §3.2 to create one, or accept shape-only evidence. |
 | 4.1 looks identical to 3.1 | Operator grant missing at this site. Re-run `seed-demo-site.ps1` or verify `/api/operators/slot-scope` returns 200. |
 | 4.3 returns 403 | Wrong account: `operatorNoOverrideToken` must be an **assigned** operator without `SLOT_OVERRIDE`; 8.3 is the route that intentionally returns 403. |
 | 5.1/5.3 differ from operator telemetry | Owner/admin resolved to Sanitized. Check the tenant/site mapping and admin seed. |
-| 5.2 returns 401 | `ownerOtherTenantToken` is empty. |
-| 5.2 shows BACKUP | The token is not actually from another tenant; use a distinct approved owner. |
+| 5.2 logs `SKIP: ownerOtherTenantEmail is empty or equals ownerEmail ...` | Expected when no distinct second-tenant owner is configured (§2.2); case 5.2 stays **Blocked**. Using the primary owner is not a substitute. |
+| 5.2 still shows BACKUP after a distinct owner is configured | The token is not actually from another tenant; use a distinct approved owner (§2.2). |
 | 6.3 fails on `floorCode` | `floorCode` was not captured (1.1 failed) or the site has no slots. |
 | 7.2 fails metric equality | Expected: Sanitized `reservedCount` is masked (genuine + BACKUP); the test asserts that relation, not literal equality. |
 | 8.4 returns 503 | ReservationService is not running; the legacy route reads a commitment snapshot. |
@@ -231,7 +259,7 @@ Acceptance definitions follow the SPARK-228 matrix: A1 schema, A2 two-axis state
 
 ## 7. OPEN / not statically verifiable
 
-- **Seed data:** the demo seed has 8 slots and no BACKUP; the 48-slot exhaustive fixture is not inserted into the running DB. Cases 4.1/5.1/5.3/7.2 therefore log a SKIP when no BACKUP exists.
+- **Seed data:** the demo seed has 48 slots (36 `STANDARD` + 12 `EV`, no motorcycle slots) and no BACKUP; the exhaustive state fixture is not inserted into the running DB. Cases 4.1/5.1/5.3/7.2 therefore log a SKIP when no BACKUP exists.
 - **A8 GLB equality:** no GLB asset is available to this collection; only slot identity/order is checked.
 - **Other-tenant owner and expired token:** both need manual environment preparation; cases 5.2 and 2.2 are Blocked if the prerequisites are unavailable.
 - **A5 frontend behavior:** stale banner and reconnect are frontend concerns and are not exercised by these HTTP requests.

@@ -1,10 +1,27 @@
 import { request } from "./authApi"
+import type { OperationalLayoutProjection } from "./operationalLayout"
 
 const server = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
 ).replace(/\/$/, "")
 
 type Response<T> = { success: boolean; data: T }
+
+export interface OperationalLayoutOptions {
+  vehicleType?: string
+  floor?: string
+}
+
+/**
+ * Lazily loaded so the existing CommonJS test harnesses can stub
+ * `./operationalLayout` without parsing a second `import.meta.env` reference.
+ */
+let operationalLayoutModule: Promise<typeof import("./operationalLayout")> | null = null
+
+async function operationalLayoutFixture(): Promise<OperationalLayoutProjection | null> {
+  operationalLayoutModule ??= import("./operationalLayout")
+  return (await operationalLayoutModule).readOperationalLayoutFixture()
+}
 
 export interface Site {
   id: string
@@ -89,6 +106,23 @@ export const parkingApi = {
 
   operatorLayout: (id: string) =>
     call<Structure>(`/${encodeURIComponent(id)}/operator-layout`),
+
+  async operationalLayout(
+    id: string,
+    opts?: OperationalLayoutOptions,
+  ): Promise<OperationalLayoutProjection> {
+    const fixture = await operationalLayoutFixture()
+    if (fixture) return fixture
+
+    const query: string[] = []
+    if (opts?.vehicleType) query.push(`vehicleType=${encodeURIComponent(opts.vehicleType)}`)
+    if (opts?.floor) query.push(`floor=${encodeURIComponent(opts.floor)}`)
+    const suffix = query.length ? `?${query.join("&")}` : ""
+
+    return call<OperationalLayoutProjection>(
+      `/${encodeURIComponent(id)}/operational-layout${suffix}`,
+    )
+  },
 
   markBackup: (siteId: string, slotId: string, reason: string) =>
     call<void>(

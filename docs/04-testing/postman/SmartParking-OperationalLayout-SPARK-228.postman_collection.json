@@ -7,7 +7,7 @@
   "item": [
     {
       "name": "00 - Setup (run first)",
-      "description": "Logs in each role, stores tokens in the environment, and captures the demo siteId. Run this folder before any other folder.",
+      "description": "Logs in each role, captures the demo siteId, then provisions the derived operator without SLOT_OVERRIDE and logs it in. Run this folder before any other folder. Requests 0.5 (second-tenant owner) and 0.9 (expiredToken) log SKIP and assert nothing when their optional inputs are not configured.",
       "item": [
         {
           "name": "0.1 Login Driver",
@@ -17,12 +17,21 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
                   "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
-                  "pm.test('role is driver', () => pm.expect(body.data.user.role).to.eql('driver'));",
-                  "pm.environment.set('driverToken', body.data.accessToken);"
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is driver', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('driver');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('driverToken', body.data.accessToken); }"
                 ]
               }
             }
@@ -49,12 +58,21 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
                   "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
-                  "pm.test('role is owner', () => pm.expect(body.data.user.role).to.eql('owner'));",
-                  "pm.environment.set('ownerToken', body.data.accessToken);"
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is owner', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('owner');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('ownerToken', body.data.accessToken); }"
                 ]
               }
             }
@@ -81,12 +99,21 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
                   "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
-                  "pm.test('role is operator', () => pm.expect(body.data.user.role).to.eql('operator'));",
-                  "pm.environment.set('operatorToken', body.data.accessToken);"
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is operator', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('operator');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('operatorToken', body.data.accessToken); }"
                 ]
               }
             }
@@ -106,83 +133,28 @@
           }
         },
         {
-          "name": "0.4 Login Operator (without SLOT_OVERRIDE)",
+          "name": "0.4 Login Admin",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
                   "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
-                  "pm.test('role is operator', () => pm.expect(body.data.user.role).to.eql('operator'));",
-                  "pm.environment.set('operatorNoOverrideToken', body.data.accessToken);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{operatorNoOverrideEmail}}\",\n  \"password\": \"{{operatorNoOverridePassword}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": "{{userServiceUrl}}/api/auth/login",
-            "description": "POST /api/auth/login for an operator assigned to the same site but without SLOT_OVERRIDE. Create it with the owner via POST /api/users and permissions such as [DEVICE_STATUS_VIEW]. Stores `operatorNoOverrideToken`."
-          }
-        },
-        {
-          "name": "0.5 Login Owner (other tenant)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
-                  "pm.test('role is owner', () => pm.expect(body.data.user.role).to.eql('owner'));",
-                  "pm.environment.set('ownerOtherTenantToken', body.data.accessToken);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{ownerOtherTenantEmail}}\",\n  \"password\": \"{{ownerOtherTenantPassword}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": "{{userServiceUrl}}/api/auth/login",
-            "description": "POST /api/auth/login for an approved Owner in a different tenant. See the manual guide for the registration/approval path. Stores `ownerOtherTenantToken`."
-          }
-        },
-        {
-          "name": "0.6 Login Admin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('access token present', () => pm.expect(body.data.accessToken).to.be.a('string').and.not.empty);",
-                  "pm.test('role is admin', () => pm.expect(body.data.user.role).to.eql('admin'));",
-                  "pm.environment.set('adminToken', body.data.accessToken);"
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is admin', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('admin');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('adminToken', body.data.accessToken); }"
                 ]
               }
             }
@@ -198,24 +170,74 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{userServiceUrl}}/api/auth/login",
-            "description": "POST /api/auth/login with SMARTPARK_ADMIN_EMAIL/PASSWORD. Stores `adminToken`."
+            "description": "POST /api/auth/login with SMARTPARK_ADMIN_EMAIL/PASSWORD from .env (default email admin@smartpark.local). Stores `adminToken`."
           }
         },
         {
-          "name": "0.7 List owned sites and capture siteId",
+          "name": "0.5 Login Owner (other tenant, optional)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const email = pm.environment.get('ownerOtherTenantEmail');",
+                  "if (!email) {",
+                  "  console.log('SKIP: ownerOtherTenantEmail is empty - see SPARK-228-manual-test-guide.md section 2.2. Case 5.2 stays Blocked until a second-tenant owner is configured.');",
+                  "} else {",
+                  "  let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "  const snippet = pm.response.text().slice(0, 200);",
+                  "  pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "  pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "    pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "    pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "    pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "  });",
+                  "  pm.test('access token present', () => {",
+                  "    pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "  pm.test('role is owner', () => {",
+                  "    pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('owner');",
+                  "  });",
+                  "  if (body && body.data && body.data.accessToken) { pm.environment.set('ownerOtherTenantToken', body.data.accessToken); }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerOtherTenantEmail}}\",\n  \"password\": \"{{ownerOtherTenantPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "Optional manual step. When ownerOtherTenantEmail is empty the test script logs SKIP and asserts nothing; when it is set it logs in an approved Owner from a different tenant and stores `ownerOtherTenantToken`. See the manual guide section 2.2."
+          }
+        },
+        {
+          "name": "0.6 List owned sites and capture siteId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
                   "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('site list is a non-empty array', () => pm.expect(body.data).to.be.an('array').that.is.not.empty);",
-                  "pm.environment.set('siteId', body.data[0].id);",
-                  "pm.environment.set('siteCode', body.data[0].code);",
-                  "console.log('Captured siteId=' + body.data[0].id + ' siteCode=' + body.data[0].code);"
+                  "pm.test('success true', () => pm.expect(body && body.success).to.eql(true));",
+                  "pm.test('site list is a non-empty array', () => pm.expect(body && body.data).to.be.an('array').that.is.not.empty);",
+                  "if (body && body.data && body.data.length) {",
+                  "  pm.environment.set('siteId', body.data[0].id);",
+                  "  pm.environment.set('siteCode', body.data[0].code);",
+                  "  console.log('Captured siteId=' + body.data[0].id + ' siteCode=' + body.data[0].code);",
+                  "} else {",
+                  "  console.log('No owned site captured. Run scripts/seed-demo-site.ps1 and re-run 0.6 before the rest of the collection.');",
+                  "}"
                 ]
               }
             }
@@ -230,7 +252,107 @@
           }
         },
         {
-          "name": "0.8 Preflight: expiredToken is configured",
+          "name": "0.7 Create Operator without SLOT_OVERRIDE (owner token)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const suffix = Date.now().toString(36) + Math.floor(Math.random() * 1000);",
+                  "const email = 'spark228-opnooverride-' + suffix + '@example.com';",
+                  "const password = 'Spark228!' + Math.floor(Math.random() * 1000);",
+                  "pm.environment.set('operatorNoOverrideEmail', email);",
+                  "pm.environment.set('operatorNoOverridePassword', password);",
+                  "if (!pm.environment.get('siteId')) { console.log('WARNING: siteId is empty; run request 0.6 first or POST /api/users will fail validation.'); }",
+                  "console.log('Provisioning operator without SLOT_OVERRIDE: ' + email);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('operator created (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'create failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'create failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in create response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('created operator has an id', () => {",
+                  "  pm.expect(body && body.data && body.data.id, 'no operator id: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('assigned to the demo site', () => {",
+                  "  pm.expect(body && body.data && body.data.siteIds).to.include(pm.environment.get('siteId'));",
+                  "});",
+                  "pm.test('grant is DEVICE_STATUS_VIEW only (no SLOT_OVERRIDE)', () => {",
+                  "  pm.expect(body && body.data && body.data.permissions).to.eql(['DEVICE_STATUS_VIEW']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"SPARK-228 Operator No Override\",\n  \"email\": \"{{operatorNoOverrideEmail}}\",\n  \"password\": \"{{operatorNoOverridePassword}}\",\n  \"siteIds\": [\"{{siteId}}\"],\n  \"permissions\": [\"DEVICE_STATUS_VIEW\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/users",
+            "description": "POST /api/users with the demo Owner token (UsersController.cs:31-37 -> OperatorProvisioningService.cs:49-94). The prerequest generates a unique email/password (8-15 chars, upper+lower+digit+special) and stores them in operatorNoOverrideEmail/operatorNoOverridePassword. Grants DEVICE_STATUS_VIEW only, so the account is assigned to {{siteId}} but has no SLOT_OVERRIDE. Runs after 0.6 captured siteId."
+          }
+        },
+        {
+          "name": "0.8 Login Operator without SLOT_OVERRIDE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is operator', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('operator');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('operatorNoOverrideToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorNoOverrideEmail}}\",\n  \"password\": \"{{operatorNoOverridePassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with the credentials generated and stored by 0.7. This operator is assigned to the demo site but has DEVICE_STATUS_VIEW only, so it exercises the Sanitized fallback in request 4.3. Stores `operatorNoOverrideToken`."
+          }
+        },
+        {
+          "name": "0.9 Preflight: expiredToken is configured",
           "event": [
             {
               "listen": "test",
@@ -238,9 +360,11 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get('expiredToken');",
-                  "pm.test('expiredToken configured (see manual guide)', () => pm.expect(token).to.be.a('string').and.not.empty);",
-                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
-                  "console.log('Expired-token acquisition is documented in SPARK-228-manual-test-guide.md; a random or revoked token is not an expiry proof.');"
+                  "if (!token) {",
+                  "  console.log('SKIP: expiredToken not configured - see manual guide; a random/revoked token is not an expiry proof.');",
+                  "} else {",
+                  "  pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "}"
                 ]
               }
             }
@@ -251,7 +375,7 @@
               { "key": "Authorization", "value": "Bearer {{expiredToken}}" }
             ],
             "url": "{{userServiceUrl}}/api/auth/me",
-            "description": "Manual prerequisite. Obtain a genuinely expired access token (access lifetime is 24h: AccessTokenService.LifetimeSeconds = 86400), or have a backend developer mint a token with a past `exp` using the Development signing key. Do not use a random string (case 2.1 covers malformed tokens) or a logged-out token as an expiry proof."
+            "description": "Manual prerequisite, not a gate. Obtain a genuinely expired access token (access lifetime is 24h: AccessTokenService.LifetimeSeconds = 86400), or have a backend developer mint a token with a past `exp` using the Development signing key. When expiredToken is empty the script logs SKIP and asserts nothing; case 2.2 stays Blocked. Do not use a random string (case 2.1 covers malformed tokens) or a logged-out token as an expiry proof."
           }
         }
       ]
@@ -589,14 +713,23 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const token = pm.environment.get('ownerOtherTenantToken');",
-                  "pm.test('ownerOtherTenantToken configured', () => pm.expect(token).to.be.a('string').and.not.empty);",
-                  "pm.test('HTTP 200 (not 403)', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
-                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
-                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));"
+                  "const otherEmail = (pm.environment.get('ownerOtherTenantEmail') || '').trim().toLowerCase();",
+                  "const primaryEmail = (pm.environment.get('ownerEmail') || '').trim().toLowerCase();",
+                  "const hasDistinctOtherTenant = otherEmail !== '' && otherEmail !== primaryEmail;",
+                  "if (!hasDistinctOtherTenant) {",
+                  "  console.log('SKIP: ownerOtherTenantEmail is empty or equals ownerEmail - case 5.2 requires a distinct second-tenant owner account (see SPARK-228-manual-test-guide.md section 2.2). A genuine owner of this site is expected to see BACKUP and unredacted fields, so the Sanitized assertions are not evaluated.');",
+                  "}",
+                  "if (hasDistinctOtherTenant) {",
+                  "  const token = pm.environment.get('ownerOtherTenantToken');",
+                  "  pm.test('ownerOtherTenantToken configured', () => pm.expect(token).to.be.a('string').and.not.empty);",
+                  "  pm.test('HTTP 200 (not 403)', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "  pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "  pm.test('reservationState limited to sanitized set', () => pm.expect(body.data.slots.every(s => ['UNRESERVED', 'RESERVED', 'PROTECTED'].includes(s.reservationState))).to.eql(true));",
+                  "  pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "  pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
+                  "}"
                 ]
               }
             }
@@ -607,7 +740,7 @@
               { "key": "Authorization", "value": "Bearer {{ownerOtherTenantToken}}" }
             ],
             "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
-            "description": "Owner from a different tenant. ParkingStructureService catches SITE_NOT_FOUND for a tenant-scoped Owner and retries with no tenant restriction + Sanitized visibility, so the public site is visible and 403 is not returned."
+            "description": "Owner from a different tenant. ParkingStructureService catches SITE_NOT_FOUND for a tenant-scoped Owner and retries with no tenant restriction + Sanitized visibility, so the public site is visible and 403 is not returned. When `ownerOtherTenantEmail` is empty or equals `ownerEmail` the script logs SKIP and asserts nothing, because a genuine owner of this site legitimately sees BACKUP (guide section 2.2)."
           }
         },
         {
@@ -993,6 +1126,19 @@
           }
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const required = ['userServiceUrl', 'parkingServiceUrl', 'driverEmail', 'driverPassword', 'ownerEmail', 'ownerPassword', 'operatorEmail', 'operatorPassword', 'adminEmail', 'adminPassword'];",
+          "const missing = required.filter(k => !pm.environment.get(k) || String(pm.environment.get(k)).startsWith('replace-with'));",
+          "if (missing.length) { console.log('MISSING environment variables: ' + missing.join(', ') + '. Copy the passwords from the repository root .env (SMARTPARK_OWNER_PASSWORD, SMARTPARK_OPERATOR_PASSWORD, SMARTPARK_ADMIN_PASSWORD).'); }"
+        ]
+      }
     }
   ]
 }

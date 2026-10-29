@@ -69,10 +69,11 @@ public sealed class ApplicationWorkflowTests
         Assert.DoesNotContain("commit", fixture.Events);
         Assert.DoesNotContain("release-outcome", fixture.Events);
 
-        // A later worker can abort this preparation without claiming an edit completed.
-        await fixture.Synchronization.RecoverPendingAsync(CancellationToken.None);
+        // The failure compensates immediately: no preparation row or hold is left
+        // for the worker to abort later.
+        Assert.Contains("force-release", fixture.Events);
         Assert.Equal("completed", fixture.Store.Rows.Single().State);
-        Assert.Contains("release-abort", fixture.Events);
+        Assert.Empty(await fixture.Store.PendingAsync(fixture.SiteId, CancellationToken.None));
     }
 
     [Fact]
@@ -121,6 +122,7 @@ public sealed class ApplicationWorkflowTests
         Assert.Empty(failures);
         Assert.Equal("preparing", fixture.Store.Rows.Single().State);
         Assert.DoesNotContain("release-abort", fixture.Events);
+        Assert.DoesNotContain("force-release", fixture.Events);
     }
 
     [Fact]
@@ -135,6 +137,7 @@ public sealed class ApplicationWorkflowTests
 
         Assert.Contains("release-outcome", fixture.Events);
         Assert.DoesNotContain("release-abort", fixture.Events);
+        Assert.DoesNotContain("force-release", fixture.Events);
         Assert.Equal("completed", fixture.Store.Rows.Single().State);
     }
 
@@ -163,7 +166,7 @@ public sealed class ApplicationWorkflowTests
         await fixture.Service.GetAsync(fixture.Owner, fixture.SiteId);
 
         Assert.DoesNotContain("begin", fixture.Events);
-        Assert.Contains("release-abort", fixture.Events);
+        Assert.Contains("force-release", fixture.Events);
         Assert.Equal("completed", fixture.Store.Rows.Single().State);
     }
 
@@ -263,6 +266,17 @@ public sealed class ApplicationWorkflowTests
                 throw new StructureException("COMMITMENTS_UNAVAILABLE", "Simulated lost response.");
             return Task.CompletedTask;
         }
+
+        public Task ForceReleaseAsync(Guid tenant, Guid site, CancellationToken ct)
+        {
+            ForceReleaseCalls++;
+            Events.Add("force-release");
+            if (FailRelease || site == FailingSite)
+                throw new StructureException("COMMITMENTS_UNAVAILABLE", "Simulated lost response.");
+            return Task.CompletedTask;
+        }
+
+        public int ForceReleaseCalls { get; private set; }
 
         public Task<IParkingStructureEdit> BeginEditAsync(
             OwnerScope owner, Guid site, CommitmentSnapshot snapshot, Guid? operation, CancellationToken ct)

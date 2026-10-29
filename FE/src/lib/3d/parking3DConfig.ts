@@ -1,4 +1,5 @@
 import type { LotType, SlotStatus } from "../types"
+import type { SlotVisualState } from "../operationalLayout"
 
 export interface Parking3DModelDef {
   id: string
@@ -176,4 +177,59 @@ export const SLOT_STATUS_HEX: Record<SlotStatus | "selected" | "default", string
   disabled: "#475569",
 
   default: "#64748b",
+}
+
+/**
+ * Two-axis visual vocabulary (SPARK-228). Keyed by the presentation state
+ * derived from `physicalState` + `reservationState`, never by a single
+ * collapsed `status` field.
+ *
+ * `unknown` is deliberately a desaturated violet-grey. It must never read as an
+ * empty/free bay (A4), so it is far from the emerald `available` and also
+ * distinct from the blue-grey `maintenance` and the near-black `unavailable`.
+ *
+ * `backup` is a saturated cyan (hue ~191°). A designated backup bay is an
+ * intentional hold, so it sits opposite the warm amber `reserved` in hue while
+ * keeping a comparable weight: an operator scanning the scene reads "cool hold"
+ * vs "warm hold" without comparing labels. It is also ~50° off `available`
+ * green, ~70° off `unknown` violet-grey and ~76° off `occupied` red.
+ */
+export const SLOT_VISUAL_STATE_COLORS: Record<
+  SlotVisualState | "selected" | "default",
+  number
+> = {
+  available: 0x22c55e, // Emerald Green
+  occupied: 0xef4444, // Red
+  reserved: 0xf59e0b, // Amber
+  backup: 0x0891b2, // Cyan — designated backup buffer, never amber
+  maintenance: 0x64748b, // Slate Gray
+  unavailable: 0x334155, // Deep Slate — physically blocked / out of service
+  unknown: 0x7c6f8f, // Desaturated violet-grey — no reliable reading
+  selected: 0x3b82f6, // Blue
+  default: 0x64748b, // Slate Gray
+}
+
+export const SLOT_VISUAL_STATE_HEX: Record<
+  SlotVisualState | "selected" | "default",
+  string
+> = {
+  available: "#22c55e",
+  occupied: "#ef4444",
+  reserved: "#f59e0b",
+  backup: "#0891b2",
+  maintenance: "#64748b",
+  unavailable: "#334155",
+  unknown: "#7c6f8f",
+  selected: "#3b82f6",
+  default: "#64748b",
+}
+
+export const SLOT_VISUAL_STATE_LABELS: Record<SlotVisualState, string> = {
+  available: "Available",
+  occupied: "Occupied",
+  reserved: "Reserved",
+  backup: "Backup",
+  maintenance: "Maintenance",
+  unavailable: "Unavailable",
+  unknown: "Unknown",
 }

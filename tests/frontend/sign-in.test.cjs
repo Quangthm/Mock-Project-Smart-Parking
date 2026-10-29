@@ -11,7 +11,7 @@ function load(file, imports = {}) {
   const context = { exports: {}, Error, require: name => {
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];
-  } };
+  }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} } };
   vm.runInNewContext(js, context);
   return context.exports;
 }
@@ -33,7 +33,7 @@ function fixture(mode, fail = false) {
     const i = cursor++;
     if (!(i in state)) state[i] = typeof initial === 'function' ? initial() : initial;
     return [state[i], value => { state[i] = typeof value === 'function' ? value(state[i]) : value; }];
-  } };
+  }, useEffect() { /* SignIn only redirects the OTP flow; these assertions cover the form. */ } };
   const jsx = (type, props) => ({ type, props });
   const failure = 'Your account has not been approved yet. Please wait for administrator approval before signing in.';
   const api = {
@@ -46,9 +46,21 @@ function fixture(mode, fail = false) {
     '../data/data': { authData: { saveUser() {}, addAuditLog() {}, notifyUser() {} } },
     'react-router-dom': { useNavigate: () => (...args) => navigations.push(args) },
     '../../operator/data/roleRoutes': { getUserHomePath: () => '/' },
-    '../../../components/brand/BrandLogo': { BrandLogo: 'brand' },
+    '../../../components/brand/BrandLogo': { BrandLogo: 'brand', BrandWordmark: 'brand-wordmark' },
+    // Presentational page chrome; it carries no state used by the sign-in form assertions.
+    '../../../components/ui/PageHeader': { PageHeader: () => null },
     '../../../components/forms/PasswordVisibilityIcon': { PasswordVisibilityIcon: 'password-icon' },
-    '../../../lib/authApi': { authApi: api }, '../../../lib/signInContact': contact,
+    // Decorative icons are irrelevant to the form behaviour under test.
+    '../../../components/icon/UntitledIcon': { UntitledIcon: () => null },
+    '../../../lib/authApi': {
+      authApi: api,
+      // SignIn branches on this error type for pending verification; the fixture throws plain errors.
+      AuthApiError: class AuthApiError extends Error {},
+      request: async () => { throw new Error('Unexpected request'); },
+    },
+    '../../../lib/signInContact': contact,
+    // SignIn clears the pending driver registration key after a successful sign-in.
+    '../Sign Up/DriverOtpForm': { pendingDriverKey: 'sp_pending_driver_registration' },
   }).SignIn;
   const render = () => { cursor = 0; return component(); };
   const input = () => nodes(render()).find(node => node.props?.autoComplete === 'username');

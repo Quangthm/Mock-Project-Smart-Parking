@@ -156,7 +156,9 @@ public static class ParkingHost
             VehicleType? vehicleFilter = null;
             if (!string.IsNullOrWhiteSpace(vehicleType))
             {
-                if (!Enum.TryParse<VehicleType>(vehicleType, ignoreCase: false, out var parsed) || !Enum.IsDefined(parsed))
+                if (!Enum.TryParse<VehicleType>(vehicleType, ignoreCase: false, out var parsed)
+                    || !Enum.IsDefined(parsed)
+                    || !string.Equals(vehicleType, parsed.ToString(), StringComparison.Ordinal))
                     return Results.BadRequest(new { success = false, code = "INVALID_VEHICLE_TYPE", message = "vehicleType must be CAR, MOTORCYCLE, or OVERSIZED." });
                 vehicleFilter = parsed;
             }
@@ -169,6 +171,11 @@ public static class ParkingHost
             catch (StructureException)
             {
                 // Already mapped to 401/403/404/409/... by the outer middleware.
+                throw;
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                // The client aborted; this is not a server failure.
                 throw;
             }
             catch (Exception)
@@ -228,4 +235,4 @@ public sealed record UnitBody(UnitType Type, string Name, Guid? ParentId, int Ca
 public sealed record SlotBody(Guid UnitId, string Code, VehicleType VehicleType, SlotType Type = SlotType.STANDARD, Guid? TenantId = null);
 public sealed record PathBody(string Code, Guid? From, Guid? To, string? MapData, Guid? TenantId = null);
 public sealed record EditStructure(string Action, Guid ResourceId, Guid UnitId, string? Code, string? Name, string? Address, bool Active, int Capacity, VehicleType VehicleType, SlotType SlotType, string? Coordinates3D, string? Features, decimal? Latitude, decimal? Longitude, Guid? TenantId = null);
-public static class Program { public static void Main(string[] args) => ParkingHost.Build(args).Run(); }
+public partial class Program { public static void Main(string[] args) => ParkingHost.Build(args).Run(); }

@@ -20,6 +20,11 @@ function fixture(respond) {
   const calls = [], events = [];
   const context = {
     exports: {}, AbortSignal, Event,
+    // authApi.ts imports the local fixture store; the sandbox needs a require shim for that module.
+    require: name => {
+      if (name === './store') return { store: { findUserById: () => undefined } };
+      throw new Error(`Unexpected import: ${name}`);
+    },
     sessionStorage: {
       getItem: key => storage.get(key) ?? null,
       removeItem: key => storage.delete(key),

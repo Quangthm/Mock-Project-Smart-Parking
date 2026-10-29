@@ -25,6 +25,13 @@ public sealed class StructureSafetyService(IStructureSafetyStore store)
         return store.ReadSnapshotAsync(tenantId, siteId, ct);
     }
 
+    public Task ForceReleaseAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    {
+        if (tenantId == Guid.Empty || siteId == Guid.Empty)
+            throw new InvalidStructureEditException("Tenant and site must be non-empty.");
+        return store.ForceReleaseAsync(tenantId, siteId, ct);
+    }
+
     public Task<object> ImpactAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
         if (tenantId == Guid.Empty || siteId == Guid.Empty)

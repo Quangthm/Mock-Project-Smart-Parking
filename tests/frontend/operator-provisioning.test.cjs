@@ -11,7 +11,8 @@ function load(file, imports) {
   const context = { exports: {}, Error, require: name => {
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];
-  } };
+  }, document: { body: {} }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+  window: { addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, confirm: () => true } };
   vm.runInNewContext(js, context);
   return context.exports;
 }
@@ -32,7 +33,8 @@ function hooks() {
       const i = cursor++;
       if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;
       return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }];
-    }, useEffect(effect) { effects.push(effect); } },
+    }, useEffect(effect) { effects.push(effect); },
+    useMemo: factory => factory(), useRef: initial => ({ current: initial }), useId: () => 'form-id' },
     runtime: { jsx, jsxs: jsx },
     reset() { slots.length = 0; effects.length = 0; cursor = 0; },
     render(fn, props) { cursor = 0; return fn(props); }, effects,
@@ -43,10 +45,18 @@ function nodes(tree) {
   const children = tree.props?.children;
   return [tree, ...[children].flat(Infinity).flatMap(nodes)];
 }
+// PageHeader renders its title and actions as children; mirror that so nodes() can reach toolbar buttons.
+const PageHeader = ({ title, description, actions }) => ({
+  type: 'header', props: { children: [title, description, actions].filter(Boolean) },
+});
 function formFixture(sites = [site]) {
   const h = hooks(), pending = deferred(), calls = [], created = [];
   const api = load('lib/parkingApi.ts', { './authApi': { request: (...args) => { calls.push(args); return pending.promise; } } });
-  const component = load('roles/owner/operators/CreateOperatorForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api, '../../../lib/signInContact': load('lib/signInContact.ts', {}) }).CreateOperatorForm;
+  const component = load('roles/owner/operators/CreateOperatorForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: node => node }, '../../../lib/parkingApi': api, '../../../lib/signInContact': load('lib/signInContact.ts', {}),
+    // Presentational controls and icons; they carry no state used by the provisioning assertions.
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/forms/PasswordVisibilityIcon': { PasswordVisibilityIcon: 'password-icon' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' } }).CreateOperatorForm;
   const render = () => h.render(component, { sites, onCreated: value => created.push(value), onCancel() {} });
   const change = (id, value) => nodes(render()).find(node => node.props?.id === id).props.onChange({ target: { value } });
   change('operator-name', ' Staff '); change('operator-email', ' staff@example.com '); change('operator-password', 'Password@123');
@@ -115,7 +125,10 @@ test('operator screen loads backend list and active real sites, updates with com
   const h = hooks();
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (path, method, body, prefix) => ({ success: true, data: prefix === '/api/operators' ? [operator] : [site, { ...site, id: 'inactive', isActive: false }] }) } });
   const component = load('roles/owner/operators/OperatorManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: node => node }, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    // Presentational controls and icons; they carry no state used by the provisioning assertions.
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/ui/PageHeader': { PageHeader },
     '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' }, '../parking-lots/SiteForm': { SiteForm: 'site-form' }, '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
   }).OperatorManagement;
   const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() {} });
@@ -133,7 +146,10 @@ test('New Operator stays clickable with zero sites and moves to operator form af
   const h = hooks(), calls = [];
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (...args) => { calls.push(args); return { success: true, data: [] }; } } });
   const component = load('roles/owner/operators/OperatorManagement.tsx', {
-    react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    react: h.react, 'react/jsx-runtime': h.runtime, 'react-dom': { createPortal: node => node }, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    // Presentational controls and icons; they carry no state used by the provisioning assertions.
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/ui/PageHeader': { PageHeader },
     '../../../lib/parkingApi': api, './CreateOperatorForm': { CreateOperatorForm: 'create-form' }, '../parking-lots/SiteForm': { SiteForm: 'site-form' },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
   }).OperatorManagement;
@@ -156,7 +172,20 @@ for (const success of [true, false]) {
   test(`site form ${success ? 'waits for committed backend site' : 'keeps form and shows server failure'}`, async () => {
     const h = hooks(), pending = deferred(), calls = [], saved = [];
     const api = load('lib/parkingApi.ts', { './authApi': { request: (...args) => { calls.push(args); return pending.promise; } } });
-    const component = load('roles/owner/parking-lots/SiteForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api }).SiteForm;
+    // The form logic lives in useSiteForm; load it for real and stub only its leaf integrations.
+    const formDeps = {
+      react: h.react, '../../../lib/parkingApi': api,
+      '../../../lib/authApi': { AuthApiError: class AuthApiError extends Error {} },
+      '../data/data': { ownerData: { getLotsByOwner: () => [], saveLot() {} } },
+      '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+      '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
+      // Model-capacity probing is not part of these provisioning assertions.
+      '../../../lib/3d/modelSlotCapacity': { useModelCarCapacity: () => ({ capacity: null, error: '' }) },
+      '../../../lib/3d/ownerModelStorage': { deleteOwnerModel: async () => {}, loadOwnerModelUrl: async () => null, saveOwnerModel: async () => null },
+    };
+    const component = load('roles/owner/parking-lots/SiteForm.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api,
+      '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' }, '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+      './useSiteForm': load('roles/owner/parking-lots/useSiteForm.ts', formDeps) }).SiteForm;
     const render = () => h.render(component, { onSaved: site => saved.push(site), onCancel() {} });
     for (const [id, value] of [['site-code', ' ABC '], ['site-name', ' abc '], ['site-address', ' Address ']]) {
       nodes(render()).find(node => node.props?.id === id).props.onChange({ target: { value } });
@@ -179,8 +208,22 @@ test('Sites screen reads real sites and operator memberships instead of local fi
   const h = hooks();
   const realSite = { ...site, code: 'ABC', address: 'Address', totalPhysicalCapacity: 0 };
   const api = load('lib/parkingApi.ts', { './authApi': { request: async (path, method, body, prefix) => ({ success: true, data: prefix === '/api/operators' ? [operator] : [realSite] }) } });
+  // SiteManagement delegates to a real data hook and a real dialogs module; only the presentational leaves are stubbed.
+  const dialogsDeps = {
+    react: h.react, 'react/jsx-runtime': h.runtime,
+    'react-dom': { createPortal: node => node },
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    './SiteForm': { SiteForm: 'site-form' },
+  };
+  const managementDeps = { react: h.react, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) }, '../../../lib/parkingApi': api };
   const component = load('roles/owner/parking-lots/SiteManagement.tsx', {
     react: h.react, 'react/jsx-runtime': h.runtime, '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/ui/PageHeader': { PageHeader },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    './SiteManagementDialogs': load('roles/owner/parking-lots/SiteManagementDialogs.tsx', dialogsDeps),
+    './useSiteManagement': load('roles/owner/parking-lots/useSiteManagement.ts', managementDeps),
     '../../../lib/parkingApi': api, './SiteForm': { SiteForm: 'site-form' },
   }).SiteManagement;
   const render = () => h.render(component, { onSiteCreated() {} });
@@ -206,6 +249,8 @@ test('Owner dashboard shares backend sites with overview, structure and refreshe
     '../operators/OperatorManagement': { OperatorManagement: 'operators' },
     '../policies/PolicySettings': { PolicySettings: 'policies' },
     '../parking-lots/SiteManagement': { SiteManagement: 'sites' },
+    // Lot management is a separate screen, not exercised by the dashboard assertions.
+    '../parking-lots/LotManagement': { LotManagement: 'lot-management' },
     '../revenue/RevenueDashboard': { RevenueDashboard: 'revenue' },
     '../structure/ParkingStructure': { ParkingStructure: 'structure' },
     '../../../components/layout/DashboardSidebar': { DashboardSidebar: 'sidebar' },
@@ -243,7 +288,18 @@ function structureFixture(failUnit = false) {
     }
     return { success: true, data: JSON.parse(JSON.stringify(layout)) };
   } } });
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api }).ParkingStructure;
+  // Presentational panels, 3D viewer and data hooks are stubbed; the unit/slot form logic stays real.
+  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': api,
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/ui/PageHeader': { PageHeader: 'page-header' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup-capacity' },
+    '../../../components/3d/Parking3DViewer': { Parking3DViewer: 'parking-3d-viewer' },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../data/data': { ownerData: { getLotsByOwner: () => [] } },
+    '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
+    '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null },
+  }).ParkingStructure;
   const outer = outerHooks.render(component, { sites: [site], selectedSiteId: 'all' });
   const editor = nodes(outer).find(node => typeof node.type === 'function');
   h.reset();
@@ -285,7 +341,17 @@ test('failed structure mutation reports error and does not report saved state', 
 
 test('empty backend site list never displays mock parking structure', () => {
   const h = hooks();
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {} }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {},
+    // Presentational shell and data hooks; these cases never reach the API.
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/ui/PageHeader': { PageHeader: 'page-header' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup-capacity' },
+    '../../../components/3d/Parking3DViewer': { Parking3DViewer: 'parking-3d-viewer' },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../data/data': { ownerData: { getLotsByOwner: () => [] } },
+    '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
+    '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null } }).ParkingStructure;
   const tree = h.render(component, { sites: [], selectedSiteId: 'all' });
   assert.ok(nodes(tree).some(node => node.props?.children === 'No sites found. Create a site in Sites first.'));
   assert.equal(nodes(tree).some(node => typeof node.type === 'function'), false);
@@ -293,7 +359,17 @@ test('empty backend site list never displays mock parking structure', () => {
 
 test('structure site selector can change sites after entering from a filtered dashboard', () => {
   const h = hooks();
-  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {} }).ParkingStructure;
+  const component = load('roles/owner/structure/ParkingStructure.tsx', { react: h.react, 'react/jsx-runtime': h.runtime, '../../../lib/parkingApi': {},
+    // Presentational shell and data hooks; these cases never reach the API.
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
+    '../../../components/ui/PageHeader': { PageHeader: 'page-header' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup-capacity' },
+    '../../../components/3d/Parking3DViewer': { Parking3DViewer: 'parking-3d-viewer' },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
+    '../data/data': { ownerData: { getLotsByOwner: () => [] } },
+    '../../../lib/3d/parking3DConfig': load('lib/3d/parking3DConfig.ts', {}),
+    '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null } }).ParkingStructure;
   const props = { sites: [site, { ...site, id: 'second-site' }], selectedSiteId: site.id };
   let tree = h.render(component, props);
   const select = nodes(tree).find(node => node.type === 'select');

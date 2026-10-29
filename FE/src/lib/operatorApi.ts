@@ -5,7 +5,14 @@ import {
   operatorsApi,
   parkingApi,
   type Structure,
+  type Unit,
 } from "./parkingApi"
+import { isSlotBookable } from "./operationalLayout"
+import type {
+  OperationalLayoutProjection,
+  PhysicalState,
+  ReservationState,
+} from "./operationalLayout"
 import type {
   AppNotification,
   Booking,
@@ -31,9 +38,72 @@ const parkingServer = (
 export interface OperatorSlot extends ParkingSlot {
   unitId: string
   vehicleType: string
+  /** Legacy presentation string kept for existing consumers; `physicalState` is authoritative. */
   operationalStatus: string
   isPhysicallyOccupied: boolean
-  reservationState: string | null
+  /** Normalised reservation axis: legacy `null`/`NONE` becomes `UNRESERVED`. */
+  reservationState: ReservationState
+  physicalState: PhysicalState
+  isBookable: boolean
+}
+
+/**
+ * Physical axis -> derived `ParkingSlot.status` presentation value. UNKNOWN and
+ * UNAVAILABLE fail closed to `disabled`, never `available`.
+ */
+const PHYSICAL_SLOT_STATUS: Record<PhysicalState, SlotStatus> = {
+  AVAILABLE: "available",
+  OCCUPIED: "occupied",
+  UNKNOWN: "disabled",
+  MAINTENANCE: "maintenance",
+  UNAVAILABLE: "disabled",
+}
+
+/** Reservation overlay, applied only when the physical axis is AVAILABLE. */
+const RESERVATION_SLOT_STATUS: Record<ReservationState, SlotStatus> = {
+  UNRESERVED: "available",
+  RESERVED: "reserved",
+  PROTECTED: "reserved",
+  BACKUP: "reserved",
+}
+
+const LEGACY_OPERATIONAL_STATUS: Record<PhysicalState, string> = {
+  AVAILABLE: "OPERATIONAL",
+  OCCUPIED: "OPERATIONAL",
+  UNKNOWN: "UNKNOWN",
+  MAINTENANCE: "MAINTENANCE",
+  UNAVAILABLE: "UNAVAILABLE",
+}
+
+/** Derived presentation status; unknown axis values fail closed to `disabled`. */
+function derivedSlotStatus(
+  physicalState: PhysicalState,
+  reservationState: ReservationState,
+): SlotStatus {
+  const physical = PHYSICAL_SLOT_STATUS[physicalState]
+  if (physical !== "available") return physical || "disabled"
+  return RESERVATION_SLOT_STATUS[reservationState] || "disabled"
+}
+
+/** Explicit normalisation: legacy `null`/`NONE`/empty means UNRESERVED. */
+function normalizeReservationState(raw: string | null | undefined): ReservationState {
+  const value = (raw ?? "").trim().toUpperCase()
+  if (value === "" || value === "NONE" || value === "UNRESERVED") return "UNRESERVED"
+  if (value === "RESERVED") return "RESERVED"
+  if (value === "PROTECTED") return "PROTECTED"
+  if (value === "BACKUP") return "BACKUP"
+  // Unknown legacy values stay non-bookable instead of looking unreserved.
+  return "RESERVED"
+}
+
+function physicalStateFromLegacy(slot: Structure["slots"][number]): PhysicalState {
+  if (slot.isPhysicallyOccupied) return "OCCUPIED"
+  const operational = (slot.operationalStatus ?? "").toUpperCase()
+  if (operational === "OPERATIONAL") return "AVAILABLE"
+  if (operational === "MAINTENANCE") return "MAINTENANCE"
+  if (operational === "UNAVAILABLE" || operational === "DISABLED" || operational === "BLOCKED")
+    return "UNAVAILABLE"
+  return "UNKNOWN"
 }
 
 export interface OperatorSite {
@@ -48,6 +118,16 @@ export interface OperatorSite {
   totalSlots: number
   floors: number
   configuredBackupCount: number
+  /**
+   * Server freshness triple from the operational-layout projection. `null` on
+   * the legacy owner aggregate, which carries no freshness metadata, so callers
+   * must treat it as unknown rather than fresh.
+   */
+  freshness?: {
+    generatedAt: string
+    isFresh: boolean
+    stalenessThresholdSeconds: number
+  } | null
   modelUrl?: string
   modelFileName?: string
   slots: OperatorSlot[]
@@ -159,30 +239,109 @@ function siteFromStructure(structure: Structure): OperatorSite {
     totalSlots: structure.slots.length,
     floors: floorUnits.length,
     configuredBackupCount: structure.capacityViews.find((view) => view.unitId === null)?.configuredBackup ?? 0,
+    // The legacy aggregate has no freshness triple; never fabricate one.
+    freshness: null,
     units: structure.units,
     slots: structure.slots.map((slot) => {
-      const operational = slot.operationalStatus.toUpperCase()
-      const reservation = slot.reservationState?.toUpperCase() ?? ""
-      const status: SlotStatus = slot.isPhysicallyOccupied
-        ? "occupied"
-        : operational === "MAINTENANCE"
-          ? "maintenance"
-          : operational !== "OPERATIONAL"
-            ? "disabled"
-            : reservation !== "" && reservation !== "NONE"
-              ? "reserved"
-              : "available"
+      const physicalState = physicalStateFromLegacy(slot)
+      const reservationState = normalizeReservationState(slot.reservationState)
 
       return {
         id: slot.id,
         unitId: slot.unitId,
         number: slot.code,
         floor: floorFor(slot.unitId),
-        status,
+        status: derivedSlotStatus(physicalState, reservationState),
         vehicleType: slot.vehicleType,
         operationalStatus: slot.operationalStatus,
-        isPhysicallyOccupied: slot.isPhysicallyOccupied,
+        isPhysicallyOccupied: physicalState === "OCCUPIED",
+        reservationState,
+        physicalState,
+        isBookable: isSlotBookable({ physicalState, reservationState }),
+      }
+    }),
+  }
+}
+
+/**
+ * Maps the authoritative operational-layout projection into the existing
+ * `OperatorSite`/`OperatorSlot` shape used by the operator screens. The two
+ * contract axes are preserved; `status` is only a derived presentation value.
+ *
+ * The projection does not carry site address/latitude/longitude/isActive, so
+ * those legacy display-only fields are left neutral here. Operators cannot read
+ * `GET /api/parking-lots`, so we intentionally do not make an extra call for them.
+ * The projection's freshness triple is carried through so the screen never has to
+ * fetch a second response just to decide staleness.
+ */
+function siteFromOperationalLayout(
+  projection: OperationalLayoutProjection,
+  tenantId: string,
+): OperatorSite {
+  const floorById = new Map(projection.floors.map((floor) => [floor.floorId, floor]))
+  const floorIndex = new Map(projection.floors.map((floor, index) => [floor.floorId, index + 1]))
+  const units: Unit[] = projection.floors.map((floor) => ({
+    id: floor.floorId,
+    parentId: null,
+    name: floor.name,
+    type: "FLOOR",
+    maxCapacity: floor.maxCapacity,
+  }))
+  const zoneUnitIds = new Map<string, string>()
+
+  for (const slot of projection.slots) {
+    if (!slot.zoneCode) continue
+    const key = `${slot.floorId}:${slot.zoneCode}`
+    if (zoneUnitIds.has(key)) continue
+    const id = `zone:${key}`
+    zoneUnitIds.set(key, id)
+    units.push({
+      id,
+      parentId: slot.floorId,
+      name: slot.zoneCode,
+      type: "ZONE",
+      maxCapacity: 0,
+    })
+  }
+
+  return {
+    id: projection.siteId,
+    tenantId,
+    code: projection.siteCode,
+    name: projection.siteName,
+    address: "",
+    latitude: null,
+    longitude: null,
+    isActive: true,
+    totalSlots: projection.slots.length,
+    floors: projection.floors.length,
+    configuredBackupCount: projection.slots.filter(
+      (slot) => slot.reservationState === "BACKUP",
+    ).length,
+    freshness: {
+      generatedAt: projection.generatedAt,
+      isFresh: projection.isFresh,
+      stalenessThresholdSeconds: projection.stalenessThresholdSeconds,
+    },
+    units,
+    slots: projection.slots.map((slot) => {
+      const floor = floorById.get(slot.floorId)
+      const zoneId = slot.zoneCode
+        ? zoneUnitIds.get(`${slot.floorId}:${slot.zoneCode}`)
+        : undefined
+
+      return {
+        id: slot.slotId,
+        unitId: zoneId ?? slot.floorId,
+        number: slot.slotCode,
+        floor: floor?.level ?? floorIndex.get(slot.floorId) ?? 1,
+        status: derivedSlotStatus(slot.physicalState, slot.reservationState),
+        vehicleType: slot.supportedVehicleType,
+        operationalStatus: LEGACY_OPERATIONAL_STATUS[slot.physicalState] || "UNKNOWN",
+        isPhysicallyOccupied: slot.physicalState === "OCCUPIED",
         reservationState: slot.reservationState,
+        physicalState: slot.physicalState,
+        isBookable: isSlotBookable(slot),
       }
     }),
   }
@@ -202,11 +361,14 @@ export async function loadOperatorSites(user: User | null): Promise<OperatorSite
   }
 
   const assignments = await operatorsApi.assignments()
-  const structures = await Promise.all(
-    assignments.map((assignment) => parkingApi.operatorLayout(assignment.siteId)),
+  const projections = await Promise.all(
+    assignments.map((assignment) => parkingApi.operationalLayout(assignment.siteId)),
   )
-  return Promise.all(structures.map(async structure => {
-    const site = siteFromStructure(structure)
+  return Promise.all(projections.map(async (projection, index) => {
+    const site = siteFromOperationalLayout(
+      projection,
+      assignments[index]?.tenantId ?? "",
+    )
     const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
     return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
   }))

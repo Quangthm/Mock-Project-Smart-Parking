@@ -41,6 +41,7 @@ public sealed class OperationalLayoutReadPathTests
         public int ReadSnapshotCalls { get; private set; }
         public int AcquireCalls { get; private set; }
         public int ReleaseCalls { get; private set; }
+        public int ForceReleaseCalls { get; private set; }
 
         public Task<CommitmentSnapshot> ReadSnapshotAsync(
             Guid tenantId, Guid siteId, CancellationToken cancellationToken)
@@ -65,6 +66,14 @@ public sealed class OperationalLayoutReadPathTests
             ReleaseCalls++;
             throw new InvalidOperationException(
                 "ReadOperationalAsync must not release a structure commitment hold.");
+        }
+
+        public Task ForceReleaseAsync(
+            Guid tenantId, Guid siteId, CancellationToken cancellationToken)
+        {
+            ForceReleaseCalls++;
+            throw new InvalidOperationException(
+                "ReadOperationalAsync must not force-release a structure commitment hold.");
         }
     }
 

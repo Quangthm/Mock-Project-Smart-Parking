@@ -6,17 +6,33 @@ import { request } from "../../../lib/authApi"
 import {
   operatorsApi,
   type OperatorAssignment,
-  type Structure,
 } from "../../../lib/parkingApi"
+import {
+  formatSlotLabel,
+  type OperationalLayoutEnvelope,
+  type OperationalLayoutProjection,
+  type SlotVisualStateDto,
+} from "../../../lib/operationalLayout"
 
 const server = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
 ).replace(/\/$/, "")
 
+/**
+ * BACKUP may only be designated on an unreserved bay that is either physically
+ * free and bookable, or currently occupied (operator override). Everything else
+ * fails closed.
+ */
+function isBackupCandidate(slot: SlotVisualStateDto): boolean {
+  if (slot.reservationState !== "UNRESERVED") return false
+  if (slot.physicalState === "OCCUPIED") return true
+  return slot.physicalState === "AVAILABLE" && slot.isBookable
+}
+
 export function OperatorBackupPanel() {
   const [sites, setSites] = useState<OperatorAssignment[]>([])
   const [site, setSite] = useState("")
-  const [layout, setLayout] = useState<Structure | null>(null)
+  const [layout, setLayout] = useState<OperationalLayoutProjection | null>(null)
 
   const [reason, setReason] = useState("")
   const [busy, setBusy] = useState(false)
@@ -48,7 +64,7 @@ export function OperatorBackupPanel() {
     let active = true
     setLayout(null)
     if (site)
-      request<{ data: Structure }>(
+      request<OperationalLayoutEnvelope>(
         `/${site}/operational-layout`,
         "GET",
         undefined,
@@ -69,6 +85,8 @@ export function OperatorBackupPanel() {
 
   async function mark(id: string) {
     if (busy) return
+    const slot = layout?.slots.find((item) => item.slotId === id)
+    if (!slot || !isBackupCandidate(slot)) return
     setBusy(true)
     setMessage("")
     try {
@@ -123,19 +141,15 @@ export function OperatorBackupPanel() {
         />
       </label>
       {layout?.slots.map((slot) => (
-        <p key={slot.id}>
-          <strong>{slot.code}</strong> · {slot.vehicleType} ·{" "}
-          {slot.reservationState ?? "Not reserved"}{" "}
+        <p key={slot.slotId}>
+          <strong>{formatSlotLabel(slot.slotCode)}</strong> · {slot.supportedVehicleType} ·{" "}
+          {slot.reservationState === "UNRESERVED"
+            ? "Not reserved"
+            : slot.reservationState}{" "}
           <button
             className="btn-outline"
-            disabled={
-              busy ||
-              !reason.trim() ||
-              slot.isPhysicallyOccupied ||
-              slot.operationalStatus !== "OPERATIONAL" ||
-              slot.reservationState !== null
-            }
-            onClick={() => void mark(slot.id)}
+            disabled={busy || !reason.trim() || !isBackupCandidate(slot)}
+            onClick={() => void mark(slot.slotId)}
           >
             Mark backup
           </button>

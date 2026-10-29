@@ -134,6 +134,11 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         if (hold.TenantId != tenantId || hold.Token != token)
             throw new HoldConflictException();
 
+        // Flush the hold deletion first: guard_structure_edit() rejects writes to
+        // site_capacity_pools while a hold row for the site still exists.
+        db.StructureEditHolds.Remove(hold);
+        await db.SaveChangesAsync(ct);
+
         if (outcome is not null)
         {
             var state = await db.StructureSiteStates.SingleOrDefaultAsync(s => s.SiteId == siteId, ct);
@@ -164,8 +169,27 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             }
         }
 
-        db.StructureEditHolds.Remove(hold);
         AddReceipt(tenantId, siteId, token, payload);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    public async Task ForceReleaseAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await LockSiteAsync(siteId, ct);
+        var hold = await db.StructureEditHolds.SingleOrDefaultAsync(h => h.SiteId == siteId, ct);
+        if (hold is null)
+        {
+            await transaction.CommitAsync(ct);
+            return;
+        }
+        // A force release may only drop a hold in the caller's tenant scope; a
+        // different tenant must still surface as a conflict, never a silent repair.
+        if (hold.TenantId != tenantId)
+            throw new HoldConflictException();
+
+        db.StructureEditHolds.Remove(hold);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
     }
