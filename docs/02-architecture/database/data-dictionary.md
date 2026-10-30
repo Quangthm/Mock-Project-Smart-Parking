@@ -70,7 +70,7 @@ Base: `03b-reservation-operations-service-db.sql`.
 | `search_facility_projections` | Search/read model: coordinates, operational status, open flag |
 | `audit_logs` | Gate/operator audit; append-only |
 
-Overlays: `site_capacity_pools` (D7) with `total_capacity`, `max_reservation_quota`, `current_reserved_count`, `pending_payment_count`, `occupied_count`, `protected_count`, `backup_count`; `structure_edit_holds`, `structure_site_state`, `structure_removed_resources` + guard triggers; `structure_release_receipts`; `confirmed_at` trigger.
+Overlays: `site_capacity_pools` (D7) with `total_capacity`, `max_reservation_quota`, `current_reserved_count`, `pending_payment_count`, `occupied_count`, `protected_count`, `backup_count`; `structure_edit_holds`, `structure_site_state` + guard triggers; `structure_release_receipts`; `confirmed_at` trigger.
 
 ## 5. Payment & Pricing DB (`smartpark_payment`)
 

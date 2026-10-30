@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Domain;
 using SmartParking.OperationService.Domain.Entities;
@@ -59,7 +60,7 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
                 Token = token,
                 CreatedAt = DateTimeOffset.UtcNow
             });
-            await db.SaveChangesAsync(ct);
+            await SaveAsync(ct);
         }
         else if (hold.TenantId != tenantId || hold.Token != token)
         {
@@ -127,7 +128,7 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             if (outcome is not null)
                 throw new HoldConflictException();
             AddReceipt(tenantId, siteId, token, payload);
-            await db.SaveChangesAsync(ct);
+            await SaveAsync(ct);
             await transaction.CommitAsync(ct);
             return;
         }
@@ -137,7 +138,7 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         // Capacity triggers reject writes while a hold exists. Flush its deletion
         // before changing pools; the transaction and site lock keep release atomic.
         db.StructureEditHolds.Remove(hold);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(ct);
 
         if (outcome is not null)
         {
@@ -150,13 +151,8 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
                 state.Active = outcome.SiteActive;
             }
 
-            foreach (var (ids, kind) in new[] { (outcome.RemovedSlots, "slot"), (outcome.RemovedUnits, "unit") })
-                foreach (var id in ids)
-                    if (!await db.StructureRemovedResources.AnyAsync(r => r.Id == id, ct))
-                        db.StructureRemovedResources.Add(new StructureRemovedResourceRow { Id = id, SiteId = siteId, Kind = kind });
-
             // Pool triggers must observe the published site/resource state.
-            await db.SaveChangesAsync(ct);
+            await SaveAsync(ct);
 
             var pools = await db.SiteCapacityPools
                 .Where(p => p.SiteId == siteId && p.TenantId == tenantId)
@@ -173,7 +169,7 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         }
 
         AddReceipt(tenantId, siteId, token, payload);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(ct);
         await transaction.CommitAsync(ct);
     }
 
@@ -193,10 +189,34 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             throw new HoldConflictException();
 
         db.StructureEditHolds.Remove(hold);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(ct);
         await transaction.CommitAsync(ct);
     }
 
+    // EF wraps provider failures (DbUpdateException, or InvalidOperationException for transient
+    // errors) and keeps the failed unit of work tracked. The structure-edit flow is written against
+    // the database exception, and a retry after a rolled-back projection must start from the
+    // committed state, so surface the PostgresException and reset the tracker.
+    private async Task SaveAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception error) when (DatabaseException(error) is { } postgres)
+        {
+            db.ChangeTracker.Clear();
+            throw postgres;
+        }
+    }
+
+    private static PostgresException? DatabaseException(Exception error) => error switch
+    {
+        PostgresException postgres => postgres,
+        DbUpdateException { InnerException: { } inner } => DatabaseException(inner),
+        InvalidOperationException { InnerException: { } inner } => DatabaseException(inner),
+        _ => null
+    };
     private void AddReceipt(Guid tenantId, Guid siteId, Guid token, string payload) =>
         db.StructureReleaseReceipts.Add(new StructureReleaseReceiptRow
         {
@@ -211,3 +231,4 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock(hashtextextended({siteId.ToString()}, 0))", ct);
 }
+
