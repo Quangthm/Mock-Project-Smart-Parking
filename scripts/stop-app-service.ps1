@@ -1,7 +1,9 @@
 param(
-    [ValidateSet('User','Facility','Operation','Frontend','All')][string]$Service = 'All'
+    [ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service = 'All'
 )
 $ErrorActionPreference = 'Stop'
+if ($Service -eq 'Facility') { $Service = 'Parking' }
+if ($Service -eq 'Reservation') { $Service = 'Operation' }
 $root = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $root '.env'
 $composePath = Join-Path $root 'compose.app.yml'
@@ -14,8 +16,9 @@ if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
 $map = @{
     User        = 'user-service'
-    Facility    = 'facility-service'
-    Operation   = 'operation-service'
+    Parking     = 'parking-service'
+    Operation   = 'reservation-service'
+    Payment     = 'payment-service'
     Frontend    = 'frontend'
 }
 

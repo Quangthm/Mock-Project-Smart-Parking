@@ -71,30 +71,36 @@ function generateInitialSpaces(
       status = "reserved"
       physicalState = "AVAILABLE"
       reservationState = "RESERVED"
-    } else if (i === 3 && count >= 8) {
-      // Dynamic Protection Window demonstration (SRS 3.4.4 & 8.2)
-      status = "reserved"
-      physicalState = "AVAILABLE"
-      reservationState = "PROTECTED"
-      isProtected = true
-    } else if (i === 4 && count >= 8) {
-      // Active Pending Payment hold demonstration (SRS 3.4.3 & 8.2)
-      status = "reserved"
-      physicalState = "AVAILABLE"
-      reservationState = "PENDING_PAYMENT"
-      isPendingPayment = true
-    } else if (i === 5 && count >= 10) {
-      // Designated Backup Capacity demonstration (SRS 3.4.5 & 8.2)
-      status = "available"
-      physicalState = "AVAILABLE"
-      reservationState = "BACKUP"
-      isBackup = true
-    } else if (i === 6 && count >= 10) {
-      // Reallocated slot demonstration (SRS 3.4.6 & Section 10)
-      status = "reserved"
-      physicalState = "AVAILABLE"
-      reservationState = "RESERVED"
-      requestedSlotCode = `${prefix}01` // Driver requested A01, but is allocated A06
+    } else if (({
+      3: count >= 8,
+      4: count >= 8,
+      5: count >= 10,
+      6: count >= 10,
+    } as Record<number, boolean>)[i]) {
+      const SPECIAL_SLOT_DEFS: Record<number, {
+        status: SpaceStatus
+        physicalState: PhysicalState
+        reservationState: ReservationProtectionState
+        isProtected?: boolean
+        isPendingPayment?: boolean
+        isBackup?: boolean
+        requestedSlotCode?: string
+      }> = {
+        3: { status: "reserved", physicalState: "AVAILABLE", reservationState: "PROTECTED", isProtected: true },
+        4: { status: "reserved", physicalState: "AVAILABLE", reservationState: "PENDING_PAYMENT", isPendingPayment: true },
+        5: { status: "available", physicalState: "AVAILABLE", reservationState: "BACKUP", isBackup: true },
+        6: { status: "reserved", physicalState: "AVAILABLE", reservationState: "RESERVED", requestedSlotCode: `${prefix}01` },
+      }
+      const special = SPECIAL_SLOT_DEFS[i]
+      if (special) {
+        status = special.status
+        physicalState = special.physicalState
+        reservationState = special.reservationState
+        if (special.isProtected) isProtected = true
+        if (special.isPendingPayment) isPendingPayment = true
+        if (special.isBackup) isBackup = true
+        if (special.requestedSlotCode) requestedSlotCode = special.requestedSlotCode
+      }
     }
 
     const item: ParkingSpaceItem = {
@@ -166,14 +172,11 @@ const DEFAULT_POLICY: LotPolicySummary = {
   ],
 }
 
-function buildDefaultStructure(
-  lotId: string,
-  lotName: string,
-  address: string,
-): ParkingStructureData {
-  const policy: LotPolicySummary = { ...DEFAULT_POLICY }
-
-  if (lotId === "lot-002") {
+const LOT_STRUCTURE_BUILDERS: Record<
+  string,
+  (lotId: string, lotName: string, address: string, policy: LotPolicySummary) => ParkingStructureData
+> = {
+  "lot-002": (lotId, lotName, address, policy) => {
     // Bitexco Outdoor Lot (Ground Floor, Car & EV/Motorcycle Zones)
     const floorG: ParkingFloorItem = {
       id: "fl-lot-002-g",
@@ -243,9 +246,9 @@ function buildDefaultStructure(
       floors: [floorG],
       policy,
     }
-  }
+  },
 
-  if (lotId === "lot-001") {
+  "lot-001": (lotId, lotName, address, policy) => {
     // Vinhomes Grand Park Multi-storey: 2 floors
     const floorB1: ParkingFloorItem = {
       id: "fl-001-b1",
@@ -325,6 +328,18 @@ function buildDefaultStructure(
       floors: [floorB1, floorB2],
       policy,
     }
+  },
+}
+
+function buildDefaultStructure(
+  lotId: string,
+  lotName: string,
+  address: string,
+): ParkingStructureData {
+  const policy: LotPolicySummary = { ...DEFAULT_POLICY }
+  const builder = LOT_STRUCTURE_BUILDERS[lotId]
+  if (builder) {
+    return builder(lotId, lotName, address, policy)
   }
 
   // Generic fallback for any other site
@@ -426,15 +441,15 @@ function normalizeStructure(data: ParkingStructureData): ParkingStructureData {
         zone.spaces = []
       }
       for (const space of zone.spaces) {
+        const STATUS_TO_PHYSICAL: Record<SpaceStatus, PhysicalState> = {
+          occupied: "OCCUPIED",
+          maintenance: "MAINTENANCE",
+          disabled: "UNAVAILABLE",
+          available: "AVAILABLE",
+          reserved: "AVAILABLE",
+        }
         if (!space.physicalState) {
-          space.physicalState =
-            space.status === "occupied"
-              ? "OCCUPIED"
-              : space.status === "maintenance"
-                ? "MAINTENANCE"
-                : space.status === "disabled"
-                  ? "UNAVAILABLE"
-                  : "AVAILABLE"
+          space.physicalState = STATUS_TO_PHYSICAL[space.status] ?? "AVAILABLE"
         }
         if (!space.reservationState) {
           space.reservationState = space.isProtected
@@ -868,16 +883,17 @@ export const structureStore = {
           space.lastUpdated = new Date().toISOString()
 
           // Physical State mapping
+          const STATUS_TO_PHYSICAL_MAPPING: Record<SpaceStatus, PhysicalState> = {
+            available: "AVAILABLE",
+            occupied: "OCCUPIED",
+            maintenance: "MAINTENANCE",
+            disabled: "UNAVAILABLE",
+            reserved: "AVAILABLE",
+          }
           if (options?.physicalState) {
             space.physicalState = options.physicalState
-          } else if (newStatus === "available") {
-            space.physicalState = "AVAILABLE"
-          } else if (newStatus === "occupied") {
-            space.physicalState = "OCCUPIED"
-          } else if (newStatus === "maintenance") {
-            space.physicalState = "MAINTENANCE"
-          } else if (newStatus === "disabled") {
-            space.physicalState = "UNAVAILABLE"
+          } else {
+            space.physicalState = STATUS_TO_PHYSICAL_MAPPING[newStatus] ?? "AVAILABLE"
           }
 
           // Reservation / Protection State mapping

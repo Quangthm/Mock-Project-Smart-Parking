@@ -28,6 +28,20 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
     }
     public AppDbContext Open() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
 
+    // Explicit fixture data for tests of existing owners/operators, not onboarding.
+    public async Task SeedTenantsAsync(params Guid[] ids)
+    {
+        await using var db = Open();
+        foreach (var id in ids.Distinct())
+        {
+            var code = "TEST-" + id.ToString("N");
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO tenants(id,code,name,contact_email,contact_phone)
+                VALUES ({id},{code},'Fixture tenant','tenant@example.test','0900000000')
+                """);
+        }
+    }
+
     public static async Task<UserServiceDatabaseFixture> CreateAsync()
     {
         var fixture = new UserServiceDatabaseFixture(Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")
@@ -44,7 +58,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         catch { await fixture.DisposeAsync(); throw; }
     }
 
-    public async Task<WebApplication> StartHostAsync()
+    public async Task<WebApplication> StartHostAsync(TimeProvider? clock = null, Action<WebApplicationBuilder>? configure = null)
     {
         using var signingKey = RSA.Create(2048);
         var app = await UserHost.BuildAsync(["--environment", "Testing"], builder =>
@@ -52,6 +66,13 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
             builder.WebHost.UseTestServer();
             builder.Logging.ClearProviders();
             builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            if (clock is not null)
+            {
+                builder.Services.AddSingleton(clock);
+                // Lifecycle tests verify account-level lockout, independently of
+                // the shared TestServer IP's per-minute transport limit.
+                builder.Services.AddSingleton<IStartupFilter, MfaTestClientAddresses>();
+            }
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:User"] = ConnectionString,
@@ -63,7 +84,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
                 ["SeedDemoUser"] = "false",
                 ["DevelopmentAdmin:Email"] = null
             });
-        });
+        }, configure);
         await app.StartAsync();
         // Delivery scheduling is exercised explicitly against PostgreSQL in DriverWorkflowTests.
         // Stop the timer here so extracting test-only OTP fixtures cannot race provider retries.
@@ -83,4 +104,17 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         using var pool = new NpgsqlConnection(ConnectionString);
         NpgsqlConnection.ClearPool(pool);
     }
+}
+
+internal sealed class MfaTestClientAddresses : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use((context, handler) =>
+        {
+            context.Connection.RemoteIpAddress = new System.Net.IPAddress(RandomNumberGenerator.GetBytes(4));
+            return handler(context);
+        });
+        next(app);
+    };
 }

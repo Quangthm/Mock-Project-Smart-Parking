@@ -278,7 +278,7 @@ export function BookingFlow({
           <button
             type="button"
             className="btn-outline"
-            title="View parking rules and policies (PDF)"
+            title="Review owner and platform policies"
             onClick={() => setShowPolicyModal(true)}
             style={{
               padding: "0.4rem 0.75rem",
@@ -289,7 +289,7 @@ export function BookingFlow({
             }}
           >
             <UntitledIcon name="file" size={13} />
-            Parking policies
+            Owner & platform policies
           </button>
           <button
             type="button"
@@ -306,7 +306,12 @@ export function BookingFlow({
       </div>
       <div className="booking-flow-steps" aria-label="Booking progress">
         {["Select Slot", "Time & Vehicle", "Payment"].map((label, index) => {
-          const currentIndex = step === "slot" ? 0 : step === "details" ? 1 : 2
+          const STEP_INDEX_MAP: Record<string, number> = {
+            slot: 0,
+            details: 1,
+            payment: 2,
+          }
+          const currentIndex = STEP_INDEX_MAP[step] ?? 0
 
           return (
             <div key={label} className="booking-flow-step">
@@ -874,7 +879,7 @@ export function BookingFlow({
             <button
               type="button"
               className="btn-outline"
-              title="View cancellation policies and parking rules"
+              title="Review owner and platform policies"
               onClick={() => setShowPolicyModal(true)}
               style={{
                 fontSize: "0.75rem",
@@ -885,7 +890,7 @@ export function BookingFlow({
               }}
             >
               <UntitledIcon name="file" size={12} />
-              Parking policies
+              Owner & platform policies
             </button>
           </div>
           <div

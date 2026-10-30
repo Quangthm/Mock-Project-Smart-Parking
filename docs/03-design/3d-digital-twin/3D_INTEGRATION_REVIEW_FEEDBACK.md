@@ -1,6 +1,6 @@
 # 3D Digital Twin — Technical Review Feedback & Architectural Reconciliation
 
-> Historical review record (12 October 2026), retained without rewriting its original observations/results. It is not current implementation evidence or the v1.1 authority. Use the [current backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) and [service ownership contract](../../02-architecture/service-boundaries/ownership-and-events.md). In particular, any v0.9 claim that legacy FacilityService owns accepted occupancy is superseded by Operations authority under V11-09. Current discovery-to-model requirements are in the [hub](README.md#maptiler-discovery-to-internal-2d3d-booking-v11-12).
+> Historical review record (12 October 2026), retained without rewriting its original observations/results. It is not current implementation evidence or the v1.1 authority. Use the [current backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) and [service ownership contract](../../02-architecture/service-boundaries/ownership-and-events.md). In particular, any v0.9 claim that legacy ParkingService owns accepted occupancy is superseded by Operations authority under V11-09. Current discovery-to-model requirements are in the [hub](README.md#maptiler-discovery-to-internal-2d3d-booking-v11-12).
 
 ## Document Control
 
@@ -33,7 +33,7 @@ Sau khi rà soát và đối chiếu chéo với **SmartPark SRS v0.9**, **Solut
 ### 2.1. ❌ Ảo giác về việc phân chia dịch vụ thành "Facility & Visualization" và "Parking Operations"
 
 > [!NOTE]
-> **Ghi chú chuyển tiếp kiến trúc (v1.1 / Fix2FA):** Nhận định kỹ thuật tại mục 2.1 này là biên bản lịch sử ghi nhận ngày 12/10/2026 dựa trên hiện trạng codebase và tài liệu v0.9 cũ. Kể từ quyết định **V11-09** (SRS v1.1) và branch refactor `Fix2FA`, kiến trúc 6 dịch vụ đã chính thức phê duyệt phân tách **Facility Service** (quản trị hạ tầng/spatial layout/3D model) và **Parking Operations** (quản trị phiên/occupancy). Hiện tại mã nguồn `src/Services/FacilityService` đang trong quá trình chuyển đổi hoàn tất sang `src/Services/FacilityService`.
+> **Ghi chú chuyển tiếp kiến trúc (v1.1 / Fix2FA):** Nhận định kỹ thuật tại mục 2.1 này là biên bản lịch sử ghi nhận ngày 12/10/2026 dựa trên hiện trạng codebase và tài liệu v0.9 cũ. Kể từ quyết định **V11-09** (SRS v1.1) và branch refactor `Fix2FA`, kiến trúc 6 dịch vụ đã chính thức phê duyệt phân tách **Facility Service** (quản trị hạ tầng/spatial layout/3D model) và **Parking Operations** (quản trị phiên/occupancy). Trên branch `Fix2FA`, mã nguồn đã đổi tên hoàn tất sang `src/Services/FacilityService` (`SmartParking.FacilityService.*`).
 
 
 * **Nhận xét của AI PM (Mục 1, 2, 9, 10, 28):**

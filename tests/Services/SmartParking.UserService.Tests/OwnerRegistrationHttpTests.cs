@@ -1,3 +1,6 @@
+using UserService.API;
+using Microsoft.Extensions.Configuration;
+using UserService.Application.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -25,6 +28,8 @@ public sealed class OwnerRegistrationHttpTests
         public Guid? Reviewer;
         private readonly OwnerApplicationDto record = new(Guid.NewGuid(), Guid.NewGuid(), "Owner", "Company",
             "owner@example.com", "0911111111", "basement", "pending", DateTimeOffset.UtcNow, null, null, null);
+        public Task<OwnerApplicationDto> SaveLotSetupAsync(OwnerLotSetupRequest body, CancellationToken ct)
+        { Calls++; return Task.FromResult(record with { LotSetupComplete = true, LotSetup = body.Lot }); }
         public Task<OwnerApplicationDto> RegisterAsync(OwnerRegistrationDto body, CancellationToken ct)
         { Calls++; return Task.FromResult(record); }
         public Task<IReadOnlyList<OwnerApplicationDto>> ListAsync(Guid adminId, CancellationToken ct)
@@ -40,8 +45,12 @@ public sealed class OwnerRegistrationHttpTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
-        builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
+        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
@@ -79,6 +88,28 @@ public sealed class OwnerRegistrationHttpTests
         Assert.False(data.TryGetProperty("password", out _));
         Assert.False(data.TryGetProperty("accessToken", out _));
         var id = data.GetProperty("id").GetGuid();
+        OwnerLotSetupRequest Setup() => new() { RegistrationId = id, SetupToken = "test-token", Lot = new()
+        { Name = "Lot", Address = "Address", LotType = "outdoor", TotalSlots = 10, Floors = 1,
+            ModelFileName = "outdoor_parking_lot.glb", PolicyAccepted = true } };
+        var invalidSetups = new Action<OwnerLotSetupRequest>[] {
+            b => b.SetupToken = "", b => b.Lot = null!, b => b.Lot.Name = " ",
+            b => b.Lot.TotalSlots = 2001, b => b.Lot.Floors = 0, b => b.Lot.Floors = 2,
+            b => b.Lot.PolicyAccepted = false, b => b.Lot.ModelFileName = "untrusted.glb",
+            b => b.Lot.HourlyRate = -1, b => b.Lot.DailyRate = 9007199254740992L,
+            b => b.Lot.Devices = null!, b => b.Lot.Devices = [null!],
+            b => b.Lot.Devices = [new("camera", "Camera", true), new("camera", "Camera", true)],
+            b => b.Lot.Devices = [new("invalid", "Device", true)]
+        };
+        var callsBeforeSetup = registrations.Calls;
+        foreach (var change in invalidSetups)
+        {
+            var setup = Setup(); change(setup);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/auth/register/owner/lot-setup", setup)).StatusCode);
+        }
+        Assert.Equal(callsBeforeSetup, registrations.Calls);
+        var saved = await client.PostAsJsonAsync("/api/auth/register/owner/lot-setup", Setup());
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        Assert.True((await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("lotSetupComplete").GetBoolean());
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/owner-applications")).StatusCode);
         async Task Login()
         {

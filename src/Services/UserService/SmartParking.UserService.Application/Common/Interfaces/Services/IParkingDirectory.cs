@@ -4,6 +4,7 @@ namespace UserService.Application.Common.Interfaces.Services;
 public sealed record DirectorySite(Guid Id, Guid TenantId);
 public interface IParkingDirectory
 {
+    Task ProvisionOwnerSiteAsync(Guid applicationId, Guid tenantId, string name, string email, string phone, UserService.Application.DTOs.OwnerLotSetupDto lot, CancellationToken ct);
     Task ProvisionTenantAsync(Guid tenantId, string name, string email, string phone, CancellationToken ct);
     Task<IReadOnlyList<DirectorySite>> ActiveSitesAsync(Guid[] siteIds, Guid[] tenantIds, CancellationToken ct);
 }

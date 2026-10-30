@@ -38,6 +38,27 @@ public sealed class PostgresStructureWorkflowTests
     }
 
     [StructurePostgresFact]
+    public async Task OwnerOnboardingIsAtomicRetryableAndPreservesSubsequentEdits()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var id = Guid.NewGuid();
+        var body = new OwnerOnboardingBody(id, "Business", "owner@example.com", "0911111111",
+            JsonSerializer.SerializeToElement(new { name = "Submitted lot", address = "Address", totalSlots = 20, floors = 2 }));
+        var store = new OwnerOnboardingStore(fixture.Parking);
+        await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => store.ProvisionAsync(id, body, default)));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM parking_sites WHERE id='{id}' AND total_physical_capacity=0 AND status='ACTIVE'"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM owner_onboarding_provisions WHERE application_id='{id}' AND payload->'Lot'->>'totalSlots'='20'"));
+        await Assert.ThrowsAsync<StructureException>(() => store.ProvisionAsync(id, body with { Name = "Changed" }, default));
+        await fixture.ExecuteAsync(fixture.Parking, $"UPDATE parking_sites SET name='Owner edited',status='INACTIVE' WHERE id='{id}'");
+        await new OwnerOnboardingStore(fixture.Parking).ProvisionAsync(id, body, default);
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM parking_sites WHERE id='{id}' AND name='Owner edited' AND status='INACTIVE'"));
+        var conflict = Guid.NewGuid();
+        await fixture.ExecuteAsync(fixture.Parking, $"INSERT INTO parking_sites(id,tenant_id,site_code,name,address) VALUES ('{conflict}','{fixture.Owner.TenantId}','conflict','existing','address')");
+        await Assert.ThrowsAsync<PostgresException>(() => store.ProvisionAsync(conflict, body with { TenantId = conflict }, default));
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM tenants WHERE id='{conflict}'"));
+    }
+
+    [StructurePostgresFact]
     public async Task CommittedEditSurvivesLostResponseAndRecoversWithANewApplicationInstance()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -95,6 +116,27 @@ public sealed class PostgresStructureWorkflowTests
             """);
     }
 
+    [StructurePostgresFact]
+    public async Task ReactivatingSitePublishesStateBeforeCapacityWithBackup()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        await fixture.ExecuteAsync(fixture.Reservation, $"""
+            INSERT INTO site_capacity_pools(tenant_id,site_id,vehicle_type,total_capacity,max_reservation_quota)
+            VALUES ('{fixture.Owner.TenantId}','{fixture.SiteId}','CAR',2,1);
+            UPDATE structure_site_state SET active=false WHERE site_id='{fixture.SiteId}';
+            """);
+        var token = Guid.NewGuid();
+        await fixture.OperationService.PrepareAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
+
+        await fixture.OperationService.CompleteAsync(fixture.Owner.TenantId, fixture.SiteId, token,
+            new(true, [], [], [new(null, "CAR", 2, 1)]), CancellationToken.None);
+
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_site_state WHERE site_id='{fixture.SiteId}' AND active"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            "SELECT count(*) FROM site_capacity_pools WHERE total_capacity=2 AND backup_count=1"));
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation, "SELECT count(*) FROM structure_edit_holds"));
+    }
     [StructurePostgresFact]
     public async Task ReceiptReplayCannotReleaseANewerHoldAndAbortedTokenCannotBeReused()
     {
@@ -234,9 +276,12 @@ public sealed class PostgresStructureWorkflowTests
         var token = Guid.NewGuid();
         var removed = Guid.NewGuid();
         await fixture.OperationService.PrepareAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
-        await Assert.ThrowsAsync<PostgresException>(() => fixture.OperationService.CompleteAsync(
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => fixture.OperationService.CompleteAsync(
             fixture.Owner.TenantId, fixture.SiteId, token,
             new(false, [removed], [], [new(null, "CAR", 0)]), CancellationToken.None));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, Assert.IsType<PostgresException>(failure.InnerException).SqlState);
+        // A retry uses a fresh request scope after the failed EF transaction.
+        fixture.ReservationContext.ChangeTracker.Clear();
 
         Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
             "SELECT count(*) FROM structure_edit_holds"));
@@ -262,7 +307,7 @@ public sealed class PostgresStructureWorkflowTests
         private readonly string reservationDatabase;
         public NpgsqlDataSource Parking { get; }
         public NpgsqlDataSource Reservation { get; }
-        private ReservationDbContext ReservationContext { get; }
+        public ReservationDbContext ReservationContext { get; }
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
         public Guid SiteId { get; private set; }
         public Guid UnitId { get; private set; }
@@ -309,14 +354,19 @@ public sealed class PostgresStructureWorkflowTests
                 var root = FindRepositoryRoot();
                 await fixture.ApplyAsync(fixture.Parking, root,
                     "scripts/database/microservices/02-facility-service-db.sql",
-                    "scripts/database/integration/02-facility-service-alignment.sql",
-                    "scripts/database/05.9-Parking-Backup-Operations.sql",
-                    "scripts/database/05.11-Parking-Structure-Synchronization.sql");
+                    "scripts/database/microservices/03a-parking-structure-ops-service-db.sql",
+                    "scripts/database/overlay/parking-tenants.sql",
+                    "scripts/database/overlay/parking-structure-synchronizations.sql",
+                    "scripts/database/overlay/parking-operator-tables.sql",
+                    "scripts/database/overlay/parking-slot-constraints.sql",
+                    "scripts/database/05.16-Parking-Owner-Onboarding.sql",
+                    "scripts/database/05.16-Parking-Owner-Onboarding.sql");
                 await fixture.ApplyAsync(fixture.Reservation, root,
-                    "scripts/database/microservices/03-reservation-session-service-db.sql",
-                    "scripts/database/integration/03-reservation-structure-safety.sql",
-                    "scripts/database/05.10-Reservation-Confirmation-Time.sql",
-                    "scripts/database/05.12-Reservation-Structure-Receipts.sql");
+                    "scripts/database/microservices/03b-reservation-operations-service-db.sql",
+                    "scripts/database/overlay/reservation-site-capacity-pools.sql",
+                    "scripts/database/overlay/reservation-structure-safety.sql",
+                    "scripts/database/overlay/reservation-structure-receipts.sql",
+                    "scripts/database/overlay/reservation-confirmation-time.sql");
                 await fixture.ExecuteAsync(fixture.Parking, $"""
                     INSERT INTO tenants(id,code,name,contact_email,contact_phone)
                     VALUES ('{fixture.Owner.TenantId}','TEST','Test','test@example.com','0000000000')

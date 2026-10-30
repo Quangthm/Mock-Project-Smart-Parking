@@ -25,7 +25,7 @@ function fixture() {
     createContext: () => ({ Provider: 'provider' }),
     useState: initial => {
       const index = cursor++;
-      if (!(index in slots)) slots[index] = initial;
+      if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
       return [slots[index], value => { slots[index] = value; }];
     },
     useRef: initial => {
@@ -48,12 +48,16 @@ function fixture() {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
       if (name === '../lib/authApi') return { authApi: api, authExpiredEvent: 'sp-auth-expired' };
+      if (name === '../roles/authentications/Sign Up/DriverOtpForm') return { restoreDriverRegistration: () => null };
+      if (name === '../lib/ownerRegistration') return { restoreOwnerRegistration: () => null };
       if (name === '../lib/store') return { store };
       throw new Error(`Unexpected import: ${name}`);
     },
     localStorage: { getItem: () => null },
-    document: { documentElement: { dataset: {}, classList: { add() {} } } },
+    sessionStorage: { getItem: () => null },
+    document: { querySelector: () => null, documentElement: { dataset: {}, classList: { add() {}, toggle() {} } } },
     window: {
+      matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
       addEventListener: (name, handler) => listeners.set(name, handler),
       removeEventListener: name => listeners.delete(name),
       setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {},

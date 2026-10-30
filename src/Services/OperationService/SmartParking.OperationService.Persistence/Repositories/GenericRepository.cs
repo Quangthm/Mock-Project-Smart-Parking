@@ -13,5 +13,4 @@ public class GenericRepository<TEntity>(ReservationDbContext db) : IRepository<T
 
     public void Update(TEntity entity) => Set.Update(entity);
     public void Remove(TEntity entity) => Set.Remove(entity);
-    public IQueryable<TEntity> Query() => Set.AsQueryable();
 }

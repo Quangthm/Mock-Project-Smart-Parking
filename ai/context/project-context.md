@@ -30,7 +30,7 @@ Current direction includes synchronous API communication where an immediate resp
 - Backend: ASP.NET Core / .NET 10
 - Frontend: React 19 + Vite + TypeScript
 - UI/styling: TailwindCSS (Material UI is **not** used — see Conflict Register)
-- Database: PostgreSQL (EF Core in UserService; raw Npgsql in FacilityService/OperationService)
+- Database: PostgreSQL (EF Core in UserService/OperationService; raw Npgsql in FacilityService)
 - Containerization: Docker
 - Messaging/event layer: RabbitMQ when justified (Kafka is not used)
 - 3D parking visualization: Three.js

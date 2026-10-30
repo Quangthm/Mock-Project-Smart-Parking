@@ -136,6 +136,11 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         if (hold.TenantId != tenantId || hold.Token != token)
             throw new HoldConflictException();
 
+        // Capacity triggers reject writes while a hold exists. Flush its deletion
+        // before changing pools; the transaction and site lock keep release atomic.
+        db.StructureEditHolds.Remove(hold);
+        await db.SaveChangesAsync(ct);
+
         if (outcome is not null)
         {
             var state = await db.StructureSiteStates.SingleOrDefaultAsync(s => s.SiteId == siteId, ct);
@@ -152,6 +157,9 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
                     if (!await db.StructureRemovedResources.AnyAsync(r => r.Id == id, ct))
                         db.StructureRemovedResources.Add(new StructureRemovedResourceRow { Id = id, SiteId = siteId, Kind = kind });
 
+            // Pool triggers must observe the published site/resource state.
+            await db.SaveChangesAsync(ct);
+
             var pools = await db.SiteCapacityPools
                 .Where(p => p.SiteId == siteId && p.TenantId == tenantId)
                 .ToListAsync(ct);
@@ -166,7 +174,6 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             }
         }
 
-        db.StructureEditHolds.Remove(hold);
         AddReceipt(tenantId, siteId, token, payload);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);

@@ -59,12 +59,16 @@ function statusLabel(status: string) {
   return status.replace(/[_-]/g, " ").toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
+const STATUS_TONE_MAP: Record<string, "completed" | "active" | "neutral" | "attention" | "pending"> = {
+  COMPLETED: "completed",
+  ACTIVE: "active",
+  CANCELLED: "neutral",
+  DISPUTED: "attention",
+  OVERSTAYED: "attention",
+}
+
 function statusTone(status: string) {
-  if (status === "COMPLETED") return "completed"
-  if (status === "ACTIVE") return "active"
-  if (status === "CANCELLED") return "neutral"
-  if (status === "DISPUTED" || status === "OVERSTAYED") return "attention"
-  return "pending"
+  return STATUS_TONE_MAP[status] ?? "pending"
 }
 
 function normalizePlate(value: string) {
@@ -147,8 +151,8 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
     </div>
 
     <div className="parking-history-filters" aria-label="Filter parking history">
-      <div className="parking-history-search">
-        <UntitledIcon name="search" size={18} />
+      <div className="parking-history-search sp-search-field">
+        <UntitledIcon name="search" size={18} aria-hidden="true" />
         <label className="sr-only" htmlFor="parking-history-search">Search license plate or {dateLabel === "Entry" ? "account" : "parking site"}</label>
         <input id="parking-history-search" type="search" name="parking-history-search" autoComplete="off" placeholder={dateLabel === "Entry" ? "Search plate or account…" : "Search plate or parking site…"} value={query} onChange={event => setQuery(event.target.value)} />
       </div>
@@ -195,7 +199,14 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
 }
 
 function Status({ status }: { status: string }) {
+  const TONE_ICON_MAP: Record<string, "check-circle" | "car" | "alert" | "x" | "clock"> = {
+    completed: "check-circle",
+    active: "car",
+    attention: "alert",
+    neutral: "x",
+    pending: "clock",
+  }
   const tone = statusTone(status)
-  const icon = tone === "completed" ? "check-circle" : tone === "active" ? "car" : tone === "attention" ? "alert" : tone === "neutral" ? "x" : "clock"
+  const icon = TONE_ICON_MAP[tone] ?? "clock"
   return <span className={`parking-history-status is-${tone}`}><UntitledIcon name={icon} size={14} />{statusLabel(status)}</span>
 }

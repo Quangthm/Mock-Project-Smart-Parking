@@ -1,5 +1,4 @@
-using SmartParking.FacilityService.Infrastructure;
-using SmartParking.FacilityService.Persistence;
+using SmartParking.FacilityService.Application;
 
 namespace SmartParking.FacilityService.API;
 
@@ -9,8 +8,8 @@ internal static class OperatorOperationsEndpoints
     {
         app.MapGet("/api/operator/sites/{siteId:guid}/tickets", async (
             Guid siteId,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             await identity.ScopeAsync(siteId, ct);
@@ -19,8 +18,8 @@ internal static class OperatorOperationsEndpoints
         app.MapPost("/api/operator/sites/{siteId:guid}/tickets", async (
             Guid siteId,
             CreateTicketRequest body,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.Subject) || body.Subject.Trim().Length > 255 ||
@@ -35,8 +34,8 @@ internal static class OperatorOperationsEndpoints
             Guid siteId,
             Guid ticketId,
             UpdateTicketRequest body,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             if (body.Status is not ("open" or "in-progress" or "resolved"))
@@ -52,8 +51,8 @@ internal static class OperatorOperationsEndpoints
         });
         app.MapGet("/api/operator/sites/{siteId:guid}/incidents", async (
             Guid siteId,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             await identity.ScopeAsync(siteId, ct);
@@ -62,8 +61,8 @@ internal static class OperatorOperationsEndpoints
         app.MapPost("/api/operator/sites/{siteId:guid}/incidents", async (
             Guid siteId,
             CreateIncidentRequest body,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.Type) || body.Type.Trim().Length > 80 ||
@@ -77,8 +76,8 @@ internal static class OperatorOperationsEndpoints
         app.MapPatch("/api/operator/sites/{siteId:guid}/incidents/{incidentId:guid}", async (
             Guid siteId,
             Guid incidentId,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             var scope = await identity.ScopeAsync(siteId, ct);
@@ -89,8 +88,8 @@ internal static class OperatorOperationsEndpoints
         });
         app.MapGet("/api/operator/sites/{siteId:guid}/audit", async (
             Guid siteId,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             await identity.ScopeAsync(siteId, ct);
@@ -99,8 +98,8 @@ internal static class OperatorOperationsEndpoints
         app.MapPost("/api/operator/sites/{siteId:guid}/audit", async (
             Guid siteId,
             CreateAuditRequest body,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.Action) || body.Action.Trim().Length > 100 ||
@@ -112,8 +111,8 @@ internal static class OperatorOperationsEndpoints
         });
         app.MapGet("/api/operator/sites/{siteId:guid}/notifications", async (
             Guid siteId,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             var scope = await identity.ScopeAsync(siteId, ct);
@@ -126,8 +125,8 @@ internal static class OperatorOperationsEndpoints
         app.MapPatch("/api/operator/sites/{siteId:guid}/notifications/{notificationId:guid}/read", async (
             Guid siteId,
             Guid notificationId,
-            OperatorSiteClient identity,
-            OperatorOperationsStore store,
+            IOperatorSiteAuthorizer identity,
+            OperatorOperationsService store,
             CancellationToken ct) =>
         {
             var scope = await identity.ScopeAsync(siteId, ct);

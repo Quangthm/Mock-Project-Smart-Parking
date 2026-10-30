@@ -1,0 +1,15 @@
+name: smartpark-tests
+services:
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    environment:
+      # Local test-only credentials used by IdentityMessagingTests.
+      RABBITMQ_DEFAULT_USER: identity_test
+      RABBITMQ_DEFAULT_PASS: local-disposable-identity-test
+    ports:
+      - "127.0.0.1:${SMARTPARK_RABBIT_TEST_PORT:-5679}:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

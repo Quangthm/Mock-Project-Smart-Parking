@@ -233,7 +233,13 @@ export interface SupportTicket {
 
   bookingId?: string
 
+  siteId?: string
+
   status: "open" | "in-progress" | "resolved"
+
+  decision?: "approved" | "rejected"
+
+  resolutionNote?: string
 
   createdAt: string
 }

@@ -8,6 +8,18 @@ namespace UserService.Infrastructure.Services;
 public sealed class ParkingDirectoryClient(HttpClient client) : IParkingDirectory
 {
     private static AuthException Unavailable() => new("PARKING_UNAVAILABLE", "Parking service is unavailable. Please retry.", 503);
+    public async Task ProvisionOwnerSiteAsync(Guid applicationId, Guid tenantId, string name, string email, string phone,
+        UserService.Application.DTOs.OwnerLotSetupDto lot, CancellationToken ct)
+    {
+        try
+        {
+            using var response = await client.PutAsJsonAsync($"internal/owner-onboarding/{applicationId}", new { tenantId, name, email, phone, lot }, ct);
+            if (!response.IsSuccessStatusCode) throw Unavailable();
+        }
+        catch (HttpRequestException) { throw Unavailable(); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw Unavailable(); }
+    }
+
     public async Task ProvisionTenantAsync(Guid tenantId, string name, string email, string phone, CancellationToken ct)
     {
         try

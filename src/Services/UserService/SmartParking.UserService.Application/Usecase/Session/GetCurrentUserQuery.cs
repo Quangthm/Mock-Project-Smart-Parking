@@ -15,7 +15,7 @@ public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var user = await unitOfWork.UserRepository.GetByIdWithRolesAsync(request.UserId, cancellationToken);
-        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active || AccessTokenService.CurrentRole(user) is null)
+        if (user is null || user.DeletedOn != null || user.Status != UserStatus.Active || AccountRolePolicy.CurrentRole(user) is null)
             return null;
 
         return new UserInfoDto
@@ -23,7 +23,8 @@ public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
             UserId = user.Id!.Value,
             FullName = user.FullName,
             Email = user.Email ?? string.Empty,
-            Role = AccessTokenService.CurrentRole(user)!
+            OnboardingComplete = user.OnboardingComplete,
+            Role = AccountRolePolicy.CurrentRole(user)!
         };
     }
 }

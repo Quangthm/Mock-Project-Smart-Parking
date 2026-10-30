@@ -68,7 +68,7 @@ Sau khi setup, chạy 3 service tích hợp:
 ```powershell
 ./scripts/run-schema-service.ps1 -Service User        # API 5035 → DB 5441
 ./scripts/run-schema-service.ps1 -Service Parking     # API 5045 → DB 5442
-./scripts/run-schema-service.ps1 -Service Reservation # API 5055 → DB 5443
+./scripts/run-schema-service.ps1 -Service Operation # API 5055 → DB 5443
 ```
 
 `run-schema-service.ps1` đọc `.env`, đặt `ConnectionStrings__<Service>` đúng DB/port và `Services__Key`. Payment/Notification/IoT chưa có runner tương ứng trong phạm vi tích hợp này.

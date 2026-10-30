@@ -123,7 +123,7 @@ Nếu Văn đã có password hashing/OTP, token validation, refresh persistence/
 - Browser thực: sai password hiển thị lỗi; login hiển thị Demo Driver; F5 vẫn đúng account; Sign Out về trang public; F5 sau logout không trở lại dashboard. Khi tắt API, Sign Out hiển thị lỗi kết nối và không báo thành công.
 - Newman chạy collection hiện tại: **10/10 request và 23/23 assertion đạt**, gồm anonymous me, login/validation, me, logout và revoked token. Không lấy kết quả ngày 02/10 làm kết quả của lần sửa mới.
 
-Ảnh minh chứng: [account Demo Driver và menu Sign Out](../../04-testing/evidence/auth-demo-login-2026-10-05.png). Cách chạy: [hướng dẫn tích hợp](../../04-testing/login-logout-frontend-guide.md).
+Ảnh minh chứng: [account Demo Driver và menu Sign Out](../../04-testing/evidence/auth-demo-login-2026-10-05.png). Cách chạy bản hiện tại: [local setup](../../../LOCAL-SETUP.md).
 
 Chưa kiểm chứng: OTP/MFA, khóa sau 3 lần sai, đăng ký backend, multi-instance, refresh rotation, phân quyền nghiệp vụ toàn hệ thống và so sánh với bản Văn.
 

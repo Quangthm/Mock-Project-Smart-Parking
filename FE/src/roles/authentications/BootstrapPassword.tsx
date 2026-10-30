@@ -21,7 +21,7 @@ export function BootstrapPassword() {
       })
       window.history.replaceState(null, "", "/change-password")
       setComplete(true)
-      setMessage("Password changed. Sign in with your new password.")
+      setMessage("Email verified and account activated. Sign in with your new password.")
       setPassword("")
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Password change failed.")
@@ -32,7 +32,7 @@ export function BootstrapPassword() {
 
   return (
     <main className="card" style={{ maxWidth: 440, margin: "4rem auto" }}>
-      <PageHeader title="Change initial password" variant="compact" />
+      <PageHeader title="Activate your Operator account" variant="compact" description="Verify your email by choosing your own password. You can sign in after activation." />
       <form onSubmit={submit}>
         <label className="label" htmlFor="bootstrap-password">
           New password (8–15 characters, uppercase, lowercase, digit and special
@@ -51,7 +51,7 @@ export function BootstrapPassword() {
           disabled={busy || complete}
         />
         <button className="btn-primary" disabled={busy || complete}>
-          Change password
+          Verify email and activate
         </button>
       </form>
       <p role="status">{message}</p>

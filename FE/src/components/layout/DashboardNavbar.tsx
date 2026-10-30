@@ -73,8 +73,10 @@ export function DashboardNavbar() {
 
   // Universal Account & Security Modal state
   const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "security" | null>(null)
+  const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
+  const [recoveryNotice, setRecoveryNotice] = useState(() => sessionStorage.getItem("sp_mfa_recovery_remaining"))
 
   useEffect(() => {
     if (user) {
@@ -89,8 +91,10 @@ export function DashboardNavbar() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault()
-        setAccountModalTab(null)
-        profileTriggerRef.current?.focus()
+        if (!securityDismissBlocked) {
+          setAccountModalTab(null)
+          profileTriggerRef.current?.focus()
+        }
       }
       if (event.key !== "Tab" || !settingsDialogRef.current) return
       const focusable = Array.from(settingsDialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]"))
@@ -102,9 +106,10 @@ export function DashboardNavbar() {
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [settingsOpen])
+  }, [settingsOpen, securityDismissBlocked])
 
   function closeSettings() {
+    if (securityDismissBlocked) return
     setAccountModalTab(null)
     profileTriggerRef.current?.focus()
   }
@@ -211,7 +216,7 @@ export function DashboardNavbar() {
                   </label>
                   <input
                     id="dashboard-search"
-                    className="input"
+                    className="input sp-search-input"
                     placeholder="Search pages and features"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
@@ -331,6 +336,21 @@ export function DashboardNavbar() {
         )}
       </nav>
 
+      {recoveryNotice !== null && (
+        <div role="status" className="card" style={{ margin: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+          <span>You signed in with a recovery code. {recoveryNotice} codes remain. If you lost your authenticator, set up a new one.</span>
+          <button className="btn-outline" onClick={() => {
+            handleOpenAccountModal("security")
+            setRecoveryNotice(null)
+            sessionStorage.removeItem("sp_mfa_recovery_remaining")
+          }}>Review 2FA settings</button>
+          <button className="text-button" onClick={() => {
+            setRecoveryNotice(null)
+            sessionStorage.removeItem("sp_mfa_recovery_remaining")
+          }}>Later</button>
+        </div>
+      )}
+
       {/* Universal Account & Security Modal for ALL ROLES */}
       {accountModalTab &&
         typeof document !== "undefined" &&
@@ -358,6 +378,7 @@ export function DashboardNavbar() {
                   ref={settingsCloseRef}
                   type="button"
                   className="btn-ghost settings-close"
+                  disabled={securityDismissBlocked}
                   onClick={closeSettings}
                   aria-label="Close settings"
                 >
@@ -377,7 +398,8 @@ export function DashboardNavbar() {
                       type="button"
                       className={`settings-nav-item${accountModalTab === id ? " selected" : ""}`}
                       aria-current={accountModalTab === id ? "page" : undefined}
-                      onClick={() => setAccountModalTab(id)}
+                      disabled={securityDismissBlocked}
+                      onClick={() => { if (!securityDismissBlocked) setAccountModalTab(id) }}
                     >
                       <UntitledIcon name={icon} size={18} />
                       <span>{label}</span>
@@ -512,7 +534,7 @@ export function DashboardNavbar() {
                 {accountModalTab === "security" && (
                   <div className="settings-security">
                     <div className="settings-section-heading"><h3>Security</h3><p>Manage extra protection for your account.</p></div>
-                    <AccountSecurityPanel key={user?.id} />
+                    <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
                   </div>
                 )}
                 </div>

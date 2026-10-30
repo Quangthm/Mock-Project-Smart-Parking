@@ -61,7 +61,7 @@
 .landing-page .smartparking-hero { align-items: start; }
 .landing-page .strata-hero-copy h1 { max-width: 15ch; margin-top: 0; font-size: clamp(2.5rem, 3.6vw, 4rem); line-height: 1.12; text-wrap: pretty; }
 .landing-page .strata-hero-copy h1 > * { display: block; white-space: nowrap; }
-.parking-hero-3d { position: relative; align-self: start; width: 100%; height: min(500px, 41vw); min-height: 360px; overflow: hidden; margin-top: -92px; }
+.parking-hero-3d { position: relative; align-self: start; width: 100%; height: min(550px, 43vw); min-height: 380px; overflow: hidden; margin-top: -92px; }
 .parking-hero-3d-canvas { position: absolute; inset: 0; }
 .parking-hero-3d-canvas canvas { display: block; width: 100%; height: 100%; }
 .parking-hero-3d-label-slot { position: absolute; right: 9%; bottom: 8%; pointer-events: none; }
@@ -181,7 +181,7 @@
   .dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1; grid-row: 2; }
   .management-side-panel { min-height: 0; }
   .dashboard-theme .management-dashboard .admin-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .parking-hero-3d { height: 460px; min-height: 0; margin-top: 0; }
+  .parking-hero-3d { height: 480px; min-height: 0; margin-top: 0; }
 }
 @media (max-width: 640px) {
   .dashboard-theme .driver-bookings-page { gap: 22px; }
@@ -201,7 +201,7 @@
   .dashboard-theme .find-parking-map-toolbar .find-parking-map-style,
   .dashboard-theme .find-parking-reopen { width: 148px; }
   .landing-page .strata-hero-copy h1 { max-width: 15ch; font-size: clamp(2rem, 8.5vw, 2.9rem); }
-  .parking-hero-3d { height: 330px; margin-top: 0; }
+  .parking-hero-3d { height: 350px; margin-top: 0; }
   .parking-hero-3d-pause { top: 8%; bottom: auto; }
   .site-footer-columns { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .site-footer-brand, .site-footer-contact { grid-column: 1 / -1; }
@@ -230,6 +230,18 @@
 }
 .dashboard-theme.driver-theme .dashboard-popover { padding: 12px; }
 .dashboard-theme.driver-theme .dashboard-search-popover .input { width: 100%; min-height: 44px; border-radius: 999px; }
+
+/* One surface and one focus indicator for icon-led search controls. */
+.dashboard-theme .sp-search-field { min-height: 46px; min-width: 0; padding-inline: 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--muted); }
+.dashboard-theme .sp-search-field:focus-within { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 2px; }
+.dashboard-theme .sp-search-field > svg { flex: none; }
+.dashboard-theme .sp-search-field input,
+.dashboard-theme .sp-search-field input:focus-visible { flex: 1 1 auto; min-width: 0; width: 100%; min-height: 42px; height: auto; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent; color: var(--fg); font-size: .875rem; }
+.dashboard-theme .sp-search-field:has(> button) input::-webkit-search-cancel-button { appearance: none; }
+.dashboard-theme .sp-search-field > button { display: grid; flex: none; place-items: center; width: 44px; height: 44px; padding: 0; margin-right: -10px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+.dashboard-theme .sp-search-field > button:hover { color: var(--fg); background: var(--raised); }
+.dashboard-theme .sp-search-input { min-height: 44px; min-width: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--fg); font-size: .875rem; }
+.dashboard-theme .sp-search-input:focus-visible { border-color: var(--focus); outline: 3px solid var(--focus); outline-offset: 2px; box-shadow: none; }
 .dashboard-theme.driver-theme :is(.dashboard-search-results button, .popover-item, .find-parking-map-menu-list button) {
   min-height: 44px;
   border-radius: 14px;

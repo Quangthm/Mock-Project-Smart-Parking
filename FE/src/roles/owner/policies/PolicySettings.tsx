@@ -15,6 +15,8 @@ import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
 
 import { digitsOnly } from "../../../lib/groupedDigits"
+import { extractOwnerPolicyPdfSections } from "../../../lib/ownerPolicyPdfTemplate"
+import { deleteOwnerPolicySectionDocument, deleteOwnerPolicySectionText, getOwnerPolicySectionDocuments, getOwnerPolicySectionTexts, ownerPolicySections, saveOwnerPolicySectionText, starterOwnerPolicyText, type OwnerPolicySectionDocuments, type OwnerPolicySectionId, type OwnerPolicySectionTexts } from "../../../lib/policySections"
 
 type DepositMode = "percentage" | "fixed"
 
@@ -56,6 +58,11 @@ const initialPolicy: PolicyState = {
 
 const inputClass =
   "w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-blue-500/20"
+
+function policyDrafts(ownerId: string, scope: string): Record<OwnerPolicySectionId, string> {
+  const saved = getOwnerPolicySectionTexts(ownerId, scope)
+  return Object.fromEntries(ownerPolicySections.map(section => [section.id, saved[section.id]?.content ?? starterOwnerPolicyText[section.id]])) as Record<OwnerPolicySectionId, string>
+}
 
 interface PolicySettingsProps {
   selectedSiteId?: string
@@ -100,7 +107,13 @@ export function PolicySettings({
     externalSiteId || "all",
   )
   const [currentPdf, setCurrentPdf] = useState<LotPolicyPdf | null>(null)
+  const [sectionDocuments, setSectionDocuments] = useState<OwnerPolicySectionDocuments>(() => user ? getOwnerPolicySectionDocuments(user.id, externalSiteId || "all") : {})
+  const [sectionTexts, setSectionTexts] = useState<OwnerPolicySectionTexts>(() => user ? getOwnerPolicySectionTexts(user.id, externalSiteId || "all") : {})
+  const [sectionDrafts, setSectionDrafts] = useState<Record<OwnerPolicySectionId, string>>(() => policyDrafts(user?.id ?? "", externalSiteId || "all"))
+  const [importedSectionIds, setImportedSectionIds] = useState<OwnerPolicySectionId[]>([])
   const [previewLot, setPreviewLot] = useState<ParkingLot | null>(null)
+  const [previewSource, setPreviewSource] = useState<"owner" | "platform">("owner")
+  const [previewPlatformSection, setPreviewPlatformSection] = useState<"terms" | "privacy" | "payment-refund">("terms")
   const [pdfNotice, setPdfNotice] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -117,6 +130,12 @@ export function PolicySettings({
 
   // Sync current PDF when selected lot changes, inheriting all-sites policy if site has none
   useEffect(() => {
+    if (user) {
+      setSectionDocuments(getOwnerPolicySectionDocuments(user.id, selectedLotId))
+      setSectionTexts(getOwnerPolicySectionTexts(user.id, selectedLotId))
+      setSectionDrafts(policyDrafts(user.id, selectedLotId))
+      setImportedSectionIds([])
+    }
     if (selectedLotId === "all") {
       const ownerPdf = user ? store.getOwnerPolicyPdf(user.id) : null
       setCurrentPdf(ownerPdf)
@@ -136,9 +155,10 @@ export function PolicySettings({
     }
   }, [selectedLotId, user, ownerLots])
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !user) return
+    e.currentTarget.value = ""
 
     if (
       !file.type.includes("pdf") &&
@@ -147,6 +167,15 @@ export function PolicySettings({
       setPdfNotice("Please select a valid PDF file (.pdf).")
       return
     }
+
+    let importedSections: Partial<Record<OwnerPolicySectionId, string>> = {}
+    try {
+      importedSections = extractOwnerPolicyPdfSections(await file.arrayBuffer())
+    } catch {
+      setPdfNotice("The PDF could not be read. Select it again.")
+      return
+    }
+    const importedIds = Object.keys(importedSections) as OwnerPolicySectionId[]
 
     const reader = new FileReader()
     reader.onload = (event) => {
@@ -162,21 +191,30 @@ export function PolicySettings({
         uploadedAt: new Date().toISOString(),
         title:
           selectedLotId === "all"
-            ? "System-wide Parking Operations Policy"
-            : `Parking Policies & Rules: ${lot?.name || "SmartParking"}`,
+            ? "Owner Policies: All Parking Sites"
+            : `Owner Policies: ${lot?.name || "SmartParking"}`,
         summaryText: `Official updated rules for ${lot?.name || "all of the owner's parking sites"}.`,
       }
 
-      if (selectedLotId === "all") {
-        store.saveOwnerPolicyPdf(user.id, payload)
-      } else {
-        store.saveLotPolicyPdf(selectedLotId, payload)
+      try {
+        if (selectedLotId === "all") {
+          store.saveOwnerPolicyPdf(user.id, payload)
+        } else {
+          store.saveLotPolicyPdf(selectedLotId, payload)
+        }
+      } catch {
+        setPdfNotice("The PDF could not be saved in this browser. Try a smaller file.")
+        return
       }
 
       setCurrentPdf(payload)
-      setPdfNotice(
-        `Uploaded policy PDF "${file.name}" successfully. Drivers can now read this document.`,
-      )
+      if (importedIds.length) {
+        setSectionDrafts(current => ({ ...current, ...importedSections }))
+        setImportedSectionIds(importedIds)
+      }
+      setPdfNotice(importedIds.length
+        ? `Uploaded "${file.name}". ${importedIds.length} template sections were loaded as drafts. Review and save each section to publish its text.`
+        : `Uploaded "${file.name}". Drivers can view the PDF; use the SmartParking template to import editable sections.`)
       setTimeout(() => setPdfNotice(null), 5000)
 
       store.addAuditLog({
@@ -197,6 +235,7 @@ export function PolicySettings({
       )
     }
 
+    reader.onerror = () => setPdfNotice("The PDF could not be read. Select it again.")
     reader.readAsDataURL(file)
   }
 
@@ -226,13 +265,44 @@ export function PolicySettings({
         }
       }
       setPdfNotice(
-        "Custom PDF deleted. The default policy has been restored.",
+        "General owner PDF removed. An all-sites owner PDF applies where available.",
       )
       setTimeout(() => setPdfNotice(null), 4000)
     }
   }
 
-  function handleOpenPreview() {
+  function handleSectionDelete(section: OwnerPolicySectionId) {
+    if (!user || !confirm(`Remove the ${ownerPolicySections.find(item => item.id === section)?.title} PDF?`)) return
+    deleteOwnerPolicySectionDocument(user.id, selectedLotId, section)
+    setSectionDocuments(getOwnerPolicySectionDocuments(user.id, selectedLotId))
+    setPdfNotice("Section PDF removed.")
+  }
+
+  function handleSectionTextSave(section: OwnerPolicySectionId) {
+    if (!user) return
+    const content = sectionDrafts[section].trim()
+    if (!content) { setPdfNotice("Enter policy text before saving this section."); return }
+    try {
+      saveOwnerPolicySectionText(user.id, selectedLotId, section, content)
+      setSectionTexts(getOwnerPolicySectionTexts(user.id, selectedLotId))
+      setImportedSectionIds(current => current.filter(id => id !== section))
+      setPdfNotice(`${ownerPolicySections.find(item => item.id === section)?.title} saved for ${selectedLotId === "all" ? "all sites" : "this site"}.`)
+    } catch {
+      setPdfNotice("The policy text could not be saved in this browser. Try again.")
+    }
+  }
+
+  function handleSectionTextDelete(section: OwnerPolicySectionId) {
+    if (!user || !confirm(`Remove the saved text for ${ownerPolicySections.find(item => item.id === section)?.title}?`)) return
+    deleteOwnerPolicySectionText(user.id, selectedLotId, section)
+    setSectionTexts(getOwnerPolicySectionTexts(user.id, selectedLotId))
+    setSectionDrafts(policyDrafts(user.id, selectedLotId))
+    setPdfNotice("Saved section text removed. The starter draft is available for editing.")
+  }
+
+  function handleOpenPreview(source: "owner" | "platform" = "owner", platformSection: "terms" | "privacy" | "payment-refund" = "terms") {
+    setPreviewSource(source)
+    setPreviewPlatformSection(platformSection)
     const lot = ownerLots.find((l) => l.id === selectedLotId) ||
       ownerLots[0] || {
         id: "sample",
@@ -295,6 +365,11 @@ export function PolicySettings({
     setPolicy((current) => ({ ...current, [key]: value }))
   }
 
+  function stepRate(key: "dayRate" | "nightRate", direction: -1 | 1) {
+    const current = Number(policy[key]) || 0
+    updatePolicy(key, String(Math.max(0, Math.round(current / 1000) * 1000 + direction * 1000)))
+  }
+
   function savePolicy() {
     if (!user) return
 
@@ -326,7 +401,7 @@ export function PolicySettings({
       className="mx-auto w-full max-w-5xl space-y-6"
       aria-labelledby="policy-settings-title"
     >
-      <PageHeader id="policy-settings-title" eyebrow="Owner tools" title="Policy Settings" description="Configure pricing, deposit rules, and upload official PDF policy documents for your parking lots." />
+      <PageHeader id="policy-settings-title" eyebrow="Owner tools" title="Policy Settings" description="Manage owner documents by topic and review separate SmartParking platform policies." />
 
       {pdfNotice && (
         <div
@@ -341,20 +416,20 @@ export function PolicySettings({
       {/* PDF Policy Document Upload & Management Section */}
       <section
         className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 space-y-4"
-        aria-label="Update parking policy PDF"
+        aria-label="Owner policy documents"
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-[var(--fg)]">
-                Parking Policy Document (PDF)
+                Owner Policies · Single PDF
               </h2>
               <span className="rounded px-2 py-0.5 text-xs font-semibold bg-blue-500/15 text-blue-500">
-                Update Policy (PDF)
+                Owner document
               </span>
             </div>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Upload or update the official parking policy. Drivers can read this document when searching and booking.
+              Complete the Owner policy template, upload one PDF, then review the imported section drafts below.
             </p>
           </div>
 
@@ -391,33 +466,21 @@ export function PolicySettings({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm text-[var(--fg)]">
-                  {currentPdf?.fileName ||
-                    `Chinh_Sach_Quy_Dinh_${(
-                      ownerLots.find((l) => l.id === selectedLotId)?.name ||
-                      "SmartParking"
-                    ).replace(/\s+/g, "_")}.pdf`}
+                  {currentPdf?.fileData ? currentPdf.fileName : "Owner policy PDF template"}
                 </span>
                 <span
                   className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
                     currentPdf?.fileData
                       ? "bg-green-500/15 text-green-500"
-                      : "bg-blue-500/15 text-blue-500"
+                      : "bg-[var(--raised)] text-[var(--muted)]"
                   }`}
                 >
                   {currentPdf?.fileData
                     ? "Uploaded File"
-                    : "Default SmartParking Document"}
+                    : "Template ready"}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {currentPdf?.fileSize
-                  ? `Size: ${currentPdf.fileSize} · `
-                  : ""}
-                Updated:{" "}
-                {new Date(
-                  currentPdf?.uploadedAt || Date.now(),
-                ).toLocaleDateString("en-US")}
-              </p>
+              {currentPdf?.fileData && <p className="mt-1 text-xs text-[var(--muted)]">{currentPdf.fileSize ? `Size: ${currentPdf.fileSize} · ` : ""}Updated: {new Date(currentPdf.uploadedAt).toLocaleDateString("en-US")}</p>}
             </div>
           </div>
 
@@ -440,7 +503,7 @@ export function PolicySettings({
             <button
               type="button"
               className="btn-outline text-xs py-2 px-3"
-              onClick={handleOpenPreview}
+              onClick={() => handleOpenPreview()}
             >
               <UntitledIcon name="eye" size={14} /> Preview PDF
             </button>
@@ -465,10 +528,46 @@ export function PolicySettings({
           </div>
         </div>
 
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+            <div><h3 className="text-sm font-semibold text-[var(--fg)]">{currentPdf?.fileData ? "Current Owner PDF" : "Owner policy PDF template"}</h3>{!currentPdf?.fileData && <p className="mt-1 text-xs text-[var(--muted)]">Complete this starter PDF, then upload it to publish your Owner policy.</p>}</div>
+            <a className="btn-outline inline-flex items-center gap-2 no-underline" href="/templates/owner-policy-template.pdf" download="smartparking-owner-policy-template.pdf"><UntitledIcon name="download" size={15} /> Download template</a>
+          </div>
+          <iframe className="h-[360px] w-full bg-[var(--card)] sm:h-[480px]" title={currentPdf?.fileData ? "Current Owner policy PDF" : "Owner policy PDF template"} src={currentPdf?.fileData || "/templates/owner-policy-template.pdf"} />
+        </div>
         <p className="text-xs text-[var(--muted)] flex items-center gap-1.5">
           <UntitledIcon name="check" size={13} />
-          This policy PDF syncs immediately so drivers can view and download it when searching and booking.
+          Owner PDFs saved in this browser appear in the Driver policy viewer for the same browser profile.
         </p>
+      </section>
+
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="owner-policy-sections-heading">
+        <h2 id="owner-policy-sections-heading" className="text-lg font-semibold text-[var(--fg)]">Owner Policies by Section</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">Edit the starter text directly on this page, then save each section. Site-specific content takes priority over the all-sites version.</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">Saved text is visible to Drivers in this browser profile.</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {ownerPolicySections.map(section => {
+            const document = sectionDocuments[section.id]
+            const inherited = selectedLotId !== "all" && document && !document.lotId
+            const savedText = sectionTexts[section.id]
+            const inheritedText = selectedLotId !== "all" && savedText && !savedText.lotId
+            return <article key={section.id} className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
+              <h3 className="font-semibold text-[var(--fg)]">{section.title}</h3>
+              <p className="mt-1 text-sm text-[var(--muted)]">{section.description}</p>
+              <label htmlFor={`owner-policy-text-${section.id}`} className="mt-4 block text-sm font-semibold text-[var(--fg)]">Policy text</label>
+              <textarea id={`owner-policy-text-${section.id}`} className="input mt-2 min-h-36 w-full resize-y rounded-xl text-sm leading-6" rows={5} value={sectionDrafts[section.id]} onChange={event => setSectionDrafts(current => ({ ...current, [section.id]: event.target.value }))} aria-describedby={`owner-policy-state-${section.id}`} />
+              <p id={`owner-policy-state-${section.id}`} className="mt-1 text-xs text-[var(--muted)]">{importedSectionIds.includes(section.id) ? "Imported from PDF · review and save to publish this text." : savedText ? inheritedText ? "Published from all sites; save to override for this site." : "Saved for this scope." : "Starter draft · not visible to Drivers until saved."}</p>
+              <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn-primary" onClick={() => handleSectionTextSave(section.id)}>Save section text</button>{savedText && !inheritedText && <button type="button" className="btn-ghost" onClick={() => handleSectionTextDelete(section.id)}>Remove saved text</button>}</div>
+              {document?.fileData && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4"><span className="text-xs text-[var(--muted)]">Previously attached section PDF{inherited ? " · From all sites" : ""}</span><a className="btn-outline no-underline" href={document.fileData} target="_blank" rel="noopener noreferrer">View PDF</a>{!inherited && <button type="button" className="btn-ghost" onClick={() => handleSectionDelete(section.id)}>Remove</button>}</div>}
+            </article>
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="platform-policy-heading">
+        <h2 id="platform-policy-heading" className="text-lg font-semibold text-[var(--fg)]">Platform Policies</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">SmartParking manages these documents. Owners can review them here; site uploads do not replace them.</p>
+        <div className="mt-4 flex flex-wrap gap-2">{([{ label: "Terms of Service", view: "terms" }, { label: "Privacy Policy", view: "privacy" }, { label: "Payment & Refund", view: "payment-refund" }] as const).map(item => <button key={item.view} type="button" className="btn-outline" onClick={() => handleOpenPreview("platform", item.view)}>{item.label}</button>)}</div>
       </section>
 
       <section
@@ -508,26 +607,14 @@ export function PolicySettings({
                 <td className="px-5 py-4">
                   {policy.pricingEnabled ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Day Rate (VND / hour)
-                        <GroupedNumberInput
-                          className={inputClass}
-                          value={policy.dayRate}
-                          onValueChange={(digits) =>
-                            updatePolicy("dayRate", digits)
-                          }
-                        />
-                      </label>
-                      <label className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
-                        Night Rate (VND / hour)
-                        <GroupedNumberInput
-                          className={inputClass}
-                          value={policy.nightRate}
-                          onValueChange={(digits) =>
-                            updatePolicy("nightRate", digits)
-                          }
-                        />
-                      </label>
+                      <div className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
+                        <span className="block">Day Rate (VND / hour)</span>
+                        <div className="flex items-center gap-2"><button type="button" className="btn-outline shrink-0" aria-label="Decrease day rate by 1,000 VND" onClick={() => stepRate("dayRate", -1)} disabled={Number(policy.dayRate) <= 0}>−</button><span className="min-w-0 flex-1"><GroupedNumberInput className={inputClass} ariaLabel="Day rate in VND per hour" step={1000} value={policy.dayRate} onValueChange={(digits) => updatePolicy("dayRate", digits.slice(0, 9))} /></span><button type="button" className="btn-outline shrink-0" aria-label="Increase day rate by 1,000 VND" onClick={() => stepRate("dayRate", 1)}>+</button></div>
+                      </div>
+                      <div className="space-y-1.5 text-xs font-medium text-[var(--muted)]">
+                        <span className="block">Night Rate (VND / hour)</span>
+                        <div className="flex items-center gap-2"><button type="button" className="btn-outline shrink-0" aria-label="Decrease night rate by 1,000 VND" onClick={() => stepRate("nightRate", -1)} disabled={Number(policy.nightRate) <= 0}>−</button><span className="min-w-0 flex-1"><GroupedNumberInput className={inputClass} ariaLabel="Night rate in VND per hour" step={1000} value={policy.nightRate} onValueChange={(digits) => updatePolicy("nightRate", digits.slice(0, 9))} /></span><button type="button" className="btn-outline shrink-0" aria-label="Increase night rate by 1,000 VND" onClick={() => stepRate("nightRate", 1)}>+</button></div>
+                      </div>
                     </div>
                   ) : (
                     <span className="text-sm text-[var(--muted)]">
@@ -586,13 +673,15 @@ export function PolicySettings({
                           max={
                             policy.depositMode === "percentage"
                               ? 100
-                              : undefined
+                              : 999999000
                           }
                           step={policy.depositMode === "percentage" ? 1 : 1000}
                           value={policy.depositValue}
-                          onChange={(event) =>
-                            updatePolicy("depositValue", event.target.value)
-                          }
+                          onChange={(event) => {
+                            const digits = event.target.value.replace(/\D/g, "")
+                            updatePolicy("depositValue", policy.depositMode === "percentage" ? (digits ? String(Math.min(100, Number(digits))) : "") : digits.slice(0, 9))
+                          }}
+                          onBlur={() => { if (policy.depositMode === "fixed") updatePolicy("depositValue", String(Math.min(999999000, Math.round((Number(policy.depositValue) || 0) / 1000) * 1000))) }}
                         />
                       </label>
                     </div>
@@ -651,6 +740,10 @@ export function PolicySettings({
               />
             </label>
           </div>
+          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+            Total = (day rate × day hours) + (night rate × night hours). Deposit
+            is capped at the total; checkout collects the remaining balance.
+          </p>
           <div className="mt-5 grid gap-3 border-t border-[var(--border)] pt-4 sm:grid-cols-3">
             <PreviewAmount label="Estimated total" amount={preview.total} />
             <PreviewAmount label="Deposit due now" amount={preview.deposit} />
@@ -673,10 +766,6 @@ export function PolicySettings({
               Save Policy
             </button>
           </div>
-          <p className="mt-4 text-xs leading-5 text-[var(--muted)]">
-            Total = (day rate × day hours) + (night rate × night hours). Deposit
-            is capped at the total; checkout collects the remaining balance.
-          </p>
         </div>
       </section>
 
@@ -685,6 +774,8 @@ export function PolicySettings({
         <LotPolicyModal
           lot={previewLot}
           onClose={() => setPreviewLot(null)}
+          initialSource={previewSource}
+          initialPlatformSection={previewPlatformSection}
         />
       )}
     </section>

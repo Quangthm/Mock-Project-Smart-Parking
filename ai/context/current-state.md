@@ -11,7 +11,7 @@ The architecture foundation is established, core services are active, and Sprint
 
 - **UserService** — full 5-layer Clean Architecture; CQRS/MediatR, FluentValidation, AutoMapper, EF Core + PostgreSQL, JWT auth, BCrypt. Reference/template service.
 - **FacilityService** — 5-layer structure (`API`, `Application`, `Domain`, `Infrastructure`, `Persistence`); Minimal APIs; raw Npgsql + PostgreSQL. Implements operational layout, gate synchronization, and slot state endpoints (`SPARK-188`).
-- **OperationService** — 4 projects (`API`, `Application`, `Domain`, `Persistence`); raw Npgsql; reservation safety and gate claim models.
+- **OperationService** — 5 projects (`API`, `Application`, `Domain`, `Infrastructure`, `Persistence`); EF Core + MediatR; reservation safety and gate claim models.
 - **IoTService** — Python AI service (`src/Services/IoTService/python-ai/`) implementing CCTV/camera stream ingestion and license plate recognition (LPR).
 - **Frontend (`FE/`)** — React 19 + Vite 8 + Tailwind v4 + Three.js 0.186.1 + MapTiler 4.1.0; complete role-based dashboards (Admin, Owner, Operator, Driver) with live backend API integrations.
 - **Database & Migration Stacks** — 6 microservice databases (`compose.schema-integration.yml`, `scripts/apply-workflow-migrations.ps1`, `scripts/database/`); automated setup and seed via `setup.ps1` and `scripts/seed-demo-site.ps1`.
@@ -19,7 +19,7 @@ The architecture foundation is established, core services are active, and Sprint
 - **Tests** — xUnit backend tests (`tests/Services/*` for UserService and FacilityService), node:test frontend tests (`tests/frontend/*`).
 
 **Implemented / Active:**
-- Clean Architecture, CQRS/MediatR, EF Core (UserService), raw Npgsql (FacilityService, OperationService), PostgreSQL schema-per-service.
+- Clean Architecture, CQRS/MediatR, EF Core (UserService, OperationService), raw Npgsql (FacilityService), PostgreSQL schema-per-service.
 - Docker compose stacks (`compose.schema-integration.yml`, `compose.app.yml`, `compose.sonar.yml`, `compose.ai.yml`).
 - 5 Core Skills for AI Agents (`ai/rule.md`, `docs/07-skills/`).
 

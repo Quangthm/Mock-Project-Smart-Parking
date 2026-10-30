@@ -5,7 +5,7 @@ using SmartParking.OperationService.Infrastructure;
 
 namespace SmartParking.OperationService.API;
 
-public static class ReservationHost
+public static class OperationHost
 {
     public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
     {
@@ -29,4 +29,4 @@ public static class ReservationHost
         return app;
     }
 }
-public static class Program { public static void Main(string[] args) => ReservationHost.Build(args).Run(); }
+public static class Program { public static void Main(string[] args) => OperationHost.Build(args).Run(); }

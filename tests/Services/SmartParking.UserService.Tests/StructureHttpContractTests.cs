@@ -36,7 +36,7 @@ public sealed class StructureHttpContractTests
     public async Task PublicReservationRouteRequiresOperatorSessionAndInternalSnapshotRequiresServiceKey()
     {
         var store = new MemoryReservationStore();
-        await using var host = ReservationHost.Build([], builder =>
+        await using var host = OperationHost.Build([], builder =>
         {
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
@@ -152,7 +152,7 @@ public sealed class StructureHttpContractTests
 
     private static WebApplication CreateHost(MemoryReservationStore store)
     {
-        return ReservationHost.Build([], builder =>
+        return OperationHost.Build([], builder =>
         {
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;

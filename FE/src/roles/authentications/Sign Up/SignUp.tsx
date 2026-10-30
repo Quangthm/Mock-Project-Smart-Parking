@@ -4,7 +4,7 @@ import { useState, useRef } from "react"
 import { useApp } from "../../../context/AppContext"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
-import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
+import { ownerApi } from "../../../lib/ownerApi"
 
 import type { LotType } from "../../../lib/types"
 
@@ -14,7 +14,7 @@ import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibi
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
-import { authApi, request, type DriverRegistration } from "../../../lib/authApi"
+import { authApi, type DriverRegistration } from "../../../lib/authApi"
 
 import {
   DriverOtpForm,
@@ -24,6 +24,8 @@ import {
 } from "./DriverOtpForm"
 
 import { OwnerVerification } from "./OwnerVerification"
+import { OwnerRegistrationRecovery } from "./OwnerRegistrationRecovery"
+import { restoreOwnerRegistration, ownerRegistrationStage, ensureOwnerRegistrationStorage, type PendingOwnerRegistration } from "../../../lib/ownerRegistration"
 
 type Tab = "driver" | "business"
 
@@ -312,9 +314,11 @@ function TermsModal({
 }
 
 export function SignUp() {
-  const { setView, setPendingOwnerSetup } = useApp()
+  const { setView } = useApp()
 
-  const [tab, setTab] = useState<Tab>("driver")
+  const [tab, setTab] = useState<Tab>(() =>
+    restoreDriverRegistration() ? "driver" : restoreOwnerRegistration() ? "business" : "driver",
+  )
 
   const [error, setError] = useState("")
 
@@ -329,51 +333,26 @@ export function SignUp() {
   )
 
   const [ownerRegistration, setOwnerRegistration] =
-    useState<(Pick<OwnerApplicationRecord, "email" | "verification"> &
-      Partial<Pick<OwnerApplicationRecord, "id" | "lotType" | "lotSetupComplete">>) | null>(
-      () => {
-        try {
-          const value = JSON.parse(
-            sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
-          )
-          return typeof value?.email === "string" &&
-            value?.lotSetupComplete === true &&
-            typeof value?.verification?.challengeId === "string" &&
-            Number.isFinite(Date.parse(value.verification.expiresAt)) &&
-            Number.isFinite(Date.parse(value.verification.resendAt))
-            ? value
-            : null
-        } catch {
-          return null
-        }
-      },
-    )
+    useState<PendingOwnerRegistration | null>(restoreOwnerRegistration)
 
   function saveOwnerRegistration(
-    application: Pick<OwnerApplicationRecord, "email" | "verification"> &
-      Partial<Pick<OwnerApplicationRecord, "id" | "lotType" | "lotSetupComplete">>,
+    application: PendingOwnerRegistration,
   ) {
     const pending = {
       id: application.id,
       email: application.email,
       lotType: application.lotType,
-      lotSetupComplete: application.lotSetupComplete === true,
+      setupToken: application.lotSetupComplete ? undefined : application.setupToken,
+      lotSetupComplete: application.lotSetupComplete,
       verification: application.verification,
+      setupRecovery: application.setupRecovery,
+    }
+    try {
+      sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(pending))
+    } catch {
+      throw new Error("Browser storage is unavailable. Enable session storage before continuing registration.")
     }
     setOwnerRegistration(pending)
-    if (pending.lotSetupComplete) {
-      try {
-        sessionStorage.setItem("sp_pending_owner_registration", JSON.stringify(pending))
-      } catch {
-        /* The current tab can continue without saved registration metadata. */
-      }
-    } else {
-      try {
-        sessionStorage.removeItem("sp_pending_owner_registration")
-      } catch {
-        /* Storage cleanup. */
-      }
-    }
   }
 
   function saveRegistration(value: DriverRegistration, contact: string) {
@@ -474,6 +453,12 @@ export function SignUp() {
 
     setError("")
 
+    try { ensureOwnerRegistrationStorage() }
+    catch (error) {
+      setError(error instanceof Error ? error.message : "Browser storage is unavailable.")
+      return
+    }
+
     if (!ownerForm.agreedToPolicy) {
       setError("You must read and agree to the Partner Agreement.")
       return
@@ -510,46 +495,15 @@ export function SignUp() {
 
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
-      setPendingOwnerSetup({
-        id: application.id,
-        email: application.email,
-        lotType: application.lotType,
-        setupToken: application.setupToken,
-        verification: application.verification,
-        lotSetupComplete: false,
-      })
+      saveOwnerRegistration({ ...application, lotSetupComplete: false })
       setView("parking-lot-setup")
     } catch (e) {
       try {
-        const recovered = await request<{
-          data: Pick<OwnerApplicationRecord, "verification"> &
-            Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete">>
-        }>("/register/owner/recover", "POST", {
-          contact: ownerForm.email.trim(),
-        })
-
-        const pending = {
-          email: ownerForm.email.trim(),
-          ...recovered.data,
-          lotSetupComplete: recovered.data.lotSetupComplete === true,
-        }
-        if (pending.lotSetupComplete) {
-          saveOwnerRegistration(pending)
-        } else {
-          setPendingOwnerSetup({
-            id: pending.id ?? "",
-            email: pending.email,
-            lotType: pending.lotType ?? ownerForm.lotType,
-            setupToken: pending.setupToken,
-            verification: pending.verification,
-            lotSetupComplete: false,
-          })
-          setView("parking-lot-setup")
-        }
+        const recovered = await ownerApi.recover(ownerForm.email.trim())
+        saveOwnerRegistration(recovered)
         setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
-
-      } catch {
-        setError(e instanceof Error ? e.message : "Registration failed.")
+      } catch (recoveryError) {
+        setError([e, recoveryError].map((error) => error instanceof Error ? error.message : "Registration failed.").join(" "))
       }
     } finally {
       setRegistering(false)
@@ -595,7 +549,7 @@ export function SignUp() {
           <PageHeader title="Create Account" variant="compact" align="center" description="Join SmartParking today" />
         </div>
 
-        {!registration && !ownerRegistration?.lotSetupComplete && (
+        {!registration && (!ownerRegistration || ownerRegistrationStage(ownerRegistration) !== "verification" || tab === "driver") && (
           <div
             className="auth-role-tabs"
             style={{
@@ -618,7 +572,21 @@ export function SignUp() {
           </div>
         )}
 
-        {ownerRegistration?.lotSetupComplete ? (
+        {ownerRegistration && ownerRegistrationStage(ownerRegistration) === "recovery" && tab === "business" ? (
+          <OwnerRegistrationRecovery registration={ownerRegistration}
+            onRecovered={(application) => {
+              saveOwnerRegistration(application)
+              if (ownerRegistrationStage(application) === "setup") setView("parking-lot-setup")
+            }} onBack={() => setView("sign-in")} />
+        ) : ownerRegistration && ownerRegistrationStage(ownerRegistration) === "setup" && tab === "business" ? (
+          <div className="card">
+            <h2>Continue parking lot setup</h2>
+            <p>Your Business account is registered. Complete your parking lot setup before verifying your email.</p>
+            <button className="btn-primary" onClick={() => setView("parking-lot-setup")}>
+              Continue to Parking Lot Setup
+            </button>
+          </div>
+        ) : ownerRegistration && ownerRegistrationStage(ownerRegistration) === "verification" && tab === "business" ? (
           <OwnerVerification
             application={ownerRegistration}
             onUpdate={(verification) =>
@@ -627,7 +595,6 @@ export function SignUp() {
             onBack={() => {
               sessionStorage.removeItem("sp_pending_owner_registration")
               localStorage.removeItem("sp_pending_owner_registration")
-              setPendingOwnerSetup(null)
               setOwnerRegistration(null)
               setView("sign-in")
             }}
@@ -639,7 +606,6 @@ export function SignUp() {
               } catch {
                 /* This tab can continue. */
               }
-              setPendingOwnerSetup(null)
               setOwnerRegistration(null)
               setView("pending-approval")
             }}
