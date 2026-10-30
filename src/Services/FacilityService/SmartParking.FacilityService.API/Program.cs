@@ -17,6 +17,9 @@ public static class FacilityHost
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Parking") ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking.")));
+        builder.Services.AddDbContext<ParkingDbContext>(options =>
+            options.UseNpgsql(builder.Configuration.GetConnectionString("Parking")
+                ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking.")));
         builder.Services.AddHttpContextAccessor();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false)));
         builder.Services.AddHttpClient<OwnerIdentityClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
@@ -25,7 +28,7 @@ public static class FacilityHost
         builder.Services.AddHttpClient<SlotOperatorClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
         builder.Services.AddScoped<ISlotOperatorAuthorizer>(s => s.GetRequiredService<SlotOperatorClient>());
         builder.Services.AddHttpClient<IStructureCommitments, StructureCommitmentsClient>(c =>
-        { c.BaseAddress = new(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(10); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
+        { c.BaseAddress = new(builder.Configuration["Services:Operation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(10); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
         builder.Services.AddScoped<IParkingStructureRepository, PostgresParkingStructureRepository>();
         builder.Services.AddScoped<ParkingStructureService>();
         builder.Services.AddScoped<IOwnerOnboardingStore, OwnerOnboardingStore>();
@@ -35,13 +38,13 @@ public static class FacilityHost
         builder.Services.AddSingleton(_ => new ParkingGateConnectionPool(
             builder.Configuration.GetConnectionString("Parking")
                 ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking."),
-            builder.Configuration.GetValue("Services:ParkingGateLimit", 16)));
+            builder.Configuration.GetValue("Services:FacilityGateLimit", 16)));
         builder.Services.AddScoped<IStructureSynchronizationStore, PostgresStructureSynchronizationStore>();
         builder.Services.AddScoped<StructureSynchronizationService>();
         builder.Services.AddHostedService<StructureSynchronizationWorker>();
         builder.Services.AddScoped<IStructureOperationStore, StructureOperationStore>();
         builder.Services.AddScoped<StructureOperationService>();
-        builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
+        builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Operation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
         builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443").AllowAnyHeader().AllowAnyMethod()));
         builder.Services.AddHttpClient<OperatorSiteClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
         builder.Services.AddScoped<IOperatorSiteAuthorizer>(s => s.GetRequiredService<OperatorSiteClient>());

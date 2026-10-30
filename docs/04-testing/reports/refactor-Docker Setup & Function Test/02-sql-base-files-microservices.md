@@ -22,7 +22,7 @@ Nội dung 6 file cũ vẫn đọc được qua `git show HEAD:<path>`:
 | File cũ (đã xóa) | Dòng (theo `git diff --stat`) | Số bảng | DB/role cũ |
 |---|---|---|---|
 | `01-user-service-db.sql` | 131 | 9 | user |
-| `02-parking-service-db.sql` | 166 | 8 | parking (gồm cả `tenants`, `tariffs`, `access_items`) |
+| `02-facility-service-db.sql` | 166 | 8 | parking (gồm cả `tenants`, `tariffs`, `access_items`) |
 | `03-reservation-session-service-db.sql` | 128 | 4 | reservation/session (gồm `site_capacity_pools`) |
 | `04-payment-service-db.sql` | 122 | 5 | payment |
 | `05-notification-service-db.sql` | 68 | 3 | notification |
@@ -88,7 +88,7 @@ Hash so với arch `9a13499` (SHA-256, kiểm lại hôm nay):
 ```
 $ git status --porcelain scripts/database
  D scripts/database/microservices/01-user-service-db.sql
- D scripts/database/microservices/02-parking-service-db.sql
+ D scripts/database/microservices/02-facility-service-db.sql
  D scripts/database/microservices/03-reservation-session-service-db.sql
  D scripts/database/microservices/04-payment-service-db.sql
  D scripts/database/microservices/05-notification-service-db.sql
@@ -104,7 +104,7 @@ $ git status --porcelain scripts/database
 
 $ git diff --stat -- scripts/database
  …/database/microservices/01-user-service-db.sql  | 131 ----------------
- …/database/microservices/02-parking-service-db.sql  | 166 ---------------------
+ …/database/microservices/02-facility-service-db.sql  | 166 ---------------------
  …/database/microservices/03-reservation-session-service-db.sql | 128 ----------------
  …/database/microservices/04-payment-service-db.sql  | 122 ---------------
  …/database/microservices/05-notification-service-db.sql  | 68 ---------
@@ -160,7 +160,7 @@ $ git diff --no-index --unified=3 <arch>\02-facility-service-db.sql scripts\data
      …
      CONSTRAINT ck_deleted_slot_not_occupied CHECK (deleted_at IS NULL OR (physical_state NOT IN ('OCCUPIED', 'UNKNOWN')))
  );
-+-- DEVIATION (T4-approved): columns required by live ParkingService reads/writes (P1)
++-- DEVIATION (T4-approved): columns required by live FacilityService reads/writes (P1)
 ```
 
 ### E5. Grep file hiện hành (file:line — file đang có trên đĩa)
@@ -221,7 +221,7 @@ git status --porcelain scripts/database
 git diff --stat -- scripts/database                       # -> 6 files changed, 683 deletions(-)
 
 # 2) Đọc lại nội dung file cũ đã xóa (không cần checkout)
-git show HEAD:scripts/database/microservices/02-parking-service-db.sql | Select-String 'CREATE TABLE'
+git show HEAD:scripts/database/microservices/02-facility-service-db.sql | Select-String 'CREATE TABLE'
 
 # 3) So sánh với arch (read-only; git diff --no-index không đụng worktree A)
 $a = "D:\My file\FA26 - OJT FSoft\OJT\Mock-Project-Smart-Parking\scripts\database\microservices"

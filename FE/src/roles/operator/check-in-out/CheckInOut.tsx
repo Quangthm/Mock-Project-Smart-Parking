@@ -8,11 +8,13 @@ import {
   type OperatorSite,
   type ParkingSessionHistoryEntry,
   type WalkInParkingSession,
+  paymentApi,
 } from "../../../lib/operatorApi"
 import { PlateScanPanel } from "./PlateScanPanel"
 import type { Booking } from "../../../lib/types"
 
 type GateAction = "check-in" | "check-out"
+type CheckoutPayment = "CASH" | "PAYOS" | "DEMO"
 const historyDateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
 type QuickGateResult =
   | { kind: "reservation"; booking: Booking; action: GateAction }
@@ -56,6 +58,9 @@ export function CheckInOut({
   const [sessionsError, setSessionsError] = useState("")
 
   const [sessions, setSessions] = useState<ParkingSessionHistoryEntry[]>([])
+  const [paymentMessage, setPaymentMessage] = useState("")
+  const [checkoutPrice, setCheckoutPrice] = useState<number | null>(null)
+  const [pricingLoading, setPricingLoading] = useState(false)
 
   function slotLabel(booking: Booking) {
     return lot?.slots.find((slot) => slot.id === booking.slotId)?.number ?? booking.slotNumber
@@ -96,6 +101,27 @@ export function CheckInOut({
   }, [lot?.id, historyRefresh])
 
   useEffect(() => {
+    if (!lot) return
+    const raw = localStorage.getItem("smartpark.pendingCheckout")
+    if (!raw) return
+    try {
+      const pending = JSON.parse(raw) as { siteId?: string; transactionId?: string }
+      if (pending.siteId !== lot.id || !pending.transactionId) return
+      void paymentApi.status(pending.transactionId).then((status) => {
+        setPaymentMessage(
+          status.status === "SUCCESS"
+            ? "Payment was confirmed while this page was refreshed. Look up the vehicle again to open the gate."
+            : "A payment is still pending. The checkout state was restored.",
+        )
+      }).catch(() => {
+        setPaymentMessage("A pending checkout was found. Check payOS status before retrying.")
+      })
+    } catch {
+      localStorage.removeItem("smartpark.pendingCheckout")
+    }
+  }, [lot?.id])
+
+  useEffect(() => {
     if (initialPlateQuery && lot) {
       setQuickInput(initialPlateQuery)
       void handleQuickSearch(initialPlateQuery)
@@ -110,6 +136,7 @@ export function CheckInOut({
   ) {
     setQuickError("")
     setQuickResult(null)
+    setCheckoutPrice(null)
     const term = (inputToUse ?? quickInput).trim()
 
     if (!lot) {
@@ -135,6 +162,14 @@ export function CheckInOut({
         action: mode,
       }
       setQuickResult(result)
+      if (mode === "check-out") {
+        await loadCheckoutPrice({
+          referenceId: match.id,
+          vehicleType: match.vehicleType ?? "CAR",
+          entryTime: match.entryTime ?? match.startTime,
+          reservationId: match.id,
+        })
+      }
       if (autoCheckIn && mode === "check-in") {
         await executeCheckAction(match, "check-in", imageData)
       }
@@ -158,13 +193,20 @@ export function CheckInOut({
         const assignedSlot = activeSession.slotId
           ? lot.slots.find((slot) => slot.id === activeSession.slotId)
           : undefined
-        setQuickResult({
+        const result: QuickGateResult = {
           kind: "walk-in",
           plate: activeSession.licensePlate,
           session: assignedSlot
             ? { ...activeSession, slotNumber: assignedSlot.number }
             : activeSession,
           action: mode,
+        }
+        setQuickResult(result)
+        await loadCheckoutPrice({
+          referenceId: activeSession.id,
+          vehicleType: activeSession.vehicleType,
+          entryTime: activeSession.entryTime,
+          sessionId: activeSession.id,
         })
       } catch (walkInError) {
         if (!(walkInError instanceof AuthApiError) || walkInError.status !== 404) {
@@ -194,12 +236,22 @@ export function CheckInOut({
     booking: Booking,
     action: "check-in" | "check-out",
     imageData?: string,
+    payment: CheckoutPayment = "CASH",
   ) {
     setActionLoading(true)
     setActionFeedback(null)
 
     try {
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
+      if (action === "check-out") {
+        await settleCheckout(payment, {
+          referenceId: booking.id,
+          accountId: booking.driverId,
+          vehicleType: booking.vehicleType ?? "CAR",
+          entryTime: booking.entryTime ?? booking.startTime,
+          reservationId: booking.id,
+        })
+      }
       const updatedBooking = action === "check-in"
         ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
         : await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate, imageData)
@@ -223,6 +275,84 @@ export function CheckInOut({
     } finally {
       setActionLoading(false)
     }
+
+  }
+
+  async function loadCheckoutPrice(input: {
+    referenceId: string
+    vehicleType: string
+    entryTime: string
+    sessionId?: string
+    reservationId?: string
+  }) {
+    if (!lot) return
+    setPricingLoading(true)
+    try {
+      const pricing = await paymentApi.calculate({
+        tenantId: lot.tenantId,
+        siteId: lot.id,
+        vehicleType: input.vehicleType || "CAR",
+        entryTime: input.entryTime,
+        exitTime: new Date().toISOString(),
+        sessionId: input.sessionId,
+        reservationId: input.reservationId,
+      })
+      setCheckoutPrice(pricing.finalAmountVnd)
+    } finally {
+      setPricingLoading(false)
+    }
+  }
+
+  async function settleCheckout(payment: CheckoutPayment, input: {
+    referenceId: string
+    accountId?: string
+    vehicleType: string
+    entryTime: string
+    sessionId?: string
+    reservationId?: string
+  }) {
+    if (!lot) throw new Error("Select a parking site before processing payment.")
+    setPaymentMessage("Calculating parking fee...")
+    const pricing = await paymentApi.calculate({
+      tenantId: lot.tenantId, siteId: lot.id, vehicleType: input.vehicleType || "CAR",
+      entryTime: input.entryTime, exitTime: new Date().toISOString(),
+      sessionId: input.sessionId, reservationId: input.reservationId,
+    })
+    setPaymentMessage(`Amount due: ${pricing.finalAmountVnd.toLocaleString("vi-VN")} VND`)
+    const key = `checkout:${lot.id}:${input.referenceId}`
+    const order = await paymentApi.createOrder({
+      tenantId: lot.tenantId, siteId: lot.id, referenceId: input.referenceId,
+      referenceType: input.sessionId ? "PARKING_SESSION" : "RESERVATION",
+      amount: pricing.finalAmountVnd, accountId: input.accountId, idempotencyKey: key,
+    })
+    localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
+      orderId: order.orderId, referenceId: input.referenceId, siteId: lot.id, paymentMethod: payment,
+    }))
+    if (payment === "CASH") {
+      await paymentApi.cash(order.orderId, key)
+      setPaymentMessage("Cash payment confirmed.")
+    } else if (payment === "DEMO") {
+      await paymentApi.demoPay(order.orderId)
+      setPaymentMessage("Demo payOS payment confirmed.")
+    } else {
+      const checkout = await paymentApi.initiate(order.orderId, key)
+      localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
+        orderId: order.orderId, transactionId: checkout.paymentTransactionId,
+        referenceId: input.referenceId, siteId: lot.id, paymentMethod: payment,
+      }))
+      window.open(checkout.checkoutUrl, "_blank", "noopener,noreferrer")
+      setPaymentMessage("Waiting for payOS confirmation...")
+      const deadline = Date.now() + 5 * 60_000
+      let status: Awaited<ReturnType<typeof paymentApi.status>>
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        status = await paymentApi.status(checkout.paymentTransactionId)
+      } while (status.status !== "SUCCESS" && Date.now() < deadline)
+      if (status.status !== "SUCCESS")
+        throw new Error("Payment is still pending. Refresh and continue from the pending checkout.")
+      setPaymentMessage("Online payment confirmed.")
+    }
+    localStorage.removeItem("smartpark.pendingCheckout")
   }
 
   async function executeWalkInAction(
@@ -230,6 +360,7 @@ export function CheckInOut({
     action: GateAction,
     imageData?: string,
     vehicleType?: string,
+    payment: CheckoutPayment = "CASH",
   ) {
     setActionLoading(true)
     setActionFeedback(null)
@@ -246,6 +377,12 @@ export function CheckInOut({
         )
       } else {
         if (!result.session) throw new Error("The active walk-in session was not found.")
+        await settleCheckout(payment, {
+          referenceId: result.session.id,
+          vehicleType: result.session.vehicleType,
+          entryTime: result.session.entryTime,
+          sessionId: result.session.id,
+        })
         session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
       }
       setHistoryRefresh((current) => current + 1)
@@ -504,7 +641,20 @@ export function CheckInOut({
               </div>
             )}
 
-            <div className="mt-4 flex justify-end gap-2">
+            {quickResult.action === "check-out" && (
+              <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2">
+                <span className="text-xs text-[var(--muted)]">Parking fee</span>
+                <div className="text-xl font-bold text-[var(--fg)]">
+                  {pricingLoading
+                    ? "Calculating..."
+                    : checkoutPrice === null
+                      ? "Unavailable"
+                      : `${checkoutPrice.toLocaleString("vi-VN")} VND`}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 className="btn-outline text-xs py-1.5 px-3"
@@ -512,29 +662,54 @@ export function CheckInOut({
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className={`text-xs py-1.5 px-4 font-semibold text-white rounded-lg flex items-center gap-1.5 transition ${
-                  quickResult.action === "check-in" ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
-                }`}
-                disabled={actionLoading || lookupLoading}
-                onClick={() => quickResult.kind === "reservation"
-                  ? setConfirmingAction({ ...quickResult, imageData: latestScanImage || undefined })
-                  : void executeWalkInAction(
-                      quickResult,
-                      quickResult.action,
-                      latestScanImage || undefined,
-                      quickResult.vehicleType,
-                    )}
-              >
-                <UntitledIcon
-                  name={quickResult.action === "check-in" ? "check-circle" : "car"}
-                  size={14}
-                />
-                {quickResult.kind === "walk-in"
-                  ? `${quickResult.action === "check-in" ? "Check In" : "Check Out"} Walk-In`
-                  : `Confirm ${quickResult.action === "check-in" ? "Gate Check-In" : "Gate Check-Out"}`}
-              </button>
+              {quickResult.action === "check-in" ? (
+                <button
+                  type="button"
+                  className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                  disabled={actionLoading || lookupLoading}
+                  onClick={() => quickResult.kind === "reservation"
+                    ? setConfirmingAction({ ...quickResult, imageData: latestScanImage || undefined })
+                    : void executeWalkInAction(quickResult, "check-in", latestScanImage || undefined, quickResult.vehicleType)}
+                >
+                  Confirm Check-In
+                </button>
+              ) : quickResult.kind === "walk-in" ? (
+                <>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                    disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice === null}
+                    onClick={() => void executeWalkInAction(quickResult, "check-out", latestScanImage || undefined, quickResult.vehicleType, "PAYOS")}
+                  >
+                    Transfer Money
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice === null}
+                    onClick={() => void executeWalkInAction(quickResult, "check-out", latestScanImage || undefined, quickResult.vehicleType, "CASH")}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-amber-500 px-4 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/10"
+                    disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice === null}
+                    onClick={() => void executeWalkInAction(quickResult, "check-out", latestScanImage || undefined, quickResult.vehicleType, "DEMO")}
+                  >
+                    Demo payOS
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                  disabled={actionLoading || lookupLoading}
+                  onClick={() => setConfirmingAction({ ...quickResult, imageData: latestScanImage || undefined })}
+                >
+                  Continue to Payment
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -625,7 +800,21 @@ export function CheckInOut({
                 : "This will release the slot back to AVAILABLE and complete the booking."}
             </p>
 
-            <div className="mt-5 flex justify-end gap-2">
+            {confirmingAction.action === "check-out" && (
+              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                <p className="text-xs text-[var(--muted)]">Parking fee</p>
+                <p className="text-xl font-bold text-[var(--fg)]">
+                  {pricingLoading
+                    ? "Calculating..."
+                    : checkoutPrice === null
+                      ? "Unavailable"
+                      : `${checkoutPrice.toLocaleString("vi-VN")} VND`}
+                </p>
+                {paymentMessage && <p className="mt-2 text-xs text-[var(--muted)]">{paymentMessage}</p>}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 className="btn-outline text-xs py-1.5 px-3"
@@ -634,22 +823,43 @@ export function CheckInOut({
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className={`text-xs py-1.5 px-4 font-semibold text-white rounded-lg flex items-center gap-1.5 ${
-                  confirmingAction.action === "check-in"
-                    ? "bg-green-600 hover:bg-green-700"
-                    : "bg-blue-600 hover:bg-blue-700"
-                }`}
-                disabled={actionLoading}
-                onClick={() => executeCheckAction(
-                  confirmingAction.booking,
-                  confirmingAction.action,
-                  confirmingAction.imageData,
-                )}
-              >
-                {actionLoading ? "Processing..." : `Confirm ${confirmingAction.action === "check-in" ? "Check-In" : "Check-Out"}`}
-              </button>
+              {confirmingAction.action === "check-in" ? (
+                <button
+                  type="button"
+                  className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                  disabled={actionLoading}
+                  onClick={() => void executeCheckAction(confirmingAction.booking, "check-in", confirmingAction.imageData)}
+                >
+                  {actionLoading ? "Processing..." : "Confirm Check-In"}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                    disabled={actionLoading || pricingLoading || checkoutPrice === null}
+                    onClick={() => void executeCheckAction(confirmingAction.booking, "check-out", confirmingAction.imageData, "PAYOS")}
+                  >
+                    Transfer Money
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    disabled={actionLoading || pricingLoading || checkoutPrice === null}
+                    onClick={() => void executeCheckAction(confirmingAction.booking, "check-out", confirmingAction.imageData, "CASH")}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-amber-500 px-4 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/10"
+                    disabled={actionLoading || pricingLoading || checkoutPrice === null}
+                    onClick={() => void executeCheckAction(confirmingAction.booking, "check-out", confirmingAction.imageData, "DEMO")}
+                  >
+                    Demo payOS
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

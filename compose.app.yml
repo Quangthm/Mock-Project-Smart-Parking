@@ -5,8 +5,8 @@ x-backend-env: &backend-env
   ASPNETCORE_URLS: http://+:8080
   Services__Key: ${SMARTPARK_SERVICE_KEY:?Set SMARTPARK_SERVICE_KEY}
   Services__User: http://user-service:8080/
-  Services__Parking: http://parking-service:8080/
-  Services__Reservation: http://reservation-service:8080/
+  Services__Facility: http://facility-service:8080/
+  Services__Operation: http://operation-service:8080/
 
 x-healthcheck: &healthcheck
   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
@@ -53,7 +53,7 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
-  parking-service:
+  facility-service:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
@@ -70,7 +70,7 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
-  reservation-service:
+  operation-service:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend

@@ -58,7 +58,7 @@ Ghi chú đọc hiểu: tiêu đề **D1–D7** lấy nguyên từ bảng §4 c�
 | Trường | Nội dung |
 |---|---|
 | Nội dung | Bảng `tenants` theo SRS nằm ở `01-user-access-service-db.sql` (canonical) **và** được duplicate bằng `CREATE TABLE IF NOT EXISTS` vào `smartpark_parking`; mọi read/write của BE đi qua connection `ConnectionStrings:Parking` |
-| Lý do | Q3 verify: develop tạo `tenants` ở parking baseline và BE query trên connection Parking (JOIN `parking_sites` trong 1 transaction, `SELECT FOR SHARE`); arch chuyển `tenants` sang `01-user-access` → nếu chỉ có ở DB user thì mọi JOIN của ParkingService vỡ |
+| Lý do | Q3 verify: develop tạo `tenants` ở parking baseline và BE query trên connection Parking (JOIN `parking_sites` trong 1 transaction, `SELECT FOR SHARE`); arch chuyển `tenants` sang `01-user-access` → nếu chỉ có ở DB user thì mọi JOIN của FacilityService vỡ |
 | File(s) bị ảnh hưởng | `scripts/database/microservices/01-user-access-service-db.sql:33-46`; `scripts/database/overlay/parking-tenants.sql`; `compose.schema-integration.yml:29` |
 | Trạng thái triển khai | ✅ Đã triển khai — copy ở `01` giữ nguyên vai trò SRS-canonical, bản parking DB dùng cho runtime |
 
@@ -88,7 +88,7 @@ Ghi chú đọc hiểu: tiêu đề **D1–D7** lấy nguyên từ bảng §4 c�
 | **Q2** | Develop dùng **CẢ HAI** structure-sync (Parking worker 10s) và gate-flow (Reservation `structure_edit_holds`…) → overlay tích hợp **bắt buộc giữ** vào base/overlay mới | PLAN Q2 (dòng 26–30); nội dung `integration/03` + `05.9–05.12` đã được tái hiện: `reservation-structure-safety.sql`, `reservation-structure-receipts.sql`, `reservation-confirmation-time.sql`, `parking-structure-synchronizations.sql`, cùng `structure_operations`/`structure_backup_policies` ở base | ✅ Verify + đã triển khai (giữ dưới dạng overlay mới, không mount script cũ) |
 | **Q3** | `tenants` sống ở **parking DB**, mọi truy cập qua `ConnectionStrings:Parking` | PLAN Q3 (dòng 32–35); `overlay/parking-tenants.sql`; mount `compose.schema-integration.yml:29` | ✅ Verify + đã triển khai (= D5) |
 | **Q4** | Plate index: chọn **(a)** giữ UNIQUE arch + BE handler `23505`→409 | `01-user-access-service-db.sql:107` (`uq_active_vehicle_plate`); `VehicleRegistrationService.cs:72-74`; PLAN nhật ký: *"D2 = UNIQUE + BE handler 23505→409"* | ✅ Chốt + đã triển khai (= D2; chi tiết report 08) |
-| **Q5** | Operator 4 bảng: chọn **(a)** port DDL shape-BE vào parking DB | PLAN Q5 (dòng 44–48); `overlay/parking-operator-tables.sql` + `03a:24-34`;BE middleware `ParkingService.API/Program.cs:56-60` (`PROTOTYPE_SCHEMA_NOT_READY`) là thứ được gỡ bỏ nhờ có bảng | ✅ Chốt + đã triển khai (= D3) |
+| **Q5** | Operator 4 bảng: chọn **(a)** port DDL shape-BE vào parking DB | PLAN Q5 (dòng 44–48); `overlay/parking-operator-tables.sql` + `03a:24-34`;BE middleware `FacilityService.API/Program.cs:56-60` (`PROTOTYPE_SCHEMA_NOT_READY`) là thứ được gỡ bỏ nhờ có bảng | ✅ Chốt + đã triển khai (= D3) |
 | **Q6** | `gate_session_id` **không tồn tại** ở develop (không script, không BE) → quyết định DROP `02.1` (16/10) là no-op | PLAN Q6 (dòng 50–51) | ✅ Verify — không cần hành động nào trên nhánh này |
 
 ---
@@ -131,7 +131,7 @@ $ (T3-DB-Hybrid-Impact-and-Standardization-Plan-2026-10-18.md:104-112)
 | **D2** (=Q4) | Plate index: **(a)** giữ UNIQUE arch + tôi thêm BE handler 23505→409 … | ⚖️ **(a)** …
 | **D3** (=Q5) | Operator 4 bảng: **(a)** port DDL shape-BE vào overlay parking DB … | ✅ **(a)** |
 | **D4** | Base-file deviations (§3.2): fix roles seed, thêm 2 cột parking_slots, rename backup_policies columns | ✅ Package phê |
-| **D5** | `tenants`: SRS copy giữ ở 01 + duplicate ở parking DB (write qua ParkingService) | ✅ |
+| **D5** | `tenants`: SRS copy giữ ở 01 + duplicate ở parking DB (write qua FacilityService) | ✅ |
 | **D6** | `support_tickets`: bản BE-shape ở parking DB dùng tạm; shape SRS (05) để đó … | ✅ |
 | **D7** | `site_capacity_pools` recreate shape-BE tại reservation DB | ✅ (tự động, chỉ thông báo) |
 ```
@@ -165,14 +165,14 @@ D2 (UNIQUE + 409):
 D3 (operator 4 bảng):
   scripts/database/overlay/parking-operator-tables.sql:6,22,37   support_tickets / operator_notifications / operator_audit_logs
   scripts/database/microservices/03a-parking-structure-ops-service-db.sql:24   CREATE TABLE operator_incident_events (
-  src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs:56,60
+  src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs:56,60
       context.Request.Path.StartsWithSegments("/api/operator") && … PROTOTYPE_SCHEMA_NOT_READY …
 
 D4 (deviations):
   01-user-access-service-db.sql:80-82   ('BUSINESS_OWNER', …), ('SITE_OPERATOR', …), ('PLATFORM_ADMIN', …)
   01-user-access-service-db.sql:84      -- DEVIATION (T4-approved): runtime role codes used by UserService (…)
   02-facility-service-db.sql:79-80      supported_vehicle_type VARCHAR(20) CHECK (…) / reservation_state VARCHAR(20) CHECK (…)
-  02-facility-service-db.sql:87         -- DEVIATION (T4-approved): columns required by live ParkingService reads/writes (P1)
+  02-facility-service-db.sql:87         -- DEVIATION (T4-approved): columns required by live FacilityService reads/writes (P1)
   03a-parking-structure-ops-service-db.sql:6,15,17
       -- DEVIATION (T4-approved): BE column names (P2) / unit_id UUID NULL / count INT NOT NULL CHECK (count >= 0)
 

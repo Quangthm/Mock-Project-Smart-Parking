@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$SkipDatabase, [switch]$SkipRestore, [switch]$SkipUserSecrets, [switch]$RecreateDb,
     [ValidateSet('Local','Team')][string]$CredentialMode = 'Local',
     [string]$TeamEnvPath, [switch]$SkipSonarQube, [switch]$NonInteractive,
@@ -673,7 +673,8 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
     foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
-        if ($url) { $desired["Services:$remoteService"] = $url }
+        $configService = @{ User='User'; Parking='Facility'; Reservation='Operation' }[$remoteService]
+        if ($url) { $desired["Services:$configService"] = $url }
     }
     if ($service -eq 'User') {
         $desired['DevelopmentAdmin:Email'] = $settings['SMARTPARK_ADMIN_EMAIL']
