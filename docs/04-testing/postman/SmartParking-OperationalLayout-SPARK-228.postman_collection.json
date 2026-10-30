@@ -261,11 +261,9 @@
                 "exec": [
                   "const suffix = Date.now().toString(36) + Math.floor(Math.random() * 1000);",
                   "const email = 'spark228-opnooverride-' + suffix + '@example.com';",
-                  "const password = 'Spark228!' + Math.floor(Math.random() * 1000);",
                   "pm.environment.set('operatorNoOverrideEmail', email);",
-                  "pm.environment.set('operatorNoOverridePassword', password);",
                   "if (!pm.environment.get('siteId')) { console.log('WARNING: siteId is empty; run request 0.6 first or POST /api/users will fail validation.'); }",
-                  "console.log('Provisioning operator without SLOT_OVERRIDE: ' + email);"
+                  "console.log('Provisioning operator (invitation) without SLOT_OVERRIDE: ' + email);"
                 ]
               }
             },
@@ -290,7 +288,13 @@
                   "});",
                   "pm.test('grant is DEVICE_STATUS_VIEW only (no SLOT_OVERRIDE)', () => {",
                   "  pm.expect(body && body.data && body.data.permissions).to.eql(['DEVICE_STATUS_VIEW']);",
-                  "});"
+                  "});",
+                  "pm.test('invitation delivery status is a string', () => {",
+                  "  pm.expect(body && body.data && body.data.deliveryStatus, 'no deliveryStatus: ' + snippet).to.be.a('string');",
+                  "});",
+                  "if (body && body.data) { console.log('Invitation deliveryStatus=' + body.data.deliveryStatus + ' deliveryId=' + body.data.deliveryId); }",
+                  "if (body && body.data && body.data.id) { pm.environment.set('operatorNoOverrideId', body.data.id); }",
+                  "console.log('Activation is NOT completed by Postman: the operator must open the invitation email and submit POST /api/auth/bootstrap-password {challengeId, token, password} with the emailed 64-hex token, then paste the resulting access token into operatorNoOverrideToken.');"
                 ]
               }
             }
@@ -303,11 +307,11 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"SPARK-228 Operator No Override\",\n  \"email\": \"{{operatorNoOverrideEmail}}\",\n  \"password\": \"{{operatorNoOverridePassword}}\",\n  \"siteIds\": [\"{{siteId}}\"],\n  \"permissions\": [\"DEVICE_STATUS_VIEW\"]\n}",
+              "raw": "{\n  \"fullName\": \"SPARK-228 Operator No Override\",\n  \"email\": \"{{operatorNoOverrideEmail}}\",\n  \"siteIds\": [\"{{siteId}}\"],\n  \"permissions\": [\"DEVICE_STATUS_VIEW\"]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{userServiceUrl}}/api/users",
-            "description": "POST /api/users with the demo Owner token (UsersController.cs:31-37 -> OperatorProvisioningService.cs:49-94). The prerequest generates a unique email/password (8-15 chars, upper+lower+digit+special) and stores them in operatorNoOverrideEmail/operatorNoOverridePassword. Grants DEVICE_STATUS_VIEW only, so the account is assigned to {{siteId}} but has no SLOT_OVERRIDE. Runs after 0.6 captured siteId."
+            "description": "POST /api/users with the demo Owner token (UsersController.cs:31-37 -> OperatorProvisioningService.cs:49-94). CreateOperatorDto no longer has a password member and rejects unknown members, so the body must not send one. The prerequest generates a unique invitation email and stores it in operatorNoOverrideEmail. The response is 201 with data.id, siteIds, permissions and deliveryId/deliveryStatus; the account stays inactive until the operator accepts the emailed invitation via POST /api/auth/bootstrap-password. Runs after 0.6 captured siteId."
           }
         },
         {
@@ -318,21 +322,26 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
-                  "const snippet = pm.response.text().slice(0, 200);",
-                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
-                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
-                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
-                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
-                  "});",
-                  "pm.test('access token present', () => {",
-                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
-                  "});",
-                  "pm.test('role is operator', () => {",
-                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('operator');",
-                  "});",
-                  "if (body && body.data && body.data.accessToken) { pm.environment.set('operatorNoOverrideToken', body.data.accessToken); }"
+                  "const existingToken = pm.environment.get('operatorNoOverrideToken');",
+                  "if (!existingToken) {",
+                  "  console.log('SKIP: operatorNoOverrideToken is empty - the operator created in 0.7 must accept the emailed invitation and be activated via POST /api/auth/bootstrap-password (the 64-hex activation token exists only in the delivered email and is never exposed by the API). Paste the activated access token - and the password chosen at activation - into operatorNoOverrideToken / operatorNoOverridePassword, then run 0.8 or requests 4.3 and 8.3 directly. Cases 4.3 and 8.3 stay Blocked until then.');",
+                  "} else {",
+                  "  let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "  const snippet = pm.response.text().slice(0, 200);",
+                  "  pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "  pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "    pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "    pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "    pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "  });",
+                  "  pm.test('access token present', () => {",
+                  "    pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "  pm.test('role is operator', () => {",
+                  "    pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('operator');",
+                  "  });",
+                  "  if (body && body.data && body.data.accessToken) { pm.environment.set('operatorNoOverrideToken', body.data.accessToken); }",
+                  "}"
                 ]
               }
             }
@@ -348,7 +357,7 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{userServiceUrl}}/api/auth/login",
-            "description": "POST /api/auth/login with the credentials generated and stored by 0.7. This operator is assigned to the demo site but has DEVICE_STATUS_VIEW only, so it exercises the Sanitized fallback in request 4.3. Stores `operatorNoOverrideToken`."
+            "description": "Optional re-login for the operator created in 0.7. Creation only sends an invitation; the password is chosen by the operator during POST /api/auth/bootstrap-password. When operatorNoOverrideToken is empty the script logs SKIP and asserts nothing (cases 4.3/8.3 stay Blocked). When it is set, the script logs in with operatorNoOverrideEmail/operatorNoOverridePassword and stores the fresh token in `operatorNoOverrideToken`."
           }
         },
         {
@@ -502,11 +511,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get('expiredToken');",
-                  "pm.test('expiredToken configured', () => pm.expect(token).to.be.a('string').and.not.empty);",
-                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
-                  "const body = pm.response.json();",
-                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
-                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                  "if (!token) {",
+                  "  console.log('SKIP: expiredToken not configured - see manual guide; a random/revoked token is not an expiry proof.');",
+                  "} else {",
+                  "  pm.test('expiredToken configured', () => pm.expect(token).to.be.a('string').and.not.empty);",
+                  "  pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "  let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "  pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "  pm.test('UNAUTHENTICATED', () => pm.expect(body && body.code).to.eql('UNAUTHENTICATED'));",
+                  "}"
                 ]
               }
             }
@@ -517,7 +530,7 @@
               { "key": "Authorization", "value": "Bearer {{expiredToken}}" }
             ],
             "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
-            "description": "Uses the genuinely expired token provisioned for the environment. See the manual guide: wait for the 24h access lifetime or mint a past-exp token with the Development signing key."
+            "description": "Uses the genuinely expired token provisioned for the environment. See the manual guide: wait for the 24h access lifetime or mint a past-exp token with the Development signing key. When expiredToken is empty the script logs SKIP and asserts nothing; case 2.2 stays Blocked."
           }
         }
       ]
@@ -641,14 +654,19 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('HTTP 200 (not 403)', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
-                  "pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
-                  "pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
-                  "pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
-                  "pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
-                  "pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));"
+                  "const token = pm.environment.get('operatorNoOverrideToken');",
+                  "if (!token) {",
+                  "  console.log('SKIP: operatorNoOverrideToken is empty - case 4.3 (assigned operator without SLOT_OVERRIDE -> 200 Sanitized fallback) is Blocked until the operator created in 0.7 accepts the emailed invitation and is activated via POST /api/auth/bootstrap-password. Zero assertions evaluated.');",
+                  "} else {",
+                  "  pm.test('HTTP 200 (not 403)', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "  pm.test('slots is array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "  pm.test('no BACKUP visible', () => pm.expect(body.data.slots.filter(s => s.reservationState === 'BACKUP')).to.have.lengthOf(0));",
+                  "  pm.test('sessionType redacted', () => pm.expect(body.data.slots.every(s => s.sessionType === null)).to.eql(true));",
+                  "  pm.test('operatorContext redacted', () => pm.expect(body.data.slots.every(s => s.operatorContext === null)).to.eql(true));",
+                  "  pm.test('isBookable invariant', () => pm.expect(body.data.slots.every(s => s.isBookable === (s.physicalState === 'AVAILABLE' && s.reservationState === 'UNRESERVED'))).to.eql(true));",
+                  "}"
                 ]
               }
             }
@@ -659,7 +677,7 @@
               { "key": "Authorization", "value": "Bearer {{operatorNoOverrideToken}}" }
             ],
             "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
-            "description": "Assigned operator without SLOT_OVERRIDE. LayoutCallerResolver catches FORBIDDEN from slot-scope and falls back to Sanitized visibility; the read still returns 200."
+            "description": "Assigned operator without SLOT_OVERRIDE. LayoutCallerResolver catches FORBIDDEN from slot-scope and falls back to Sanitized visibility; the read still returns 200. Requires operatorNoOverrideToken; when it is empty the script logs SKIP (case Blocked) and asserts nothing."
           }
         }
       ]
@@ -1031,9 +1049,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
-                  "const body = pm.response.json();",
-                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                  "const token = pm.environment.get('operatorNoOverrideToken');",
+                  "if (!token) {",
+                  "  console.log('SKIP: operatorNoOverrideToken is empty - case 8.3 (legacy operator-layout 403 without SLOT_OVERRIDE) is Blocked until the operator created in 0.7 accepts the emailed invitation and is activated via POST /api/auth/bootstrap-password. Zero assertions evaluated.');",
+                  "} else {",
+                  "  pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));",
+                  "}"
                 ]
               }
             }
@@ -1044,7 +1067,7 @@
               { "key": "Authorization", "value": "Bearer {{operatorNoOverrideToken}}" }
             ],
             "url": "{{parkingServiceUrl}}/api/parking-lots/{{siteId}}/operator-layout",
-            "description": "Contrast with 4.3: the new operational-layout falls back to Sanitized, but the legacy route still requires SLOT_OVERRIDE and returns 403."
+            "description": "Contrast with 4.3: the new operational-layout falls back to Sanitized, but the legacy route still requires SLOT_OVERRIDE and returns 403. Requires operatorNoOverrideToken; when it is empty the script logs SKIP (case Blocked) and asserts nothing."
           }
         },
         {

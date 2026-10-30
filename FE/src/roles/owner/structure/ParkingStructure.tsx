@@ -9,7 +9,7 @@ import { useApp } from "../../../context/AppContext"
 import { ownerData as store } from "../data/data"
 import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
-import { formatSlotLabel } from "../../../lib/operationalLayout"
+import { formatSlotLabel, mapSlotVisualState, type PhysicalState, type ReservationState } from "../../../lib/operationalLayout"
 
 interface ParkingStructureProps {
   sites?: Site[]
@@ -48,14 +48,44 @@ const RESERVATION_APPEARANCE_MAP: Record<string, { label: string; status: "reser
 
 const ACTIVE_OPERATIONAL_SET = new Set(["ACTIVE", "AVAILABLE", "OPERATIONAL"])
 
+/**
+ * Derives the two authoritative axes once, so the 3D model and the slot cards
+ * cannot disagree. Both halves fail closed: an unrecognised operational status
+ * is never AVAILABLE, and an unrecognised non-empty reservation is a BACKUP hold
+ * (mirrors the backend's OperationalStateMapping).
+ */
+function slotAxes(slot: Slot): { physicalState: PhysicalState; reservationState: ReservationState } {
+  const physicalState: PhysicalState = slot.isPhysicallyOccupied ? "OCCUPIED"
+    : slot.operationalStatus === "MAINTENANCE" ? "MAINTENANCE"
+    : slot.operationalStatus === "UNKNOWN" ? "UNKNOWN"
+    : slot.operationalStatus === "BLOCKED" ? "UNAVAILABLE"
+    : ACTIVE_OPERATIONAL_SET.has(slot.operationalStatus) ? "AVAILABLE"
+    : "UNKNOWN"
+
+  const reservation = (slot.reservationState ?? "").trim().toUpperCase()
+  const reservationState: ReservationState = reservation === "" || reservation === "NONE" ? "UNRESERVED"
+    : reservation === "RESERVED" || reservation === "PROTECTED" || reservation === "BACKUP" ? reservation
+    : "BACKUP"
+
+  return { physicalState, reservationState }
+}
+
 function slotAppearance(slot: Slot) {
+  const { physicalState, reservationState } = slotAxes(slot)
+  const visualState = mapSlotVisualState({ physicalState, reservationState })
+
   if (slot.isPhysicallyOccupied) {
     return slot.reservationState === "PROTECTED"
       ? { label: "Occupied + protected", status: "occupied" }
       : { label: "Occupied", status: "occupied" }
   }
   if (slot.reservationState && slot.reservationState !== "NONE") {
-    return RESERVATION_APPEARANCE_MAP[slot.reservationState] ?? {
+    const mapped = RESERVATION_APPEARANCE_MAP[slot.reservationState]
+    if (mapped) return mapped
+    // The shared mapper decides when a hold is a backup appearance: BACKUP only
+    // shows as backup while the bay is physically AVAILABLE.
+    if (visualState === "backup") return { label: "Backup", status: "backup" }
+    return {
       label: slot.reservationState.replace(/_/g, " "),
       status: "reserved",
     }
@@ -130,11 +160,15 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
   const units = structure?.units ?? []
   const slots = structure?.slots ?? []
   const ownerLot = useMemo(() => store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === siteId), [user?.id, siteId, reload])
-  const modelSlots = useMemo(() => slots.map(slot => ({ id: slot.id, number: slot.code, floor: 1,
-    status: slot.isPhysicallyOccupied ? "occupied" as const
-      : !["ACTIVE", "AVAILABLE", "OPERATIONAL"].includes(slot.operationalStatus) ? "maintenance" as const
-      : slot.reservationState && slot.reservationState !== "NONE" ? "reserved" as const : "available" as const,
-  })), [slots])
+  const modelSlots = useMemo(() => slots.map(slot => {
+    const axes = slotAxes(slot)
+    return { id: slot.id, number: slot.code, floor: 1,
+      status: slot.isPhysicallyOccupied ? "occupied" as const
+        : !["ACTIVE", "AVAILABLE", "OPERATIONAL"].includes(slot.operationalStatus) ? "maintenance" as const
+        : slot.reservationState && slot.reservationState !== "NONE" ? "reserved" as const : "available" as const,
+      ...axes,
+    }
+  }), [slots])
   const unitById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units])
   const parentOptions = units.filter((unit) =>
     unitForm.type === "ZONE" ? unit.type === "FLOOR" : unitForm.type === "BLOCK" && (unit.type === "FLOOR" || unit.type === "ZONE"),
@@ -332,6 +366,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     available: "check-circle",
     occupied: "car",
     reserved: "clock",
+    backup: "clock",
     maintenance: "wrench",
   } as Record<string, "check-circle" | "car" | "clock" | "wrench">)[appearance.status] ?? "wrench"} size={14} />{appearance.label}</span>
                     <span className="w-full truncate text-[10px] text-[var(--muted)]" title={location(slot.unitId)}>{location(slot.unitId)}</span>
