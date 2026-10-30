@@ -159,6 +159,33 @@ public sealed class PostgresStructureWorkflowTests
     }
 
     [StructurePostgresFact]
+    public async Task ReleaseDeletesTheHoldBeforeGuardedCapacityWrites()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        await fixture.ExecuteAsync(fixture.Reservation, $"""
+            INSERT INTO site_capacity_pools(tenant_id,site_id,spatial_unit_id,vehicle_type,total_capacity,max_reservation_quota)
+            VALUES ('{fixture.Owner.TenantId}','{fixture.SiteId}',NULL,'CAR',3,3)
+            """);
+        var token = Guid.NewGuid();
+        await fixture.OperationService.PrepareAsync(
+            fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
+
+        // guard_structure_edit() raises 55P03 for a site_capacity_pools write while a
+        // hold row for the site exists. This only succeeds when ReleaseAsync flushes
+        // the hold deletion before touching the pool.
+        await fixture.OperationService.CompleteAsync(
+            fixture.Owner.TenantId, fixture.SiteId, token,
+            new(true, [], [], [new(null, "CAR", 1, 0)]), CancellationToken.None);
+
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation,
+            "SELECT count(*) FROM structure_edit_holds"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_release_receipts WHERE token='{token}'"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            "SELECT count(*) FROM site_capacity_pools WHERE total_capacity=1 AND max_reservation_quota=1"));
+    }
+
+    [StructurePostgresFact]
     public async Task RecoveryFenceWaitsForUnacknowledgedPhysicalCommitAndReturnsReadyPayload()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -276,11 +303,17 @@ public sealed class PostgresStructureWorkflowTests
         var token = Guid.NewGuid();
         var removed = Guid.NewGuid();
         await fixture.OperationService.PrepareAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
-        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => fixture.OperationService.CompleteAsync(
+        // EF/Npgsql wrap provider failures (DbUpdateException, then a transient-failure
+        // InvalidOperationException from the retrying execution strategy). Walk the chain so
+        // the simulated projection failure is still proven, not just "something threw".
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => fixture.OperationService.CompleteAsync(
             fixture.Owner.TenantId, fixture.SiteId, token,
             new(false, [removed], [], [new(null, "CAR", 0)]), CancellationToken.None));
-        Assert.Equal(PostgresErrorCodes.CheckViolation, Assert.IsType<PostgresException>(failure.InnerException).SqlState);
-        // A retry uses a fresh request scope after the failed EF transaction.
+        Exception? cause = failure;
+        while (cause is not PostgresException && cause.InnerException is not null)
+            cause = cause.InnerException;
+        Assert.Equal(PostgresErrorCodes.CheckViolation, Assert.IsType<PostgresException>(cause).SqlState);
+        // A rejected retry must not reuse the context whose EF transaction just failed.
         fixture.ReservationContext.ChangeTracker.Clear();
 
         Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
@@ -295,9 +328,37 @@ public sealed class PostgresStructureWorkflowTests
             "SELECT count(*) FROM site_capacity_pools WHERE total_capacity=1 AND max_reservation_quota=1"));
 
         await fixture.ExecuteAsync(fixture.Reservation, "DROP TRIGGER reject_test_capacity ON site_capacity_pools");
-        await fixture.OperationService.CompleteAsync(fixture.Owner.TenantId, fixture.SiteId, token,
+        await fixture.NewReservationService().CompleteAsync(fixture.Owner.TenantId, fixture.SiteId, token,
             new(false, [removed], [], [new(null, "CAR", 0)]), CancellationToken.None);
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation, "SELECT count(*) FROM structure_edit_holds"));
+    }
+
+    [StructurePostgresFact]
+    public async Task ForceReleaseRejectsAHoldOwnedByAnotherTenantThenReleasesItsOwn()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var token = Guid.NewGuid();
+        await fixture.OperationService.PrepareAsync(
+            fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
+
+        // A live editor holds the site. Another tenant must never be able to force-release it,
+        // and the rejected attempt must leave the hold exactly as it was.
+        await Assert.ThrowsAsync<ReservationDomain.HoldConflictException>(() =>
+            fixture.NewReservationService().ForceReleaseAsync(Guid.NewGuid(), fixture.SiteId, CancellationToken.None));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_edit_holds WHERE token='{token}'"));
+
+        // The owning tenant may repair its own orphaned hold; a subsequent edit can acquire again.
+        await fixture.NewReservationService().ForceReleaseAsync(
+            fixture.Owner.TenantId, fixture.SiteId, CancellationToken.None);
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation,
+            "SELECT count(*) FROM structure_edit_holds"));
+
+        var next = Guid.NewGuid();
+        await fixture.NewReservationService().PrepareAsync(
+            fixture.Owner.TenantId, fixture.SiteId, next, CancellationToken.None);
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_edit_holds WHERE token='{next}'"));
     }
 
     private sealed class DatabaseFixture : IAsyncDisposable, IOwnerAuthorizer, ISlotOperatorAuthorizer
@@ -337,6 +398,12 @@ public sealed class PostgresStructureWorkflowTests
             Service = new(new PostgresParkingStructureRepository(Parking), this, this, Transport, Store, synchronization);
         }
 
+        // A production retry is a new request scope with a new DbContext; reusing a context
+        // whose transaction already failed leaves the change tracker in a stale state.
+        public ReservationApplication.StructureSafetyService NewReservationService() =>
+            new(new StructureSafetyStore(new ReservationDbContext(
+                new DbContextOptionsBuilder<ReservationDbContext>().UseNpgsql(Reservation).Options)));
+
         public static async Task<DatabaseFixture> CreateAsync()
         {
             var admin = Environment.GetEnvironmentVariable("SMARTPARK_STRUCTURE_TEST_CONNECTION")!;
@@ -359,7 +426,6 @@ public sealed class PostgresStructureWorkflowTests
                     "scripts/database/overlay/parking-structure-synchronizations.sql",
                     "scripts/database/overlay/parking-operator-tables.sql",
                     "scripts/database/overlay/parking-slot-constraints.sql",
-                    "scripts/database/05.16-Parking-Owner-Onboarding.sql",
                     "scripts/database/05.16-Parking-Owner-Onboarding.sql");
                 await fixture.ApplyAsync(fixture.Reservation, root,
                     "scripts/database/microservices/03b-reservation-operations-service-db.sql",
@@ -464,5 +530,8 @@ public sealed class PostgresStructureWorkflowTests
                 throw new StructureException("COMMITMENTS_UNAVAILABLE", "Simulated lost HTTP acknowledgement after commit.");
             }
         }
+
+        public Task ForceReleaseAsync(Guid tenant, Guid site, CancellationToken ct) =>
+            service.ForceReleaseAsync(tenant, site, ct);
     }
 }

@@ -2,6 +2,7 @@ import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useMemo } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { formatSlotLabel } from "../../../lib/operationalLayout"
 import type { Booking, SupportTicket, AppNotification } from "../../../lib/types"
 import type { OperatorSite } from "../../../lib/operatorApi"
 
@@ -29,7 +30,12 @@ export function OperatorOverview({
   const occupiedSlots = lot?.slots.filter((slot) => slot.status === "occupied").length ?? 0
   const reservedSlots = lot?.slots.filter((slot) => slot.status === "reserved").length ?? 0
   const backupSlots = lot?.slots.filter((slot) => slot.reservationState?.toUpperCase() === "BACKUP").length ?? 0
-  const maintenanceSlots = lot?.slots.filter((slot) => slot.status === "maintenance" || slot.status === "disabled").length ?? 0
+  // Maintenance is the physical MAINTENANCE axis only; UNKNOWN and UNAVAILABLE
+  // both derive `status === "disabled"` and must not be counted as maintenance.
+  const maintenanceSlots = lot?.slots.filter((slot) => slot.physicalState === "MAINTENANCE").length ?? 0
+  const failClosedSlots = lot?.slots.filter(
+    (slot) => slot.physicalState === "UNKNOWN" || slot.physicalState === "UNAVAILABLE",
+  ).length ?? 0
 
   const occupancyRate = totalSlots > 0 ? Math.min(100, Math.round(((occupiedSlots + reservedSlots) / totalSlots) * 100)) : 0
 
@@ -59,7 +65,7 @@ export function OperatorOverview({
 
   return (
     <div className="space-y-6">
-      <PageHeader title={lot.name} eyebrow={<>{lot.code} · {lot.address}</>} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
+      <PageHeader title={lot.name} eyebrow={<>{lot.code}{lot.address ? ` · ${lot.address}` : ''}</>} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5">
             <span className="text-xs font-medium text-[var(--muted)] pl-2">Site:</span>
             <RoundedSelect
@@ -169,7 +175,10 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums">{maintenanceSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">Unavailable slots</div>
+            <div className="mt-0.5 text-[11px] text-[var(--muted)]">
+              Unavailable slots
+              {failClosedSlots > 0 ? ` · ${failClosedSlots} bays with no reliable state` : ''}
+            </div>
           </div>
         </button>
       </div>
@@ -325,7 +334,7 @@ export function OperatorOverview({
                           </span>
                         </td>
                         <td className="py-2.5 text-[var(--fg)] font-medium">
-                          {booking.slotNumber}
+                          {formatSlotLabel(booking.slotNumber)}
                         </td>
                         <td className="py-2.5 text-[var(--muted)]">
                           {new Date(booking.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} –{" "}

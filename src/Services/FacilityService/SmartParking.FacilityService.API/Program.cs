@@ -24,9 +24,12 @@ public static class FacilityHost
         builder.Services.AddScoped<IOwnerAuthorizer>(s => s.GetRequiredService<OwnerIdentityClient>());
         builder.Services.AddHttpClient<SlotOperatorClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
         builder.Services.AddScoped<ISlotOperatorAuthorizer>(s => s.GetRequiredService<SlotOperatorClient>());
+        builder.Services.AddHttpClient<LayoutCallerResolver>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
+        builder.Services.AddScoped<ILayoutCallerResolver>(s => s.GetRequiredService<LayoutCallerResolver>());
         builder.Services.AddHttpClient<IStructureCommitments, StructureCommitmentsClient>(c =>
         { c.BaseAddress = new(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(10); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
         builder.Services.AddScoped<IParkingStructureRepository, PostgresParkingStructureRepository>();
+        builder.Services.AddScoped<IOperationalLayoutReader, PostgresOperationalLayoutReader>();
         builder.Services.AddScoped<ParkingStructureService>();
         builder.Services.AddScoped<IOwnerOnboardingStore, OwnerOnboardingStore>();
         builder.Services.AddScoped<OwnerOnboardingService>();
@@ -134,7 +137,49 @@ public static class FacilityHost
             return Results.Created($"/api/parking-lots/{site.Id}/structure", new { success = true, data = site });
         });
         app.MapGet("/api/parking-lots/{id:guid}/structure", async (Guid id, Guid? tenantId, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.GetAsync(await Scope(identity, tenantId, ct), id, ct) }));
-        app.MapGet("/api/parking-lots/{id:guid}/operational-layout", async (Guid id, ISlotOperatorAuthorizer identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.ReadOperationalAsync(await identity.ScopeAsync(id, ct), id, ct) }));
+        app.MapGet("/api/parking-lots/{id:guid}/operational-layout", async (
+            Guid id,
+            string? vehicleType,
+            string? floor,
+            HttpContext context,
+            ParkingStructureService service,
+            CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            context.Response.Headers.Vary = "Authorization";
+
+            VehicleType? vehicleFilter = null;
+            if (!string.IsNullOrWhiteSpace(vehicleType))
+            {
+                if (!Enum.TryParse<VehicleType>(vehicleType, ignoreCase: false, out var parsed)
+                    || !Enum.IsDefined(parsed)
+                    || !string.Equals(vehicleType, parsed.ToString(), StringComparison.Ordinal))
+                    return Results.BadRequest(new { success = false, code = "INVALID_VEHICLE_TYPE", message = "vehicleType must be CAR, MOTORCYCLE, or OVERSIZED." });
+                vehicleFilter = parsed;
+            }
+
+            try
+            {
+                var data = await service.ReadOperationalAsync(id, vehicleFilter, floor, ct);
+                return Results.Ok(new { success = true, data });
+            }
+            catch (StructureException)
+            {
+                // Already mapped to 401/403/404/409/... by the outer middleware.
+                throw;
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                // The client aborted; this is not a server failure.
+                throw;
+            }
+            catch (Exception)
+            {
+                return Results.Json(
+                    new { success = false, code = "INTERNAL_ERROR", message = "An unexpected error occurred." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+        });
         app.MapPost("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup", async (Guid id, Guid slot, BackupMarkBody body, ISlotOperatorAuthorizer identity, ParkingStructureService service, CancellationToken ct) =>
         { await service.MarkOperationalBackupAsync(await identity.ScopeAsync(id, ct), id, slot, body.Reason, ct); return Results.Ok(new { success = true }); });
         app.MapPost("/api/parking-lots/{id:guid}/operations", async (Guid id, OperationBody body, IOwnerScopeReader identity, StructureOperationService operations, CancellationToken ct) =>
@@ -157,8 +202,13 @@ public static class FacilityHost
             return Results.Ok(new { success = true });
         });
         app.MapPost("/api/parking-lots/{id:guid}/paths", async (Guid id, PathBody body, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddAccessPathAsync(await Scope(identity, body.TenantId, ct), id, body.Code, body.From, body.To, body.MapData, ct) }));
-        app.MapGet("/api/parking-lots/{id:guid}/operator-layout", async (Guid id, OperatorLayoutService service, CancellationToken ct) =>
-            Results.Ok(new { success = true, data = await service.ReadAsync(id, ct) }));
+        app.MapGet("/api/parking-lots/{id:guid}/operator-layout", async (Guid id, ISlotOperatorAuthorizer identity, OperatorLayoutService service, CancellationToken ct) =>
+        {
+            // Legacy route serves the same aggregate; require the same SLOT_OVERRIDE gate as
+            // /operational-layout so it cannot bypass that boundary. Payload is unchanged.
+            await identity.ScopeAsync(id, ct);
+            return Results.Ok(new { success = true, data = await service.ReadAsync(id, ct) });
+        });
         app.MapDelete("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup", async (Guid id, Guid slot, ISlotOperatorAuthorizer identity, ParkingStructureService service, CancellationToken ct) =>
         {
             await service.SetOperationalBackupAsync(await identity.ScopeAsync(id, ct), id, slot, false, "Backup designation released by operator.", ct);
@@ -178,4 +228,4 @@ public sealed record UnitBody(UnitType Type, string Name, Guid? ParentId, int Ca
 public sealed record SlotBody(Guid UnitId, string Code, VehicleType VehicleType, SlotType Type = SlotType.STANDARD, Guid? TenantId = null);
 public sealed record PathBody(string Code, Guid? From, Guid? To, string? MapData, Guid? TenantId = null);
 public sealed record EditStructure(string Action, Guid ResourceId, Guid UnitId, string? Code, string? Name, string? Address, bool Active, int Capacity, VehicleType VehicleType, SlotType SlotType, string? Coordinates3D, string? Features, decimal? Latitude, decimal? Longitude, Guid? TenantId = null);
-public static class Program { public static void Main(string[] args) => FacilityHost.Build(args).Run(); }
+public partial class Program { public static void Main(string[] args) => FacilityHost.Build(args).Run(); }

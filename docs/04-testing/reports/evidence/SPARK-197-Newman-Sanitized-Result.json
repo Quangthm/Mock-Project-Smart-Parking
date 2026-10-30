@@ -1,0 +1,71 @@
+{
+  "task": "SPARK-197",
+  "targetCommit": "9952091294a9603ee53863fca2b454e6a11eb666",
+  "executedAtUtc": "2026-10-29T11:50:31.192Z",
+  "result": "PASS",
+  "requestsExecuted": 10,
+  "assertionsTotal": 17,
+  "assertionsFailed": 0,
+  "cases": [
+    {
+      "name": "Anonymous list",
+      "httpStatus": 401,
+      "assertions": 1,
+      "passed": true
+    },
+    {
+      "name": "Anonymous detail",
+      "httpStatus": 401,
+      "assertions": 1,
+      "passed": true
+    },
+    {
+      "name": "Anonymous review denied",
+      "httpStatus": 401,
+      "assertions": 1,
+      "passed": true
+    },
+    {
+      "name": "Owner list denied",
+      "httpStatus": 403,
+      "assertions": 1,
+      "passed": true
+    },
+    {
+      "name": "Owner detail denied",
+      "httpStatus": 403,
+      "assertions": 1,
+      "passed": true
+    },
+    {
+      "name": "Owner review denied",
+      "httpStatus": 403,
+      "assertions": 1,
+      "passed": true
+    },
+    {
+      "name": "Admin list",
+      "httpStatus": 200,
+      "assertions": 2,
+      "passed": true
+    },
+    {
+      "name": "Admin detail A",
+      "httpStatus": 200,
+      "assertions": 4,
+      "passed": true
+    },
+    {
+      "name": "Admin detail B",
+      "httpStatus": 200,
+      "assertions": 4,
+      "passed": true
+    },
+    {
+      "name": "Admin nonexistent ID",
+      "httpStatus": 404,
+      "assertions": 1,
+      "passed": true
+    }
+  ]
+}

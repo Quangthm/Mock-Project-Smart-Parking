@@ -342,15 +342,24 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
 .parking-status[data-status="occupied"] { background: var(--status-occupied-bg); color: var(--occupied); }
 .parking-status[data-status="reserved"] { background: var(--status-reserved-bg); color: var(--reserved); }
 .parking-status[data-status="maintenance"] { background: var(--status-maintenance-bg); color: var(--maintenance); }
-.parking-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
-.parking-kpi { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 16px 20px; }
-.parking-kpi + .parking-kpi { border-left: 1px solid var(--border); }
+/* The strip carries seven states, so it wraps instead of assuming a fixed count.
+   Dividers come from a 1px gap over the border colour, which keeps every row and
+   column ruled — including the row-start item — with no adjacency selector and
+   therefore no stray edge dividers at any wrap point. Inside the dashboard theme
+   the strip is re-skinned to separate cards (workspace-layout.css), so the 1px
+   gap and border-coloured backing simply yield to that gap and background. */
+.parking-kpi-strip { display: flex; flex-wrap: wrap; gap: 1px; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: 8px; }
+.parking-kpi { display: flex; flex: 1 1 calc(25% - 13px); flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 16px 20px; background: var(--card); }
 .parking-kpi .parking-status { padding: 0; background: transparent; }
 .parking-kpi strong { color: var(--fg); font-size: 1.75rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
 .parking-kpi:first-child strong { color: var(--available); }
 .parking-space { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 72px; padding: 7px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--fg); font-variant-numeric: tabular-nums; cursor: pointer; }
 .parking-space[data-status="available"] { border: 2px solid var(--available); background: var(--status-available-bg); color: var(--available); }
 .parking-space[data-status="reserved"] { background: var(--status-reserved-bg); color: var(--reserved); }
+/* A backup hold is not a reservation: it uses the two-axis vocabulary cyan
+   (SLOT_VISUAL_STATE_HEX.backup in lib/3d/parking3DConfig.ts), same border /
+   tint / accent split as the other states above. */
+.parking-space[data-status="backup"] { border-color: #0891b2; background: #0891b21f; color: #0891b2; }
 .parking-space[data-status="occupied"] { background: var(--status-occupied-bg); color: var(--occupied); }
 .parking-space[data-status="maintenance"] { background: var(--status-maintenance-bg); color: var(--maintenance); }
 .parking-space .parking-status { max-width: 100%; padding: 0; background: transparent; font-size: .7rem; }
@@ -441,6 +450,14 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
   .dashboard-scrim { position: fixed; z-index: 110; inset: 60px 0 0; display: block; border: 0; background: #09120e80; }
 }
 
+@media (max-width: 767px) {
+  /* Between sm and md the page content is 585-711px wide. At the low end of that
+     band four 1/4 cells would leave ~86px of text space, which the "Maintenance"
+     KPI label (icon + 11 characters) already exceeds, so the band uses three
+     cells; md and above get the design's four columns back. */
+  .parking-kpi { flex-basis: calc(33.333% - 13px); }
+}
+
 @media (max-width: 640px) {
   .admin-kpi-strip { grid-template-columns: 1fr; }
   .admin-kpi { border-right: 0; border-top: 1px solid var(--border); }
@@ -465,9 +482,7 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
   .owner-finance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .owner-finance-kpi:nth-child(3) { border-left: 0; }
   .owner-finance-kpi:nth-child(n+3) { border-top: 1px solid var(--border); }
-  .parking-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .parking-kpi:nth-child(3) { border-left: 0; }
-  .parking-kpi:nth-child(n+3) { border-top: 1px solid var(--border); }
+  .parking-kpi { flex-basis: calc(50% - 13px); }
   .dashboard-content { margin: 0; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
   .smartparking-hero { grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .smartparking-hero .hero-actions > button { flex: 1 1 100%; }
@@ -477,6 +492,14 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
   .find-parking-result-top strong, .find-parking-detail-grid strong { font-size: 1rem; }
   .find-parking-address, .find-parking-result-bottom, .find-parking-map-status p { font-size: .875rem; }
   .booking-time-list button { font-size: 1rem; }
+}
+
+/* Below ~352px the page content is under 320px wide, so a half-width KPI cell
+   cannot hold the longest state label ("Maintenance") next to its icon and the
+   text would spill into the gutter. One full-width row per state keeps the strip
+   readable without truncating or hiding a label. */
+@media (max-width: 359px) {
+  .parking-kpi { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

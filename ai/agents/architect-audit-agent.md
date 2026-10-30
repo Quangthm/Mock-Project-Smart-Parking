@@ -25,7 +25,10 @@
      - Tách biệt Command / Query; Handler tương tác qua Port interface; DI đăng ký đầy đủ.
    - **Nhóm 4: Ranh giới Dữ liệu Microservice & Anti-Corruption:**
      - Tuyệt đối không có cross-database foreign key, cross-DB query hay tiêm chéo `DbContext`.
-     - Anti-Corruption Layer (ACL): Adapter phải map response của bên ngoài về Application/Domain model.
+     - Anti-Corruption Layer (ACL):
+       - Adapter gọi service bên ngoài phải map response của bên ngoài về Application/Domain model.
+       - 🔴 **Quy tắc Outbound Deserialization:** Tuyệt đối CẤM deserialize trực tiếp payload mạng (`ReadFromJsonAsync<T>`) vào Domain Model / Entity / Value Object. Mọi Outbound Adapter phải có DTO riêng ở tầng Infrastructure và thực hiện validation / mapping tường minh.
+       - 🟡 **Quy tắc Test Coverage cho Adapter:** Mọi Outbound Adapter dùng HttpClient bắt buộc phải có Unit Test kiểm thử cả 2 trường hợp: JSON chuẩn (string enum) và JSON lỗi/không hợp lệ để đảm bảo an toàn luồng dữ liệu.
    - **Nhóm 5: 11 Nghĩa vụ Kỹ thuật Payment (Nếu audit `PaymentService`):**
      - Idempotency, trạng thái UNKNOWN, retry <= 4, xác thực webhook HMAC, outbox pattern, v.v.
 3. **Xuất Báo cáo Đánh giá Kiến trúc (Architecture Audit Report):**
