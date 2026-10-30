@@ -352,11 +352,22 @@ export async function loadOperatorSites(user: User | null): Promise<OperatorSite
 
   if (user.role === "owner") {
     const sites = await parkingApi.list()
-    const structures = await Promise.all(sites.map((site) => parkingApi.structure(site.id)))
-    return Promise.all(structures.map(async structure => {
-      const site = siteFromStructure(structure)
+    const siteById = new Map(sites.map((site) => [site.id, site]))
+    const projections = await Promise.all(
+      sites.map((site) => parkingApi.operationalLayout(site.id)),
+    )
+    return Promise.all(projections.map(async (projection, index) => {
+      const siteMeta = siteById.get(sites[index].id)
+      const site = siteFromOperationalLayout(projection, siteMeta?.tenantId ?? "")
+      const merged: OperatorSite = {
+        ...site,
+        address: siteMeta?.address ?? site.address,
+        latitude: siteMeta?.latitude ?? site.latitude,
+        longitude: siteMeta?.longitude ?? site.longitude,
+        isActive: siteMeta?.isActive ?? site.isActive,
+      }
       const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
-      return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+      return savedModelUrl ? { ...merged, modelUrl: savedModelUrl } : merged
     }))
   }
 

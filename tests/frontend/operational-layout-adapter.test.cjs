@@ -320,42 +320,57 @@ test('operator sites map the authoritative projection and keep both axes on OCCU
   assert.equal(bookableSlot.status, 'available');
 });
 
-test('legacy owner structures still map explicitly, normalising null reservations to UNRESERVED', async () => {
-  const structure = {
-    site: {
-      id: 'site-1', tenantId: 'tenant-1', code: 'S1', name: 'Owner site', address: 'Addr',
-      latitude: null, longitude: null, status: 'ACTIVE', isActive: true, totalPhysicalCapacity: 1,
-    },
-    units: [],
-    slots: [{
-      id: 'slot-1', unitId: 'unit-1', code: 'A-001', vehicleType: 'CAR', type: 'STANDARD',
-      operationalStatus: 'OPERATIONAL', isPhysicallyOccupied: true, reservationState: 'PROTECTED',
-    }, {
-      id: 'slot-2', unitId: 'unit-1', code: 'A-002', vehicleType: 'CAR', type: 'STANDARD',
-      operationalStatus: 'OPERATIONAL', isPhysicallyOccupied: false, reservationState: null,
-    }],
-    paths: [],
-    capacityViews: [],
+// F3: the owner path now reads the same authoritative projection as the operator
+// path, and only borrows site metadata (address/lat/lng/isActive/tenantId) from
+// `parkingApi.list()`.
+test('owner sites read the operational-layout projection too, keeping list() metadata', async () => {
+  const ownerSite = {
+    id: fresh.siteId, tenantId: 'tenant-1', code: fresh.siteCode, name: fresh.siteName,
+    address: '123 Owner Street', latitude: 10.5, longitude: 106.5,
+    status: 'ACTIVE', isActive: true, totalPhysicalCapacity: 48,
   };
+  let structureCalls = 0;
   const operatorApi = load('lib/operatorApi.ts', {
     ...operatorApiImports,
     './parkingApi': {
-      operatorsApi: { assignments: async () => [] },
+      operatorsApi: { assignments: async () => { throw new Error('owner path must not read assignments'); } },
       parkingApi: {
-        list: async () => [{ ...structure.site }],
-        structure: async () => structure,
-        operationalLayout: async () => { throw new Error('owner path must not call operationalLayout'); },
+        list: async () => [ownerSite],
+        structure: async () => { structureCalls += 1; throw new Error('owner path must not call parkingApi.structure'); },
+        operationalLayout: async id => { assert.equal(id, fresh.siteId); return fresh; },
       },
     },
   }, operatorApiReplacements);
 
   const sites = await operatorApi.loadOperatorSites({ id: 'owner-1', role: 'owner' });
-  const slots = sites[0].slots;
-  assert.equal(slots[0].physicalState, 'OCCUPIED');
-  assert.equal(slots[0].reservationState, 'PROTECTED');
-  assert.equal(slots[1].physicalState, 'AVAILABLE');
-  assert.equal(slots[1].reservationState, 'UNRESERVED');
-  assert.equal(slots[1].isBookable, true);
+  assert.equal(structureCalls, 0);
+  assert.equal(sites.length, 1);
+  const site = sites[0];
+
+  // metadata comes from list(), not from the projection
+  assert.equal(site.tenantId, 'tenant-1');
+  assert.equal(site.address, '123 Owner Street');
+  assert.equal(site.latitude, 10.5);
+  assert.equal(site.longitude, 106.5);
+  assert.equal(site.isActive, true);
+  assert.equal(site.code, fresh.siteCode);
+  assert.equal(site.name, fresh.siteName);
+
+  // axes + freshness come from the projection
+  assert.equal(site.totalSlots, fresh.slots.length);
+  assert.equal(site.floors, fresh.floors.length);
+  assert.ok(site.freshness);
+  assert.equal(site.freshness.generatedAt, fresh.generatedAt);
+  assert.equal(site.freshness.stalenessThresholdSeconds, fresh.stalenessThresholdSeconds);
+
+  const backup = site.slots.find(slot => slot.number === 'CarParkingSpace_004');
+  assert.equal(backup.physicalState, 'AVAILABLE');
+  assert.equal(backup.reservationState, 'BACKUP');
+  assert.equal(backup.isBookable, false);
+
+  const unknownSlot = site.slots.find(slot => slot.number === 'CarParkingSpace_009');
+  assert.equal(unknownSlot.physicalState, 'UNKNOWN');
+  assert.notEqual(unknownSlot.status, 'available');
 });
 
 function loadParkingApi(flag, requestImpl) {
