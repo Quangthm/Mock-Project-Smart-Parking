@@ -20,7 +20,7 @@
 
 ### 1.1. Purpose
 
-This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Transitional `FacilityService` (renamed from `ParkingService`)/`OperationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
+This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Transitional `FacilityService` (renamed from `FacilityService`)/`OperationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
 
 The target binding must ensure the following; historical prototype evidence is separately labelled in §§11–13:
 
@@ -69,7 +69,7 @@ The target binding must ensure the following; historical prototype evidence is s
   * `docs/03-design/3d-digital-twin/3D_ASSET_DOCUMENTATION_Parking_House.md`
   * `docs/03-design/3d-digital-twin/3D_ASSET_DOCUMENTATION_Underground_Parking.md`
 * **Historical Microservice Database Script names** (use the [current schema index](../../02-architecture/database/README.md) for the recorded deployment profile):
-  * `scripts/database/microservices/02-parking-service-db.sql` (`parking_slots`, `spatial_units`, `parking_sites`).
+  * `scripts/database/microservices/02-facility-service-db.sql` (`parking_slots`, `spatial_units`, `parking_sites`).
   * `scripts/database/microservices/03-reservation-session-service-db.sql` (`reservations`, `parking_sessions`, `slot_allocations`).
   * `scripts/database/microservices/06-iot-service-db.sql` (`sensor_telemetries`, `devices`).
 * **Source Code Implementations**:
@@ -102,7 +102,7 @@ The approved target has six domain-owned services. The source folder names below
 
 | Service / component | Contract status | Technical responsibility |
 | :--- | :--- | :--- |
-| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; runtime `FacilityService` (formerly `ParkingService`) remains transitional. |
+| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; runtime `FacilityService` (formerly `FacilityService`) remains transitional. |
 | **Parking Operations** | Target ownership | Accepted occupancy/uncertainty, reservations, claims, allocation, protection, availability, Search and monthly/yearly coverage. Legacy `OperationService` is implementation evidence. |
 | **User & Access** | Target ownership | Identity, organization/membership/review and current scoped permissions. |
 | **IoT & Recognition** | Target ownership | Raw device observations, recognition/evidence and integrations; no direct occupancy/admission authority. |
@@ -804,4 +804,4 @@ The checked items below retain the original prototype record; they do not mark t
 | :--- | :--- | :--- | :--- |
 | `v1.1.0` | 2026-10-20 | 3D Digital Twin Engineering Group | Formalized Section 2.5 Facility Onboarding & Automated Slot Ingestion Pipeline (dual onboarding paths 1a/1b, scene graph mesh parsing, Floor/Zone classification, automobile physical capacity calculation, motorcycle aggregate capacity decoupling per BR-CAP-01, < 3s batch registration SLA, and Owner post-setup rules). |
 | `v1.0.0` | 2026-10-19 | 3D Digital Twin Engineering Group | Formal approval baseline aligned with **SmartPark SRS v1.0** (FR-MAP-01–04, FR-LOT-01–03, FR-CAP-02, BR-CAP-01) and **Solution Architecture v1.0**. Reconciled with ASP.NET Core SignalR hub (`/hubs/parking-lot`), established Authoritative Reconnect Snapshot Rule, aligned 6-service domain ownership (`Facility & Visualization` vs `Parking Operations`), and formalized Precision Integrity. |
-| `v0.1.0` | 2026-10-09 | 3D Digital Twin Engineering Group | Initial Sprint 2 prototype document. Full alignment with SRS v0.9 §3.2.2/§3.2.3, PostgreSQL microservice schemas (`02-parking-service-db.sql`, `03-reservation-session-service-db.sql`), and Blender 5.2.2 LTS production asset specifications. |
+| `v0.1.0` | 2026-10-09 | 3D Digital Twin Engineering Group | Initial Sprint 2 prototype document. Full alignment with SRS v0.9 §3.2.2/§3.2.3, PostgreSQL microservice schemas (`02-facility-service-db.sql`, `03-reservation-session-service-db.sql`), and Blender 5.2.2 LTS production asset specifications. |

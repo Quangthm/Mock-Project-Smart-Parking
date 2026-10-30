@@ -29,7 +29,7 @@ public static class UserHost
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddHttpClient<IParkingDirectory, ParkingDirectoryClient>(client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Services:Parking"] ?? "http://localhost:5045/");
+            client.BaseAddress = new Uri(builder.Configuration["Services:Facility"] ?? "http://localhost:5045/");
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });

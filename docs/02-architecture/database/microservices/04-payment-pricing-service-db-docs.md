@@ -99,6 +99,21 @@ Quản lý đơn hàng phát sinh từ đặt chỗ trước, phiên đỗ tại
 
 Lưu vết giao dịch thanh toán qua cổng trực tuyến (payOS, VNPay, MoMo, ZaloPay) hoặc tiền mặt (CASH) do Operator thu tại cổng. Có ràng buộc duy nhất `idx_provider_transaction_unique` trên `(payment_method, gateway_transaction_id)`.
 
+### 5.1 Luồng thanh toán khi check-out
+
+Check-out không được đóng phiên đỗ trước khi giao dịch thành công:
+
+1. Operator gọi pricing để tính phí tại thời điểm hiện tại.
+2. Payment Service tạo `payment_orders` với `PENDING` và thời hạn 15 phút.
+3. Với tiền mặt, Operator xác nhận tại quầy; với payOS, frontend mở `checkout_url` và
+   đối soát transaction sau khi quay lại hoặc refresh trang.
+4. Chỉ khi transaction ở trạng thái `SUCCESS`, frontend mới gọi API check-out của
+   OperationService.
+
+`Idempotency-Key` của order giữ cho refresh/back không tạo đơn mới. Trạng thái order
+và transaction là nguồn sự thật bền vững. Nút `demo-pay` chỉ dùng cho môi trường demo;
+production vẫn phải chờ webhook hoặc đối soát payOS.
+
 ---
 
 ## 6. Bảng `invoices` — Hóa đơn kế toán

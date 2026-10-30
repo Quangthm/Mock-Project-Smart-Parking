@@ -11,7 +11,7 @@ import type {
   Booking,
   BookingStatus,
   PaymentMethod,
-  PaymentStatus,
+  PaymentStatus as BookingPaymentStatus,
   ParkingSlot,
   SlotStatus,
   SupportTicket,
@@ -26,6 +26,10 @@ const reservationServer = (
 
 const parkingServer = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
+).replace(/\/$/, "")
+
+const paymentServer = (
+  import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "http://localhost:5065"
 ).replace(/\/$/, "")
 
 export interface OperatorSlot extends ParkingSlot {
@@ -63,7 +67,7 @@ export interface GateReservation {
   slotNumber: string
   licensePlate: string
   status: BookingStatus
-  paymentStatus: PaymentStatus | null
+  paymentStatus: BookingPaymentStatus | null
   paymentMethod: string | null
   amount: number | null
   startTime: string
@@ -73,6 +77,7 @@ export interface GateReservation {
   entryImageUrl: string | null
   exitImageUrl: string | null
   createdAt: string
+  vehicleType: string
 }
 
 export interface WalkInParkingSession {
@@ -232,6 +237,8 @@ function toBooking(reservation: GateReservation): Booking {
     paymentMethod,
     amount: reservation.amount ?? 0,
     createdAt: reservation.createdAt,
+    vehicleType: reservation.vehicleType,
+    entryTime: reservation.entryTime ?? reservation.startTime,
   }
 }
 
@@ -298,6 +305,97 @@ async function operationsRequest<T>(
   )
   if (!result.success) throw new Error("Operator request failed.")
   return result.data
+}
+
+async function paymentRequest<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  prefix = "/api/v1/payments",
+  headers?: Record<string, string>,
+): Promise<T> {
+  const result = await request<Response<T>>(
+    path,
+    method,
+    body,
+    prefix,
+    paymentServer,
+    headers,
+  )
+  if (!result.success) throw new Error("Payment request failed.")
+  return result.data
+}
+
+export interface PricingResult {
+  finalAmountVnd: number
+  currency: string
+  totalParkedMinutes: number
+  isFreeStay: boolean
+}
+
+export interface PaymentOrder {
+  orderId: string
+  orderCode: string
+  amount: number
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentCheckout {
+  paymentTransactionId: string
+  orderCode: number
+  amount: number
+  checkoutUrl: string
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentTransactionStatus {
+  transactionId: string
+  orderId: string
+  amount: number
+  status: string
+  paidAt: string | null
+  isAuthoritative: boolean
+}
+
+export const paymentApi = {
+  calculate: (body: {
+    tenantId: string
+    siteId: string
+    vehicleType: string
+    entryTime: string
+    exitTime: string
+    sessionId?: string
+    reservationId?: string
+  }) => paymentRequest<PricingResult>("/calculate", "POST", body, "/api/v1/pricing"),
+  createOrder: (body: {
+    tenantId: string
+    siteId: string
+    referenceId: string
+    referenceType: "RESERVATION" | "PARKING_SESSION"
+    amount: number
+    accountId?: string
+    idempotencyKey: string
+  }) => paymentRequest<PaymentOrder>("/orders", "POST", body),
+  initiate: (orderId: string, idempotencyKey: string) =>
+    paymentRequest<PaymentCheckout>(
+      `/orders/${encodeURIComponent(orderId)}/checkout`,
+      "POST",
+      { paymentMethod: "PAYOS" },
+      "/api/v1/payments",
+      { "Idempotency-Key": idempotencyKey },
+    ),
+  cash: (orderId: string, idempotencyKey: string) =>
+    paymentRequest<PaymentTransactionStatus>(
+      `/orders/${encodeURIComponent(orderId)}/cash`,
+      "POST",
+      { idempotencyKey },
+    ),
+  demoPay: (orderId: string) =>
+    paymentRequest<PaymentTransactionStatus>(`/orders/${encodeURIComponent(orderId)}/demo-pay`, "POST"),
+  status: (transactionId: string) =>
+    paymentRequest<PaymentTransactionStatus>(`/transactions/${encodeURIComponent(transactionId)}/status`),
 }
 
 export const reservationApi = {

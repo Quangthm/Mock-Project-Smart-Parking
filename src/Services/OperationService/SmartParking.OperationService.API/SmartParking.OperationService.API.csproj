@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><UserSecretsId>SmartParking.ReservationService.API.LocalDevelopment</UserSecretsId></PropertyGroup>
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><UserSecretsId>SmartParking.OperationService.API.LocalDevelopment</UserSecretsId></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../SmartParking.OperationService.Application/SmartParking.OperationService.Application.csproj" />
     <ProjectReference Include="../SmartParking.OperationService.Infrastructure/SmartParking.OperationService.Infrastructure.csproj" />
