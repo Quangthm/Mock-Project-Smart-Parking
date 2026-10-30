@@ -666,8 +666,8 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     $desired = [ordered]@{
         'Services:Key' = $settings['SMARTPARK_SERVICE_KEY']
         'Services:User' = 'http://localhost:5035/'
-        'Services:Parking' = 'http://localhost:5045/'
-        'Services:Reservation' = 'http://localhost:5055/'
+        'Services:Facility' = 'http://localhost:5045/'
+        'Services:Operation' = 'http://localhost:5055/'
         'Services:Payment' = 'http://localhost:5065/'
     }
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
@@ -694,10 +694,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         if ($settings['SMARTPARK_JWT_PRIVATE_KEY_PEM']) { $desired['Jwt:PrivateKeyPem'] = $settings['SMARTPARK_JWT_PRIVATE_KEY_PEM'] }
     }
     if ($service -eq 'Payment') {
-        # PaymentService resolves the reservation API through Services:ReservationService:BaseUrl.
+        # PaymentService resolves the reservation API through Services:OperationService:BaseUrl.
         $reservationUrl = $settings['SMARTPARK_SERVICE_RESERVATION_URL']
         if (!$reservationUrl) { $reservationUrl = 'http://localhost:5055/' }
-        $desired['Services:ReservationService:BaseUrl'] = $reservationUrl
+        $desired['Services:OperationService:BaseUrl'] = $reservationUrl
         # Empty payOS values keep the sandbox emulation; keys are never removed automatically.
         if ($settings['SMARTPARK_PAYOS_CLIENT_ID']) { $desired['PayOs:ClientId'] = $settings['SMARTPARK_PAYOS_CLIENT_ID'] }
         if ($settings['SMARTPARK_PAYOS_API_KEY']) { $desired['PayOs:ApiKey'] = $settings['SMARTPARK_PAYOS_API_KEY'] }

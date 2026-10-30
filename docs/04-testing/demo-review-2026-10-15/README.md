@@ -13,7 +13,7 @@ Review ngày 15/10/2026 (Asia/Saigon), nhánh `Fix2FA`, HEAD `6165024c634316d155
 | Login / logout | Có backend và frontend; unit/HTTP tests không cần PostgreSQL đã chạy | Cần chạy thử trên DB thật; logout/refresh race còn tồn tại |
 | Driver đăng ký | Có đăng ký, OTP, kích hoạt | Cần SMTP/nhà cung cấp và inbox thực tế; test PostgreSQL đang skip |
 | Owner đăng ký | Có đăng ký, xác minh email, chờ duyệt | Không bỏ qua xác minh; dùng contact mới |
-| Admin duyệt Owner | Có API và kiểm tra quyền duyệt | ParkingService phải hoạt động để tạo tenant; chưa chạy acceptance thực tế |
+| Admin duyệt Owner | Có API và kiểm tra quyền duyệt | FacilityService phải hoạt động để tạo tenant; chưa chạy acceptance thực tế |
 | Owner tạo parking structure | Backend có site/unit/slot CRUD; màn hình đang dùng structure local | Onboarding tạo lot local; tab Structure không dùng luồng CRUD backend; form Site có thể che lỗi API |
 | Owner xem 3D | Có viewer dùng ở Driver/Operator | Owner chưa có đường gọi viewer; chưa chứng minh model chứa đúng slot đã lưu |
 | Owner tạo Operator | Có API thật và form gọi API | Account Active trước xác minh contact; mail onboarding cần public origin HTTPS |
@@ -74,7 +74,7 @@ Nếu giữ nguyên source hiện tại, chỉ nên trình bày các bước ide
 | Lệnh | Kết quả | Giới hạn |
 | --- | --- | --- |
 | `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --no-restore --verbosity minimal` | 65 passed, 18 skipped, 0 failed / 83 | Có compile ba API; các test PostgreSQL skip |
-| `dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --no-restore --verbosity minimal` | 24 passed, 9 skipped, 0 failed / 33 | PostgreSQL/locking/trigger chưa được xác minh |
+| `dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-restore --verbosity minimal` | 24 passed, 9 skipped, 0 failed / 33 | PostgreSQL/locking/trigger chưa được xác minh |
 | `node --test tests/frontend/*.test.cjs` | 66 passed, 22 failed / 88 | 22 lỗi VM loader thiếu stub import; không kết luận 22 lỗi runtime từ kết quả này |
 | `npm run build` tại FE | PASS | Không chứng minh typecheck, e2e, payment hoặc dữ liệu thật; có chunk-size warning |
 | `docker version --format '{{.Server.Version}}'` | Không kết nối được Docker engine | Không chạy API + PostgreSQL end-to-end trong lượt này |

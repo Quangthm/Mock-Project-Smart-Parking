@@ -59,7 +59,7 @@ services:
       dockerfile: docker/Dockerfile.backend
       args:
         SERVICE: FacilityService
-    image: smartpark/parking-service:local
+    image: smartpark/facility-service:local
     environment:
       <<: *backend-env
       ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
@@ -76,7 +76,7 @@ services:
       dockerfile: docker/Dockerfile.backend
       args:
         SERVICE: OperationService
-    image: smartpark/reservation-service:local
+    image: smartpark/operation-service:local
     environment:
       <<: *backend-env
       ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
@@ -97,8 +97,8 @@ services:
     environment:
       <<: *backend-env
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
-      # PaymentService reads Services:ReservationService:BaseUrl (not Services:Reservation).
-      Services__ReservationService__BaseUrl: http://reservation-service:8080/
+      # PaymentService reads Services:OperationService:BaseUrl (not Services:Operation).
+      Services__OperationService__BaseUrl: http://operation-service:8080/
       # Empty PayOS credentials keep the local sandbox emulation (fake checkout link/QR).
       PayOs__ClientId: ${SMARTPARK_PAYOS_CLIENT_ID:-}
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}

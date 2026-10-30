@@ -68,7 +68,7 @@ Owner review calls Parking HTTP while holding local transaction/user/application
 
 ## Demo rehearsal prerequisites
 
-1. Owner registration creates PendingVerification; verify emailed Owner OTP before Admin approval. Review refuses non-PendingApproval/unverified users. On approval ParkingService must be reachable for tenant provisioning.
+1. Owner registration creates PendingVerification; verify emailed Owner OTP before Admin approval. Review refuses non-PendingApproval/unverified users. On approval FacilityService must be reachable for tenant provisioning.
 2. Driver registration creates PendingVerification; queue worker dispatches OTP; verification activates Driver. Prepare unique contacts and test actual inbox delivery before presenting.
 3. SMTP configuration is a real dependency: WorkflowTransport throws without SMTP host. SMS needs configured HTTPS provider; a queue acceptance is not SMS delivery evidence. Do not assume test fakes are production adapters.
 4. Operator creation may return success while onboarding delivery fails. Onboarding adapter additionally requires HTTPS `Onboarding:PublicOrigin` for its password link (`Infrastructure/Services/WorkflowTransport.cs:19-20`); ordinary http://localhost configuration fails that mail before SMTP send. Inspect delivery status in rehearsal and configure approved HTTPS origin if the email/link itself is part of the demo.

@@ -91,8 +91,8 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | Container | URL | Ghi chú |
 | --- | --- | --- |
 | `smartpark-app-user-service-1` | http://localhost:5035/health | Seed admin/owner/operator khi start |
-| `smartpark-app-parking-service-1` | http://localhost:5045/health | Dùng `facility-db` |
-| `smartpark-app-reservation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
+| `smartpark-app-facility-service-1` | http://localhost:5045/health | Dùng `facility-db` |
+| `smartpark-app-operation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065/health | Dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 

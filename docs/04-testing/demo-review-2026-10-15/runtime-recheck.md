@@ -16,7 +16,7 @@ Phạm vi theo yêu cầu: kiểm tra lại setup và review readiness cho demo 
 | Migration Parking | `structure_synchronizations` tồn tại |
 | Migration Reservation | `structure_release_receipts` tồn tại |
 | UserService tests với PostgreSQL | **83 passed, 0 failed, 0 skipped** |
-| ParkingService tests với PostgreSQL | **33 passed, 0 failed, 0 skipped** |
+| FacilityService tests với PostgreSQL | **33 passed, 0 failed, 0 skipped** |
 
 Các test DB tạo/xóa database tên ngẫu nhiên riêng, không áp schema vào database demo. Parking test tạo role tạm để kiểm tra password authentication. Fixture dùng provider giả cho một số dependency và HTTP TestServer: 116 test pass không thay thế rehearsal các service/email/browser thật.
 

@@ -20,7 +20,7 @@
 
 ### 1.1. Purpose
 
-This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Transitional `FacilityService` (renamed from `ParkingService`)/`OperationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
+This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`). Transitional `FacilityService` (renamed from `FacilityService`)/`OperationService` endpoints and prototype DTOs are transitional implementation references, not approval of old service ownership or a finalized v1.1 wire contract. See [ownership](../../02-architecture/service-boundaries/ownership-and-events.md) and [discovery requirements](../../01-requirements/srs/modules/03-discovery-visualization.md).
 
 The target binding must ensure the following; historical prototype evidence is separately labelled in §§11–13:
 
@@ -102,7 +102,7 @@ The approved target has six domain-owned services. The source folder names below
 
 | Service / component | Contract status | Technical responsibility |
 | :--- | :--- | :--- |
-| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; runtime `FacilityService` (formerly `ParkingService`) remains transitional. |
+| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; runtime `FacilityService` (formerly `FacilityService`) remains transitional. |
 | **Parking Operations** | Target ownership | Accepted occupancy/uncertainty, reservations, claims, allocation, protection, availability, Search and monthly/yearly coverage. Legacy `OperationService` is implementation evidence. |
 | **User & Access** | Target ownership | Identity, organization/membership/review and current scoped permissions. |
 | **IoT & Recognition** | Target ownership | Raw device observations, recognition/evidence and integrations; no direct occupancy/admission authority. |
