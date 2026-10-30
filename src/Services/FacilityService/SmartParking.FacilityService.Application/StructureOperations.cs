@@ -11,12 +11,15 @@ public sealed record StructureEdit(
     string? Address = null,
     bool Active = false,
     int Capacity = 0,
-    VehicleType VehicleType = default,
+    VehicleType? VehicleType = null,
     SlotType SlotType = default,
     string? Coordinates3D = null,
     string? Features = null,
     decimal? Latitude = null,
-    decimal? Longitude = null);
+    decimal? Longitude = null,
+    IReadOnlyList<VehicleType>? VehicleTypes = null,
+    VehicleType? PrimaryVehicleType = null,
+    IReadOnlyList<StructureBatchItem>? BatchItems = null);
 
 public sealed record StructureOperation(Guid Id, Guid SiteId, string Status, string? Reason, string? Impact);
 public sealed record ReallocationPlan(string Status, string? Reason, string Impact);
@@ -55,7 +58,7 @@ public sealed class StructureOperationService(
         await AuthorizeAsync(owner, cancellationToken);
         if (key == Guid.Empty)
             throw new StructureException("INVALID_STRUCTURE", "Provide an idempotency key.");
-        if (edit.Action is not ("removeSlot" or "removeUnit" or "capacity" or "active" or "moveSlot" or "configureSlot"))
+        if (edit.Action is not ("removeSlot" or "removeUnit" or "capacity" or "active" or "moveSlot" or "configureSlot" or "batch"))
             throw new StructureException("INVALID_STRUCTURE", "Unsupported impact operation.");
 
         var operation = await store.BeginAsync(owner, site, key, edit, cancellationToken);
@@ -93,6 +96,13 @@ public sealed class StructureOperationService(
             // Synchronization acknowledgement already completed this operation
             // atomically. Updating it again would race with recovery.
             return await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+        }
+        catch (StructureBatchException error)
+        {
+            // The operation is marked failed, but the per-item payload must reach the caller: the
+            // middleware renders the contract's 409 body, and nothing was physically applied.
+            await store.UpdateAsync(owner, operation.Id, "failed", error.Message, plan.Impact, cancellationToken);
+            throw;
         }
         catch (StructureException error)
         {

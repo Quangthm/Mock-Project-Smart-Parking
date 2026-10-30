@@ -53,6 +53,8 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorOperationsService>();
         builder.Services.AddScoped<IOperatorGateSlotStore, OperatorGateSlotStore>();
         builder.Services.AddScoped<OperatorGateSlotService>();
+        builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
+        builder.Services.AddScoped<MaintenanceWindowService>();
         var app = builder.Build();
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.UseCors();
@@ -69,6 +71,28 @@ public static class FacilityHost
             {
                 context.Response.StatusCode = 503;
                 await context.Response.WriteAsJsonAsync(new { success = false, code = "PROTOTYPE_SCHEMA_NOT_READY", message = "Operator data is unavailable until database reconciliation is complete." });
+            }
+            catch (ReleasedIdentifierException e)
+            {
+                context.Response.StatusCode = 409;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    success = false,
+                    code = e.Code,
+                    message = e.Message,
+                    released = new { id = e.ResourceId, code = e.ReleasedCode, deletedAt = e.DeletedAt }
+                });
+            }
+            catch (StructureBatchException e)
+            {
+                context.Response.StatusCode = 409;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    success = false,
+                    code = e.Code,
+                    message = e.Message,
+                    items = e.Failures.Select(f => new { resourceId = f.ResourceId, code = f.Code, message = f.Message })
+                });
             }
             catch (StructureException e)
             {
@@ -136,7 +160,38 @@ public static class FacilityHost
             var site = await service.CreateAsync(await Scope(identity, body.TenantId, ct), body.Code, body.Name, body.Address, body.Latitude, body.Longitude, ct);
             return Results.Created($"/api/parking-lots/{site.Id}/structure", new { success = true, data = site });
         });
-        app.MapGet("/api/parking-lots/{id:guid}/structure", async (Guid id, Guid? tenantId, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.GetAsync(await Scope(identity, tenantId, ct), id, ct) }));
+        app.MapGet("/api/parking-lots/{id:guid}/structure", async (Guid id, Guid? tenantId, IOwnerScopeReader identity, ParkingStructureService service, MaintenanceWindowService windows, CancellationToken ct) =>
+        {
+            var owner = await Scope(identity, tenantId, ct);
+            var structure = await service.GetAsync(owner, id, ct);
+            var serviceState = await windows.StateAsync(owner, id, structure.Site.Status, ct);
+            return Results.Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    structure.Site,
+                    structure.Units,
+                    structure.Slots,
+                    structure.Paths,
+                    structure.BackupPolicies,
+                    structure.CapacityViews,
+                    serviceState = new
+                    {
+                        state = serviceState.State,
+                        closedUntil = serviceState.ClosedUntil,
+                        windows = serviceState.Windows.Select(window => new
+                        {
+                            window.Id,
+                            window.Start,
+                            window.End,
+                            window.Reason,
+                            window.EnforcementState
+                        })
+                    }
+                }
+            });
+        });
         app.MapGet("/api/parking-lots/{id:guid}/operational-layout", async (
             Guid id,
             string? vehicleType,
@@ -189,7 +244,7 @@ public static class FacilityHost
         });
         app.MapGet("/api/parking-lots/{id:guid}/operations/{operationId:guid}", async (Guid id, Guid operationId, Guid? tenantId, IOwnerScopeReader identity, StructureOperationService operations, CancellationToken ct) => Results.Ok(new { success = true, data = await operations.ReadAsync(await Scope(identity, tenantId, ct), id, operationId, ct) }));
         app.MapPost("/api/parking-lots/{id:guid}/units", async (Guid id, UnitBody body, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddUnitAsync(await Scope(identity, body.TenantId, ct), id, body.Type, body.Name, body.ParentId, body.Capacity, ct) }));
-        app.MapPost("/api/parking-lots/{id:guid}/slots", async (Guid id, SlotBody body, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddSlotAsync(await Scope(identity, body.TenantId, ct), id, body.UnitId, body.Code, body.VehicleType, body.Type, ct) }));
+        app.MapPost("/api/parking-lots/{id:guid}/slots", async (Guid id, SlotBody body, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) => Results.Ok(new { success = true, data = await service.AddSlotAsync(await Scope(identity, body.TenantId, ct), id, body.UnitId, body.Code, body.VehicleType, body.Type, body.VehicleTypes, body.PrimaryVehicleType, ct) }));
         app.MapPatch("/api/parking-lots/{id:guid}/structure", async (Guid id, EditStructure body, IOwnerScopeReader identity, ParkingStructureService service, CancellationToken ct) =>
         {
             if (body.Action == "backup") await identity.ScopeAsync(ct, "BACKUP_CONFIGURE");
@@ -197,7 +252,8 @@ public static class FacilityHost
             var edit = new StructureEdit(
                 body.Action, body.ResourceId, body.UnitId, body.Code, body.Name, body.Address,
                 body.Active, body.Capacity, body.VehicleType, body.SlotType,
-                body.Coordinates3D, body.Features, body.Latitude, body.Longitude);
+                body.Coordinates3D, body.Features, body.Latitude, body.Longitude,
+                body.VehicleTypes, body.PrimaryVehicleType);
             await service.ApplyAsync(await Scope(identity, body.TenantId, ct), id, edit, ct);
             return Results.Ok(new { success = true });
         });
@@ -214,6 +270,29 @@ public static class FacilityHost
             await service.SetOperationalBackupAsync(await identity.ScopeAsync(id, ct), id, slot, false, "Backup designation released by operator.", ct);
             return Results.Ok(new { success = true });
         });
+        app.MapGet("/api/parking-lots/{id:guid}/maintenance-windows", async (Guid id, Guid? tenantId, IOwnerScopeReader identity, MaintenanceWindowService windows, CancellationToken ct) =>
+            Results.Ok(new { success = true, data = await windows.ListAsync(await Scope(identity, tenantId, ct), id, ct) }));
+        app.MapPost("/api/parking-lots/{id:guid}/maintenance-windows", async (Guid id, MaintenanceWindowBody body, IOwnerScopeReader identity, MaintenanceWindowService windows, CancellationToken ct) =>
+        {
+            var window = await windows.CreateAsync(await Scope(identity, body.TenantId, ct), id, body.Start, body.End, body.Reason, null, null, ct);
+            return Results.Created($"/api/parking-lots/{id}/maintenance-windows/{window.Id}", new { success = true, data = window });
+        });
+        app.MapPatch("/api/parking-lots/{id:guid}/maintenance-windows/{windowId:guid}", async (Guid id, Guid windowId, MaintenanceWindowPatch body, IOwnerScopeReader identity, MaintenanceWindowService windows, CancellationToken ct) =>
+            Results.Ok(new { success = true, data = await windows.ExtendAsync(await Scope(identity, body.TenantId, ct), id, windowId, body.Start, body.End, ct) }));
+        app.MapDelete("/api/parking-lots/{id:guid}/maintenance-windows/{windowId:guid}", async (Guid id, Guid windowId, Guid? tenantId, IOwnerScopeReader identity, MaintenanceWindowService windows, CancellationToken ct) =>
+        {
+            await windows.CancelAsync(await Scope(identity, tenantId, ct), id, windowId, ct);
+            return Results.Ok(new { success = true });
+        });
+        app.MapPost("/api/parking-lots/{id:guid}/structure/batch", async (Guid id, BatchBody body, HttpContext context, IOwnerScopeReader identity, StructureOperationService operations, CancellationToken ct) =>
+        {
+            var header = context.Request.Headers["Idempotency-Key"].ToString();
+            if (!Guid.TryParse(header, out var idempotencyKey)) return Results.BadRequest(new { success = false, code = "INVALID_STRUCTURE", message = "Idempotency-Key header is required." });
+            if (body.IdempotencyKey is { } declared && declared != idempotencyKey) return Results.BadRequest(new { success = false, code = "INVALID_STRUCTURE", message = "Idempotency-Key header and body idempotencyKey must agree." });
+            var edit = new StructureEdit("batch", BatchItems: body.Items.Select(item => new StructureBatchItem(item.ResourceId, item.Action, item.ExpectedUpdatedAt)).ToArray());
+            var result = await operations.ExecuteAsync(await Scope(identity, body.TenantId, ct), id, idempotencyKey, edit, ct);
+            return Results.Json(new { success = result.Status == "completed", data = result, message = $"Operation {result.Id}: {result.Status}. {result.Reason}" }, statusCode: result.Status == "completed" ? 200 : result.Status == "pending" ? 202 : 409);
+        });
         app.MapOperatorOperations();
         return app;
     }
@@ -225,7 +304,11 @@ public sealed record BackupMarkBody(string Reason);
 public sealed record OperationBody(Guid IdempotencyKey, StructureEdit Edit, Guid? TenantId = null);
 public sealed record CreateSite(string Code, string Name, string Address, decimal? Latitude, decimal? Longitude, Guid? TenantId = null);
 public sealed record UnitBody(UnitType Type, string Name, Guid? ParentId, int Capacity, Guid? TenantId = null);
-public sealed record SlotBody(Guid UnitId, string Code, VehicleType VehicleType, SlotType Type = SlotType.STANDARD, Guid? TenantId = null);
+public sealed record SlotBody(Guid UnitId, string Code, VehicleType? VehicleType, SlotType Type = SlotType.STANDARD, IReadOnlyList<VehicleType>? VehicleTypes = null, VehicleType? PrimaryVehicleType = null, Guid? TenantId = null);
 public sealed record PathBody(string Code, Guid? From, Guid? To, string? MapData, Guid? TenantId = null);
-public sealed record EditStructure(string Action, Guid ResourceId, Guid UnitId, string? Code, string? Name, string? Address, bool Active, int Capacity, VehicleType VehicleType, SlotType SlotType, string? Coordinates3D, string? Features, decimal? Latitude, decimal? Longitude, Guid? TenantId = null);
+public sealed record EditStructure(string Action, Guid ResourceId, Guid UnitId, string? Code, string? Name, string? Address, bool Active, int Capacity, VehicleType? VehicleType, SlotType SlotType, IReadOnlyList<VehicleType>? VehicleTypes = null, VehicleType? PrimaryVehicleType = null, string? Coordinates3D = null, string? Features = null, decimal? Latitude = null, decimal? Longitude = null, Guid? TenantId = null);
+public sealed record MaintenanceWindowBody(DateTime Start, DateTime End, string Reason, Guid? TenantId = null);
+public sealed record MaintenanceWindowPatch(DateTime? Start, DateTime? End, Guid? TenantId = null);
+public sealed record BatchBody(IReadOnlyList<BatchItemBody> Items, Guid? IdempotencyKey = null, Guid? TenantId = null);
+public sealed record BatchItemBody(Guid ResourceId, string Action, DateTime? ExpectedUpdatedAt = null);
 public partial class Program { public static void Main(string[] args) => FacilityHost.Build(args).Run(); }

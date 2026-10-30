@@ -137,9 +137,11 @@ public sealed class ParkingStructureService(
         => EditAsync(owner, siteId, structure => structure.AddUnit(type, name, parentId, capacity), null, null, null, ct);
 
     public Task<Guid> AddSlotAsync(
-        OwnerScope owner, Guid siteId, Guid unitId, string code, VehicleType vehicle,
-        SlotType type = SlotType.STANDARD, CancellationToken ct = default)
-        => EditAsync(owner, siteId, structure => structure.AddSlot(unitId, code, vehicle, type), null, null, null, ct);
+        OwnerScope owner, Guid siteId, Guid unitId, string code, VehicleType? vehicle,
+        SlotType type = SlotType.STANDARD, IReadOnlyList<VehicleType>? vehicleTypes = null,
+        VehicleType? primaryVehicleType = null, CancellationToken ct = default)
+        => EditAsync(owner, siteId, structure => structure.AddSlot(unitId, code,
+            SlotCompatibility.Primary(vehicle, primaryVehicleType, vehicleTypes), type, vehicleTypes), null, null, null, ct);
 
     public Task<Guid> AddAccessPathAsync(
         OwnerScope owner, Guid siteId, string code, Guid? from, Guid? to,
@@ -205,12 +207,6 @@ public sealed class ParkingStructureService(
             await using (var edit = await repository.BeginEditAsync(actor, siteId, snapshot, operationId, ct))
             {
                 var structure = edit.Structure;
-                if (structure.Site.TotalPhysicalCapacity != structure.Slots.Count)
-                {
-                    throw new StructureException(
-                        "STRUCTURE_CONFLICT", "Reconcile declared physical capacity before editing.");
-                }
-
                 var originalSlots = structure.Slots.Select(slot => slot.Id).ToHashSet();
                 var originalUnits = structure.Units.Select(unit => unit.Id).ToHashSet();
 
