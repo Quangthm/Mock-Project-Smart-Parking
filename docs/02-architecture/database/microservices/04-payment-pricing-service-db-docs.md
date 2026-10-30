@@ -108,7 +108,7 @@ Check-out không được đóng phiên đỗ trước khi giao dịch thành c�
 3. Với tiền mặt, Operator xác nhận tại quầy; với payOS, frontend mở `checkout_url` và
    đối soát transaction sau khi quay lại hoặc refresh trang.
 4. Chỉ khi transaction ở trạng thái `SUCCESS`, frontend mới gọi API check-out của
-   ReservationService.
+   OperationService.
 
 `Idempotency-Key` của order giữ cho refresh/back không tạo đơn mới. Trạng thái order
 và transaction là nguồn sự thật bền vững. Nút `demo-pay` chỉ dùng cho môi trường demo;

@@ -30,7 +30,7 @@ public class DependencyInjectionTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Payment"] = "Host=localhost;Port=5444;Database=smartpark_payment;Username=postgres;Password=postgres",
-                ["Services:ReservationService:BaseUrl"] = "http://localhost:5002/"
+                ["Services:OperationService:BaseUrl"] = "http://localhost:5002/"
             })
             .Build();
 

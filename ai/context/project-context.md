@@ -23,14 +23,14 @@ Service-owned persistence
 
 Current direction includes synchronous API communication where an immediate response is required and RabbitMQ only where asynchronous/event-driven communication provides a real benefit. Kafka is **not** used (see Conflict Register in `ai/architecture-reference.md`).
 
-> **Verified reality (2026-10-12):** 3 services are implemented (UserService, ParkingService, ReservationService). No API Gateway, no messaging broker, no SignalR/MQTT/Redis exist in code yet.
+> **Verified reality (2026-10-12):** 3 services are implemented (UserService, FacilityService, OperationService). No API Gateway, no messaging broker, no SignalR/MQTT/Redis exist in code yet.
 
 ## Current technology direction
 
 - Backend: ASP.NET Core / .NET 10
 - Frontend: React 19 + Vite + TypeScript
 - UI/styling: TailwindCSS (Material UI is **not** used — see Conflict Register)
-- Database: PostgreSQL (EF Core in UserService; raw Npgsql in ParkingService/ReservationService)
+- Database: PostgreSQL (EF Core in UserService; raw Npgsql in FacilityService/OperationService)
 - Containerization: Docker
 - Messaging/event layer: RabbitMQ when justified (Kafka is not used)
 - 3D parking visualization: Three.js

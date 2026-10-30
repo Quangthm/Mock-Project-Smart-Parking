@@ -78,7 +78,7 @@ $teamFile = Join-Path $testRoot 'team-private.env'
 $teamA = New-Fixture 'team-a'
 Invoke-Fixture $teamA @{CredentialMode='Team'; TeamEnvPath=$teamFile}
 $teamKey = $global:setupTestSecretMaps['User']['Services:Key']
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
 $previousKey = $env:SMARTPARK_SERVICE_KEY
 $env:SMARTPARK_SERVICE_KEY = 'no-export-sentinel'
 $null = & (Join-Path $teamA 'scripts/load-env.ps1') -EnvPath $teamFile -NoExport
@@ -97,9 +97,9 @@ $global:setupTestSecretMaps['Parking']['Services:Key'] = 'different-service-key-
 Invoke-Fixture $teamB
 Assert-Setup ($global:setupTestSecretMaps['Parking']['Services:Key'] -ceq $teamKey) 'Services:Key was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true}
-$global:setupTestSecretMaps['User']['Services:Parking'] = 'http://old-parking.example.test/'
+$global:setupTestSecretMaps['User']['Services:Facility'] = 'http://old-parking.example.test/'
 Invoke-Fixture $teamB
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -ceq 'http://parking.example.test:5045/') 'Services:Parking URL was not synced from .env.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -ceq 'http://parking.example.test:5045/') 'Services:Facility URL was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true; SkipSonarQube=$true}
 $global:setupTestSecretMaps['User']['DevelopmentAdmin:Password'] = 'Different@Admin1'
 $global:setupTestSecretMaps['User']['Jwt:PrivateKeyPem'] = 'stale-jwt-key-material'

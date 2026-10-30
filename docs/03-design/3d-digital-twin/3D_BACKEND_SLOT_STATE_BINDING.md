@@ -22,7 +22,7 @@
 
 This document defines the target integration boundaries for binding Operations-authoritative occupancy/claims to Facility-owned identities/models in the SmartPark web client (`FE/`).
 
-> **Transitional Implementation Note (v1.1 / Fix2FA):** In the current codebase on `develop`, endpoints reside under `src/Services/ParkingService/` (`GET /api/parking-lots/{id}/operational-layout`). In accordance with approved SRS v1.1 Decision V11-09 and the `Fix2FA` refactor branch, this codebase is migrating to `src/Services/FacilityService/` (`SmartParking.FacilityService.API`). The 3D client integrates against contract behavior that remains stable across this renaming.
+> **Transitional Implementation Note (v1.1 / Fix2FA):** In the current codebase on `develop`, endpoints reside under `src/Services/FacilityService/` (`GET /api/parking-lots/{id}/operational-layout`). In accordance with approved SRS v1.1 Decision V11-09 and the `Fix2FA` refactor branch, this codebase is migrating to `src/Services/FacilityService/` (`SmartParking.FacilityService.API`). The 3D client integrates against contract behavior that remains stable across this renaming.
 
 The target binding must ensure the following; historical prototype evidence is separately labelled in §§11–13:
 
@@ -71,11 +71,11 @@ The target binding must ensure the following; historical prototype evidence is s
   * `docs/03-design/3d-digital-twin/3D_ASSET_DOCUMENTATION_Parking_House.md`
   * `docs/03-design/3d-digital-twin/3D_ASSET_DOCUMENTATION_Underground_Parking.md`
 * **Historical Microservice Database Script names** (use the [current schema index](../../02-architecture/database/README.md) for the recorded deployment profile):
-  * `scripts/database/microservices/02-parking-service-db.sql` (`parking_slots`, `spatial_units`, `parking_sites`).
+  * `scripts/database/microservices/02-facility-service-db.sql` (`parking_slots`, `spatial_units`, `parking_sites`).
   * `scripts/database/microservices/03-reservation-session-service-db.sql` (`reservations`, `parking_sessions`, `slot_allocations`).
   * `scripts/database/microservices/06-iot-service-db.sql` (`sensor_telemetries`, `devices`).
 * **Source Code Implementations**:
-  * Backend API: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs` and `OperatorOperationsEndpoints.cs`.
+  * Backend API: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs` and `OperatorOperationsEndpoints.cs`.
   * Frontend 3D Subsystem: `FE/src/components/3d/Parking3DViewer.tsx`, `FE/src/lib/3d/slotMatcher.ts`, `FE/src/lib/3d/parking3DConfig.ts`.
 
 ---
@@ -104,8 +104,8 @@ The approved target has six domain-owned services. The source folder names below
 
 | Service / component | Contract status | Technical responsibility |
 | :--- | :--- | :--- |
-| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; legacy `ParkingService` is transitional. |
-| **Parking Operations** | Target ownership | Accepted occupancy/uncertainty, reservations, claims, allocation, protection, availability, Search and monthly/yearly coverage. Legacy `ReservationService` is implementation evidence. |
+| **Facility & Visualization** | Target ownership | Facility hierarchy, slot identity/coordinates/configuration and fixed model association. May expose a rebuildable, versioned projection sourced from Operations; legacy `FacilityService` is transitional. |
+| **Parking Operations** | Target ownership | Accepted occupancy/uncertainty, reservations, claims, allocation, protection, availability, Search and monthly/yearly coverage. Legacy `OperationService` is implementation evidence. |
 | **User & Access** | Target ownership | Identity, organization/membership/review and current scoped permissions. |
 | **IoT & Recognition** | Target ownership | Raw device observations, recognition/evidence and integrations; no direct occupancy/admission authority. |
 | **Payment & Pricing** | Target ownership | Authoritative tariffs, financial terms, verified money/refunds and interval price estimates. |
@@ -351,7 +351,7 @@ The following retained prototype example illustrates two independent render dime
 | `supportedVehicleType` | `string` (Enum) | Yes | `CAR` \| `MOTORCYCLE` \| `OVERSIZED`. |
 | `slotType` | `string` (Enum) | Yes | `STANDARD` \| `EV` \| `DISABLED` \| `VIP`. |
 | `physicalState` | `string` (Enum) | Yes | Operations-accepted physical condition/projection; `OCCUPIED` means a vehicle is present/treated as occupied, not that it is the reservation claimant. Raw sensor/manual inputs require authoritative reconciliation. |
-| `reservationState` | `string` (Enum) / `null` | No | Operations-owned mutually exclusive reservation/protection projection (`RESERVED`, `PROTECTED`, `BACKUP`); independent from physical occupant identity. Transitional `ReservationService` is not a new ownership decision. |
+| `reservationState` | `string` (Enum) / `null` | No | Operations-owned mutually exclusive reservation/protection projection (`RESERVED`, `PROTECTED`, `BACKUP`); independent from physical occupant identity. Transitional `OperationService` is not a new ownership decision. |
 | `sessionType` | `string` (Enum) / `null` | No | Active session classification used by `car_color status`. |
 | `isEvCharging` | `boolean` | Yes | Flag indicating whether vehicle is actively drawing power. |
 | `updatedAt` | `string` (ISO 8601) | Yes | Last state modification time for staleness detection. |
@@ -745,7 +745,7 @@ The table preserves prototype technical choices, not current v1.1 API or runtime
 
 | ID | Topic / Question | Current Project Baseline | Resolution Owner | Status |
 | :--- | :--- | :--- | :--- | :---: |
-| **Q-01** | Which endpoint serves operational layout? | `GET /api/parking-lots/{id}/operational-layout` in `ParkingService.API` | Backend Team | **RESOLVED** |
+| **Q-01** | Which endpoint serves operational layout? | `GET /api/parking-lots/{id}/operational-layout` in `FacilityService.API` | Backend Team | **RESOLVED** |
 | **Q-02** | Is `slotId` or `slotCode` the primary mapping key? | `slotCode` matches 3D mesh names; `slotId` UUID tracks DB transactions. | FE & DB Lead | **RESOLVED** |
 | **Q-03** | How are reservation states formatted? | `reservation_state` enum column (`RESERVED`, `PROTECTED`, `BACKUP`) in DB. | DB Lead | **RESOLVED** |
 | **Q-04** | Can multiple overlays coexist? | Mutually exclusive in MVP; single highest priority halo displayed. | PM / UI Lead | **CONFIRMED** |
@@ -804,4 +804,4 @@ The checked items below retain the original prototype record; they do not mark t
 | :--- | :--- | :--- | :--- |
 | `v1.1.0` | 2026-10-20 | 3D Digital Twin Engineering Group | Formalized Section 2.5 Facility Onboarding & Automated Slot Ingestion Pipeline (dual onboarding paths 1a/1b, scene graph mesh parsing, Floor/Zone classification, automobile physical capacity calculation, motorcycle aggregate capacity decoupling per BR-CAP-01, < 3s batch registration SLA, and Owner post-setup rules). |
 | `v1.0.0` | 2026-10-19 | 3D Digital Twin Engineering Group | Formal approval baseline aligned with **SmartPark SRS v1.0** (FR-MAP-01–04, FR-LOT-01–03, FR-CAP-02, BR-CAP-01) and **Solution Architecture v1.0**. Reconciled with ASP.NET Core SignalR hub (`/hubs/parking-lot`), established Authoritative Reconnect Snapshot Rule, aligned 6-service domain ownership (`Facility & Visualization` vs `Parking Operations`), and formalized Precision Integrity. |
-| `v0.1.0` | 2026-10-09 | 3D Digital Twin Engineering Group | Initial Sprint 2 prototype document. Full alignment with SRS v0.9 §3.2.2/§3.2.3, PostgreSQL microservice schemas (`02-parking-service-db.sql`, `03-reservation-session-service-db.sql`), and Blender 5.2.2 LTS production asset specifications. |
+| `v0.1.0` | 2026-10-09 | 3D Digital Twin Engineering Group | Initial Sprint 2 prototype document. Full alignment with SRS v0.9 §3.2.2/§3.2.3, PostgreSQL microservice schemas (`02-facility-service-db.sql`, `03-reservation-session-service-db.sql`), and Blender 5.2.2 LTS production asset specifications. |

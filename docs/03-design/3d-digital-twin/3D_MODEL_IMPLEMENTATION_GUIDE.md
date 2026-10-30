@@ -313,8 +313,8 @@ Mock-Project-Smart-Parking/
 │           └── 3d-palette.ts                     # PBR design tokens & SRS v1.0 reservation status codes
 └── src/
     └── Services/                                 # Authoritative Backend .NET Microservices (Solution Architecture v1.0)
-        ├── ParkingService/                       # Implements Facility & Visualization (structure/layout) and Parking Operations read projections
-        ├── ReservationService/                   # Implements Parking Operations (booking lifecycle & active allocations)
+        ├── FacilityService/                       # Implements Facility & Visualization (structure/layout) and Parking Operations read projections
+        ├── OperationService/                   # Implements Parking Operations (booking lifecycle & active allocations)
         └── IoTService/                           # Implements IoT & Recognition (camera LPR & physical sensor telemetries)
 ```
 

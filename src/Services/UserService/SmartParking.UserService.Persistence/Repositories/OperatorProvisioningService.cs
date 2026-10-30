@@ -57,7 +57,7 @@ public sealed class OperatorProvisioningService(AppDbContext db, IPasswordServic
         var hash = passwords.Hash(body.Password);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await AccountWorkflowService.RequirePermissionAsync(db,ownerId,"OPERATOR_MANAGE",ct);
-        // Lock only identity-owned rows. Site/tenant state is validated via ParkingService.
+        // Lock only identity-owned rows. Site/tenant state is validated via FacilityService.
         var ownerTenants = await db.Database.SqlQuery<Guid>($"""
             SELECT a.tenant_id AS "Value" FROM accounts a
             JOIN users u ON u.id = a.user_id JOIN account_roles r ON r.account_id = a.id

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('User','Parking','Reservation','Frontend','All')][string]$Service = 'All'
+    [ValidateSet('User','Facility','Operation','Frontend','All')][string]$Service = 'All'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -14,8 +14,8 @@ if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
 $map = @{
     User        = 'user-service'
-    Parking     = 'parking-service'
-    Reservation = 'reservation-service'
+    Facility    = 'facility-service'
+    Operation   = 'operation-service'
     Frontend    = 'frontend'
 }
 

@@ -15,7 +15,7 @@ Import [Postman collection](postman/assigned-workflows-2026-10-08.postman_collec
 | Biến | Giá trị / cách lấy |
 | --- | --- |
 | userUrl | `http://localhost:5035` hoặc UserService QA URL |
-| parkingUrl | `http://localhost:5045` hoặc ParkingService QA URL |
+| parkingUrl | `http://localhost:5045` hoặc FacilityService QA URL |
 | driverEmail, ownerEmail, operatorEmail | Ba inbox QA khác nhau, mỗi lần chạy dùng bộ contact mới |
 | ownerPhone | Số điện thoại hồ sơ Owner; bắt buộc khác dữ liệu hiện có, không cần nhận SMS trong luồng email-only |
 | password | Mật khẩu mẫu phục vụ test, 8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt |

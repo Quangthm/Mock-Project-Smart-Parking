@@ -475,7 +475,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 404 Not Found (hoặc 503/504 nếu ParkingService chưa chạy)', () => {",
+                  "pm.test('Status code is 404 Not Found (hoặc 503/504 nếu FacilityService chưa chạy)', () => {",
                   "    pm.expect([404, 503, 504]).to.include(pm.response.code);",
                   "});",
                   "const json = pm.response.json();",
@@ -517,7 +517,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 422 Unprocessable Entity (hoặc 503/504 nếu ReservationService chưa chạy)', () => {",
+                  "pm.test('Status code is 422 Unprocessable Entity (hoặc 503/504 nếu OperationService chưa chạy)', () => {",
                   "    pm.expect([422, 503, 504]).to.include(pm.response.code);",
                   "});",
                   "const json = pm.response.json();",

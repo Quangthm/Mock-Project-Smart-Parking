@@ -16,7 +16,7 @@ This file is a compact working snapshot. Detailed decisions should be stored as 
 | Status vocabulary | CONFIRMED | Use project status labels consistently | BA context |
 | Messaging broker | CONFIRMED | RabbitMQ is the current direction; Kafka is not used | Conflict Register (`ai/architecture-reference.md`) |
 | UI library | CONFIRMED | TailwindCSS v4 only; Material UI is not used | Repo reality |
-| Backend stack | CONFIRMED | .NET 10; CQRS/MediatR; EF Core (UserService) / raw Npgsql (ParkingService, ReservationService); PostgreSQL | Repo reality |
+| Backend stack | CONFIRMED | .NET 10; CQRS/MediatR; EF Core (UserService) / raw Npgsql (FacilityService, OperationService); PostgreSQL | Repo reality |
 | 5 Core Skills | CONFIRMED | Commit, PR, Session, .env, Coding skills mandated in `ai/rule.md` | Agent Architecture Refactor |
 
 ## Non-negotiable interpretation rule

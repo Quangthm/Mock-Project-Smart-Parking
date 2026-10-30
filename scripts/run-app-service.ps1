@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Operation','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -44,12 +44,12 @@ if ($config.ExitCode -ne 0) { throw "compose.app.yml is invalid.`n$($config.Text
 
 $map = @{
     User        = 'user-service'
-    Parking     = 'parking-service'
-    Reservation = 'reservation-service'
+    Facility    = 'facility-service'
+    Operation   = 'operation-service'
     Frontend    = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','parking-service','reservation-service','frontend')
+    @('user-service','facility-service','operation-service','frontend')
 } else {
     @($map[$Service])
 }
@@ -120,8 +120,8 @@ while ($true) {
 Write-Host ''
 Write-Host 'SmartPark app containers are running:' -ForegroundColor Green
 Write-Host '  User        http://localhost:5035/health'
-Write-Host '  Parking     http://localhost:5045/health'
-Write-Host '  Reservation http://localhost:5055/health'
+Write-Host '  Facility    http://localhost:5045/health'
+Write-Host '  Operation   http://localhost:5055/health'
 Write-Host '  Frontend    http://localhost:5173'
 Write-Host ''
 

@@ -182,7 +182,7 @@ CREATE TABLE payment_transactions (
 CREATE INDEX idx_payment_transactions_order ON payment_transactions(payment_order_id);
 CREATE UNIQUE INDEX idx_provider_transaction_unique ON payment_transactions(payment_method, gateway_transaction_id) 
     WHERE gateway_transaction_id IS NOT NULL;
--- A successful transaction is the durable prerequisite for ReservationService
+-- A successful transaction is the durable prerequisite for OperationService
 -- to complete a parking-session check-out. CASH and demo-payOS use this table too.
 CREATE INDEX idx_payment_transactions_pending_reconciliation
     ON payment_transactions(payment_order_id, status)

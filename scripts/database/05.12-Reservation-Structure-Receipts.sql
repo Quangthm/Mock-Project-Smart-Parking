@@ -1,4 +1,4 @@
--- ReservationService only; apply after the structure safety overlay.
+-- OperationService only; apply after the structure safety overlay.
 
 BEGIN;
 CREATE TABLE IF NOT EXISTS structure_release_receipts (

@@ -4,13 +4,13 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using SmartParking.ParkingService.Application;
-using SmartParking.ParkingService.Domain;
-using SmartParking.ParkingService.Infrastructure;
-using SmartParking.ReservationService.API;
-using SmartParking.ReservationService.Application;
-using SmartParking.ReservationService.Application.Common.Interfaces.Persistence;
-using ReservationDomain = SmartParking.ReservationService.Domain;
+using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Domain;
+using SmartParking.FacilityService.Infrastructure;
+using SmartParking.OperationService.API;
+using SmartParking.OperationService.Application;
+using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
+using ReservationDomain = SmartParking.OperationService.Domain;
 
 namespace SmartParking.UserService.Tests;
 

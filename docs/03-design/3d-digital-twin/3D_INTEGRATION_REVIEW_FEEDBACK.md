@@ -1,6 +1,6 @@
 # 3D Digital Twin — Technical Review Feedback & Architectural Reconciliation
 
-> Historical review record (12 October 2026), retained without rewriting its original observations/results. It is not current implementation evidence or the v1.1 authority. Use the [current backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) and [service ownership contract](../../02-architecture/service-boundaries/ownership-and-events.md). In particular, any v0.9 claim that legacy ParkingService owns accepted occupancy is superseded by Operations authority under V11-09. Current discovery-to-model requirements are in the [hub](README.md#maptiler-discovery-to-internal-2d3d-booking-v11-12).
+> Historical review record (12 October 2026), retained without rewriting its original observations/results. It is not current implementation evidence or the v1.1 authority. Use the [current backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) and [service ownership contract](../../02-architecture/service-boundaries/ownership-and-events.md). In particular, any v0.9 claim that legacy FacilityService owns accepted occupancy is superseded by Operations authority under V11-09. Current discovery-to-model requirements are in the [hub](README.md#maptiler-discovery-to-internal-2d3d-booking-v11-12).
 
 ## Document Control
 
@@ -33,25 +33,25 @@ Sau khi rà soát và đối chiếu chéo với **SmartPark SRS v0.9**, **Solut
 ### 2.1. ❌ Ảo giác về việc phân chia dịch vụ thành "Facility & Visualization" và "Parking Operations"
 
 > [!NOTE]
-> **Ghi chú chuyển tiếp kiến trúc (v1.1 / Fix2FA):** Nhận định kỹ thuật tại mục 2.1 này là biên bản lịch sử ghi nhận ngày 12/10/2026 dựa trên hiện trạng codebase và tài liệu v0.9 cũ. Kể từ quyết định **V11-09** (SRS v1.1) và branch refactor `Fix2FA`, kiến trúc 6 dịch vụ đã chính thức phê duyệt phân tách **Facility Service** (quản trị hạ tầng/spatial layout/3D model) và **Parking Operations** (quản trị phiên/occupancy). Hiện tại mã nguồn `src/Services/ParkingService` đang trong quá trình chuyển đổi hoàn tất sang `src/Services/FacilityService`.
+> **Ghi chú chuyển tiếp kiến trúc (v1.1 / Fix2FA):** Nhận định kỹ thuật tại mục 2.1 này là biên bản lịch sử ghi nhận ngày 12/10/2026 dựa trên hiện trạng codebase và tài liệu v0.9 cũ. Kể từ quyết định **V11-09** (SRS v1.1) và branch refactor `Fix2FA`, kiến trúc 6 dịch vụ đã chính thức phê duyệt phân tách **Facility Service** (quản trị hạ tầng/spatial layout/3D model) và **Parking Operations** (quản trị phiên/occupancy). Hiện tại mã nguồn `src/Services/FacilityService` đang trong quá trình chuyển đổi hoàn tất sang `src/Services/FacilityService`.
 
 
 * **Nhận xét của AI PM (Mục 1, 2, 9, 10, 28):**
-  > *"The target six-service baseline supersedes the old service boundary: Facility & Visualization → resource/configuration/layout, Parking Operations → accepted operation/claims/availability... Rewrite backend slot-binding document around O-authoritative state → F visualization projection → FE... The current ParkingService endpoint should be treated as transitional."*
+  > *"The target six-service baseline supersedes the old service boundary: Facility & Visualization → resource/configuration/layout, Parking Operations → accepted operation/claims/availability... Rewrite backend slot-binding document around O-authoritative state → F visualization projection → FE... The current FacilityService endpoint should be treated as transitional."*
 * **Thực tế kiến trúc và mã nguồn dự án:**
   1. **Quy hoạch 6 microservices chính thức của SmartPark** (theo `SmartPark_Solution_Architecture_v0.9.md (lưu trữ tại docs/archive/ và được kế thừa tại smartpark-solution-architecture-v1.1.md)` §3.4) bao gồm:
      - **`UserService`** *(Đã có code)*: Quản trị tài khoản, quyền hạn, phương tiện đã đăng ký.
-     - **`ParkingService`** *(Đã có code)*: Quản trị toàn bộ hạ tầng vật lý bãi đỗ (`parking_sites`, `spatial_units`), vị trí đỗ (`parking_slots`), và **trạng thái vận hành vật lý của slot** (`physical_state`).
-     - **`ReservationService`** *(Đã có code)*: Quản trị đặt chỗ, vòng đời giữ chỗ, ưu tiên phân bổ và rào cản bảo vệ.
-     - **`IoTService`** *(Sắp triển khai theo roadmap)*: Thu thập telemetry cảm biến vật lý và camera LPR, gửi sự kiện đồng bộ về `ParkingService`.
+     - **`FacilityService`** *(Đã có code)*: Quản trị toàn bộ hạ tầng vật lý bãi đỗ (`parking_sites`, `spatial_units`), vị trí đỗ (`parking_slots`), và **trạng thái vận hành vật lý của slot** (`physical_state`).
+     - **`OperationService`** *(Đã có code)*: Quản trị đặt chỗ, vòng đời giữ chỗ, ưu tiên phân bổ và rào cản bảo vệ.
+     - **`IoTService`** *(Sắp triển khai theo roadmap)*: Thu thập telemetry cảm biến vật lý và camera LPR, gửi sự kiện đồng bộ về `FacilityService`.
      - **`PaymentService`** *(Sắp triển khai theo roadmap)*: Xử lý giao dịch thanh toán và đối soát cổng thanh toán.
      - **`NotificationService`** *(Sắp triển khai theo roadmap)*: Quản lý thông báo thời gian thực và tin nhắn người dùng.
-  2. **Thực trạng backend hiện tại**: Nhóm backend đã hoàn tất task **SPARK-188** trong `src/Services/ParkingService/` với endpoint chính thức:
+  2. **Thực trạng backend hiện tại**: Nhóm backend đã hoàn tất task **SPARK-188** trong `src/Services/FacilityService/` với endpoint chính thức:
      ```text
      GET /api/parking-lots/{id}/operational-layout
      ```
   3. **Đánh giá**: Tên gọi *"Facility & Visualization"* và *"Parking Operations"* **hoàn toàn không tồn tại** trong bất kỳ tài liệu kiến trúc hay mã nguồn nào của dự án. Đây là sự suy diễn/ảo giác từ mô hình AI của PM. Nếu tách dịch vụ theo đề xuất này, tài liệu thiết kế 3D sẽ bị ngắt kết nối hoàn toàn khỏi hệ thống backend .NET 10 thực tế.
-* **Kết luận & Hành động**: Nhóm giữ nguyên thẩm quyền dữ liệu của **`ParkingService`** theo đúng kiến trúc chính thức v0.9, đồng thời cập nhật bảng mô tả kiến trúc 6-service rõ ràng trong `3D_BACKEND_SLOT_STATE_BINDING.md §2.2`.
+* **Kết luận & Hành động**: Nhóm giữ nguyên thẩm quyền dữ liệu của **`FacilityService`** theo đúng kiến trúc chính thức v0.9, đồng thời cập nhật bảng mô tả kiến trúc 6-service rõ ràng trong `3D_BACKEND_SLOT_STATE_BINDING.md §2.2`.
 
 ---
 
@@ -104,7 +104,7 @@ Nhóm đã ghi nhận đầy đủ các đóng góp mang tính xây dựng và c
 
 | # | Vấn đề từ Review PM | Đánh giá của Nhóm Kỹ thuật | Hành động xử lý | Trạng thái |
 | :---: | :--- | :--- | :--- | :---: |
-| **1** | Đòi hỏi tách thành *Facility & Visualization* và *Parking Operations*. | ❌ **Sai hoàn toàn (Ảo giác)**. Không có trong kiến trúc v0.9 hay codebase. | Giữ nguyên vai trò của `ParkingService`, làm rõ roadmap 6 services trong doc binding. | **ĐÃ XỬ LÝ** |
+| **1** | Đòi hỏi tách thành *Facility & Visualization* và *Parking Operations*. | ❌ **Sai hoàn toàn (Ảo giác)**. Không có trong kiến trúc v0.9 hay codebase. | Giữ nguyên vai trò của `FacilityService`, làm rõ roadmap 6 services trong doc binding. | **ĐÃ XỬ LÝ** |
 | **2** | Phê bình mapping theo mảng `slots[index]` và tạo `slot-auto-*`. | ⚠️ **Đúng cho Code FE cũ, Sai cho Doc mới**. Doc mới đã cấm triệt để điều này. | Giữ nguyên chuẩn hóa `slot_code` trong doc, lập kế hoạch refactor code FE (SPARK-228). | **ĐÃ XỬ LÝ** |
 | **3** | Chuyển Enterprise Ingestion thành Phase 2 Proposed Spec. | ✅ **Hoàn toàn đúng và hợp lý**. Phù hợp với scope v1.0 MVP. | Đổi Status tài liệu Ingestion Rules và thêm Scope Disclaimer. | **ĐÃ XỬ LÝ** |
 | **4** | Chuẩn hóa Tech Stack về React 19 + Vite 8, bỏ Next.js. | ✅ **Hoàn toàn đúng**. Phù hợp với `FE/package.json`. | Cập nhật Mục 4 & Mục 10 trong Implementation Guide. | **ĐÃ XỬ LÝ** |

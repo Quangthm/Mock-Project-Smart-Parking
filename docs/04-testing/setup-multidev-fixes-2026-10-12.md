@@ -15,7 +15,7 @@ Repo: `D:\DataFPTU\Semester6\Mock-Project-Smart-Parking`, branch `develop-fix-ap
 
 - Windows PowerShell 5.1 scratch suite: Local reuse, rerun idempotence, hai máy giả lập cùng Team baseline, remote URL mapping, MapTiler import, Team/secret/URL conflict preservation, SkipUserSecrets, NoExport no-mutation, invalid port không tạo .env, bảo vệ volume cũ không rõ password. CLI/user-secrets dùng doubles, không ghi user-secrets thật.
 - `scripts/test-workflow-upgrade.ps1`: PostgreSQL thật trong Compose UUID riêng, baseline pre-05.11/05.12, sentinel ở cả ba DB, migration hai lần từ cwd khác với env tường minh, restart giữ volume và dữ liệu cũ. Rerun với COMPOSE_PROJECT_NAME=smartpark-schema vẫn chỉ tác động project UUID test. Log `.cache/review-results/setup-upgrade-final.log`. Containers/volumes test đã dọn.
-- Solution: **109 passed, 0 failed, 0 skipped** (77 UserService + 32 ParkingService), với cả SMARTPARK_AUTH_TEST_CONNECTION và SMARTPARK_STRUCTURE_TEST_CONNECTION trên PostgreSQL tạm riêng. TRX `.cache/review-results/setup-fix-20261012-final/`. Container tạm đã dọn.
+- Solution: **109 passed, 0 failed, 0 skipped** (77 UserService + 32 FacilityService), với cả SMARTPARK_AUTH_TEST_CONNECTION và SMARTPARK_STRUCTURE_TEST_CONNECTION trên PostgreSQL tạm riêng. TRX `.cache/review-results/setup-fix-20261012-final/`. Container tạm đã dọn.
 - Syntax scripts, Sonar Compose `config --quiet` và `git diff --check` pass.
 
 ## Review chéo

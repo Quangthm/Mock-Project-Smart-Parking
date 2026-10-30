@@ -20,7 +20,7 @@ Phạm vi đối chiếu: report trong Downloads, commit `f794d60`, compose, mig
 Lệnh:
 
 ```powershell
-dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --no-restore --verbosity minimal
+dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-restore --verbosity minimal
 ```
 
 Kết quả: 24 passed, 1 failed, 8 skipped, tổng 33. Build các project Parking/Reservation liên quan thành công.
@@ -57,7 +57,7 @@ Connection phải dùng TCP với password authentication (SCRAM hoặc MD5), t�
 # Đặt connection string của PostgreSQL local/test trong biến môi trường,
 # theo host/port và credential trên máy; không commit hoặc in password.
 $env:SMARTPARK_STRUCTURE_TEST_CONNECTION = '<local-postgres-connection>'
-dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --filter 'FullyQualifiedName~GateAuthenticationTests' --verbosity minimal
+dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --filter 'FullyQualifiedName~GateAuthenticationTests' --verbosity minimal
 ```
 
 Sau thay đổi: build thành công, 24 passed, 0 failed, 9 skipped. Test PostgreSQL mới bị skip vì chưa có connection string. Đây không phải kết quả xác thực DB thành công và không thay thế kết quả fail lịch sử ở trên. Docker daemon chưa chạy, checkout chưa có `.env` và không phát hiện listener trên các port PostgreSQL local thông dụng; chưa chạy được test với DB thật ở môi trường hiện tại.
