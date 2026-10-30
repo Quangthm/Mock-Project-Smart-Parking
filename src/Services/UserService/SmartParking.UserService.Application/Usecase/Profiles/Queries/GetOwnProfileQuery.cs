@@ -1,8 +1,8 @@
 using MediatR;
+using SmartParking.UserService.Application.Usecase.Profiles.Contracts;
 using UserService.Application.Common.Interfaces.Services;
-using UserService.Application.Profiles.Contracts;
 
-namespace UserService.Application.Profiles.Queries;
+namespace SmartParking.UserService.Application.Usecase.Profiles.Queries;
 
 /// <summary>Reads the caller's own profile.</summary>
 public sealed record GetOwnProfileQuery : IRequest<OwnProfileResponse>;

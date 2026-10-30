@@ -89,6 +89,16 @@ public sealed class ApiExceptionMapper
         Add("OTP_COOLDOWN", "Wait before requesting another code.", 429);
         Add("OTP_EXPIRED", "Code has expired. Request a new code.", 400);
         Add("OTP_INVALID", "Incorrect verification code.", 400);
+        Add("MFA_CHALLENGE_INVALID", "Sign-in verification expired or is invalid. Sign in again.", 401);
+        Add("MFA_SETUP_EXPIRED", "Start authenticator setup again.", 400);
+        Add("MFA_NOT_ENABLED", "Two-factor authentication is not enabled.", 409);
+        Add("MFA_LOCKED", "Too many invalid codes. Try again after 15 minutes.", 423);
+        Add("SETUP_TOKEN_INVALID", "Setup credential is invalid or expired. Verify your registered email to restore setup access.", 401);
+        Add("SETUP_ALREADY_SAVED", "Setup has already been submitted.", 409);
+        Add("APPROVAL_CONFLICT", "Approval context changed; reconcile the existing provisioning operation.", 409);
+        Add("APPROVAL_IN_PROGRESS", "Approval has started. Retry approval to finish provisioning.", 409);
+        Add("LOT_SETUP_REQUIRED", "Complete parking lot setup before approval.", 409);
+        Add("OPERATOR_NOT_FOUND", "Pending Operator was not found in your authorized scope.", 404);
         Add("MFA_ALREADY_ENABLED", "MFA is already enabled.", 409);
         Add("MFA_INVALID", "Invalid authenticator code.", 400);
         Add("DELIVERY_NOT_FOUND", "Delivery was not found.", 404);

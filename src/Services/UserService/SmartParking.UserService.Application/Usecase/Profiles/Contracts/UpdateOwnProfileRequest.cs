@@ -1,4 +1,4 @@
-namespace UserService.Application.Profiles.Contracts;
+namespace SmartParking.UserService.Application.Usecase.Profiles.Contracts;
 
 /// <summary>
 /// The permitted client input for an own-profile update.

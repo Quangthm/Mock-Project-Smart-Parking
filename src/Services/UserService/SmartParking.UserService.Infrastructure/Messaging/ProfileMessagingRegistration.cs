@@ -1,8 +1,10 @@
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Profiles.Events;
+using UserService.Application.Common.Interfaces.MessageBroker;
+using UserService.Application.Common.Interfaces.Services;
+using UserService.Infrastructure.Services;
 
 namespace UserService.Infrastructure.Messaging;
 
@@ -11,22 +13,30 @@ public static class ProfileMessagingRegistration
     public const string ProfileNameChangedExchange = "smartpark.user-access.user-profile-name-changed.v1";
     public const string ProfileAuditQueue = "smartpark.notification-audit.user-profile-name-changed.v1";
 
-    /// <summary>The composition root supplies Persistence's EF Bus Outbox registration.</summary>
     public static IServiceCollection AddProfileMessaging(this IServiceCollection services,
         IConfiguration configuration, Action<IBusRegistrationConfigurator> configureOutbox)
     {
+        var accessEnabled = configuration.GetValue<bool>("Messaging:Enabled");
         services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+        if (accessEnabled)
+        {
+            services.AddScoped<IAccessEventTransport, RabbitAccessEventTransport>();
+            services.AddHostedService<AccessOutboxWorker>();
+        }
         services.AddMassTransit(registration =>
         {
             configureOutbox(registration);
-            registration.UsingRabbitMq((_, bus) =>
+            if (accessEnabled) registration.AddConsumer<AccessProjectionConsumer>();
+            registration.UsingRabbitMq((context, bus) =>
             {
-                var broker = configuration.GetSection("Messaging:RabbitMq");
-                bus.Host(broker["Host"] ?? "localhost", broker.GetValue<ushort?>("Port") ?? 5672,
-                    broker["VirtualHost"] ?? "/", host =>
+                // Host setup uses loopback/published port; app Compose uses broker DNS/internal port.
+                bus.Host(configuration["SMARTPARK_RABBITMQ_HOST"] ?? "127.0.0.1",
+                    configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
+                    configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark", host =>
                     {
-                        host.Username(broker["Username"] ?? "guest");
-                        host.Password(broker["Password"] ?? "guest");
+                        host.Username(configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark");
+                        host.Password(configuration["SMARTPARK_RABBITMQ_PASSWORD"]
+                            ?? throw new InvalidOperationException("Configure SMARTPARK_RABBITMQ_PASSWORD."));
                     });
                 bus.Message<UserProfileNameChanged>(message => message.SetEntityName(ProfileNameChangedExchange));
                 bus.Publish<UserProfileNameChanged>(publish =>
@@ -35,12 +45,18 @@ public static class ProfileMessagingRegistration
                     publish.AutoDelete = false;
                     publish.ExchangeType = "fanout";
                 });
-                // No receive endpoint: durable routing is provisioned independently before delivery is enabled.
+                // Profile audit routing is provisioned independently; no audit consumer is required.
+                if (accessEnabled)
+                    bus.ReceiveEndpoint("smartpark-user-access-projection-v1", endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<AccessProjectionConsumer>(context);
+                    });
             });
         });
         services.Configure<MassTransitHostOptions>(options =>
         {
-            // API startup and database capture stay available while the broker is unavailable.
             options.WaitUntilStarted = false;
             options.StopTimeout = TimeSpan.FromSeconds(10);
         });

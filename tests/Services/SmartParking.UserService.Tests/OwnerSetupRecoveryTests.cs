@@ -24,7 +24,7 @@ public sealed class OwnerSetupRecoveryTests
             Name = "Recovered lot", Address = "Test address", LotType = "outdoor", TotalSlots = 445, Floors = 1,
             ModelFileName = "outdoor_parking_lot.glb", PolicyAccepted = true } };
     private static OwnerRegistrationService Service(AppDbContext db, TimeProvider clock) =>
-        new(db, new BcryptPasswordService(), clock, new TestParkingDirectory(), WorkflowTestSupport.Create(db, clock));
+        new(db, new BcryptPasswordService(), clock, new TestParkingDirectory(), WorkflowTestSupport.Create(db, clock), TestAuthorization.Anonymous(db, clock));
     private static async Task<string> Code(UserServiceDatabaseFixture fixture, Guid challenge, IWorkflowProtector? protector = null)
     {
         await using var db = fixture.Open();

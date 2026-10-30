@@ -116,17 +116,18 @@ public sealed class VehicleRegistrationTests
             var service = await Service(db, a);
             first = (await service.SaveAsync(a.Id!.Value, null, Vehicle(), default)).Id;
             await service.SaveAsync(a.Id.Value, null, Vehicle("59-x1 123.45", "MOTORCYCLE"), default);
-            Assert.Empty(await service.ListAsync(b.Id!.Value, default));
-            Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(b.Id.Value, first, Vehicle(), default))).Code);
+            var other = await Service(db, b);
+            Assert.Empty(await other.ListAsync(b.Id!.Value, default));
+            Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<AuthException>(() => other.SaveAsync(b.Id.Value, first, Vehicle(), default))).Code);
             // Architecture decision D2 keeps unique active plates and maps duplicates to 409.
-            var duplicate = await Assert.ThrowsAsync<AuthException>(() => service.SaveAsync(b.Id.Value, null, Vehicle("51A12345"), default));
+            var duplicate = await Assert.ThrowsAsync<AuthException>(() => other.SaveAsync(b.Id.Value, null, Vehicle("51A12345"), default));
             Assert.Equal("PLATE_EXISTS", duplicate.Code);
             Assert.Equal(409, duplicate.StatusCode);
         }
         // Use a fresh context after the rejected write and verify no ownership changed.
         await using (var db = fixture.Open())
         {
-            var service = Service(db);
+            var service = await Service(db, b);
             Assert.Empty(await service.ListAsync(b.Id!.Value, default));
             Assert.Equal(2, await db.RegisteredVehicles.CountAsync());
             await service.SaveAsync(b.Id.Value, null, Vehicle("51B67890"), default);

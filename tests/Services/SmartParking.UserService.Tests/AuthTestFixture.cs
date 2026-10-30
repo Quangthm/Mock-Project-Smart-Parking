@@ -1,4 +1,3 @@
-using UserService.Infrastructure.Services;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
@@ -20,7 +19,7 @@ internal sealed class AuthTestFixture : IUserRepository, IUnitOfWork, ICurrentAc
     public User User { get; } = new()
     {
         Id = Guid.Parse("11111111-1111-1111-1111-111111111111"), Email = "driver@gmail.com", FullName = "Demo Driver",
-        PasswordHash = PasswordHash, Status = UserStatus.Active,
+        PasswordHash = PasswordHash, Status = UserStatus.Active, EmailVerifiedAt = DateTimeOffset.UnixEpoch,
         Accounts = [new Account { RoleCode = "DRIVER" }]
     };
     public AuthenticationPolicy Policy { get; } = new();
@@ -152,7 +151,7 @@ internal sealed class MemorySessions(TestClock clock) : IAuthSessionStore
     }
     private static AuthSession Clone(AuthSession s) => new()
     {
-        Id = s.Id, UserId = s.UserId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
+        Id = s.Id, UserId = s.UserId, AccountId = s.AccountId, AccessTokenId = s.AccessTokenId, TokenHash = s.TokenHash,
         AccessExpiresAt = s.AccessExpiresAt, ExpiresAt = s.ExpiresAt, CreatedAt = s.CreatedAt, IsRevoked = s.IsRevoked,
         LastRefreshedAt = s.LastRefreshedAt
     };

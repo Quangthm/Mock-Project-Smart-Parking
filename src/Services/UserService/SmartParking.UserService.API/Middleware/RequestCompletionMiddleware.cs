@@ -10,7 +10,7 @@ public sealed class RequestCompletionMiddleware(RequestDelegate next, ILogger<Re
     {
         var started = Stopwatch.GetTimestamp();
         var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(unmatched)";
-        var correlation = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+        var correlation = UserService.API.Common.RequestCorrelation.Get(context);
         var propagated = false;
         try
         {

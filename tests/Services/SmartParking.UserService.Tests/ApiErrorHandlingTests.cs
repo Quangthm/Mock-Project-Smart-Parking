@@ -32,6 +32,22 @@ namespace SmartParking.UserService.Tests;
 public sealed class ApiErrorHandlingTests
 {
     [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ErrorCorrelationIsServerGeneratedInEveryEnvironment(string environment)
+    {
+        await using var host = await ErrorHost.StartAsync(environment: environment);
+        host.Client.DefaultRequestHeaders.Add("traceparent", "00-11111111111111111111111111111111-2222222222222222-01");
+        foreach (var route in new[] { "/missing", "/error-probe/secure", "/error-probe/unexpected/value" })
+        {
+            using var response = await host.Client.GetAsync(route);
+            var trace = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("traceId").GetString()!;
+            Assert.Matches("^[0-9a-f]{32}$", trace);
+            Assert.NotEqual("11111111111111111111111111111111", trace);
+            Assert.Contains(host.Logs.Entries, entry => entry.Message.Contains(trace));
+        }
+    }
+    [Theory]
     [InlineData("/missing", "GET", null, 404, "NOT_FOUND")]
     [InlineData("/error-probe/binding", "GET", null, 405, "METHOD_NOT_ALLOWED")]
     [InlineData("/error-probe/binding", "POST", "text/plain", 415, "UNSUPPORTED_MEDIA_TYPE")]
@@ -44,10 +60,15 @@ public sealed class ApiErrorHandlingTests
     {
         await using var host = await ErrorHost.StartAsync();
         using var request = new HttpRequestMessage(new HttpMethod(method), route);
+        request.Headers.Add("X-Correlation-Id", "secret-client-controlled-correlation");
         if (contentType is not null)
             request.Content = new StringContent("{\"name\":", Encoding.UTF8, contentType);
         using var response = await host.Client.SendAsync(request);
         await AssertErrorAsync(response, status, code);
+        var trace = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("traceId").GetString()!;
+        Assert.Matches("^[0-9a-f]{32}$", trace);
+        Assert.Contains(host.Logs.Entries, entry => entry.Message.Contains(trace));
+        Assert.DoesNotContain("secret-client-controlled-correlation", await response.Content.ReadAsStringAsync());
         if (status == 401)
         {
             Assert.Equal("Bearer", Assert.Single(response.Headers.WwwAuthenticate).Scheme);
@@ -258,9 +279,9 @@ public sealed class ApiErrorHandlingTests
             issuer: "error-test", audience: "error-test", claims: [new Claim("role", "Driver")],
             expires: DateTime.UtcNow.AddMinutes(5), signingCredentials: new SigningCredentials(Key, SecurityAlgorithms.HmacSha256)));
 
-        public static async Task<ErrorHost> StartAsync(bool completeAuthenticationResponses = false)
+        public static async Task<ErrorHost> StartAsync(bool completeAuthenticationResponses = false, string environment = "Testing")
         {
-            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environment });
             builder.WebHost.UseTestServer();
             var logs = new CapturedLogs();
             // Match the service's production logging levels: framework Information

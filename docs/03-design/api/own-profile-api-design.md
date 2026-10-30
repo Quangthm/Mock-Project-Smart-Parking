@@ -1,3 +1,5 @@
+> Current approval: see [29 October follow-up](../../04-testing/reports/SPARK-248/follow-up.md). Name updates use fresh authorization, tracked mutation and one implicit save transaction; post-check invalidation may complete first. Earlier serialization and manual-overlay deployment text below is historical and superseded. Error envelopes include an opaque server-generated `traceId` in every environment.
+
 # Own normal profile — API Design
 
 | Metadata | Value |
@@ -20,8 +22,8 @@ All four roles may read their own profile and change their shared User name thro
 | Existing routes/envelope | [v1.1 contracts](../../02-architecture/api/v1.1-contracts.md#route-and-schema-authority) |
 | Media | [Media design](../../02-architecture/service-boundaries/media-contract.md); approved scope here preserves the existing stored avatar representation |
 | Approval evidence | User's 24 October answers, recorded in [task decisions](../../../ai/tasks/completed/TASK-SPARK-248-SESSION-20261024.md#4-technical-decisions) |
-| Implementation protocol | [Code-flow and authorization review](../../04-testing/own-profile-review.md) |
-| Schema/event delivery | [Outbox deployment and verification](../../04-testing/own-profile-outbox.md) |
+| Implementation protocol | [Code-flow and authorization review](../../04-testing/reports/SPARK-248/own-profile-review.md) |
+| Schema/event delivery | [Outbox deployment and verification](../../04-testing/reports/SPARK-248/own-profile-outbox.md) |
 
 D1 approves the routes, additive `avatarUrl` response and framework error codes. D2 approves Unicode scalar counting. D3 approves immutable account-bound sessions, stable account selection and role-only authorization. D4 approves the changed-only event and EF Bus Outbox. These are explicit user decisions, not inferred from the former uncommitted implementation.
 
@@ -103,14 +105,14 @@ New sessions select the eligible Account with the lowest Account ID under the im
 
 Each Account has exactly one role through required `accounts.role_code -> roles.code`. Profile authorization uses that current role, not `Accounts.Permissions`; operational permission storage remains in use by other operations. An active second Account cannot authorize a request through a locked/revoked first Account. Token role claims alone grant nothing; the authoritative current role must match.
 
-The reusable Application `ICurrentAccessService` applies the same current-account/session policy to Bearer validation and protected use cases. Profile reads use `RequireAsync`; name writes use `LockAsync` inside their unit-of-work transaction. Persistence `ICurrentAccessStore` supplies fresh state and locks User, exact Account, referenced Role and exact session. The Account lock protects direct role reassignment; the shared Role lock protects the referenced catalogue row. Role/permission decisions and resource-scope checks remain separate, and this consolidation changes no profile HTTP fields or event contract.
+The reusable Application `ICurrentAccessService` applies current-account/session policy to Bearer validation and protected use cases. Profile reads and name writes use `RequireAsync`. The name handler then loads the trusted User ID through a tracked repository capability, mutates only FullName, captures a changed-only event through the scoped EF Bus Outbox, and calls SaveChangesAsync once. Account locking, role changes and session revocation committed after the successful fresh check may precede that save. This approved timing is limited to normal name updates; shared locking APIs and protected security writers retain their protocol.
 
 ### Validation and error responses
 
 Failures retain `success:false`, `code`, `message`, and optional `errors:[{field,message}]`. Actual HTTP status is set in HTTP and is absent from JSON.
 
 ```json
-{"success":false,"code":"VALIDATION_FAILED","message":"Validation failed.","errors":[{"field":"FullName","message":"Enter a display name of 1 to 255 characters without control characters."}]}
+{"success":false,"traceId":"9e5ccf02d90d4c8f98b81739cda33a80a","code":"VALIDATION_FAILED","message":"Validation failed.","errors":[{"field":"FullName","message":"Enter a display name of 1 to 255 characters without control characters."}]}
 ```
 
 The validator supplies the fixed name message above; “characters” uses the approved Unicode scalar counting rule. Binding errors use generic text and do not echo JSON values or internal type names.
@@ -122,7 +124,6 @@ The validator supplies the fixed name message above; “characters” uses the a
 | 403 | FORBIDDEN | Account/User/role loses eligibility after initial Bearer validation but before the guarded operation; other authorization forbids | Do not retry unchanged credentials as if access were granted |
 | 404 | NOT_FOUND | Unknown route, including deferred avatar mutation route | Use documented routes |
 | 405 | METHOD_NOT_ALLOWED | Unsupported method | Use documented method |
-| 409 | PROFILE_ACCESS_CONFLICT | Bounded authorization-lock contention/deadlock/serialization failure before a successful commit | Retry with current credentials; this is not a name-version conflict |
 | 415 | UNSUPPORTED_MEDIA_TYPE | Unsupported request media type | Send JSON |
 | 429 | TOO_MANY_REQUESTS | Existing configured rate limiter rejects a request | Observe limiter policy; no new profile limiter is added |
 | 500 | INTERNAL_ERROR | Unexpected failure, including missing schema or database failure | Investigate using server correlation; response exposes no internal exception |
@@ -142,15 +143,15 @@ User & Access owns `UserProfileNameChanged` v1; Notification & Audit is the docu
 | occurredAtUtc | timestamp | Server UTC event time |
 | correlationId | string | Server request/trace correlation |
 
-No name, contact, password, token or raw session identifier is included. Emit only when the normalized name differs from the current persisted name. A no-op returns the current profile without an event. Durable outbox recording is part of the name transaction.
+No name, contact, password, token or raw session identifier is included. Emit only when the normalized name differs from the name loaded for mutation. This comparison is not a globally serialized change history. A no-op returns the current profile without an event. Durable outbox recording is part of the name transaction.
 
 ### Retry and state outcomes
 
 | Case | Observable contract |
 | --- | --- |
 | Competing authorized name changes | Last committed write wins; no client version or mandatory ETag |
-| Revocation/lock wins coordinated ordering | Reject name write; no outgoing event |
-| Authorized save commits first | Subsequent revocation takes effect afterwards; no retroactive cancellation |
+| Fresh check observes invalid authority | Reject name write; no outgoing event |
+| Invalidation commits after successful fresh check | Already-authorized name update may finish |
 | Successful changed name | Name and event durably recorded together; Audit processing may still be pending |
 | Broker unavailable or delivery disabled | Capture remains durable in PostgreSQL; later relay delivery is asynchronous |
 | Normalized no-op | Return current profile; no new event |
@@ -158,14 +159,14 @@ No name, contact, password, token or raw session identifier is included. Emit on
 | Required outbox write cannot persist | Roll back name and event; no direct-publish/drop/fake-success fallback |
 | Session expiry equality | Expiry at or before server time is invalid |
 
-See the [implementation review](../../04-testing/own-profile-review.md) for the separately justified lock protocol and [outbox guide](../../04-testing/own-profile-outbox.md) for manual schema deployment and durable routing prerequisites.
+See the [implementation review](../../04-testing/reports/SPARK-248/own-profile-review.md) for the separately justified lock protocol and [outbox guide](../../04-testing/reports/SPARK-248/own-profile-outbox.md) for consolidated fresh setup and durable routing prerequisites.
 
 ## Open questions and deferred items
 
 | Item | Decision or implementation gap | Affected operation | Owner / Jira | Approval reference |
 | --- | --- | --- | --- | --- |
-| Verification complete | Build, HTTP integration, real PostgreSQL races and RabbitMQ outage/recovery passed; commands and results are recorded in the task record | All | SPARK-248 | Task record |
-| Manual deployment | Apply reviewed session and framework outbox scripts to the selected User database; provision durable queue before enabling delivery | Runtime deployment | User/service maintainer | Approved scripts-only scope |
+| Runtime verification deferred | User will prepare schema and isolated RabbitMQ resources later. Historical runtime results are not acceptance evidence for this tree. | Persistence/messaging | SPARK-248 | 29 October user reply |
+| Deployment | Fresh setup initializes consolidated base01 once and verifies schema/topology. Existing databases require reviewed migration or explicit reset. | Runtime deployment | User/service maintainer | 29 October approval |
 | Deferred | Avatar replacement/removal, verified contact/password/2FA changes, account switching, Audit consumer | Separate slices | Respective owners | User brief and D1–D4 |
 | Existing authentication alignment | Legacy token lifetime/login payload differences from v1.1 remain separate security work; this slice does not claim that all auth requirements are met | Login/refresh | User/security | See review constraints |
 

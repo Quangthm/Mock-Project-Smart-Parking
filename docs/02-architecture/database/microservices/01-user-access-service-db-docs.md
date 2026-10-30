@@ -16,7 +16,7 @@ The [21 October V11-06 clarification](../../../05-project-management/decision-lo
 |---|---|
 | Database vật lý | `smartpark_user` (PostgreSQL 16, port `5441`) |
 | Base DDL | [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql) |
-| Separate runtime setup | Base → [`13-own-profile-session-account.sql`](../../../../scripts/database/microservices/13-own-profile-session-account.sql) → [`14-user-profile-outbox.sql`](../../../../scripts/database/microservices/14-user-profile-outbox.sql); giữ nguyên các script riêng theo [hướng dẫn SPARK-248](../../../04-testing/own-profile-outbox.md) |
+| Separate runtime setup | Base → [`13-own-profile-session-account.sql`](../../../../scripts/database/microservices/13-own-profile-session-account.sql) → [`14-user-profile-outbox.sql`](../../../../scripts/database/microservices/14-user-profile-outbox.sql); giữ nguyên các script riêng theo [hướng dẫn SPARK-248](../../../04-testing/reports/SPARK-248/own-profile-outbox.md) |
 | Deployment status | Base hiện tạo trực tiếp `accounts.role_code`; người vận hành thực hiện reset/recreate development DB sau khi review. Không có ALTER migration cho thay đổi role |
 | Runtime deviation | `roles` seed 7 mã thay vì 4 mã SRS; xem §5 |
 
@@ -242,7 +242,7 @@ Quan hệ là **Account N : 1 Role**: mỗi Account bắt buộc có đúng mộ
 
 Registration, provisioning và bootstrap ghi `role_code` cùng Account. SQL seed giữ nguyên 7 Role code; Driver dùng `DRIVER`, Owner provisioning dùng `BUSINESS_OWNER`, Operator provisioning dùng `SITE_OPERATOR`, Admin bootstrap dùng `ADMIN`. Các Account/tenant/site/grant liên quan tiếp tục giữ quan hệ hiện có.
 
-Luồng protected request dùng `ICurrentActor` → `ICurrentAccessService` → `CurrentAccessContext`. Persistence trả về trạng thái User, đúng Account gắn với session, Role hiện tại và session; Application quyết định tính hợp lệ, role/token consistency, action permission và resource scope. Mutation được bảo vệ giữ thứ tự khóa **User → Account → Role → Session**; khóa Account bảo vệ `role_code`, không cần khóa một bản ghi gán role riêng. Xem [SPARK-248 implementation review](../../../04-testing/own-profile-review.md).
+Luồng protected request dùng `ICurrentActor` → `ICurrentAccessService` → `CurrentAccessContext`. Persistence trả về trạng thái User, đúng Account gắn với session, Role hiện tại và session; Application quyết định tính hợp lệ, role/token consistency, action permission và resource scope. Mutation được bảo vệ giữ thứ tự khóa **User → Account → Role → Session**; khóa Account bảo vệ `role_code`, không cần khóa một bản ghi gán role riêng. Xem [SPARK-248 implementation review](../../../04-testing/reports/SPARK-248/own-profile-review.md).
 
 `accounts.permissions` và `operator_grants.permissions` vẫn là các permission array hiện có. Role không thay thế kiểm tra quyền hành động hoặc tenant/site/lot scope. Một Account khác cùng User chỉ được tham gia scope theo quy tắc membership cùng User/cùng Role rõ ràng và quyền/grant riêng; không được cứu một session-bound Account không còn hợp lệ hoặc cho mượn Role khác. Admin không tự động có quyền vận hành hay tài chính. Own-profile dùng current access cho tất cả role được hỗ trợ; role/status/permissions không được tự sửa qua profile.
 

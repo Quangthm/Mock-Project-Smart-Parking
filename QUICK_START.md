@@ -371,3 +371,6 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 - [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
+
+
+Own-profile schema, shared RabbitMQ, configuration and safe database recreation: [SPARK-248 deployment guide](docs/04-testing/reports/SPARK-248/follow-up.md).

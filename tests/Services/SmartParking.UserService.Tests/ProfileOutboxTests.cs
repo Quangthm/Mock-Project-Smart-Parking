@@ -13,11 +13,11 @@ using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Models.Exceptions;
-using UserService.Application.Profiles.Commands;
-using UserService.Application.Profiles.Events;
+using SmartParking.UserService.Application.Usecase.Profiles.Commands;
 using UserService.Infrastructure.Messaging;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
+using UserService.Application.Profiles.Events;
 
 namespace SmartParking.UserService.Tests;
 
@@ -32,7 +32,7 @@ public sealed class ProfileOutboxTests
             "CREATE TABLE \"(?:InboxState|OutboxState|OutboxMessage)\"[\\s\\S]*?;|CREATE (?:UNIQUE )?INDEX \"IX_(?:InboxState|OutboxState|OutboxMessage)[\\s\\S]*?;")
             .Select(match => match.Value).ToArray();
         Assert.Equal(9, statements.Length);
-        var script = File.ReadAllText(ServiceSchema.FeaturePath("microservices/14-user-profile-outbox.sql"));
+        var script = File.ReadAllText(ServiceSchema.FeaturePath("microservices/01-user-access-service-db.sql"));
         var reviewed = script.Split("-- BEGIN FRAMEWORK DDL")[1].Split("-- END FRAMEWORK DDL")[0];
         Assert.Equal(Normalize(string.Join("\n", statements)), Normalize(reviewed));
     }
@@ -141,6 +141,15 @@ public sealed class ProfileOutboxTests
         }
         await SaveAsync("  After  ");
         await SaveAsync("After");
+        await using (var failure = fixture.Open())
+            await failure.Database.ExecuteSqlRawAsync("ALTER TABLE \"OutboxMessage\" ADD CONSTRAINT test_handler_outbox_failure CHECK (false) NOT VALID");
+        await Assert.ThrowsAsync<DbUpdateException>(() => SaveAsync("Must roll back"));
+        await using (var failure = fixture.Open())
+        {
+            Assert.Equal("After", (await failure.Users.SingleAsync()).FullName);
+            Assert.Equal(1, await failure.Set<OutboxMessage>().CountAsync());
+            await failure.Database.ExecuteSqlRawAsync("ALTER TABLE \"OutboxMessage\" DROP CONSTRAINT test_handler_outbox_failure");
+        }
         await using (var db = fixture.Open())
         {
             Assert.Equal("After", (await db.Users.SingleAsync()).FullName);
@@ -184,6 +193,48 @@ public sealed class ProfileOutboxTests
         }
     }
 
+    [PostgresFact]
+    public async Task AccessHandoffCommitsAcknowledgmentAndFrameworkCaptureTogether()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        await using var provider = Services(fixture.ConnectionString).BuildServiceProvider();
+        var clock = TimeProvider.System;
+        var message = new global::UserService.Application.Common.Interfaces.Services.OperatorAccessChanged(
+            Guid.NewGuid(), 1, Guid.NewGuid(), 1, clock.GetUtcNow(), Guid.NewGuid(), Guid.NewGuid(), [], "active");
+        await using (var db = fixture.Open())
+        {
+            new AccessEventStore(db, clock).Stage(message);
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"OutboxMessage\" ADD CONSTRAINT test_reject_handoff CHECK (false)");
+        }
+        async Task Handoff()
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var store = new AccessEventStore(db, clock);
+            var lease = (await store.ClaimAsync(default))!;
+            await new global::UserService.Infrastructure.Services.RabbitAccessEventTransport(
+                scope.ServiceProvider.GetRequiredService<IPublishEndpoint>()).PublishAsync(lease.Message, default);
+            await store.CompleteAsync(lease, default);
+        }
+        await Assert.ThrowsAsync<DbUpdateException>(Handoff);
+        await using (var db = fixture.Open())
+        {
+            Assert.Null((await db.AccessEventOutbox.SingleAsync()).PublishedAt);
+            Assert.Empty(await db.Set<OutboxMessage>().ToArrayAsync());
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"OutboxMessage\" DROP CONSTRAINT test_reject_handoff");
+            // Release this failed test lease deterministically; no sleep or shared resource.
+            await db.AccessEventOutbox.ExecuteUpdateAsync(s => s.SetProperty(x => x.LeaseUntil, (DateTimeOffset?)null));
+        }
+        await Handoff();
+        await using (var db = fixture.Open())
+        {
+            Assert.NotNull((await db.AccessEventOutbox.SingleAsync()).PublishedAt);
+            Assert.Equal(message.EventId, (await db.Set<OutboxMessage>().SingleAsync()).MessageId);
+            Assert.Single(await db.Set<OutboxState>().ToArrayAsync());
+        }
+    }
+
     internal static ServiceCollection Services(string connection, int port = 5672, bool deliver = false)
     {
         var services = new ServiceCollection();
@@ -198,10 +249,11 @@ public sealed class ProfileOutboxTests
         .AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Messaging:OutboxDeliveryEnabled"] = deliver.ToString(),
-            ["Messaging:RabbitMq:Host"] = "127.0.0.1",
-            ["Messaging:RabbitMq:Port"] = port.ToString(),
-            ["Messaging:RabbitMq:Username"] = "guest",
-            ["Messaging:RabbitMq:Password"] = "guest"
+            ["SMARTPARK_RABBITMQ_HOST"] = "127.0.0.1",
+            ["SMARTPARK_RABBITMQ_PORT"] = port.ToString(),
+            ["SMARTPARK_RABBITMQ_VHOST"] = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_VHOST") ?? "smartpark",
+            ["SMARTPARK_RABBITMQ_USER"] = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_USER") ?? "smartpark",
+            ["SMARTPARK_RABBITMQ_PASSWORD"] = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_PASSWORD") ?? "unused-capture-test-password"
         }).Build();
 
     internal static async Task<Guid> SeedAsync(UserServiceDatabaseFixture fixture)

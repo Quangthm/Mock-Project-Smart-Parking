@@ -12,7 +12,7 @@ This dictionary preserves the recorded deployment profile of branch `feature/db-
 
 ## 2. User & Access DB (`smartpark_user`)
 
-Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship. Apply the existing separate scripts [`13-own-profile-session-account.sql`](../../../scripts/database/microservices/13-own-profile-session-account.sql) then [`14-user-profile-outbox.sql`](../../../scripts/database/microservices/14-user-profile-outbox.sql) for the current SPARK-248 runtime, as described in the [profile deployment guide](../../04-testing/own-profile-outbox.md). They are not folded into the base schema.
+Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship. Apply the existing separate scripts [`13-own-profile-session-account.sql`](../../../scripts/database/microservices/13-own-profile-session-account.sql) then [`14-user-profile-outbox.sql`](../../../scripts/database/microservices/14-user-profile-outbox.sql) for the current SPARK-248 runtime, as described in the [profile deployment guide](../../04-testing/reports/SPARK-248/own-profile-outbox.md). They are not folded into the base schema.
 
 | Table | Key columns / rules |
 |---|---|

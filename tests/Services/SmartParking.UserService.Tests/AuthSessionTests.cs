@@ -18,7 +18,7 @@ public sealed class AuthSessionTests
     public async Task OwnerSessionsAndMeUsePersistedOnboardingState(bool complete)
     {
         var fixture = new AuthTestFixture();
-        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "BUSINESS_OWNER";
+        fixture.User.Accounts.Single().RoleCode = "BUSINESS_OWNER";
         fixture.User.OnboardingComplete = complete;
         var result = await fixture.SignIn();
         Assert.True(result.IsSuccess);

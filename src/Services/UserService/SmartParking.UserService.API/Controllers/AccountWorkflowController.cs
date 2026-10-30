@@ -5,13 +5,14 @@ using UserService.Application.DTOs;
 using UserService.Application.Services;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Usecase.Management;
-using MediatR;
 using UserService.Application.Usecase.IdentityAccess;
 namespace UserService.API.Controllers;
 
 [ApiController,Route("api/auth"),ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSessionService sessions,IMediator mediator):ControllerBase
+public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSessionService sessions,IMediator mediator, ICurrentActor actor):ControllerBase
 {
+    private Guid Actor => actor.UserId ?? throw UserService.Application.Common.Models.Exceptions.AuthException.InvalidToken();
+
     [AllowAnonymous,HttpPost("otp/request"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> RequestOtp(OtpLoginDto body,CancellationToken ct)=>Ok(new{success=true,data=await workflows.RequestLoginAsync(body.Contact,ct)});
     [AllowAnonymous,HttpPost("otp/login"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
@@ -37,7 +38,7 @@ public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSe
 
     [Authorize, HttpPost("mfa/setup"), Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> Setup(MfaVerificationDto body, CancellationToken ct) =>
-        Ok(new { success = true, data = await workflows.SetupMfaAsync(Actor, body, ct) });
+        Ok(new { success = true, data = await mediator.Send(new SetupOwnMfaCommand(body), ct) });
 
     [Authorize, HttpPost("mfa/enable"), Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> Enable(VerifyDriverOtpDto body, CancellationToken ct) =>

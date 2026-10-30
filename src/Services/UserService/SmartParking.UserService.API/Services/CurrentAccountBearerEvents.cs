@@ -9,6 +9,14 @@ namespace UserService.API.Services;
 /// <summary>Transport adapter for the shared Application current-access policy.</summary>
 public sealed class CurrentAccountBearerEvents(ICurrentAccessService access, ApiErrorWriter errors) : JwtBearerEvents
 {
+    public override Task MessageReceived(MessageReceivedContext context)
+    {
+        if (context.Request.Path.StartsWithSegments("/hubs/operators") &&
+            context.Request.Query.TryGetValue("access_token", out var token))
+            context.Token = token;
+        return Task.CompletedTask;
+    }
+
     public override async Task TokenValidated(TokenValidatedContext context)
     {
         var principal = context.Principal;

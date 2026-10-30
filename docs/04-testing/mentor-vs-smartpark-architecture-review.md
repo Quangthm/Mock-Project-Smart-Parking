@@ -702,7 +702,7 @@ Repository requirements/design (read relevant sections; not wholesale unrelated 
 - [v1.1 API contracts](../02-architecture/api/v1.1-contracts.md): separate authorized profile retrieval, pending API/security design details.
 - [Media design candidate](../02-architecture/service-boundaries/media-contract.md): ownership, references, lifecycle and unresolved exact wire schemas.
 - [Review folder guidance](README.md), [architecture reference](../../ai/architecture-reference.md), [guardrails](../../ai/context/architecture-guardrails.md), [AGENTS router](../../ai/AGENTS.md), [operating rules](../../ai/rule.md).
-- [Previous SPARK-248 session](../../ai/tasks/active/TASK-SPARK-248-SESSION-20261022.md): historical implementation/test claims, superseded scope assumptions identified above.
+- [Previous SPARK-248 session](../../ai/tasks/completed/TASK-SPARK-248-SESSION-20261022.md): historical implementation/test claims, superseded scope assumptions identified above.
 - [Focused profile tests](../../tests/Services/SmartParking.UserService.Tests/OwnProfileTests.cs), [unrun persistence tests](../../tests/Services/SmartParking.UserService.Tests/OwnProfilePersistenceTests.cs).
 
 Official framework/library references are linked at the claims they support throughout the report. ASP.NET Core source links pin v10.0.0 for the relevant major-version mechanism, not the exact installed patch. EF pages describe behavior applicable to EF Core 10; FluentValidation guidance covers 12.x's async rule requirement. MediatR's exact v14.2.0 source URL could not be fetched, so upstream interface source is explicitly labeled rather than represented as a pinned package audit.

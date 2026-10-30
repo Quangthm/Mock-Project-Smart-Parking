@@ -15,7 +15,7 @@ public static class ProfileOutboxRegistration
             outbox.DisableInboxCleanupService();
             outbox.UseBusOutbox(busOutbox =>
             {
-                if (!configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
+                if (!bool.TryParse(configuration["Messaging:OutboxDeliveryEnabled"], out var enabled) || !enabled)
                     busOutbox.DisableDeliveryService();
             });
         });

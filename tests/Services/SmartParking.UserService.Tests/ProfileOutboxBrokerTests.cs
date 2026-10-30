@@ -34,7 +34,15 @@ public sealed class ProfileOutboxBrokerTests
         var message = ProfileOutboxTests.NewEvent(userId);
 
         // Independent provisioning occurs before the producer starts; there is no Audit consumer.
-        var factory = new ConnectionFactory { HostName = "127.0.0.1", Port = brokerPort };
+        var brokerSettings = ProfileOutboxTests.Configuration(brokerPort, deliver: true);
+        var factory = new ConnectionFactory
+        {
+            HostName = "127.0.0.1", Port = brokerPort,
+            UserName = brokerSettings["SMARTPARK_RABBITMQ_USER"]!,
+            Password = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_PASSWORD")
+                ?? throw new InvalidOperationException("Configure the isolated broker password privately."),
+            VirtualHost = brokerSettings["SMARTPARK_RABBITMQ_VHOST"]!
+        };
         await using var broker = await factory.CreateConnectionAsync();
         await using var channel = await broker.CreateChannelAsync();
         var queue = "smartpark_profile_test_" + Guid.NewGuid().ToString("N");

@@ -1,7 +1,7 @@
 using FluentValidation;
 using SmartParking.UserService.Domain.ValueObjects;
 
-namespace UserService.Application.Profiles.Commands;
+namespace SmartParking.UserService.Application.Usecase.Profiles.Commands;
 
 /// <summary>Enforces the display-name rules on the own-profile update.</summary>
 public sealed class UpdateOwnProfileValidator : AbstractValidator<UpdateOwnProfileCommand>

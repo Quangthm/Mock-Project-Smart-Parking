@@ -107,7 +107,6 @@ services:
       retries: 10
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: smartpark-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
       RABBITMQ_DEFAULT_PASS: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}

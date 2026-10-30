@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory=$true)][uri]$ManagementUri,
     [Parameter(Mandatory=$true)][pscredential]$Credential,
-    [string]$VirtualHost = '/',
+    [string]$VirtualHost = 'smartpark',
     [switch]$VerifyOnly
 )
 $ErrorActionPreference = 'Stop'

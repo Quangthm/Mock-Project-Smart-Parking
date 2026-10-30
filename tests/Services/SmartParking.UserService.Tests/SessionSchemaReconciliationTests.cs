@@ -8,7 +8,7 @@ namespace SmartParking.UserService.Tests;
 public sealed class SessionSchemaReconciliationTests
 {
     [PostgresFact]
-    public async Task BaseThenSessionThenOutboxIsRequiredAndLegacySessionsAreNotBackfilled()
+    public async Task ConsolidatedBaseIsCompleteAndLegacyNullSessionsRemainImmutable()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
         var database = "smartpark_auth_test_" + Guid.NewGuid().ToString("N");
@@ -30,7 +30,7 @@ public sealed class SessionSchemaReconciliationTests
             async Task VerifyReadOnly()
             {
                 await using var verify = new NpgsqlCommand(await File.ReadAllTextAsync(
-                    Path.Combine(ServiceSchema.Root, "scripts/database/verify-user-access-schema.sql")), connection);
+                    Path.Combine(ServiceSchema.Root, "scripts/database/test/verify-user-access-schema.sql")), connection);
                 try { await verify.ExecuteNonQueryAsync(); }
                 catch (PostgresException)
                 {
@@ -43,11 +43,9 @@ public sealed class SessionSchemaReconciliationTests
             }
 
             await Apply("microservices/01-user-access-service-db.sql");
-            var baseOnly = await Assert.ThrowsAsync<PostgresException>(VerifyReadOnly);
-            Assert.Contains("13-own-profile-session-account.sql", baseOnly.Hint);
-
-            // An actual pre-13 session has no Account column. Never infer one on upgrade,
-            // even when only one account currently exists for this User.
+            await VerifyReadOnly();
+            await VerifyReadOnly(); // Repeated setup verifies without replaying DDL.
+            // Synthetic legacy NULL binding remains immutable and is never guessed.
             var userId = Guid.NewGuid();
             var accountId = Guid.NewGuid();
             var legacyId = Guid.NewGuid();
@@ -64,11 +62,6 @@ public sealed class SessionSchemaReconciliationTests
                 await seed.ExecuteNonQueryAsync();
             }
 
-            await Apply("microservices/13-own-profile-session-account.sql");
-            await Apply("microservices/13-own-profile-session-account.sql"); // Supported upgrade is repeatable.
-            var withoutOutbox = await Assert.ThrowsAsync<PostgresException>(VerifyReadOnly);
-            Assert.Contains("14-user-profile-outbox.sql", withoutOutbox.Hint);
-
             await using (var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connectionString).Options))
             {
                 Assert.Null((await db.AuthSessions.SingleAsync(s => s.Id == legacyId)).AccountId);
@@ -83,7 +76,6 @@ public sealed class SessionSchemaReconciliationTests
                     (await Assert.ThrowsAsync<PostgresException>(() => rebind.ExecuteNonQueryAsync())).SqlState);
             }
 
-            await Apply("microservices/14-user-profile-outbox.sql");
             await VerifyReadOnly();
             await using var final = new NpgsqlCommand("""
                 SELECT to_regclass('public.account_roles') IS NULL

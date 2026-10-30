@@ -26,19 +26,11 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
             (!notBefore.HasValue || notBefore.Value <= clock.GetUtcNow().UtcDateTime)
     };
 
-    public static Account? SelectLoginAccount(User user) => user.Accounts
-        .Where(a => a.Id is not null && a.Status == "ACTIVE" && a.DeletedOn == null && CurrentRole(a) is not null)
-        .OrderBy(a => a.Id).FirstOrDefault();
-
-    public static string? CurrentRole(User user) => SelectLoginAccount(user) is { } account ? CurrentRole(account) : null;
-
-    public static string? CurrentRole(Account account) => AccessRoles.Map(account.RoleCode);
-
     public string GenerateAccessToken(User user, Account account, Guid accessTokenId, DateTimeOffset expiresAt)
     {
         if (account.UserId != user.Id || account.Id is null)
             throw new InvalidOperationException("The session account must belong to the authenticated User.");
-        var role = CurrentRole(account) ?? throw new InvalidOperationException("A login account must have an assigned role.");
+        var role = AccountRolePolicy.CurrentRole(account) ?? throw new InvalidOperationException("A login account must have an assigned role.");
         var token = new JwtSecurityToken(options.Issuer, options.Audience,
             [new Claim(JwtRegisteredClaimNames.Sub, user.Id!.Value.ToString()),
              new Claim(JwtRegisteredClaimNames.Jti, accessTokenId.ToString("N")),

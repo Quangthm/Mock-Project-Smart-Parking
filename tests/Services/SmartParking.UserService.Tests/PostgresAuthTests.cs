@@ -110,21 +110,17 @@ public sealed class PostgresAuthTests
             {
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
-                // Exercise upgrade from the old schema with an existing refresh row.
-                await db.Database.ExecuteSqlRawAsync("INSERT INTO user_refresh_tokens(id,user_id,access_token_id,access_expires_at,token_hash,expires_at,is_revoked,created_at) VALUES(gen_random_uuid(), '11111111-1111-1111-1111-111111111111',gen_random_uuid(),NOW(),'legacy-hash',NOW()+INTERVAL '7 days',false,NOW()); ALTER TABLE users DROP COLUMN failed_login_attempts; ALTER TABLE users DROP COLUMN locked_until; ALTER TABLE user_refresh_tokens DROP COLUMN access_token_id; ALTER TABLE user_refresh_tokens DROP COLUMN access_expires_at;");
-                var migration = await File.ReadAllTextAsync(Path.Combine(root!.FullName, "scripts/database/05.2-Auth-Design-Alignment.sql"));
-                await db.Database.ExecuteSqlRawAsync(migration);
-                await db.Database.ExecuteSqlRawAsync(migration); // Idempotence.
-                db.ChangeTracker.Clear();
-                Assert.True((await db.AuthSessions.SingleAsync()).IsRevoked);
-                // Only the public known plaintext seed is converted; a second run is a no-op.
-                await db.Database.ExecuteSqlRawAsync("UPDATE users SET password_hash='Password@123' WHERE id='11111111-1111-1111-1111-111111111111'");
-                var demoMigration = await File.ReadAllTextAsync(Path.Combine(root.FullName, "scripts/database/05.3-Demo-Password-Hash.sql"));
-                await db.Database.ExecuteSqlRawAsync(demoMigration);
-                var converted = await db.Users.AsNoTracking().SingleAsync();
-                Assert.True(passwords.Verify("Password@123", converted.PasswordHash));
-                await db.Database.ExecuteSqlRawAsync(demoMigration);
-                Assert.Equal(converted.PasswordHash, (await db.Users.AsNoTracking().SingleAsync()).PasswordHash);
+                // Canonical schema preserves legacy NULL bindings without guessing an Account.
+                await db.Database.ExecuteSqlRawAsync("INSERT INTO user_refresh_tokens(id,user_id,access_token_id,access_expires_at,token_hash,expires_at,is_revoked,created_at) VALUES(gen_random_uuid(), '11111111-1111-1111-1111-111111111111',gen_random_uuid(),NOW()+INTERVAL '1 hour','legacy-hash',NOW()+INTERVAL '7 days',false,NOW())");
+                var legacy = await db.AuthSessions.AsNoTracking().SingleAsync();
+                Assert.Null(legacy.AccountId);
+                Assert.False(await new PostgresAuthSessionStore(db, clock).IsActiveAsync(legacy.AccessTokenId, legacy.UserId, default));
+                var seeded = await db.Users.AsNoTracking().SingleAsync();
+                Assert.True(passwords.Verify("Password@123", seeded.PasswordHash));
+                await new DataSeeder(db, passwords).SeedAsync();
+                Assert.Equal(seeded.PasswordHash, (await db.Users.AsNoTracking().SingleAsync()).PasswordHash);
+                await ServiceSchema.ApplyFeaturesAsync(db);
+
             }
 
             async Task<LoginResult> Attempt(string password)

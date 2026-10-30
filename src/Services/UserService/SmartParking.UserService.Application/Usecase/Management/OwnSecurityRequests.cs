@@ -1,9 +1,10 @@
 using MediatR;
+using UserService.Application.DTOs;
 using UserService.Application.Common.Interfaces.Services;
 
 namespace UserService.Application.Usecase.Management;
 
-public sealed record SetupOwnMfaCommand : IRequest<object>;
+public sealed record SetupOwnMfaCommand(MfaVerificationDto Body) : IRequest<object>;
 public sealed record EnableOwnMfaCommand(string Code) : IRequest;
 public sealed record GetWorkflowDeliveryQuery(Guid DeliveryId) : IRequest<object>;
 public sealed record RetryWorkflowDeliveryCommand(Guid DeliveryId) : IRequest<object>;
@@ -13,7 +14,7 @@ public sealed class OwnSecurityRequestHandler(IAccountWorkflows workflows, ICurr
       IRequestHandler<GetWorkflowDeliveryQuery, object>, IRequestHandler<RetryWorkflowDeliveryCommand, object>
 {
     public async Task<object> Handle(SetupOwnMfaCommand request, CancellationToken ct) =>
-        await workflows.SetupMfaAsync((await current.RequireAsync(ct)).User.Id!.Value, ct);
+        await workflows.SetupMfaAsync((await current.RequireAsync(ct)).User.Id!.Value, request.Body, ct);
     public async Task Handle(EnableOwnMfaCommand request, CancellationToken ct) =>
         await workflows.EnableMfaAsync((await current.RequireAsync(ct)).User.Id!.Value, request.Code, ct);
     public async Task<object> Handle(GetWorkflowDeliveryQuery request, CancellationToken ct) =>

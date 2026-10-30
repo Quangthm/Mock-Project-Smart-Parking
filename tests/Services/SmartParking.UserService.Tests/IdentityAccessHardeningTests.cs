@@ -74,7 +74,7 @@ public sealed class IdentityAccessHardeningTests
         owner.Accounts.Single().Permissions = ["OPERATOR_MANAGE", "PARKING_MANAGE"];
         var denied = new Account { Id = Guid.NewGuid(), User = owner, UserId = owner.Id!.Value,
             TenantId = tenantB, Status = "ACTIVE", Permissions = [] };
-        denied.AccountRoles.Add(new() { AccountId = denied.Id.Value, Account = denied, RoleCode = "BUSINESS_OWNER" });
+        denied.RoleCode = "BUSINESS_OWNER";
         owner.Accounts.Add(denied);
         await using (var db = fixture.Open()) { db.Users.Add(owner); await db.SaveChangesAsync(); }
         var directory = new TestParkingDirectory();
@@ -223,7 +223,7 @@ public sealed class IdentityAccessHardeningTests
         var user=new User {Id=Guid.NewGuid(),Email=email,EmailVerifiedAt=clock.Now,FullName="Test User",Status=UserStatus.Active,
             PasswordHash=new BcryptPasswordService().Hash("Password@123"),CreatedOn=clock.Now,ModifiedOn=clock.Now};
         var account=new Account {Id=Guid.NewGuid(),User=user,UserId=user.Id.Value,Status="ACTIVE"};
-        account.AccountRoles.Add(new(){AccountId=account.Id.Value,Account=account,RoleCode=role});
+        account.RoleCode = role;
         user.Accounts.Add(account);return user;
     }
     private static async Task<UserSessionDto> Login(HttpClient client,string email,string password)

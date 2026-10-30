@@ -28,6 +28,6 @@ public sealed class HttpCurrentActor(IHttpContextAccessor accessor) : ICurrentAc
         Guid.TryParse(Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value, out var id) ? id : null;
 
     public string? Role => Principal?.FindFirst("role")?.Value;
-    public string CorrelationId => Activity.Current?.TraceId.ToString()
-        ?? accessor.HttpContext?.TraceIdentifier ?? string.Empty;
+    public string CorrelationId => accessor.HttpContext is { } context
+        ? UserService.API.Common.RequestCorrelation.Get(context) : string.Empty;
 }

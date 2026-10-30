@@ -1,6 +1,8 @@
+> Historical evidence. The approved 29 October name-only timing and consolidated setup supersede earlier locking/manual-overlay instructions. See [current follow-up](follow-up.md). Historical test counts are not current verification.
+
 # Own-profile audit outbox — deployment and verification
 
-SPARK-248 / US-U01 · 25 October 2026 · implementation guide. API and event decisions were approved by the user on 24 October; see [feature API design](../03-design/api/own-profile-api-design.md). This change does not deploy schema or implement Notification & Audit.
+SPARK-248 / US-U01 · 25 October 2026 · implementation guide. API and event decisions were approved by the user on 24 October; see [feature API design](../../../03-design/api/own-profile-api-design.md). This change does not deploy schema or implement Notification & Audit.
 
 ## What success means
 
@@ -15,8 +17,8 @@ User & Access owns the versioned event; Notification & Audit owns the eventual p
 The repository uses reviewed SQL feature scripts; there is no existing EF migration/snapshot workflow to extend. `AppDbContext` calls MassTransit's `AddTransactionalOutboxEntities()`. The proposed SQL is generated from that exact model with **MassTransit 8.5.7, EF Core 10.0.12, and Npgsql EF Core 10.0.3**. The equality test detects incompatible table/index drift.
 
 1. Stop/restrict the old application version's writes during a coordinated deployment. Review and back up the explicitly selected User & Access database. Do not use a default connection or another service database.
-2. For a clean database, first run the canonical [01-user-access-service-db.sql](../../scripts/database/microservices/01-user-access-service-db.sql), then apply the separate [13-own-profile-session-account.sql](../../scripts/database/microservices/13-own-profile-session-account.sql) and [14-user-profile-outbox.sql](../../scripts/database/microservices/14-user-profile-outbox.sql) in that order through the team's normal manual deployment process. For an existing database, inspect its schema and review the applicable scripts first. Script 14 is a one-time, transactional create script; a second application is expected to fail rather than silently accept a different schema. The role simplification is represented directly in base01, with no role ALTER migration.
-3. Run the read-only [verify-user-access-schema.sql](../../scripts/database/verify-user-access-schema.sql) with `psql -v ON_ERROR_STOP=1` against that explicitly selected database. It verifies direct role constraints, session ownership and immutability, token uniqueness, and framework outbox columns/constraints/indexes. Only then deploy this application with `Messaging__OutboxDeliveryEnabled=false`. Legacy sessions without immutable AccountId must sign in again. No startup migration or schema fallback exists.
+2. For a clean database, first run the canonical [01-user-access-service-db.sql](../../../../scripts/database/microservices/01-user-access-service-db.sql), then apply the separate `13-own-profile-session-account.sql` (historical, consolidated into base01) and `14-user-profile-outbox.sql` (historical, consolidated into base01) in that order through the team's normal manual deployment process. For an existing database, inspect its schema and review the applicable scripts first. Script 14 is a one-time, transactional create script; a second application is expected to fail rather than silently accept a different schema. The role simplification is represented directly in base01, with no role ALTER migration.
+3. Run the read-only [verify-user-access-schema.sql](../../../../scripts/database/test/verify-user-access-schema.sql) with `psql -v ON_ERROR_STOP=1` against that explicitly selected database. It verifies direct role constraints, session ownership and immutability, token uniqueness, and framework outbox columns/constraints/indexes. Only then deploy this application with `Messaging__OutboxDeliveryEnabled=false`. Legacy sessions without immutable AccountId must sign in again. No startup migration or schema fallback exists.
 4. Provision and verify the durable RabbitMQ topology independently of any consumer, as described below. Review queue policies and capacity.
 5. Set the broker configuration, then enable `Messaging__OutboxDeliveryEnabled=true` and restart/recreate the User Service through the documented runner. Verify pending records drain and messages accumulate in the durable audit queue while the consumer is absent.
 6. Deploy a future idempotent Audit consumer independently. It must consume this queue and persist deduplication and audit records atomically. It is not part of this task.
@@ -36,7 +38,7 @@ The ordinary `compose.schema-integration.yml` User database initialization and `
 Example verification using a locally configured libpq service (credentials stay out of the command):
 
 ```powershell
-psql --dbname="service=smartpark-user-reviewed" -v ON_ERROR_STOP=1 -f scripts/database/verify-user-access-schema.sql
+psql --dbname="service=smartpark-user-reviewed" -v ON_ERROR_STOP=1 -f scripts/database/test/verify-user-access-schema.sql
 ```
 
 Configure that service for the explicitly reviewed User database first. The verifier runs in a read-only transaction, raises an error listing missing/incompatible definitions, and performs no schema repair, reset, backfill or automatic deployment. The developer remains responsible for any approved development reset/recreation.
@@ -118,7 +120,7 @@ dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserServi
 
 Coverage: generated model/SQL equality; supported delivery-disabled registration; capture-only host startup and durable recording without an AMQP server; name/event commit and rollback in one scope; real business-column/outbox-storage failures; actual profile handler attribution, normalized no-op suppression and revoked-session rejection; broker-unavailable host startup with delivery enabled; queue present with zero consumers; recovery using the unchanged EventId/DestinationAddress; persistent routing and framework cleanup.
 
-Actual executed results belong to the [task record](../../ai/tasks/completed/TASK-SPARK-248-SESSION-20261024.md). On 26 October 2026 all 7 outbox tests passed against isolated PostgreSQL and RabbitMQ, including broker outage/recovery without a consumer. Both topology provisioning and VerifyOnly also passed. Real broker checks are skipped with an explicit reason when their environment is absent.
+Actual executed results belong to the [task record](../../../../ai/tasks/completed/TASK-SPARK-248-SESSION-20261024.md). On 26 October 2026 all 7 outbox tests passed against isolated PostgreSQL and RabbitMQ, including broker outage/recovery without a consumer. Both topology provisioning and VerifyOnly also passed. Real broker checks are skipped with an explicit reason when their environment is absent.
 
 ## Framework evidence
 

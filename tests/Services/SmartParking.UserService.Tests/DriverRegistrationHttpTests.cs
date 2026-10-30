@@ -42,7 +42,6 @@ public sealed class DriverRegistrationHttpTests
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
         builder.Services.AddApiErrorResponses();
-        builder.Services.AddApplicationServices(builder.Configuration);
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();

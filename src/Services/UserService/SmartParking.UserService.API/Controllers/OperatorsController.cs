@@ -1,16 +1,16 @@
+using System.IdentityModel.Tokens.Jwt;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.Authorization;
 using UserService.Application.Common.Interfaces.Services;
-using MediatR;
 using UserService.Application.Usecase.IdentityAccess;
 
 namespace UserService.API.Controllers;
 
 [ApiController, Route("api/operators"), Authorize]
 [ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class OperatorsController(ISender sender) : ControllerBase
+public sealed class OperatorsController(IMediator sender) : ControllerBase
 {
     [HttpPost("{id:guid}/invitation"), Authorize(Roles="owner"), Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> Reissue(Guid id, CancellationToken ct)

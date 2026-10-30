@@ -8,7 +8,7 @@ public sealed record CreateOperatorCommand(CreateOperatorDto Body) : IRequest<Op
 public sealed record ListOperatorsQuery : IRequest<IReadOnlyList<OperatorDto>>;
 public sealed record GetOperatorAssignmentsQuery : IRequest<IReadOnlyList<OperatorAssignment>>;
 
-public sealed class OperatorRequestHandler(IOperatorProvisioningService operators, ICurrentAccessService current,
+public sealed class OperatorRequestHandler(IMediator mediator, ICurrentAccessService current,
     IAccountAuthorizationService authorization)
     : IRequestHandler<CreateOperatorCommand, OperatorDto>, IRequestHandler<ListOperatorsQuery, IReadOnlyList<OperatorDto>>,
       IRequestHandler<GetOperatorAssignmentsQuery, IReadOnlyList<OperatorAssignment>>
@@ -20,9 +20,9 @@ public sealed class OperatorRequestHandler(IOperatorProvisioningService operator
         return id;
     }
     public async Task<OperatorDto> Handle(CreateOperatorCommand request, CancellationToken ct) =>
-        await operators.CreateAsync(await RequireOwnerAsync(ct), request.Body, ct);
+        await mediator.Send(new IdentityAccess.CreateOperatorCommand(await RequireOwnerAsync(ct), request.Body), ct);
     public async Task<IReadOnlyList<OperatorDto>> Handle(ListOperatorsQuery request, CancellationToken ct) =>
-        await operators.ListAsync(await RequireOwnerAsync(ct), ct);
+        await mediator.Send(new IdentityAccess.ListOperatorsQuery(await RequireOwnerAsync(ct)), ct);
     public async Task<IReadOnlyList<OperatorAssignment>> Handle(GetOperatorAssignmentsQuery request, CancellationToken ct) =>
         await authorization.OperatorAssignmentsAsync((await current.RequireAsync(ct)).User.Id!.Value, ct);
 }

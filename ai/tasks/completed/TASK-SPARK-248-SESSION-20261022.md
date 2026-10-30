@@ -1,3 +1,5 @@
+> Archived historical session. Avatar deletion, old profile routes and coordinated authorization/name-save requirements are superseded by the 29 October user decisions. Retained results apply only to their recorded revisions.
+
 # Session Review — 2026-10-22
 
 ## 1. Session Information

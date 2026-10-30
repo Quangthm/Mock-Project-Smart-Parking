@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.UserService.Application.Usecase.Profiles.Commands;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Models.Exceptions;
-using UserService.Application.Profiles.Commands;
-using UserService.Application.Profiles.Queries;
+using SmartParking.UserService.Application.Usecase.Profiles.Queries;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 
@@ -14,6 +14,24 @@ namespace SmartParking.UserService.Tests;
 /// <summary>Real PostgreSQL profile behavior, separate from deterministic authorization race tests.</summary>
 public sealed class OwnProfilePersistenceTests
 {
+    [PostgresFact]
+    public async Task TrackedLoaderRefreshesStaleStateAndPreservesPendingWork()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        var clock = new TestClock();
+        var seeded = await SeedAsync(fixture, clock);
+        await using var db = fixture.Open();
+        var user = await db.Users.SingleAsync();
+        await using (var other = fixture.Open())
+            await other.Users.ExecuteUpdateAsync(set => set.SetProperty(u => u.CompanyName, "Fresh company"));
+        var repository = new UserRepository(db);
+        Assert.Same(user, await repository.GetByIdForUpdateAsync(user.Id!.Value, default));
+        Assert.Equal("Fresh company", user.CompanyName);
+        user.CompanyName = "Pending company";
+        await Assert.ThrowsAsync<InvalidOperationException>(() => repository.GetByIdForUpdateAsync(user.Id!.Value, default));
+        Assert.Equal("Pending company", user.CompanyName);
+        Assert.Equal(Microsoft.EntityFrameworkCore.EntityState.Modified, db.Entry(user).State);
+    }
     [PostgresFact]
     public async Task SharedUserNameAndLegacyAvatarRoundTripWithoutChangingOtherFields()
     {

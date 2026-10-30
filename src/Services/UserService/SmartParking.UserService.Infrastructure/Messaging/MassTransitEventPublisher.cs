@@ -1,6 +1,6 @@
 using MassTransit;
-using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Profiles.Events;
+using UserService.Application.Common.Interfaces.MessageBroker;
 
 namespace UserService.Infrastructure.Messaging;
 

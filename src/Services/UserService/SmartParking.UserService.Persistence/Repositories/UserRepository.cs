@@ -14,6 +14,19 @@ public class UserRepository
     {
     }
 
+    public async Task<User?> GetByIdForUpdateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var tracked = dbContext.ChangeTracker.Entries<User>().SingleOrDefault(e => e.Entity.Id == userId);
+        if (tracked is not null)
+        {
+            if (tracked.State != EntityState.Unchanged)
+                throw new InvalidOperationException("The profile target already has pending mutations.");
+            await tracked.ReloadAsync(cancellationToken);
+            return tracked.State == EntityState.Detached || tracked.Entity.DeletedOn != null ? null : tracked.Entity;
+        }
+        return await dbSet.SingleOrDefaultAsync(u => u.Id == userId && u.DeletedOn == null, cancellationToken);
+    }
+
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken)
     {
         return await this.dbSet

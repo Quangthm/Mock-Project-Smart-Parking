@@ -1,6 +1,6 @@
 using SmartParking.UserService.Domain.Entities;
 
-namespace UserService.Application.Profiles.Contracts;
+namespace SmartParking.UserService.Application.Usecase.Profiles.Contracts;
 
 /// <summary>
 /// The profile data the caller is allowed to read about their own account.

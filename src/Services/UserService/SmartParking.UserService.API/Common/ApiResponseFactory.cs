@@ -62,7 +62,8 @@ public static class ApiResponseFactory
 public readonly record struct ApiResponse(int StatusCode, object Body)
 {
     /// <summary>Materializes the response for a controller action.</summary>
-    public IActionResult ToActionResult() => new ObjectResult(Body) { StatusCode = StatusCode };
+    public IActionResult ToActionResult() => StatusCode >= 400
+        ? new ApiErrorActionResult(this) : new ObjectResult(Body) { StatusCode = StatusCode };
 }
 
 /// <summary>One rejected field and the reason it was rejected.</summary>

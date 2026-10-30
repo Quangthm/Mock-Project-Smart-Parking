@@ -39,7 +39,7 @@ internal static class ServiceSchema
     public static async Task InitializeAsync(AppDbContext db)
     {
         await db.Database.OpenConnectionAsync();
-        foreach(var path in new[] {"microservices/01-user-access-service-db.sql", "integration/01-user-service-alignment.sql", "integration/01-user-service-alignment.sql"})
+        foreach(var path in new[] {"microservices/01-user-access-service-db.sql"})
         {
             await using var cmd=new NpgsqlCommand(await File.ReadAllTextAsync(Path.Combine(Root,"scripts/database",path)),(NpgsqlConnection)db.Database.GetDbConnection());
             await cmd.ExecuteNonQueryAsync();
@@ -60,22 +60,18 @@ internal static class ServiceSchema
         foreach (var file in new[] { "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
         {
             var sql = await File.ReadAllTextAsync(FeaturePath(file));
-            await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
-            await cmd.ExecuteNonQueryAsync();
+            await using var featureCommand = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
+            await featureCommand.ExecuteNonQueryAsync();
         }
+        await using var cmd = new NpgsqlCommand(await File.ReadAllTextAsync(FeaturePath("test/verify-user-access-schema.sql")),
+            (NpgsqlConnection)db.Database.GetDbConnection());
+        await cmd.ExecuteNonQueryAsync();
         await db.Database.CloseConnectionAsync();
-        foreach (var file in new[] { "microservices/13-own-profile-session-account.sql", "microservices/14-user-profile-outbox.sql" })
-        {
-            await db.Database.OpenConnectionAsync();
-            await using var feature = new NpgsqlCommand(await File.ReadAllTextAsync(FeaturePath(file)),
-                (NpgsqlConnection)db.Database.GetDbConnection());
-            await feature.ExecuteNonQueryAsync();
-            await db.Database.CloseConnectionAsync();
-        }
     }
 }
 internal sealed class TestParkingDirectory : IParkingDirectory
 {
+    public Func<Guid, string, string, string, CancellationToken, Task>? OnProvision { get; set; }
     public bool Unavailable { get; set; }
     public bool LoseProvisionResponse { get; set; }
     public Dictionary<Guid,Guid> Sites { get; } = [];

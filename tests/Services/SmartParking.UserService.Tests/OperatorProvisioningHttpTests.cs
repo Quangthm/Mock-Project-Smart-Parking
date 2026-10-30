@@ -41,8 +41,6 @@ public sealed class OperatorProvisioningHttpTests
             CreatedOperator = user;
             CreatedBy = grants.Single().CreatedBy;
         }
-        public Task<IReadOnlyList<OperatorDto>> ListAsync(Guid ownerId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorDto>>([]);
-        public Task<IReadOnlyList<OperatorAssignment>> AssignmentsAsync(Guid operatorId,CancellationToken ct) => Task.FromResult<IReadOnlyList<OperatorAssignment>>([]);
     }
 
     private sealed class RecordedAccessEvents : UnusedAccessEvents
@@ -58,7 +56,6 @@ public sealed class OperatorProvisioningHttpTests
         builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
         builder.Services.AddApiErrorResponses();
-        builder.Services.AddApplicationServices(builder.Configuration);
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
@@ -72,7 +69,7 @@ public sealed class OperatorProvisioningHttpTests
         builder.Services.AddSingleton<IParkingDirectory>(directory);
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
-        var fixture = new AuthTestFixture(); var operators = new Operators();
+        var fixture = new AuthTestFixture();
         TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
         builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
@@ -91,7 +88,8 @@ public sealed class OperatorProvisioningHttpTests
         async Task Login(string role)
         {
             fixture.User.Accounts.Single().RoleCode = role;
-            fixture.User.Accounts.Single().TenantId = role == "BUSINESS_OWNER" ? Guid.NewGuid() : null;
+            fixture.User.EmailVerifiedAt = fixture.Clock.Now;
+            fixture.User.Accounts.Single().TenantId = role == "BUSINESS_OWNER" ? repository.TenantId : null;
             var r = await client.PostAsJsonAsync("/api/auth/login", new { email = "driver@gmail.com", password = "Password@123" });
             Assert.Equal(HttpStatusCode.OK, r.StatusCode);
             var token = (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("accessToken").GetString();

@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.UserService.Domain.Entities;
@@ -51,7 +52,7 @@ public sealed class SessionOwnershipPersistenceTests
     }
 
     [PostgresFact]
-    public async Task OverlayRerunPreservesLegacyNullBindingAndRefreshRejectsIt()
+    public async Task VerificationPreservesLegacyNullBindingAndRefreshRejectsIt()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
         await using var db = fixture.Open();
@@ -61,7 +62,7 @@ public sealed class SessionOwnershipPersistenceTests
         db.AuthSessions.Add(legacy);
         await db.SaveChangesAsync();
         await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(
-            ServiceSchema.FeaturePath("microservices/13-own-profile-session-account.sql")));
+            ServiceSchema.FeaturePath("test/verify-user-access-schema.sql")));
         Assert.Null((await db.AuthSessions.AsNoTracking().SingleAsync(s => s.Id == legacy.Id)).AccountId);
         var store = new PostgresAuthSessionStore(db, clock);
         Assert.False(await store.IsActiveAsync(legacy.AccessTokenId, legacy.UserId, default));

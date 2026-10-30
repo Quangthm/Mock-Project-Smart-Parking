@@ -16,12 +16,12 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
 
     public async Task<UserSessionDto> CreateAsync(User user, CancellationToken cancellationToken)
     {
-        var account = AccessTokenService.SelectLoginAccount(user) ?? throw AuthException.InvalidToken();
+        var account = AccountRolePolicy.SelectLoginAccount(user) ?? throw AuthException.InvalidToken();
         var now = clock.GetUtcNow();
         var refresh = NewRefreshToken();
         var session = new AuthSession
         {
-            Id = Guid.NewGuid(), UserId = user.Id!.Value, AccessTokenId = Guid.NewGuid(),
+            Id = Guid.NewGuid(), UserId = user.Id!.Value, AccountId = account.Id!.Value, AccessTokenId = Guid.NewGuid(),
             TokenHash = HashRefreshToken(refresh), AccessExpiresAt = now.AddSeconds(SessionLifetime.AccessSeconds),
             ExpiresAt = now.AddDays(Math.Min(policy.RefreshTokenDays, 7)), CreatedAt = now, LastRefreshedAt = now
         };
@@ -37,7 +37,7 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
             throw AuthException.InvalidToken();
         var account = user.Accounts.SingleOrDefault(a => a.Id == previous.AccountId && a.Id != null
             && a.UserId == user.Id && a.Status == "ACTIVE" && a.DeletedOn == null);
-        if (account is null || AccessTokenService.CurrentRole(account) is null)
+        if (account is null || AccountRolePolicy.CurrentRole(account) is null)
             throw AuthException.InvalidToken();
         var id = Guid.NewGuid();
         var refresh = NewRefreshToken();
@@ -56,7 +56,7 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
         User = new UserInfoDto
         {
             UserId = user.Id!.Value, FullName = user.FullName, Email = user.Email ?? string.Empty,
-            Role = AccessTokenService.CurrentRole(account)!
+            Role = AccountRolePolicy.CurrentRole(account)!,
             OnboardingComplete = user.OnboardingComplete,
         }
     };

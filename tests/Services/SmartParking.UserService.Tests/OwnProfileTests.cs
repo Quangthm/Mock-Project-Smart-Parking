@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using UserService.Application.Profiles.Events;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using SmartParking.UserService.Domain.ValueObjects;
@@ -17,14 +18,25 @@ using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
-using UserService.Application.Profiles.Commands;
-using UserService.Application.Profiles.Events;
+using SmartParking.UserService.Application.Usecase.Profiles.Commands;
 using UserService.Infrastructure.Services;
 
 namespace SmartParking.UserService.Tests;
 
 public sealed class OwnProfileTests
 {
+    [Fact]
+    public void ApplicationMappingConfigurationIsValid()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddApplicationServices(new global::UserService.Application.Common.Models.JwT.AuthenticationPolicy());
+        using var provider = services.BuildServiceProvider();
+        var mapper = provider.GetRequiredService<AutoMapper.IMapper>();
+        mapper.ConfigurationProvider.AssertConfigurationIsValid();
+        Assert.True(string.IsNullOrEmpty(mapper.Map<UpdateOwnProfileCommand>(
+            new SmartParking.UserService.Application.Usecase.Profiles.Contracts.UpdateOwnProfileRequest()).FullName));
+    }
     [Fact]
     public void NameCountsUnicodeScalarsAndPreservesInteriorSpacing()
     {
@@ -142,6 +154,8 @@ public sealed class OwnProfileTests
     [InlineData("{\"fullName\":", false)]
     [InlineData("{\"fullName\":123}", false)]
     [InlineData("{\"fullName\":\"   \"}", true)]
+    [InlineData("{}", true)]
+    [InlineData("{\"fullName\":null}", true)]
     public async Task BindingAndValidatorFailuresNeverPublish(string json, bool fieldValidation)
     {
         await using var host = await ProfileHost.StartAsync();
@@ -216,7 +230,7 @@ public sealed class OwnProfileTests
             builder.WebHost.UseTestServer();
             builder.Services.AddControllers().AddApplicationPart(typeof(ProfileController).Assembly);
             builder.Services.AddApiErrorResponses();
-            builder.Services.AddApplicationServices(builder.Configuration);
+            builder.Services.AddApplicationServices(new global::UserService.Application.Common.Models.JwT.AuthenticationPolicy());
             builder.Services.AddApiCurrentActor();
             builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
             builder.Services.AddJWTAuthentication(builder.Configuration, true);

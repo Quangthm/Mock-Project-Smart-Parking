@@ -19,7 +19,9 @@ public sealed class ApiErrorWriter
         if (HttpMethods.IsHead(context.Request.Method) || response.StatusCode is 204 or 304)
             return true;
 
-        await context.Response.WriteAsJsonAsync(response.Body, cancellationToken);
+        var body = System.Text.Json.JsonSerializer.SerializeToNode(response.Body)!.AsObject();
+        body["traceId"] = RequestCorrelation.Get(context);
+        await context.Response.WriteAsJsonAsync(body, cancellationToken);
         return true;
     }
 }

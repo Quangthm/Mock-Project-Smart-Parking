@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using UserService.Application.Common.Models.JwT;
-using UserService.Application.Services;
+using UserService.Infrastructure.Services;
+using UserService.Application.Common.Interfaces.Services;
 using UserService.API.Services;
 
 namespace UserService.API.Extensions;
@@ -13,14 +14,15 @@ public static class ApiAuthenticationExtensions
     {
         var jwtOptions = configuration.GetSection("Jwt").Get<JwtOptions>() ?? new();
         services.AddSingleton(jwtOptions);
+        services.AddScoped<IAccessTokenService, AccessTokenService>();
         services.AddSingleton(_ => new JwtKeyProvider(jwtOptions, allowEphemeralKey));
         services.AddScoped<CurrentAccountBearerEvents>();
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<JwtKeyProvider>((options, keys) =>
+            .Configure<JwtKeyProvider, TimeProvider>((options, keys, clock) =>
             {
                 options.MapInboundClaims = false;
-                options.TokenValidationParameters = AccessTokenService.ValidationParameters(jwtOptions, keys);
+                options.TokenValidationParameters = AccessTokenService.ValidationParameters(jwtOptions, keys, clock);
                 options.EventsType = typeof(CurrentAccountBearerEvents);
             });
         return services;

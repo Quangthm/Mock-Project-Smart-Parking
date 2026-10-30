@@ -139,8 +139,10 @@ public sealed class AuthorizationScopeTests
         await Forbidden(() => handler.Handle(new ListUsersQuery(new()), default));
     }
 
-    [Fact]
-    public async Task ProductionCompositionResolvesProtectedHandlersWithoutOpeningExternalConnections()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProductionCompositionResolvesProtectedHandlersWithoutOpeningExternalConnections(bool accessMessaging)
     {
         using var key = RSA.Create(2048);
         await using var app = await UserHost.BuildAsync(["--environment", "Testing"], builder =>
@@ -151,6 +153,13 @@ public sealed class AuthorizationScopeTests
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:User"] = "Host=127.0.0.1;Database=composition_only;Username=composition_only",
+                ["Messaging:Enabled"] = accessMessaging.ToString(),
+                ["Services:Parking"] = "http://parking.test/",
+                ["SMARTPARK_RABBITMQ_HOST"] = "127.0.0.1",
+                ["SMARTPARK_RABBITMQ_PORT"] = "5672",
+                ["SMARTPARK_RABBITMQ_VHOST"] = "/",
+                ["SMARTPARK_RABBITMQ_USER"] = "guest",
+                ["SMARTPARK_RABBITMQ_PASSWORD"] = "guest",
                 ["Services:Key"] = new string('x', 40),
                 ["Jwt:Issuer"] = "composition-tests", ["Jwt:Audience"] = "composition-tests",
                 ["Jwt:PrivateKeyPem"] = key.ExportRSAPrivateKeyPem(),

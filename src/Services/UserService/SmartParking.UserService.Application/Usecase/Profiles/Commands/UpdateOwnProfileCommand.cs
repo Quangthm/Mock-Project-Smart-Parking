@@ -2,10 +2,10 @@ using MediatR;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Interfaces.MessageBroker;
-using UserService.Application.Profiles.Contracts;
 using UserService.Application.Profiles.Events;
+using SmartParking.UserService.Application.Usecase.Profiles.Contracts;
 
-namespace UserService.Application.Profiles.Commands;
+namespace SmartParking.UserService.Application.Usecase.Profiles.Commands;
 
 /// <summary>Changes the caller's own display name.</summary>
 public sealed record UpdateOwnProfileCommand(string FullName) : IRequest<OwnProfileResponse>;
@@ -16,11 +16,10 @@ public sealed class UpdateOwnProfileCommandHandler(IUnitOfWork unitOfWork, ICurr
 {
     public async Task<OwnProfileResponse> Handle(UpdateOwnProfileCommand request, CancellationToken cancellationToken)
     {
-        // Keep the authorization guard until both the narrow name write and durable event
-        // capture commit. The publisher is scoped to this unit of work's EF Bus Outbox.
-        await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
-        var current = await access.LockAsync(cancellationToken);
-        var user = current.User;
+        // Name-only policy accepts invalidation committed after this fresh check.
+        var current = await access.RequireAsync(cancellationToken);
+        var user = await unitOfWork.UserRepository.GetByIdForUpdateAsync(current.User.Id!.Value, cancellationToken)
+            ?? throw global::UserService.Application.Common.Models.Exceptions.AuthException.InvalidToken();
         var previousName = user.FullName;
         user.UpdateFullName(request.FullName);
         if (!StringComparer.Ordinal.Equals(previousName, user.FullName))
@@ -29,7 +28,6 @@ public sealed class UpdateOwnProfileCommandHandler(IUnitOfWork unitOfWork, ICurr
                 user.Id!.Value, clock.GetUtcNow(), actor.CorrelationId), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        await transaction.CommitAsync(cancellationToken);
         return OwnProfileResponse.From(user, current.Role);
     }
 }

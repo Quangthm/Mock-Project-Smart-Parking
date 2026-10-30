@@ -25,7 +25,7 @@ public sealed class ApiExceptionHandler(ApiExceptionMapper mapper, ApiErrorWrite
             // Do not pass the Exception object: SQL and arbitrary exception messages
             // may contain secrets/PII. Framework diagnostics for handled errors are suppressed.
             logger.LogError("Request failed with {ExceptionType}; correlation {CorrelationId}.",
-                exception.GetType().FullName, Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
+                exception.GetType().FullName, RequestCorrelation.Get(httpContext));
         }
         return true;
     }

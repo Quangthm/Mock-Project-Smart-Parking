@@ -5,6 +5,8 @@ using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
 using UserService.Infrastructure.Services;
 using UserService.Persistence.Repositories;
+using UserService.Application.Services;
+using UserService.Application.Usecase.IdentityAccess;
 
 namespace SmartParking.UserService.Tests;
 
@@ -35,7 +37,8 @@ public sealed class AuthorizationPersistenceTests
         var allowedAccount = owner.Accounts.Single(a => a.TenantId == allowedTenant);
         var ownerAccess = await TestAuthorization.ForUserAsync(db, clock, owner.Id!.Value, parking, allowedAccount.Id);
         var workflows = WorkflowTestSupport.Create(db, clock, ownerAccess);
-        var provisioning = new OperatorProvisioningService(db, new BcryptPasswordService(), clock, workflows, ownerAccess);
+        var provisioning = new CreateOperatorHandler(new IdentityAccessRepository(db), new UnitOfWork(db, new UserRepository(db)),
+            new OperatorInvitationFactory(new TestWorkflowProtector()), clock, parking, new AccessEventStore(db, clock), ownerAccess);
         var siteA = Guid.NewGuid();
         var siteB = Guid.NewGuid();
         var deniedSite = Guid.NewGuid();
@@ -43,13 +46,13 @@ public sealed class AuthorizationPersistenceTests
         parking.Sites[siteB] = allowedTenant;
         parking.Sites[deniedSite] = deniedTenant;
         CreateOperatorDto Request(params Guid[] sites) => new() { FullName = "Operator", Email = "operator@example.test",
-            Password = "Password@123", SiteIds = sites, Permissions = ["DEVICE_MANAGE"] };
+            SiteIds = sites, Permissions = ["DEVICE_MANAGE"] };
 
         // Permission from the first membership cannot authorize the second tenant.
         Assert.Equal("SITE_ACCESS_DENIED", (await Assert.ThrowsAsync<AuthException>(() =>
-            provisioning.CreateAsync(owner.Id.Value, Request(deniedSite), default))).Code);
+            provisioning.Handle(new CreateOperatorCommand(owner.Id.Value, Request(deniedSite)), default))).Code);
         Assert.Empty(await db.OperatorGrants.ToListAsync());
-        var created = await provisioning.CreateAsync(owner.Id.Value, Request(siteA, siteB), default);
+        var created = await provisioning.Handle(new CreateOperatorCommand(owner.Id.Value, Request(siteA, siteB)), default);
         var accounts = await db.Accounts.AsNoTracking().Include(a => a.Role)
             .Where(a => a.UserId == created.Id).OrderBy(a => a.Id).ToArrayAsync();
         Assert.Equal(2, accounts.Length);
@@ -57,6 +60,12 @@ public sealed class AuthorizationPersistenceTests
         Assert.Equal(new[] { siteA, siteB }.Order(), accounts.Select(a => a.SiteId!.Value).Order());
         Assert.Equal(2, await db.OperatorGrants.CountAsync());
 
+        // Provisioning now requires contact verification before activation. Scope assertions
+        // start from an activated synthetic operator, independently of the invitation tests.
+        await db.Users.Where(u => u.Id == created.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(u => u.Status, SmartParking.UserService.Domain.Enum.UserStatus.Active)
+            .SetProperty(u => u.EmailVerifiedAt, clock.Now));
+        await db.Accounts.Where(a => a.UserId == created.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, "ACTIVE"));
         var bound = accounts[0];
         var target = accounts[1];
         var operatorAccess = await TestAuthorization.ForUserAsync(db, clock, created.Id, parking, bound.Id);

@@ -1,10 +1,11 @@
 using MediatR;
+using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.UserService.Application.Usecase.Profiles.Contracts;
 using UserService.API.Common;
-using UserService.Application.Profiles.Commands;
-using UserService.Application.Profiles.Contracts;
-using UserService.Application.Profiles.Queries;
+using SmartParking.UserService.Application.Usecase.Profiles.Commands;
+using SmartParking.UserService.Application.Usecase.Profiles.Queries;
 
 namespace UserService.API.Controllers;
 
@@ -16,7 +17,7 @@ namespace UserService.API.Controllers;
 [Route("api/auth/me")]
 [Authorize]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class ProfileController(IMediator mediator) : ControllerBase
+public sealed class ProfileController(IMediator mediator, IMapper mapper) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken cancellationToken) =>
@@ -25,6 +26,6 @@ public sealed class ProfileController(IMediator mediator) : ControllerBase
     [HttpPatch]
     public async Task<IActionResult> Update([FromBody] UpdateOwnProfileRequest body, CancellationToken cancellationToken) =>
         ApiResponseFactory.Success(await mediator.Send(
-            new UpdateOwnProfileCommand(body.FullName ?? string.Empty), cancellationToken)).ToActionResult();
+            mapper.Map<UpdateOwnProfileCommand>(body), cancellationToken)).ToActionResult();
 
 }

@@ -18,11 +18,13 @@ internal static class TestAuthorization
     // and unused feature services are substituted; an unexpected feature call fails loudly.
     public static void AddServices(IServiceCollection services, AuthTestFixture fixture)
     {
+        services.TryAddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        services.TryAddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        services.TryAddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         services.TryAddSingleton<IAuthorizationScopeStore>(new MemoryScopes(fixture));
         services.TryAddSingleton<IParkingDirectory, TestParkingDirectory>();
         services.TryAddSingleton<IUserManagementService>(UnsupportedFeature.Create<IUserManagementService>());
         services.TryAddSingleton<IOwnerRegistrationService>(UnsupportedFeature.Create<IOwnerRegistrationService>());
-        services.TryAddSingleton<IOperatorProvisioningService>(UnsupportedFeature.Create<IOperatorProvisioningService>());
         services.TryAddSingleton<IAccountWorkflows>(UnsupportedFeature.Create<IAccountWorkflows>());
     }
 

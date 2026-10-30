@@ -1,4 +1,4 @@
-# Run in Windows PowerShell 5.1. All writes go to a scratch checkout; CLI/secrets are doubles.
+﻿# Run in Windows PowerShell 5.1. All writes go to a scratch checkout; CLI/secrets are doubles.
 param()
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path $PSScriptRoot -Parent
@@ -69,6 +69,13 @@ function Expect-Failure($action, $pattern) {
 $local = New-Fixture 'local'
 Invoke-Fixture $local
 $localBytes = [IO.File]::ReadAllBytes((Join-Path $local '.env'))
+$localSettings = & (Join-Path $local 'scripts/load-env.ps1') -EnvPath (Join-Path $local '.env') -NoExport
+foreach ($pair in @{ Username='USER'; Password='PASSWORD'; VirtualHost='VHOST'; Port='PORT' }.GetEnumerator()) {
+    Assert-Setup ($global:setupTestSecretMaps['User']["SMARTPARK_RABBITMQ_$($pair.Value)"] -ceq $localSettings["SMARTPARK_RABBITMQ_$($pair.Value)"]) 'Shared broker setting was not mapped to host configuration.'
+}
+Assert-Setup ($global:setupTestSecretMaps['User']['SMARTPARK_RABBITMQ_HOST'] -eq '127.0.0.1') 'Host broker address must be loopback.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Messaging:OutboxDeliveryEnabled'] -eq 'false') 'Delivery enabled without explicit configuration.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Cors:AllowedOrigins'] -eq $localSettings['SMARTPARK_USER_CORS_ORIGINS']) 'CORS origins were not mapped.'
 $writes = $global:setupTestSecretWrites
 Invoke-Fixture $local
 Assert-Setup ([Convert]::ToBase64String($localBytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $local '.env')))) 'Rerun changed .env.'
