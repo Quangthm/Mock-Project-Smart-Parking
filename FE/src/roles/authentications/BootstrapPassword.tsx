@@ -1,9 +1,14 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 import { request } from "../../lib/authApi"
-import { PageHeader } from "../../components/ui/PageHeader"
+import { BrandLogo, BrandWordmark } from "../../components/brand/BrandLogo"
+import { useApp } from "../../context/AppContext"
+import "./bootstrap-password.css"
 
 export function BootstrapPassword() {
+  const navigate = useNavigate()
+  const { setView } = useApp()
   const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [complete, setComplete] = useState(false)
@@ -31,31 +36,48 @@ export function BootstrapPassword() {
   }
 
   return (
-    <main className="card" style={{ maxWidth: 440, margin: "4rem auto" }}>
-      <PageHeader title="Activate your Operator account" variant="compact" description="Verify your email by choosing your own password. You can sign in after activation." />
-      <form onSubmit={submit}>
-        <label className="label" htmlFor="bootstrap-password">
-          New password (8–15 characters, uppercase, lowercase, digit and special
-          character)
-        </label>
-        <input
-          className="input"
-          id="bootstrap-password"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={8}
-          maxLength={15}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy || complete}
-        />
-        <button className="btn-primary" disabled={busy || complete}>
-          Verify email and activate
-        </button>
-      </form>
-      <p role="status">{message}</p>
-      <a href="/">Sign in</a>
+    <main className="operator-activation-page">
+      <section className="card operator-activation-card" aria-labelledby="operator-activation-title">
+        <div className="operator-activation-brand">
+          <BrandLogo height={42} />
+          <BrandWordmark height={22} />
+        </div>
+        <div className="operator-activation-heading">
+          <span className="operator-activation-eyebrow">Operator invitation</span>
+          <h1 id="operator-activation-title">Activate your account</h1>
+          <p>Choose a password to verify your email and start using your Operator workspace.</p>
+        </div>
+        <ol className="operator-activation-steps" aria-label="Activation steps">
+          <li><span>01</span> Create password</li>
+          <li><span>02</span> Activate account</li>
+          <li><span>03</span> Sign in</li>
+        </ol>
+        <form onSubmit={submit} className="operator-activation-form">
+          <label className="label" htmlFor="bootstrap-password">New password</label>
+          <input
+            className="input"
+            id="bootstrap-password"
+            type="password"
+            autoComplete="new-password"
+            aria-describedby="operator-password-hint"
+            required
+            minLength={8}
+            maxLength={15}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={busy || complete}
+          />
+          <p id="operator-password-hint" className="operator-activation-hint">8–15 characters with uppercase and lowercase letters, a number, and a special character.</p>
+          {message && <p role="status" className={`operator-activation-message${complete ? " is-complete" : ""}`}>{message}</p>}
+          <div className="operator-activation-actions">
+            <button type="submit" className="btn-primary" disabled={busy || complete}>
+              {busy ? "Activating…" : complete ? "Account activated" : "Verify email and activate"}
+            </button>
+            <button type="button" className="btn-outline" onClick={() => { setView("sign-in"); navigate("/") }}>Sign in</button>
+          </div>
+        </form>
+        <p className="operator-activation-footnote">Your invitation is linked to this email. You can sign in after activation.</p>
+      </section>
     </main>
   )
 }

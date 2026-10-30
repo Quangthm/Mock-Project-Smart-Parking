@@ -1,4 +1,4 @@
-import { useState, useId } from "react"
+import { useEffect, useState, useId } from "react"
 
 import { useApp } from "../../../context/AppContext"
 import { parkingApi } from "../../../lib/parkingApi"
@@ -22,6 +22,9 @@ import {
 } from "../../../lib/3d/parking3DConfig"
 import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
 import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
+import { loadContractDraft, saveContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
+import { PartnerContractDialog } from "../../../components/modals/PartnerContractDialog"
+import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 
 type OnboardStep = 1 | 2 | 3 | 4 | 5
 
@@ -107,6 +110,8 @@ export function OnboardingWizard({
   registration?: {
     id: string
     email: string
+    ownerName?: string
+    businessName?: string
     setupToken?: string
     lotType: LotType
     onComplete: (application: PendingOwnerRegistration) => void
@@ -145,6 +150,9 @@ export function OnboardingWizard({
   })
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
+  const [contractDraft, setContractDraft] = useState<ContractDraftRecord | null>(() => registration ? loadContractDraft(registration.id) : null)
+  const [showContract, setShowContract] = useState(false)
+  const [showModelPreview, setShowModelPreview] = useState(false)
 
   const [completionError, setCompletionError] = useState("")
 
@@ -166,6 +174,10 @@ export function OnboardingWizard({
   const activeModelUrl = customModelUrl || activeModelDef.path
 
   const activeModelFileName = customModelFileName || activeModelDef.fileName
+  const setupFingerprint = JSON.stringify({ lotType, lotConfig, devices, pricing, customModelFileName })
+  const activeContractDraft = contractDraft?.setupFingerprint === setupFingerprint ? contractDraft : null
+
+  useEffect(() => () => { if (customModelUrl) URL.revokeObjectURL(customModelUrl) }, [customModelUrl])
   const modelCapacity = useModelCarCapacity(activeModelUrl)
 
   function handleLotTypeSelect(type: LotType) {
@@ -183,6 +195,11 @@ export function OnboardingWizard({
     const file = e.target.files?.[0]
 
     if (!file) return
+    if (file.size > 30 * 1024 * 1024) {
+      setModelUploadError("Choose a GLB file smaller than 30 MB.")
+      e.target.value = ""
+      return
+    }
 
     const validation = validateModelUpload(file.name, lotType)
 
@@ -221,6 +238,10 @@ export function OnboardingWizard({
     }
 
     setCompletionError("")
+    if (registration && !activeContractDraft?.ownerAcknowledgedAt) {
+      setCompletionError("Read and acknowledge the partnership draft before submitting your parking lot.")
+      return
+    }
 
     setIsCompleting(true)
 
@@ -259,6 +280,7 @@ export function OnboardingWizard({
       }
 
       if (registration) {
+        if (customModelFile) await saveOwnerModel(registration.id, customModelFile)
         const setup: OwnerLotSetup = {
           name,
           address,
@@ -272,7 +294,8 @@ export function OnboardingWizard({
               label: DEVICE_OPTIONS.find((device) => device.type === type)?.label ?? type,
               enabled: true,
             })),
-          modelFileName: activeModelFileName,
+          // Registration accepts only a canonical file name; the Owner GLB is kept for browser preview.
+          modelFileName: activeModelDef.fileName,
           ...numericPricing,
           policyAccepted: systemPolicyAccepted,
         }
@@ -606,7 +629,7 @@ export function OnboardingWizard({
                   </div>
                 </div>
 
-                {!registration && <label style={{ cursor: "pointer" }}>
+                <label className="owner-model-import" style={{ cursor: "pointer" }}>
                   <span
                     className="btn-outline"
                     style={{
@@ -617,16 +640,18 @@ export function OnboardingWizard({
                       gap: 4,
                     }}
                   >
-                    <UntitledIcon name="file" size={14} /> Upload .glb File
+                    <UntitledIcon name="file" size={14} /> Import your 3D model (.glb)
                   </span>
                   <input
                     type="file"
                     accept=".glb"
-                    style={{ display: "none" }}
+                    className="sr-only"
                     onChange={handleModelFileUpload}
                   />
-                </label>}
+                </label>
               </div>
+
+              {registration && customModelFileName && <p className="text-xs text-[var(--muted)]">This model is stored in this browser for preview. The registration service still records the standard model for this lot type.</p>}
 
               {/* Strict file rule notification */}
               <div
@@ -760,8 +785,8 @@ export function OnboardingWizard({
                     >
                       Digital Twin Synchronization:
                     </span>
-                    <span style={{ color: "#16a34a", fontWeight: 600 }}>
-                      ● Authoritative backend binding
+                    <span style={{ color: "var(--primary)", fontWeight: 600 }}>
+                      {customModelFile ? "Owner model · local preview" : "System model"}
                     </span>
                   </div>
                 </div>
@@ -775,10 +800,13 @@ export function OnboardingWizard({
                     paddingTop: "0.5rem",
                   }}
                 >
-                  The 3D view will show live space occupancy when operators open
-                  the parking site. You can finish setting up the facility now.
+                  {customModelFile ? "This imported model is previewed in this browser. A backend upload is needed before other users can see it." : "The system model can display live space occupancy when operators open the parking site."}
                 </p>
               </div>
+              <button type="button" className="btn-outline mt-4" onClick={() => setShowModelPreview(value => !value)} aria-expanded={showModelPreview}>
+                {showModelPreview ? "Hide 3D preview" : "Preview selected 3D model"}
+              </button>
+              {showModelPreview && <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--border)]"><Parking3DViewer modelUrl={activeModelUrl} lotType={lotType} interactive={false} showLegend={false} height={300} /></div>}
             </div>
 
             <button className="btn-primary" onClick={() => setStep(2)}>
@@ -1108,22 +1136,12 @@ export function OnboardingWizard({
               >
                 SmartParking Partner Agreement
               </div>
-              <div
-                style={{
-                  maxHeight: "120px",
-                  overflowY: "auto",
-                  fontSize: "0.78rem",
-                  color: "var(--muted)",
-                  lineHeight: 1.7,
-                  marginBottom: "0.75rem",
-                }}
-              >
-                By joining SmartParking, you agree to: (1) Revenue sharing at
-                15% platform fee per booking; (2) Maintaining lot quality
-                standards; (3) Providing accurate availability data; (4)
-                Honoring the refund policy; (5) Allowing SmartParking to display
-                your lot information on the platform.
-              </div>
+              <ol className="owner-partner-terms">
+                <li>Keep parking availability, prices, opening hours, and site details accurate.</li>
+                <li>Operate the lot safely and help resolve booking and on-site complaints.</li>
+                <li>Follow the agreed cancellation and refund terms. Commercial rates belong in a separate signed schedule.</li>
+                <li>Allow SmartParking to display approved lot details and a 3D preview.</li>
+              </ol>
               <label
                 style={{
                   display: "flex",
@@ -1223,7 +1241,7 @@ export function OnboardingWizard({
               <Row label="Lot Type" value={LOT_TYPE_INFO[lotType].label} />
               <Row
                 label="3D Digital Twin"
-                value={`${activeModelFileName} (Integrated)`}
+                value={`${activeModelFileName} (${customModelFile ? "Owner import · local preview" : "System model"})`}
               />
               <Row label="Name" value={lotConfig.name} />
               <Row label="Address" value={lotConfig.address} />
@@ -1271,6 +1289,14 @@ export function OnboardingWizard({
                 value={`${pricing.gracePeriodMinutes || "15"} minutes`}
               />
             </div>
+            {registration && <div className="owner-contract-step">
+              <div>
+                <strong>Partnership contract draft</strong>
+                <p>Read the agreement and add your draft signature before submitting your parking lot for review.</p>
+                <span>{activeContractDraft?.ownerAcknowledgedAt ? `Draft signed by ${activeContractDraft.ownerName}` : "Owner draft signature required"}</span>
+              </div>
+              <button type="button" className="btn-outline" onClick={() => setShowContract(true)}>{activeContractDraft?.ownerAcknowledgedAt ? "View contract" : "Read and sign draft"}</button>
+            </div>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button className="btn-outline" onClick={() => setStep(4)}>
                 Back
@@ -1278,7 +1304,7 @@ export function OnboardingWizard({
               <button
                 className="btn-accent"
                 onClick={handleComplete}
-                disabled={isCompleting}
+                disabled={isCompleting || (!!registration && !activeContractDraft?.ownerAcknowledgedAt)}
                 style={{
                   flex: 1,
                   justifyContent: "center",
@@ -1315,6 +1341,29 @@ export function OnboardingWizard({
           </div>
         )}
       </div>
+      {registration && showContract && <PartnerContractDialog
+        applicationId={registration.id}
+        businessName={registration.businessName || "Owner business"}
+        lotName={lotConfig.name || "Parking lot"}
+        record={activeContractDraft}
+        signer="owner"
+        signerName={registration.ownerName || user?.name || ""}
+        onClose={() => setShowContract(false)}
+        onSign={(name) => {
+          const next: ContractDraftRecord = {
+            ...activeContractDraft,
+            ownerName: name,
+            ownerEmail: registration.email,
+            businessName: registration.businessName || "Owner business",
+            lotName: lotConfig.name || "Parking lot",
+            ownerAcknowledgedAt: new Date().toISOString(),
+            modelFileName: customModelFileName || undefined,
+            setupFingerprint,
+          }
+          saveContractDraft(registration.id, next)
+          setContractDraft(next)
+          setShowContract(false)
+        }} />}
     </div>
   )
 }
@@ -1348,6 +1397,8 @@ export function BusinessLotSetupPage() {
       registration={{
         id: registration.id!,
         email: registration.email,
+        ownerName: registration.ownerName,
+        businessName: registration.businessName,
         setupToken: registration.setupToken,
         lotType: registration.lotType!,
         onComplete: (application) => {

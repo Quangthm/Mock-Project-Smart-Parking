@@ -112,17 +112,19 @@
 .auth-panel .auth-alt-actions > button:disabled { opacity: .62; cursor: not-allowed; }
 .auth-email-icon { font-size: 1.2rem; line-height: 1; }
 .auth-google-icon { display: block; flex: none; width: 19px; height: 19px; }
+.auth-mfa-option-button { align-self: center; width: min(100%, 280px); min-height: 44px; border-radius: 999px; }
 
 /* Dashboard hierarchy follows the work: figures, trend, then the sites or events. */
 .management-title-row { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-gap-3); }
 .management-site-filter { display: flex; align-items: center; gap: var(--ui-gap-2); color: var(--fg); font-size: .875rem; font-weight: 650; }
 .management-site-filter .input { min-width: 210px; min-height: 44px; border-radius: 999px; }
-.dashboard-theme .management-dashboard-grid { grid-template-columns: minmax(0, 1.8fr) minmax(260px, .95fr); align-items: start; gap: var(--ui-gap-4); }
+.dashboard-theme .management-dashboard-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: var(--ui-gap-4); }
 .dashboard-theme .management-dashboard-grid .owner-kpi-strip { grid-column: 1 / -1; grid-row: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1; grid-row: 2; min-height: 354px; padding: var(--ui-gap-4); }
+.dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1 / span 2; grid-row: 2; min-height: 354px; padding: var(--ui-gap-4); }
+.dashboard-theme .management-dashboard-grid .management-side-panel { grid-column: 3; grid-row: 2; }
 .dashboard-theme .management-dashboard-grid .owner-kpi { min-height: 124px; justify-content: space-between; }
 .dashboard-theme .management-dashboard-grid .owner-kpi p:last-child { overflow-wrap: anywhere; font-size: clamp(1.25rem, 1.9vw, 1.75rem); }
-.management-side-panel { min-width: 0; min-height: 354px; padding: var(--ui-gap-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); }
+.management-side-panel { min-width: 0; min-height: 354px; height: 100%; padding: var(--ui-gap-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); }
 .management-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ui-gap-3); margin-bottom: var(--ui-gap-4); }
 .management-panel-heading h2 { margin: 0; color: var(--fg); font-size: 1.125rem; font-weight: 700; }
 .management-panel-heading p { margin: 5px 0 0; color: var(--muted); font-size: .875rem; }
@@ -141,6 +143,68 @@
 .dashboard-theme .management-dashboard .admin-kpi > div:nth-child(2) { font-size: clamp(1.25rem, 1.8vw, 1.75rem) !important; overflow-wrap: anywhere; }
 .dashboard-theme .management-dashboard .admin-kpi > div:last-child,
 .dashboard-theme .management-dashboard :is(.admin-overview-charts, .admin-overview-details) p { font-size: .875rem !important; line-height: 1.5; }
+
+/* Keep form actions visibly separated in every workspace. */
+.settings-form-actions,
+.booking-flow-header-actions,
+.find-parking-details-actions,
+.find-parking-detail-actions,
+.parking-history-pagination > div { gap: 12px; }
+.security-recovery-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; max-width: 1180px; margin: 12px auto !important; padding: 14px 18px; border-radius: 18px !important; }
+.security-recovery-notice > span { flex: 1 1 320px; min-width: 0; line-height: 1.5; }
+.security-recovery-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.security-recovery-actions > button { min-height: 44px; border-radius: 999px; }
+.security-recovery-notice :is(button):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.security-recovery-notice.is-transient { animation: security-recovery-slide 5s linear both; }
+@keyframes security-recovery-slide {
+  0% { opacity: 0; transform: translateX(28px); }
+  7% { opacity: 1; transform: translateX(0); }
+  88% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-28px); }
+}
+.dashboard-theme .find-parking-search-tools { gap: 10px; }
+@media (min-width: 1025px) {
+  .security-recovery-notice { max-width: calc(100% - 124px); margin-left: 100px !important; margin-right: 24px !important; }
+}
+@media (max-width: 1024px) {
+  .security-recovery-notice { max-width: calc(100% - 24px); margin-left: 12px !important; margin-right: 12px !important; }
+}
+.security-action-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.security-action-row > button { min-height: 44px; }
+.security-setup-notice { margin: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--raised); color: var(--fg); line-height: 1.5; }
+.security-setup-notice.is-success { border-color: var(--available); background: var(--status-available-bg); color: var(--badge-success-fg); }
+.owner-partner-terms{margin:0 0 16px;padding-left:22px;display:grid;gap:8px;color:var(--fg);font-size:.9rem;line-height:1.55;list-style:decimal}
+.signup-terms-heading{margin:22px 0 8px;font-size:1rem;line-height:1.4;color:var(--fg)}
+.signup-terms-heading:first-child{margin-top:0;text-align:center;font-size:1.1rem}
+.signup-terms-paragraph{margin:0 0 10px;color:var(--fg)}
+.signup-terms-bullet{margin:0 0 9px;padding-left:18px;position:relative;color:var(--fg)}
+.signup-terms-bullet::before{content:"•";position:absolute;left:3px;color:var(--primary)}
+.owner-contract-step{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;padding:18px;margin:0 0 20px;border:1px solid var(--border);border-radius:18px;background:var(--raised)}
+.owner-contract-step strong{font-size:1rem;color:var(--fg)}
+.owner-contract-step p{margin:5px 0;color:var(--muted);font-size:.88rem;line-height:1.5}
+.owner-contract-step span{font-size:.8rem;color:var(--primary)}
+.owner-contract-step button{min-height:44px;border-radius:999px}
+.application-document-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0 18px}
+.application-document-actions button{min-height:44px;border-radius:999px}
+.application-document-actions span{font-size:.8rem;color:var(--muted)}
+.owner-model-import:focus-within>span{outline:3px solid var(--primary);outline-offset:3px}
+.application-model-import{display:inline-flex;margin:4px 0 16px;cursor:pointer}
+.application-model-import>span{min-height:44px;display:inline-flex;align-items:center;border-radius:999px}
+.security-setup-notice.is-transient { animation: security-notice-slide 5s ease-in-out both; }
+@keyframes security-notice-slide {
+  0% { opacity: 0; transform: translateX(24px); }
+  8%, 84% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-24px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .security-recovery-notice.is-transient { animation: none; }
+  .security-setup-notice.is-transient { animation: none; }
+}
+.owner-recovery-card, .owner-recovery-form { display: grid; gap: 16px; }
+.owner-recovery-card { padding: 24px; }
+.owner-recovery-card > p, .owner-recovery-form > p { margin: 0; }
+.owner-recovery-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.owner-recovery-actions > button { min-height: 44px; }
 .dashboard-theme .management-dashboard .recharts-text { font-size: .75rem; }
 .dashboard-theme .management-dashboard :is(.admin-overview-charts, .admin-overview-details) { gap: var(--ui-gap-4) !important; }
 .dashboard-theme .management-dashboard :is(.admin-overview-charts, .admin-overview-details) > .card { padding: var(--ui-gap-4) !important; }
@@ -179,6 +243,7 @@
   .dashboard-theme .management-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
   .dashboard-theme .management-dashboard-grid .owner-kpi-strip { grid-column: 1; }
   .dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1; grid-row: 2; }
+  .dashboard-theme .management-dashboard-grid .management-side-panel { grid-column: 1; grid-row: 3; }
   .management-side-panel { min-height: 0; }
   .dashboard-theme .management-dashboard .admin-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .parking-hero-3d { height: 480px; min-height: 0; margin-top: 0; }
@@ -581,4 +646,15 @@
   .dashboard-theme .find-parking-reopen { padding-inline: 6px; }
   .dashboard-theme .find-parking-map-style-label { display: none; }
   .dashboard-theme .find-parking-map-style-value { font-size: 14px; }
+}
+
+/* Keep the smallest phone layouts readable without page-level horizontal scrolling. */
+@media (max-width: 420px) {
+  .landing-page .strata-hero-copy h1 > * { white-space: normal; }
+  .site-footer-columns { grid-template-columns: minmax(0, 1fr) !important; }
+  .site-footer-brand, .site-footer-contact { grid-column: auto; }
+  .auth-panel .auth-alt-actions { grid-template-columns: minmax(0, 1fr); }
+  .auth-panel .auth-alt-actions > button { justify-content: center; white-space: normal; }
+  .dashboard-theme .driver-bookings-page .current-bookings-tabs { flex-wrap: wrap; }
+  .dashboard-theme .driver-bookings-page .current-bookings-tabs button { flex: 1 1 auto; justify-content: center; }
 }

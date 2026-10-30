@@ -392,7 +392,7 @@ select:not([multiple]):not([size]) {
   padding: 0.85rem 1rem;
   border: 1px solid var(--border);
   border-left: 4px solid var(--primary);
-  border-radius: 0.75rem;
+  border-radius: 18px;
   background: var(--bg);
   color: var(--fg);
   box-shadow: 0 12px 36px #0b162833;

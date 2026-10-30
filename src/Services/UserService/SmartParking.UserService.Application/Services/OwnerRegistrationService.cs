@@ -167,7 +167,9 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         }
         else account.Status = "INACTIVE";
         await db.SaveChangesAsync(ct);
-        var deliveryId=await workflows.QueueAsync(user.Id!.Value,adminId,"OWNER_DECISION",new("email",user.Email!,"SmartPark application decision",$"Your application is {application.Status}."),ct);
+        var deliveryId=await workflows.QueueAsync(user.Id!.Value,adminId,"OWNER_DECISION",
+            new("email",user.Email!,body.Status == "approved" ? "Your SmartParking parking site is approved" : "Your SmartParking owner application update",$"Your application is {application.Status}.",
+                EmailTemplate: body.Status == "approved" ? WorkflowEmailTemplates.OwnerApproved : WorkflowEmailTemplates.OwnerRejected),ct);
         await tx.CommitAsync(ct);
         return Result(application) with { ContactVerified = true,DeliveryId=deliveryId,DeliveryStatus="pending" };
     }

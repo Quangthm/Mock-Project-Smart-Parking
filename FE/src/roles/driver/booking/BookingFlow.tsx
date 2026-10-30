@@ -10,10 +10,10 @@ import type {
   Booking,
   ParkingLot,
   ParkingSlot,
-  PaymentMethod,
 } from "../../../lib/types"
 
-import { PAYMENT_OPTIONS } from "../data/paymentOptions"
+import { qrLogo } from "../data/paymentOptions"
+import { PaymentCheckout } from "../payments/PaymentCheckout"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { BookingDateTimePicker } from "./BookingDateTimePicker"
@@ -27,7 +27,8 @@ import {
   type RegisteredVehicle,
 } from "../../../lib/vehiclesApi"
 
-type Step = "slot" | "details" | "payment" | "qr"
+type Step = "slot" | "details" | "payment" | "qr" | "cash"
+type BookingPaymentMethod = "qr" | "cash"
 
 type VehicleForm = {
   type: "motorcycle" | "car"
@@ -102,8 +103,8 @@ export function BookingFlow({
     resumeBooking?.endTime.slice(0, 16) ?? "",
   )
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
-    resumeBooking?.paymentMethod ?? null,
+  const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod | null>(
+    resumeBooking?.paymentMethod === "qr" ? "qr" : null,
   )
 
   const bookingId = resumeBooking?.id ?? ""
@@ -247,8 +248,10 @@ export function BookingFlow({
     }
   }
 
-  function holdSlotAndContinue() {
-    setMessage("Booking is unavailable until the Driver booking service is connected.")
+  function continueToPaymentStep() {
+    if (!selectedSlot || !selectedVehicle || !validTimeWindow) return
+    setMessage("")
+    setStep("payment")
   }
 
   function cancelHold() {
@@ -260,15 +263,7 @@ export function BookingFlow({
   function continueToPayment() {
     if (!paymentMethod) return
 
-    if (paymentMethod === "qr") {
-      setStep("qr")
-
-      return
-    }
-
-    setMessage(
-      `Live ${PAYMENT_OPTIONS.find((option) => option.id === paymentMethod)?.name} checkout is not configured. A payment gateway endpoint is required to continue.`,
-    )
+    setStep(paymentMethod)
   }
 
   return (
@@ -310,6 +305,8 @@ export function BookingFlow({
             slot: 0,
             details: 1,
             payment: 2,
+            qr: 2,
+            cash: 2,
           }
           const currentIndex = STEP_INDEX_MAP[step] ?? 0
 
@@ -823,7 +820,7 @@ export function BookingFlow({
                 !selectedVehicle ||
                 !validTimeWindow
               }
-              onClick={holdSlotAndContinue}
+              onClick={continueToPaymentStep}
               style={{ flex: 1, justifyContent: "center" }}
             >
               Continue
@@ -850,9 +847,9 @@ export function BookingFlow({
               fontSize: "0.82rem",
             }}
           >
-            Booking {bookingId || "pending"} is saved with Payment Pending.
-            Choose a card, QR code, or another payment provider. You can return
-            to Booking to continue later.
+            Choose how you would like to pay. Your slot and booking are not
+            reserved yet; the booking service must create an order before
+            payment can be completed.
           </p>
           <div
             style={{
@@ -871,7 +868,7 @@ export function BookingFlow({
                 fontSize: "0.82rem",
               }}
             >
-              Total due:{" "}
+              Estimated total:{" "}
               <strong style={{ color: "var(--fg)" }}>
                 {(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")} VND
               </strong>
@@ -901,7 +898,10 @@ export function BookingFlow({
               marginBottom: "1rem",
             }}
           >
-            {PAYMENT_OPTIONS.map((option) => (
+            {([
+              { id: "qr", name: "Pay by QR", description: "payOS VietQR", icon: <img src={qrLogo} alt="" /> },
+              { id: "cash", name: "Pay by cash", description: "At the parking site", icon: <UntitledIcon name="banknote" size={28} /> },
+            ] as const).map((option) => (
               <button
                 key={option.id}
                 type="button"
@@ -941,14 +941,10 @@ export function BookingFlow({
                   transition: "all 0.15s ease",
                 }}
               >
-                <img
-                  src={option.logo}
-                  alt={option.name}
-                  style={{ height: 28, maxWidth: 64, objectFit: "contain" }}
-                />
+                <span className="booking-payment-icon" aria-hidden="true">{option.icon}</span>
                 <span
                   style={{
-                    fontSize: "0.75rem",
+                    fontSize: "0.95rem",
                     fontWeight: 600,
                     color: "var(--fg)",
                     textAlign: "center",
@@ -956,6 +952,7 @@ export function BookingFlow({
                 >
                   {option.name}
                 </span>
+                <span className="booking-payment-description">{option.description}</span>
               </button>
             ))}
           </div>
@@ -975,48 +972,29 @@ export function BookingFlow({
               onClick={continueToPayment}
               style={{ flex: 1, justifyContent: "center" }}
             >
-              Continue
+              Continue with {paymentMethod === "cash" ? "cash" : "QR"}
             </button>
           </div>
         </section>
       )}
 
       {step === "qr" && (
-        <section className="card booking-stage-right" style={{ textAlign: "center" }}>
-          <h3
-            style={{
-              margin: "0 0 0.5rem",
-              fontFamily: "Be Vietnam Pro",
-              color: "var(--fg)",
-            }}
-          >
-            QR payment
-          </h3>
-          <p
-            style={{
-              margin: "0 0 1rem",
-              color: "var(--muted)",
-              fontSize: "0.82rem",
-            }}
-          >
-            A real payment QR must be generated by the configured payment
-            gateway. No gateway is connected yet, so this booking has not been
-            charged.
-          </p>
-          <div
-            style={{ display: "flex", justifyContent: "center", gap: "0.6rem" }}
-          >
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={() => setStep("payment")}
-            >
-              Back to payment methods
-            </button>
-            <button type="button" className="btn-outline" onClick={cancelHold}>
-              Cancel hold
-            </button>
-          </div>
+        <div className="booking-stage-right booking-payment-checkout">
+          <PaymentCheckout showMethodPicker={false} />
+          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
+            Back to payment methods
+          </button>
+        </div>
+      )}
+
+      {step === "cash" && (
+        <section className="card booking-stage-right booking-cash-stage">
+          <span className="booking-payment-icon" aria-hidden="true"><UntitledIcon name="banknote" size={28} /></span>
+          <h3>Pay by cash</h3>
+          <p>Cash is collected at the parking site. This choice has not reserved a slot or recorded a payment. Booking confirmation will be available when the booking service is connected.</p>
+          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
+            Back to payment methods
+          </button>
         </section>
       )}
 

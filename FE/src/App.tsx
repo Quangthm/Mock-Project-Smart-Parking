@@ -35,6 +35,7 @@ import { SignUp } from "./roles/authentications/Sign Up/SignUp"
 import { BusinessLotSetupPage } from "./roles/owner/parking-lots/CreateParkingLotForOwner"
 
 import { BootstrapPassword } from "./roles/authentications/BootstrapPassword"
+import { PaymentResultPage } from "./roles/driver/payments/PaymentResultPage"
 
 import { DriverDashboard } from "./roles/driver/dashboard/DriverDashboard"
 
@@ -80,6 +81,15 @@ function AppContent() {
     return () => { window.history.scrollRestoration = previous }
   }, [])
 
+  useEffect(() => {
+    const isWorkspacePath = ["/dashboard/finance", "/dashboard/operation", "/pos"].includes(location.pathname)
+    if (!authReady || (location.pathname !== "/" && !isWorkspacePath) || window.history.state?.smartParkingView) return
+    window.history.replaceState({
+      ...window.history.state,
+      smartParkingView: view,
+    }, "", window.location.href)
+  }, [authReady, location.pathname, view])
+
   const isOperatorPath = [
     "/dashboard/finance",
     "/dashboard/operation",
@@ -104,6 +114,7 @@ function AppContent() {
   )
 
   if (location.pathname === "/change-password") return <BootstrapPassword />
+  if (location.pathname === "/payment/success" || location.pathname === "/payment/fail") return <PaymentResultPage />
 
   const usesDashboardNavbar = !isEmailOtpPath && (
     ["driver", "owner", "operator", "admin"].includes(view) || isOperatorPath

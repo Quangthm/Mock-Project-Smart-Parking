@@ -1,0 +1,285 @@
+.account-switcher-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  min-height: 100dvh;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg) 96%, var(--primary));
+  color: var(--fg);
+}
+
+.popover-item-switch > svg,
+.settings-nav-item > svg { transition: transform 220ms cubic-bezier(.2, .8, .2, 1); }
+.popover-item-switch:is(:hover, :focus-visible) > svg,
+.settings-nav-item:is(:hover, :focus-visible) > svg { transform: scale(1.08); }
+
+.account-switcher-frame {
+  min-height: 100dvh;
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  padding: clamp(16px, 3vw, 38px);
+  display: flex;
+  flex-direction: column;
+}
+
+.account-switcher-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.account-switcher-close {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.account-switcher-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 0 64px;
+  text-align: center;
+}
+
+.account-switcher-eyebrow {
+  margin: 0 0 12px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.account-switcher-content h2 {
+  margin: 0;
+  font-family: "Be Vietnam Pro", sans-serif;
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: -.035em;
+  line-height: 1.18;
+}
+
+.account-switcher-intro {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: clamp(14px, 1.4vw, 16px);
+}
+
+.account-switcher-grid {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: clamp(18px, 3vw, 34px);
+  margin: clamp(30px, 5vw, 52px) 0 34px;
+}
+
+.account-switcher-profile {
+  width: 176px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.account-switcher-avatar {
+  position: relative;
+  width: clamp(108px, 14vw, 140px);
+  height: clamp(108px, 14vw, 140px);
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+  border: 3px solid var(--border);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 20%, var(--card));
+  color: var(--primary);
+  font-size: clamp(44px, 7vw, 62px);
+  font-weight: 650;
+  line-height: 1;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.account-switcher-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-switcher-profile:hover .account-switcher-avatar,
+.account-switcher-profile:focus-visible .account-switcher-avatar {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.account-switcher-add-avatar {
+  border-style: dashed;
+  background: var(--card);
+  color: var(--muted);
+}
+.account-switcher-add:is(:hover, :focus-visible) .account-switcher-add-avatar { color: var(--primary); }
+
+.account-switcher-role-icon {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.account-switcher-profile strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.account-switcher-role { color: var(--muted); font-size: 14px; }
+.account-switcher-current { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-size: 12px; font-weight: 700; }
+
+.account-switcher-options {
+  width: min(100%, 580px);
+  margin: 0 0 30px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--card);
+  text-align: left;
+}
+.account-switcher-options h3 { margin: 0 0 14px; font-size: 16px; }
+.account-switcher-option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 10px; }
+.account-switcher-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+.account-switcher-option > svg:last-child { margin-left: auto; color: var(--muted); }
+.account-switcher-option:is(:hover, :focus-visible),
+.account-switcher-option[aria-pressed="true"] { border-color: var(--primary); background: var(--active); }
+.account-switcher-option-icon { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 50%; background: var(--active); color: var(--primary); }
+.account-switcher-preview { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
+.account-switcher-preview strong { display: block; font-size: 16px; }
+.account-switcher-preview p { margin: 7px 0; color: var(--muted); font-size: 14px; }
+.account-switcher-preview > span { display: block; color: var(--primary); font-size: 13px; font-weight: 650; line-height: 1.5; }
+.account-switcher-eligibility-note { margin: 14px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+.account-switcher-footer {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.account-switcher-signout {
+  min-width: 172px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.account-switcher-signout:hover:not(:disabled),
+.account-switcher-close:hover {
+  border-color: var(--primary);
+  background: var(--active);
+}
+
+.account-switcher-signout:disabled { opacity: .55; cursor: wait; }
+.account-switcher-error { max-width: 420px; margin: 0; color: var(--occupied); font-size: 14px; }
+
+.account-switcher-overlay :is(button, a):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.settings-role-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 76px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--primary);
+}
+
+.settings-role-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--active);
+}
+
+.settings-role-row > span:nth-child(2) {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  color: var(--fg);
+}
+
+.settings-role-row strong { font-size: 15px; }
+.settings-role-row small { color: var(--muted); font-size: 13px; }
+.settings-open-switcher { margin-top: 16px; min-height: 44px; border-radius: 999px; }
+
+@media (max-width: 480px) {
+  .account-switcher-content { padding-bottom: 42px; }
+  .account-switcher-grid { gap: 8px; margin-top: 32px; }
+  .account-switcher-profile { width: min(46vw, 160px); }
+  .account-switcher-avatar { width: min(30vw, 118px); height: min(30vw, 118px); }
+  .account-switcher-options { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover-item-switch > svg,
+  .settings-nav-item > svg { transition: none; transform: none !important; }
+  .account-switcher-overlay *, .account-switcher-overlay *::before, .account-switcher-overlay *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}

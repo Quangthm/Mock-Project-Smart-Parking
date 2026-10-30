@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react"
+import { useApp } from "../../../context/AppContext"
+import { PartnerContractDialog } from "../../../components/modals/PartnerContractDialog"
+import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
+import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
+import { loadContractDraft, saveContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
 
 import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
@@ -8,7 +14,16 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { request } from "../../../lib/authApi"
 
 export function Applications() {
+  const { user } = useApp()
   const [apps, setApps] = useState<OwnerApplicationRecord[]>([])
+  const [contractDrafts, setContractDrafts] = useState<Record<string, ContractDraftRecord | null>>({})
+  const [contractApp, setContractApp] = useState<OwnerApplicationRecord | null>(null)
+  const [modelApp, setModelApp] = useState<OwnerApplicationRecord | null>(null)
+  const [modelUrl, setModelUrl] = useState<string | null>(null)
+  const [modelLoading, setModelLoading] = useState(false)
+  const [modelError, setModelError] = useState("")
+  const [reviewFileUrl, setReviewFileUrl] = useState<string | null>(null)
+  const [reviewFileName, setReviewFileName] = useState("")
 
   const [notes, setNotes] = useState<Record<string, string>>({})
 
@@ -30,7 +45,10 @@ export function Applications() {
     ownerApi
       .list()
       .then((data) => {
-        if (active) setApps(data)
+        if (active) {
+          setApps(data)
+          setContractDrafts(Object.fromEntries(data.map(app => [app.id, loadContractDraft(app.id)])))
+        }
       })
 
       .catch((e) => {
@@ -46,6 +64,23 @@ export function Applications() {
       active = false
     }
   }, [reload])
+
+  useEffect(() => {
+    if (!modelApp) { setReviewFileUrl(null); setReviewFileName(""); return }
+    let active = true
+    setModelUrl(null)
+    setModelError("")
+    setReviewFileUrl(null)
+    setReviewFileName("")
+    setModelLoading(true)
+    loadOwnerModelUrl(modelApp.id)
+      .then(url => { if (active) setModelUrl(url) })
+      .catch(() => { if (active) setModelError("The Owner model is unavailable in this browser.") })
+      .finally(() => { if (active) setModelLoading(false) })
+    return () => { active = false }
+  }, [modelApp])
+
+  useEffect(() => () => { if (reviewFileUrl) URL.revokeObjectURL(reviewFileUrl) }, [reviewFileUrl])
 
   async function review(
     app: OwnerApplicationRecord,
@@ -184,6 +219,13 @@ export function Applications() {
                     </div>
                   </div>
                 </div>
+                {app.lotSetup && <div className="application-document-actions">
+                  <button type="button" className="btn-outline" onClick={() => setContractApp(app)}>Review contract</button>
+                  <button type="button" className="btn-outline" onClick={() => setModelApp(app)}>View 3D model</button>
+                  {contractDrafts[app.id]?.adminAcknowledgedAt && <span>Admin acknowledged</span>}
+                  {contractDrafts[app.id]?.ownerAcknowledgedAt && !contractDrafts[app.id]?.adminAcknowledgedAt && <span>Sign the draft before approving this application.</span>}
+                  {!contractDrafts[app.id] && <span>Contract draft is not available in this browser.</span>}
+                </div>}
                 <div className="application-review-form"
                   style={{
                     display: "flex",
@@ -209,7 +251,7 @@ export function Applications() {
                   </div>
                   <div className="application-review-actions">
                   <button
-                    disabled={!!busy || loading || !app.contactVerified || !app.lotSetupComplete || !app.lotSetup}
+                    disabled={!!busy || loading || !app.contactVerified || !app.lotSetupComplete || !app.lotSetup || (!!contractDrafts[app.id] && !contractDrafts[app.id]?.adminAcknowledgedAt)}
                     onClick={() => review(app, "approved")}
                     className="application-approve"
                     style={{
@@ -291,6 +333,10 @@ export function Applications() {
                 <div style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
                   {app.ownerName} · {app.lotType}
                 </div>
+                {app.lotSetup && <div className="application-document-actions">
+                  <button type="button" className="btn-outline" onClick={() => setContractApp(app)}>View contract</button>
+                  <button type="button" className="btn-outline" onClick={() => setModelApp(app)}>View 3D model</button>
+                </div>}
                 {app.deliveryStatus && (
                   <p>Notification: {app.deliveryStatus}</p>
                 )}
@@ -341,6 +387,43 @@ export function Applications() {
           ))}
         </div>
       </section>
+      {contractApp && <PartnerContractDialog
+        applicationId={contractApp.id}
+        businessName={contractApp.businessName}
+        lotName={contractApp.lotSetup?.name || "Parking lot"}
+        record={contractDrafts[contractApp.id] ?? null}
+        signer="admin"
+        signerName={user?.name || ""}
+        onClose={() => setContractApp(null)}
+        onSign={(name) => {
+          const existing = contractDrafts[contractApp.id]
+          if (!existing?.ownerAcknowledgedAt) return
+          const next = { ...existing, ownerEmail: contractApp.email, businessName: contractApp.businessName,
+            lotName: contractApp.lotSetup?.name || "Parking lot", adminName: name, adminAcknowledgedAt: new Date().toISOString() }
+          saveContractDraft(contractApp.id, next)
+          setContractDrafts(current => ({ ...current, [contractApp.id]: next }))
+          setContractApp(null)
+        }} />}
+      {modelApp && <div className="partner-contract-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModelApp(null) }}>
+        <section className="partner-contract-dialog" role="dialog" aria-modal="true" aria-label="Parking lot 3D model">
+          <header className="partner-contract-header"><div><p className="partner-contract-eyebrow">Owner application</p><h2>{modelApp.lotSetup?.name || "Parking lot"} · 3D model</h2></div><button type="button" className="partner-contract-close" aria-label="Close 3D model" onClick={() => setModelApp(null)}>×</button></header>
+          <div className="partner-contract-content">
+            <p>{contractDrafts[modelApp.id]?.modelFileName ? `Owner import: ${contractDrafts[modelApp.id]?.modelFileName}` : `System model: ${modelApp.lotSetup?.modelFileName || "Not specified"}`}</p>
+            {modelError && <p role="alert">{modelError}</p>}
+            <label className="owner-model-import application-model-import"><span className="btn-outline">Open GLB for local review</span><input className="sr-only" type="file" accept=".glb,model/gltf-binary" onChange={event => {
+              const file = event.target.files?.[0]
+              if (file && file.name.toLowerCase().endsWith(".glb") && file.size <= 30 * 1024 * 1024) {
+                setReviewFileUrl(URL.createObjectURL(file))
+                setReviewFileName(file.name)
+                setModelError("")
+              } else if (file) setModelError("Choose a GLB file smaller than 30 MB.")
+              event.target.value = ""
+            }} /></label>
+            {reviewFileName && <p>Previewing local file: {reviewFileName}</p>}
+            {modelLoading ? <p role="status">Loading 3D model…</p> : contractDrafts[modelApp.id]?.modelFileName && !modelUrl && !reviewFileUrl ? <p>The imported model is stored only in the Owner's browser. Ask the Owner for the GLB file to review it on this device.</p> : <Parking3DViewer modelUrl={reviewFileUrl || modelUrl || ALLOWED_PARKING_MODELS[modelApp.lotType].path} lotType={modelApp.lotType} interactive={false} showLegend={false} showControls={true} height={340} />}
+          </div>
+        </section>
+      </div>}
     </div>
   )
 }

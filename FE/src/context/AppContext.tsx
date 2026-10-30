@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   type ReactNode,
 } from "react"
 
@@ -63,13 +64,44 @@ function initialView(): View {
   } catch {
     /* Login remains available through the navigation. */
   }
+  const savedView = window.history.state?.smartParkingView
+  if (isView(savedView) && !["driver", "owner", "operator", "admin"].includes(savedView)) return savedView
   return "landing"
+}
+
+const views: ReadonlySet<string> = new Set<View>([
+  "landing", "pricing", "support", "faq", "sign-in", "sign-up",
+  "parking-lot-setup", "pending-approval", "business", "about",
+  "affiliates", "careers", "driver", "owner", "operator", "admin",
+  "terms", "privacy", "payment-refund",
+])
+
+function isView(value: unknown): value is View {
+  return typeof value === "string" && views.has(value)
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
 
-  const [view, setView] = useState<View>(initialView)
+  const [view, setViewState] = useState<View>(initialView)
+  const viewRef = useRef(view)
+  const userRef = useRef(user)
+  const historyReady = useRef(false)
+
+  const setView = useCallback((next: View) => {
+    if (viewRef.current === next) return
+    if (historyReady.current && window.location.pathname === "/") {
+      const current = window.history.state ?? {}
+      window.history.pushState({
+        ...current,
+        idx: typeof current.idx === "number" ? current.idx + 1 : 1,
+        smartParkingView: next,
+        smartParkingPage: undefined,
+      }, "", window.location.href)
+    }
+    viewRef.current = next
+    setViewState(next)
+  }, [])
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
@@ -92,6 +124,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logoutPending = useRef(false)
 
   const authRevision = useRef(0)
+
+  useEffect(() => {
+    if (!authReady) return
+    if (window.location.pathname === "/") {
+      window.history.replaceState({
+        ...window.history.state,
+        smartParkingView: viewRef.current,
+      }, "", window.location.href)
+    }
+    historyReady.current = true
+  }, [authReady])
+
+  useEffect(() => {
+    const restoreView = (event: PopStateEvent) => {
+      if (!["/", "/dashboard/finance", "/dashboard/operation", "/pos"].includes(window.location.pathname) || !isView(event.state?.smartParkingView)) return
+      const requested = event.state.smartParkingView as View
+      const isProtected = ["driver", "owner", "operator", "admin"].includes(requested)
+      const next = isProtected && userRef.current?.role !== requested ? "landing" : requested
+      if (next !== requested) {
+        window.history.replaceState({ ...event.state, smartParkingView: next }, "", window.location.href)
+      }
+      viewRef.current = next
+      setViewState(next)
+    }
+    window.addEventListener("popstate", restoreView)
+    return () => window.removeEventListener("popstate", restoreView)
+  }, [])
 
   useEffect(() => {
     store.init()
@@ -131,6 +190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       authApi.clearSession()
 
       setUserState(null)
+      userRef.current = null
 
       store.setCurrentUserId(null)
 
@@ -154,6 +214,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           store.setCurrentUserId(account.id)
 
           setUserState(account)
+          userRef.current = account
 
           setView(account.role)
         }
@@ -198,6 +259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authRevision.current++
 
     setUserState(u)
+    userRef.current = u
 
     setAuthError("")
 

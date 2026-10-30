@@ -31,9 +31,11 @@ public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory c
         {
             if(string.IsNullOrWhiteSpace(config["Otp:Smtp:Host"]))throw new InvalidOperationException("Configure SMTP delivery.");
             using var smtp=new SmtpClient(config["Otp:Smtp:Host"],config.GetValue("Otp:Smtp:Port",587)){EnableSsl=true,Credentials=new NetworkCredential(config["Otp:Smtp:Username"],config["Otp:Smtp:Password"])};
-            using var mail=message.OtpCode is null
-                ? new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body)
-                : OtpEmailTemplate.Create(config["Otp:Smtp:From"]!,message);
+            using var mail=message.OtpCode is not null
+                ? OtpEmailTemplate.Create(config["Otp:Smtp:From"]!,message)
+                : WorkflowNotificationEmailTemplate.CanRender(message)
+                    ? WorkflowNotificationEmailTemplate.Create(config["Otp:Smtp:From"]!,message)
+                    : new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body);
             mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());
             try { await smtp.SendMailAsync(mail,ct); }
             catch (SmtpException error)

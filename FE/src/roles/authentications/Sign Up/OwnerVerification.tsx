@@ -93,40 +93,44 @@ export function OwnerVerification({
   }
 
   return (
-    <form className="card text-center" onSubmit={verify}>
+    <form className="card flex flex-col gap-5 p-6 text-center sm:p-8" onSubmit={verify}>
       <PageHeader title="Verify email" variant="compact" align="center" description="Your parking lot setup is saved. Enter the code sent to your email to submit your application for Admin review." />
-      <p style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{application.email}</p>
-      <label className="label" htmlFor="owner-code">
-        Verification code
-      </label>
-      <input
-        id="owner-code"
-        className="input text-center"
-        required
-        pattern="[0-9]{6}"
-        maxLength={6}
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        value={code}
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        disabled={busy}
-      />
+      <p className="m-0 break-words font-semibold">{application.email}</p>
+      <div className="flex flex-col gap-2 text-left">
+        <label className="label" htmlFor="owner-code">
+          Verification code
+        </label>
+        <input
+          id="owner-code"
+          className="input w-full text-center"
+          required
+          pattern="[0-9]{6}"
+          maxLength={6}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          disabled={busy}
+        />
+      </div>
       {expired && <p role="status">Your code has expired. Request a new code below.</p>}
-      <p role="status">{message}</p>
-      <button className="btn-primary" disabled={busy || expired || code.length !== 6}>
-        {busy ? "Please wait…" : "Verify"}
-      </button>
-      <button
-        type="button"
-        className="btn-outline"
-        disabled={busy || resendSeconds > 0}
-        onClick={() => void resend()}
-      >
-        {resendSeconds ? `Resend in ${resendSeconds}s` : "Resend code"}
-      </button>
-      <button type="button" className="btn-outline" disabled={busy} onClick={onBack}>
-        Back to Sign In
-      </button>
+      {message && <p role="status">{message}</p>}
+      <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+        <button className="btn-primary min-h-11 flex-1 whitespace-nowrap" disabled={busy || expired || code.length !== 6}>
+          {busy ? "Please wait…" : "Verify"}
+        </button>
+        <button
+          type="button"
+          className="btn-outline min-h-11 flex-1 whitespace-nowrap"
+          disabled={busy || resendSeconds > 0}
+          onClick={() => void resend()}
+        >
+          {resendSeconds ? `Resend in ${resendSeconds}s` : "Resend code"}
+        </button>
+        <button type="button" className="btn-outline min-h-11 flex-1 whitespace-nowrap" disabled={busy} onClick={onBack}>
+          Back to Sign In
+        </button>
+      </div>
     </form>
   )
 }

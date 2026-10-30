@@ -1,4 +1,5 @@
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.Services;
 using System.Security.Cryptography;
 using System.Text;
 using SmartParking.UserService.Domain.Entities;
@@ -308,8 +309,9 @@ public sealed partial class AccountWorkflowService
     {
         if (!string.IsNullOrWhiteSpace(user.Email) && user.EmailVerifiedAt is not null)
             await QueueAsync(user.Id!.Value, user.Id.Value, "MFA_SECURITY_CHANGE",
-                new("email", user.Email, "SmartPark security notification",
-                    $"{action} at {clock.GetUtcNow():u}. If you did not make this change, contact support."), ct);
+                new("email", user.Email, action == "Two-factor authentication enabled" ? "Two-factor authentication is on · SmartParking" : "SmartParking account security update",
+                    $"{action} at {clock.GetUtcNow():u}. If you did not make this change, contact support.",
+                    EmailTemplate: WorkflowEmailTemplates.MfaSecurityChange), ct);
     }
 
     public static string Totp(string secret, long step)

@@ -424,7 +424,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                 onMethodChange={setUseRecoveryCode}
                 disabled={submitting}
               />
-              <button type="button" className="text-button" disabled={submitting}
+              <button type="button" className="btn-outline auth-mfa-option-button" disabled={submitting}
                 onClick={() => {
                   setMfaChallenge(null)
                   setMfaValue("")
@@ -490,7 +490,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                 Request another code
               </button>
               <button
-                className="text-button"
+                className="btn-outline auth-mfa-option-button"
                 type="button"
                 disabled={submitting}
                 onClick={() => {
@@ -875,6 +875,8 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "0.75rem",
                     marginTop: "0.5rem",
                   }}
                 >

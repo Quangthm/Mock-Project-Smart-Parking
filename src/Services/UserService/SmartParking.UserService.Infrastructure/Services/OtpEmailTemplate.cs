@@ -55,9 +55,9 @@ public static class OtpEmailTemplate
                 <tr><td align="center" style="padding:32px 16px;">
                   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #dce5ed;border-radius:12px;">
                     <tr><td align="center" style="padding:32px 24px 8px;">
-                      <img src="cid:{LogoContentId}" width="112" height="112" alt="SmartParking logo" style="display:block;width:112px;height:112px;border:0;">
+                      <img src="cid:{LogoContentId}" width="56" height="64" alt="SmartParking logo" style="display:block;width:56px;height:64px;border:0;">
                     </td></tr>
-                    <tr><td align="center" style="padding:0 24px 24px;font-size:17px;font-weight:700;letter-spacing:.2px;color:#07558d;">SmartParking</td></tr>
+                    <tr><td align="center" style="padding:0 24px 24px;font-size:17px;font-weight:700;letter-spacing:.2px;"><span style="color:#1f3450;">Smart</span><span style="color:#1bb782;">Parking</span></td></tr>
                     <tr><td style="padding:0 40px;">
                       <h1 style="margin:0 0 12px;font-size:24px;line-height:1.3;font-weight:700;color:#17324d;">Your verification code</h1>
                       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#496175;">Enter this code to continue with SmartParking.</p>

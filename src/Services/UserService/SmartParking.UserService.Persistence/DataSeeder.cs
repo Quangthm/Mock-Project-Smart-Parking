@@ -87,16 +87,21 @@ public class DataSeeder
         }
         if (!await _dbContext.Roles.AnyAsync(r => r.Code == roleCode))
             _dbContext.Roles.Add(new Role { Code = roleCode, Name = roleName });
-        _dbContext.Users.Add(new User {
-            Id = Guid.NewGuid(), Email = email, FullName = fullName,
-            PasswordHash = _passwords.Hash(password), Status = UserStatus.Active,
-            CreatedOn = DateTimeOffset.UtcNow, ModifiedOn = DateTimeOffset.UtcNow,
+        _dbContext.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            FullName = fullName,
+            PasswordHash = _passwords.Hash(password),
+            Status = UserStatus.Active,
+            CreatedOn = DateTimeOffset.UtcNow,
+            ModifiedOn = DateTimeOffset.UtcNow,
             Accounts = [new Account { Id = Guid.NewGuid(), Status = "ACTIVE", CreatedOn = DateTimeOffset.UtcNow,
                 AccountRoles = [new AccountRole { RoleCode = roleCode }] }]
         });
         await _dbContext.SaveChangesAsync();
     }
-
     public async Task SeedAdminAsync(string email, string password)
         => await SeedRoleUserAsync(email, password, "Development Administrator", "ADMIN", "Administrator");
+
 }

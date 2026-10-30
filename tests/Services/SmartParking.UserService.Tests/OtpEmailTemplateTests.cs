@@ -40,12 +40,13 @@ public sealed class OtpEmailTemplateTests
             Assert.Contains("012345", content);
             Assert.Contains("valid for 5 minutes", content);
             Assert.Contains("cid:smartparking-logo", content);
+            Assert.Contains("color:#1f3450;\">Smart</span><span style=\"color:#1bb782;\">Parking", content);
         }
 
         var logo = Assert.Single(html.LinkedResources);
         Assert.Equal(MediaTypeNames.Image.Png, logo.ContentType.MediaType);
         Assert.Equal("smartparking-logo", logo.ContentId);
-        Assert.Equal("2B33D1097630CD662E21CFC4EBF647E261ECFC8DF63B6EAD308E3A50526614EE",
+        Assert.Equal("7011F89B2A5CA20E205A38898D4FAE438D5D4D8CC6D4925098D1E90628B02834",
             Convert.ToHexString(SHA256.HashData(logo.ContentStream)));
     }
 

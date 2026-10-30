@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import { useApp } from "../../context/AppContext"
@@ -23,9 +23,57 @@ export function DashboardSidebar({ groups, children }: { groups: DashboardNavGro
   const [hint, setHint] = useState<NavHint | null>(null)
   const [toolbar, setToolbar] = useState<Element | null>(null)
   const activePage = groups.flatMap((group) => group.items).find((item) => item.active)?.id
+  const groupsRef = useRef(groups)
+  const activePageRef = useRef(activePage)
+  const initialHistoryPage = useRef<string | null>(typeof window !== "undefined" && typeof window.history.state?.smartParkingPage === "string" ? window.history.state.smartParkingPage : null)
+  groupsRef.current = groups
+  activePageRef.current = activePage
 
   useEffect(() => { setToolbar(document.querySelector(".dashboard-topbar")) }, [])
   useLayoutEffect(() => { scrollPageToTop() }, [activePage])
+
+  useEffect(() => {
+    const restorePage = (event: PopStateEvent) => {
+      if (event.state?.smartParkingView !== user?.role) return
+      const page = event.state?.smartParkingPage
+      if (typeof page !== "string" || page === activePageRef.current) return
+      groupsRef.current.flatMap((group) => group.items).find((item) => item.id === page)?.onClick()
+    }
+    window.addEventListener("popstate", restorePage)
+    return () => window.removeEventListener("popstate", restorePage)
+  }, [user?.role])
+
+  useEffect(() => {
+    if (!activePage || !user?.role) return
+    const current = window.history.state ?? {}
+    if (!current.smartParkingView) {
+      window.history.replaceState({ ...current, smartParkingView: user.role, smartParkingPage: activePage }, "", window.location.href)
+      return
+    }
+    if (current.smartParkingView !== user.role) return
+    if (current.smartParkingPage === activePage) {
+      initialHistoryPage.current = null
+      return
+    }
+    const previousPage = current.smartParkingPage
+    if (initialHistoryPage.current === previousPage) {
+      const savedItem = groupsRef.current.flatMap((group) => group.items).find((item) => item.id === previousPage)
+      if (savedItem) {
+        savedItem.onClick()
+        return
+      }
+      initialHistoryPage.current = null
+    }
+    if (!previousPage) {
+      window.history.replaceState({ ...current, smartParkingPage: activePage }, "", window.location.href)
+      return
+    }
+    window.history.pushState({
+      ...current,
+      idx: typeof current.idx === "number" ? current.idx + 1 : 1,
+      smartParkingPage: activePage,
+    }, "", window.location.href)
+  }, [activePage, user?.role])
 
   function showHint(event: MouseEvent<HTMLButtonElement> | FocusEvent<HTMLButtonElement>, label: string) {
     const rect = event.currentTarget.getBoundingClientRect()
