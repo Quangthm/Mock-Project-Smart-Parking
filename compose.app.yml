@@ -5,8 +5,8 @@ x-backend-env: &backend-env
   ASPNETCORE_URLS: http://+:8080
   Services__Key: ${SMARTPARK_SERVICE_KEY:?Set SMARTPARK_SERVICE_KEY}
   Services__User: http://user-service:8080/
-  Services__Parking: http://parking-service:8080/
-  Services__Reservation: http://reservation-service:8080/
+  Services__Facility: http://facility-service:8080/
+  Services__Operation: http://operation-service:8080/
 
 x-healthcheck: &healthcheck
   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
@@ -53,16 +53,16 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
-  parking-service:
+  facility-service:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
         SERVICE: FacilityService
-    image: smartpark/parking-service:local
+    image: smartpark/facility-service:local
     environment:
       <<: *backend-env
-      ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      ConnectionStrings__Facility: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5045:8080"
     networks:
@@ -70,16 +70,16 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
-  reservation-service:
+  operation-service:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
         SERVICE: OperationService
-    image: smartpark/reservation-service:local
+    image: smartpark/operation-service:local
     environment:
       <<: *backend-env
-      ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      ConnectionStrings__Operation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5055:8080"
     networks:
@@ -97,8 +97,8 @@ services:
     environment:
       <<: *backend-env
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
-      # PaymentService reads Services:ReservationService:BaseUrl (not Services:Reservation).
-      Services__ReservationService__BaseUrl: http://reservation-service:8080/
+      # PaymentService reads Services:OperationService:BaseUrl.
+      Services__OperationService__BaseUrl: http://operation-service:8080/
       # Empty PayOS credentials keep the local sandbox emulation (fake checkout link/QR).
       PayOs__ClientId: ${SMARTPARK_PAYOS_CLIENT_ID:-}
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}

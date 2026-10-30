@@ -13,8 +13,8 @@ public static class PersistenceDependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("Reservation")
-            ?? throw new InvalidOperationException("Configure ConnectionStrings:Reservation.");
+        var connectionString = configuration.GetConnectionString("Operation")
+            ?? throw new InvalidOperationException("Configure ConnectionStrings:Operation.");
 
         services.AddDbContext<ReservationDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IReservationRepository, ReservationRepository>();

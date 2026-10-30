@@ -25,16 +25,16 @@ services:
       POSTGRES_DB: smartpark_facility
       POSTGRES_USER: smartpark_facility
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
-    ports: ["127.0.0.1:${SMARTPARK_DB_PARKING_PORT:-5442}:5432"]
+    ports: ["127.0.0.1:${SMARTPARK_DB_FACILITY_PORT:-5442}:5432"]
     volumes:
       - facility-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
-      - ./scripts/database/microservices/03a-parking-structure-ops-service-db.sql:/docker-entrypoint-initdb.d/02-base.sql:ro
-      - ./scripts/database/overlay/parking-tenants.sql:/docker-entrypoint-initdb.d/03-overlay-tenants.sql:ro
-      - ./scripts/database/overlay/parking-structure-synchronizations.sql:/docker-entrypoint-initdb.d/04-overlay-synchronizations.sql:ro
-      - ./scripts/database/overlay/parking-operator-tables.sql:/docker-entrypoint-initdb.d/05-overlay-operator.sql:ro
-      - ./scripts/database/overlay/parking-slot-constraints.sql:/docker-entrypoint-initdb.d/06-overlay-slot-constraints.sql:ro
-      - ./scripts/database/05.16-Parking-Owner-Onboarding.sql:/docker-entrypoint-initdb.d/07-owner-onboarding.sql:ro
+      - ./scripts/database/microservices/03a-facility-structure-ops-service-db.sql:/docker-entrypoint-initdb.d/02-base.sql:ro
+      - ./scripts/database/overlay/facility-tenants.sql:/docker-entrypoint-initdb.d/03-overlay-tenants.sql:ro
+      - ./scripts/database/overlay/facility-structure-synchronizations.sql:/docker-entrypoint-initdb.d/04-overlay-synchronizations.sql:ro
+      - ./scripts/database/overlay/facility-operator-tables.sql:/docker-entrypoint-initdb.d/05-overlay-operator.sql:ro
+      - ./scripts/database/overlay/facility-slot-constraints.sql:/docker-entrypoint-initdb.d/06-overlay-slot-constraints.sql:ro
+      - ./scripts/database/05.16-Facility-Owner-Onboarding.sql:/docker-entrypoint-initdb.d/07-owner-onboarding.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_facility -d smartpark_facility"]
       interval: 5s
@@ -47,14 +47,14 @@ services:
       POSTGRES_DB: smartpark_operations
       POSTGRES_USER: smartpark_operations
       POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}
-    ports: ["127.0.0.1:${SMARTPARK_DB_RESERVATION_PORT:-5443}:5432"]
+    ports: ["127.0.0.1:${SMARTPARK_DB_OPERATION_PORT:-5443}:5432"]
     volumes:
       - operations-schema-data:/var/lib/postgresql/data
-      - ./scripts/database/microservices/03b-reservation-operations-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
-      - ./scripts/database/overlay/reservation-site-capacity-pools.sql:/docker-entrypoint-initdb.d/02-overlay-capacity-pools.sql:ro
-      - ./scripts/database/overlay/reservation-structure-safety.sql:/docker-entrypoint-initdb.d/03-overlay-structure-safety.sql:ro
-      - ./scripts/database/overlay/reservation-structure-receipts.sql:/docker-entrypoint-initdb.d/04-overlay-receipts.sql:ro
-      - ./scripts/database/overlay/reservation-confirmation-time.sql:/docker-entrypoint-initdb.d/05-overlay-confirmation.sql:ro
+      - ./scripts/database/microservices/03b-operation-operations-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/overlay/operation-site-capacity-pools.sql:/docker-entrypoint-initdb.d/02-overlay-capacity-pools.sql:ro
+      - ./scripts/database/overlay/operation-structure-safety.sql:/docker-entrypoint-initdb.d/03-overlay-structure-safety.sql:ro
+      - ./scripts/database/overlay/operation-structure-receipts.sql:/docker-entrypoint-initdb.d/04-overlay-receipts.sql:ro
+      - ./scripts/database/overlay/operation-confirmation-time.sql:/docker-entrypoint-initdb.d/05-overlay-confirmation.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_operations -d smartpark_operations"]
       interval: 5s

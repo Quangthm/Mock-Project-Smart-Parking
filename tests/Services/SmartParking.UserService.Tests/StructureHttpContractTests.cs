@@ -40,7 +40,7 @@ public sealed class StructureHttpContractTests
         {
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
-            builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
+            builder.Configuration["ConnectionStrings:Operation"] = "Host=localhost;Database=unused;Username=unused";
             builder.Services.AddSingleton<IStructureSafetyStore>(store);
         });
         await host.StartAsync();
@@ -156,7 +156,7 @@ public sealed class StructureHttpContractTests
         {
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
-            builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
+            builder.Configuration["ConnectionStrings:Operation"] = "Host=localhost;Database=unused;Username=unused";
             builder.Services.AddSingleton<IStructureSafetyStore>(store);
         });
     }

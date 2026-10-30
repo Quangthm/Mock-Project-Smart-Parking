@@ -1,5 +1,5 @@
-param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service,
+﻿param(
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Operation','Payment','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -46,13 +46,13 @@ if ($config.ExitCode -ne 0) { throw "compose.app.yml is invalid.`n$($config.Text
 
 $map = @{
     User        = 'user-service'
-    Parking     = 'parking-service'
-    Operation   = 'reservation-service'
+    Facility    = 'facility-service'
+    Operation   = 'operation-service'
     Payment     = 'payment-service'
     Frontend    = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','parking-service','reservation-service','payment-service','frontend')
+    @('user-service','facility-service','operation-service','payment-service','frontend')
 } else {
     @($map[$Service])
 }

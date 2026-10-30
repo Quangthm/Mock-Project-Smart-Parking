@@ -11,13 +11,13 @@ public static class InfrastructureDependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        var reservationServiceBaseUrl = configuration["Services:ReservationService:BaseUrl"] ?? "http://localhost:5002/";
+        var operationServiceBaseUrl = configuration["Services:OperationService:BaseUrl"] ?? "http://localhost:5055/";
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
 
         services.AddHttpClient<IReservationPricingSnapshotPort, ReservationSnapshotHttpAdapter>(client =>
         {
-            client.BaseAddress = new Uri(reservationServiceBaseUrl);
+            client.BaseAddress = new Uri(operationServiceBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(3);
         });
 

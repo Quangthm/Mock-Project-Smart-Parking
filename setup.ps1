@@ -454,9 +454,9 @@ function Invoke-AiCameraSetup {
 # Read existing secrets without printing their values or invoking `list`.
 $existingByService = @{}
 $projectByService = @{}
-foreach ($service in @('User','Parking','Reservation','Payment')) {
+foreach ($service in @('User','Facility','Operation','Payment')) {
     # Keep existing connection/configuration keys while resolving the renamed project.
-    $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
+    $projectService = switch ($service) { 'Facility' { 'Facility' } 'Operation' { 'Operation' } default { $service } }
     $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
     $projectByService[$service] = $projectDir
     [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${projectService}Service.API.csproj") -Raw
@@ -496,7 +496,7 @@ if ($CredentialMode -eq 'Team') {
     foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { throw "Team file must configure $name." }
     }
-    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL')) {
+    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_FACILITY_URL','SMARTPARK_SERVICE_OPERATION_URL','SMARTPARK_SERVICE_PAYMENT_URL')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { continue }
         if ($settings[$name] -and $settings[$name] -notlike 'replace-with-*' -and $settings[$name] -cne $team[$name]) {
             throw "Team/local conflict for $name. Existing configuration was preserved; reconcile it explicitly before retrying."
@@ -525,7 +525,7 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
         } else {
             # Reuse an existing local PostgreSQL password when configuring an old volume.
             $passwords = @()
-            foreach ($service in @('User','Parking','Reservation','Payment')) {
+            foreach ($service in @('User','Facility','Operation','Payment')) {
                 $connection = $existingByService[$service]["ConnectionStrings:$service"]
                 $extracted = Get-SecretConnectionStringPassword $connection
                 if ($extracted) { $passwords += $extracted }
@@ -580,12 +580,12 @@ if ($settings['SMARTPARK_SERVICE_KEY'].Length -lt 32) { throw 'SMARTPARK_SERVICE
 foreach ($name in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
     Assert-DevelopmentPassword $name $settings[$name]
 }
-foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
+foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_FACILITY_PORT','SMARTPARK_DB_OPERATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
     $port = 0
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
 if ($settings['VITE_MAPTILER_API_KEY'] -match "[\r\n']") { throw 'Configure MapTiler key directly in FE/.env.' }
-foreach ($service in @('USER','PARKING','RESERVATION','PAYMENT')) {
+foreach ($service in @('USER','FACILITY','OPERATION','PAYMENT')) {
     $name = "SMARTPARK_SERVICE_${service}_URL"
     if ($settings[$name]) {
         $uri = $null
@@ -617,7 +617,7 @@ if ($settings['SMARTPARK_SERVICE_KEY'].Length -lt 32) { throw 'SMARTPARK_SERVICE
 foreach ($name in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
     Assert-DevelopmentPassword $name $settings[$name]
 }
-foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
+foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_FACILITY_PORT','SMARTPARK_DB_OPERATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
     $port = 0
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
@@ -639,10 +639,10 @@ if (!$SkipDatabase) {
     & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile up -d --wait
     if ($LASTEXITCODE -ne 0) { throw 'Database startup failed. Check Docker Desktop, ports and SQL initialization logs. Existing volumes were preserved.' }
     $migrationIndex = 0
-    foreach ($service in @('User','Parking','Reservation','Payment','Notification','Iot')) {
+    foreach ($service in @('User','Facility','Operation','Payment','Notification','Iot')) {
         $migrationIndex++
         Write-Host "    - [$migrationIndex/6] Probing authentication and applying migrations for $service..." -ForegroundColor DarkGray
-        $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$service]
+        $container = @{ User='user-db'; Facility='facility-db'; Operation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$service]
         # Container env is used internally; credentials never become command arguments.
         # Send shell code through stdin: PowerShell 5.1 strips native argument quotes.
         # The trailing comment also consumes its Windows CRLF line terminator.
@@ -659,19 +659,19 @@ if (!$SkipDatabase) {
 }
 
 Write-Host '[5/7] Configuring user-secrets for User, Facility, Operation, Payment...' -ForegroundColor Cyan
-if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment')) {
-    $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
+if (!$SkipUserSecrets) { foreach ($service in @('User','Facility','Operation','Payment')) {
+    $database = @{ User='smartpark_user'; Facility='smartpark_facility'; Operation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
     $password = $settings['SMARTPARK_DEV_PASSWORD'].Replace('"','""')
     $desired = [ordered]@{
         'Services:Key' = $settings['SMARTPARK_SERVICE_KEY']
         'Services:User' = 'http://localhost:5035/'
-        'Services:Parking' = 'http://localhost:5045/'
-        'Services:Reservation' = 'http://localhost:5055/'
+        'Services:Facility' = 'http://localhost:5045/'
+        'Services:Operation' = 'http://localhost:5055/'
         'Services:Payment' = 'http://localhost:5065/'
     }
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
-    foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
+    foreach ($remoteService in @('User','Facility','Operation','Payment')) {
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
         if ($url) { $desired["Services:$remoteService"] = $url }
     }
@@ -693,10 +693,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         if ($settings['SMARTPARK_JWT_PRIVATE_KEY_PEM']) { $desired['Jwt:PrivateKeyPem'] = $settings['SMARTPARK_JWT_PRIVATE_KEY_PEM'] }
     }
     if ($service -eq 'Payment') {
-        # PaymentService resolves the reservation API through Services:ReservationService:BaseUrl.
-        $reservationUrl = $settings['SMARTPARK_SERVICE_RESERVATION_URL']
-        if (!$reservationUrl) { $reservationUrl = 'http://localhost:5055/' }
-        $desired['Services:ReservationService:BaseUrl'] = $reservationUrl
+        # PaymentService resolves the operation API through Services:OperationService:BaseUrl.
+        $operationUrl = $settings['SMARTPARK_SERVICE_OPERATION_URL']
+        if (!$operationUrl) { $operationUrl = 'http://localhost:5055/' }
+        $desired['Services:OperationService:BaseUrl'] = $operationUrl
         # Empty payOS values keep the sandbox emulation; keys are never removed automatically.
         if ($settings['SMARTPARK_PAYOS_CLIENT_ID']) { $desired['PayOs:ClientId'] = $settings['SMARTPARK_PAYOS_CLIENT_ID'] }
         if ($settings['SMARTPARK_PAYOS_API_KEY']) { $desired['PayOs:ApiKey'] = $settings['SMARTPARK_PAYOS_API_KEY'] }

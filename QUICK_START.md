@@ -91,8 +91,8 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | Container | URL | Ghi chú |
 | --- | --- | --- |
 | `smartpark-app-user-service-1` | http://localhost:5035/health | Seed admin/owner/operator khi start |
-| `smartpark-app-parking-service-1` | http://localhost:5045/health | Dùng `facility-db` |
-| `smartpark-app-reservation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
+| `smartpark-app-facility-service-1` | http://localhost:5045/health | Dùng `facility-db` |
+| `smartpark-app-operation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065/health | Dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
@@ -214,7 +214,7 @@ Khi nhiều dev cần dùng chung credential, leader cung cấp **file credentia
 ```
 
 - File Team bắt buộc có: `SMARTPARK_DEV_PASSWORD`, `SMARTPARK_SERVICE_KEY` (≥32 ký tự), `SMARTPARK_ADMIN_PASSWORD` (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt).
-- Có thể kèm: `SONAR_DB_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`, `VITE_MAPTILER_API_KEY`, `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_PARKING_URL`, `SMARTPARK_SERVICE_RESERVATION_URL`, `SMARTPARK_SERVICE_PAYMENT_URL`.
+- Có thể kèm: `SONAR_DB_PASSWORD`, `SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`, `VITE_MAPTILER_API_KEY`, `SMARTPARK_SERVICE_USER_URL`, `SMARTPARK_SERVICE_FACILITY_URL`, `SMARTPARK_SERVICE_OPERATION_URL`, `SMARTPARK_SERVICE_PAYMENT_URL`.
 - File Team **không thay thế** toàn bộ `.env`: port, SMTP và cấu hình riêng trên máy vẫn giữ nguyên.
 - Setup dừng nếu credential Team khác cấu hình local đã có (`Team/local conflict`); cấu hình hiện tại được giữ nguyên, phải reconcile thủ công rồi chạy lại.
 - Không commit file Team hoặc secret thật.
@@ -324,7 +324,7 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 | Frontend (Vite) | `5173` | Host hoặc Docker |
 | SonarQube UI | `9000` | Mặc định của setup |
 
-DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng. Cấu hình URL qua `SMARTPARK_SERVICE_USER_URL` / `SMARTPARK_SERVICE_PARKING_URL` / `SMARTPARK_SERVICE_RESERVATION_URL` / `SMARTPARK_SERVICE_PAYMENT_URL`.
+DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập được, listener/firewall phù hợp và cùng service key; setup không tự mở mạng. Cấu hình URL qua `SMARTPARK_SERVICE_USER_URL` / `SMARTPARK_SERVICE_FACILITY_URL` / `SMARTPARK_SERVICE_OPERATION_URL` / `SMARTPARK_SERVICE_PAYMENT_URL`.
 
 ### 7.4 DB volume và migration
 
