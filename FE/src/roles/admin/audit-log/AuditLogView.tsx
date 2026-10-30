@@ -28,10 +28,12 @@ export function AuditLogView() {
   return (
     <div>
       <PageHeader title="Audit Log" variant="compact" actions={<input
-        className="input max-w-[260px]"
+        className="input sp-search-input max-w-[260px]"
+        aria-label="Search audit log by action or user"
+        autoComplete="off"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        placeholder="Search by action or user..."
+        placeholder="Search by action or user…"
       />} />
       <div style={{ overflowX: "auto" }}>
         <table

@@ -21,8 +21,8 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
         var session = new AuthSession
         {
             Id = Guid.NewGuid(), UserId = user.Id!.Value, AccessTokenId = Guid.NewGuid(),
-            TokenHash = HashRefreshToken(refresh), AccessExpiresAt = now.AddSeconds(AccessTokenService.LifetimeSeconds),
-            ExpiresAt = now.AddDays(policy.RefreshTokenDays), CreatedAt = now
+            TokenHash = HashRefreshToken(refresh), AccessExpiresAt = now.AddSeconds(SessionLifetime.AccessSeconds),
+            ExpiresAt = now.AddDays(Math.Min(policy.RefreshTokenDays, 7)), CreatedAt = now, LastRefreshedAt = now
         };
         var result = Response(user, session.AccessTokenId, refresh, session.AccessExpiresAt);
         await sessions.AddAsync(session, cancellationToken);
@@ -32,11 +32,11 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
     public async Task<UserSessionDto> RotateAsync(User user, AuthSession previous, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
-        if (previous.UserId != user.Id || previous.IsRevoked || previous.ExpiresAt <= now)
+        if (previous.UserId != user.Id || !SessionLifetime.CanRefresh(previous, now))
             throw AuthException.InvalidToken();
         var id = Guid.NewGuid();
         var refresh = NewRefreshToken();
-        var expires = now.AddSeconds(AccessTokenService.LifetimeSeconds);
+        var expires = now.AddSeconds(SessionLifetime.AccessSeconds);
         if (expires > previous.ExpiresAt) expires = previous.ExpiresAt;
         var result = Response(user, id, refresh, expires);
         if (!await sessions.RotateAsync(previous, id, HashRefreshToken(refresh), expires, cancellationToken))
@@ -51,7 +51,8 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
         User = new UserInfoDto
         {
             UserId = user.Id!.Value, FullName = user.FullName, Email = user.Email ?? string.Empty,
-            Role = AccessTokenService.CurrentRole(user)!
+            OnboardingComplete = user.OnboardingComplete,
+            Role = AccountRolePolicy.CurrentRole(user)!
         }
     };
 }

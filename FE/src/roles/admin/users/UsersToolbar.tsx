@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Button } from "../../../components/ui/Button"
 import { Input } from "../../../components/ui/Input"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -16,9 +17,9 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
             <UntitledIcon name="search" size={16} />
           </span>
           <Input
-            className="w-full !pl-11 !pr-9"
+            className="sp-search-input w-full !pl-11 !pr-9"
             aria-label="Search users by name, email, or phone number"
-            placeholder="Search by name, email, or phone number..."
+            placeholder="Search by name, email, or phone number…"
             maxLength={200}
             disabled={saving}
             value={search}
@@ -38,7 +39,7 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
 
         {/* Role Filter */}
         <div className="w-auto min-w-[140px]">
-          <select
+          <RoundedSelect
             className="input w-full py-2 text-sm"
             disabled={saving}
             value={query.role}
@@ -51,12 +52,12 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
             <option value="owner">Owner</option>
             <option value="operator">Operator</option>
             <option value="admin">Admin</option>
-          </select>
+          </RoundedSelect>
         </div>
 
         {/* Status Filter */}
         <div className="w-auto min-w-[150px]">
-          <select
+          <RoundedSelect
             className="input w-full py-2 text-sm"
             disabled={saving}
             value={query.status}
@@ -70,7 +71,7 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
             <option value="pendingVerification">Pending Verification</option>
             <option value="pendingApproval">Pending Approval</option>
             <option value="rejected">Rejected</option>
-          </select>
+          </RoundedSelect>
         </div>
 
         {/* Action Buttons */}

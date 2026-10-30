@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import type { Site } from "../../../lib/parkingApi"
 import type { LotType } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -9,9 +10,9 @@ export function SiteForm({ site, onSaved, onCancel }: {
   onCancel: () => void
 }) {
   const {
-    formId, lotType, setLotType, selectedCity, district, setDistrict,
+    formId, lotType, chooseLotType, selectedCity, district, setDistrict,
     streetAddress, setStreetAddress, isManualCode, form, setForm,
-    devices, setDevices, busy, error, computedCode, fullAddress,
+    devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   } = useSiteForm(site, onSaved, onCancel)
 
@@ -28,7 +29,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
         <p className="text-xs text-[var(--muted)] mt-1">
           {site
             ? "Update the site type, layout, identification, and operating equipment."
-            : "Create a parking site, then add units and slots in Parking Structure for operators to use."}
+            : "Create a parking site and review its live model and capacity in Parking Structure."}
         </p>
       </div>
 
@@ -43,7 +44,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
                 return (
                   <div
                     key={type}
-                    onClick={() => setLotType(type)}
+                    onClick={() => chooseLotType(type)}
                     className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
                       selected
                         ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--fg)] shadow-xs"
@@ -105,7 +106,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
               <label className="label" htmlFor={`${formId}-city`}>
                 Province / City *
               </label>
-              <select
+              <RoundedSelect
                 id={`${formId}-city`}
                 className="input"
                 value={selectedCity}
@@ -116,14 +117,14 @@ export function SiteForm({ site, onSaved, onCancel }: {
                     {c.name} ({c.code})
                   </option>
                 ))}
-              </select>
+              </RoundedSelect>
             </div>
 
             <div>
               <label className="label" htmlFor={`${formId}-district`}>
                 District *
               </label>
-              <select
+              <RoundedSelect
                 id={`${formId}-district`}
                 className="input"
                 value={district}
@@ -134,7 +135,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
                     {d}
                   </option>
                 ))}
-              </select>
+              </RoundedSelect>
             </div>
           </div>
 
@@ -168,6 +169,8 @@ export function SiteForm({ site, onSaved, onCancel }: {
           <div className="font-semibold text-xs text-[var(--fg)]">
             Capacity & Levels
           </div>
+          <label className="block text-xs text-[var(--muted)]">3D model for car capacity<input className="input mt-2" type="file" accept=".glb,model/gltf-binary" onChange={event => { uploadModel(event.target.files?.[0]); event.target.value = "" }} /><span className="mt-1 block">{customModelFileName ? `Owner model: ${customModelFileName}` : "Using the supplied model for this parking type."}</span></label>
+          {modelError && <p role="alert" className="text-xs text-[var(--badge-danger-strong)]">{modelError}</p>}
 
           <div
             className={`grid gap-3 ${
@@ -176,18 +179,19 @@ export function SiteForm({ site, onSaved, onCancel }: {
           >
             <div>
               <label className="label" htmlFor={`${formId}-slots`}>
-                Planned Parking Spaces *
+                Planned Car Spaces *
               </label>
               <input
                 id={`${formId}-slots`}
                 className="input"
                 type="number"
                 min={1}
-                max={5000}
+                max={modelCapacity.capacity ?? undefined}
                 value={form.totalSlots}
                 onChange={(e) => setForm((c) => ({ ...c, totalSlots: e.target.value }))}
                 required
               />
+              <p className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error || (modelCapacity.capacity === null ? "Checking car bays in the 3D model…" : `Maximum ${modelCapacity.capacity} car spaces in this model.`)}</p>
             </div>
 
             {LOT_TYPE_INFO[lotType].hasFloors && (
@@ -292,7 +296,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
                 id={`${formId}-daily-rate`}
                 className="input"
                 type="number"
-                step={5000}
+                step={1000}
                 min={0}
                 value={form.dailyRate}
                 onChange={(e) => setForm((c) => ({ ...c, dailyRate: Number(e.target.value) }))}

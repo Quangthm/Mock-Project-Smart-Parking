@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import type { Site } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -66,10 +67,13 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
 
       {/* Filter and Search Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
+        <div className="sp-search-field flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
+            type="search"
+            aria-label="Search parking sites by name or location"
+            autoComplete="off"
             placeholder="Search site by name or location…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -87,7 +91,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
 
         <div className="flex items-center gap-2 text-xs">
           <span className="text-[var(--muted)]">Status:</span>
-          <select
+          <RoundedSelect
             className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
@@ -95,7 +99,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
             <option value="all">All Sites ({sites.length})</option>
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
-          </select>
+          </RoundedSelect>
         </div>
       </div>
 

@@ -43,7 +43,7 @@ Review phần đã stage, bảo đảm không có config/credential thật hoặ
 
 ```powershell
 dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj
-dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj
+dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj
 node --test tests/frontend/auth-api.test.cjs tests/frontend/auth-context.test.cjs
 Push-Location FE
 npm run build

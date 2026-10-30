@@ -45,9 +45,13 @@ namespace UserService.Application.Common.Behaviors
             }
 
             var context = new ValidationContext<TRequest>(request);
-            var errors = this.validators.Select(v => v.Validate(context))
-                                        .SelectMany(e => e.Errors)
-                                        .Where(e => e is not null).ToList();
+            var errors = new List<FluentValidation.Results.ValidationFailure>();
+            // Validators may share a scoped repository/DbContext. Never run them concurrently.
+            foreach (var validator in this.validators)
+            {
+                var result = await validator.ValidateAsync(context, cancellationToken).ConfigureAwait(false);
+                errors.AddRange(result.Errors.Where(error => error is not null));
+            }
 
             if (errors.Count != 0)
             {

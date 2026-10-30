@@ -9,7 +9,8 @@ namespace UserService.API;
 
 public static class UserHost
 {
-    public static async Task<WebApplication> BuildAsync(string[] args, Action<WebApplicationBuilder>? configure = null)
+    public static async Task<WebApplication> BuildAsync(string[] args, Action<WebApplicationBuilder>? configure = null,
+        Action<WebApplicationBuilder>? configureServices = null)
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
@@ -21,19 +22,14 @@ public static class UserHost
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
         builder.Services.AddControllers().AddApplicationPart(typeof(Controllers.AuthController).Assembly);
-        builder.Services.AddApplicationServices(builder.Configuration);
-        var chatbot=builder.Configuration.GetSection("Chatbot").Get<UserService.Application.Chatbot.ChatbotOptions>()??new();
-        if(chatbot.TimeoutSeconds is <1 or >120 || chatbot.AllowedIntents.Any(i=>i is not ("FAQ" or "PARKING_SEARCH")))throw new InvalidOperationException("Invalid chatbot timeout or read intent allowlist.");
-        builder.Services.AddSingleton(chatbot);
-        builder.Services.AddScoped<UserService.Application.Chatbot.IChatModel,UnconfiguredChatModel>();
-        builder.Services.AddScoped<UserService.Application.Chatbot.IChatBackendGateway,UnconfiguredChatBackend>();
-        builder.Services.AddScoped<UserService.Application.Chatbot.ChatbotCoordinator>();
+        builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
+        builder.Services.AddIdentityWorkflowServices();
         builder.Services.AddPersistenceServices(builder.Configuration);
         builder.Services.AddJWTAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddHttpClient<IParkingDirectory, ParkingDirectoryClient>(client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Services:Parking"] ?? "http://localhost:5045/");
+            client.BaseAddress = new Uri(builder.Configuration["Services:Facility"] ?? "http://localhost:5045/");
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
@@ -49,7 +45,7 @@ public static class UserHost
             throw new InvalidOperationException("Configure durable Workflow:KeyDirectory for encrypted workflow state.");
         builder.Services.AddSingleton<IWorkflowProtector, UserService.Infrastructure.Services.WorkflowProtector>();
         builder.Services.AddScoped<IWorkflowTransport, UserService.Infrastructure.Services.WorkflowTransport>();
-        builder.Services.AddScoped<IOtpSender, UserService.API.Services.QueuedOtpSender>();
+        builder.Services.AddScoped<IOtpSender, UserService.Application.Services.QueuedOtpSender>();
         builder.Services.AddHostedService<UserService.API.Services.WorkflowDeliveryWorker>();
         builder.Services.AddRateLimiter(options =>
         {
@@ -59,12 +55,19 @@ public static class UserHost
                 { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         builder.Services.AddAuthorization();
+        builder.Services.AddSignalR();
+        builder.Services.AddSingleton<UserService.API.Hubs.AccessConnections>();
+        builder.Services.AddScoped<IAccessChangeNotifier, UserService.API.Hubs.AccessChangeNotifier>();
+        // Outbox intent is always persisted. Delivery is enabled explicitly when RabbitMQ is configured.
+        if (builder.Configuration.GetValue<bool>("Messaging:Enabled"))
+            builder.Services.AddAccessMessaging(builder.Configuration);
         // Only allow the local frontend during this demo. Production uses explicit configured origins.
         builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
             .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
+        configureServices?.Invoke(builder);
         var app = builder.Build();
         // Fail early when the signing key is missing or invalid.
         _ = app.Services.GetRequiredService<JwtKeyProvider>();
@@ -111,6 +114,7 @@ public static class UserHost
         app.UseAuthorization();
         app.UseRateLimiter();
         app.MapControllers();
+        app.MapHub<UserService.API.Hubs.OperatorAccessHub>("/hubs/operators", options => options.CloseOnAuthenticationExpiration = true);
         return app;
     }
 }

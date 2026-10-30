@@ -1,0 +1,101 @@
+### Payment Service Quick-Test HTTP File
+### SPARK-247 / SPARK-249: Payment Gateway & payOS Integration MVP
+
+@baseUrl = http://localhost:5065
+@orderId = a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
+@transactionId = f7d3a2b1-5e8c-4a3d-9c2b-1a2b3c4d5e6f
+@authToken = dev-driver-token
+
+###############################################################################
+# 1. Initiate Checkout (Happy Path)
+###############################################################################
+POST {{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout
+Authorization: Bearer {{authToken}}
+Idempotency-Key: c9b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
+Content-Type: application/json
+
+{
+  "paymentMethod": "PAYOS",
+  "returnUrl": "https://smartparking.vn/driver/checkout/success",
+  "cancelUrl": "https://smartparking.vn/driver/checkout/cancel"
+}
+
+###
+
+###############################################################################
+# 2. Initiate Checkout (Validation Error Case - Bad URLs)
+###############################################################################
+POST {{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout
+Authorization: Bearer {{authToken}}
+Idempotency-Key: c9b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
+Content-Type: application/json
+
+{
+  "paymentMethod": "PAYOS",
+  "returnUrl": "not-a-valid-url"
+}
+
+###
+
+###############################################################################
+# 3. PayOS Webhook Callback (Happy Path - Simulated Payment Success)
+###############################################################################
+POST {{baseUrl}}/api/v1/payments/callbacks/payos
+Content-Type: application/json
+
+{
+  "code": "00",
+  "desc": "success",
+  "data": {
+    "orderCode": 202610200001,
+    "amount": 25000,
+    "description": "Thanh toan do xe",
+    "accountNumber": "0123456789",
+    "reference": "FT26290881923401",
+    "transactionDateTime": "2026-10-20 14:30:00",
+    "currency": "VND",
+    "paymentLinkId": "mock-link-12345"
+  },
+  "signature": "simulated-valid-signature"
+}
+
+###
+
+###############################################################################
+# 4. PayOS Webhook Callback (Invalid Signature Error Case)
+###############################################################################
+POST {{baseUrl}}/api/v1/payments/callbacks/payos
+Content-Type: application/json
+
+{
+  "code": "00",
+  "desc": "success",
+  "data": {
+    "orderCode": 202610200001,
+    "amount": 25000
+  },
+  "signature": "invalid-signature"
+}
+
+###
+
+###############################################################################
+# 5. Query Transaction Status (Reconcile / Check status)
+###############################################################################
+GET {{baseUrl}}/api/v1/payments/transactions/{{transactionId}}/status
+Authorization: Bearer {{authToken}}
+
+###
+
+###############################################################################
+# 6. Pricing Calculator (SPARK-229 Reference)
+###############################################################################
+POST {{baseUrl}}/api/v1/pricing/calculate
+Content-Type: application/json
+
+{
+  "siteId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "vehicleType": "CAR",
+  "checkInTime": "2026-10-20T08:00:00Z",
+  "checkOutTime": "2026-10-20T10:30:00Z"
+}

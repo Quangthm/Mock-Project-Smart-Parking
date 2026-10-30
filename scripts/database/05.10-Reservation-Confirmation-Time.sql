@@ -1,4 +1,4 @@
--- ReservationService only. Historical confirmation time is deliberately unknown.
+-- OperationService only. Historical confirmation time is deliberately unknown.
 BEGIN;
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
 CREATE OR REPLACE FUNCTION record_reservation_confirmation() RETURNS trigger LANGUAGE plpgsql AS $$

@@ -8,20 +8,21 @@ $composeFile = Join-Path $fixtureRoot 'compose.schema-integration.yml'
 $envFile = Join-Path $fixtureRoot '.env'
 [IO.File]::WriteAllText($envFile, "SMARTPARK_DEV_PASSWORD=isolated-upgrade-test-password`n")
 $compose = @("name: $projectName", 'services:')
+$fixtureNames = @{ User='user'; Parking='facility'; Reservation='operations' }
 # Empty fixture databases: the runner must apply the full canonical set on the
 # first run, then detect the already-current schema and skip on the second run.
 foreach ($service in @('User','Parking','Reservation')) {
-    $name = $service.ToLowerInvariant()
+    $name = $fixtureNames[$service]
     $compose += @("  ${name}-db:", '    image: postgres:16-alpine', '    environment:', "      POSTGRES_USER: smartpark_$name", "      POSTGRES_DB: smartpark_$name", '      POSTGRES_PASSWORD: ${SMARTPARK_DEV_PASSWORD:?missing}', '    volumes:', "      - ${name}-data:/var/lib/postgresql/data", '    healthcheck:', "      test: [CMD-SHELL, 'pg_isready -U smartpark_$name -d smartpark_$name']", '      interval: 1s', '      timeout: 3s', '      retries: 60')
 }
-$compose += @('volumes:', '  user-data:', '  parking-data:', '  reservation-data:')
+$compose += @('volumes:', '  user-data:', '  facility-data:', '  operations-data:')
 [IO.File]::WriteAllLines($composeFile, $compose, (New-Object Text.UTF8Encoding($false)))
 function Invoke-TestCompose([string[]]$arguments) {
     & docker compose --project-name $projectName --env-file $envFile -f $composeFile @arguments
     if ($LASTEXITCODE -ne 0) { throw 'Isolated Compose command failed.' }
 }
 function Query-TestDatabase($service, $sql) {
-    $name = $service.ToLowerInvariant()
+    $name = $fixtureNames[$service]
     $result = & docker compose --project-name $projectName --env-file $envFile -f $composeFile exec -T "${name}-db" psql -U "smartpark_$name" -d "smartpark_$name" -v ON_ERROR_STOP=1 -At -c $sql
     if ($LASTEXITCODE -ne 0) { throw 'Isolated database query failed.' }
     return ($result -join '').Trim()
@@ -50,6 +51,9 @@ try {
         if ((Query-TestDatabase $service 'SELECT count(*) FROM setup_upgrade_sentinel WHERE id=42') -ne '1') { throw 'Restart lost existing data.' }
     }
     if ((Query-TestDatabase User "SELECT to_regclass('uq_active_vehicle_plate') IS NOT NULL") -ne 't') { throw 'User canonical schema missing after restart.' }
+    if ((Query-TestDatabase User "SELECT to_regclass('mfa_recovery_codes') IS NOT NULL AND to_regclass('rotated_session_proofs') IS NOT NULL") -ne 't') { throw 'MFA or identity feature tables missing.' }
+    if ((Query-TestDatabase User "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND ((table_name='mfa_credentials' AND column_name IN ('pending_protected_secret','pending_expires_at')) OR (table_name='users' AND column_name IN ('access_version','onboarding_complete')) OR (table_name='owner_applications' AND column_name='lot_setup'))") -ne '5') { throw 'MFA, access or onboarding feature columns missing.' }
+    if ((Query-TestDatabase Parking "SELECT to_regclass('owner_onboarding_provisions') IS NOT NULL") -ne 't') { throw 'Parking onboarding feature table missing.' }
     if ((Query-TestDatabase Parking "SELECT to_regclass('structure_synchronizations') IS NOT NULL") -ne 't') { throw 'Parking overlay tables missing after restart.' }
     if ((Query-TestDatabase Parking "SELECT to_regclass('tenants') IS NOT NULL") -ne 't') { throw 'Parking tenants overlay missing after restart.' }
     if ((Query-TestDatabase Reservation "SELECT to_regclass('structure_release_receipts') IS NOT NULL") -ne 't') { throw 'Reservation overlay tables missing after restart.' }

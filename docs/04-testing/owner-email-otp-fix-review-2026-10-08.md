@@ -19,7 +19,7 @@ Removed phoneVerification from the Owner response DTO/frontend type and the Post
 
 ## Validation
 
-- dotnet test SmartParking.slnx --artifacts-path .cache/owner-email-tests --no-restore --verbosity minimal: 93 passed, 0 failed, 0 skipped (79 UserService + 14 ParkingService).
+- dotnet test SmartParking.slnx --artifacts-path .cache/owner-email-tests --no-restore --verbosity minimal: 93 passed, 0 failed, 0 skipped (79 UserService + 14 FacilityService).
 - Tests ran against local PostgreSQL with isolated temporary databases.
 - Real HTTP test hosts for User/Parking/Reservation exercised email-only registration, verification, pending login denial, Admin approval/tenant provisioning, Owner login, parking creation and later operator/revocation operations.
 - Regression cases: no Owner SMS created; pending/unverified Owner cannot approve; phone-only verification cannot approve; replay rejected; resend preserves attempt/lock rules and exact five-minute expiry; legacy email-only recovery cancels phone challenge/payload; unverified phone cannot be used for OTP login; concurrent review and notification retry remain correct.

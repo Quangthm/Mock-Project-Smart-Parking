@@ -1,3 +1,6 @@
+using UserService.API;
+using Microsoft.Extensions.Configuration;
+using UserService.Application.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -36,8 +39,12 @@ public sealed class DriverRegistrationHttpTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
-        builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
+        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         var fixture = new AuthTestFixture();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();

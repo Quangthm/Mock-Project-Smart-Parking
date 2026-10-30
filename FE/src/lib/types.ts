@@ -23,6 +23,8 @@ export interface DriverVehicle {
 
   licensePlate: string
 
+  vehicleType?: string
+
   plateType?: "vn" | "foreign"
 
   plateImageUrl?: string
@@ -147,6 +149,10 @@ export interface Booking {
 
   licensePlate: string
 
+  vehicleType?: string
+
+  entryTime?: string
+
   plateType?: "vn" | "foreign"
 
   plateImageUrl?: string
@@ -227,7 +233,13 @@ export interface SupportTicket {
 
   bookingId?: string
 
+  siteId?: string
+
   status: "open" | "in-progress" | "resolved"
+
+  decision?: "approved" | "rejected"
+
+  resolutionNote?: string
 
   createdAt: string
 }

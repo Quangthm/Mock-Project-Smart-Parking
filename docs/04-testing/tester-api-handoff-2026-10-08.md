@@ -1,6 +1,8 @@
 # API handoff cho tester — các task của tác giả
 
-> Cập nhật môi trường local ngày 08/10/2026; xem [review sửa email OTP](owner-email-otp-fix-review-2026-10-08.md):
+> Contract Operator trong phần lịch sử bên dưới đã được thay thế ngày 15/10: create không nhận password, Operator pending phải activate bằng invitation trước login. Dùng [API contract hiện tại](../02-architecture/api/operator-provisioning.md) và [bộ test case hành trình mới](test-cases/demo-user-journey-2026-10-15.md) khi retest working tree hiện tại.
+
+> Cập nhật môi trường local ngày 08/10/2026; xem [contract đăng ký và duyệt Owner](../02-architecture/api/owner-registration-approval.md):
 > SMTP đã gửi thành công, Services:Key đã được cấu hình tại local. Owner onboarding đã sửa dùng email OTP; không cần SMS config cho luồng Owner.
 > đây chưa phải kết quả retest môi trường QA bên ngoài.
 
@@ -15,7 +17,7 @@ Import [Postman collection](postman/assigned-workflows-2026-10-08.postman_collec
 | Biến | Giá trị / cách lấy |
 | --- | --- |
 | userUrl | `http://localhost:5035` hoặc UserService QA URL |
-| parkingUrl | `http://localhost:5045` hoặc ParkingService QA URL |
+| parkingUrl | `http://localhost:5045` hoặc FacilityService QA URL |
 | driverEmail, ownerEmail, operatorEmail | Ba inbox QA khác nhau, mỗi lần chạy dùng bộ contact mới |
 | ownerPhone | Số điện thoại hồ sơ Owner; bắt buộc khác dữ liệu hiện có, không cần nhận SMS trong luồng email-only |
 | password | Mật khẩu mẫu phục vụ test, 8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt |
@@ -37,7 +39,7 @@ Migration hiện hành: User `05.8`; Parking `05.9` và **`05.11`** (structure s
 
 Sau setup, mở ba terminal riêng tại repo và chạy `./scripts/run-schema-service.ps1 -Service User`, `Reservation`, `Parking`. Runner đọc `.env`; không cần đặt lại password/service key trong từng terminal. API lần lượt ở `5035`, `5055`, `5045`. Chạy frontend bằng `npm install` và `npm run dev` tại `FE` nếu test giao diện. SMTP QA cần được cấu hình trong `.env` để nhận email OTP; HTTPS `Onboarding:PublicOrigin` và key ring bền vững của môi trường QA do người quản trị cấu hình. Không đưa `.env`, password hoặc service key vào tài liệu bàn giao.
 
-Phần refactor Parking Structure, journal/recovery và các test PostgreSQL xem [hướng dẫn SPARK-188](../02-architecture/service-boundaries/parking-structure-spark-188.md). Test PostgreSQL chỉ chạy khi có `SMARTPARK_STRUCTURE_TEST_CONNECTION`; nếu thiếu thì báo skipped. Các bước setup này không phải bằng chứng Docker/DB đã chạy thành công trên máy tester: đính kèm kết quả startup, migration và smoke test khi bàn giao kết quả.
+Phần Parking Structure xem [thiết kế API](../03-design/api/parking-structure-api-design.md); cách chạy PostgreSQL tests xem [hướng dẫn test tự động](../../tests/README.md). Test PostgreSQL chỉ chạy khi có `SMARTPARK_STRUCTURE_TEST_CONNECTION`; nếu thiếu thì báo skipped. Các bước setup này không phải bằng chứng Docker/DB đã chạy thành công trên máy tester: đính kèm kết quả startup, migration và smoke test khi bàn giao kết quả.
 
 ## 2. Cách đọc response
 
@@ -203,7 +205,7 @@ HTTP tests cho exact expiry/concurrency dùng test clock/fixture harness; không
 
 AI task chỉ setup cấu trúc: application ports/context/options, infrastructure adapters, read allowlist FAQ/PARKING_SEARCH, disabled mặc định, unit tests. **Chưa có live chat public endpoint**; không gửi `/chat` và ghi bug thiếu business chatbot. Xem [scaffold contract](../03-design/ai/chatbot-scaffold.md).
 
-Evidence lượt sửa: [review report](cross-task-fix-review-2026-10-08.md), [91 backend test results](reports/cross-task-2026-10-08.csv), 30 frontend regression tests và FE build đã pass tại lượt review. Đây là evidence developer, chưa thay thế tester UAT/provider test và remote CI. PostgreSQL tests chạy DB cô lập; không migrate DB dự án.
+Evidence lượt sửa ngày 08/10: [91 backend test results](reports/cross-task-2026-10-08.csv), 30 frontend regression tests và FE build đã pass tại lượt review. Đây là evidence developer, chưa thay thế tester UAT/provider test và remote CI. PostgreSQL tests chạy DB cô lập; không migrate DB dự án. Báo cáo review rời của đợt này được giữ trong lịch sử Git.
 
 Phiếu mỗi case: `caseId | code SHA | schema SHA | environment | role/fixture IDs | method/path | redacted request | HTTP + redacted response | GET/DB outcome | expected | actual | Pass/Fail/Blocked | bug/dependency link`. Dùng **Blocked/dependency** khi chưa có inbox/SMS, Admin fixture, commitment fixture hoặc reallocation/refund adapter; vẫn test failure/pending semantics thuộc scope này. Không đánh Done task của thành viên khác.
 

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Preserve the existing secrets store when renaming the service. -->
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><UserSecretsId>SmartParking.ParkingService.API.LocalDevelopment</UserSecretsId></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../SmartParking.FacilityService.Persistence/SmartParking.FacilityService.Persistence.csproj" /><ProjectReference Include="../SmartParking.FacilityService.Infrastructure/SmartParking.FacilityService.Infrastructure.csproj" /></ItemGroup>
+</Project>

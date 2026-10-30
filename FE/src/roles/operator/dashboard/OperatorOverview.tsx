@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useMemo } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -61,7 +62,7 @@ export function OperatorOverview({
       <PageHeader title={lot.name} eyebrow={<>{lot.code} · {lot.address}</>} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5">
             <span className="text-xs font-medium text-[var(--muted)] pl-2">Site:</span>
-            <select
+            <RoundedSelect
               className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm font-medium text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={lot.id}
               onChange={(e) => onSelectLot(e.target.value)}
@@ -71,7 +72,7 @@ export function OperatorOverview({
                   {l.name}
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
           </div>
         )} />
 

@@ -1,4 +1,6 @@
 import { request } from "./authApi"
+import { store } from "./store"
+import { loadOwnerModelUrl } from "./3d/ownerModelStorage"
 import {
   operatorsApi,
   parkingApi,
@@ -9,7 +11,7 @@ import type {
   Booking,
   BookingStatus,
   PaymentMethod,
-  PaymentStatus,
+  PaymentStatus as BookingPaymentStatus,
   ParkingSlot,
   SlotStatus,
   SupportTicket,
@@ -24,6 +26,10 @@ const reservationServer = (
 
 const parkingServer = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
+).replace(/\/$/, "")
+
+const paymentServer = (
+  import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "http://localhost:5065"
 ).replace(/\/$/, "")
 
 export interface OperatorSlot extends ParkingSlot {
@@ -78,7 +84,7 @@ export interface GateReservation {
   slotNumber: string
   licensePlate: string
   status: BookingStatus
-  paymentStatus: PaymentStatus | null
+  paymentStatus: BookingPaymentStatus | null
   paymentMethod: string | null
   amount: number | null
   startTime: string
@@ -88,6 +94,7 @@ export interface GateReservation {
   entryImageUrl: string | null
   exitImageUrl: string | null
   createdAt: string
+  vehicleType: string
 }
 
 export interface WalkInParkingSession {
@@ -145,6 +152,7 @@ export interface OperatorAuditEvent {
 }
 
 function siteFromStructure(structure: Structure): OperatorSite {
+  const ownerModel = store.getLots().find(lot => lot.id === structure.site.id)
   const floorUnits = structure.units.filter((unit) => unit.type === "FLOOR")
   const unitsById = new Map(structure.units.map((unit) => [unit.id, unit]))
   const floorNumbers = new Map(floorUnits.map((unit, index) => [unit.id, index + 1]))
@@ -164,6 +172,8 @@ function siteFromStructure(structure: Structure): OperatorSite {
     tenantId: structure.site.tenantId,
     code: structure.site.code,
     name: structure.site.name,
+    modelUrl: ownerModel?.modelUrl?.startsWith("blob:") ? undefined : ownerModel?.modelUrl,
+    modelFileName: ownerModel?.modelFileName,
     address: structure.site.address,
     latitude: structure.site.latitude,
     longitude: structure.site.longitude,
@@ -206,14 +216,22 @@ export async function loadOperatorSites(user: User | null): Promise<OperatorSite
   if (user.role === "owner") {
     const sites = await parkingApi.list()
     const structures = await Promise.all(sites.map((site) => parkingApi.structure(site.id)))
-    return structures.map(siteFromStructure)
+    return Promise.all(structures.map(async structure => {
+      const site = siteFromStructure(structure)
+      const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
+      return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+    }))
   }
 
   const assignments = await operatorsApi.assignments()
   const structures = await Promise.all(
     assignments.map((assignment) => parkingApi.operatorLayout(assignment.siteId)),
   )
-  return structures.map(siteFromStructure)
+  return Promise.all(structures.map(async structure => {
+    const site = siteFromStructure(structure)
+    const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
+    return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+  }))
 }
 
 function toBooking(reservation: GateReservation): Booking {
@@ -236,28 +254,25 @@ function toBooking(reservation: GateReservation): Booking {
     paymentMethod,
     amount: reservation.amount ?? 0,
     createdAt: reservation.createdAt,
+    vehicleType: reservation.vehicleType,
+    entryTime: reservation.entryTime ?? reservation.startTime,
   }
 }
 
+const PAYMENT_METHOD_MAP: Record<string, PaymentMethod> = {
+  VNPAY: "vnpay",
+  MOMO: "momo",
+  ZALOPAY: "zalopay",
+  VISA: "visa",
+  CREDIT_CARD: "visa",
+  APPLEPAY: "applepay",
+  APPLE_PAY: "applepay",
+  QR: "qr",
+}
+
 function mapPaymentMethod(method: string | null): PaymentMethod | undefined {
-  switch (method?.toUpperCase()) {
-    case "VNPAY":
-      return "vnpay"
-    case "MOMO":
-      return "momo"
-    case "ZALOPAY":
-      return "zalopay"
-    case "VISA":
-    case "CREDIT_CARD":
-      return "visa"
-    case "APPLEPAY":
-    case "APPLE_PAY":
-      return "applepay"
-    case "QR":
-      return "qr"
-    default:
-      return undefined
-  }
+  if (!method) return undefined
+  return PAYMENT_METHOD_MAP[method.toUpperCase()]
 }
 
 async function reservationRequest<T>(
@@ -307,6 +322,97 @@ async function operationsRequest<T>(
   )
   if (!result.success) throw new Error("Operator request failed.")
   return result.data
+}
+
+async function paymentRequest<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  prefix = "/api/v1/payments",
+  headers?: Record<string, string>,
+): Promise<T> {
+  const result = await request<Response<T>>(
+    path,
+    method,
+    body,
+    prefix,
+    paymentServer,
+    headers,
+  )
+  if (!result.success) throw new Error("Payment request failed.")
+  return result.data
+}
+
+export interface PricingResult {
+  finalAmountVnd: number
+  currency: string
+  totalParkedMinutes: number
+  isFreeStay: boolean
+}
+
+export interface PaymentOrder {
+  orderId: string
+  orderCode: string
+  amount: number
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentCheckout {
+  paymentTransactionId: string
+  orderCode: number
+  amount: number
+  checkoutUrl: string
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentTransactionStatus {
+  transactionId: string
+  orderId: string
+  amount: number
+  status: string
+  paidAt: string | null
+  isAuthoritative: boolean
+}
+
+export const paymentApi = {
+  calculate: (body: {
+    tenantId: string
+    siteId: string
+    vehicleType: string
+    entryTime: string
+    exitTime: string
+    sessionId?: string
+    reservationId?: string
+  }) => paymentRequest<PricingResult>("/calculate", "POST", body, "/api/v1/pricing"),
+  createOrder: (body: {
+    tenantId: string
+    siteId: string
+    referenceId: string
+    referenceType: "RESERVATION" | "PARKING_SESSION"
+    amount: number
+    accountId?: string
+    idempotencyKey: string
+  }) => paymentRequest<PaymentOrder>("/orders", "POST", body),
+  initiate: (orderId: string, idempotencyKey: string) =>
+    paymentRequest<PaymentCheckout>(
+      `/orders/${encodeURIComponent(orderId)}/checkout`,
+      "POST",
+      { paymentMethod: "PAYOS" },
+      "/api/v1/payments",
+      { "Idempotency-Key": idempotencyKey },
+    ),
+  cash: (orderId: string, idempotencyKey: string) =>
+    paymentRequest<PaymentTransactionStatus>(
+      `/orders/${encodeURIComponent(orderId)}/cash`,
+      "POST",
+      { idempotencyKey },
+    ),
+  demoPay: (orderId: string) =>
+    paymentRequest<PaymentTransactionStatus>(`/orders/${encodeURIComponent(orderId)}/demo-pay`, "POST"),
+  status: (transactionId: string) =>
+    paymentRequest<PaymentTransactionStatus>(`/transactions/${encodeURIComponent(transactionId)}/status`),
 }
 
 export const reservationApi = {

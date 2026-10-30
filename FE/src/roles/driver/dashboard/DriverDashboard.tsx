@@ -54,6 +54,7 @@ export function DriverDashboard() {
   const [accountForm, setAccountForm] = useState({ name: "", phone: "" })
 
   const [profileMessage, setProfileMessage] = useState("")
+  const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -85,6 +86,7 @@ export function DriverDashboard() {
   })
 
   function openProfileSection(section: ProfileSection) {
+    if (securityDismissBlocked) return
     setProfileSection(section)
 
     setProfileMessage("")
@@ -212,7 +214,7 @@ export function DriverDashboard() {
           <div
             role="presentation"
             onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setProfileSection(null)
+              if (e.target === e.currentTarget && !securityDismissBlocked) setProfileSection(null)
             }}
             style={{
               position: "fixed",
@@ -298,10 +300,11 @@ export function DriverDashboard() {
                 <button
                   type="button"
                   aria-label="Close profile window"
-                  onClick={() => setProfileSection(null)}
+                  disabled={securityDismissBlocked}
+                  onClick={() => { if (!securityDismissBlocked) setProfileSection(null) }}
                   style={{
-                    width: 34,
-                    height: 34,
+                    width: 44,
+                    height: 44,
                     border: "1px solid var(--border)",
                     borderRadius: "50%",
                     background: "var(--card)",
@@ -441,7 +444,7 @@ export function DriverDashboard() {
               )}
 
               {profileSection === "security" && (
-                <AccountSecurityPanel key={user?.id} />
+                <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
               )}
 
               {profileSection === "vehicles" && <VehicleManager />}
@@ -471,7 +474,7 @@ export function DriverDashboard() {
         ) : (
           <>
             {tab === "home" && homePanel !== "find" && (
-              <div className="animate-in">
+              <div key={homePanel} className="animate-in">
                 {homePanel === "bookings" ? (
                   <section className="driver-bookings-page">
                     <PageHeader title="Bookings" variant="compact" />

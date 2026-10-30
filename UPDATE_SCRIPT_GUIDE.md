@@ -29,9 +29,12 @@ AI camera dùng các helper trong `setup.ps1`: `Test-AiModelAssets`/`Assert-AiMo
 
 ## Docker app runner
 
-`compose.app.yml` chạy 4 container riêng (`user-service`, `parking-service`, `reservation-service`, `frontend`) trong project `smartpark-app`, dùng external network `smartpark-schema_default`. Backend dùng `docker/Dockerfile.backend` với build arg `SERVICE`; FE dùng `FE/Dockerfile` (Node 22, Vite port 5173). Không thêm `container_name` để tránh xung đột nhiều checkout.
+`compose.app.yml` chạy 5 container riêng (`user-service`, `parking-service`, `reservation-service`, `payment-service`, `frontend`) trong project `smartpark-app`, dùng external network `smartpark-schema_default`. Backend dùng `docker/Dockerfile.backend` với build arg `SERVICE`; FE dùng `FE/Dockerfile` (Node 22, Vite port 5173). Không thêm `container_name` để tránh xung đột nhiều checkout.
 
-`scripts/run-app-service.ps1` nhận `-Service User|Parking|Reservation|Frontend|All`, `-NoBuild`, `-NoLogWindow`. Script kiểm tra `.env`, `compose.app.yml`, network, chạy `up -d`, poll trạng thái tối đa 120 giây, in 100 dòng log và fail nếu container exit/unhealthy. Mỗi target mở một cửa sổ CMD `logs -f` trừ khi có `-NoLogWindow`. `scripts/stop-app-service.ps1` dừng target hoặc `down --remove-orphans` cho `All`, không xóa volume. Các wrapper `.cmd` chỉ gọi lại script PowerShell.
+`scripts/run-app-service.ps1` nhận `-Service User|Facility|Operation|Frontend|All`, `-NoBuild`, `-NoLogWindow`. Script kiểm tra `.env`, `compose.app.yml`, network, chạy `up -d`, poll trạng thái tối đa 120 giây, in 100 dòng log và fail nếu container exit/unhealthy. Mỗi target mở một cửa sổ CMD `logs -f` trừ khi có `-NoLogWindow`. `scripts/stop-app-service.ps1` dừng target hoặc `down --remove-orphans` cho `All`, không xóa volume. Các wrapper `.cmd` chỉ gọi lại script PowerShell.
+`payment-service` là service duy nhất đọc `Services:ReservationService:BaseUrl` (khác `Services:Reservation` dùng bởi các service còn lại) và nhận `PayOs__*` từ `SMARTPARK_PAYOS_*`; giá trị PayOS rỗng giữ sandbox emulation (`PayOsAdapter`), nên local không cần key thật.
+
+`scripts/run-app-service.ps1` nhận `-Service User|Parking|Reservation|Payment|Frontend|All`, `-NoBuild`, `-NoLogWindow`. Script kiểm tra `.env`, `compose.app.yml`, network, chạy `up -d`, poll trạng thái tối đa 120 giây, in 100 dòng log và fail nếu container exit/unhealthy. Mỗi target mở một cửa sổ CMD `logs -f` trừ khi có `-NoLogWindow`. `scripts/stop-app-service.ps1` dừng target hoặc `down --remove-orphans` cho `All`, không xóa volume. Các wrapper `.cmd` chỉ gọi lại script PowerShell.
 
 Lưu ý PowerShell 5.1: Docker ghi progress ra stderr; script dùng helper native-command để không biến stderr thành terminating error, và quyết định pass/fail bằng `$LASTEXITCODE`. Khi sửa wrapper, giữ behavior này và parse `docker compose ps --all --format json` cho cả array/NDJSON.
 

@@ -1,4 +1,5 @@
-import { useApp } from "../../context/AppContext"
+import { useApp, type View } from "../../context/AppContext"
+import { useLocation, useNavigate } from "react-router-dom"
 
 import { BrandLogo, BrandWordmark } from "../brand/BrandLogo"
 
@@ -6,6 +7,8 @@ import { UntitledIcon } from "../icon/UntitledIcon"
 
 export function Footer() {
   const { setView } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   return (
     <footer className="site-footer"
@@ -184,7 +187,7 @@ export function Footer() {
             ].map((p) => (
               <button
                 key={p.label}
-                onClick={() => setView(p.view)}
+                onClick={() => { setView(p.view); if (location.pathname !== "/") navigate("/") }}
                 style={{
                   background: "none",
                   border: "none",
@@ -205,15 +208,17 @@ export function Footer() {
   )
 }
 
-function FooterLinks({ links }: { links: { label: string; view: string }[] }) {
+function FooterLinks({ links }: { links: { label: string; view: View }[] }) {
   const { setView } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       {links.map((l) => (
         <button
           key={l.label}
-          onClick={() => setView(l.view as any)}
+          onClick={() => { setView(l.view); if (location.pathname !== "/") navigate("/") }}
           style={{
             background: "none",
             border: "none",

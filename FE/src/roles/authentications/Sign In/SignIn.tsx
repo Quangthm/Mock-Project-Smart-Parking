@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useApp } from "../../../context/AppContext"
 import { authData as store } from "../data/data"
 import { useNavigate } from "react-router-dom"
@@ -7,20 +7,26 @@ import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { authApi, AuthApiError, request } from "../../../lib/authApi"
+import { authApi, AuthApiError, type MfaLoginChallenge } from "../../../lib/authApi"
+import { resumePendingSignIn } from "../pendingRegistrationSignIn"
 import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
-import { isValidAccountEmail } from "../../../lib/signInContact"
+import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
+import { isValidAccountEmail, isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
 
-export function SignIn() {
-  const { setUser, setView } = useApp()
+export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" } = {}) {
+  const { view, user: currentUser, setUser, setView } = useApp()
   const navigate = useNavigate()
+  const [mode, setMode] = useState<"password" | "otp">(flow === "email-otp" ? "otp" : "password")
+
+  useEffect(() => {
+    if (flow === "email-otp" && !currentUser && view !== "sign-in") setView("sign-in")
+  }, [currentUser, flow, setView, view])
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [mode, setMode] = useState<"otp" | "password">("password")
 
   const [challenge, setChallenge] = useState<{
     challengeId: string
@@ -29,7 +35,8 @@ export function SignIn() {
   } | null>(null)
 
   const [code, setCode] = useState("")
-  const [totp, setTotp] = useState("")
+  const [mfaValue, setMfaValue] = useState("")
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false)
 
   // Forgot Password Modal State
   const [showForgotPassword, setShowForgotPassword] = useState(false)
@@ -44,30 +51,42 @@ export function SignIn() {
   const [fpError, setFpError] = useState("")
   const [fpSubmitting, setFpSubmitting] = useState(false)
 
-  const [requireTotp, setRequireTotp] = useState(false)
-  const [totpCode, setTotpCode] = useState("")
+  const [mfaChallenge, setMfaChallenge] = useState<MfaLoginChallenge | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (submitting) return
     setError("")
-
     if (mode === "password" && !isValidAccountEmail(email)) {
       setError("Please enter a valid email address.")
       return
     }
-
+    if (!isValidSignInContact(email)) {
+      setError(signInContactMessage)
+      return
+    }
     setSubmitting(true)
 
     try {
-      const user =
-        mode === "otp"
-          ? await authApi.loginOtp(
-              challenge!.challengeId,
-              code,
-              totp || undefined,
-            )
-          : await authApi.login(email, password, totpCode || undefined)
+      if (mode === "otp" && !challenge) {
+        setChallenge(await authApi.requestOtp(email))
+        return
+      }
+
+      const totp = useRecoveryCode ? undefined : mfaValue || undefined
+      const recoveryCode = useRecoveryCode ? mfaValue || undefined : undefined
+      const result = mode === "otp"
+        ? await authApi.loginOtp(challenge!.challengeId, code, totp, recoveryCode)
+        : mfaChallenge
+          ? await authApi.completeMfaLogin(mfaChallenge, totp, recoveryCode)
+          : await authApi.login(email, password)
+
+      if ("mfaRequired" in result) {
+        setMfaChallenge(result.challenge)
+        setPassword("")
+        return
+      }
+      const user = result
 
       const signedInUser = { ...user, lastLoginAt: new Date().toISOString() }
       store.saveUser(signedInUser)
@@ -90,84 +109,61 @@ export function SignIn() {
       sessionStorage.removeItem(pendingDriverKey)
       sessionStorage.removeItem("sp_pending_owner_registration")
       setPassword("")
+      setMfaValue("")
+      setMfaChallenge(null)
       setUser(signedInUser)
       setView(user.role)
       navigate(getUserHomePath(user), { replace: true })
-    } catch (error) {
-      if (
-        mode === "password" &&
-        error instanceof AuthApiError &&
-        error.code === "ACCOUNT_PENDING_VERIFICATION"
-      ) {
-        try {
-          const contact = email.trim()
-          try {
-            const registration = await authApi.recoverDriver(contact)
-            sessionStorage.setItem(
-              pendingDriverKey,
-              JSON.stringify({ ...registration, contact }),
-            )
-            sessionStorage.removeItem("sp_pending_owner_registration")
-            localStorage.removeItem("sp_pending_owner_registration")
-          } catch (driverError) {
-            if (!(driverError instanceof AuthApiError) || driverError.code !== "REGISTRATION_NOT_FOUND")
-              throw driverError
 
-            const recovered = await request<{
-              success: boolean
-              data: {
-                verification?: { challengeId: string; expiresAt: string; resendAt: string }
-                emailVerified: boolean
-              }
-            }>("/register/owner/recover", "POST", { contact })
-            if (!recovered.success || recovered.data.emailVerified || !recovered.data.verification?.challengeId)
-              throw new Error("Email verification is not available yet. Please contact support.")
-            sessionStorage.setItem(
-              "sp_pending_owner_registration",
-              JSON.stringify({ email: contact, lotSetupComplete: true, verification: recovered.data.verification }),
-            )
-            sessionStorage.removeItem(pendingDriverKey)
-          }
+    } catch (error) {
+      try {
+        const nextView = await resumePendingSignIn(error, email)
+        if (nextView) {
           setPassword("")
-          setView("sign-up")
-          return
-        } catch (recoveryError) {
-          setError(
-            recoveryError instanceof Error
-              ? recoveryError.message
-              : "Unable to resume verification. Please try again.",
-          )
+          setView(nextView)
+          if (flow === "email-otp") navigate("/")
           return
         }
+      } catch (recoveryError) {
+        setError(recoveryError instanceof Error ? recoveryError.message : "Unable to resume registration. Please try again.")
+        return
       }
       const msg =
         error instanceof Error
           ? error.message
           : "Sign in failed. Please try again."
 
-      // MFA accounts must complete the OTP challenge endpoint. The password endpoint
-      // deliberately returns MFA_REQUIRED and cannot accept a TOTP on retry.
+      if (
+        error instanceof AuthApiError &&
+        ["MFA_CHALLENGE_INVALID", "CHALLENGE_CLOSED"].includes(
+          error.code ?? ""
+        )
+      ) {
+        setMfaChallenge(null)
+        setMfaValue("")
+      }
+
       if (
         mode === "password" &&
-        msg.toLowerCase().includes("use otp sign-in") &&
-        !requireTotp
+        msg.toLowerCase().includes("use otp sign-in")
       ) {
         try {
           const nextChallenge = await authApi.requestOtp(email)
+
           setMode("otp")
           setChallenge(nextChallenge)
           setCode("")
-          setTotp("")
-          setRequireTotp(false)
-          setTotpCode("")
+          setMfaValue("")
+          setUseRecoveryCode(false)
+
           setError(
-            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code.",
+            "Two-factor authentication is enabled. Enter the sign-in code sent to you and your authenticator code."
           )
         } catch (otpError) {
           setError(
             otpError instanceof Error
               ? otpError.message
-              : "Unable to start OTP sign-in. Please try again.",
+              : "Unable to start OTP sign-in. Please try again."
           )
         }
       } else {
@@ -176,26 +172,39 @@ export function SignIn() {
     } finally {
       setSubmitting(false)
     }
+
   }
 
-  async function requestEmailOtp() {
+  async function requestSignInOtp() {
     if (submitting) return
-    if (!isValidAccountEmail(email)) {
-      setError("Please enter a valid email address.")
+    if (!isValidSignInContact(email)) {
+      setError(signInContactMessage)
       return
     }
 
     setError("")
     setSubmitting(true)
     try {
-      setChallenge(await authApi.requestOtp(email.trim()))
       setMode("otp")
+      setChallenge(await authApi.requestOtp(email.trim()))
       setCode("")
-      setTotp("")
+      setMfaValue("")
       setPassword("")
-      setRequireTotp(false)
-      setTotpCode("")
+      setUseRecoveryCode(false)
+      setMfaChallenge(null)
     } catch (otpError) {
+      try {
+        const nextView = await resumePendingSignIn(otpError, email)
+        if (nextView) {
+          setPassword("")
+          setView(nextView)
+          if (flow === "email-otp") navigate("/")
+          return
+        }
+      } catch (recoveryError) {
+        setError(recoveryError instanceof Error ? recoveryError.message : "Unable to resume registration. Please try again.")
+        return
+      }
       setError(
         otpError instanceof Error
           ? otpError.message
@@ -293,7 +302,6 @@ export function SignIn() {
 
   const handleCompleteForgotPassword = () => {
     setShowForgotPassword(false)
-    setMode("password")
     setEmail(fpEmail)
     setPassword(fpNewPassword)
   }
@@ -306,7 +314,7 @@ export function SignIn() {
         <div className="auth-panel-heading">
           <BrandLogo height={64} style={{ margin: "0 auto 0.5rem" }} />
           <BrandWordmark height={21} />
-          <PageHeader title="Sign In" variant="compact" align="center" description="Welcome back to SmartParking" />
+          <PageHeader title={mode === "otp" ? "Email OTP Sign In" : "Sign In"} variant="compact" align="center" description={mode === "otp" ? challenge ? "Enter the code sent to your email" : "Enter your email to receive a sign-in code" : "Welcome back to SmartParking"} />
         </div>
 
         <form
@@ -316,32 +324,28 @@ export function SignIn() {
         >
           <div>
             <label className="label" htmlFor="sign-in-email" style={{ fontSize: "0.925rem" }}>
-              Email
+              Email or Phone Number
             </label>
             <input
               id="sign-in-email"
               name="email"
               className="input"
-              type="email"
+              type="text"
               autoComplete="username"
               value={email}
-              disabled={submitting || !!challenge}
-              onChange={(e) => {
-                setEmail(e.target.value)
-                setError("")
-              }}
-              placeholder="you@example.com"
+              disabled={submitting || !!challenge || !!mfaChallenge}
+              onChange={(e) => { setEmail(e.target.value); setError("") }}
+              placeholder="you@example.com or phone number"
               required
               style={{ fontSize: "1rem" }}
             />
           </div>
 
-          {mode === "password" && (
+          {mode === "password" && !mfaChallenge && (
             <div>
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
                   alignItems: "center",
                   marginBottom: "0.25rem",
                 }}
@@ -353,21 +357,6 @@ export function SignIn() {
                 >
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={handleOpenForgotPassword}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--primary)",
-                    cursor: "pointer",
-                    fontSize: "0.825rem",
-                    fontWeight: 600,
-                    padding: 0,
-                  }}
-                >
-                  Forgot password?
-                </button>
               </div>
               <div style={{ position: "relative" }}>
                 <input
@@ -405,42 +394,46 @@ export function SignIn() {
                   <PasswordVisibilityIcon visible={showPassword} />
                 </button>
               </div>
-            </div>
-          )}
-
-          {mode === "password" && requireTotp && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-              <div
+              <button
+                type="button"
+                onClick={handleOpenForgotPassword}
                 style={{
-                  padding: "0.5rem 0.75rem",
-                  borderRadius: "var(--radius)",
-                  background: "#f59e0b10",
-                  border: "1px solid #f59e0b40",
-                  color: "#b45309",
+                  display: "block",
+                  margin: "0.5rem 0 0 auto",
+                  padding: 0,
+                  background: "none",
+                  border: "none",
+                  color: "var(--primary)",
+                  cursor: "pointer",
                   fontSize: "0.825rem",
-                  lineHeight: 1.5,
+                  fontWeight: 600,
                 }}
               >
-                Your account has two-factor authentication enabled. Please enter your security code below.
-              </div>
-              <label className="label" style={{ fontSize: "0.925rem" }}>
-                Security Code (2FA)
-                <input
-                  className="input"
-                  placeholder="Enter your 6-digit security code"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  autoFocus
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
-                  style={{ fontSize: "1rem" }}
-                />
-              </label>
+                Forgot password?
+              </button>
             </div>
           )}
 
+          {mode === "password" && mfaChallenge && (
+            <>
+              <p role="status">Your password was verified. Enter your authenticator code or a saved recovery code.</p>
+              <MfaCodeInput
+                recovery={useRecoveryCode}
+                value={mfaValue}
+                onChange={setMfaValue}
+                onMethodChange={setUseRecoveryCode}
+                disabled={submitting}
+              />
+              <button type="button" className="text-button" disabled={submitting}
+                onClick={() => {
+                  setMfaChallenge(null)
+                  setMfaValue("")
+                  setError("")
+                }}>
+                Back to password sign-in
+              </button>
+            </>
+          )}
           {mode === "otp" && challenge && (
             <>
               <p
@@ -453,6 +446,20 @@ export function SignIn() {
               >
                 Check {email} for your code. Expires in 5 minutes.
               </p>
+              <button
+                className="btn-outline justify-center"
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  setChallenge(null)
+                  setCode("")
+                  setMfaValue("")
+                  setUseRecoveryCode(false)
+                  setError("")
+                }}
+              >
+                Change email
+              </button>
               <label className="label text-center">
                 Verification code
                 <input
@@ -465,23 +472,38 @@ export function SignIn() {
                   onChange={(e) => setCode(e.target.value)}
                 />
               </label>
-              <label className="label text-center">
-                Authenticator code (if MFA enabled)
-                <input
-                  className="input text-center"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={totp}
-                  onChange={(e) => setTotp(e.target.value)}
-                />
-              </label>
+              <MfaCodeInput
+                recovery={useRecoveryCode}
+                value={mfaValue}
+                onChange={setMfaValue}
+                onMethodChange={setUseRecoveryCode}
+                required={false}
+                disabled={submitting}
+              />
+              <p style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Required only if two-factor authentication is enabled.</p>
               <button
                 className="btn-outline justify-center"
                 type="button"
                 disabled={submitting}
-                onClick={requestEmailOtp}
+                onClick={requestSignInOtp}
               >
                 Request another code
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  setMode("password")
+                  setChallenge(null)
+                  setCode("")
+                  setMfaValue("")
+                  setMfaChallenge(null)
+                  setUseRecoveryCode(false)
+                  setError("")
+                }}
+              >
+                Back to password sign-in
               </button>
             </>
           )}
@@ -513,16 +535,20 @@ export function SignIn() {
               padding: "0.75rem",
             }}
           >
-            {submitting ? "Please wait…" : "Sign In"}
+            {submitting ? "Please wait…" : mode === "otp" ? challenge ? "Verify and Sign In" : "Send Email Code" : "Sign In"}
           </button>
 
-          {mode === "password" && (
+          {mode === "password" && !mfaChallenge && (
             <div className="auth-alt-actions" aria-label="Other sign-in options">
               <button
                 type="button"
                 disabled={submitting}
                 className="btn-outline justify-center"
-                onClick={requestEmailOtp}
+                onClick={() => {
+                  setError("")
+                  setPassword("")
+                  navigate("/sign-in/email-otp")
+                }}
                 aria-label="Sign in with email OTP"
               >
                 <span className="auth-email-icon" aria-hidden="true">✉</span> Email OTP
@@ -544,6 +570,18 @@ export function SignIn() {
             </div>
           )}
 
+          {mode === "otp" && (
+            <button
+              type="button"
+              className="btn-outline justify-center"
+              disabled={submitting}
+              onClick={() => { setView("sign-in"); navigate("/") }}
+            >
+              Back to password sign-in
+            </button>
+          )}
+
+
           <p
             style={{
               textAlign: "center",
@@ -555,7 +593,7 @@ export function SignIn() {
             Don't have an account?{" "}
             <button
               type="button"
-              onClick={() => setView("sign-up")}
+              onClick={() => { setView("sign-up"); if (mode === "otp") navigate("/") }}
               style={{
                 background: "none",
                 border: "none",

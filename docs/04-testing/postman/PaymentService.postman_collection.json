@@ -1,0 +1,557 @@
+{
+  "info": {
+    "name": "SmartParking - PaymentService",
+    "description": "# SmartParking - Payment Service API Collection\n\nCollection kiểm thử toàn diện các API của Payment Service thuộc hệ thống SmartParking. Tuân thủ tiêu chuẩn thiết kế kiến trúc Clean Architecture & Hexagonal, CQRS/MediatR và tài liệu API Contract tại `docs/02-architecture/api/payment-service/01-pricing-calculation.contract.md`.\n\n## 1. Chuẩn bị môi trường\n\n1. Khởi động Payment Service bằng lệnh:\n   ```bash\n   dotnet run --project src/Services/PaymentService/SmartParking.PaymentService.API\n   ```\n2. Mặc định cổng API của PaymentService là **5065** (`http://localhost:5065`).\n3. Lấy JWT Token từ UserService (hoặc Identity Provider) và gán vào các biến collection:\n   - `accessToken`: JWT token của User/Driver thông thường.\n   - `adminToken`: JWT token có role `ADMIN` hoặc `OPERATOR` (dùng cho các tác vụ nội bộ hoặc Policy Override).\n\n## 2. Các Folder tính năng\n\n- `01 - Pricing Calculator` (SPARK-229): Động cơ tính phí đỗ xe tất định, cắt lát khung giờ, xử lý phiên đỗ qua nửa đêm, thời gian miễn phí bao gồm (grace period) và làm tròn tiền tệ 1 lần duy nhất ở kết quả cuối.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5065",
+      "type": "string",
+      "description": "Địa chỉ HTTP của Payment Service (mặc định http://localhost:5065)"
+    },
+    {
+      "key": "accessToken",
+      "value": "user-token",
+      "type": "string",
+      "description": "Bearer JWT Access Token của Driver / Regular User (lấy từ UserService)"
+    },
+    {
+      "key": "adminToken",
+      "value": "admin-token",
+      "type": "string",
+      "description": "Bearer JWT Access Token của ADMIN / OPERATOR (dùng cho Policy Override)"
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "string",
+      "description": "ID doanh nghiệp sở hữu bãi xe (UUID v4)"
+    },
+    {
+      "key": "siteId",
+      "value": "",
+      "type": "string",
+      "description": "ID bãi đỗ xe (UUID v4)"
+    },
+    {
+      "key": "calcEntryTime",
+      "value": "",
+      "type": "string",
+      "description": "Thời điểm xe vào bãi (ISO-8601, tự động sinh qua pre-request script)"
+    },
+    {
+      "key": "calcExitTime",
+      "value": "",
+      "type": "string",
+      "description": "Thời điểm xe ra bãi (ISO-8601, tự động sinh qua pre-request script)"
+    },
+    {
+      "key": "freeEntryTime",
+      "value": "",
+      "type": "string",
+      "description": "Thời điểm xe vào bãi trong ngưỡng miễn phí (ISO-8601)"
+    },
+    {
+      "key": "freeExitTime",
+      "value": "",
+      "type": "string",
+      "description": "Thời điểm xe ra bãi trong ngưỡng miễn phí (ISO-8601)"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 - Pricing Calculator",
+      "description": "Các kịch bản kiểm thử API tính phí đỗ xe (POST /api/v1/pricing/calculate) theo SPARK-229.",
+      "item": [
+        {
+          "name": "Calculate pricing - Policy override with Admin token (Happy Path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = new Date();",
+                  "const entry = new Date(now.getTime() - 2 * 60 * 60 * 1000); // 2 giờ trước",
+                  "pm.collectionVariables.set('calcEntryTime', entry.toISOString());",
+                  "pm.collectionVariables.set('calcExitTime', now.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 2000ms', () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "pm.test('Content-Type is application/json', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "const json = pm.response.json();",
+                  "pm.test('Response envelope has success=true and data', () => {",
+                  "    pm.expect(json).to.have.property('success', true);",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "pm.test('Financial calculation fields are valid', () => {",
+                  "    const data = json.data;",
+                  "    pm.expect(data.currency).to.eql('VND');",
+                  "    pm.expect(data.finalAmountVnd).to.be.a('number');",
+                  "    pm.expect(data.finalAmountVnd).to.be.at.least(0);",
+                  "    pm.expect(data.totalParkedMinutes).to.be.a('number');",
+                  "    pm.expect(data.invoiceRoundedMinutes).to.be.a('number');",
+                  "    pm.expect(data.roundingMode).to.be.a('string');",
+                  "    pm.expect(data.segments).to.be.an('array');",
+                  "    pm.expect(data.segments.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Ô tô Tiêu chuẩn 2026\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 20000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 30000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Happy path: Tính phí đỗ xe kèm Policy Override (dành cho Admin/Internal caller có role ADMIN hoặc OPERATOR)."
+          }
+        },
+        {
+          "name": "Calculate pricing - Free parking stay within grace period (Happy Path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = new Date();",
+                  "const entry = new Date(now.getTime() - 10 * 60 * 1000); // 10 phút trước (<= 15 phút grace)",
+                  "pm.collectionVariables.set('freeEntryTime', entry.toISOString());",
+                  "pm.collectionVariables.set('freeExitTime', now.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Stay within grace period should be free (0 VND)', () => {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.isFreeStay).to.eql(true);",
+                  "    pm.expect(json.data.finalAmountVnd).to.eql(0);",
+                  "    pm.expect(json.data.billedMinutes).to.eql(0);",
+                  "    pm.expect(json.data.segments.length).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{freeEntryTime}}\",\n  \"exitTime\": \"{{freeExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Ô tô Tiêu chuẩn 2026\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 20000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 30000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Happy path: Thời gian đỗ xe nhỏ hơn hoặc bằng số phút miễn phí (10 phút <= 15 phút grace period) -> Số tiền bằng 0 VND và IsFreeStay = true."
+          }
+        },
+        {
+          "name": "Calculate pricing - Motorcycle vehicle type (Happy Path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = new Date();",
+                  "const entry = new Date(now.getTime() - 90 * 60 * 1000); // 1.5 giờ trước",
+                  "pm.collectionVariables.set('calcEntryTime', entry.toISOString());",
+                  "pm.collectionVariables.set('calcExitTime', now.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Motorcycle calculation succeeds', () => {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.finalAmountVnd).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"MOTORCYCLE\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Xe máy Tiêu chuẩn\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"MOTORCYCLE\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 5000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 10000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Happy path: Tính phí đỗ xe cho loại xe máy (MOTORCYCLE)."
+          }
+        },
+        {
+          "name": "Calculate pricing - Missing required fields (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('Validation error envelope structure is correct', () => {",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
+                  "    pm.expect(json.errors).to.be.an('array');",
+                  "    pm.expect(json.errors.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"00000000-0000-0000-0000-000000000000\",\n  \"siteId\": \"00000000-0000-0000-0000-000000000000\",\n  \"vehicleType\": \"\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Thiếu hoặc để trống các trường bắt buộc (tenantId, siteId, vehicleType)."
+          }
+        },
+        {
+          "name": "Calculate pricing - Unsupported vehicle type (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns UNSUPPORTED_VEHICLE_TYPE error', () => {",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
+                  "    const hasVehicleTypeError = json.errors.some(e => e.field === 'VehicleType' || e.code === 'UNSUPPORTED_VEHICLE_TYPE');",
+                  "    pm.expect(hasVehicleTypeError).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"TRUCK\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Loại xe không được hỗ trợ trong Sprint hiện tại (chỉ hỗ trợ CAR và MOTORCYCLE)."
+          }
+        },
+        {
+          "name": "Calculate pricing - ExitTime before EntryTime (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns INVALID_TIME_RANGE error', () => {",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
+                  "    const hasTimeError = json.errors.some(e => e.field === 'ExitTime' || e.code === 'INVALID_TIME_RANGE');",
+                  "    pm.expect(hasTimeError).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T12:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T08:00:00+07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Thời gian ra bãi (ExitTime) trước thời gian vào bãi (EntryTime)."
+          }
+        },
+        {
+          "name": "Calculate pricing - Policy override by unauthorized regular user (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns FORBIDDEN validation error for regular user override', () => {",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
+                  "    const hasForbiddenError = json.errors.some(e => e.field === 'PolicyOverride' || e.code === 'FORBIDDEN');",
+                  "    pm.expect(hasForbiddenError).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Unauthorized Override\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"00:00\",\n        \"endTime\": \"00:00\",\n        \"ratePerHourVnd\": 0\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Regular user (không có role ADMIN/OPERATOR) cố ý truyền policyOverride để ép giá 0 VND."
+          }
+        },
+        {
+          "name": "Calculate pricing - No token provided (Expected 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Không truyền Bearer token trong Authorization header -> Bị chặn với HTTP 401 Unauthorized."
+          }
+        },
+        {
+          "name": "Calculate pricing - Non-existent walk-in tariff (Expected 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 404 Not Found (hoặc 503/504 nếu FacilityService chưa chạy)', () => {",
+                  "    pm.expect([404, 503, 504]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Returns TARIFF_NOT_FOUND error code', () => {",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.errorCode).to.eql('TARIFF_NOT_FOUND');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"22222222-2222-2222-2222-222222222222\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Khách vãng lai tính tiền nhưng bãi xe chưa cấu hình bảng giá active cho loại xe này -> Trả về 404 TARIFF_NOT_FOUND."
+          }
+        },
+        {
+          "name": "Calculate pricing - Corrupted or missing reservation snapshot (Expected 422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 422 Unprocessable Entity (hoặc 503/504 nếu OperationService chưa chạy)', () => {",
+                  "    pm.expect([422, 503, 504]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 422) {",
+                  "    pm.test('Returns CORRUPTED_POLICY_SNAPSHOT error code', () => {",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.errorCode).to.eql('CORRUPTED_POLICY_SNAPSHOT');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"22222222-2222-2222-2222-222222222222\",\n  \"vehicleType\": \"CAR\",\n  \"reservationId\": \"00000000-0000-0000-0000-000000000000\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pricing", "calculate"]
+            },
+            "description": "Case lỗi: Phiên đỗ xe gắn với Reservation nhưng snapshot giá lúc đặt chỗ không tồn tại hoặc bị hỏng -> Trả về 422 CORRUPTED_POLICY_SNAPSHOT (tuyệt đối không tự fallback sang bảng giá hiện hành)."
+          }
+        }
+      ]
+    }
+  ]
+}

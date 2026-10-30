@@ -1,3 +1,4 @@
+using UserService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.UserService.Domain.Entities;
@@ -5,7 +6,6 @@ using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
 using UserService.Application.Services;
-using UserService.Infrastructure.Services;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 
@@ -38,6 +38,34 @@ public sealed class OwnerRegistrationTests
         async Task<OwnerApplicationDto> Register(string email, string phone)
         {
             var result=await Run(s => s.RegisterAsync(Body(email, phone), default));
+            Assert.Null(result.Verification);
+            Assert.NotNull(result.SetupToken);
+            await using (var before = new AppDbContext(options))
+            {
+                Assert.False(await before.AuthChallenges.AnyAsync(c => c.UserId == result.OwnerId));
+                Assert.False(await before.WorkflowDeliveries.AnyAsync(c => c.UserId == result.OwnerId));
+                var entity = await before.OwnerApplications.SingleAsync(a => a.Id == result.Id);
+                Assert.NotEqual(result.SetupToken, entity.SetupTokenHash);
+            }
+            var setup = new OwnerLotSetupRequest { RegistrationId = result.Id, SetupToken = result.SetupToken!, Lot = new()
+            { Name = "Test Lot", Address = "Test address", LotType = "outdoor", TotalSlots = 10, Floors = 1,
+                ModelFileName = "outdoor_parking_lot.glb", PolicyAccepted = true } };
+            await Expect("SETUP_TOKEN_INVALID", () => Run(s => s.SaveLotSetupAsync(new()
+                { RegistrationId = setup.RegistrationId, SetupToken = "invalid", Lot = setup.Lot }, default)));
+            var savedTime = clock.Now;
+            clock.Now = clock.Now.AddDays(2);
+            await Expect("SETUP_TOKEN_INVALID", () => Run(s => s.SaveLotSetupAsync(setup, default)));
+            clock.Now = savedTime;
+            setup.Lot.PolicyAccepted = false;
+            await Expect("VALIDATION_FAILED", () => Run(s => s.SaveLotSetupAsync(setup, default)));
+            setup.Lot.PolicyAccepted = true;
+            result = await Run(s => s.SaveLotSetupAsync(setup, default));
+            var retry = await Run(s => s.SaveLotSetupAsync(setup, default));
+            Assert.Equal(result.Verification, retry.Verification);
+            Assert.True(result.LotSetupComplete);
+            Assert.Equal("outdoor", result.LotType);
+            setup.Lot.Name = "Changed after submission";
+            await Expect("SETUP_ALREADY_SAVED", () => Run(s => s.SaveLotSetupAsync(setup, default)));
             await using var db=new AppDbContext(options);
             foreach(var challenge in new[]{result.Verification!})
             {
@@ -56,7 +84,6 @@ public sealed class OwnerRegistrationTests
             {
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
-                db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.Add(new User { Id = adminId, FullName = "Admin", Phone = "0900000000", Email = "admin@example.com",
                     PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
                     Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] });
@@ -68,6 +95,9 @@ public sealed class OwnerRegistrationTests
                 var migration = await File.ReadAllTextAsync(Path.Combine(root!.FullName, "scripts/database/05.5-Owner-Registration-Approval.sql"));
                 await db.Database.ExecuteSqlRawAsync(migration);
                 await db.Database.ExecuteSqlRawAsync(migration);
+                var onboarding = await File.ReadAllTextAsync(ServiceSchema.FeaturePath("05.15-Owner-Onboarding.sql"));
+                await db.Database.ExecuteSqlRawAsync(onboarding);
+                await db.Database.ExecuteSqlRawAsync(onboarding);
             }
             var pending = await Register(" OWNER@EXAMPLE.COM ", "0911111111");
             Assert.Equal("pending", pending.Status);
@@ -76,7 +106,7 @@ public sealed class OwnerRegistrationTests
             {
                 var user = await new UserRepository(db).GetByIdWithRolesAsync(pending.OwnerId, default);
                 Assert.Equal(UserStatus.PendingApproval, user!.Status);
-                Assert.Null(AccessTokenService.CurrentRole(user));
+                Assert.Null(AccountRolePolicy.CurrentRole(user));
                 Assert.True(passwords.Verify("Password@123", user.PasswordHash));
                 var jwt = new global::UserService.Application.Common.Models.JwT.JwtOptions { Issuer = "owner-test", Audience = "owner-test" };
                 using var keys = new JwtKeyProvider(jwt, true);
@@ -95,18 +125,27 @@ public sealed class OwnerRegistrationTests
             directory.Unavailable = true;
             await Expect("PARKING_UNAVAILABLE", () => Review(pending.Id, "approved"));
             directory.Unavailable = false;
+            directory.LoseProvisionResponse = true;
+            await Expect("PARKING_UNAVAILABLE", () => Review(pending.Id, "approved"));
+            Assert.True(directory.Sites.ContainsKey(pending.Id));
+            await using (var incomplete = new AppDbContext(options))
+            {
+                Assert.Equal(UserStatus.PendingApproval, (await incomplete.Users.SingleAsync(u => u.Id == pending.OwnerId)).Status);
+                Assert.False(await incomplete.WorkflowDeliveries.AnyAsync(d => d.UserId == pending.OwnerId && d.Kind == "OWNER_DECISION"));
+            }
+            directory.LoseProvisionResponse = false;
             Assert.Equal("pending", (await Run(s => s.ListAsync(adminId, default))).Single().Status);
             var decisions = await Task.WhenAll(new[] { "approved", "rejected" }.Select(async status =>
             {
                 try { return (await Review(pending.Id, status)).Status; }
                 catch (AuthException e) { return e.Code; }
             }));
-            Assert.Single(decisions, d => d == "APPLICATION_CLOSED");
+            Assert.Single(decisions, d => d is "APPLICATION_CLOSED" or "APPROVAL_IN_PROGRESS");
             var final = (await Run(s => s.ListAsync(adminId, default))).Single();
             Assert.Equal(adminId, final.ReviewedBy);
             Assert.Equal(clock.Now, final.ReviewedAt);
             Assert.Equal("Reviewed", final.ReviewNote);
-            await Expect("APPLICATION_CLOSED", () => Review(pending.Id, "approved"));
+            Assert.Equal("approved", (await Review(pending.Id, "approved")).Status);
             var duplicates = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ =>
             {
                 try { await Register("concurrent@example.com", "0955555555"); return "created"; }
@@ -121,7 +160,7 @@ public sealed class OwnerRegistrationTests
                 await using var db = new AppDbContext(options);
                 var user = await new UserRepository(db).GetByIdWithRolesAsync(r.OwnerId, default);
                 Assert.Equal(status == "approved" ? UserStatus.Active : UserStatus.Rejected, user!.Status);
-                Assert.Equal(status == "approved" ? "owner" : null, AccessTokenService.CurrentRole(user));
+                Assert.Equal(status == "approved" ? "owner" : null, AccountRolePolicy.CurrentRole(user));
                 if (status == "approved") { Assert.Equal(r.Id, user.Accounts.Single().TenantId); Assert.Contains(r.Id, directory.Provisioned); }
                 var jwt = new global::UserService.Application.Common.Models.JwT.JwtOptions { Issuer = "owner-test", Audience = "owner-test" };
                 using var keys = new JwtKeyProvider(jwt, true);
@@ -132,8 +171,40 @@ public sealed class OwnerRegistrationTests
                     passwords, new AuthSessionService(tokens, sessions, policy, clock), policy, clock);
                 var result = await login.Handle(new() { Email = r.Email, Password = "Password@123" }, default);
                 Assert.Equal(status == "approved", result.IsSuccess);
-                if (result.IsSuccess) Assert.Equal("owner", result.Session!.User!.Role);
+                if (result.IsSuccess)
+                {
+                    Assert.Equal("owner", result.Session!.User!.Role);
+                    Assert.True(result.Session.User.OnboardingComplete);
+                    Assert.True((await new global::UserService.Application.Usecase.Session.GetCurrentUserQueryHandler(new UnitOfWork(db, new UserRepository(db)))
+                        .Handle(new(r.OwnerId), default))!.OnboardingComplete);
+                }
             }
+            var concurrent = await Register("concurrent-approval@example.com", "0966666666");
+            var approvals = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ =>
+            {
+                try { return (await Review(concurrent.Id, "approved")).Status; }
+                catch (AuthException e) { return e.Code; }
+            }));
+            Assert.All(approvals, result => Assert.Equal("approved", result));
+            await using (var check = new AppDbContext(options))
+                Assert.Equal(1, await check.WorkflowDeliveries.CountAsync(d => d.UserId == concurrent.OwnerId && d.Kind == "OWNER_DECISION"));
+            var legacy = await Run(s => s.RegisterAsync(Body("legacy@example.com", "0977777777"), default));
+            await using (var old = new AppDbContext(options))
+            {
+                var workflow = WorkflowTestSupport.Create(old, clock);
+                await Expect("SETUP_RECOVERY_REQUIRED", () => workflow.RecoverOwnerAsync(legacy.Email, default));
+                var owner = await old.Users.SingleAsync(u => u.Id == legacy.OwnerId);
+                var challenge = await workflow.IssueOwnerAsync(owner, default); // simulate pre-upgrade registration
+                await Expect("LOT_SETUP_REQUIRED", () => workflow.VerifyOwnerAsync(challenge.ChallengeId, "000000", default));
+                await Expect("LOT_SETUP_REQUIRED", () => workflow.ResendOwnerAsync(challenge.ChallengeId, default));
+                owner.EmailVerifiedAt = clock.Now;
+                owner.Status = UserStatus.PendingApproval;
+                await old.SaveChangesAsync();
+            }
+            await Expect("LOT_SETUP_REQUIRED", () => Review(legacy.Id, "approved"));
+            var adminList = await Run(s => s.ListAsync(adminId, default));
+            Assert.All(adminList, item => Assert.Null(item.SetupToken));
+            Assert.DoesNotContain("setupToken", System.Text.Json.JsonSerializer.Serialize(adminList, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
             await using (var db = new AppDbContext(options))
                 await db.Users.Where(u => u.Id == adminId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UserStatus.Locked));
             await Expect("FORBIDDEN", () => Run(s => s.ListAsync(adminId, default)));

@@ -1,10 +1,10 @@
+using UserService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
-using UserService.Infrastructure.Services;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 using UserService.Application.Services;

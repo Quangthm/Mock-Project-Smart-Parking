@@ -204,14 +204,18 @@ export function useLotStatus(lot: OperatorSite | null, initialSlotCode = "", ini
       }
       if (!unit) return false
     }
+    const STATUS_FILTER_PREDICATES: Record<Exclude<SlotStatusFilter, "all">, (s: OperatorSlot) => boolean> = {
+      available: (s) => s.status === "available",
+      occupied: (s) => s.status === "occupied",
+      reserved: (s) => s.status === "reserved",
+      maintenance: (s) => s.status === "maintenance" || s.status === "disabled",
+      backup: (s) => s.reservationState?.toUpperCase() === "BACKUP",
+    }
+
     const isMoto = slot.vehicleType.toLowerCase().includes("motorcycle")
     if (vehicleTypeFilter === "car" && isMoto) return false
     if (vehicleTypeFilter === "motorcycle" && !isMoto) return false
-    if (statusFilter === "available" && slot.status !== "available") return false
-    if (statusFilter === "occupied" && slot.status !== "occupied") return false
-    if (statusFilter === "reserved" && slot.status !== "reserved") return false
-    if (statusFilter === "maintenance" && slot.status !== "maintenance" && slot.status !== "disabled") return false
-    if (statusFilter === "backup" && slot.reservationState?.toUpperCase() !== "BACKUP") return false
+    if (statusFilter !== "all" && !STATUS_FILTER_PREDICATES[statusFilter]?.(slot)) return false
     if (searchQuery.trim() && !slot.number.toLowerCase().includes(searchQuery.trim().toLowerCase())) return false
     return true
   }), [allSlots, isOutdoor, selectedFloor, selectedZone, vehicleTypeFilter, statusFilter, searchQuery, lot])

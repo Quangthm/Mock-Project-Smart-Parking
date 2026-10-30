@@ -1,3 +1,4 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -10,6 +11,7 @@ import {
 } from "../../../lib/parkingApi"
 import { CreateOperatorForm } from "./CreateOperatorForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { watchOperators } from "../../../lib/operatorLive"
 
 export function OperatorManagement({
   selectedSiteId,
@@ -28,6 +30,18 @@ export function OperatorManagement({
   const [reload, setReload] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSite, setFilterSite] = useState(selectedSiteId)
+  const [inviting, setInviting] = useState<string | null>(null)
+  useEffect(() => watchOperators(() => setReload(value => value + 1)), [user?.id])
+
+  async function resendInvitation(id: string) {
+    setInviting(id)
+    setError("")
+    try {
+      await operatorsApi.reissueInvitation(id)
+      setMessage("A new activation invitation is queued. Previous links are no longer valid.")
+    } catch (err) { setError(err instanceof Error ? err.message : "Cannot send invitation.") }
+    finally { setInviting(null) }
+  }
 
   // Reassign Site State & Confirmation
   const [transferOp, setTransferOp] = useState<Operator | null>(null)
@@ -71,13 +85,13 @@ export function OperatorManagement({
 
   function onCreated(operator: Operator) {
     setOperators((current) =>
-      [...current, operator].sort((a, b) =>
+      current.some(existing => existing.id === operator.id) ? current : [...current, operator].sort((a, b) =>
         a.fullName.localeCompare(b.fullName),
       ),
     )
     setShowCreate(false)
     setMessage(
-      `Account created for ${operator.email}. The operator can sign in with this email and the password you provided.`,
+      `Invitation queued for ${operator.email}. The operator must verify their email and choose their own password before signing in.`,
     )
     onOperatorsChanged()
   }
@@ -184,10 +198,13 @@ export function OperatorManagement({
 
       {/* Filters Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+        <div className="sp-search-field flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
+            type="search"
+            aria-label="Search operators by name or email"
+            autoComplete="off"
             placeholder="Search operator by name or email…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -205,7 +222,7 @@ export function OperatorManagement({
 
         <div className="flex items-center gap-2 text-xs">
           <span className="text-[var(--muted)] font-medium">Filter Site:</span>
-          <select
+          <RoundedSelect
             className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs text-[var(--fg)] outline-none"
             value={filterSite}
             onChange={(e) => setFilterSite(e.target.value)}
@@ -216,7 +233,7 @@ export function OperatorManagement({
                 {s.name}
               </option>
             ))}
-          </select>
+          </RoundedSelect>
         </div>
       </div>
 
@@ -277,6 +294,12 @@ export function OperatorManagement({
 
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {op.status === "pending_verification" && (
+                          <button type="button" className="btn-outline text-[11px] py-1 px-2.5"
+                            disabled={inviting !== null} onClick={() => void resendInvitation(op.id)}>
+                            {inviting === op.id ? "Sending…" : "Resend invitation"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2.5"
@@ -377,7 +400,7 @@ export function OperatorManagement({
                   <label className="label mb-1" htmlFor="transfer-target-site">
                     New Assigned Site:
                   </label>
-                  <select
+                  <RoundedSelect
                     id="transfer-target-site"
                     className="input"
                     value={targetSiteId}
@@ -391,7 +414,7 @@ export function OperatorManagement({
                         {s.name}
                       </option>
                     ))}
-                  </select>
+                  </RoundedSelect>
                 </div>
               </div>
 

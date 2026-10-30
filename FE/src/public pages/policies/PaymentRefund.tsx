@@ -139,8 +139,10 @@ export function PaymentRefund() {
 
       <PolicySection title="2. Cơ chế đặt cọc">
         <p>
-          Khi xác nhận booking, Tài xế thanh toán tiền cọc bằng 30% tổng phí đỗ
-          xe. Phần còn lại được thu khi Check-out.
+          Chủ bãi quyết định có yêu cầu đặt cọc hay không, cùng với hình thức và
+          mức cọc áp dụng cho từng bãi. Số tiền cọc được hiển thị cho Tài xế trước
+          khi xác nhận đặt chỗ và không vượt quá tổng phí đỗ xe. Nếu có đặt cọc,
+          phần còn lại được thu khi Check-out.
         </p>
         <p>
           <strong>Mục đích:</strong> Đảm bảo cam kết giữ chỗ và bù đắp doanh thu

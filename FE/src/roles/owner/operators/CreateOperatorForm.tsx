@@ -1,8 +1,8 @@
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useEffect, type FormEvent } from "react"
 import { createPortal } from "react-dom"
 import { operatorsApi, type Operator, type Site } from "../../../lib/parkingApi"
 import { isValidAccountEmail } from "../../../lib/signInContact"
-import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 interface CreateOperatorFormProps {
@@ -21,26 +21,6 @@ const DEFAULT_OPERATOR_PERMISSIONS = [
   "SLOT_OVERRIDE",
 ]
 
-function validatePassword(pw: string): string[] {
-  const errors: string[] = []
-  if (pw.length < 8) errors.push("At least 8 characters")
-  if (pw.length > 15) errors.push("Maximum 15 characters")
-  if (!/[A-Z]/.test(pw)) errors.push("One uppercase letter")
-  if (!/[a-z]/.test(pw)) errors.push("One lowercase letter")
-  if (!/[0-9]/.test(pw)) errors.push("One number")
-  if (!/[^A-Za-z0-9]/.test(pw)) errors.push("One special character")
-  return errors
-}
-
-const PASSWORD_RULES = [
-  "At least 8 characters",
-  "Maximum 15 characters",
-  "One uppercase letter",
-  "One lowercase letter",
-  "One number",
-  "One special character",
-]
-
 export function CreateOperatorForm({
   isOpen,
   sites,
@@ -51,12 +31,8 @@ export function CreateOperatorForm({
   const [form, setForm] = useState({
     name: "",
     email: "",
-    password: "",
-    confirmPassword: "",
     siteId: sites[0]?.id ?? "",
   })
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [generalError, setGeneralError] = useState("")
   const [emailError, setEmailError] = useState("")
@@ -75,17 +51,7 @@ export function CreateOperatorForm({
 
   if (!isOpen || typeof document === "undefined") return null
 
-  const isDirty = Boolean(
-    form.name.trim() ||
-      form.email.trim() ||
-      form.password ||
-      form.confirmPassword,
-  )
-
-  const passwordErrors = validatePassword(form.password)
-  const isPasswordValid = form.password.length > 0 && passwordErrors.length === 0
-  const isConfirmMatch =
-    form.password.length > 0 && form.password === form.confirmPassword
+  const isDirty = Boolean(form.name.trim() || form.email.trim())
 
   function handleAttemptClose() {
     if (busy) return
@@ -129,20 +95,7 @@ export function CreateOperatorForm({
       return
     }
 
-    // 3. Password validation
-    if (!isPasswordValid) {
-      setGeneralError(
-        "Password must be 8–15 characters with uppercase, lowercase, a digit, and a special character.",
-      )
-      return
-    }
-
-    if (!isConfirmMatch) {
-      setGeneralError("Password confirmation does not match.")
-      return
-    }
-
-    // 4. Sites check
+    // 3. Sites check
     const siteIds = sites.filter((s) => s.id === form.siteId).map((s) => s.id)
 
     if (!siteIds.length) {
@@ -155,7 +108,6 @@ export function CreateOperatorForm({
       const operator = await operatorsApi.create({
         fullName: trimmedName,
         email: normalizedEmail,
-        password: form.password,
         siteIds,
         permissions: DEFAULT_OPERATOR_PERMISSIONS,
       })
@@ -164,8 +116,6 @@ export function CreateOperatorForm({
       setForm({
         name: "",
         email: "",
-        password: "",
-        confirmPassword: "",
         siteId: sites[0]?.id ?? "",
       })
       onCreated(operator)
@@ -208,7 +158,7 @@ export function CreateOperatorForm({
                 Create Operator
               </h2>
               <p className="text-xs text-[var(--muted)]">
-                Set the operator's login email, password, and work site.
+                Invite an operator to a work site. They must verify their email and set their password before signing in.
               </p>
             </div>
           </div>
@@ -281,109 +231,12 @@ export function CreateOperatorForm({
             )}
           </div>
 
-          {/* Password Fields */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="op-password">
-                Password <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  id="op-password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  className="input pr-10"
-                  minLength={8}
-                  maxLength={15}
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, password: e.target.value }))
-                  }
-                  disabled={busy}
-                  required
-                />
-                <button
-                  type="button"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
-                  onClick={() => setShowPassword(!showPassword)}
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  <PasswordVisibilityIcon visible={showPassword} size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="label" htmlFor="op-confirm-password">
-                Re-Password <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  id="op-confirm-password"
-                  type={showConfirmPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  className={`input pr-10 ${
-                    form.confirmPassword && !isConfirmMatch ? "border-red-500" : ""
-                  }`}
-                  value={form.confirmPassword}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, confirmPassword: e.target.value }))
-                  }
-                  disabled={busy}
-                  required
-                />
-                <button
-                  type="button"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  tabIndex={-1}
-                  aria-label={
-                    showConfirmPassword ? "Hide password" : "Show password"
-                  }
-                >
-                  <PasswordVisibilityIcon visible={showConfirmPassword} size={18} />
-                </button>
-              </div>
-              {form.confirmPassword && !isConfirmMatch && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400 font-medium">
-                  Passwords do not match
-                </p>
-              )}
-            </div>
-          </div>
-
-          {form.password && (
-            <div className="space-y-1.5" aria-label="Password requirements">
-              <div className="h-1 overflow-hidden rounded-sm bg-[var(--border)]">
-                <div
-                  className="h-full transition-all"
-                  style={{
-                    width: `${((6 - passwordErrors.length) / 6) * 100}%`,
-                    background: passwordErrors.length >= 4 ? "#ef4444" : passwordErrors.length >= 2 ? "#f59e0b" : "#22c55e",
-                  }}
-                />
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                {PASSWORD_RULES.map((rule) => (
-                  <span
-                    key={rule}
-                    className={`flex items-center gap-1 ${passwordErrors.includes(rule) ? "text-[var(--muted)]" : "text-green-500"}`}
-                  >
-                    {passwordErrors.includes(rule) ? <span aria-hidden="true">○</span> : <UntitledIcon name="check" size={13} />}
-                    {rule}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Assigned Facility */}
           <div>
             <label className="label" htmlFor="op-site">
               Site <span className="text-red-500">*</span>
             </label>
-            <select
+            <RoundedSelect
               id="op-site"
               className="input"
               value={form.siteId}
@@ -401,7 +254,7 @@ export function CreateOperatorForm({
                   {site.name} ({site.totalPhysicalCapacity} slots)
                 </option>
               ))}
-            </select>
+            </RoundedSelect>
             {!sites.length && (
               <p role="status" className="mt-1 text-xs text-[var(--muted)]">
                 No active sites are available. Create an active site in Sites before creating this account.
@@ -426,9 +279,7 @@ export function CreateOperatorForm({
                 busy ||
                 !sites.length ||
                 !form.name.trim() ||
-                !form.email.trim() ||
-                !isPasswordValid ||
-                !isConfirmMatch
+                !form.email.trim()
               }
             >
               {busy ? "Creating Operator…" : "Create Operator"}

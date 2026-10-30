@@ -13,6 +13,15 @@ const refreshKey = "sp_refresh_token"
 const expiryKey = "sp_access_expires_at"
 
 export const authExpiredEvent = "sp-auth-expired"
+export const authRefreshedEvent = "sp-auth-refreshed"
+let refreshInFlight: Promise<void> | null = null
+let logoutInProgress = false
+// A refresh rotates credentials within a login; login/logout changes its identity.
+let sessionGeneration = 0
+
+function requireSessionGeneration(expected: number) {
+  if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")
+}
 
 interface ApiUser {
   userId: string
@@ -27,6 +36,37 @@ interface LoginSession {
   refreshToken: string
   expiresIn: number
   user: ApiUser
+  recoveryCodesRemaining?: number | null
+}
+
+export interface MfaLoginChallenge {
+  challengeId: string
+  challengeToken: string
+  expiresAt: string
+}
+
+export type PasswordLoginResult = User | { mfaRequired: true; challenge: MfaLoginChallenge }
+
+export interface MfaVerification {
+  password: string
+  totp?: string
+  recoveryCode?: string
+}
+
+export interface MfaStatus {
+  enabled: boolean
+  recoveryCodesRemaining: number
+}
+
+export interface MfaSetup {
+  secret: string
+  uri: string
+  expiresAt: string
+}
+
+export interface MfaRecoveryCodes {
+  recoveryCodes: string[]
+  signInRequired: boolean
 }
 
 interface ApiResponse<T> {
@@ -80,11 +120,71 @@ function toUser(account: ApiUser): User {
 }
 
 function clearSession() {
+  sessionGeneration++
   sessionStorage.removeItem(tokenKey)
 
   sessionStorage.removeItem(refreshKey)
 
   sessionStorage.removeItem(expiryKey)
+  sessionStorage.removeItem("sp_mfa_recovery_remaining")
+}
+
+function saveLoginSession(response: ApiResponse<LoginSession>, isRefresh = false): User {
+  if (!response.success || !response.data?.accessToken || !response.data.refreshToken)
+    throw new Error("Invalid sign-in response.")
+
+  const user = toUser(response.data.user)
+  if (!isRefresh) sessionGeneration++
+  sessionStorage.setItem(tokenKey, response.data.accessToken)
+  sessionStorage.setItem(refreshKey, response.data.refreshToken)
+  sessionStorage.setItem(expiryKey, String(Date.now() + response.data.expiresIn * 1000))
+  if (response.data.recoveryCodesRemaining != null)
+    sessionStorage.setItem("sp_mfa_recovery_remaining", String(response.data.recoveryCodesRemaining))
+  else
+    sessionStorage.removeItem("sp_mfa_recovery_remaining")
+  return user
+}
+
+function anonymousPath(path: string, prefix: string) {
+  return prefix === "/api/auth" && (["/login", "/refresh", "/otp/login", "/otp/request", "/mfa/login", "/bootstrap-password"].includes(path) || path.startsWith("/register/"))
+}
+
+export async function ensureAccessToken(): Promise<string> {
+  const token = sessionStorage.getItem(tokenKey)
+  if (!token) return ""
+  if (logoutInProgress) throw new Error("Sign out is in progress.")
+  if (Number(sessionStorage.getItem(expiryKey) ?? 0) > Date.now() + 30_000 && !refreshInFlight) return token
+  if (!refreshInFlight) {
+    const originalRefresh = sessionStorage.getItem(refreshKey)
+    refreshInFlight = (async () => {
+      if (!originalRefresh) {
+        clearSession()
+        window.dispatchEvent(new Event(authExpiredEvent))
+        throw new AuthApiError("Please sign in again.", 401, "INVALID_TOKEN")
+      }
+      let response: Response
+      try {
+        response = await fetch(baseUrl + "/api/auth/refresh", {
+          method: "POST", cache: "no-store", signal: AbortSignal.timeout(10_000),
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: originalRefresh }),
+        })
+      } catch { throw new Error("Cannot refresh your session. Please try again.") }
+      const payload = await response.json().catch(() => null)
+      // An old in-flight response must never restore or erase a different login/logout.
+      if (sessionStorage.getItem(refreshKey) !== originalRefresh || sessionStorage.getItem(tokenKey) !== token) return
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearSession()
+          window.dispatchEvent(new Event(authExpiredEvent))
+        }
+        throw new AuthApiError(payload?.message ?? "Cannot refresh your session.", response.status, payload?.code)
+      }
+      saveLoginSession(payload, true)
+      window.dispatchEvent(new Event(authRefreshedEvent))
+    })().finally(() => { refreshInFlight = null })
+  }
+  await refreshInFlight
+  return sessionStorage.getItem(tokenKey) ?? ""
 }
 
 export async function request<T>(
@@ -93,7 +193,13 @@ export async function request<T>(
   body?: unknown,
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
+  const generation = sessionGeneration
+  if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
+    await ensureAccessToken()
+    requireSessionGeneration(generation)
+  }
   const token = sessionStorage.getItem(tokenKey)
 
   let response: Response
@@ -108,6 +214,7 @@ export async function request<T>(
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
 
         ...(token ? { Authorization: "Bearer " + token } : {}),
+        ...extraHeaders,
       },
 
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -119,11 +226,18 @@ export async function request<T>(
   const payload =
     response.status === 204 ? null : await response.json().catch(() => null)
 
+  // Do not let an old response update the UI or clear a replacement login.
+  const issuesSession = apiPrefix === "/api/auth" && ["/login", "/otp/login", "/mfa/login"].includes(path)
+  if (!anonymousPath(path, apiPrefix) || issuesSession) requireSessionGeneration(generation)
+
   if (!response.ok) {
+    const isMfaManagement = ["/mfa/setup", "/mfa/enable", "/mfa/disable", "/mfa/recovery-codes"].includes(path)
+    const verificationFailed = isMfaManagement && ["AUTH_FAILED", "MFA_INVALID", "MFA_REQUIRED"].includes(payload?.code)
     if (
       response.status === 401 &&
       token &&
-      !["/login", "/logout", "/otp/login", "/otp/request"].includes(path) &&
+      !anonymousPath(path, apiPrefix) && path !== "/logout" &&
+      !verificationFailed &&
       token === sessionStorage.getItem(tokenKey)
     ) {
       clearSession()
@@ -167,30 +281,15 @@ export const authApi = {
     challengeId: string,
     code: string,
     totp?: string,
+    recoveryCode?: string,
   ): Promise<User> {
     const response = await request<ApiResponse<LoginSession>>(
       "/otp/login",
       "POST",
-      { challengeId, code, ...(totp ? { totp } : {}) },
+      { challengeId, code, ...(totp ? { totp } : {}), ...(recoveryCode ? { recoveryCode } : {}) },
     )
 
-    if (
-      !response.success ||
-      !response.data?.accessToken ||
-      !response.data.refreshToken
-    )
-      throw new Error("Invalid sign-in response.")
-
-    const user = toUser(response.data.user)
-
-    sessionStorage.setItem(tokenKey, response.data.accessToken)
-    sessionStorage.setItem(refreshKey, response.data.refreshToken)
-
-    sessionStorage.setItem(
-      expiryKey,
-      String(Date.now() + response.data.expiresIn * 1000),
-    )
-    return user
+    return saveLoginSession(response)
   },
 
   async registerDriver(body: {
@@ -251,37 +350,57 @@ export const authApi = {
 
   expiresAt: () => Number(sessionStorage.getItem(expiryKey) ?? 0),
 
-  async login(email: string, password: string, totp?: string): Promise<User> {
-    const response = await request<ApiResponse<LoginSession>>(
+  async login(email: string, password: string): Promise<PasswordLoginResult> {
+    const response = await request<ApiResponse<LoginSession | MfaLoginChallenge> & { mfaRequired?: boolean }>(
       "/login",
       "POST",
-      { email: email.trim(), password, ...(totp ? { totp } : {}) },
+      { email: email.trim(), password },
     )
 
-    if (
-      !response.success ||
-      !response.data?.accessToken ||
-      !response.data.refreshToken
-    )
-      throw new Error("Invalid login response.")
+    if (response.mfaRequired && response.success) {
+      const challenge = response.data as MfaLoginChallenge
+      if (!challenge?.challengeId || !challenge.challengeToken || !challenge.expiresAt)
+        throw new Error("Invalid verification challenge.")
+      return { mfaRequired: true, challenge }
+    }
+    return saveLoginSession(response as ApiResponse<LoginSession>)
+  },
 
-    const user = toUser(response.data.user)
+  async completeMfaLogin(challenge: MfaLoginChallenge, totp?: string, recoveryCode?: string): Promise<User> {
+    const response = await request<ApiResponse<LoginSession>>("/mfa/login", "POST", {
+      challengeId: challenge.challengeId,
+      challengeToken: challenge.challengeToken,
+      ...(totp ? { totp } : {}),
+      ...(recoveryCode ? { recoveryCode } : {}),
+    })
+    return saveLoginSession(response)
+  },
 
-    sessionStorage.setItem(tokenKey, response.data.accessToken)
+  async mfaStatus(): Promise<MfaStatus> {
+    return (await request<ApiResponse<MfaStatus>>("/mfa/status")).data
+  },
 
-    sessionStorage.setItem(refreshKey, response.data.refreshToken)
+  async setupMfa(verification: MfaVerification): Promise<MfaSetup> {
+    return (await request<ApiResponse<MfaSetup>>("/mfa/setup", "POST", verification)).data
+  },
 
-    sessionStorage.setItem(
-      expiryKey,
-      String(Date.now() + response.data.expiresIn * 1000),
-    )
+  async enableMfa(code: string): Promise<MfaRecoveryCodes> {
+    return (await request<ApiResponse<MfaRecoveryCodes>>("/mfa/enable", "POST", { code })).data
+  },
 
-    return user
+  async disableMfa(verification: MfaVerification): Promise<void> {
+    await request("/mfa/disable", "POST", verification)
+  },
+
+  async regenerateRecoveryCodes(verification: MfaVerification): Promise<MfaRecoveryCodes> {
+    return (await request<ApiResponse<MfaRecoveryCodes>>("/mfa/recovery-codes", "POST", verification)).data
   },
 
   async currentUser(): Promise<User | null> {
     if (!sessionStorage.getItem(tokenKey)) return null
-
+    const generation = sessionGeneration
+    await ensureAccessToken()
+    requireSessionGeneration(generation)
     const token = sessionStorage.getItem(tokenKey)
 
     const response = await request<ApiResponse<ApiUser>>("/me")
@@ -294,6 +413,13 @@ export const authApi = {
   },
 
   async logout(): Promise<void> {
+    const generation = sessionGeneration
+    if (refreshInFlight) await refreshInFlight
+    requireSessionGeneration(generation)
+    // Refresh an expired access token before the authenticated logout request.
+    await ensureAccessToken()
+    requireSessionGeneration(generation)
+    logoutInProgress = true
     const token = sessionStorage.getItem(tokenKey)
 
     try {
@@ -315,15 +441,18 @@ export const authApi = {
         try {
           // Only a failed bearer check may expire the local session; a valid one stays available for retry.
 
+          logoutInProgress = false
           await request<ApiResponse<ApiUser>>("/me")
         } catch {
           // Preserve the original logout error. A /me 401 already dispatches authExpiredEvent.
         }
       }
 
+      logoutInProgress = false
       throw error
     }
 
     if (token === sessionStorage.getItem(tokenKey)) clearSession()
+    logoutInProgress = false
   },
 }

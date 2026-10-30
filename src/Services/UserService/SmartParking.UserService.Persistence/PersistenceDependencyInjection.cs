@@ -1,6 +1,8 @@
+using UserService.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Persistence.Repositories;
 using UserService.Application.Common.Interfaces.Services;
@@ -16,19 +18,14 @@ public static class PersistenceDependencyInjection
             options.UseNpgsql(configuration.GetConnectionString("User") ?? configuration.GetConnectionString("DefaultConnection")
                 ?? throw new InvalidOperationException("Configure ConnectionStrings:User for the service-owned User database.")));
 
+        services.AddScoped<IIdentityWorkflowStore>(sp => sp.GetRequiredService<AppDbContext>());
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddTransient<DataSeeder>();
-        services.AddSingleton(TimeProvider.System);
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
-        services.AddScoped<IDriverRegistrationService, DriverRegistrationService>();
-        services.AddScoped<DriverRegistrationService>();
-        services.AddScoped<IOwnerRegistrationService, OwnerRegistrationService>();
-        services.AddScoped<IUserManagementService, UserManagementService>();
-        services.AddScoped<IOperatorProvisioningService, OperatorProvisioningService>();
-        services.AddScoped<AccountWorkflowService>();
-        services.AddScoped<IAccountWorkflows>(sp=>sp.GetRequiredService<AccountWorkflowService>());
-        services.AddScoped<IMfaPolicy>(sp=>sp.GetRequiredService<AccountWorkflowService>());
+        services.AddScoped<IIdentityAccessRepository, IdentityAccessRepository>();
+        services.AddScoped<IAccessEventStore, AccessEventStore>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
 
         return services;

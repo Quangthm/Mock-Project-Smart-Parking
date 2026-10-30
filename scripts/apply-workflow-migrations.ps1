@@ -1,10 +1,12 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Payment','Notification','Iot')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
     [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$ProjectName = 'smartpark-schema'
 )
 $ErrorActionPreference = 'Stop'
+# Existing schema maps retain Reservation as their compatibility key.
+if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $codeRoot = Split-Path $PSScriptRoot -Parent
 $composeFile = Join-Path $SchemaRoot 'compose.schema-integration.yml'
 if (!(Test-Path -LiteralPath $composeFile -PathType Leaf)) { throw 'SchemaRoot must contain the canonical schema compose file.' }
@@ -91,6 +93,19 @@ if ($state -eq 'empty') {
     }
 }
 
+# These incremental features are not included in the canonical baseline.
+# Apply on both empty and current databases; each migration is re-runnable.
+$features = switch ($Service) {
+    'User' { '05.13-Mfa-Lifecycle.sql'; '05.14-Identity-Access-Hardening.sql'; '05.15-Owner-Onboarding.sql' }
+    'Parking' { '05.16-Parking-Owner-Onboarding.sql' }
+    default { }
+}
+foreach ($feature in $features) {
+    $sql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$feature") -Raw
+    $sql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw "Feature migration failed for $Service at $feature." }
+}
+
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.
 foreach ($table in (@($required) + @($sentinel))) {
@@ -98,7 +113,7 @@ foreach ($table in (@($required) + @($sentinel))) {
     if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') { throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts." }
 }
 if ($state -eq 'current') {
-    Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    Write-Output "$Service schema already current; applied incremental features and verified required relations."
 } else {
     Write-Output "$Service workflow migrations applied."
 }

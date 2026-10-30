@@ -1,3 +1,6 @@
+using UserService.API;
+using Microsoft.Extensions.Configuration;
+using UserService.Infrastructure.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -22,7 +25,6 @@ using UserService.Application.Services;
 using UserService.Application.Common.Models.JwT;
 using UserService.Application.Usecase.Login;
 using UserService.Application.Usecase.Session;
-using UserService.Infrastructure.Services;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 
@@ -51,8 +53,12 @@ public sealed class UserManagementTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
-        builder.Services.AddApplicationServices(builder.Configuration);
+        builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
+        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
@@ -151,7 +157,6 @@ public sealed class UserManagementTests
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, new BcryptPasswordService()).SeedAsync();
                 driverId = (await db.Users.SingleAsync()).Id!.Value;
-                db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.AddRange(new User { Id = adminId, FullName = "Admin", Status = UserStatus.Active,
                     Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] },
                     new User { Id = pendingId, FullName = "Pending", Status = UserStatus.PendingApproval },
