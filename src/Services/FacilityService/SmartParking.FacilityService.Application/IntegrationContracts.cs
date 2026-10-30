@@ -23,6 +23,10 @@ public interface IStructureCommitments
     Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken);
     Task<CommitmentSnapshot> AcquireAsync(Guid tenantId, Guid siteId, Guid token, CancellationToken cancellationToken);
     Task ReleaseAsync(Guid tenantId, Guid siteId, Guid token, StructureOutcome? outcome, CancellationToken cancellationToken);
+    // A site can hold at most one edit hold, and an abandoned preparation leaves no
+    // physical change behind. This releases a leaked hold whose token no longer
+    // matches any durable row; it is only valid for an aborting row, under the site gate.
+    Task ForceReleaseAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken);
 }
 
 public sealed record StructureSynchronization(

@@ -205,8 +205,8 @@ SELECT
   (SELECT count(*) FROM spatial_unit_capacities WHERE site_id = :'site_id'::uuid)::text || '|' ||
   (SELECT count(*) FROM slot_compatibilities WHERE site_id = :'site_id'::uuid)::text;
 '@
-Assert-Counts -Label 'facility' -Actual $facilityCounts -Expected @('1','2','8','2','8')
-Write-Host '      OK (1 site, 2 units, 8 slots)' -ForegroundColor DarkGray
+Assert-Counts -Label 'facility' -Actual $facilityCounts -Expected @('1','2','48','2','48')
+Write-Host '      OK (1 site, 2 units, 48 slots)' -ForegroundColor DarkGray
 
 Write-Host '[5/6] Seeding reservation DB...' -ForegroundColor Cyan
 Invoke-SeedFile -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Path (Join-Path $demoDir '03-reservation.sql')

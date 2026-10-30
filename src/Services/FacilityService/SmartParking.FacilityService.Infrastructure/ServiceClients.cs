@@ -79,6 +79,25 @@ public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCo
             using var response = await client.PostAsJsonAsync(
                 $"internal/structure/{siteId}/{token}/release",
                 new { tenantId, outcome }, cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                throw new StructureException("STRUCTURE_BUSY", "Another edit has a pending hold.");
+            if (!response.IsSuccessStatusCode) throw Unavailable();
+        }
+        catch (Exception error) when (IsTransportFailure(error, cancellationToken))
+        {
+            throw Unavailable();
+        }
+    }
+
+    public async Task ForceReleaseAsync(
+        Guid tenantId, Guid siteId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await client.DeleteAsync(
+                $"internal/structure/{siteId}/holds?tenantId={tenantId}", cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                throw new StructureException("STRUCTURE_BUSY", "Another edit has a pending hold.");
             if (!response.IsSuccessStatusCode) throw Unavailable();
         }
         catch (Exception error) when (IsTransportFailure(error, cancellationToken))

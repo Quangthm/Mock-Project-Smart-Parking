@@ -1,0 +1,932 @@
+openapi: 3.1.0
+info:
+  title: SmartPark 3D Digital Twin API Specification
+  description: >-
+    Authoritative API contracts for the SmartPark 3D Digital Twin visualization projection,
+    Driver discovery slot selection, and batch facility structure ingestion.
+    Refined and hardened for implementation readiness with fail-safe defaults, cross-service hold protocol,
+    non-blocking read paths, asset ingestion security, and motorcycle scalar capacity decoupling.
+  version: 1.2.0
+  contact:
+    name: SmartPark Engineering Team
+servers:
+  - url: http://localhost:5045
+    description: Local Development Server (ParkingService)
+  - url: https://api.smartpark.example.com
+    description: Production Gateway
+
+paths:
+  /api/parking-lots/{id}/operational-layout:
+    get:
+      summary: Retrieve Operational Layout Projection
+      description: >-
+        Returns a high-performance, non-authoritative visualization projection of the parking facility's
+        layout and slot telemetry. Supports dual-mode role-based data projection: Drivers and anonymous guests
+        receive sanitized information without internal operational or personal data; Operators receive full operational metrics.
+        Non-blocking read path using ReadSnapshotAsync; does not acquire exclusive edit holds.
+      operationId: getOperationalLayout
+      tags:
+        - 3D Digital Twin
+        - Layout & Visualization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier of the parking facility (UUID v4).
+          schema:
+            type: string
+            format: uuid
+            example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
+        - name: vehicleType
+          in: query
+          required: false
+          description: Optional filter by vehicle category.
+          schema:
+            $ref: '#/components/schemas/SupportedVehicleType'
+        - name: floor
+          in: query
+          required: false
+          description: Optional filter by floor level code (e.g., Floor_G, Floor_L1, Floor_B1).
+          schema:
+            type: string
+            example: Floor_G
+      security:
+        - BearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: Layout projection successfully retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalLayoutResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+        '503':
+          $ref: '#/components/responses/503ServiceUnavailable'
+
+  /api/parking-lots/{id}/structure:
+    post:
+      summary: Batch Ingestion of Parking Structure from 3D Model Manifest
+      description: >-
+        Atomically provisions or reconciles floors, slots, and motorcycle capacity pools extracted from
+        a 3D model manifest. Enforces the SafeChange invariant: if any slot in the facility is physically
+        occupied, has unknown telemetry, or is bound to active reservations, replacement is rejected with
+        HTTP 409 Conflict. Synchronizes cross-service edit holds with ReservationService using durable tokens.
+      operationId: batchIngestStructure
+      tags:
+        - Facility Management
+        - 3D Ingestion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier of the parking facility (UUID v4).
+          schema:
+            type: string
+            format: uuid
+            example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Client-supplied UUID v4 token preventing duplicate transaction execution.
+          schema:
+            type: string
+            format: uuid
+            example: e7a1c2d3-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+        - name: X-Service-Contract
+          in: header
+          required: false
+          description: Client-supplied contract version declaration (e.g. 1.2.0). Defaults to 1.2.0 if omitted.
+          schema:
+            type: string
+            example: "1.2.0"
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchStructureIngestRequest'
+      responses:
+        '201':
+          description: Parking structure successfully ingested and reconciled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchStructureIngestResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          $ref: '#/components/responses/409Conflict'
+        '422':
+          $ref: '#/components/responses/422Unprocessable'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+        '503':
+          $ref: '#/components/responses/503ServiceUnavailable'
+
+  /ws/parking-lots/{id}/layout:
+    get:
+      summary: Real-Time Layout & Telemetry Streaming Hub (SignalR / WebSocket)
+      description: >-
+        Real-time bi-directional SignalR hub endpoint for streaming incremental slot status updates,
+        reservation halo transitions, and freshness heartbeats. Clients establish a WebSocket connection
+        and join lot-specific groups (`JoinLot(lotId)`). Dispatches `SlotStateChangedEvent` and `HeartbeatTick`.
+      operationId: streamLayoutEvents
+      tags:
+        - 3D Digital Twin
+        - Real-Time Streaming
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier of the parking facility (UUID v4).
+          schema:
+            type: string
+            format: uuid
+            example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
+      responses:
+        '101':
+          description: Switching Protocols to WebSocket / SignalR connection.
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Enter valid user JWT Bearer token.
+
+  schemas:
+    OperationalLayoutResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/OperationalLayoutProjectionDto'
+
+    OperationalLayoutProjectionDto:
+      type: object
+      required:
+        - siteId
+        - siteCode
+        - siteName
+        - contractVersion
+        - generatedAt
+        - isFresh
+        - stalenessThresholdSeconds
+        - metrics
+        - floors
+        - slots
+      properties:
+        siteId:
+          type: string
+          format: uuid
+          example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
+        siteCode:
+          type: string
+          example: SITE_CENTRAL_01
+        siteName:
+          type: string
+          example: Central Plaza Garage
+        contractVersion:
+          type: string
+          example: "1.2.0"
+        generatedAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T10:15:30.125Z"
+        isFresh:
+          type: boolean
+          description: True if telemetry heartbeat from sensor gateway was active within the staleness threshold.
+          example: true
+        stalenessThresholdSeconds:
+          type: integer
+          example: 30
+        metrics:
+          $ref: '#/components/schemas/LayoutMetricsDto'
+        floors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FloorProjectionDto'
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotVisualStateDto'
+
+    LayoutMetricsDto:
+      type: object
+      required:
+        - totalPhysicalCapacity
+        - occupiedCount
+        - reservedCount
+        - availableCarSlots
+        - motorcycleCapacity
+      properties:
+        totalPhysicalCapacity:
+          type: integer
+          description: Total count of discrete bookable car stalls. Never includes motorcycles.
+          example: 48
+        occupiedCount:
+          type: integer
+          example: 18
+        reservedCount:
+          type: integer
+          description: >-
+            Count of slots whose reservationState is exactly RESERVED. PROTECTED and BACKUP slots are
+            not included in this count. A slot that is both physically occupied and reserved contributes
+            1 to occupiedCount and 1 to reservedCount, because the two axes are orthogonal.
+          example: 6
+        availableCarSlots:
+          type: integer
+          example: 24
+        motorcycleCapacity:
+          $ref: '#/components/schemas/MotorcycleCapacityDto'
+        zoneCapacities:
+          type: array
+          description: Capacity and reservation metrics aggregated at the Zone spatial unit level (FR-MAP-03).
+          items:
+            $ref: '#/components/schemas/ZoneCapacityDto'
+
+    ZoneCapacityDto:
+      type: object
+      required:
+        - zoneId
+        - zoneCode
+        - floorCode
+        - maxCapacity
+        - occupiedCount
+        - zoneOnlyReservedCount
+      properties:
+        zoneId:
+          type: string
+          format: uuid
+          example: 7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d
+        zoneCode:
+          type: string
+          example: Zone_A
+        floorCode:
+          type: string
+          example: Floor_G
+        name:
+          type: string
+          example: Ground Outdoor North
+        maxCapacity:
+          type: integer
+          example: 24
+        occupiedCount:
+          type: integer
+          example: 10
+        allocatedSlotCount:
+          type: integer
+          example: 3
+        zoneOnlyReservedCount:
+          type: integer
+          description: Active reservations allocated to this Zone without an exact slot assignment.
+          example: 2
+
+    MotorcycleCapacityDto:
+      type: object
+      required:
+        - maxCapacity
+        - occupiedCount
+        - availableCount
+      properties:
+        maxCapacity:
+          type: integer
+          example: 40
+        occupiedCount:
+          type: integer
+          example: 15
+        availableCount:
+          type: integer
+          example: 25
+
+    FloorProjectionDto:
+      type: object
+      required:
+        - floorId
+        - floorCode
+        - name
+        - level
+        - maxCapacity
+      properties:
+        floorId:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        floorCode:
+          type: string
+          example: Floor_G
+        name:
+          type: string
+          example: Ground Level
+        level:
+          type: integer
+          description: Sort level index (e.g., -1 for B1, 1 for Ground, 2 for L1).
+          example: 1
+        maxCapacity:
+          type: integer
+          example: 48
+
+    SlotVisualStateDto:
+      type: object
+      required:
+        - slotId
+        - slotCode
+        - floorId
+        - floorCode
+        - supportedVehicleType
+        - slotType
+        - physicalState
+        - reservationState
+        - isEvCharging
+        - isBookable
+        - updatedAt
+      properties:
+        slotId:
+          type: string
+          format: uuid
+          example: b8a1c2d3-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+        slotCode:
+          type: string
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)?$'
+          description: Raw case-preserving mesh identifier from 3D model asset.
+          example: PARKING_G_CAR_001
+        floorId:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        floorCode:
+          type: string
+          example: Floor_G
+        zoneCode:
+          type: [string, "null"]
+          example: Zone_A
+        rowCode:
+          type: [string, "null"]
+          example: Row_01
+        supportedVehicleType:
+          $ref: '#/components/schemas/SupportedVehicleType'
+        slotType:
+          $ref: '#/components/schemas/SlotType'
+        physicalState:
+          $ref: '#/components/schemas/PhysicalState'
+        reservationState:
+          $ref: '#/components/schemas/ReservationState'
+        sessionType:
+          anyOf:
+            - $ref: '#/components/schemas/SessionType'
+            - type: 'null'
+          description: Active session classification determining vehicle proxy PBR chassis color. Null for Driver/Guest.
+          example: STANDARD
+        isEvCharging:
+          type: boolean
+          example: false
+        isBookable:
+          type: boolean
+          description: True if bay is physically AVAILABLE and UNRESERVED. Forced to false if physicalState is UNKNOWN or reservationState is BACKUP.
+          example: true
+        coordinates3d:
+          type: [object, "null"]
+          properties:
+            x:
+              type: number
+              format: float
+              example: 12.45
+            y:
+              type: number
+              format: float
+              example: 0.00
+            z:
+              type: number
+              format: float
+              example: -5.30
+        features:
+          type: [object, "null"]
+          properties:
+            covered:
+              type: boolean
+              example: true
+            hasCharger:
+              type: boolean
+              example: false
+            chargerPowerKw:
+              type: [number, "null"]
+              format: float
+              example: 22.0
+        operatorContext:
+          type: [object, "null"]
+          description: Operational metadata included for authorized Site Operators, Owners, and Admins; redacted for public drivers.
+          properties:
+            activeSessionId:
+              type: [string, "null"]
+              format: uuid
+              example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            maskedPlate:
+              type: [string, "null"]
+              example: "30A-*****.89"
+            approachingReservation:
+              type: [object, "null"]
+              description: Context for incoming reservation, including reallocation tracking (SPARK-244 / US-O03).
+              properties:
+                reservationId:
+                  type: string
+                  format: uuid
+                  example: d1e2f3a4-b5c6-7a8b-9c0d-1e2f3a4b5c6d
+                requestedSlotCode:
+                  type: string
+                  description: Originally requested slot code from driver booking.
+                  example: PARKING_G_CAR_002
+                allocatedSlotCode:
+                  type: string
+                  description: Authoritative assigned slot code in facility.
+                  example: PARKING_G_CAR_001
+                isReallocated:
+                  type: boolean
+                  description: True if allocatedSlotCode differs from requestedSlotCode.
+                  example: true
+                reallocationReason:
+                  type: [string, "null"]
+                  example: OCCUPIED_OVERSTAY_DISPLACEMENT
+                expectedArrivalTime:
+                  type: string
+                  format: date-time
+                  example: "2026-10-24T10:30:00.000Z"
+                gracePeriodExpiresAt:
+                  type: string
+                  format: date-time
+                  example: "2026-10-24T10:45:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T10:14:55.000Z"
+
+    BatchStructureIngestRequest:
+      type: object
+      required:
+        - archetype
+        - contractVersion
+        - floors
+        - slots
+        - motorcycleCapacity
+      properties:
+        archetype:
+          $ref: '#/components/schemas/FacilityArchetype'
+        modelFileName:
+          type: string
+          description: Asset file name of the 3D model (e.g. outdoor_parking_lot_blender.glb).
+          example: outdoor_parking_lot_blender.glb
+        modelAssetUrl:
+          type: string
+          format: uri
+          description: CDN or storage bucket URL of the 3D GLB model asset.
+          example: https://cdn.smartpark.example.com/models/archetypes/outdoor_v1.glb
+        contractVersion:
+          type: string
+          example: "1.2.0"
+        reason:
+          type: string
+          maxLength: 500
+          description: Audit justification for structure update (satisfies PostgreSQL structure_slot_audit.reason NOT NULL). Defaults to 'Batch structure manifest update' if omitted.
+          example: Batch structure manifest update
+        floors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/FloorIngestDto'
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/SlotIngestDto'
+        motorcycleCapacity:
+          $ref: '#/components/schemas/MotorcycleCapacityIngestDto'
+
+    FloorIngestDto:
+      type: object
+      required:
+        - floorCode
+        - name
+        - level
+        - maxCapacity
+      properties:
+        floorCode:
+          type: string
+          example: Floor_G
+        name:
+          type: string
+          example: Ground Level
+        level:
+          type: integer
+          example: 1
+        maxCapacity:
+          type: integer
+          example: 48
+
+    SlotIngestDto:
+      type: object
+      required:
+        - slotCode
+        - floorCode
+        - supportedVehicleType
+        - slotType
+      properties:
+        slotCode:
+          type: string
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)?$'
+          description: Raw case-preserving mesh identifier from 3D model asset.
+          example: PARKING_G_CAR_001
+        floorCode:
+          type: string
+          example: Floor_G
+        supportedVehicleType:
+          $ref: '#/components/schemas/IngestSupportedVehicleType'
+        slotType:
+          $ref: '#/components/schemas/SlotType'
+        coordinates3d:
+          type: object
+          properties:
+            x:
+              type: number
+              format: float
+              example: 10.50
+            y:
+              type: number
+              format: float
+              example: 0.00
+            z:
+              type: number
+              format: float
+              example: -4.20
+        features:
+          type: object
+          properties:
+            covered:
+              type: boolean
+              example: false
+            hasCharger:
+              type: boolean
+              example: false
+            chargerPowerKw:
+              type: [number, "null"]
+              format: float
+              example: 22.0
+
+    MotorcycleCapacityIngestDto:
+      type: object
+      required:
+        - maxCapacity
+      properties:
+        maxCapacity:
+          type: integer
+          description: Scalar capacity pool for motorcycles (BR-CAP-01).
+          example: 30
+        assignedFloorCode:
+          type: string
+          example: Floor_G
+
+    BatchStructureIngestResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/BatchIngestOutcomeDto'
+
+    BatchIngestOutcomeDto:
+      type: object
+      required:
+        - siteId
+        - archetype
+        - totalFloorsIngested
+        - totalCarSlotsIngested
+        - totalMotorcycleCapacity
+        - physicalCapacity
+        - ingestedAt
+      properties:
+        siteId:
+          type: string
+          format: uuid
+          example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
+        archetype:
+          $ref: '#/components/schemas/FacilityArchetype'
+        totalFloorsIngested:
+          type: integer
+          example: 1
+        totalCarSlotsIngested:
+          type: integer
+          example: 48
+        totalMotorcycleCapacity:
+          type: integer
+          example: 30
+        physicalCapacity:
+          type: integer
+          example: 48
+        ingestedAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T10:16:00.000Z"
+
+    PhysicalState:
+      type: string
+      enum:
+        - AVAILABLE
+        - OCCUPIED
+        - UNKNOWN
+        - MAINTENANCE
+        - UNAVAILABLE
+      description: Channel A physical condition. UNKNOWN must fail closed to non-bookable.
+
+    ReservationState:
+      type: string
+      enum:
+        - UNRESERVED
+        - RESERVED
+        - PROTECTED
+        - BACKUP
+      description: Channel B reservation and protection overlay. Sourced from database where UNRESERVED is SQL NULL.
+
+    SessionType:
+      type: string
+      enum:
+        - STANDARD
+        - EV_CHARGING
+        - RESERVED
+        - VIP
+      description: Active session classification determining vehicle proxy PBR chassis color. Null for Driver/Guest.
+
+    SupportedVehicleType:
+      type: string
+      enum:
+        - CAR
+        - MOTORCYCLE
+        - OVERSIZED
+
+    IngestSupportedVehicleType:
+      type: string
+      enum:
+        - CAR
+        - OVERSIZED
+      description: Allowed vehicle types for discrete slot ingestion. Motorcycles must be submitted via motorcycleCapacity (VAL-ING-12).
+
+    SlotType:
+      type: string
+      enum:
+        - STANDARD
+        - EV
+        - DISABLED
+        - VIP
+
+    FacilityArchetype:
+      type: string
+      enum:
+        - OUTDOOR
+        - INDOOR
+        - UNDERGROUND
+        - CUSTOM
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - code
+        - message
+      properties:
+        success:
+          type: boolean
+          example: false
+        code:
+          type: string
+          example: STRUCTURE_IN_USE
+        message:
+          type: string
+          example: Operation failed due to active commitments.
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - success
+        - code
+        - message
+        - errors
+      properties:
+        success:
+          type: boolean
+          example: false
+        code:
+          type: string
+          example: VALIDATION_FAILED
+        message:
+          type: string
+          example: Request validation failed.
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationErrorItem'
+
+    ValidationErrorItem:
+      type: object
+      required:
+        - field
+        - code
+        - message
+      properties:
+        field:
+          type: string
+          example: slots[0].slotCode
+        code:
+          type: string
+          example: DUPLICATE_SLOT_CODE
+        message:
+          type: string
+          example: Duplicate slot code within request payload.
+
+  responses:
+    400BadRequest:
+      description: Malformed syntax, invalid parameters, or missing idempotency key.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: INVALID_IDEMPOTENCY_KEY
+            message: "A valid UUID v4 Idempotency-Key header is required."
+
+    401Unauthorized:
+      description: Missing, invalid, or expired authentication token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: UNAUTHENTICATED
+            message: "Authentication is required to access this resource."
+
+    403Forbidden:
+      description: Caller lacks required permissions or tenant scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: FORBIDDEN
+            message: "Access to target facility is denied."
+
+    404NotFound:
+      description: Target parking site was not found in tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: SITE_NOT_FOUND
+            message: "Parking site was not found in this tenant."
+
+    409Conflict:
+      description: SafeChange invariant violation or concurrent edit hold.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            structureInUse:
+              summary: Active commitments or occupied slots exist
+              value:
+                success: false
+                code: STRUCTURE_IN_USE
+                message: "Cannot modify structure: 2 active reservations and 1 occupied slot exist."
+            structureBusy:
+              summary: Another edit hold is currently pending
+              value:
+                success: false
+                code: STRUCTURE_BUSY
+                message: "Another structure edit has a pending hold."
+            cannotDeleteActiveContainer:
+              summary: Child slots in deleted container have active reservations or vehicles
+              value:
+                success: false
+                code: CANNOT_DELETE_ACTIVE_CONTAINER
+                message: "Cannot delete floor Floor_L2: active reservations exist in child slots."
+            duplicateActiveSlotCode:
+              summary: Concurrent insertion of active duplicate slot code
+              value:
+                success: false
+                code: DUPLICATE_ACTIVE_SLOT_CODE
+                message: "An active slot with code 'PARKING_G_CAR_001' already exists in this unit."
+
+    422Unprocessable:
+      description: Validation failure or payload mismatch.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          examples:
+            validationFailed:
+              summary: Schema constraint failed
+              value:
+                success: false
+                code: VALIDATION_FAILED
+                message: "Request validation failed."
+                errors:
+                  - field: "slots[0].slotCode"
+                    code: "DUPLICATE_SLOT_CODE"
+                    message: "Duplicate slot code within request payload."
+            motorcycleSlotProhibited:
+              summary: Individual motorcycle slot submitted
+              value:
+                success: false
+                code: INVALID_MOTORCYCLE_SLOT
+                message: "Motorcycles must be submitted via motorcycleCapacity, not individual slots."
+                errors:
+                  - field: "slots[5].supportedVehicleType"
+                    code: "INVALID_MOTORCYCLE_SLOT"
+                    message: "Motorcycle spaces must be pooled in motorcycleCapacity."
+            idempotencyMismatch:
+              summary: Idempotency payload changed
+              value:
+                success: false
+                code: IDEMPOTENCY_PAYLOAD_MISMATCH
+                message: "Idempotency key was previously used with a different request payload."
+                errors:
+                  - field: "header.Idempotency-Key"
+                    code: "IDEMPOTENCY_PAYLOAD_MISMATCH"
+                    message: "Payload SHA-256 hash does not match previous execution."
+            invalidFileName:
+              summary: Malicious path traversal in filename
+              value:
+                success: false
+                code: INVALID_MODEL_FILE_NAME
+                message: "File name must match ^[a-zA-Z0-9_\\-\\.]+\\.glb$."
+                errors:
+                  - field: "modelFileName"
+                    code: "INVALID_MODEL_FILE_NAME"
+                    message: "Path traversal characters are prohibited."
+            invalidAssetUrl:
+              summary: Unauthorized asset URL domain
+              value:
+                success: false
+                code: INVALID_ASSET_URL
+                message: "Asset URL must belong to approved storage CDN."
+                errors:
+                  - field: "modelAssetUrl"
+                    code: "INVALID_ASSET_URL"
+                    message: "Domain is not in storage CDN allowlist."
+
+    500InternalError:
+      description: Unexpected server exception.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: INTERNAL_ERROR
+            message: "An unexpected error occurred."
+
+    503ServiceUnavailable:
+      description: Downstream dependency unreachable or failed commitments check.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: COMMITMENTS_UNAVAILABLE
+            message: "Reservation commitment service is currently unavailable; retry after recovery."

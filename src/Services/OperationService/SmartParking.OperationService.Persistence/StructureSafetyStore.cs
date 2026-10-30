@@ -177,6 +177,26 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         await transaction.CommitAsync(ct);
     }
 
+    public async Task ForceReleaseAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await LockSiteAsync(siteId, ct);
+        var hold = await db.StructureEditHolds.SingleOrDefaultAsync(h => h.SiteId == siteId, ct);
+        if (hold is null)
+        {
+            await transaction.CommitAsync(ct);
+            return;
+        }
+        // A force release may only drop a hold in the caller's tenant scope; a
+        // different tenant must still surface as a conflict, never a silent repair.
+        if (hold.TenantId != tenantId)
+            throw new HoldConflictException();
+
+        db.StructureEditHolds.Remove(hold);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
     private void AddReceipt(Guid tenantId, Guid siteId, Guid token, string payload) =>
         db.StructureReleaseReceipts.Add(new StructureReleaseReceiptRow
         {

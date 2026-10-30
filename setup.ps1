@@ -507,14 +507,14 @@ if ($CredentialMode -eq 'Team') {
         }
     }
 }
-foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SMARTPARK_RABBITMQ_PASSWORD')) {
     if (!$settings[$name] -or $settings[$name] -like 'replace-with-*') {
         $value = $null
         if ($name -eq 'SMARTPARK_SERVICE_KEY') {
             $keys = @($existingByService.Values | ForEach-Object { $_['Services:Key'] } | Where-Object { $_ } | Select-Object -Unique)
             if ($keys.Count -gt 1) { throw 'Existing service keys differ. Reconcile Services:Key before setup.' }
             if ($keys.Count -eq 1) { $value = $keys[0] }
-        } elseif ($name -in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+        } elseif ($name -in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SMARTPARK_RABBITMQ_PASSWORD')) {
             if ($name -eq 'SMARTPARK_ADMIN_PASSWORD') {
                 $value = $existingByService['User']['DevelopmentAdmin:Password']
             }

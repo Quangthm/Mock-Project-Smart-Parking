@@ -139,7 +139,7 @@ The 2D/3D view continues to use the existing independent channels:
 
 `RESERVED` and `PROTECTED` remain mutually exclusive projection values in the current Reservation / Protection State model. This clarification does **not** require a new database column, a split enum, or a schema migration.
 
-The reservation entitlement/claim can continue to exist in Operations while the slot projection changes from `RESERVED` to `PROTECTED` when protection behavior is active.
+The reservation entitlement/claim can continue to exist in Operations while the slot projection stays `PROTECTED` for as long as protection behavior is active — including through the whole allocation window — and becomes `RESERVED` only when the slot is actually free for its beneficiary. See the 2026-10-27 amendment below, which supersedes the original `RESERVED` → `PROTECTED` wording.
 
 A 2D/3D user may therefore see combinations such as:
 
@@ -158,6 +158,21 @@ Where an authorized Operations projection explicitly establishes the relationshi
 - `Currently occupied; protected/reserved for your future booking`.
 
 It must not expose another Driver's identity merely to explain that the current occupant differs from the reservation claimant.
+
+### Amendment 2026-10-27 — protection-first ordering during the allocation window
+
+PM decision recorded 2026-10-27: the projection must **not** flip `PROTECTED` → `RESERVED` at the allocation point while the current occupant is still physically present.
+
+- Stage 2 (allocation window, `T_start − ALLOCATION_LEAD_TIME`): the slot stays `OCCUPIED + PROTECTED` and no `RESERVED` is emitted on it. When a replacement slot is found, it is locked **immediately** by a `slot_allocations` row with `allocation_status = 'RESERVED'` over the beneficiary's time range, and the reservation moves `CONFIRMED → ALLOCATED`.
+- Window `T_start − 15m` → `T_start − 5m`: the reconciliation worker runs **every 5 minutes** (three passes) and additionally runs once on every checkout/exit in the lot, so a slot that frees up is locked within seconds instead of waiting for the next tick.
+- Hard deadline `T_start − 5m`: no hold ⇒ use an available `BACKUP` slot; no `BACKUP` left ⇒ cancel the reservation, refund under the existing refund policy, notify the driver.
+- `slot_allocations.allocation_status` keeps exactly three values and none is added: `RESERVED` (locked, vehicle not yet in) → `OCCUPIED` (vehicle checked in) → `RELEASED` (vehicle left or hold returned). The partial `EXCLUDE` constraint over `('RESERVED','OCCUPIED')` prevents two reservations from locking the same slot over overlapping ranges.
+- Trigger/guard baseline: `scripts/database/integration/03-reservation-structure-safety.sql:20` (`PENDING_PAYMENT`, `CONFIRMED`, `ALLOCATED`, `PARKING`) is authoritative; `05.6-Parking-Structure.sql:38` is the stale copy (it uses `CHECKED_IN` and omits `ALLOCATED`).
+- `RESERVED` therefore appears on the original slot only when it becomes genuinely available for its beneficiary.
+
+This amendment supersedes the “`RESERVED` → `PROTECTED`” ordering as originally written above. The mutually-exclusive projection rule and the four valid combinations remain unchanged.
+
+---
 
 ## RA-05 — Capacity accounting remains distinct-resource accounting
 
