@@ -306,7 +306,7 @@ export function OperatorOverview({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-xs text-[var(--muted)]">
                       <th className="pb-2 font-medium">Plate / Vehicle</th>

@@ -658,3 +658,48 @@
   .dashboard-theme .driver-bookings-page .current-bookings-tabs { flex-wrap: wrap; }
   .dashboard-theme .driver-bookings-page .current-bookings-tabs button { flex: 1 1 auto; justify-content: center; }
 }
+
+/* Shared narrow-viewport safeguards: preserve content instead of clipping it. */
+#root, #main-content, .dashboard-theme, .dashboard-content, .dashboard-workspace { min-width: 0; }
+.dashboard-theme :is(.card, .feature-guide, .overflow-x-auto, .booking-stage-right, .booking-model-panel) { min-width: 0; max-width: 100%; }
+.dashboard-theme :is(input, select, textarea, button) { max-width: 100%; }
+.dashboard-theme :is(input, select, textarea) { min-width: 0; }
+.dashboard-theme :is(.overflow-x-auto, [style*="overflow-x: auto"]) { overscroll-behavior-inline: contain; }
+.dashboard-theme :is(.card, [role="dialog"]) :is(h1, h2, h3, h4, p, dt, dd, label) { overflow-wrap: anywhere; }
+.smartparking-chat-shell { max-width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)); max-height: calc(100dvh - 76px - env(safe-area-inset-bottom)); }
+
+@media (max-width: 640px) {
+  :is(input, select, textarea) { font-size: max(16px, 1em); }
+  .dashboard-theme .dashboard-content { width: 100%; }
+  .dashboard-theme .dashboard-content :is(.overflow-x-auto, [style*="overflow-x: auto"]) { max-width: 100%; }
+  .dashboard-theme :is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent) { min-height: 44px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+  .dashboard-theme :is(.icon-button, .profile-trigger, .dashboard-nav-item) { min-width: 44px; min-height: 44px; }
+  .dashboard-theme [role="dialog"] { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px - env(safe-area-inset-bottom)); }
+  .dashboard-theme .settings-dialog { width: 100%; }
+  .dashboard-theme .settings-dialog-content { padding: 18px 16px calc(22px + env(safe-area-inset-bottom)); }
+  .dashboard-theme .dashboard-popover { position: fixed; top: 64px; right: 8px; bottom: auto; left: auto; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 80px); overflow-y: auto; }
+  .dashboard-theme .notification-pop-in { position: fixed !important; top: 64px !important; right: 8px !important; bottom: auto !important; left: auto !important; width: min(360px, calc(100vw - 16px)) !important; max-height: calc(100dvh - 80px) !important; }
+  .dashboard-theme .notification-pop-in header { flex-wrap: wrap; gap: 8px; }
+  .dashboard-theme .booking-flow-stage-grid.is-form-stage > .booking-stage-right:not(.booking-time-vehicle-stage) { width: 100%; }
+  .dashboard-theme .booking-datetime-fields { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-theme .booking-time-vehicle-grid { gap: 14px; }
+  .dashboard-theme .find-parking-map { min-width: 0; }
+  .dashboard-theme .find-parking-details-wrap { max-width: 100%; }
+  .dashboard-theme .smartparking-chat-shell.is-open { max-width: calc(100vw - 16px); }
+  .dashboard-theme .driver-bookings-page .current-booking-card { flex-wrap: wrap; }
+  .dashboard-theme .driver-bookings-page .current-booking-info { flex-basis: min(100%, 210px); }
+  .dashboard-theme .owner-overview-canvas .owner-kpi-strip { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-theme .management-dashboard :is(.admin-kpi-strip, .operator-kpi-strip) { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .dashboard-theme .dashboard-popover { right: 6px; width: calc(100vw - 12px); }
+  .dashboard-theme .find-parking-panel { width: calc(100% - 16px); left: 8px; }
+  .dashboard-theme .find-parking-search { padding: 10px; }
+  .dashboard-theme .find-parking-map-toolbar { right: 8px; }
+  .dashboard-theme .find-parking-details-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .dashboard-theme .smartparking-chat-shell { max-width: calc(100vw - 12px); }
+  .dashboard-theme .management-dashboard .admin-kpi-strip { grid-template-columns: minmax(0, 1fr); }
+}
+@media (hover: none) {
+  .dashboard-nav-hint { display: none; }
+}

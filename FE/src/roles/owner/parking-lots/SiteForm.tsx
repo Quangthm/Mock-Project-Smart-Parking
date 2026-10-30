@@ -17,7 +17,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
   } = useSiteForm(site, onSaved, onCancel)
 
   return (
-    <form className="space-y-5 text-[var(--fg)] max-h-[85vh] overflow-y-auto pr-1" onSubmit={submit}>
+    <form className="space-y-5 text-[var(--fg)] max-h-[85dvh] overflow-y-auto pr-1" onSubmit={submit}>
       {/* Header */}
       <div className="border-b border-[var(--border)] pb-3">
         <h3 className="text-lg font-bold text-[var(--fg)] flex items-center gap-2">

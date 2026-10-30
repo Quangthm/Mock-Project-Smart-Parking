@@ -116,18 +116,18 @@ export function OwnerVerification({
       {expired && <p role="status">Your code has expired. Request a new code below.</p>}
       {message && <p role="status">{message}</p>}
       <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-        <button className="btn-primary min-h-11 flex-1 whitespace-nowrap" disabled={busy || expired || code.length !== 6}>
+        <button className="btn-primary min-h-11 basis-full justify-center sm:basis-auto sm:flex-1" disabled={busy || expired || code.length !== 6}>
           {busy ? "Please wait…" : "Verify"}
         </button>
         <button
           type="button"
-          className="btn-outline min-h-11 flex-1 whitespace-nowrap"
+          className="btn-outline min-h-11 basis-full justify-center sm:basis-auto sm:flex-1"
           disabled={busy || resendSeconds > 0}
           onClick={() => void resend()}
         >
           {resendSeconds ? `Resend in ${resendSeconds}s` : "Resend code"}
         </button>
-        <button type="button" className="btn-outline min-h-11 flex-1 whitespace-nowrap" disabled={busy} onClick={onBack}>
+        <button type="button" className="btn-outline min-h-11 basis-full justify-center sm:basis-auto sm:flex-1" disabled={busy} onClick={onBack}>
           Back to Sign In
         </button>
       </div>

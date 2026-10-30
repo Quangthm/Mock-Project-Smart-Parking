@@ -169,7 +169,7 @@ export function NotificationBell({ userId }: { userId: string }) {
             right: 0,
             top: "calc(100% + 0.65rem)",
             width: "min(360px, calc(100vw - 2rem))",
-            maxHeight: "min(460px, calc(100vh - 80px))",
+            maxHeight: "min(460px, calc(100dvh - 80px))",
             overflowY: "auto",
             zIndex: 200,
             background: "var(--bg)",

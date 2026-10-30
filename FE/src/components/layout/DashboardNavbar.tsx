@@ -64,6 +64,7 @@ export function DashboardNavbar() {
     toggleTheme,
     signOut,
     authError,
+    dashboardMenuOpen,
     setDashboardMenuOpen,
     accentColor,
     setAccentColor,
@@ -207,6 +208,17 @@ export function DashboardNavbar() {
     <>
       <nav className="dashboard-topbar">
         <div className="dashboard-topbar-left">
+          <button
+            type="button"
+            className="dashboard-mobile-menu-button icon-button"
+            data-dashboard-menu-trigger
+            aria-label={dashboardMenuOpen ? "Close navigation" : "Open navigation"}
+            aria-controls="dashboard-navigation"
+            aria-expanded={dashboardMenuOpen}
+            onClick={() => { setPanel(null); setDashboardMenuOpen(!dashboardMenuOpen) }}
+          >
+            <UntitledIcon name={dashboardMenuOpen ? "x" : "menu"} size={22} />
+          </button>
           <button
             type="button"
             className="dashboard-brand"

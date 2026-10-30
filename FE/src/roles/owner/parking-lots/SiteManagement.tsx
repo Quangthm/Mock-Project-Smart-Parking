@@ -67,7 +67,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
 
       {/* Filter and Search Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <div className="sp-search-field flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
+        <div className="sp-search-field flex w-full min-w-0 basis-full items-center gap-2 sm:w-auto sm:min-w-[220px] sm:basis-auto sm:flex-1 sm:max-w-sm">
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
