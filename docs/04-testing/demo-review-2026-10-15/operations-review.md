@@ -6,7 +6,7 @@ Review of the actual dirty `Fix2FA` checkout at base `6165024c634316d15525fe48bd
 
 | Demo step | Backend evidence | Assessment |
 | --- | --- | --- |
-| Owner creates lot, units and slots | `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs:93`, `:108`, `:109` | Implemented routes; requires active approved Owner tenant, User API, Parking API/DB and Reservation API/DB. HTTP acceptance was not executed in this review. |
+| Owner creates lot, units and slots | `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs:93`, `:108`, `:109` | Implemented routes; requires active approved Owner tenant, User API, Parking API/DB and Reservation API/DB. HTTP acceptance was not executed in this review. |
 | Owner views saved structure/3D data | Parking API `Program.cs:98`; repository `PostgresParkingStructureRepository.cs:205` | Authoritative structure and optional coordinate JSON are returned. This does not prove that the frontend renders the saved layout. |
 | Operator check-in/check-out | Reservation API `Program.cs:37–51`; Parking API `Program.cs:92–121` | Missing public admission/session/checkout/departure routes. The Reservation host only serves three internal structure-safety operations. |
 | Slot changes immediately | Parking repository `PostgresParkingStructureRepository.cs:150–160`, `:205` | Physical occupancy is read but no entry/departure workflow writes it. No SignalR host/hub/subscription implementation found in `src`. |
@@ -16,7 +16,7 @@ Review of the actual dirty `Fix2FA` checkout at base `6165024c634316d15525fe48bd
 
 ### OPS-01 — P1: The requested operator entry/exit demo has no authoritative backend workflow
 
-**Evidence:** `src/Services/OperationService/SmartParking.OperationService.API/Program.cs:37–51` registers prepare/impact/release for structure edits only. The complete Parking public route set at `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs:92–121` exposes structure CRUD, impact operations and backup marking. `SlotOperatorClient.cs:18` authorizes `SLOT_OVERRIDE`, which is a backup operation permission, not admission/checkout authority.
+**Evidence:** `src/Services/ReservationService/SmartParking.ReservationService.API/Program.cs:37–51` registers prepare/impact/release for structure edits only. The complete Parking public route set at `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs:92–121` exposes structure CRUD, impact operations and backup marking. `SlotOperatorClient.cs:18` authorizes `SLOT_OVERRIDE`, which is a backup operation permission, not admission/checkout authority.
 
 **Impact:** The current frontend check-in/out action cannot create an authoritative backend parking session, enforce backend capacity or establish consistency across separate browsers/devices. LocalStorage can survive a page reload, so reload alone does not prove backend persistence. Tables and protection triggers in SQL do not implement those commands. This is a missing slice, not a small wiring fix.
 
@@ -65,14 +65,14 @@ Review of the actual dirty `Fix2FA` checkout at base `6165024c634316d15525fe48bd
 ## Checks actually executed
 
 ```powershell
-dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-restore --verbosity minimal
+dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --no-restore --verbosity minimal
 ```
 
 Result: **24 passed, 0 failed, 9 skipped**, 33 total. Build of referenced Parking/Reservation Domain/Application/Persistence succeeded. All nine PostgreSQL-dependent checks skipped because `SMARTPARK_STRUCTURE_TEST_CONNECTION` was not configured. Therefore real database locking, trigger, recovery and concurrency acceptance remain unverified here. The suite does not reference the Parking API/Infrastructure projects, so its successful build does not certify their production composition.
 
 Read-only source searches confirmed the route inventory, lack of occupancy/session/payment commands and lack of SignalR wiring. No live HTTP workflow, real provider call or real payment was executed. No new tests or source edits were made.
 
-To run the skipped suite, set `SMARTPARK_STRUCTURE_TEST_CONNECTION` to an isolated PostgreSQL server account allowed to create/drop disposable databases, then rerun the command. `tests/Services/SmartParking.FacilityService.Tests/PostgresStructureWorkflowTests.cs:275–310` creates independent temporary Parking/Reservation databases and applies the actual scripts. Do not point it at a shared application database.
+To run the skipped suite, set `SMARTPARK_STRUCTURE_TEST_CONNECTION` to an isolated PostgreSQL server account allowed to create/drop disposable databases, then rerun the command. `tests/Services/SmartParking.ParkingService.Tests/PostgresStructureWorkflowTests.cs:275–310` creates independent temporary Parking/Reservation databases and applies the actual scripts. Do not point it at a shared application database.
 
 ## Source recheck after Docker availability changed
 

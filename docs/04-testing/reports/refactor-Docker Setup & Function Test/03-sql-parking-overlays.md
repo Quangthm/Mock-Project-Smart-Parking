@@ -21,7 +21,7 @@
 | Trường | Nội dung |
 |---|---|
 | Object tạo | `CREATE EXTENSION "uuid-ossp"` (`:4`); bảng `tenants` (`:5-16`, PK `id`, CHECK `status IN ('ACTIVE','INACTIVE','SUSPENDED')`); unique index `uq_active_tenant_code` trên `(code) WHERE deleted_at IS NULL` (`:17`); index `idx_tenants_status` (`:18`) |
-| Purpose | FacilityService JOIN `tenants` với `parking_sites` trên **một** connection (`ConnectionStrings:Parking`) — nếu `tenants` chỉ nằm ở `smartpark_user` thì mọi JOIN/`SELECT FOR SHARE` của FacilityService vỡ (gap P4, quyết định Q3/D5) |
+| Purpose | ParkingService JOIN `tenants` với `parking_sites` trên **một** connection (`ConnectionStrings:Parking`) — nếu `tenants` chỉ nằm ở `smartpark_user` thì mọi JOIN/`SELECT FOR SHARE` của ParkingService vỡ (gap P4, quyết định Q3/D5) |
 | FK | **Không có FK** tới bất kỳ bảng nào (đặc biệt không FK ra ngoài — bảng là self-contained copy) |
 
 ### B. `parking-structure-synchronizations.sql` — bảng sync cho structure worker
@@ -29,7 +29,7 @@
 | Trường | Nội dung |
 |---|---|
 | Object tạo | Bảng `structure_synchronizations` (`:6-15`: PK `token`, `state` CHECK `preparing/aborting/ready/completed`, CHECK `state <> 'ready' OR outcome IS NOT NULL`, FK `site_id → parking_sites(id)` `:9`, FK `operation_id → structure_operations(id)` `:10`); partial index `ix_structure_synchronizations_pending` trên `created_at WHERE state <> 'completed'` (`:17`) |
-| Purpose | Worker `StructureSynchronizationWorker` (FacilityService, chạy nền ~10s) đọc/ghi bảng này — arch `9a13499` không tạo bảng này, chỉ còn script legacy `05.11` (bị runner chặn) → gap P3; shape lấy từ `05.11` nhưng viết lại `IF NOT EXISTS` và FK **trong cùng DB** với `parking_sites` + `structure_operations` (đều do `02`/`03a` tạo trong `smartpark_parking`) |
+| Purpose | Worker `StructureSynchronizationWorker` (ParkingService, chạy nền ~10s) đọc/ghi bảng này — arch `9a13499` không tạo bảng này, chỉ còn script legacy `05.11` (bị runner chặn) → gap P3; shape lấy từ `05.11` nhưng viết lại `IF NOT EXISTS` và FK **trong cùng DB** với `parking_sites` + `structure_operations` (đều do `02`/`03a` tạo trong `smartpark_parking`) |
 | FK | FK tới `parking_sites`, `structure_operations` (cùng DB) — **không có FK tới `tenants`** |
 
 ### C. `parking-operator-tables.sql` — 3 bảng operator shape-BE (D3(a)/D6)
@@ -114,8 +114,8 @@ $ git diff -- compose.schema-integration.yml        # (trích khối parking-db)
 @@ -26,10 +24,12 @@ services:
      volumes:
        - parking-schema-data:/var/lib/postgresql/data
--      - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
--      - ./scripts/database/integration/02-facility-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+-      - ./scripts/database/microservices/02-parking-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+-      - ./scripts/database/integration/02-parking-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
 -      - ./scripts/database/05.9-Parking-Backup-Operations.sql:/docker-entrypoint-initdb.d/03-workflows.sql:ro
 -      - ./scripts/database/05.11-Parking-Structure-Synchronization.sql:/docker-entrypoint-initdb.d/04-synchronization.sql:ro
 +      - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
@@ -146,11 +146,11 @@ parking-operator-tables.sql:1-3 (comment):
 -- NOTE: operator_incident_events is intentionally omitted — provided by 03a
 -- Purpose: T4-approved D3(a) — BE-shape prototype schema made durable (P5/P6)
 
-src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs:56,60:
+src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs:56,60:
     context.Request.Path.StartsWithSegments("/api/operator") && …
     … new { success = false, code = "PROTOTYPE_SCHEMA_NOT_READY", … }
 
-src/Services/FacilityService/SmartParking.FacilityService.API/OperatorOperationsEndpoints.cs:10,34,53,62:
+src/Services/ParkingService/SmartParking.ParkingService.API/OperatorOperationsEndpoints.cs:10,34,53,62:
     app.MapGet("/api/operator/sites/{siteId:guid}/tickets", …) · MapPatch …/tickets/{ticketId:guid} · MapGet …/incidents · MapPost …/incidents
 ```
 
@@ -189,5 +189,5 @@ docker compose --project-name smartpark-schema -f compose.schema-integration.yml
 # -> ck_deleted_slot_safe
 
 # 4) Gap 503 đã được xử lý (đọc code)
-Select-String -Path src\Services\FacilityService\SmartParking.FacilityService.API\Program.cs -Pattern 'PROTOTYPE_SCHEMA_NOT_READY'
+Select-String -Path src\Services\ParkingService\SmartParking.ParkingService.API\Program.cs -Pattern 'PROTOTYPE_SCHEMA_NOT_READY'
 ```

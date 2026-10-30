@@ -54,8 +54,8 @@
 +      - ./scripts/database/microservices/01-user-access-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
 …
 @@ parking-db @@
--      - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
--      - ./scripts/database/integration/02-facility-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
+-      - ./scripts/database/microservices/02-parking-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+-      - ./scripts/database/integration/02-parking-service-alignment.sql:/docker-entrypoint-initdb.d/02-alignment.sql:ro
 -      - ./scripts/database/05.9-Parking-Backup-Operations.sql:/docker-entrypoint-initdb.d/03-workflows.sql:ro
 -      - ./scripts/database/05.11-Parking-Structure-Synchronization.sql:/docker-entrypoint-initdb.d/04-synchronization.sql:ro
 +      - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro

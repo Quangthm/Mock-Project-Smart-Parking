@@ -91,7 +91,7 @@ User configuration: `Workflow:KeyDirectory` là key ring bền vững, cùng app
 
 SMTP: `Otp:Smtp:Host/Port/Username/Password/From`; SMS HTTPS: `Otp:Sms:Url/ApiKey`; invitation origin HTTPS: `Onboarding:PublicOrigin`. Secrets đặt ngoài source. Không còn DevelopmentLogCodes/raw OTP logging. Khi chưa cấu hình provider, outbox có failed/retry outcome; không giả báo đã gửi.
 
-Parking dùng `Services:Operation`, `Services:Key`; optional HTTPS `Services:StructureReallocation` cần contract trả `{status:resolved|pending|failed,reason,impact}`. Không dùng adapter chưa triển khai để báo completed.
+Parking dùng `Services:Reservation`, `Services:Key`; optional HTTPS `Services:StructureReallocation` cần contract trả `{status:resolved|pending|failed,reason,impact}`. Không dùng adapter chưa triển khai để báo completed.
 
 Recovery: `scripts/recover-structure-hold.ps1 -SiteId <id> -ParkingStopped -SchemaRoot <checkout>` inspect trước; `-Apply` chỉ sau khi mọi Parking instance đã dừng. Script kiểm tra không còn DB connections, publish physical/capacity/backup snapshot, release fence rồi finalize operations có physical marker. Không release mù với outcome null.
 

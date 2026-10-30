@@ -40,7 +40,7 @@ Theo quyết định phê duyệt kiến trúc **`PAY-01` (13/10/2026)**, dự �
 - **Service sở hữu:** `Payment Service` (`SmartParking.PaymentService.API`, `SmartParking.PaymentService.Application`, `SmartParking.PaymentService.Infrastructure`).
 - **Phân định ranh giới liên dịch vụ (Cross-Service Boundary):**
   - Payment Service chỉ chịu trách nhiệm quản lý **Dòng tiền và Hóa đơn** (Order, Transaction, Invoice, Webhook).
-  - Khi thanh toán thành công (`SUCCESS`), Payment Service phát sinh sự kiện thanh toán thành công (Domain Event / Outbox Event). Dịch vụ Vận hành (`FacilityService` / `Operations`) sẽ tiêu thụ sự kiện này một cách bất đồng bộ để nâng barie giải phóng xe hoặc xác nhận đặt chỗ. **Tuyệt đối không để Payment Service can thiệp trực tiếp vào database của FacilityService**.
+  - Khi thanh toán thành công (`SUCCESS`), Payment Service phát sinh sự kiện thanh toán thành công (Domain Event / Outbox Event). Dịch vụ Vận hành (`ParkingService` / `Operations`) sẽ tiêu thụ sự kiện này một cách bất đồng bộ để nâng barie giải phóng xe hoặc xác nhận đặt chỗ. **Tuyệt đối không để Payment Service can thiệp trực tiếp vào database của ParkingService**.
 
 ### 1.3 Xác thực & Phân quyền (Authentication & Authorization)
 - **Client Checkout API (`/checkout`):**

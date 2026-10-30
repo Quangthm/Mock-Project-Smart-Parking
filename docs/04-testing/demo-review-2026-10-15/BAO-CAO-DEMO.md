@@ -30,7 +30,7 @@ Kết quả hiện tại chia thành ba nhóm:
 | Login / logout | **Đã kiểm tra với Admin** | Đăng nhập, đọc thông tin tài khoản, đăng xuất thành công. Token cũ bị từ chối sau logout. Các role khác chưa rehearsal đầy đủ. |
 | Driver đăng ký | **Có API, cần chạy thử thực tế** | Có đăng ký và xác minh OTP. Cần xác nhận nhận được email và kích hoạt tài khoản. |
 | Owner đăng ký | **Có API, cần chạy thử thực tế** | Có đăng ký, xác minh email và trạng thái chờ duyệt. |
-| Admin duyệt Owner | **Có API, chưa duyệt application thật trong lần kiểm tra này** | Đã đọc được danh sách application bằng Admin. Khi duyệt cần FacilityService để tạo tenant. |
+| Admin duyệt Owner | **Có API, chưa duyệt application thật trong lần kiểm tra này** | Đã đọc được danh sách application bằng Admin. Khi duyệt cần ParkingService để tạo tenant. |
 | Owner tạo parking structure | **Chưa hoàn chỉnh** | Backend có CRUD site/unit/slot, nhưng màn hình structure đang dùng dữ liệu local. |
 | Owner xem model 3D | **Chưa có trong luồng Owner** | Viewer đang được dùng ở Driver/Operator; Owner chưa có đường mở viewer của structure đã lưu. |
 | Owner tạo Operator | **Có API, còn lỗi nghiệp vụ** | Account được kích hoạt trước xác minh contact. Email onboarding còn cần cấu hình HTTPS origin hợp lệ. |
@@ -60,11 +60,11 @@ Kết quả hiện tại chia thành ba nhóm:
 | Bộ kiểm tra | Kết quả | Giới hạn |
 | --- | --- | --- |
 | UserService với PostgreSQL thật | **83 đạt, 0 lỗi, 0 bỏ qua** | Dùng database test riêng; không thay thế rehearsal email/browser thật. |
-| FacilityService với PostgreSQL thật | **33 đạt, 0 lỗi, 0 bỏ qua** | Kiểm tra các chức năng đã có; không chứng minh các API check-in/out chưa được triển khai. |
+| ParkingService với PostgreSQL thật | **33 đạt, 0 lỗi, 0 bỏ qua** | Kiểm tra các chức năng đã có; không chứng minh các API check-in/out chưa được triển khai. |
 | Frontend build ở lượt review trước | **Thành công** | Build không chứng minh luồng nghiệp vụ hoạt động. Không chạy lại vì source không thay đổi trong lượt kiểm tra sau. |
 | Frontend tests ở lượt review trước | **66 đạt, 22 lỗi** | 22 lỗi xảy ra do test harness thiếu mock import, chưa chạy đến assertions; không đồng nghĩa có 22 lỗi giao diện thực tế. |
 
-**Lưu ý khi chạy test trên Windows:** Lần build UserService test bị khóa DLL vì FacilityService đang chạy. Chạy lại bằng test binary đã build với `--no-build --no-restore` đạt 83/83. Không dừng service đang dùng để demo.
+**Lưu ý khi chạy test trên Windows:** Lần build UserService test bị khóa DLL vì ParkingService đang chạy. Chạy lại bằng test binary đã build với `--no-build --no-restore` đạt 83/83. Không dừng service đang dùng để demo.
 
 ## 4. Các vấn đề cần ưu tiên sửa
 
@@ -108,9 +108,9 @@ Kết quả hiện tại chia thành ba nhóm:
 
 **Source frontend:** `FE/src/roles/operator/check-in-out/CheckInOut.tsx`, khoảng dòng 106–181.
 
-**Bằng chứng backend:** `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`, dòng 37–51, chỉ đăng ký ba route internal cho prepare/impact/release khi chỉnh structure. `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`, dòng 92–121, có route structure và backup; chưa có API admission/session/checkout/departure.
+**Bằng chứng backend:** `src/Services/ReservationService/SmartParking.ReservationService.API/Program.cs`, dòng 37–51, chỉ đăng ký ba route internal cho prepare/impact/release khi chỉnh structure. `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`, dòng 92–121, có route structure và backup; chưa có API admission/session/checkout/departure.
 
-**Bằng chứng trạng thái slot:** `src/Services/FacilityService/SmartParking.FacilityService.Persistence/PostgresParkingStructureRepository.cs`, khoảng dòng 205, đọc occupancy từ `physical_state='OCCUPIED'`. Chưa có entry/departure workflow ghi accepted occupancy tương ứng. Không tìm thấy SignalR hub/subscription trong source backend đã kiểm tra. Chỉ thêm polling hoặc đổi màu UI sẽ không giải quyết nguồn dữ liệu chưa được cập nhật.
+**Bằng chứng trạng thái slot:** `src/Services/ParkingService/SmartParking.ParkingService.Persistence/PostgresParkingStructureRepository.cs`, khoảng dòng 205, đọc occupancy từ `physical_state='OCCUPIED'`. Chưa có entry/departure workflow ghi accepted occupancy tương ứng. Không tìm thấy SignalR hub/subscription trong source backend đã kiểm tra. Chỉ thêm polling hoặc đổi màu UI sẽ không giải quyết nguồn dữ liệu chưa được cập nhật.
 
 ### 4.4. Owner chưa có đường xem 3D
 
@@ -178,7 +178,7 @@ Việc review đối chiếu hướng dẫn `AGENTS.md` được cung cấp và 
 | Controller mỏng, use case qua CQRS/MediatR | Một số action Auth/OwnerApplications/Operators gọi workflow service trực tiếp; Parking route gọi service trực tiếp | Tách command/query và handler cho từng workflow được sửa; controller chỉ xử lý transport. |
 | Application điều phối; Persistence tập trung truy cập dữ liệu | Nhiều quyết định nghiệp vụ, validation và transaction nằm trong các workflow service thuộc Persistence | Đưa orchestration vào Application qua repository/UOW port; giữ SQL và lock trong Persistence. |
 | Controller không truy cập DbContext trực tiếp | `IdentityScopeController` dùng `AppDbContext` để truy vấn membership | Tách query có kiểm tra permission và tenant nhất quán. |
-| Domain không phụ thuộc serialization | `src/Services/FacilityService/SmartParking.FacilityService.Domain/ParkingStructure.cs`, dòng 181–186, parse JSON bằng `JsonDocument` | Parse/map JSON ở boundary ngoài Domain; Domain nhận dữ liệu có kiểu. |
+| Domain không phụ thuộc serialization | `src/Services/ParkingService/SmartParking.ParkingService.Domain/ParkingStructure.cs`, dòng 181–186, parse JSON bằng `JsonDocument` | Parse/map JSON ở boundary ngoài Domain; Domain nhận dữ liệu có kiểu. |
 | Transaction local không bảo đảm atomic cho HTTP service khác | `OwnerRegistrationService.cs`, dòng 75–106 trong UserService Persistence/Repositories, gọi Parking khi transaction local còn mở | Dùng operation ID ổn định và workflow phục hồi; lưu durable intent/outcome để xử lý remote success nhưng local commit thất bại. |
 | Phân quyền gắn với action và resource hiện tại | Quyền và tenant có thể lấy từ hai membership khác nhau | Kiểm tra cùng actor/action/membership/tenant; bổ sung test deny scope. |
 
@@ -228,7 +228,7 @@ docker compose --env-file .env -f compose.schema-integration.yml ps
 
 # Có cấu hình connection test riêng trong process; không ghi secret trong báo cáo.
 dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --no-build --no-restore --verbosity minimal
-dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-restore --verbosity minimal
+dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --no-restore --verbosity minimal
 
 # Frontend: đã chạy trong cùng đợt review, trước lần kiểm tra Docker sau cùng.
 # npm run build thực hiện tại thư mục FE.

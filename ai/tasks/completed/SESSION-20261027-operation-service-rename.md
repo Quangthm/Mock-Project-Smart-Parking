@@ -3,7 +3,7 @@
 ## 1. Session Information
 - Branch: Fix2FA
 - Status: Completed
-- Request: Rename OperationService to OperationService and obtain medium subagent cross-review before team handoff.
+- Request: Rename ReservationService to OperationService and obtain medium subagent cross-review before team handoff.
 
 ## 2. Objectives
 - [x] Rename service folder, five projects, assemblies/namespaces and build/test references.
@@ -11,7 +11,7 @@
 - [x] Build/test and independent cross-review.
 
 ## 3. Work Completed
-- Renamed src/Services/OperationService to src/Services/OperationService; all five SmartParking.OperationService.* projects and 42 tracked source files migrated.
+- Renamed src/Services/ReservationService to src/Services/OperationService; all five SmartParking.OperationService.* projects and 42 tracked source files migrated.
 - Renamed bootstrap to OperationHost and updated solution/project/test references, architecture checks and current documentation.
 - Compose builds OperationService. Setup resolves new project names; runner/stop/schema/migration scripts accept Operation with Reservation compatibility alias.
 - Existing ten documentation changes from FacilityService naming preserved. Legacy source-folder remnants contained only generated obj/bin files; moved them to ignored .cache/renamed-service-build-artifacts so src/Services shows only FacilityService, OperationService, UserService and IoTService.
@@ -19,7 +19,7 @@
 ## 4. Technical Decisions
 - OperationService is the exact user-requested service name.
 - Keep reservation business terminology, HTTP routes, database smartpark_operations, API port 5055, legacy configuration keys, environment variables and UserSecretsId for compatibility.
-- Compose service/image/DNS operation-service remain compatible; generic Dockerfile resolves the new OperationService assembly from build arg.
+- Compose service/image/DNS reservation-service remain compatible; generic Dockerfile resolves the new OperationService assembly from build arg.
 - Historical reports/session records remain historical; current team setup guidance documents the compatibility boundary and required rebuild.
 
 ## 5. Files Changed
@@ -43,8 +43,8 @@
 - git diff --check: PASS.
 
 ## 8. Git Status
-- User authorized committing the reviewed changes and explicitly waived the Jira suffix. Conventional Commit: refactor(operation): rename OperationService to OperationService. No push requested or performed.
-- New OperationService files and old OperationService path deletions included together; Git recognizes the source moves as renames.
+- User authorized committing the reviewed changes and explicitly waived the Jira suffix. Conventional Commit: refactor(operation): rename ReservationService to OperationService. No push requested or performed.
+- New OperationService files and old ReservationService path deletions included together; Git recognizes the source moves as renames.
 
 ## 9. Handoff / Next Steps
 - After pull: dotnet restore SmartParking.slnx, then dotnet build SmartParking.slnx.

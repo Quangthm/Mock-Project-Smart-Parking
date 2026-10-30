@@ -8,7 +8,7 @@
 
 ## v1.1 target alignment (DB26/DB27/DB32)
 
-IoT owns external device integrations and raw observations, while Operations accepts occupancy/availability and Facility owns configuration. Combined Partner setup does not transfer these responsibilities to User or legacy FacilityService; exact device-configuration handoff remains design-pending. VNeID is a clearly labelled mandatory simulation (sole seeded Admin exempt), not a live government or IoT integration. Backend discovery/model state must preserve accepted source/version/freshness. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
+IoT owns external device integrations and raw observations, while Operations accepts occupancy/availability and Facility owns configuration. Combined Partner setup does not transfer these responsibilities to User or legacy ParkingService; exact device-configuration handoff remains design-pending. VNeID is a clearly labelled mandatory simulation (sole seeded Admin exempt), not a live government or IoT integration. Backend discovery/model state must preserve accepted source/version/freshness. See [alignment backlog](../alignment-backlog.md#v11-schema-and-seed-alignment-pending). All DDL columns/defaults below remain recorded schema facts; no migration or runtime validation is claimed.
 
 ## 0. Deployment profile
 

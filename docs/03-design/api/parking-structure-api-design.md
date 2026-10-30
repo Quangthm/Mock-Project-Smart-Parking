@@ -35,7 +35,7 @@ Before opening, Facility checks approved/provisioned configuration, supported ca
 
 ## Existing structure route references
 
-Retain these integration paths with canonical service ownership; they do not prove the legacy FacilityService implementation meets the target. Normal Owner session and current owned-lot action scope are required, with Operator endpoints separately scoped. A supplied `tenantId` selects an authorized tenant, never grants it.
+Retain these integration paths with canonical service ownership; they do not prove the legacy ParkingService implementation meets the target. Normal Owner session and current owned-lot action scope are required, with Operator endpoints separately scoped. A supplied `tenantId` selects an authorized tenant, never grants it.
 
 | Method/path | Request and response contract retained |
 |---|---|

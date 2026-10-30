@@ -23,8 +23,6 @@ export interface DriverVehicle {
 
   licensePlate: string
 
-  vehicleType?: string
-
   plateType?: "vn" | "foreign"
 
   plateImageUrl?: string
@@ -148,10 +146,6 @@ export interface Booking {
   slotNumber: string
 
   licensePlate: string
-
-  vehicleType?: string
-
-  entryTime?: string
 
   plateType?: "vn" | "foreign"
 

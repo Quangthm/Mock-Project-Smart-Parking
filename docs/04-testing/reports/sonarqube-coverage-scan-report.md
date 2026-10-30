@@ -35,7 +35,7 @@
 - `dotnet-reportgenerator-globaltool` (v5.5.11) – Công cụ xuất báo cáo tổng hợp coverage dạng Text & HTML.
 - `coverlet.collector` (v6.0.4) – Tích hợp vào:
   - `tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj`
-  - `tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj` _(Mới bổ sung)_
+  - `tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj` _(Mới bổ sung)_
 
 ---
 
@@ -68,7 +68,7 @@ Chúng tôi đã thiết kế và bổ sung **3 tệp kiểm thử chuyên sâu*
 
 ### 4.1. Test Suite 1: `StructureOperationAndEditHandlerTests.cs`
 
-- **Đường dẫn:** `tests/Services/SmartParking.FacilityService.Tests/StructureOperationAndEditHandlerTests.cs`
+- **Đường dẫn:** `tests/Services/SmartParking.ParkingService.Tests/StructureOperationAndEditHandlerTests.cs`
 - **Mục tiêu:** Kiểm thử toàn diện `StructureEditHandler` (xử lý các hành động cập nhật bãi đỗ) và `StructureOperationService`.
 - **Các ca kiểm thử:**
   - `StructureEditHandler_AppliesProfileUpdate`: Cập nhật mã bãi, tên, địa chỉ, toạ độ GPS.
@@ -84,8 +84,8 @@ Chúng tôi đã thiết kế và bổ sung **3 tệp kiểm thử chuyên sâu*
 
 ### 4.2. Test Suite 2: `ReservationGateUseCaseTests.cs`
 
-- **Đường dẫn:** `tests/Services/SmartParking.FacilityService.Tests/ReservationGateUseCaseTests.cs`
-- **Mục tiêu:** Kiểm thử toàn bộ nghiệp vụ cổng ra vào và đặt chỗ (`OperationService.Application`).
+- **Đường dẫn:** `tests/Services/SmartParking.ParkingService.Tests/ReservationGateUseCaseTests.cs`
+- **Mục tiêu:** Kiểm thử toàn bộ nghiệp vụ cổng ra vào và đặt chỗ (`ReservationService.Application`).
 - **Các ca kiểm thử:**
   - `ListReservationsQueryHandler_ReturnsStoreList`: Liệt kê danh sách đặt chỗ theo phạm vi trạm (`SiteScope`).
   - `ListParkingSessionsQueryHandler_ReturnsStoreList`: Lấy lịch sử phiên gửi xe tại trạm.
@@ -115,14 +115,14 @@ Chúng tôi đã thiết kế và bổ sung **3 tệp kiểm thử chuyên sâu*
 
 | Module / Assembly                               | Trước khi viết Test | Sau khi viết Test |       Trạng thái       |
 | :---------------------------------------------- | :-----------------: | :---------------: | :--------------------: |
-| **SmartParking.FacilityService.Domain**          |        90.1%        |    **100.0%**     | **Đạt chuẩn (>= 80%)** |
-| **SmartParking.FacilityService.Application**     |        57.0%        |     **78.7%**     |      Tiệm cận 80%      |
+| **SmartParking.ParkingService.Domain**          |        90.1%        |    **100.0%**     | **Đạt chuẩn (>= 80%)** |
+| **SmartParking.ParkingService.Application**     |        57.0%        |     **78.7%**     |      Tiệm cận 80%      |
 | - _StructureEditHandler_                        |        0.0%         |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 | - _StructureEdit Record_                        |        13.3%        |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 | - _OperatorLayoutService_                       |       100.0%        |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 | - _StructureOutcomeBuilder_                     |       100.0%        |    **100.0%**     |  **Đạt chuẩn (100%)**  |
-| **SmartParking.OperationService.Domain**      |        88.0%        |     **88.0%**     | **Đạt chuẩn (>= 80%)** |
-| **SmartParking.OperationService.Application** |        23.2%        |     **71.7%**     |    Tăng vọt +48.5%     |
+| **SmartParking.ReservationService.Domain**      |        88.0%        |     **88.0%**     | **Đạt chuẩn (>= 80%)** |
+| **SmartParking.ReservationService.Application** |        23.2%        |     **71.7%**     |    Tăng vọt +48.5%     |
 | - _CheckInReservationCommandHandler_            |        0.0%         |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 | - _CheckOutReservationCommandHandler_           |        0.0%         |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 | - _CheckInWalkInCommandHandler_                 |        0.0%         |    **100.0%**     |  **Đạt chuẩn (100%)**  |
@@ -134,7 +134,7 @@ Chúng tôi đã thiết kế và bổ sung **3 tệp kiểm thử chuyên sâu*
 | - _ValidateAccessTokenCommandHandler_           |        0.0%         |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 | **SmartParking.UserService.Domain**             |        29.4%        |    **100.0%**     |  **Đạt chuẩn (100%)**  |
 
-> **Tổng số test cases thực thi:** **135 test cases** (FacilityService: 47 passed, UserService: 74 passed, Skipped DB tests: 14). Tỷ lệ pass: **100%**.
+> **Tổng số test cases thực thi:** **135 test cases** (ParkingService: 47 passed, UserService: 74 passed, Skipped DB tests: 14). Tỷ lệ pass: **100%**.
 
 ---
 
@@ -173,7 +173,7 @@ Start-Process "TestResults/CoverageReport/index.html"
 
 Để đưa toàn bộ tất cả các tầng (bao gồm cả Infrastructure và API Controller) vượt ngưỡng 80%:
 
-1. **`FacilityService.Infrastructure`:** Viết test cho `StructureImpactPlanner` (lập kế hoạch dời xe khi bảo trì phân khu) và `StructureCommitmentsClient`.
+1. **`ParkingService.Infrastructure`:** Viết test cho `StructureImpactPlanner` (lập kế hoạch dời xe khi bảo trì phân khu) và `StructureCommitmentsClient`.
 2. **`UserService.Application.Services.VehicleRegistrationService`:** Bổ sung test cho luồng kiểm duyệt biển số xe và phân quyền tài xế.
-3. **`OperationService.Application.StructureSafetyService`:** Nâng từ 70% lên 100% bằng cách bổ sung ca kiểm thử vượt quota đỗ xe.
+3. **`ReservationService.Application.StructureSafetyService`:** Nâng từ 70% lên 100% bằng cách bổ sung ca kiểm thử vượt quota đỗ xe.
 4. **Cấu hình SonarQube Quality Gate:** Thiết lập Quality Gate trên giao diện SonarQube với ngưỡng chặn Coverage >= 80% đối với mã nguồn mới (New Code).
