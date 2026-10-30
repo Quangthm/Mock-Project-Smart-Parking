@@ -19,7 +19,7 @@
 
 Bộ docs trong `arch/database-schema/docs/02-architecture/database/` được sinh từ **6 file SQL arch** + SRS v1.0. Branch triển khai đã chuyển sang profile **6 DB vật lý** với **7 base DDL + 8 overlay** và các deviation đã được phê tại T4 (D1–D7). Vì vậy, nếu copy nguyên bộ docs arch về branch mà không cập nhật, tài liệu sẽ mô tả sai schema đang chạy:
 
-- Tên file cũ (`01-user-service-db.sql`, `02-facility-service-db.sql`, `03-reservation-session-service-db.sql`, …).
+- Tên file cũ (`01-user-service-db.sql`, `02-parking-service-db.sql`, `03-reservation-session-service-db.sql`, …).
 - `03` bị mô tả là một file/DB, trong khi triển khai tách `03a` → `smartpark_parking`, `03b` → `smartpark_reservation`.
 - `01` docs seed 4 role; triển khai seed 7 mã.
 - `02` docs nói `parking_slots` chỉ có `physical_state`; triển khai có thêm `supported_vehicle_type`, `reservation_state`.
@@ -55,7 +55,7 @@ Kết luận: docs arch phản ánh đúng **arch @9a13499**, không phản ánh
 
 | DB | Overlay | Vì sao |
 |---|---|---|
-| `smartpark_parking` | `parking-tenants.sql` | `FacilityService.API/Program.cs:76-91`; JOIN `tenants` tại `OperatorGateSlotStore.cs:40`, `PostgresParkingStructureRepository.cs:22`, `PostgresStructureSynchronizationStore.cs:55` |
+| `smartpark_parking` | `parking-tenants.sql` | `ParkingService.API/Program.cs:76-91`; JOIN `tenants` tại `OperatorGateSlotStore.cs:40`, `PostgresParkingStructureRepository.cs:22`, `PostgresStructureSynchronizationStore.cs:55` |
 | `smartpark_parking` | `parking-structure-synchronizations.sql` | `PostgresStructureSynchronizationStore` dùng bảng, BE không tự tạo |
 | `smartpark_parking` | `parking-operator-tables.sql` | `/api/operator/*` cần `support_tickets`, `operator_notifications`, `operator_audit_logs`; `operator_incident_events` ở 03a |
 | `smartpark_parking` | `parking-slot-constraints.sql` | `ck_deleted_slot_safe` + `uq_site_slot_code_ci` |
@@ -154,7 +154,7 @@ Get-ChildItem docs\02-architecture\database -Recurse -File
 #    giữ nguyên tên file/claim tại thời điểm ghi.
 Get-ChildItem docs\02-architecture\database -Recurse -Filter *.md |
   Where-Object { $_.FullName -notmatch '\\db-update-log\\|alignment-backlog\.md$' } |
-  Select-String -Pattern '01-user-service-db\.sql|02-facility-service-db\.sql|03-reservation-session-service-db\.sql|smartpark-srs-v0\.9|4 role codes|chỉ lưu `physical_state`'
+  Select-String -Pattern '01-user-service-db\.sql|02-parking-service-db\.sql|03-reservation-session-service-db\.sql|smartpark-srs-v0\.9|4 role codes|chỉ lưu `physical_state`'
 
 # 3) UTF-8 strict + BOM/mojibake
 $utf8 = New-Object System.Text.UTF8Encoding($false, $true)

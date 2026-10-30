@@ -25,7 +25,7 @@
 - Exit the explicit email OTP route when pending registration recovery selects another view. Added six runtime regression cases across three destination views and two recovery branches.
 
 ## 5. Files Changed
-- Upstream merge changes span FE, OperationService, service tests, docs and development tooling.
+- Upstream merge changes span FE, ReservationService, service tests, docs and development tooling.
 - Merge-specific resolutions include SmartParking.slnx, conflicting FE/auth files and package lock, Reservation source relocations/DI/persistence, Facility test names and 3D docs.
 - Regression/fixture updates: tests/frontend and PostgresStructureWorkflowTests.cs.
 

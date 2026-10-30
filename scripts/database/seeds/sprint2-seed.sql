@@ -1,6 +1,6 @@
 -- ==========================================
 -- SPRINT 2 DETERMINISTIC SEED DATA
--- Applies to 01-user-service-db and 02-facility-service-db
+-- Applies to 01-user-service-db and 02-parking-service-db
 -- ==========================================
 
 -- >>> USER SERVICE DB SEED <<<

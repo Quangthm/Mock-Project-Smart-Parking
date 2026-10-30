@@ -70,10 +70,16 @@ public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGa
 
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
     {
-        await db.ParkingSlotsFull.Where(x => x.TenantId == tenantId && x.SiteId == siteId &&
-            x.Id == slotId && x.PhysicalState == "OCCUPIED")
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.PhysicalState, "AVAILABLE")
-                .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow), ct);
+        await using var db = await source.OpenConnectionAsync(ct);
+        await using var command = new NpgsqlCommand("""
+            UPDATE parking_slots
+            SET physical_state = 'AVAILABLE', updated_at = now()
+            WHERE tenant_id = $1 AND site_id = $2 AND id = $3
+              AND physical_state = 'OCCUPIED'
+            """, db);
+        command.Parameters.AddWithValue(tenantId);
+        command.Parameters.AddWithValue(siteId);
+        command.Parameters.AddWithValue(slotId);
+        await command.ExecuteNonQueryAsync(ct);
     }
 }

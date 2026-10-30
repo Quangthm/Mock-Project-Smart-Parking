@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
+# Parking remains an alias so existing scripts and configuration continue to work.
 if ($Service -eq 'Facility') { $Service = 'Parking' }
+# Keep Reservation configuration keys and database settings compatible.
 if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
@@ -31,23 +33,23 @@ function Assert-DevPassword([string]$Name, [string]$Value) {
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:Services__Key = $env:SMARTPARK_SERVICE_KEY
 $env:Services__User = 'http://localhost:5035/'
-$env:Services__Facility = 'http://localhost:5045/'
-$env:Services__Operation = 'http://localhost:5055/'
+$env:Services__Parking = 'http://localhost:5045/'
+$env:Services__Reservation = 'http://localhost:5055/'
 $env:Services__Payment = 'http://localhost:5065/'
 foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
     $url = [Environment]::GetEnvironmentVariable('SMARTPARK_SERVICE_' + $remoteService.ToUpperInvariant() + '_URL')
     if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
 }
 
-$dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Facility = 'SMARTPARK_DB_PARKING_PORT'; Operation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
-$defaultDbPortByService = @{ User = '5441'; Facility = '5442'; Operation = '5443'; Payment = '5444' }
-$apiPortByService = @{ User = '5035'; Facility = '5045'; Operation = '5055'; Payment = '5065' }
+$dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
+$defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444' }
+$apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065' }
 
 $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }
 $apiPort = $apiPortByService[$Service]
 
-$dbName = @{ User='smartpark_user'; Facility='smartpark_facility'; Operation='smartpark_operations'; Payment='smartpark_payment' }[$Service]
+$dbName = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment' }[$Service]
 # Quote the password for Npgsql syntax so ';' inside a password is safe.
 $quotedPassword = $env:SMARTPARK_DEV_PASSWORD.Replace('"', '""')
 [Environment]::SetEnvironmentVariable('ConnectionStrings__' + $Service, "Host=127.0.0.1;Port=$dbPort;Database=$dbName;Username=$dbName;Password=`"$quotedPassword`"", 'Process')
@@ -77,10 +79,10 @@ if ($Service -eq 'User') {
 
 # Optional .env settings override saved user-secrets only for this runner process.
 if ($Service -eq 'Payment') {
-    # PaymentService resolves the reservation API through Services:OperationService:BaseUrl.
+    # PaymentService resolves the reservation API through Services:ReservationService:BaseUrl.
     $reservationUrl = $env:SMARTPARK_SERVICE_RESERVATION_URL
     if ([string]::IsNullOrWhiteSpace($reservationUrl)) { $reservationUrl = 'http://localhost:5055/' }
-    $env:Services__OperationService__BaseUrl = $reservationUrl
+    $env:Services__ReservationService__BaseUrl = $reservationUrl
     # Empty payOS values keep the sandbox emulation and saved user-secrets intact.
     if ($env:SMARTPARK_PAYOS_CLIENT_ID) { $env:PayOs__ClientId = $env:SMARTPARK_PAYOS_CLIENT_ID }
     if ($env:SMARTPARK_PAYOS_API_KEY) { $env:PayOs__ApiKey = $env:SMARTPARK_PAYOS_API_KEY }

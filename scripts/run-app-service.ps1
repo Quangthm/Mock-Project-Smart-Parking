@@ -1,9 +1,11 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Operation','Payment','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
 $ErrorActionPreference = 'Stop'
+if ($Service -eq 'Facility') { $Service = 'Parking' }
+if ($Service -eq 'Reservation') { $Service = 'Operation' }
 $root = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $root '.env'
 $composePath = Join-Path $root 'compose.app.yml'
@@ -44,13 +46,13 @@ if ($config.ExitCode -ne 0) { throw "compose.app.yml is invalid.`n$($config.Text
 
 $map = @{
     User        = 'user-service'
-    Facility    = 'facility-service'
-    Operation   = 'operation-service'
+    Parking     = 'parking-service'
+    Operation   = 'reservation-service'
     Payment     = 'payment-service'
     Frontend    = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','facility-service','operation-service','payment-service','frontend')
+    @('user-service','parking-service','reservation-service','payment-service','frontend')
 } else {
     @($map[$Service])
 }

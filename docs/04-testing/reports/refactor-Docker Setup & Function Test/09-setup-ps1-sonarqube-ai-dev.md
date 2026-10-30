@@ -108,7 +108,7 @@ User yêu cầu step [8/8] chạy cả FE + 3 BE trong 1 container để dev nha
 
 ### Vấn đề phát hiện khi test
 1. **BE `dotnet run` fail** — `DirectoryNotFoundException` vì `--contentRoot` relative path không tồn tại trong container; cần absolute path.
-2. **OOM kill (Exit 137)** — 3 dotnet SDK process (UserService, FacilityService, OperationService) + Node dev server vượt quá RAM allocation.
+2. **OOM kill (Exit 137)** — 3 dotnet SDK process (UserService, ParkingService, ReservationService) + Node dev server vượt quá RAM allocation.
 3. **Healthcheck sai** — chỉ check FE:5173 (TCP) → pass sớm nhưng BE chưa build xong.
 
 ### Kết luận

@@ -52,17 +52,17 @@ public sealed class ReservationSnapshotHttpAdapter : IReservationPricingSnapshot
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to call OperationService at {Url}", url);
+            _logger.LogError(ex, "Failed to call ReservationService at {Url}", url);
             throw new PricingDomainException("RESERVATION_SERVICE_UNAVAILABLE", "Reservation service is temporarily unavailable.");
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to deserialize snapshot from OperationService");
+            _logger.LogError(ex, "Failed to deserialize snapshot from ReservationService");
             throw new PricingDomainException("CORRUPTED_POLICY_SNAPSHOT", "Invalid snapshot format from Reservation service.", "reservationId");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError("Timeout calling OperationService at {Url}", url);
+            _logger.LogError("Timeout calling ReservationService at {Url}", url);
             throw new PricingDomainException("RESERVATION_SERVICE_TIMEOUT", "Reservation service request timed out.");
         }
     }

@@ -70,7 +70,7 @@ Mirror trong runner `scripts/apply-workflow-migrations.ps1:29-35` (`Reservation 
 
 ## Lý do / quyết định liên quan
 
-- **Q2** (develop dùng cả structure-sync **và** gate-flow → overlay tích hợp bắt buộc được giữ): 3/4 overlay này chính là phần gate-flow của OperationService được "di trú" từ `integration/03` + `05.10` + `05.12` sang bộ overlay mới.
+- **Q2** (develop dùng cả structure-sync **và** gate-flow → overlay tích hợp bắt buộc được giữ): 3/4 overlay này chính là phần gate-flow của ReservationService được "di trú" từ `integration/03` + `05.10` + `05.12` sang bộ overlay mới.
 - **D7 / R3** → `reservation-site-capacity-pools.sql` (recreate shape-BE).
 - **R1** → safety tables + `guard_structure_edit()` (advisory lock khớp contract tại `StructureSafetyStore.cs:81`).
 - **R2** → receipts; **R4** → confirmation trigger (thiếu thì `confirmed_at` luôn NULL).
@@ -145,7 +145,7 @@ $ scripts/apply-workflow-migrations.ps1:29-35
 
 ```
 reservation-site-capacity-pools.sql:3-5:
--- Purpose : Recreate site_capacity_pools with the shape the OperationService BE
+-- Purpose : Recreate site_capacity_pools with the shape the ReservationService BE
 --           actually uses. The original DDL … was lost in the arch SRS split (T4 D7, gap R3) …
 reservation-site-capacity-pools.sql:8:  -- Order   : APPLY FIRST (1st) — reservation-structure-safety.sql depends on this table.
 

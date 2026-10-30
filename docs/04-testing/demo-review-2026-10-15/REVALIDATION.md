@@ -43,13 +43,13 @@ Các đường dẫn bên dưới tính từ repository root. Dòng là source c
 
 ### R03 — P1: Check-in/out chưa có workflow backend
 
-**Bằng chứng:** `FE/src/roles/operator/check-in-out/CheckInOut.tsx:106–134,181` dùng timer rồi `saveBooking`/`saveLot`. `OperatorDashboard.tsx:90–100` fallback về tất cả local lots nếu không tìm được scope. Search toàn `src` chỉ tìm thấy Reservation API bảo vệ structure tại `src/Services/OperationService/SmartParking.OperationService.API/Program.cs:37`; chưa có admission/session/checkout/departure route.
+**Bằng chứng:** `FE/src/roles/operator/check-in-out/CheckInOut.tsx:106–134,181` dùng timer rồi `saveBooking`/`saveLot`. `OperatorDashboard.tsx:90–100` fallback về tất cả local lots nếu không tìm được scope. Search toàn `src` chỉ tìm thấy Reservation API bảo vệ structure tại `src/Services/ReservationService/SmartParking.ReservationService.API/Program.cs:37`; chưa có admission/session/checkout/departure route.
 
 **Tác động:** đổi trình duyệt/tài khoản không có authoritative session và occupancy chung; không có backend kiểm tra hai xe tranh cùng slot hay quyền site tại thời điểm entry. Sửa: Operations sở hữu entry/session/checkout/actual departure, transaction và idempotency; UI dùng current assignments và command thật, không fallback toàn bộ bãi.
 
 ### R04 — P1: Slot backend chưa nhận occupancy từ entry/departure
 
-**Bằng chứng:** `src/Services/FacilityService/SmartParking.FacilityService.Persistence/PostgresParkingStructureRepository.cs:205` đọc occupied từ `physical_state`; update ở dòng 148 ghi structure fields/reservation state. Không tìm thấy writer từ parking session hay SignalR wiring trong `src`.
+**Bằng chứng:** `src/Services/ParkingService/SmartParking.ParkingService.Persistence/PostgresParkingStructureRepository.cs:205` đọc occupied từ `physical_state`; update ở dòng 148 ghi structure fields/reservation state. Không tìm thấy writer từ parking session hay SignalR wiring trong `src`.
 
 **Tác động:** chỉ bổ sung session hoặc polling frontend vẫn chưa làm Owner model đổi đúng màu. Cần accepted occupancy do Operations quản lý, read contract hoặc durable versioned projection và FE reload sau command/reconnect. Push phải kiểm tra scope; có thể chọn polling trong triển khai nếu đáp ứng tiêu chí độ trễ đã chốt.
 
@@ -163,7 +163,7 @@ Lệnh backend thành công:
 
 ```powershell
 dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --no-restore --verbosity quiet -p:OutputPath=bin/ReviewCheck20261015/
-dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-restore --verbosity quiet -p:OutputPath=bin/ReviewCheck20261015/
+dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --no-restore --verbosity quiet -p:OutputPath=bin/ReviewCheck20261015/
 ```
 
 Lần đầu User test dùng output mặc định lỗi MSB3021/MSB3027 vì Parking API đang giữ DLL. Đã compile/test sang output riêng thành công, không dừng API và không dùng binary cũ để tuyên bố build mới qua. Docker CLI bị sandbox từ chối truy cập config/named pipe; không suy ra Docker engine ngừng hoạt động. Không thay đổi quyền Docker để hoàn thành review này.

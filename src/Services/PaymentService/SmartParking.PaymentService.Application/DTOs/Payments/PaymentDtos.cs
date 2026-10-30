@@ -9,18 +9,6 @@ public record PaymentCheckoutRequestDto(
     string? CancelUrl = null
 );
 
-public record CreatePaymentOrderRequestDto(
-    Guid TenantId,
-    Guid SiteId,
-    Guid ReferenceId,
-    ReferenceType ReferenceType,
-    decimal Amount,
-    Guid? AccountId = null,
-    string? IdempotencyKey = null
-);
-
-public record CashPaymentRequestDto(string? IdempotencyKey = null);
-
 public record PaymentCheckoutResponseDto(
     Guid PaymentTransactionId,
     long OrderCode,

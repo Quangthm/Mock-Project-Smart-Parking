@@ -179,7 +179,7 @@ public class ReservationSnapshotHttpAdapterTests
     }
 
     [Fact]
-    public async Task GetAcceptedPolicySnapshotAsync_WhenServiceUnavailable_ThrowsOperationServiceUnavailableException()
+    public async Task GetAcceptedPolicySnapshotAsync_WhenServiceUnavailable_ThrowsReservationServiceUnavailableException()
     {
         // Arrange
         var adapter = CreateAdapter(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));

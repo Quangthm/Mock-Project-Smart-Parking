@@ -99,8 +99,8 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 | Container | Host URL | Ghi chú |
 | --- | --- | --- |
 | `smartpark-app-user-service-1` | http://localhost:5035 | `/health`; seed admin/owner/operator khi start |
-| `smartpark-app-facility-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
-| `smartpark-app-operation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
+| `smartpark-app-parking-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
+| `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065 | `/health`; dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
@@ -147,7 +147,7 @@ Runner dùng `.env` cho connection string, shared service key, Admin/owner/opera
 | Notification | — | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
 
-`FacilityService` là tên mới của `FacilityService`. Runner vẫn nhận `-Service Parking` để tương thích lệnh cũ. Giữ nguyên các khóa `ConnectionStrings:Parking`, `Services:Facility`, biến `SMARTPARK_*PARKING*` và UserSecretsId cũ. Database theo baseline develop là `smartpark_facility` / `smartpark_operations`; API routes và port không đổi.
+`FacilityService` là tên mới của `ParkingService`. Runner vẫn nhận `-Service Parking` để tương thích lệnh cũ. Giữ nguyên các khóa `ConnectionStrings:Parking`, `Services:Parking`, biến `SMARTPARK_*PARKING*` và UserSecretsId cũ. Database theo baseline develop là `smartpark_facility` / `smartpark_operations`; API routes và port không đổi.
 
 ### 3.3 Frontend trên host
 
@@ -379,8 +379,8 @@ Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skill
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
 
-### OperationService (đổi tên từ OperationService)
+### OperationService (đổi tên từ ReservationService)
 
-Mã nguồn, project và namespace dùng tên OperationService. Chạy bằng -Service Operation; -Service Reservation vẫn là alias tương thích. Giữ UserSecretsId SmartParking.OperationService.API.LocalDevelopment, các khóa ConnectionStrings:Reservation / Services:Operation và biến SMARTPARK_*RESERVATION*. Compose vẫn dùng service/image operation-service để tương thích môi trường hiện có; build arg là OperationService. Port API 5055, database smartpark_operations và các HTTP route giữ nguyên.
+Mã nguồn, project và namespace dùng tên OperationService. Chạy bằng -Service Operation; -Service Reservation vẫn là alias tương thích. Giữ UserSecretsId SmartParking.ReservationService.API.LocalDevelopment, các khóa ConnectionStrings:Reservation / Services:Reservation và biến SMARTPARK_*RESERVATION*. Compose vẫn dùng service/image reservation-service để tương thích môi trường hiện có; build arg là OperationService. Port API 5055, database smartpark_operations và các HTTP route giữ nguyên.
 
 Sau khi pull, chạy dotnet restore SmartParking.slnx và dotnet build SmartParking.slnx. Với Docker, chạy scripts/run-app-service.ps1 -Service Operation để build lại image; không dùng -NoBuild cho lần đầu sau đổi tên.
