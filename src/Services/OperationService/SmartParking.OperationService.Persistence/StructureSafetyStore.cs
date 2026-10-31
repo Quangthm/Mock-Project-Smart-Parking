@@ -44,7 +44,8 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
 
     public async Task<HoldSnapshot> AcquireAsync(Guid tenantId, Guid siteId, Guid token, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, ct);
         await LockSiteAsync(siteId, ct);
         if (await db.StructureReleaseReceipts.AnyAsync(r => r.Token == token, ct))
             throw new HoldConflictException();
@@ -108,7 +109,8 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
 
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid token, EditOutcome? outcome, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, ct);
         await LockSiteAsync(siteId, ct);
         var payload = JsonSerializer.Serialize(outcome, JsonOptions);
         var receipt = await db.StructureReleaseReceipts.SingleOrDefaultAsync(r => r.Token == token, ct);
@@ -207,7 +209,6 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             CompletedAt = DateTimeOffset.UtcNow
         });
 
-    private Task<int> LockSiteAsync(Guid siteId, CancellationToken ct) =>
-        db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({siteId.ToString()}, 0))", ct);
+    private static Task LockSiteAsync(Guid siteId, CancellationToken ct) =>
+        Task.CompletedTask;
 }

@@ -2,7 +2,7 @@
 
 > **Mục đích:** Tài liệu này là **hướng dẫn thực thi và kiểm toán mã nguồn (Implementation & Code Review Guidelines)** để **AI Agent** và **Developer** đối chiếu, đảm bảo mọi commit / PR trong `src/Services/` tuân thủ nghiêm ngặt các ranh giới kiến trúc đã được phê duyệt của dự án SmartParking.
 > **Vị trí tài liệu:** Tài liệu này phục vụ kiểm soát mã nguồn ở mức implementation, **không thay thế hoặc ghi đè** SRS, các quyết định PM đã phê duyệt (`DEC-PAY-ARCH-01`, `DEC-PAY-ARCH-02`) hay các hợp đồng kiến trúc giải pháp hiện hành (`SmartPark Solution Architecture v1.0`).
-> **Trọng tâm đặc biệt:** `SmartParking.PaymentService` (đối chiếu chuẩn mực cùng `UserService`, `ParkingService`, `ReservationService`).
+> **Trọng tâm đặc biệt:** `SmartParking.PaymentService` (đối chiếu chuẩn mực cùng `UserService`, `FacilityService`, `OperationService`).
 
 ---
 
@@ -137,7 +137,7 @@ Dành cho nhà phát triển và agent triển khai miền Tài chính:
 ### 4.1. Quyền Sở hữu Biểu phí (Authoritative Tariff Ownership — DEC-PAY-ARCH-01)
 > [!IMPORTANT]
 > **Quyết định PM:** Payment & Pricing là nguồn có thẩm quyền duy nhất (authoritative owner) đối với versioned tariffs, financial terms và accepted financial snapshots. Các service khác cung cấp dữ kiện thuộc domain của mình qua hợp đồng API/event; không quyết định hoặc ghi trực tiếp tariff của Payment.
-- **Xử lý Adapter hiện tại:** Interface `IParkingTariffPort` / `ParkingTariffHttpAdapter` đang gọi sang ParkingService phải được hiểu là **giải pháp chuyển đổi tạm thời (legacy transitional adapter)**, không phải kiến trúc đích. Kế hoạch chuyển đổi ownership và writer phải được thực hiện có kiểm soát, không duy trì 2 nguồn thẩm quyền song song.
+- **Xử lý Adapter hiện tại:** Interface `IParkingTariffPort` / `ParkingTariffHttpAdapter` đang gọi sang FacilityService phải được hiểu là **giải pháp chuyển đổi tạm thời (legacy transitional adapter)**, không phải kiến trúc đích. Kế hoạch chuyển đổi ownership và writer phải được thực hiện có kiểm soát, không duy trì 2 nguồn thẩm quyền song song.
 - **Bảo toàn Snapshot:** Không sửa đổi hoặc xóa lịch sử snapshot tài chính đã chốt để áp lại giá hiện hành.
 
 ### 4.2. Đưa Snapshot Serialization ra ngoài Domain (DEC-PAY-ARCH-02)
@@ -171,8 +171,8 @@ Dành cho nhà phát triển và agent triển khai miền Tài chính:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **`PaymentService`** | `Domain/Pricing` (Cần refactor bỏ `ToSnapshotJson`) | MediatR CQRS + FluentValidation + Ports | Skeleton DI (chuẩn bị `PaymentDbContext`) | HTTP Outbound Adapters (Tariff legacy, Reservation) | `PricingController`, `ExceptionHandlingMiddleware` |
 | **`UserService`** | `Domain/Entities`, `ValueObjects`, `BaseEntity` | MediatR CQRS + FluentValidation + Services | EF Core `AppDbContext` + Repositories + UnitOfWork | Email / Token Services | MVC Controllers |
-| **`ParkingService`** | `Domain/ParkingStructure.cs` | `ParkingStructureService` + Handlers | PostgreSQL Direct Stores (`Npgsql`) | HTTP Service Clients + Workers | Minimal APIs (`Program.cs`) |
-| **`ReservationService`**| `Domain/StructureEditPolicy.cs` | `StructureSafetyService` | PostgreSQL Safety Store riêng (`Npgsql`) | *(Tích hợp trong Persistence)* | Minimal APIs (`Program.cs`) |
+| **`FacilityService`** | `Domain/ParkingStructure.cs` | `ParkingStructureService` + Handlers | PostgreSQL Direct Stores (`Npgsql`) | HTTP Service Clients + Workers | Minimal APIs (`Program.cs`) |
+| **`OperationService`**| `Domain/StructureEditPolicy.cs` | `StructureSafetyService` | PostgreSQL Safety Store riêng (`Npgsql`) | *(Tích hợp trong Persistence)* | Minimal APIs (`Program.cs`) |
 
 ---
 
@@ -366,11 +366,11 @@ public class CreatePaymentHandler : IRequestHandler<CreatePaymentOrderCommand, R
 **❌ SAI — DTO của hệ thống bên ngoài lan vào Application:**
 ```csharp
 // File: SmartParking.PaymentService.Application/Common/Interfaces/Ports/IParkingTariffPort.cs
-using ParkingService.Contracts.V1;  // ❌ Import contract của service khác vào Application
+using FacilityService.Contracts.V1;  // ❌ Import contract của service khác vào Application
 
 public interface IParkingTariffPort
 {
-    // ❌ Trả về DTO thuộc về ParkingService — khi ParkingService đổi contract, Application bị vỡ
+    // ❌ Trả về DTO thuộc về FacilityService — khi FacilityService đổi contract, Application bị vỡ
     Task<ParkingTariffResponseDto> GetTariffAsync(Guid structureId);
 }
 ```
@@ -403,7 +403,7 @@ public class ParkingTariffHttpAdapter : IParkingTariffPort
     public async Task<ParkingTariffInfo> GetTariffAsync(
         Guid structureId, CancellationToken ct)
     {
-        // Gọi ParkingService API
+        // Gọi FacilityService API
         var externalDto = await _httpClient.GetFromJsonAsync<ExternalTariffResponse>(
             $"/api/v1/structures/{structureId}/tariff", ct);
 
