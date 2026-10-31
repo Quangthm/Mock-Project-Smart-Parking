@@ -153,6 +153,42 @@ export class SlotMaterialManager {
   }
 
   /**
+   * Selection tint for a template mesh the Owner picked for registration. An unselected
+   * mesh is restored to the model's own material so it stays visually inert.
+   */
+
+  public applyRegistrationState(mesh: THREE.Mesh, selected: boolean): void {
+    if (!(mesh instanceof THREE.Mesh)) return
+
+    if (!this.originalMaterials.has(mesh.id)) {
+      this.originalMaterials.set(mesh.id, mesh.material)
+    }
+
+    if (!selected) {
+      this.restoreOriginal(mesh)
+      return
+    }
+
+    const targetColor = 0xf59e0b
+    let mat = this.activeMaterials.get(mesh.id)
+    if (!mat) {
+      mat = new THREE.MeshStandardMaterial({
+        roughness: 0.35,
+        metalness: 0.1,
+        transparent: true,
+        side: THREE.DoubleSide,
+      })
+      this.activeMaterials.set(mesh.id, mat)
+      mesh.material = mat
+    }
+    mat.color.setHex(targetColor)
+    mat.emissive.setHex(targetColor)
+    mat.emissiveIntensity = 0.5
+    mat.opacity = 0.9
+    mat.needsUpdate = true
+  }
+
+  /**
    * Pulse animation for the currently selected or focused slot.
    */
 
