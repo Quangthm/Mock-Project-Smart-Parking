@@ -5,6 +5,7 @@ import "./partner-contract.css"
 
 interface Props {
   applicationId: string
+  ownerName: string
   businessName: string
   lotName: string
   record: ContractDraftRecord | null
@@ -15,7 +16,7 @@ interface Props {
   onSign: (name: string) => void
 }
 
-export function PartnerContractDialog({ applicationId, businessName, lotName, record, signer, signerName, readOnly = false, onClose, onSign }: Props) {
+export function PartnerContractDialog({ applicationId, ownerName, businessName, lotName, record, signer, signerName, readOnly = false, onClose, onSign }: Props) {
   const [readToEnd, setReadToEnd] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [name, setName] = useState(signerName)
@@ -56,7 +57,8 @@ export function PartnerContractDialog({ applicationId, businessName, lotName, re
         <button ref={closeRef} type="button" className="partner-contract-close" onClick={onClose} aria-label="Close agreement">×</button>
       </header>
       <div className="partner-contract-meta">
-        <span><strong>Owner</strong> {businessName}</span>
+        <span><strong>Owner</strong> {ownerName}</span>
+        <span><strong>Company</strong> {businessName}</span>
         <span><strong>Parking lot</strong> {lotName}</span>
         <span><strong>Application</strong> {applicationId.slice(0, 8)}</span>
       </div>

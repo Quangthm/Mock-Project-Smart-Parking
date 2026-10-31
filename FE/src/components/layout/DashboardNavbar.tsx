@@ -11,6 +11,7 @@ import { scrollPageToTop } from "../../lib/scrollPageToTop"
 import { AccountSwitcher } from "../account/AccountSwitcher"
 import { PartnerContractDialog } from "../modals/PartnerContractDialog"
 import { listOwnerContractCopies } from "../../lib/partnerContract"
+import { showUiToast } from "../../lib/uiToast"
 
 const rolePages: Record<string, { id: string; label: string }[]> = {
   driver: [
@@ -190,6 +191,7 @@ export function DashboardNavbar() {
     store.saveUser(updated)
     setUser(updated)
     setProfileMsg("Your account settings have been saved.")
+    showUiToast("Profile saved", "Your account settings have been saved.")
   }
 
   function toggleSearch() {
@@ -629,6 +631,7 @@ export function DashboardNavbar() {
         )}
       {contractCopy && <PartnerContractDialog
         applicationId={contractCopy.applicationId}
+        ownerName={contractCopy.record.ownerName}
         businessName={contractCopy.record.businessName || "Owner business"}
         lotName={contractCopy.record.lotName || "Parking lot"}
         record={contractCopy.record}

@@ -6,6 +6,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { useApp } from "../../../context/AppContext"
+import { showUiToast } from "../../../lib/uiToast"
 import { ownerData as store } from "../data/data"
 import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
@@ -189,11 +190,14 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     try {
       await action()
       setNotice(success)
+      showUiToast("Parking structure updated", success)
       setReload((value) => value + 1)
       onChanged?.()
       return true
     } catch (cause) {
-      setError(errorText(cause, "Cannot save parking structure."))
+      const message = errorText(cause, "Cannot save parking structure.")
+      setError(message)
+      showUiToast("Structure not saved", message, "error")
       return false
     } finally {
       savingRef.current = false

@@ -880,8 +880,7 @@
   .dashboard-theme .find-parking.has-details .find-parking-map-toolbar { right: 24px; }
 }
 @media (max-width: 640px) {
-  .dashboard-theme .find-parking-map-toolbar { top: calc(min(45dvh, 340px) + 20px); right: 12px; }
-  .dashboard-theme .find-parking.is-search-collapsed .find-parking-map-toolbar { top: 68px; }
+  .dashboard-theme .find-parking-map-toolbar { top: 10px; right: 10px; }
   .dashboard-theme .find-parking-map .parking-map-label { width: 174px; min-height: 50px; }
   .dashboard-theme .parking-map-label-copy strong { font-size: 11px; }
   .dashboard-theme .parking-map-label-copy > span { font-size: 10px; }

@@ -5,6 +5,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi } from "../../../lib/operatorApi"
 import type { SupportTicket } from "../../../lib/types"
 import { store } from "../../../lib/store"
+import { showUiToast } from "../../../lib/uiToast"
 import { formatTicketDecision, ticketPresentation } from "../../../lib/ticketPresentation"
 import "../../../booking-support.css"
 
@@ -108,11 +109,14 @@ export function TicketManagement({ siteId }: { siteId: string }) {
       setTickets((current) => current.map((item) => item.id === ticket.id ? updated : item))
       if (selectedTicket?.id === ticket.id) setSelectedTicket(updated)
       setActionFeedback(`Ticket #${ticket.id} ${ticketDecision || `updated to ${status}`}.`)
+      showUiToast("Ticket updated", `Ticket #${ticket.id} ${ticketDecision || `updated to ${status}`}.`)
       if (local && ticketDecision) store.createNotification({ recipientId: ticket.userId, recipientRole: "driver", type: "TICKET_RESOLVED", title: `Ticket ${ticketDecision}`, message: note || "Your ticket was reviewed.", relatedEntityId: ticket.id })
       setDecisionReason("")
       setDecisionDetail("")
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not update the support ticket.")
+      const message = error instanceof Error ? error.message : "Could not update the support ticket."
+      setLoadError(message)
+      showUiToast("Ticket not updated", message, "error")
     } finally {
       setBusyTicketId(null)
     }

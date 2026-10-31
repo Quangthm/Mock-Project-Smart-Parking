@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { request } from "../../../lib/authApi"
+import { showUiToast } from "../../../lib/uiToast"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import type { OwnerApplicationRecord } from "../../../lib/ownerApi"
@@ -85,6 +86,7 @@ export function OwnerVerification({
       onUpdate(response.data)
       setCode("")
       setMessage("A new code is queued.")
+      showUiToast("Code requested", "A new verification code is queued for delivery.", "info")
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Retry failed.")
     } finally {

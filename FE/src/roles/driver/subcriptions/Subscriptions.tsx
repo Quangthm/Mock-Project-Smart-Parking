@@ -14,6 +14,7 @@ import type {
 } from "../../../lib/types"
 
 import { driverData as store } from "../data/data"
+import { showUiToast } from "../../../lib/uiToast"
 
 import { PAYMENT_OPTIONS } from "../data/paymentOptions"
 
@@ -211,6 +212,7 @@ export function Subscriptions() {
     setCheckoutSuccess(
       `Pass activated successfully for ${selectedLotForDetail.name}! Valid until ${expires.toLocaleDateString("en-GB")}.`,
     )
+    showUiToast("Pass activated", `Your pass for ${selectedLotForDetail.name} is ready.`)
   }
 
   return (

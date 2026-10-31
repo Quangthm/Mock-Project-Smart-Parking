@@ -12,6 +12,7 @@ import {
 import { CreateOperatorForm } from "./CreateOperatorForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { watchOperators } from "../../../lib/operatorLive"
+import { showUiToast } from "../../../lib/uiToast"
 
 export function OperatorManagement({
   selectedSiteId,
@@ -39,6 +40,7 @@ export function OperatorManagement({
     try {
       await operatorsApi.reissueInvitation(id)
       setMessage("A new activation invitation is queued. Previous links are no longer valid.")
+      showUiToast("Invitation queued", "A new activation invitation is on its way.")
     } catch (err) { setError(err instanceof Error ? err.message : "Cannot send invitation.") }
     finally { setInviting(null) }
   }
@@ -94,6 +96,7 @@ export function OperatorManagement({
       `Invitation queued for ${operator.email}. The operator must verify their email and choose their own password before signing in.`,
     )
     onOperatorsChanged()
+    showUiToast("Operator invited", `An activation invitation is queued for ${operator.email}.`)
   }
 
   async function handleDeleteOperator(operator: Operator) {
@@ -105,6 +108,7 @@ export function OperatorManagement({
       await operatorsApi.remove(operator.id)
       setOperators((current) => current.filter((item) => item.id !== operator.id))
       setMessage(`Operator account ${operator.email} was deleted.`)
+      showUiToast("Operator deleted", `${operator.email} was removed.`)
       onOperatorsChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete operator account.")

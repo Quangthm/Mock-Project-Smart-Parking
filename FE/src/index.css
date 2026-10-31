@@ -377,32 +377,6 @@ select:not([multiple]):not([size]) {
 }
 .notification-pop-in { animation: notificationPopIn 0.18s ease-out both; transform-origin: top right; }
 
-@keyframes notificationSweep {
-  0% { transform: translateX(110vw); opacity: 0; }
-  14% { transform: translateX(0); opacity: 1; }
-  72% { transform: translateX(0); opacity: 1; }
-  100% { transform: translateX(-110vw); opacity: 0; }
-}
-.notification-sweep {
-  position: fixed;
-  z-index: 500;
-  top: 72px;
-  left: 12px;
-  width: min(380px, calc(100vw - 24px));
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--primary);
-  border-radius: 18px;
-  background: var(--bg);
-  color: var(--fg);
-  box-shadow: 0 12px 36px #0b162833;
-  pointer-events: none;
-  animation: notificationSweep 5.2s ease-in-out both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .notification-sweep { animation: none; opacity: 1; transform: none; }
-}
-
 .driver-accounts-grid { grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.5fr); }
 @media (max-width: 720px) {
   .driver-accounts-grid { grid-template-columns: minmax(0, 1fr); }

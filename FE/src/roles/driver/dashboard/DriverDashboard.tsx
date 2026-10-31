@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { useApp } from "../../../context/AppContext"
 
 import { driverData as store } from "../data/data"
+import { showUiToast } from "../../../lib/uiToast"
 
 import type { ParkingLot } from "../../../lib/types"
 
@@ -120,6 +121,7 @@ export function DriverDashboard() {
     setUser(updatedUser)
 
     setProfileMessage("Your account settings have been saved.")
+    showUiToast("Profile saved", "Your account settings have been saved.")
   }
 
   const navGroups = [

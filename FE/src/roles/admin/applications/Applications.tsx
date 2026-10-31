@@ -12,6 +12,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { request } from "../../../lib/authApi"
+import { showUiToast } from "../../../lib/uiToast"
 
 export function Applications() {
   const { user } = useApp()
@@ -100,12 +101,11 @@ export function Applications() {
       )
 
       setNotes((current) => ({ ...current, [app.id]: "" }))
+      showUiToast("Application reviewed", `Owner application ${status}.`)
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Review failed. Refresh and try again.",
-      )
+      const message = e instanceof Error ? e.message : "Review failed. Refresh and try again."
+      setError(message)
+      showUiToast("Review failed", message, "error")
     } finally {
       setBusy(null)
     }
@@ -352,6 +352,7 @@ export function Applications() {
                           "POST",
                         )
                         setReload((n) => n + 1)
+                        showUiToast("Notification retried", "The delivery request was submitted again.")
                       } catch (e) {
                         setError(
                           e instanceof Error ? e.message : "Retry failed.",
@@ -389,6 +390,7 @@ export function Applications() {
       </section>
       {contractApp && <PartnerContractDialog
         applicationId={contractApp.id}
+        ownerName={contractApp.ownerName || contractDrafts[contractApp.id]?.ownerName || "Owner"}
         businessName={contractApp.businessName}
         lotName={contractApp.lotSetup?.name || "Parking lot"}
         record={contractDrafts[contractApp.id] ?? null}

@@ -12,6 +12,70 @@
   --sp-ease-color: cubic-bezier(.25, .1, .25, 1);
 }
 
+/* A single action toast stays anchored across role changes and public routes. */
+.app-toast-viewport {
+  position: fixed;
+  z-index: 1500;
+  top: calc(72px + env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  width: min(390px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.app-toast {
+  --toast-accent: var(--primary);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  overflow: hidden;
+  padding: 14px 16px 17px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--toast-accent);
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: 0 16px 40px #0c201c24;
+  animation: sp-action-toast 5.2s both;
+}
+.app-toast[data-tone="error"] { --toast-accent: var(--occupied); }
+.app-toast[data-tone="info"] { --toast-accent: var(--protected); }
+.app-toast::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--toast-accent);
+  transform-origin: left;
+  animation: sp-toast-progress 5.2s linear both;
+}
+.app-toast-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--toast-accent);
+  border-radius: 50%;
+  color: var(--toast-accent);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+.app-toast-copy { display: grid; gap: 3px; min-width: 0; }
+.app-toast-copy strong { font-size: .875rem; line-height: 1.35; }
+.app-toast-copy > span { color: var(--muted); font-size: .875rem; line-height: 1.5; overflow-wrap: anywhere; }
+@keyframes sp-action-toast {
+  0% { opacity: 0; transform: translateX(32px); }
+  5%, 93% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(32px); }
+}
+@keyframes sp-toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 640px) {
+  .app-toast-viewport { top: calc(68px + env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: min(390px, calc(100vw - 24px)); }
+}
+
 /* Controls answer immediately on press; hover changes their surface, not size. */
 :is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent,
     .icon-button, .profile-trigger, .dashboard-nav-item, .popover-item,
@@ -152,8 +216,8 @@
               box-shadow var(--sp-motion-fade) var(--sp-ease-color);
 }
 @keyframes sp-menu-in {
-  from { opacity: 0; transform: scale(.9); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translateY(-5px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes sp-hint-in {
   from { opacity: 0; translate: -5px 0; }
@@ -163,18 +227,18 @@
 /* Large surfaces settle calmly; dialogs keep their center while fading in. */
 .dashboard-theme .settings-dialog,
 [role="dialog"].card {
-  animation: sp-surface-in var(--sp-motion-surface) var(--sp-ease-soft) both;
+  animation: sp-surface-in var(--sp-motion-reveal) var(--sp-ease-soft) both;
 }
 .dashboard-theme .find-parking-details-panel {
   animation: sp-panel-in var(--sp-motion-reveal) var(--sp-ease-out) both;
 }
 @keyframes sp-surface-in {
-  from { opacity: 0; filter: blur(4px); transform: scale(.96); }
-  to { opacity: 1; filter: blur(0); transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes sp-panel-in {
-  from { opacity: 0; filter: blur(4px); }
-  to { opacity: 1; filter: blur(0); }
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* Content changes are visible without moving the fixed rail or map canvas. */
@@ -196,12 +260,6 @@
   to { opacity: 1; }
 }
 
-.notification-sweep { border-radius: 18px; transform-origin: top left; animation: sp-toast-in-out 5.2s both; }
-@keyframes sp-toast-in-out {
-  0% { opacity: 0; transform: translateY(-8px) scale(.96); filter: blur(4px); }
-  4%, 94% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translateY(-8px) scale(.98); filter: blur(0); }
-}
 
 /* Existing scroll reveal keeps its observer, using the same motion rhythm. */
 .landing-motion-ready .landing-reveal {
@@ -224,7 +282,7 @@
               box-shadow var(--sp-motion-fade) var(--sp-ease-color);
 }
 .auth-route .auth-panel {
-  animation: sp-surface-in var(--sp-motion-surface) var(--sp-ease-soft) both;
+  animation: sp-surface-in var(--sp-motion-reveal) var(--sp-ease-soft) both;
 }
 
 @media (max-width: 1024px) {
@@ -233,6 +291,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app-toast { animation: none !important; opacity: 1; transform: none; }
+  .app-toast::after { animation: none !important; transform: none; }
+  .public-theme-icon { animation: none !important; }
   .notification-pop-in,
   .notification-pop-in[data-open="true"],
   .dashboard-theme .find-parking-map-style-list,
@@ -286,10 +347,8 @@
   .landing-motion-ready .landing-reveal.is-visible { transform: none; transition: opacity var(--sp-motion-fade) var(--sp-ease-out); }
   .notification-row { transition: background-color var(--sp-motion-fade) var(--sp-ease-color); }
   .notification-row:active { transform: none; }
-  .notification-sweep { animation: sp-toast-fade 5.2s both; }
   .public-nav-link::after { transition: none; }
 }
 @media (max-width: 1024px) {
   .notification-pop-in { transform-origin: bottom left; }
 }
-@keyframes sp-toast-fade { 0%, 100% { opacity: 0; } 4%, 94% { opacity: 1; } }

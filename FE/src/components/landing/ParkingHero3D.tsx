@@ -380,15 +380,29 @@ export function ParkingHero3D() {
       elapsed += delta
       render(delta)
     }
+    const applyTheme = () => {
+      const dark = document.documentElement.classList.contains("dark")
+      concrete.color.setHex(dark ? 0xc6d3c9 : 0xd9e5dc)
+      deck.color.setHex(dark ? 0x334f46 : 0x668d7c)
+      asphalt.color.setHex(dark ? 0x2b403e : 0x53786b)
+      stripe.color.setHex(dark ? 0xf1f1dd : 0xffffff)
+      metal.color.setHex(dark ? 0xb7c9c2 : 0xa8c0b2)
+      renderer.toneMappingExposure = dark ? 1.18 : 1.06
+      render(1)
+    }
+    const themeObserver = new MutationObserver(applyTheme)
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
     const onMotionChange = () => render(1)
     reducedMotion.addEventListener("change", onMotionChange)
     renderer.setAnimationLoop(animate)
     resize()
+    applyTheme()
 
     return () => {
       renderer.setAnimationLoop(null)
       timer.dispose()
       reducedMotion.removeEventListener("change", onMotionChange)
+      themeObserver.disconnect()
       resizeObserver.disconnect()
       intersection.disconnect()
       scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Line) object.geometry.dispose() })

@@ -11,26 +11,14 @@ export function NotificationBell({ userId }: { userId: string }) {
     store.getNotifications(userId),
   )
 
-  const [toastQueue, setToastQueue] = useState<AppNotification[]>([])
-
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-
-  const knownIdsRef = useRef(new Set(notifications.map((item) => item.id)))
 
   const unread = notifications.filter((item) => !item.isRead).length
 
   useEffect(() => {
     const refresh = () => {
       const latest = store.getNotifications(userId)
-
-      const incoming = latest.filter(
-        (item) => !knownIdsRef.current.has(item.id),
-      )
-
-      latest.forEach((item) => knownIdsRef.current.add(item.id))
-
-      if (incoming.length) setToastQueue((queue) => [...queue, ...incoming])
 
       setNotifications(latest)
     }
@@ -62,41 +50,8 @@ export function NotificationBell({ userId }: { userId: string }) {
     }
   }, [userId])
 
-  useEffect(() => {
-    if (!toastQueue.length) return
-
-    const timer = window.setTimeout(
-      () => setToastQueue((queue) => queue.slice(1)),
-      5200,
-    )
-
-    return () => window.clearTimeout(timer)
-  }, [toastQueue])
-
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
-      {toastQueue[0] && (
-        <div
-          key={toastQueue[0].id}
-          className="notification-sweep"
-          role="status"
-          aria-live="polite"
-        >
-          <strong style={{ display: "block", fontSize: "0.84rem" }}>
-            {toastQueue[0].title}
-          </strong>
-          <span
-            style={{
-              display: "block",
-              marginTop: 3,
-              fontSize: "0.78rem",
-              lineHeight: 1.4,
-            }}
-          >
-            {toastQueue[0].message}
-          </span>
-        </div>
-      )}
       <button
         ref={triggerRef}
         type="button"

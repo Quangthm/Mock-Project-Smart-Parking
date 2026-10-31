@@ -1,5 +1,6 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState } from "react"
+import { showUiToast } from "../../../lib/uiToast"
 
 import { parkingApi, type Structure } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -63,11 +64,15 @@ export function BackupCapacityPanel({
           return
         }
       }
-      setNotice(carSlotId && form.vehicleType === "CAR" ? "Capacity and selected car slot saved." : "Backup configuration saved.")
+      const success = carSlotId && form.vehicleType === "CAR" ? "Capacity and selected car slot saved." : "Backup configuration saved."
+      setNotice(success)
+      showUiToast("Backup updated", success)
       setCarSlotId("")
       onChanged()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cannot update backup.")
+      const message = e instanceof Error ? e.message : "Cannot update backup."
+      setError(message)
+      showUiToast("Backup not updated", message, "error")
     } finally {
       setBusy(false)
     }

@@ -13,6 +13,7 @@ import type { User } from "../lib/types"
 import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
+import { showUiToast } from "../lib/uiToast"
 import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
 import { restoreOwnerRegistration } from "../lib/ownerRegistration"
 
@@ -196,7 +197,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setDashboardMenuOpen(false)
 
-      setView("sign-in")
+      setView("landing")
 
       setAuthError("Your session has expired. Please sign in again.")
     }
@@ -240,6 +241,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(authExpiredEvent, expire)
     }
   }, [])
+
+  useEffect(() => {
+    if (authError !== "Your session has expired. Please sign in again.") return
+    const timer = window.setTimeout(() => setAuthError(""), 5_200)
+    return () => window.clearTimeout(timer)
+  }, [authError])
 
   // Requests refresh an expiring access token on demand. An unattended tab must
   // neither discard a valid refresh session nor keep it alive with a timer.
@@ -317,6 +324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         action: "SIGN_OUT",
         details: "User signed out",
       })
+      showUiToast("Signed out", "You have signed out of SmartParking.")
     } catch (error) {
       // Keep the session visible so the user can retry; do not claim revocation succeeded.
 

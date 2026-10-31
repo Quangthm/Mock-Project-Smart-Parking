@@ -1,5 +1,6 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
+import { showUiToast } from "../../../lib/uiToast"
 import { useApp } from "../../../context/AppContext"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
 import { parkingApi } from "../../../lib/parkingApi"
@@ -109,9 +110,11 @@ export function SlotManagement({ lot }: SlotManagementProps) {
       })
 
       setSelectedSlotId("")
+      showUiToast("Backup slot designated", "The selected slot is reserved for backup capacity.")
       setDesignateReason("")
       window.dispatchEvent(new Event("sp-operator-refresh"))
     } catch (err) {
+      showUiToast("Backup slot not designated", err instanceof Error ? err.message : "Failed to designate backup slot.", "error")
       setFeedback({
         type: "error",
         message: err instanceof Error ? err.message : "Failed to designate backup slot.",
@@ -135,8 +138,10 @@ export function SlotManagement({ lot }: SlotManagementProps) {
         message: `Backup designation released. The slot is now available for regular bookings.`,
       })
       setReleasingSlot(null)
+      showUiToast("Backup slot released", "The slot is available for regular bookings.")
       window.dispatchEvent(new Event("sp-operator-refresh"))
     } catch (err) {
+      showUiToast("Backup slot not released", err instanceof Error ? err.message : "Failed to release backup slot.", "error")
       setFeedback({
         type: "error",
         message: err instanceof Error ? err.message : "Failed to release backup slot.",

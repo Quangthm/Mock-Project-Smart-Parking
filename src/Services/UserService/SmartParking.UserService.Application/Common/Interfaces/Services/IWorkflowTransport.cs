@@ -11,6 +11,7 @@ public static class WorkflowEmailTemplates
     public const string OwnerApproved = "owner-approved";
     public const string OwnerRejected = "owner-rejected";
     public const string MfaSecurityChange = "mfa-security-change";
+    public const string OperatorInvitation = "operator-invitation";
 }
 public interface IWorkflowTransport
 {

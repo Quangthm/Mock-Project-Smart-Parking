@@ -20,6 +20,7 @@ import { RoleRoute } from "./components/navigation/RoleRoute"
 import { Footer } from "./components/layout/Footer"
 
 import { FloatingChatbot } from "./components/chat/FloatingChatbot"
+import { AppToastHost } from "./components/feedback/AppToastHost"
 
 import { Landing } from "./public pages/Landing"
 
@@ -70,6 +71,12 @@ function AppContent() {
   const location = useLocation()
 
   const navigate = useNavigate()
+
+  const sessionExpired = authError === "Your session has expired. Please sign in again."
+
+  useEffect(() => {
+    if (sessionExpired && location.pathname !== "/") navigate("/", { replace: true })
+  }, [location.pathname, navigate, sessionExpired])
 
   useLayoutEffect(() => {
     scrollPageToTop()
@@ -135,11 +142,6 @@ function AppContent() {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
       <main id="main-content" tabIndex={-1} style={{ flex: 1 }}>
-        {authError && (
-          <div role="alert" className="p-4 text-center text-red-600">
-            {authError}
-          </div>
-        )}
         {!authReady && (
           <div className="p-8 text-center text-sm text-[var(--muted)]">
             Loading account…
@@ -218,6 +220,7 @@ export default function App() {
     <BrowserRouter>
       <AppProvider>
         <AppContent />
+        <AppToastHost />
       </AppProvider>
     </BrowserRouter>
   )

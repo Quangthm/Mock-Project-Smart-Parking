@@ -6,6 +6,7 @@ import type { User } from "../../../lib/types"
 
 import { adminData as store } from "../data/data"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { showUiToast } from "../../../lib/uiToast"
 
 function accountStatus(driver: User) {
   if (driver.accountStatus === "suspended") return "Suspended"
@@ -103,6 +104,7 @@ export function DriverAccounts() {
     })
 
     setNotice("Driver information updated.")
+    showUiToast("Driver updated", "Driver information updated.")
   }
 
   function setStatus(status: "active" | "suspended" | "locked") {
@@ -124,6 +126,7 @@ export function DriverAccounts() {
       action: `DRIVER_${status.toUpperCase()}`,
       details: `${status} Driver account ${selected.id}`,
     })
+    showUiToast("Account status updated", `Driver account is now ${status}.`)
   }
 
   function resetPassword() {
@@ -142,6 +145,7 @@ export function DriverAccounts() {
     })
 
     setTemporaryPassword(password)
+    showUiToast("Credentials reset", "Temporary credentials have been generated.")
   }
 
   if (admin?.role !== "admin")

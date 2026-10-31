@@ -29,7 +29,7 @@ public sealed class WorkflowNotificationEmailTemplateTests
         Assert.Contains(label, content);
         Assert.Contains(message.Body, content);
         Assert.Contains("cid:smartparking-logo", content);
-        Assert.Contains("color:#1f3450;\">Smart</span><span style=\"color:#1bb782;\">Parking", content);
+        Assert.Contains("alt=\"SmartParking logo\"", content);
         var logo = Assert.Single(html.LinkedResources);
         Assert.Equal("smartparking-logo", logo.ContentId);
         Assert.Equal("7011F89B2A5CA20E205A38898D4FAE438D5D4D8CC6D4925098D1E90628B02834",
@@ -62,5 +62,64 @@ public sealed class WorkflowNotificationEmailTemplateTests
         Assert.Equal(2, mail.AlternateViews.Count);
         using var reader = new StreamReader(mail.AlternateViews[1].ContentStream, Encoding.UTF8);
         Assert.Contains(label, reader.ReadToEnd());
+    }
+
+    [Theory]
+    [InlineData("Authenticator replaced at 2026-10-30 12:00:00Z.", "Your authenticator was changed")]
+    [InlineData("Two-factor authentication disabled at 2026-10-30 12:00:00Z.", "Two-factor authentication is off")]
+    [InlineData("Recovery codes replaced at 2026-10-30 12:00:00Z.", "Your recovery codes were replaced")]
+    public void Security_changes_have_specific_content(string body, string heading)
+    {
+        var message = new WorkflowMessage("email", "person@example.com", "SmartParking account security update",
+            body, EmailTemplate: WorkflowEmailTemplates.MfaSecurityChange);
+        using var mail = WorkflowNotificationEmailTemplate.Create("sender@example.com", message);
+        using var reader = new StreamReader(mail.AlternateViews[1].ContentStream, Encoding.UTF8);
+        var content = reader.ReadToEnd();
+
+        Assert.Contains(heading, content);
+        Assert.Contains(body, content);
+        Assert.Contains("Be Vietnam Pro", content);
+    }
+
+    [Fact]
+    public void Operator_invitation_has_activation_button_and_plain_text_fallback()
+    {
+        const string link = "https://smartparking.example/change-password?challengeId=123&amp;token=abc";
+        var message = new WorkflowMessage("email", "operator@example.com", "Verify your SmartPark Operator account",
+            "Verify your email and choose your own password to activate your account (24 hours): " +
+            "https://smartparking.example/change-password?challengeId=123&token=abc",
+            EmailTemplate: WorkflowEmailTemplates.OperatorInvitation);
+        Assert.True(WorkflowNotificationEmailTemplate.CanRender(message));
+        using var mail = WorkflowNotificationEmailTemplate.Create("sender@example.com", message);
+        using var reader = new StreamReader(mail.AlternateViews[1].ContentStream, Encoding.UTF8);
+        var content = reader.ReadToEnd();
+
+        Assert.Equal(message.Body, mail.Body);
+        Assert.Contains("Activate your Operator account", content);
+        Assert.Contains("Verify email and set password", content);
+        Assert.Contains(link, content);
+        Assert.Contains("cid:smartparking-logo", content);
+    }
+
+    [Fact]
+    public void Pending_operator_invitation_without_template_marker_uses_the_new_layout()
+    {
+        var message = new WorkflowMessage("email", "operator@example.com", "Verify your SmartPark Operator account",
+            "Activate: https://smartparking.example/change-password?challengeId=123&token=abc");
+
+        Assert.True(WorkflowNotificationEmailTemplate.CanRender(message));
+        using var mail = WorkflowNotificationEmailTemplate.Create("sender@example.com", message);
+        using var reader = new StreamReader(mail.AlternateViews[1].ContentStream, Encoding.UTF8);
+        Assert.Contains("Verify email and set password", reader.ReadToEnd());
+    }
+
+    [Fact]
+    public void Operator_invitation_rejects_untrusted_link()
+    {
+        var message = new WorkflowMessage("email", "operator@example.com", "Verify your SmartPark Operator account",
+            "Activate: javascript:alert(1)/change-password?challengeId=123",
+            EmailTemplate: WorkflowEmailTemplates.OperatorInvitation);
+
+        Assert.Throws<ArgumentException>(() => WorkflowNotificationEmailTemplate.Create("sender@example.com", message));
     }
 }

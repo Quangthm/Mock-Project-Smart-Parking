@@ -1343,6 +1343,7 @@ export function OnboardingWizard({
       </div>
       {registration && showContract && <PartnerContractDialog
         applicationId={registration.id}
+        ownerName={registration.ownerName || user?.name || "Owner"}
         businessName={registration.businessName || "Owner business"}
         lotName={lotConfig.name || "Parking lot"}
         record={activeContractDraft}

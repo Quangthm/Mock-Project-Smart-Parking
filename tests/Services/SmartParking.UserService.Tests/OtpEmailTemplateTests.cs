@@ -40,7 +40,7 @@ public sealed class OtpEmailTemplateTests
             Assert.Contains("012345", content);
             Assert.Contains("valid for 5 minutes", content);
             Assert.Contains("cid:smartparking-logo", content);
-            Assert.Contains("color:#1f3450;\">Smart</span><span style=\"color:#1bb782;\">Parking", content);
+            Assert.Contains("alt=\"SmartParking logo\"", content);
         }
 
         var logo = Assert.Single(html.LinkedResources);

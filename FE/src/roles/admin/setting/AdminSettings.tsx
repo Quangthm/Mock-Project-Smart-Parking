@@ -4,6 +4,7 @@ import { useApp } from "../../../context/AppContext"
 
 import { adminData as store } from "../data/data"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { showUiToast } from "../../../lib/uiToast"
 
 export function AdminSettings() {
   const { user, setUser } = useApp()
@@ -63,6 +64,7 @@ export function AdminSettings() {
     })
 
     setSuccess("Profile updated successfully.")
+    showUiToast("Profile saved", "Profile updated successfully.")
 
     setForm((f) => ({
       ...f,

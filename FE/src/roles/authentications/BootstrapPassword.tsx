@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 
 import { request } from "../../lib/authApi"
+import { showUiToast } from "../../lib/uiToast"
 import { BrandLogo, BrandWordmark } from "../../components/brand/BrandLogo"
 import { useApp } from "../../context/AppContext"
 import "./bootstrap-password.css"
@@ -27,6 +28,7 @@ export function BootstrapPassword() {
       window.history.replaceState(null, "", "/change-password")
       setComplete(true)
       setMessage("Email verified and account activated. Sign in with your new password.")
+      showUiToast("Account activated", "Your email is verified. You can sign in with your new password.")
       setPassword("")
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Password change failed.")
