@@ -5,11 +5,11 @@
 | Field | Value |
 |---|---|
 | Session ID | TASK-SPARK-238-SESSION-20261028 |
-| Date | 2026-10-28 (continued 2026-10-29) |
-| Agent | Orchestrator (single-session; subagent delegation unavailable, see §6) |
-| Branch | `feat/SPARK-238-facility-structure` |
+| Date | 2026-10-28 (continued 2026-10-29, 2026-10-30, 2026-10-31, 2026-11-01) |
+| Agent | Orchestrator (multi-session; subagent delegation used from 2026-10-30, see §6) |
+| Branch | `feat/SPARK-238-facility-structure-port` (base `origin/develop` = `ea0d212c`, after the SPARK-228 merge and the `ParkingService`→`FacilityService` / `ReservationService`→`OperationService` rename). The earlier `feat/SPARK-238-facility-structure` could not be rebased and was re-delivered commit-by-commit — see §3.8 |
 | Related task | SPARK-238 (US-OW01 / FR-LOT-02 / UC-LOT-01, Sprint 2) |
-| Status | **Phase 1 APPROVED 2026-10-29**; **Phase 2 implemented** (P2a–P2d, P2f, P2g; P2e and P2h blocked, see §6); **P4 acceptance tests written and green** (22 DB-backed tests). Nothing committed. |
+| Status | **Phase 1 APPROVED 2026-10-29**; **Phase 2 implemented and DB-verified** (P2a–P2d, P2f, P2g; P2e/P2h blocked, see §6/§3.8); **Phase 3 UI ported and green**; **Phase 4 acceptance tests green** (22 DB-backed). **Phase 5 packaging CLOSED 2026-11-01**: owner-UI defects fixed (§3.9), the maintenance overlay wired into the migration path, A1-A12 traceability added, branch pushed and a PR opened against `develop` (§8). Ported onto `develop` and committed as `76630c39` (a), `ac849ea7` (b), `cd99422a` (c), `ce76fd05` (d) — see §3.8 |
 
 ## 2. Objectives
 
@@ -158,6 +158,67 @@ Behaviour worth recording:
 
 Verification (orchestrator re-ran independently): `npm run build` in `FE/` → **built in 5.57 s, exit 0**; `node --test tests/frontend/parking-structure-rules.test.cjs` → **19 tests, 19 pass, 0 fail**. The full `tests/frontend/*.test.cjs` suite has **56 pre-existing failures** from the harness's module resolution (`Unexpected import: …/components/ui/RoundedSelect`, `PageHeader`, and an `auth-api` fixture without `require`); the count is unchanged by this work (73 tests / 17 pass before, 92 / 36 after). `npx tsc --noEmit` still reports three type errors in files this task did not touch (`OperatorDashboard.tsx:307`, `SiteManagement.tsx:61`, `useSiteManagement.ts:93`). No frontend dependency was added; `npm ci` only materialised the absent `node_modules` and neither manifest nor lockfile changed.
 
+### 3.8 Port to FacilityService/OperationService and 228↔238 matcher reconciliation (2026-10-30)
+
+While SPARK-238 was in Phase 2/3, `origin/develop` merged SPARK-228 (PR #36) and renamed `ParkingService` → `FacilityService` and `ReservationService` → `OperationService`. The Phase 1–3 commits could not be rebased (two waves of conflicts plus a rename/relocation rewrite), so on user direction the work was re-delivered commit-by-commit onto a fresh branch `feat/SPARK-238-facility-structure-port` (base `origin/develop` = `ea0d212c`):
+
+| Commit | Contents |
+|---|---|
+| `76630c39` | (a) contract/docs — `parking-structure-api-design.md` v1.3 APPROVED, `3d-digital-twin-openapi.yaml` 1.4.0, `sprint2-seed.sql`, data-dictionary rows, session log |
+| `ac849ea7` | (b) `structure_removed_resources` drop ported to `OperationService` (7 files) |
+| `cd99422a` | (c) P2 backend ported to `FacilityService`/`OperationService` — 18 files, +1589/−202 |
+| `ce76fd05` | (d) P3 owner facility-structure UI port — 20 files, +4126/−397 |
+
+The stale `src/Services/ParkingService/` and `src/Services/ReservationService/` trees and the leftover `tests/Services/SmartParking.ParkingService.Tests/` (obj artifacts only, 0 tracked files) were removed. All 22 gated Postgres tests pass on the port branch (`SMARTPARK_STRUCTURE_TEST_CONNECTION` against `smartpark_facility_238` on `facility-db-1:5442`); the ungated solution is green (`dotnet build` 0/0).
+
+#### 228↔238 conflict at `FE/src/lib/3d/slotMatcher.ts` (resolved — Option A)
+
+The P3 FE port initially took `slotMatcher.ts` wholesale from SPARK-238, which **regressed SPARK-228's contract test**. Measured with a controlled file swap:
+
+| `slotMatcher.ts` | `tests/frontend/operational-layout-adapter.test.cjs` |
+|---|---|
+| develop (`ea0d212c`, 228) | **16/16 pass** |
+| P3 (238) | **14/16 pass, 2 fail** (`Error: Unexpected import: ./meshSlotMapping`; changed result fields; tolerant-vs-raw-exact semantics) |
+
+Resolution (user Option A): `git checkout origin/develop -- FE/src/lib/3d/slotMatcher.ts` restores 228's raw-exact matcher unchanged; 238's tolerant scene-level binding moved into a **new, owner-clean module** `FE/src/lib/3d/registeredMeshMapping.ts` (it could not go into `meshSlotMapping.ts`, which must keep **zero imports** because `tests/frontend/parking-structure-rules.test.cjs` loads it with a `require` that throws). `Parking3DViewer.tsx` computes **both** mappings at each call site and never mixes sources for one decision. `matchSlotCodes`/`matchSlotCode` in `operationalLayout.ts` were **retained** because 228's contract test still consumes them.
+
+**Ownership boundary (durable):**
+
+| Concern | Owner module | Semantics |
+|---|---|---|
+| Operational-layout overlay colouring (`slotMatcher.ts` + `matchSlotCodes` in `operationalLayout.ts`) | **SPARK-228** | raw-exact binding; `unmatchedSlotCodes`/`unmatchedMeshNames`; must not be re-used or re-shaped by 238 |
+| Slot registration / hover-click-pick / inert unregistered meshes (A12) / census / focus | **SPARK-238** (`registeredMeshMapping.ts` + `meshSlotMapping.ts`) | tolerant matching (normalised-exact → hyphen alias → all-or-nothing positional fallback) |
+
+Gate results after the split: `operational-layout-adapter.test.cjs` **16/16**; `parking-structure-rules.test.cjs` **19/19**; `npm run build` in `FE/` exit 0; `npx tsc --noEmit` still only the 4 pre-existing errors in untouched files (`GroupedNumberInput.tsx`, `OperatorDashboard.tsx`, `SiteManagement.tsx`, `useSiteManagement.ts`); `slotMatcher.ts` byte-identical to `origin/develop` (`b0c30f87acc…`).
+
+Deferred: merging the two normalisers into one shared module (not done in 238 — it would couple the raw-exact 228 contract to 238's tolerant rules).
+
+Cross-service findings recorded at the same time (both **BLOCKED, deferred, do not implement in 238**):
+
+- **P2h/DE-16** — `FacilityService` still returns the `ParkingStructure` aggregate from `GetAsync`/`ReadAsync`; there is no typed read DTO carrying `capacity`, `compatibilitySource` or `primaryVehicleType`, so the DE-8 read-safety fix must land with SPARK-228 (which owns the read path).
+- **P2e/DE-13** — `OperationService.StructureController` exposes only site-scoped endpoints (`snapshot`/`impact`/`release`/`holds`) and `HoldSnapshot.HasLiveCommitments` is a single site-wide bool; there is no resource-scoped commitment projection, so `SafeChange` keeps its site-wide guard.
+
+Merge checklist (recorded, not executed): during the merge to `develop`, `scripts/apply-workflow-migrations.ps1` must gain `overlay/parking-structure-maintenance.sql` (shared file — coordinate); merge order is SPARK-238 → `develop`, then SPARK-244 resumes the FacilityService consumer side.
+
+### 3.9 Phase 5 — owner-UI defect fixes, packaging and closure (2026-10-31 / 2026-11-01)
+
+Deployment diagnosis first: several reported failures were environment, not code. The running `parking-service` image (built 2026-10-29 17:23) predated the branch, so `/maintenance-windows` and `/structure/batch` answered 404; the frontend container was bind-mounted from a different checkout (`Mock-Project-Smart-Parking\FE`), so no Owner-UI fix of this branch was visible; and the deploy database lacked `structure_maintenance_windows` because the overlay had only been applied to the isolated 238 database. Rebuilding `parking-service`/`reservation-service` from the worktree, force-recreating `frontend` and applying the overlay to `smartpark_facility` removed the entire reported 404/405/500 family and the "Authentication request failed." message on the structure tab (that string is the generic fallback for a non-401 response whose body carries no `message`).
+
+| Defect | Root cause | Fix (commit) |
+|---|---|---|
+| `PATCH action=backup` returned 500 | The backup-policy INSERT omitted `tenant_id`, which the deployed table declares NOT NULL, so Postgres raised 23502 | `PostgresParkingStructureRepository.CommitAsync` writes `tenant_id` (`3b218a53`) |
+| Panels duplicated/repeated on every interaction; DEMO content persisted after switching site; 3D not interactive | Three sibling panels inside the gated fragment shared `key={siteId}` (React logged duplicate keys equal to the site id); separately, a structure edit notified the parent, whose site-list refetch churned the `sites` identity and re-ran the site-resolution effect | One `<Fragment key={siteId}>` for the whole block with the per-panel keys removed; `refresh()` no longer notifies the parent; the parent keeps the previous list identity on an equal refetch; the effect re-resolves only when the requested site or the available set changes (`8ed8b5d1`) |
+| Unit capacity accepted above the model bay count | The dialog had only an integer/non-negative check, no upper bound | `UnitDialog` rejects a capacity above `useModelCarCapacity` for the selected template; `0` still means no layout limit (`8ed8b5d1`) |
+| Unregistered meshes could not be selected | Every template mesh was already bound to a registered code, or the GLB had not loaded and the procedural fallback draws bays only for registered slots | `SlotRegistrationPanel` renders an explicit empty state naming both causes and the next actions (`8ed8b5d1`) |
+| My Parking Lots rendered the empty state after a failed load | The protected list request ran before the session was restored, and the render fell through to the empty state even when the request had failed | The hook waits for `authReady`, maps 401/403 to actionable messages, and the page suppresses the empty state while an error is present (`2e404525`) |
+| Edit site toasted success but the change reverted | The form sent only `action=profile`, so a status change was toasted and then reverted by the post-save refetch | The edit persists `active` as a second call and re-reads the list, verifying `code`/`name`/`address`/`isActive` before reporting success (`2e404525`) |
+| A name-only edit rewrote the address | The form seeded city/district from the first catalogue entry and always recomposed the address | The stored address is parsed and sent back verbatim when untouched (`addressComposition.ts`, `2e404525`) |
+| Indoor model reported 36 bays instead of 64 | The bay key stripped Blender suffixes before de-duplicating, collapsing distinct bays | `modelSlotCapacity` keys on the ancestor chain plus the preserved name; outdoor 48, indoor 64, underground 48 (`2e404525`) |
+
+Packaging (D1-D8): the change set was split into six logical commits on top of the four port commits (see §8); `overlay/parking-structure-maintenance.sql` was added to `apply-workflow-migrations.ps1` (Parking script list, required relations and re-runnable feature set) and mounted in `compose.schema-integration.yml` (`7cd0f45f`); `docs/04-testing/requirements-traceability/SPARK-238-requirements-traceability.md` traces A1-A12 with the deferred debt table; the PM review findings F01-F16 remain dispositioned in §3.5.
+
+Honest limits of this phase: `scripts/test-workflow-upgrade.ps1` was **not** run (it starts isolated containers, which needs explicit permission); the Postman collection and the browser flows were executed by the task owner, not reproduced by the agent; and the C5 fix was confirmed **structurally** (the Vite-served module contains a single `_jsxDEV(Fragment` wrapper and exactly one key binding) rather than observed in a browser.
+
 ## 4. Technical Decisions
 
 | Decision | Reason | Alternatives | Impact |
@@ -194,6 +255,8 @@ Verification (orchestrator re-ran independently): `npm run build` in `FE/` → *
 
 Untouched on purpose: nothing under `FE/`, no ParkingService source, and no change to `ParkingStructureService.ReadAsync`/`ReadOperationalAsync` (SPARK-228 owns the read path; the DTO change is scheduled through DE-16).
 
+This table records the **Phase 0/1** contract change set only. The port to `FacilityService`/`OperationService`, the owner-UI fixes and the packaging work are listed in §3.8 and §3.9 and in the commit list in §8.
+
 ## 6. Issues and Blockers
 
 | Issue | Root cause | Resolution | Remaining risk |
@@ -212,9 +275,12 @@ Untouched on purpose: nothing under `FE/`, no ParkingService source, and no chan
 | DB-backed coverage (P4) | 13 new tests in `PostgresStructureWorkflowTests.cs` cover multi-value compatibility round trip, compatibility-as-a-predicate (a dual-compatible slot is not counted twice), legacy projection fallback + NULL projection claimable via `ANY` without throwing, rejected Owner geometry, explicit restore of a released code (including a claim by the secondary category afterwards), capacity reconciliation, maintenance windows (`pending` + `SCHEDULED`, `23P01` overlap → `409 STRUCTURE_IN_USE`, half-open adjacency, grow-only extension, cancel guard), atomic batch (per-item failure applies nothing, valid batch applies all, stale `expectedUpdatedAt` rejects, unsupported action/count rejected) and idempotency replay |
 | Test isolation | Every DB test creates and drops only its own `structure_parking_test_*` / `structure_reservation_test_*` databases on the isolated container. `smartpark_facility` (SPARK-228 lane) was never modified; `smartpark_facility_238` served only as the `CREATE DATABASE` anchor. A mid-run container restart by another user aborted one suite run (`57P03`); it was retried after the container returned healthy and one orphan test-database pair was dropped |
 | Lint | Not applicable |
+| Final verification (2026-11-01, port branch HEAD) | `dotnet build SmartParking.slnx --nologo -m:1` → **Build succeeded, 0 warnings, 0 errors**; `dotnet test SmartParking.slnx --nologo -m:1 --no-build` → FacilityService **148 passed / 22 skipped**, IoT **1 passed**, Payment **88 passed**, User **103 passed / 34 skipped**, **0 failed**. The 22 skips are the `SMARTPARK_STRUCTURE_TEST_CONNECTION`-gated database tests, all green when the variable is set (22/22) |
+| Frontend verification (2026-11-01) | `npm run build` exit 0; `npx tsc --noEmit` → exactly the 4 pre-existing errors in files this work did not touch; `parking-structure-rules` 24/24, `mesh-slot-mapping` 19/19, `address-composition` 9/9, `operational-layout-adapter` (SPARK-228 guard) 16/16 |
+| Migration-script validation (2026-11-01) | `apply-workflow-migrations.ps1` parses cleanly (PowerShell AST parse) and `docker compose -f compose.schema-integration.yml --env-file .env config --quiet` exits 0. `scripts/test-workflow-upgrade.ps1` was **not** run: it starts isolated containers, which needs explicit permission |
 | OpenAPI validation | **Structurally verified, NOT parser-validated (F16).** No YAML library is available: `python -c "import yaml"` → `ModuleNotFoundError`; `node -e require('yaml')` and `require('js-yaml')` → not installed; no `node_modules` at the repo root or under `FE/`. Verification was therefore by inspection and text search: the batch path block is absent from `paths:`, exactly two path entries remain, `components` sections are intact, and the file is 881 lines |
 | Seed verification | `sprint2-seed.sql` reviewed by reading; both slot-less sites now declare `0`. Not executed against a database in this change set |
-| HTTP-level verification | **Not performed.** There is no HTTP fixture for ParkingService in this suite; the new routes (`/maintenance-windows`, `/structure/batch`) and the middleware mappings (`409 IDENTIFIER_RELEASED`, per-item batch failures) are exercised at the domain/store/service layer only. The endpoint mapping code itself is unchanged and compiles |
+| HTTP-level verification | **Performed 2026-11-01.** In-process HTTP contract tests cover the structure routes (`FacilityStructureEndpointTests`, 18/18). On the running Docker stack, with a real Owner token: `PATCH action=backup` → 200; `GET /{id}/structure` → 200 with `serviceState.state=ACTIVE`; `GET /{id}/maintenance-windows` → 200 `[]`; `POST` window → 201 `pending`; `DELETE` window → 200; `PATCH markBackup` → 403 (correct: the demo Owner holds no `BACKUP_MARK`, DEC-LOT-04). The Postman collection (11 folders, 83 requests) was executed by the task owner and passes |
 | Manual verification | Source reading only, anchored per row in §3.2–§3.5 and §3.3 (each claim cites file/line) |
 | Session-start git status | `feat/SPARK-238-facility-structure`, working tree clean at the first message of the session |
 
@@ -222,11 +288,11 @@ Untouched on purpose: nothing under `FE/`, no ParkingService source, and no chan
 
 | Field | Value |
 |---|---|
-| Branch | `feat/SPARK-238-facility-structure` |
-| Last commit | `e3a47fe1 chore(infra): generate the RabbitMQ password in local setup` |
-| Working tree | **20 files modified, 9 untracked, nothing staged** — `git diff --stat`: **1657 insertions, 207 deletions**. Docs/SQL: `parking-structure-api-design.md`, `3d-digital-twin-openapi.yaml`, `sprint2-seed.sql`, `overlay/reservation-structure-safety.sql`, `integration/03-reservation-structure-safety.sql`, `data-dictionary.md`, `03-parking-operations-service-db-docs.md`. ParkingService: `API/Program.cs`, `Application/ParkingStructureService.cs`, `Application/StructureEditHandler.cs`, `Application/StructureOperations.cs`, `Domain/ParkingStructure.cs`, `Persistence/OperatorGateSlotStore.cs`, `Persistence/PostgresParkingStructureRepository.cs`. ReservationService: `Domain/Entities/ReservationEntities.cs`, `Persistence/ReservationDbContext.cs`, `Persistence/StructureSafetyStore.cs`. Tests: `PostgresStructureWorkflowTests.cs`, `StructureOperationAndEditHandlerTests.cs`, `StructureTests.cs`. Untracked: this session log, `overlay/parking-structure-maintenance.sql`, `Application/MaintenanceWindows.cs`, `Application/SlotCompatibility.cs`, `Domain/MaintenanceWindow.cs`, `Domain/StructureBatch.cs`, `Persistence/PostgresMaintenanceWindowStore.cs`, `MaintenanceWindowTests.cs`, `StructureBatchTests.cs` |
-| Commit | None — commit only when explicitly requested. The change set now spans three concerns — contract approval, the `structure_removed_resources` drop (cross-service: ReservationService), and the SPARK-238 P2 backend + P4 tests — and should be split into at least three commits when authorised |
-| Applied outside git | `operations-db-1` received the new overlay/delta (no `-RecreateDb`). `smartpark-app-reservation-service-1` was **not** rebuilt, by user decision, so it still runs the pre-change binary |
+| Branch | `feat/SPARK-238-facility-structure-port` (base `origin/develop` = `ea0d212c`), pushed to `origin` |
+| Last commit | `7cd0f45f chore(database): apply the maintenance-window overlay in the migration script [SPARK-238]` |
+| Commits | **11 on the branch:** the four port commits (see §3.8) `76630c39` (a) contract/docs · `ac849ea7` (b) `structure_removed_resources` drop → OperationService · `cd99422a` (c) P2 backend → FacilityService/OperationService (18 files, +1589/−202) · `ce76fd05` (d) P3 owner facility-structure UI (20 files, +4126/−397); then `3b218a53` backup-policy `tenant_id` · `8ed8b5d1` owner structure screen fixes · `2e404525` My Parking Lots + site edit persistence · `c54301ae` HTTP/frontend/address tests · `8e1e47ae` testing docs + A1-A12 traceability · `7cd0f45f` maintenance overlay in the migration script · and the `chore(session)` commit that moves this log to `ai/tasks/completed/` |
+| Working tree | **Clean** at the close of the session. The pre-port working tree (branch `feat/SPARK-238-facility-structure`, +1657/−207 across ParkingService/ReservationService) was re-delivered commit-by-commit and no longer exists as a live tree |
+| Applied outside git | `operations-db-1` received the overlay/delta (no `-RecreateDb`). `smartpark_facility` received `parking-structure-maintenance.sql`, so the deployed database matches the overlay. `parking-service`, `reservation-service` and `frontend` were rebuilt/recreated from this worktree with explicit user permission |
 
 ## 9. Handoff / Next Steps
 
@@ -246,14 +312,27 @@ The seven items below were the P1 gate. PM approved DE-1…DE-11 and the `struct
 
 ### Next steps
 
-1. **P2 — done:** P2a (compat table + compat-aware claim), P2b (reject Owner geometry), P2c (capacity reconciliation), P2d (explicit restore), P2f (maintenance windows), P2g (atomic batch) are implemented and now DB-verified by P4.
-2. **P2e — BLOCKED (do not approximate):** narrowing `SafeChange`'s site-wide `hasLiveCommitments` check to affected resources needs resource-scoped commitment data that Reservation does not project (DE-13). The site-wide guard stays until `expectedEnd`/`type` exist.
-3. **P2h — BLOCKED on SPARK-228 (DE-16):** the typed read DTO that replaces serializing the domain aggregate (so `CapacityViews`/`CAPACITY_CONFLICT` can never throw mid-response) touches `ReadAsync`/`ReadOperationalAsync`, which planning §11 forbids this task from editing while SPARK-228 is in flight. Agree shared-file ownership and land it with or after SPARK-228.
-4. **P3 (FE owner)** — spatial tree, multi-select mesh registration with per-item outcomes and an explicit restore decision (`409 IDENTIFIER_RELEASED` must surface as a decision, never auto-retried), inert unregistered meshes (`slotMatcher.ts`), per-slot compatibility editor with an explicit primary, access paths, deactivation/closure flow showing `serviceState` and honouring `expectedUpdatedAt` once DE-16 exposes it.
-5. **P4 — done for the backend surface:** 22 DB-backed tests (9 pre-existing + 13 new) cover the A5–A11 mechanics. Still unverified: any HTTP-level behaviour (no ParkingService HTTP fixture exists), and the review's maintenance-race scenario, which cannot be written until DE-13 defines an enforcement acknowledgement.
-6. `apply-workflow-migrations.ps1` must gain `overlay/parking-structure-maintenance.sql` at merge — it was deliberately left untouched because the SPARK-228 lane shares that script.
-7. Do not touch `ParkingStructureService.ReadOperationalAsync` / `ReadAsync` while SPARK-228 is in flight.
-8. Commit only when explicitly requested; the change set now spans three concerns (contract approval, the `structure_removed_resources` drop in ReservationService, and the SPARK-238 P2 backend + P4 tests) and should be split.
+**P5 packaging — CLOSED 2026-11-01**
+
+| # | D-item | Outcome |
+|---|---|---|
+| D1 | Commit the FE capacity/empty-state work | Done — `8ed8b5d1` (structure screen) and `2e404525` (parking lots + capacity) |
+| D2 | Commit the My Parking Lots / edit-site work | Done — `2e404525` |
+| D3 | Commit the `tenant_id` fix and the new tests | Done — `3b218a53` and `c54301ae` |
+| D4 | Add the maintenance overlay to the migration path | Done — `7cd0f45f` (`apply-workflow-migrations.ps1` script list + required relations + feature set, and the `compose.schema-integration.yml` mount) |
+| D5 | A1-A12 traceability | Done — `docs/04-testing/requirements-traceability/SPARK-238-requirements-traceability.md` |
+| D6 | Session log → `ai/tasks/completed/` | Done — this file |
+| D7 | Push the branch and open a PR against `develop` | Done — branch pushed to `origin`; PR opened against `develop` |
+| D8 | Record the out-of-scope debt | Done — DE-4, DE-13, DE-16 plus DE-3 and the A12 caveat, in the traceability debt table and §10 |
+
+Forward-looking items:
+
+1. **P2e — BLOCKED (do not approximate):** narrowing `SafeChange`'s site-wide `hasLiveCommitments` check to affected resources needs resource-scoped commitment data that Reservation does not project (DE-13). The site-wide guard stays until `expectedEnd`/`type` exist.
+2. **P2h — BLOCKED on SPARK-228 (DE-16):** the typed read DTO that replaces serializing the domain aggregate (so `CapacityViews`/`CAPACITY_CONFLICT` can never throw mid-response) touches `ReadAsync`/`ReadOperationalAsync`, which planning §11 forbids this task from editing while SPARK-228 is in flight. Agree shared-file ownership and land it with or after SPARK-228.
+3. **P3 — done** in the port (commit `ce76fd05`) and hardened in `8ed8b5d1`. Still open for a later task: honouring `expectedUpdatedAt` once DE-16 exposes a version token.
+4. **P4 — done:** 22 database-backed tests (9 pre-existing + 13 new) plus 18 in-process HTTP contract tests and 24/19/9 frontend tests cover A5-A11, A1-A3 and A12. The review's maintenance-race scenario still cannot be written until DE-13 defines an enforcement acknowledgement.
+5. Merge order: SPARK-238 → `develop`, then SPARK-244 resumes the FacilityService consumer side. The maintenance overlay is already wired into the migration path, so no merge-time script edit is required.
+6. Do not touch `ParkingStructureService.ReadOperationalAsync` / `ReadAsync` while SPARK-228 is in flight.
 
 ## 10. Context for the Next Session
 
@@ -271,3 +350,10 @@ The seven items below were the P1 gate. PM approved DE-1…DE-11 and the `struct
 - Two read-side defects must be fixed with the same change set: a NULL `supported_vehicle_type` throws in `Load` (`Enum.Parse`) and is claimable via `ANY` before throwing (R-9), and an inconsistent projection throws during serialization of `GET /structure`.
 - `GET /api/parking-lots/{id}/operator-layout` is correctly authorized (operator site-scope); the earlier note claiming otherwise was wrong and is corrected in §3.1. `GET /{id}/operational-layout` is a different route with lot-scoped `SLOT_OVERRIDE`.
 - `POST /api/parking-lots/{id}/structure` (replace-all batch ingestion) never existed in code, is rejected under Q1, and is now absent from the OpenAPI `paths:`. Do not implement it. The **approved** batch route is the narrower `POST /{id}/structure/batch` for atomic same-lot deactivation only.
+- **Work now lives on `feat/SPARK-238-facility-structure-port`** (base `origin/develop` = `ea0d212c`), re-delivered after the SPARK-228 merge and the service rename. Commits `76630c39` (a), `ac849ea7` (b), `cd99422a` (c), `ce76fd05` (d); working tree clean. The old `feat/SPARK-238-facility-structure` tree is abandoned (see §3.8).
+- **Matcher ownership boundary is durable:** operational-overlay colouring (`slotMatcher.ts` + `matchSlotCodes` in `operationalLayout.ts`) belongs to SPARK-228 and is raw-exact; slot registration + the inert-unregistered-mesh rule (A12) belong to SPARK-238 (`registeredMeshMapping.ts` + `meshSlotMapping.ts`) and are tolerant. Do not let either side reuse the other's matcher. `meshSlotMapping.ts` must keep **zero imports** (a frontend test loads it with a throwing `require`). Merging the two normalisers is deferred.
+- **P2h/DE-16 and P2e/DE-13 are BLOCKED cross-service** (FacilityService typed read DTO belongs with SPARK-228; resource-scoped commitments belong with OperationService). Recorded as deferred; do not implement inside SPARK-238.
+- **P5 closed 2026-11-01.** The packaging commits are listed in §8; the A1-A12 traceability file is the canonical acceptance record; the deferred debt (DE-4, DE-13, DE-16, DE-3 and the A12 positional-fallback caveat) is recorded there and must **not** be implemented inside SPARK-238.
+- The deployed stack was rebuilt from this worktree with explicit user permission, and `smartpark_facility` now carries `structure_maintenance_windows`. Do **not** recreate database volumes (`setup.ps1 -RecreateDb`, `docker compose down -v`).
+- Known non-defects that must not be "fixed": 5.16/5.17 return 403 by design (DEC-LOT-04, `BACKUP_MARK` is never implicit); a new lot reports `totalPhysicalCapacity = 0` until slots are registered; the 4 `tsc --noEmit` errors and the 10 `operator-provisioning.test.cjs` failures are pre-existing and unrelated.
+- Merge order: SPARK-238 → `develop`, then SPARK-244 resumes the FacilityService consumer side. The maintenance overlay is already wired into `apply-workflow-migrations.ps1` and `compose.schema-integration.yml`.
