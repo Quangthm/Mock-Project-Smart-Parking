@@ -15,7 +15,9 @@ internal sealed class TestWorkflowProtector:IWorkflowProtector
 }
 internal static class WorkflowTestSupport
 {
-    public static AccountWorkflowService Create(AppDbContext db,TimeProvider clock)=>new(db,new BcryptPasswordService(),new TestWorkflowProtector(),clock);
+    public static AccountWorkflowService Create(AppDbContext db,TimeProvider clock,
+        IAccountAuthorizationService? authorization = null)=>new(db,new BcryptPasswordService(),new TestWorkflowProtector(),clock,
+            authorization ?? TestAuthorization.Anonymous(db, clock));
 }
 
 internal static class ServiceSchema
@@ -58,14 +60,18 @@ internal static class ServiceSchema
         foreach (var file in new[] { "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
         {
             var sql = await File.ReadAllTextAsync(FeaturePath(file));
-            await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
-            await cmd.ExecuteNonQueryAsync();
+            await using var featureCommand = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
+            await featureCommand.ExecuteNonQueryAsync();
         }
+        await using var cmd = new NpgsqlCommand(await File.ReadAllTextAsync(FeaturePath("test/verify-user-access-schema.sql")),
+            (NpgsqlConnection)db.Database.GetDbConnection());
+        await cmd.ExecuteNonQueryAsync();
         await db.Database.CloseConnectionAsync();
     }
 }
 internal sealed class TestParkingDirectory : IParkingDirectory
 {
+    public Func<Guid, string, string, string, CancellationToken, Task>? OnProvision { get; set; }
     public bool Unavailable { get; set; }
     public bool LoseProvisionResponse { get; set; }
     public Dictionary<Guid,Guid> Sites { get; } = [];
@@ -84,7 +90,7 @@ internal sealed class TestParkingDirectory : IParkingDirectory
     {
         if(Unavailable) throw new global::UserService.Application.Common.Models.Exceptions.AuthException("PARKING_UNAVAILABLE","Unavailable",503);
         lock(Provisioned) Provisioned.Add(id);
-        return Task.CompletedTask;
+        return OnProvision?.Invoke(id,name,email,phone,ct) ?? Task.CompletedTask;
     }
     public Task<IReadOnlyList<DirectorySite>> ActiveSitesAsync(Guid[] siteIds,Guid[] tenantIds,CancellationToken ct)
     {

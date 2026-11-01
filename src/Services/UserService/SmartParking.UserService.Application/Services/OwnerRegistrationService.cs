@@ -11,7 +11,7 @@ using UserService.Application.DTOs;
 
 namespace UserService.Application.Services;
 
-public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking, AccountWorkflowService workflows)
+public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking, AccountWorkflowService workflows, IAccountAuthorizationService authorization)
     : IOwnerRegistrationService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
@@ -40,7 +40,7 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
             PasswordHash = string.IsNullOrEmpty(body.Password) ? "" : passwords.Hash(body.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             Status = "PENDING_APPROVAL", CreatedOn = now };
-        account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id.Value, RoleCode = "BUSINESS_OWNER" });
+        account.RoleCode = "BUSINESS_OWNER";
         user.Accounts.Add(account);
         var setupToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var application = new OwnerApplication { Id = Guid.NewGuid(), UserId = user.Id.Value, User = user,
@@ -89,8 +89,9 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         return Result(application) with { Verification = challenge };
     }
 
-    private async Task RequireAdmin(Guid id, CancellationToken ct)
+    private async Task RequireAdmin(Guid id, CancellationToken ct, bool lockRows = false)
     {
+        await authorization.RequireOwnerReviewAsync(id, lockRows, ct);
         await AccountWorkflowService.RequirePermissionAsync(db, id, "ACCOUNT_ADMIN", ct);
         if (!await db.IsActiveAdminAsync(id, ct))
             throw Error("FORBIDDEN", "Active Admin access is required.", 403);
@@ -119,7 +120,7 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
             db.ResetTracking();
         }
         await using var tx = await db.BeginTransactionAsync(ct);
-        await RequireAdmin(adminId, ct);
+        await RequireAdmin(adminId, ct, true);
         // Serialize competing reviews; only the first pending -> final decision may commit.
         var application = await db.LockOwnerApplicationAsync(id, ct);
         if (application is null) throw Error("APPLICATION_NOT_FOUND", "Owner application was not found.", 404);
@@ -146,7 +147,7 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         if (user.EmailVerifiedAt is null)
             throw Error("CONTACT_UNVERIFIED", "Verify required contact before approval.", 409);
         var account = user.Accounts.SingleOrDefault(a => a.DeletedOn == null && a.Status == "PENDING_APPROVAL" &&
-            a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"));
+            a.RoleCode == "BUSINESS_OWNER");
         if (account is null) throw Error("APPLICATION_CLOSED", "Owner account is no longer eligible for review.", 409);
         if (body.Status == "approved")
             await db.EnsureOwnerTenantAsync(application.Id, application.BusinessName, user.Email!, user.Phone!, ct);
@@ -178,7 +179,7 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
     private async Task<ApprovalIntent> RecordApprovalIntentAsync(Guid adminId, Guid id, ReviewOwnerDto body, CancellationToken ct)
     {
         await using var tx = await db.BeginTransactionAsync(ct);
-        await RequireAdmin(adminId, ct);
+        await RequireAdmin(adminId, ct, true);
         var application = await db.LockOwnerApplicationAsync(id, ct)
             ?? throw Error("APPLICATION_NOT_FOUND", "Owner application was not found.", 404);
         var user = await db.LockUserAsync(application.UserId, ct);

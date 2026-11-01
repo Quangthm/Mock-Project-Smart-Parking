@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
@@ -61,6 +61,15 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     $env:DevelopmentAdmin__Password = $env:SMARTPARK_ADMIN_PASSWORD
 }
 if ($Service -eq 'User') {
+    $env:SMARTPARK_RABBITMQ_HOST = '127.0.0.1'
+    $env:SMARTPARK_RABBITMQ_PORT = $env:SMARTPARK_RABBITMQ_PORT
+    $env:SMARTPARK_RABBITMQ_USER = $env:SMARTPARK_RABBITMQ_USER
+    $env:SMARTPARK_RABBITMQ_PASSWORD = $env:SMARTPARK_RABBITMQ_PASSWORD
+    $env:SMARTPARK_RABBITMQ_VHOST = $env:SMARTPARK_RABBITMQ_VHOST
+    $env:Cors__AllowedOrigins = $env:SMARTPARK_USER_CORS_ORIGINS
+    if (!$env:Messaging__OutboxDeliveryEnabled) { $env:Messaging__OutboxDeliveryEnabled = 'false' }
+}
+if ($Service -eq 'User') {
     if ($env:SMARTPARK_OWNER_PASSWORD) {
         Assert-DevPassword 'SMARTPARK_OWNER_PASSWORD' $env:SMARTPARK_OWNER_PASSWORD
         if ($env:SMARTPARK_OWNER_EMAIL) {
@@ -93,10 +102,6 @@ if ($Service -eq 'User') {
     if ($env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN) { $env:Onboarding__PublicOrigin = $env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN }
     if ($env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK) { $env:Onboarding__AllowHttpLoopback = $env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK }
     if ($env:SMARTPARK_MESSAGING_ENABLED) { $env:Messaging__Enabled = $env:SMARTPARK_MESSAGING_ENABLED }
-    foreach ($field in @('Host','Port','VirtualHost','Username','Password')) {
-        $value = [Environment]::GetEnvironmentVariable('SMARTPARK_RABBITMQ_' + $field.ToUpperInvariant())
-        if ($value) { [Environment]::SetEnvironmentVariable('Messaging__' + $field, $value, 'Process') }
-    }
     foreach ($field in @('Host','Port','Username','Password','From')) {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }

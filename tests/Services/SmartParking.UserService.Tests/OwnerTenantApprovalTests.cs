@@ -22,14 +22,14 @@ public sealed class OwnerTenantApprovalTests
         Guid deliveryId;
         await using (var db = fixture.Open())
         {
-            var result = await Service(db, new TestParkingDirectory()).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
+            var result = await (await Service(db, new TestParkingDirectory(), admin)).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
             deliveryId = result.DeliveryId!.Value;
         }
         var transport = new DecisionTransport();
         for (var attempt = 1; attempt <= 3; attempt++)
         {
             await using var db = fixture.Open();
-            var workflow = WorkflowTestSupport.Create(db, clock);
+            var workflow = WorkflowTestSupport.Create(db, clock, await TestAuthorization.ForUserAsync(db, clock, admin));
             if (attempt > 1) await workflow.DeliveryAsync(admin, deliveryId, true, default);
             transport.Fail = attempt < 3;
             await workflow.DeliverOneAsync(transport, default);
@@ -49,7 +49,7 @@ public sealed class OwnerTenantApprovalTests
         Assert.Null(message.OtpCode);
         await using (var db = fixture.Open())
         {
-            var workflow = WorkflowTestSupport.Create(db, clock);
+            var workflow = WorkflowTestSupport.Create(db, clock, await TestAuthorization.ForUserAsync(db, clock, admin));
             await workflow.DeliveryAsync(admin, deliveryId, true, default);
             await workflow.DeliverOneAsync(transport, default);
         }
@@ -79,7 +79,7 @@ public sealed class OwnerTenantApprovalTests
         var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(fixture.ConnectionString)
             .AddInterceptors(new FailDecisionSave()).Options;
         await using (var failing = new AppDbContext(options))
-            await Assert.ThrowsAsync<IOException>(() => Service(failing, parking).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default));
+            await Assert.ThrowsAsync<IOException>(async () => await (await Service(failing, parking, admin)).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default));
         Assert.Contains(application.Id, parking.Provisioned);
         await using (var check = fixture.Open())
         {
@@ -96,7 +96,7 @@ public sealed class OwnerTenantApprovalTests
         async Task<OwnerApplicationDto> Approve()
         {
             await using var db = fixture.Open();
-            return await Service(db, parking).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
+            return await (await Service(db, parking, admin)).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
         }
         var results = await Task.WhenAll(Approve(), Approve());
         Assert.All(results, r => Assert.Equal("approved", r.Status));
@@ -133,7 +133,7 @@ public sealed class OwnerTenantApprovalTests
                     """);
             await using (var db = fixture.Open())
             {
-                var review = Service(db, new TestParkingDirectory()).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
+                var review = (await Service(db, new TestParkingDirectory(), admin)).ReviewAsync(admin, application.Id, new() { Status = "approved" }, default);
                 if (scenario == "matching") Assert.Equal("approved", (await review).Status);
                 else Assert.Equal("APPROVAL_CONFLICT", (await Assert.ThrowsAsync<AuthException>(() => review)).Code);
             }
@@ -157,7 +157,7 @@ public sealed class OwnerTenantApprovalTests
         var (admin, application) = await SeedAsync(fixture);
         var parking = new TestParkingDirectory();
         await using (var db = fixture.Open())
-            Assert.Equal("rejected", (await Service(db, parking).ReviewAsync(admin, application.Id, new() { Status = "rejected" }, default)).Status);
+            Assert.Equal("rejected", (await (await Service(db, parking, admin)).ReviewAsync(admin, application.Id, new() { Status = "rejected" }, default)).Status);
         await using var check = fixture.Open();
         Assert.Equal(0, await TenantCountAsync(check, application.Id));
         Assert.Empty(parking.Provisioned);
@@ -166,19 +166,23 @@ public sealed class OwnerTenantApprovalTests
     private static Task<int> TenantCountAsync(AppDbContext db, Guid id) =>
         db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM tenants WHERE id={id}").SingleAsync();
 
-    private static OwnerRegistrationService Service(AppDbContext db, TestParkingDirectory parking) =>
-        new(db, new BcryptPasswordService(), TimeProvider.System, parking, WorkflowTestSupport.Create(db, TimeProvider.System));
+    private static async Task<OwnerRegistrationService> Service(AppDbContext db, TestParkingDirectory parking, Guid admin)
+    {
+        var authorization = await TestAuthorization.ForUserAsync(db, TimeProvider.System, admin, parking);
+        return new(db, new BcryptPasswordService(), TimeProvider.System, parking,
+            WorkflowTestSupport.Create(db, TimeProvider.System, authorization), authorization);
+    }
 
     private static async Task<(Guid Admin, OwnerApplication Application)> SeedAsync(UserServiceDatabaseFixture fixture)
     {
         await using var db = fixture.Open();
         var admin = new User { Id = Guid.NewGuid(), FullName = "Admin", Email = "admin@example.com", PasswordHash = "unused", Status = UserStatus.Active };
         admin.Accounts.Add(new Account { Id = Guid.NewGuid(), User = admin, UserId = admin.Id.Value,
-            AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] });
+            RoleCode = "PLATFORM_ADMIN" });
         var owner = new User { Id = Guid.NewGuid(), FullName = "Owner", Email = "owner@example.com", Phone = "0912345678",
             PasswordHash = "unused", Status = UserStatus.PendingApproval, EmailVerifiedAt = DateTimeOffset.UtcNow };
         owner.Accounts.Add(new Account { Id = Guid.NewGuid(), User = owner, UserId = owner.Id.Value, Status = "PENDING_APPROVAL",
-            AccountRoles = [new AccountRole { RoleCode = "BUSINESS_OWNER" }] });
+            RoleCode = "BUSINESS_OWNER" });
         var application = new OwnerApplication { Id = Guid.NewGuid(), UserId = owner.Id.Value, User = owner,
             BusinessName = "Owner business", LotType = "outdoor", SubmittedAt = DateTimeOffset.UtcNow,
             LotSetupJson = JsonSerializer.Serialize(new OwnerLotSetupDto { Name = "Lot", Address = "Address", LotType = "outdoor" }) };

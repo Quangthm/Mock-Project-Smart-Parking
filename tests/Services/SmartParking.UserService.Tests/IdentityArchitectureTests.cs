@@ -4,6 +4,8 @@ using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using UserService.API.Middleware;
+using UserService.API.Common;
+using Microsoft.Extensions.DependencyInjection;
 using UserService.Application.Common.Behaviors;
 using UserService.Application.Common.Models.Exceptions;
 
@@ -11,6 +13,27 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class IdentityArchitectureTests
 {
+    [Theory]
+    [InlineData("MFA_CHALLENGE_INVALID", 401)]
+    [InlineData("MFA_SETUP_EXPIRED", 400)]
+    [InlineData("MFA_NOT_ENABLED", 409)]
+    [InlineData("MFA_LOCKED", 423)]
+    [InlineData("SETUP_TOKEN_INVALID", 401)]
+    [InlineData("SETUP_ALREADY_SAVED", 409)]
+    [InlineData("APPROVAL_CONFLICT", 409)]
+    [InlineData("APPROVAL_IN_PROGRESS", 409)]
+    [InlineData("LOT_SETUP_REQUIRED", 409)]
+    [InlineData("OPERATOR_NOT_FOUND", 404)]
+    public void IncomingWorkflowErrorsRetainPublicStatusWithoutReflectingExceptionText(string code, int status)
+    {
+        var result = ApiExceptionMapper.CreateDefault().Map(new AuthException(code, "private exception content", status));
+        Assert.Equal(status, result.Response.StatusCode);
+        var body = JsonSerializer.Serialize(result.Response.Body);
+        Assert.Contains(code, body);
+        Assert.DoesNotContain("private exception content", body);
+        Assert.False(result.IsUnexpected);
+    }
+
     private sealed class AsyncRule : AbstractValidator<string>
     {
         public AsyncRule(List<string> calls, string name)
@@ -35,18 +58,21 @@ public sealed class IdentityArchitectureTests
     [Theory]
     [InlineData("unexpected",500,"INTERNAL_ERROR")]
     [InlineData("business",403,"FORBIDDEN")]
-    [InlineData("unauthorized",401,"INVALID_TOKEN")]
+    [InlineData("unauthorized",500,"INTERNAL_ERROR")]
     public async Task GlobalBoundaryPreservesContractsAndSanitizesUnexpectedErrors(string type,int status,string code)
     {
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
-        var middleware = new AuthExceptionMiddleware(_ => throw type switch
+        using var services = new ServiceCollection().AddLogging().AddOptions().BuildServiceProvider();
+        context.RequestServices = services;
+        Exception exception = type switch
         {
             "business" => new AuthException("FORBIDDEN","Current permission required.",403),
             "unauthorized" => new UnauthorizedAccessException("secret connection string"),
             _ => new InvalidOperationException("secret connection string")
-        }, NullLogger<AuthExceptionMiddleware>.Instance);
-        await middleware.InvokeAsync(context);
+        };
+        var handler = new ApiExceptionHandler(ApiExceptionMapper.CreateDefault(), new ApiErrorWriter(), NullLogger<ApiExceptionHandler>.Instance);
+        Assert.True(await handler.TryHandleAsync(context, exception, default));
         Assert.Equal(status,context.Response.StatusCode);
         var json=Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray());
         Assert.DoesNotContain("secret",json);

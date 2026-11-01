@@ -43,6 +43,18 @@ public sealed class StructureController(IMediator mediator) : ApiControllerBase(
         [FromBody] HoldRequest body,
         CancellationToken ct) =>
         Ok(await Mediator.Send(new ReadStructureSnapshotQuery(body.TenantId, siteId), ct));
+
+    // Repair surface for an abandoned preparation whose leaked hold token no
+    // longer matches a durable row. Internal-only, like every other structure route.
+    [HttpDelete("{siteId:guid}/holds")]
+    public async Task<IActionResult> ForceRelease(
+        [FromRoute] Guid siteId,
+        [FromQuery] Guid tenantId,
+        CancellationToken ct)
+    {
+        await Mediator.Send(new ForceReleaseStructureHoldsCommand(tenantId, siteId), ct);
+        return NoContent();
+    }
 }
 
 public sealed record HoldRequest(Guid TenantId);

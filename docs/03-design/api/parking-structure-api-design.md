@@ -52,6 +52,17 @@ Retain these integration paths with canonical service ownership; they do not pro
 
 Retain applicable profile bounds: code 1–50, name 1–255, address 1–2000; paired latitude/longitude within [-90,90]/[-180,180]. Unit names 1–100, layout capacity nonnegative with existing `0` unbounded-layout semantics; never interpret that as unlimited bookable capacity. Slot codes 1–50. Existing coordinate/features/map JSON serialization and 65,536-character bound are compatibility details, not permission to upload new 3D assets. The conflicting historic spatial enum sets (`FLOOR/ZONE/BLOCK` versus a longer hierarchy) and legacy OVERSIZED/EV enum values require Facility wire compatibility review under V11-DES-04; they do not approve extra vehicle products or EV charging. Fixed deployment models remain unchanged.
 
+### Selective slot registration (open design input — SPARK-238)
+
+Registering a slot is already a single-slot operation (`POST /api/parking-lots/{id}/slots`), so "the Owner selects which meshes to manage" needs no new endpoint. What changes is the **default**: a lot is no longer expected to register every mesh at creation time.
+
+- **Why bulk registration is the wrong default:** `removeSlot` is a soft delete (`UPDATE parking_slots SET deleted_at = CURRENT_TIMESTAMP`) and a tombstone is written to `structure_removed_resources` whenever live commitments exist. A flow that re-derives the whole slot set from a manifest deletes and re-creates rows on every edit, which mints new slot UUIDs, orphans allocation history and accumulates tombstones.
+- **Constraint that fixes the shape:** `parking_slots` has a table-level `UNIQUE (tenant_id, site_id, slot_code)` plus the case-insensitive `uq_site_slot_code_ci`, while the "active" index is partial on `deleted_at IS NULL` (`02-facility-service-db.sql:84`, `02-facility-service-db.sql:88`, `integration/02-parking-service-alignment.sql:11`). Because the full unique constraint is not partial, a removed code cannot be inserted again — re-registering the same mesh must **resurrect** the existing row (`deleted_at = NULL`), not insert a new one.
+- **Proposed behaviour:** register only the slots the Owner explicitly selects; make registration an idempotent upsert on `(site, slot_code)`; never delete a slot merely because a later request omits it.
+- **Consequence to accept:** capacity counts **registered** slots only, so an unregistered mesh is neither bookable nor counted. Any capacity figure shown to the Owner must say so.
+
+This note is design input for the facility-creation work stream (US-OW01 / FR-LOT-02). It is **not** part of SPARK-228, which only reads the resulting projection, and it is not yet an approved contract.
+
 Existing action example for an unrelated valid rename:
 
 ```json

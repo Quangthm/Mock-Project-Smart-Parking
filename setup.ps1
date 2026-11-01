@@ -507,14 +507,14 @@ if ($CredentialMode -eq 'Team') {
         }
     }
 }
-foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SMARTPARK_RABBITMQ_PASSWORD')) {
     if (!$settings[$name] -or $settings[$name] -like 'replace-with-*') {
         $value = $null
         if ($name -eq 'SMARTPARK_SERVICE_KEY') {
             $keys = @($existingByService.Values | ForEach-Object { $_['Services:Key'] } | Where-Object { $_ } | Select-Object -Unique)
             if ($keys.Count -gt 1) { throw 'Existing service keys differ. Reconcile Services:Key before setup.' }
             if ($keys.Count -eq 1) { $value = $keys[0] }
-        } elseif ($name -in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
+        } elseif ($name -in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SMARTPARK_RABBITMQ_PASSWORD')) {
             if ($name -eq 'SMARTPARK_ADMIN_PASSWORD') {
                 $value = $existingByService['User']['DevelopmentAdmin:Password']
             }
@@ -538,7 +538,7 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
                 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Docker volumes. Start Docker Desktop and retry, or use -SkipDatabase.' }
                 if ($volumes) {
                     if ($RecreateDb) {
-                        # Existing volumes are about to be dropped by `down -v`; the old password no longer applies.
+                        # Selected database volumes are about to be recreated; the old password no longer applies.
                         Write-Warning 'Password guard skipped because -RecreateDb will wipe existing schema volumes.'
                     } else {
                         throw 'Existing database volumes found. Recover their original SMARTPARK_DEV_PASSWORD in .env; setup will not replace or delete data.'
@@ -553,6 +553,9 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
         $settings[$name] = $value
         $generated[$name] = $value
     }
+}
+foreach ($entry in @{ SMARTPARK_RABBITMQ_USER='smartpark'; SMARTPARK_RABBITMQ_VHOST='smartpark'; SMARTPARK_RABBITMQ_PORT='5672'; SMARTPARK_RABBITMQ_MGMT_PORT='15672'; SMARTPARK_USER_CORS_ORIGINS='http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443' }.GetEnumerator()) {
+    if (!$settings.ContainsKey($entry.Key)) { $settings[$entry.Key]=$entry.Value; $generated[$entry.Key]=$entry.Value }
 }
 foreach ($pair in @(
     @{ Name = 'SMARTPARK_OWNER_EMAIL'; Default = 'owner@smartpark.local' },
@@ -580,7 +583,7 @@ if ($settings['SMARTPARK_SERVICE_KEY'].Length -lt 32) { throw 'SMARTPARK_SERVICE
 foreach ($name in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
     Assert-DevelopmentPassword $name $settings[$name]
 }
-foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
+foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT','SMARTPARK_RABBITMQ_PORT','SMARTPARK_RABBITMQ_MGMT_PORT')) {
     $port = 0
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
@@ -617,7 +620,7 @@ if ($settings['SMARTPARK_SERVICE_KEY'].Length -lt 32) { throw 'SMARTPARK_SERVICE
 foreach ($name in @('SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD')) {
     Assert-DevelopmentPassword $name $settings[$name]
 }
-foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT')) {
+foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTPARK_DB_RESERVATION_PORT','SMARTPARK_DB_PAYMENT_PORT','SMARTPARK_DB_NOTIFICATION_PORT','SMARTPARK_DB_IOT_PORT','SMARTPARK_RABBITMQ_PORT','SMARTPARK_RABBITMQ_MGMT_PORT')) {
     $port = 0
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
@@ -630,14 +633,24 @@ if (!$SkipDatabase) {
     & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile config --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Docker Compose configuration is invalid.' }
     if ($RecreateDb) {
-        # Same project name, env file and compose file as `up` — only the schema project is targeted.
-        Write-Host '    - Dropping schema volumes (-RecreateDb); existing dev data in those volumes will be lost...' -ForegroundColor DarkGray
-        & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile down -v
-        if ($LASTEXITCODE -ne 0) { throw 'Failed to remove schema volumes for -RecreateDb. Existing volumes were preserved.' }
+        # Only database containers and named volumes; preserve shared broker and network.
+        $dbServices = @('user-db','facility-db','operations-db','payment-db','notification-db','iot-db')
+        & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile rm --stop --force @dbServices
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to remove database containers; no volumes removed.' }
+        foreach ($volume in @('user','facility','operations','payment','notification','iot')) {
+            $volumeName = "smartpark-schema_$volume-schema-data"
+            & docker volume inspect $volumeName *> $null
+            if ($LASTEXITCODE -eq 0) {
+                & docker volume rm $volumeName | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw 'Failed to remove selected database volume.' }
+            }
+        }
     }
         Write-Host '    - Starting database containers and waiting for healthy (first init can take a few minutes)...' -ForegroundColor DarkGray
     & docker compose --project-name smartpark-schema --env-file $envFile -f $composeFile up -d --wait
     if ($LASTEXITCODE -ne 0) { throw 'Database startup failed. Check Docker Desktop, ports and SQL initialization logs. Existing volumes were preserved.' }
+    $brokerCredential = New-Object PSCredential($settings['SMARTPARK_RABBITMQ_USER'], (ConvertTo-SecureString $settings['SMARTPARK_RABBITMQ_PASSWORD'] -AsPlainText -Force))
+    & (Join-Path $taskRoot 'scripts/messaging/provision-profile-audit-topology.ps1') -ManagementUri ("http://127.0.0.1:" + $settings['SMARTPARK_RABBITMQ_MGMT_PORT']) -Credential $brokerCredential -VirtualHost $settings['SMARTPARK_RABBITMQ_VHOST']
     $migrationIndex = 0
     foreach ($service in @('User','Parking','Reservation','Payment','Notification','Iot')) {
         $migrationIndex++
@@ -686,6 +699,14 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         if (!$keyDirectory) { $keyDirectory = '.cache/workflow-keys' }
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
         $desired['Workflow:KeyDirectory'] = $keyDirectory
+        $desired['Messaging:OutboxDeliveryEnabled'] = if ($settings['Messaging__OutboxDeliveryEnabled']) { $settings['Messaging__OutboxDeliveryEnabled'] } else { 'false' }
+        $desired['Messaging:Enabled'] = if ($settings['SMARTPARK_MESSAGING_ENABLED']) { $settings['SMARTPARK_MESSAGING_ENABLED'] } else { 'false' }
+        $desired['SMARTPARK_RABBITMQ_HOST'] = '127.0.0.1'
+        $desired['SMARTPARK_RABBITMQ_PORT'] = $settings['SMARTPARK_RABBITMQ_PORT']
+        $desired['SMARTPARK_RABBITMQ_VHOST'] = $settings['SMARTPARK_RABBITMQ_VHOST']
+        $desired['SMARTPARK_RABBITMQ_USER'] = $settings['SMARTPARK_RABBITMQ_USER']
+        $desired['SMARTPARK_RABBITMQ_PASSWORD'] = $settings['SMARTPARK_RABBITMQ_PASSWORD']
+        $desired['Cors:AllowedOrigins'] = $settings['SMARTPARK_USER_CORS_ORIGINS']
         foreach ($field in @('Host','Port','Username','Password','From')) {
             $value = $settings["SMARTPARK_SMTP_$($field.ToUpperInvariant())"]
             if ($value) { $desired["Otp:Smtp:$field"] = $value }
@@ -718,10 +739,9 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         Write-Warning 'DevelopmentAdmin:Password differs between user-secrets and .env; user-secrets will be overwritten to match .env. Setup does not change the Admin password already seeded in the database — if Admin login fails afterwards, restore the old password in .env or rerun with -RecreateDb.'
     }
     if ($toSync.Count) {
-        foreach ($name in $toSync.Keys) {
-            & dotnet user-secrets set $name $toSync[$name] --project $projectByService[$service] | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service ($name)." }
-        }
+        # Secrets travel on stdin, never in process command-line arguments.
+        $toSync | ConvertTo-Json -Compress | & dotnet user-secrets set --project $projectByService[$service] | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service." }
     }
     foreach ($name in $removable) {
         & dotnet user-secrets remove $name --project $projectByService[$service] | Out-Null

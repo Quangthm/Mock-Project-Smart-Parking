@@ -31,10 +31,21 @@ public sealed class StructureSynchronizationService(
         if (synchronization.State == "ready" && synchronization.Outcome is null)
             throw new InvalidOperationException("A committed edit must have a replay outcome.");
 
-        await commitments.ReleaseAsync(
-            synchronization.TenantId, synchronization.SiteId, synchronization.Token,
-            synchronization.State == "ready" ? synchronization.Outcome : null,
-            cancellationToken);
+        if (synchronization.State == "aborting")
+        {
+            // An aborted preparation committed nothing, so no exact outcome exists.
+            // Its leaked hold may carry an older token that no durable row references;
+            // the site gate proves no other request is live, so a site-level release
+            // repairs it. Ready rows must still release their exact outcome.
+            await commitments.ForceReleaseAsync(
+                synchronization.TenantId, synchronization.SiteId, cancellationToken);
+        }
+        else
+        {
+            await commitments.ReleaseAsync(
+                synchronization.TenantId, synchronization.SiteId, synchronization.Token,
+                synchronization.Outcome, cancellationToken);
+        }
         await store.AcknowledgeAsync(synchronization.Token, cancellationToken);
     }
 

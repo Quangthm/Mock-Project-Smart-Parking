@@ -169,7 +169,7 @@ The 3D visualization layer is built upon industry-standard, lightweight web tech
 | **UI Framework** | **React 19 + Vite 8 (TypeScript)** | **IMPLEMENTED** (`FE/`) | Declarative UI state, reactive hooks, ultra-fast Vite HMR build toolchain. *(Note: Next.js is not used).* |
 | **3D WebGL Engine** | **Three.js (`three` v0.186+)** | **IMPLEMENTED** (`FE/`) | Industry-standard WebGL2 abstraction, tree-shakeable, robust scene graph management. |
 | **Animation & Motion** | **Native `requestAnimationFrame` + Three.js Math** | **IMPLEMENTED** (`FE/`) | Zero-dependency frame loop, math-based pulse animations. *(GSAP is an optional enhancement for future complex camera paths).* |
-| **Real-Time Data Bus** | **ASP.NET Core SignalR** | **TARGET ARCHITECTURE** | Native .NET 10 microservice push channel (`/hubs/parking-lot`). Replaces legacy STOMP/raw WebSocket proposals. |
+| **Real-Time Data Bus** | **ASP.NET Core SignalR** | **TARGET ARCHITECTURE** | Native .NET 10 microservice push channel (`/ws/parking-lots/{id}/layout`, superseding legacy `/hubs/parking-lot`). Replaces legacy STOMP/raw WebSocket proposals. |
 | **Geometry Decompression** | **Google Draco (WebAssembly)** | **RECOMMENDED OPTIMIZATION** *(Optional)* | 70–80% network payload reduction. *(Currently optional: v1.0 GLB models are loaded directly with standard GLTFLoader).* |
 | **Model Authoring** | **Blender 5.2.2 LTS** | **IMPLEMENTED PRODUCTION PIPELINE** | Clean origin pivots, PBR textures, optimized hierarchy, GLB binary export. |
 
@@ -233,7 +233,7 @@ flowchart TD
         SlotSvc["Slot Management & Allocation"]
         TeleSvc["EV & Battery Telemetry"]
         GateSvc["Access Gate Control"]
-        SignalRHub["SignalR Hub (/hubs/parking-lot)"]
+        SignalRHub["SignalR Hub (/ws/parking-lots/{id}/layout)"]
     end
 
     subgraph WebClient ["SmartPark Web Application"]
@@ -1310,7 +1310,7 @@ In accordance with **SRS BR-CAP-01**, motorcycles are tracked via an **aggregate
 ## 20. BACKEND DATA INTEGRATION & SIGNALR REALTIME RECONNECTION
 
 The frontend connects to the authoritative ASP.NET Core **SignalR Hub** exposed by the backend:
-* **SignalR Hub Endpoint**: `/hubs/parking-lot`
+* **SignalR Hub Endpoint**: `/ws/parking-lots/{id}/layout` (superseding legacy prototype route `/hubs/parking-lot`)
 * **Hub Group**: `lot_{lotId}`
 * **Realtime Event**: `SlotStateChanged`
 * **Canonical Event Payload (SRS v0.9 §3.2.2 Orthogonal Schema)**:

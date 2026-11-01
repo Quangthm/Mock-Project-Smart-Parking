@@ -1,5 +1,4 @@
 using MassTransit;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,33 +6,6 @@ using UserService.Application.Common.Interfaces.Services;
 
 namespace UserService.Infrastructure.Services;
 
-public static class AccessMessaging
-{
-    public static IServiceCollection AddAccessMessaging(this IServiceCollection services, IConfiguration config)
-    {
-        services.AddMassTransit(bus =>
-        {
-            bus.AddConsumer<AccessProjectionConsumer>();
-            bus.UsingRabbitMq((context, rabbit) =>
-            {
-                rabbit.Host(config["Messaging:Host"] ?? "localhost", config.GetValue<ushort>("Messaging:Port", 5672),
-                    config["Messaging:VirtualHost"] ?? "/", host =>
-                {
-                    host.Username(config["Messaging:Username"] ?? throw new InvalidOperationException("Configure Messaging:Username."));
-                    host.Password(config["Messaging:Password"] ?? throw new InvalidOperationException("Configure Messaging:Password."));
-                });
-                rabbit.ReceiveEndpoint("smartpark-user-access-projection-v1", endpoint =>
-                {
-                    endpoint.UseMessageRetry(retry => retry.Intervals(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                    endpoint.ConfigureConsumer<AccessProjectionConsumer>(context);
-                });
-            });
-        });
-        services.AddScoped<IAccessEventTransport, RabbitAccessEventTransport>();
-        services.AddHostedService<AccessOutboxWorker>();
-        return services;
-    }
-}
 public sealed class RabbitAccessEventTransport(IPublishEndpoint publisher) : IAccessEventTransport
 {
     public Task PublishAsync(OperatorAccessChanged message, CancellationToken ct) =>

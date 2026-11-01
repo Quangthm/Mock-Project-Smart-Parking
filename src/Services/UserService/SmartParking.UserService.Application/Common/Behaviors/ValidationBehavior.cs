@@ -44,11 +44,14 @@ namespace UserService.Application.Common.Behaviors
                 return await next(cancellationToken).ConfigureAwait(false);
             }
 
-            var context = new ValidationContext<TRequest>(request);
+            // Validators can share a scoped DbContext, which does not support
+            // parallel operations. Async rules must still observe cancellation.
             var errors = new List<FluentValidation.Results.ValidationFailure>();
-            // Validators may share a scoped repository/DbContext. Never run them concurrently.
             foreach (var validator in this.validators)
             {
+                // Each context owns a mutable failure collection. Reusing it would
+                // append earlier validators' failures again on each result.
+                var context = new ValidationContext<TRequest>(request);
                 var result = await validator.ValidateAsync(context, cancellationToken).ConfigureAwait(false);
                 errors.AddRange(result.Errors.Where(error => error is not null));
             }
