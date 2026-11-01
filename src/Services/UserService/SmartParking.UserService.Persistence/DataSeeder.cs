@@ -47,22 +47,15 @@ public class DataSeeder
         {
             Id = accountId,
             UserId = userId,
+            RoleCode = "DRIVER",
             Status = "ACTIVE",
             CreatedOn = DateTimeOffset.UtcNow,
             User = demoUser
         };
 
-        var accountRole = new AccountRole
-        {
-            AccountId = accountId,
-            RoleCode = "DRIVER",
-            Account = demoAccount
-        };
-
         if (!await _dbContext.Roles.AnyAsync(r => r.Code == "DRIVER"))
             _dbContext.Roles.Add(new Role { Code = "DRIVER", Name = "Driver" });
 
-        demoAccount.AccountRoles.Add(accountRole);
         demoUser.Accounts.Add(demoAccount);
 
         _dbContext.Users.Add(demoUser);
@@ -77,11 +70,11 @@ public class DataSeeder
                 @"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$"))
             throw new InvalidOperationException("Development bootstrap needs a valid email and an 8-15 character password with upper/lowercase, digit and special character.");
         email = email.Trim().ToLowerInvariant();
-        var existing = await _dbContext.Users.Include(u => u.Accounts).ThenInclude(a => a.AccountRoles).AsSplitQuery()
+        var existing = await _dbContext.Users.Include(u => u.Accounts).AsSplitQuery()
             .SingleOrDefaultAsync(u => u.Email == email);
         if (existing is not null)
         {
-            if (!existing.Accounts.Any(a => a.Status == "ACTIVE" && a.AccountRoles.Any(r => r.RoleCode == roleCode)))
+            if (!existing.Accounts.Any(a => a.Status == "ACTIVE" && a.RoleCode == roleCode))
                 throw new InvalidOperationException("Development bootstrap email already belongs to a user with a different role.");
             return;
         }
@@ -92,7 +85,7 @@ public class DataSeeder
             PasswordHash = _passwords.Hash(password), Status = UserStatus.Active,
             CreatedOn = DateTimeOffset.UtcNow, ModifiedOn = DateTimeOffset.UtcNow,
             Accounts = [new Account { Id = Guid.NewGuid(), Status = "ACTIVE", CreatedOn = DateTimeOffset.UtcNow,
-                AccountRoles = [new AccountRole { RoleCode = roleCode }] }]
+                RoleCode = roleCode }]
         });
         await _dbContext.SaveChangesAsync();
     }

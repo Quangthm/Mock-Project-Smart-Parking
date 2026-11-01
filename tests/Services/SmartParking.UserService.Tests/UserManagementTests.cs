@@ -15,9 +15,11 @@ using System.Text.Json;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.API.Controllers;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
@@ -53,6 +55,8 @@ public sealed class UserManagementTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
+        builder.Services.AddApiErrorResponses();
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
@@ -62,14 +66,18 @@ public sealed class UserManagementTests
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
+        TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
+        builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
+        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
         var users = new FakeUsers();
         builder.Services.AddSingleton<IUserManagementService>(users);
         await using var app = builder.Build();
-        app.UseMiddleware<AuthExceptionMiddleware>();
+        app.UseRouting();
+        app.UseApiErrorResponses();
         app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
         await app.StartAsync();
         using var client = app.GetTestClient();
@@ -89,7 +97,7 @@ public sealed class UserManagementTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/users/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PatchAsJsonAsync($"/api/users/{id}/status", new { status = "locked" })).StatusCode);
         Assert.Equal(0, users.Calls);
-        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "PLATFORM_ADMIN";
+        fixture.User.Accounts.Single().RoleCode = "PLATFORM_ADMIN";
         await Login();
         foreach (var query in new[] { "page=0", "pageSize=101", "role=superuser", "status=disabled", "page=oops" })
             Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/users?" + query)).StatusCode);
@@ -108,7 +116,7 @@ public sealed class UserManagementTests
         fixture.User.Status = UserStatus.Locked;
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users")).StatusCode);
         fixture.User.Status = UserStatus.Active;
-        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "BUSINESS_OWNER";
+        fixture.User.Accounts.Single().RoleCode = "BUSINESS_OWNER";
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users")).StatusCode);
     }
 
@@ -146,7 +154,7 @@ public sealed class UserManagementTests
         async Task<T> Run<T>(Func<UserManagementService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, clock));
+            return await action(new(db, clock, await TestAuthorization.ForUserAsync(db, clock, adminId)));
         }
         Task<ManagedUserDto> Change(Guid actor, Guid target, string status) => Run(s => s.SetStatusAsync(actor, target, new() { Status = status }, default));
         async Task Expect(string code, Func<Task> action) => Assert.Equal(code, (await Assert.ThrowsAsync<AuthException>(action)).Code);
@@ -157,11 +165,15 @@ public sealed class UserManagementTests
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, new BcryptPasswordService()).SeedAsync();
                 driverId = (await db.Users.SingleAsync()).Id!.Value;
+                // The schema already seeds PLATFORM_ADMIN; adding it again breaks the roles primary key.
+                if (!await db.Roles.AnyAsync(r => r.Code == "PLATFORM_ADMIN"))
+                    db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.AddRange(new User { Id = adminId, FullName = "Admin", Status = UserStatus.Active,
-                    Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] },
+                    Accounts = [new Account { Id = Guid.NewGuid(), RoleCode = "PLATFORM_ADMIN" }] },
                     new User { Id = pendingId, FullName = "Pending", Status = UserStatus.PendingApproval },
                     new User { Id = deletedId, FullName = "Deleted", Status = UserStatus.Active, DeletedOn = clock.Now });
-                db.AuthSessions.Add(new AuthSession { Id = Guid.NewGuid(), UserId = driverId, AccessTokenId = tokenId,
+                var driverAccountId = await db.Accounts.Where(a => a.UserId == driverId).Select(a => a.Id).SingleAsync();
+                db.AuthSessions.Add(new AuthSession { Id = Guid.NewGuid(), UserId = driverId, AccountId = driverAccountId, AccessTokenId = tokenId,
                     TokenHash = AuthSessionService.HashRefreshToken("test-refresh"), CreatedAt = clock.Now, AccessExpiresAt = clock.Now.AddHours(1), ExpiresAt = clock.Now.AddDays(7) });
                 await db.SaveChangesAsync();
             }
@@ -193,7 +205,7 @@ public sealed class UserManagementTests
             await using (var db = new AppDbContext(options))
             {
                 Assert.False(await new PostgresAuthSessionStore(db, clock).IsActiveAsync(tokenId, driverId, default));
-                Assert.True((await db.AuthSessions.SingleAsync()).IsRevoked);
+                Assert.True((await db.AuthSessions.SingleAsync(s => s.UserId == driverId)).IsRevoked);
             }
             Assert.Equal("active", (await Change(adminId, driverId, "active")).Status);
             await Expect("INVALID_TOKEN", RefreshOldSession);

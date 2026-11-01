@@ -62,8 +62,8 @@ public sealed class IdentityRegressionTests
         }
         await using(var db=fixture.Open())
         {
-            await new UserManagementService(db,clock).SetStatusAsync(admin.Id!.Value,blocked.Id!.Value,new(){Status="active"},default);
-            var user=await db.Users.Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleAsync(u=>u.Id==blocked.Id);
+            await new UserManagementService(db,clock, await TestAuthorization.ForUserAsync(db, clock, admin.Id!.Value)).SetStatusAsync(admin.Id!.Value,blocked.Id!.Value,new(){Status="active"},default);
+            var user=await db.Users.Include(u=>u.Accounts).SingleAsync(u=>u.Id==blocked.Id);
             Assert.Equal(UserStatus.PendingVerification,user.Status);
             Assert.Null(AccountRolePolicy.CurrentRole(user));
             Assert.All(user.Accounts,a=>Assert.Equal("PENDING_VERIFICATION",a.Status));
@@ -92,6 +92,6 @@ public sealed class IdentityRegressionTests
         var user=new User{Id=Guid.NewGuid(),Email=email,FullName="Test User",EmailVerifiedAt=clock.Now,Status=UserStatus.Active,
             PasswordHash=new BcryptPasswordService().Hash("Password@123"),CreatedOn=clock.Now,ModifiedOn=clock.Now};
         var account=new Account{Id=Guid.NewGuid(),User=user,UserId=user.Id.Value,Status="ACTIVE"};
-        account.AccountRoles.Add(new(){Account=account,AccountId=account.Id.Value,RoleCode=role});user.Accounts.Add(account);return user;
+        account.RoleCode = role;user.Accounts.Add(account);return user;
     }
 }

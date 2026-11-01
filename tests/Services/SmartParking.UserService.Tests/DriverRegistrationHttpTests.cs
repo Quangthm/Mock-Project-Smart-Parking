@@ -10,10 +10,12 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using UserService.API.Controllers;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Infrastructure.Services;
 using UserService.Application.DTOs;
 
@@ -39,6 +41,8 @@ public sealed class DriverRegistrationHttpTests
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
+        builder.Services.AddApiErrorResponses();
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
@@ -46,9 +50,12 @@ public sealed class DriverRegistrationHttpTests
         builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         var fixture = new AuthTestFixture();
+        TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
+        builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
+        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
@@ -61,7 +68,8 @@ public sealed class DriverRegistrationHttpTests
             { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         await using var app = builder.Build();
-        app.UseMiddleware<AuthExceptionMiddleware>();
+        app.UseRouting();
+        app.UseApiErrorResponses();
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseRateLimiter();
