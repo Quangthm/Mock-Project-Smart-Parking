@@ -120,6 +120,35 @@ test('removal explains children, slots and paths instead of a generic error', ()
   assert.deepEqual(Array.from(rules.unitRemovalBlockers('zone', units, [], [])), []);
 });
 
+// --- site selection ------------------------------------------------------
+
+test('a real site requested by the parent wins', () => {
+  assert.equal(rules.resolveActiveSiteId('site-b', 'site-a', ['site-a', 'site-b']), 'site-b');
+});
+
+test('the owner choice survives while the parent still says "all"', () => {
+  // This is the regression that made the site dropdown snap back: the parent default
+  // is the "all" sentinel, so the local pick must not be reset to the first site.
+  assert.equal(rules.resolveActiveSiteId('all', 'site-b', ['site-a', 'site-b']), 'site-b');
+  assert.equal(rules.resolveActiveSiteId(null, 'site-b', ['site-a', 'site-b']), 'site-b');
+  assert.equal(rules.resolveActiveSiteId(undefined, 'site-b', ['site-a', 'site-b']), 'site-b');
+});
+
+test('an unknown or stale requested id falls back to the current site', () => {
+  assert.equal(rules.resolveActiveSiteId('deleted-site', 'site-b', ['site-a', 'site-b']), 'site-b');
+  assert.equal(rules.resolveActiveSiteId('', 'site-b', ['site-a', 'site-b']), 'site-b');
+});
+
+test('an invalid current site falls back to the first available site', () => {
+  assert.equal(rules.resolveActiveSiteId(null, 'gone', ['site-a', 'site-b']), 'site-a');
+  assert.equal(rules.resolveActiveSiteId('all', '', ['site-a', 'site-b']), 'site-a');
+});
+
+test('no available sites yields the empty selection', () => {
+  assert.equal(rules.resolveActiveSiteId('all', 'site-a', []), '');
+  assert.equal(rules.resolveActiveSiteId('site-b', 'site-a', []), '');
+});
+
 // --- compatibility -------------------------------------------------------
 
 test('one category resolves without a declared primary, several never infer one', () => {
