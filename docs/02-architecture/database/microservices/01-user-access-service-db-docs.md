@@ -4,7 +4,7 @@
 > **Database file**: [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql)  
 > **Schema baseline**: Recorded v1.0 RC3 (Commit `6165024`, replacing v0.9), updated for the approved v1.1 one-role-per-Account clean-install model. This describes repository definitions, not an executed development database reset. Other v1.1 target gaps remain [DB25–DB27, DB30–DB33](../alignment-backlog.md#v11-schema-and-seed-alignment-pending).
 > **Message Broker**: RabbitMQ + MassTransit  
-> **Scope**: Quản lý định danh con người (`users`), tổ chức/doanh nghiệp (`tenants`), tài khoản theo ngữ cảnh (`accounts`), vai trò trực tiếp (`accounts.role_code` → `roles.code`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), phân quyền vận hành bãi (`operator_grants`), xác thực nâng cao (`auth_challenges`, `workflow_deliveries`), và MFA/TOTP (`mfa_credentials`).
+> **Scope**: Quản lý định danh con người (`users`), tổ chức/doanh nghiệp (`tenants`), tài khoản theo ngữ cảnh (`accounts`), vai trò trực tiếp (`accounts.role_code` → `roles.code`), phương tiện (`vehicles`), vòng đời token xác thực (`user_refresh_tokens`), đăng ký OTP tài xế (`driver_registrations`), đơn đăng ký chủ bãi (`owner_applications`), phân quyền vận hành bãi (`operator_grants`), xác thực nâng cao (`auth_challenges`, `workflow_deliveries`), MFA/TOTP (`mfa_credentials`), và persistence hạ tầng durable messaging của MassTransit (`"InboxState"`, `"OutboxState"`, `"OutboxMessage"`).
 
 ## v1.1 simulated identity target (DB26)
 
@@ -16,7 +16,7 @@ The [21 October V11-06 clarification](../../../05-project-management/decision-lo
 |---|---|
 | Database vật lý | `smartpark_user` (PostgreSQL 16, port `5441`) |
 | Base DDL | [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql) |
-| Separate runtime setup | Base → [`13-own-profile-session-account.sql`](../../../../scripts/database/microservices/13-own-profile-session-account.sql) → [`14-user-profile-outbox.sql`](../../../../scripts/database/microservices/14-user-profile-outbox.sql); giữ nguyên các script riêng theo [hướng dẫn SPARK-248](../../../04-testing/reports/SPARK-248/own-profile-outbox.md) |
+| SPARK-248 current DDL layout | Current `feat/SPARK-248-manage-own-profile` integrates the session/Account binding and MassTransit framework DDL directly into base `01-user-access-service-db.sql`; the earlier separate `13-own-profile-session-account.sql` / `14-user-profile-outbox.sql` paths are no longer present in the current `scripts/database/microservices/` branch layout. Treat the base file as the recorded fresh-install definition; existing/partial databases still require reviewed migration rather than replay. |
 | Deployment status | Base hiện tạo trực tiếp `accounts.role_code`; người vận hành thực hiện reset/recreate development DB sau khi review. Không có ALTER migration cho thay đổi role |
 | Runtime deviation | `roles` seed 7 mã thay vì 4 mã SRS; xem §5 |
 
@@ -39,6 +39,9 @@ Client → API Gateway (JWT RS256)
           │ driver_registrations│ ← OTP đăng ký
           │ owner_applications  │ ← Đơn chủ bãi
           │ operator_grants     │ ← Phân quyền vận hành
+          │ "InboxState"        │ ← MassTransit inbox framework state
+          │ "OutboxState"       │ ← MassTransit bus-outbox batch state
+          │ "OutboxMessage"     │ ← Durable serialized messages chờ/đã relay
           └───────────────┘
 ```
 
@@ -46,6 +49,8 @@ Client → API Gateway (JWT RS256)
 - `users` = bản thể con người, tồn tại độc lập.
 - `accounts` = bản thể vận hành, gắn với tenant/site, một `user` có thể có nhiều `account`; mỗi `account` có đúng một vai trò qua `role_code` bắt buộc.
 - Tất cả cross-service references (đến Parking Service, Reservation Service…) sử dụng **Logical ID** lưu dưới dạng `UUID`, không enforce bằng FK vật lý.
+- Ba bảng quoted-name `"InboxState"`, `"OutboxState"`, `"OutboxMessage"` là **framework persistence của MassTransit**, không phải business aggregate của User & Access. Application không đọc/ghi trực tiếp các bảng này để thực hiện nghiệp vụ; mapping được đăng ký bởi `AddTransactionalOutboxEntities()` và runtime outbox được cấu hình qua `AddEntityFrameworkOutbox<AppDbContext>()`.
+- `workflow_deliveries` là trạng thái delivery ở cấp ứng dụng cho workflow OTP/notification; nó **không thay thế** MassTransit transactional outbox tables và không nên được mô tả như cùng một storage concern.
 
 ---
 
@@ -584,7 +589,9 @@ Lưu trữ các mã xác thực (như OTP qua SMS/Email) được hệ thống g
 
 ### 12.1 Mục đích nghiệp vụ
 
-Lưu vết (audit log) các tác vụ gửi tin nhắn, email chứa OTP. Đóng vai trò như một Outbox Pattern để theo dõi trạng thái gửi thành công/thất bại, hỗ trợ retry gửi lại khi có lỗi mạng từ Notification Provider.
+Lưu vết (audit log) các tác vụ gửi tin nhắn, email chứa OTP. Đây là **application-level delivery workflow state** để theo dõi trạng thái gửi thành công/thất bại và retry khi Notification Provider gặp lỗi mạng.
+
+Không đồng nhất bảng này với MassTransit transactional outbox. Durable broker publishing của SPARK-248 dùng các bảng framework `"OutboxState"` / `"OutboxMessage"` (và `"InboxState"` được MassTransit mapping vào model); xem §13. `workflow_deliveries` giữ semantics nghiệp vụ/delivery riêng của User & Access.
 
 D10 target: preserve committed account/application/review/provisioning results when delivery fails. Retry delivery without rerunning those mutations; `sent` is not proof of delivered. DB33 tracks delivery receipts/attempts and approval-with-modifications messaging.
 
@@ -623,20 +630,166 @@ D10 target: preserve committed account/application/review/provisioning results w
 
 ---
 
+## 13. MassTransit durable messaging persistence — RabbitMQ transactional outbox/inbox
+
+### 13.1 Mục đích và ownership
+
+SPARK-248 dùng **MassTransit Entity Framework transactional outbox** trên PostgreSQL để làm bền vững message trước khi relay sang RabbitMQ. `AppDbContext.OnModelCreating` đăng ký `AddTransactionalOutboxEntities()`, còn runtime đăng ký `AddEntityFrameworkOutbox<AppDbContext>()`, `UsePostgres()` và `UseBusOutbox(...)`.
+
+Ba bảng framework được tạo trực tiếp trong current base `01-user-access-service-db.sql` với **quoted PascalCase names**:
+
+- `"InboxState"`
+- `"OutboxState"`
+- `"OutboxMessage"`
+
+Đây là **transport/framework persistence**, không phải business entity để controller/Application query trực tiếp. MassTransit sở hữu schema semantics và lifecycle của các hàng này. User & Access chỉ tương tác qua publish/send abstraction và transaction/DbContext đã được cấu hình.
+
+Current SPARK-248 `ProfileOutboxRegistration` đặt `QueryDelay = 1 second`, tắt inbox cleanup service vì UserService hiện **publish-only**, và dùng `Messaging:OutboxDeliveryEnabled` để có thể giữ delivery service disabled cho tới khi durable RabbitMQ topology được provision/verify. Việc tắt delivery service không biến các message đã commit thành “đã publish”; trạng thái database và broker delivery phải được phân biệt.
+
+RabbitMQ topology là concern riêng với PostgreSQL persistence. Script provisioning profile-audit hiện cấu hình durable fanout exchange `smartpark.user-access.user-profile-name-changed.v1`, durable queue `smartpark.notification-audit.user-profile-name-changed.v1`, và binding tương ứng; các exchange/queue này **không phải database tables**.
+
+### 13.2 Quan hệ với `workflow_deliveries`
+
+| Concern | Storage | Owner / semantics |
+|---|---|---|
+| OTP/email/SMS delivery workflow | `workflow_deliveries` | User & Access application workflow; status/retry của một delivery nghiệp vụ |
+| Durable publish transaction | `"OutboxState"`, `"OutboxMessage"` | MassTransit EF outbox; persist message cùng transaction trước broker relay |
+| Consumer deduplication/inbox framework state | `"InboxState"` | MassTransit framework state keyed theo message + consumer |
+| Broker transport | RabbitMQ exchange / queue / binding | Runtime transport topology; không nằm trong PostgreSQL |
+
+Không dùng `workflow_deliveries` thay cho MassTransit outbox và không dùng MassTransit framework tables để biểu diễn trạng thái nghiệp vụ OTP/notification.
+
+### 13.3 Bảng `"InboxState"` — MassTransit consumer inbox state
+
+Current DDL vẫn materialize `"InboxState"` vì `AddTransactionalOutboxEntities()` đăng ký framework entities đầy đủ, dù current UserService profile messaging path là publisher-only và runtime tắt inbox cleanup service.
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa framework |
+|---|---|---|
+| `"Id"` | `BIGINT GENERATED BY DEFAULT AS IDENTITY`, PK | Surrogate row identity do MassTransit mapping dùng |
+| `"MessageId"` | `UUID NOT NULL` | Message identity |
+| `"ConsumerId"` | `UUID NOT NULL` | Consumer identity |
+| `"LockId"` | `UUID NOT NULL` | Coordination/locking identity |
+| `"RowVersion"` | `BYTEA NULL` | Optimistic concurrency/version token |
+| `"Received"` | `TIMESTAMPTZ NOT NULL` | Thời điểm framework nhận message |
+| `"ReceiveCount"` | `INTEGER NOT NULL` | Số lần nhận/xử lý theo framework |
+| `"ExpirationTime"` | `TIMESTAMPTZ NULL` | Thời điểm inbox state có thể hết hạn |
+| `"Consumed"` | `TIMESTAMPTZ NULL` | Thời điểm consumer hoàn tất consume |
+| `"Delivered"` | `TIMESTAMPTZ NULL` | Thời điểm các message phát sinh từ inbox flow đã được delivery |
+| `"LastSequenceNumber"` | `BIGINT NULL` | Sequence cuối đã xử lý/delivery |
+
+**Constraints / indexes**
+
+| Tên | Định nghĩa | Mục đích |
+|---|---|---|
+| `"PK_InboxState"` | PK (`"Id"`) | Primary key |
+| `"AK_InboxState_MessageId_ConsumerId"` | UNIQUE (`"MessageId"`, `"ConsumerId"`) | Một inbox state cho một message/consumer pair |
+| `"IX_InboxState_Delivered"` | INDEX (`"Delivered"`) | Hỗ trợ framework tìm trạng thái delivery |
+
+### 13.4 Bảng `"OutboxState"` — MassTransit bus-outbox state
+
+Theo current SPARK-248, UserService dùng **Bus Outbox**. `"OutboxState"` giữ trạng thái batch/outbox cần cho relay/coordination của MassTransit.
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa framework |
+|---|---|---|
+| `"OutboxId"` | `UUID NOT NULL`, PK | Identity của outbox transaction/batch |
+| `"LockId"` | `UUID NOT NULL` | Coordination/locking identity |
+| `"RowVersion"` | `BYTEA NULL` | Optimistic concurrency/version token |
+| `"Created"` | `TIMESTAMPTZ NOT NULL` | Thời điểm outbox state được tạo |
+| `"Delivered"` | `TIMESTAMPTZ NULL` | Thời điểm outbox đã được relay hoàn tất |
+| `"LastSequenceNumber"` | `BIGINT NULL` | Sequence cuối thuộc outbox đã được delivery |
+
+**Constraints / indexes**
+
+| Tên | Định nghĩa | Mục đích |
+|---|---|---|
+| `"PK_OutboxState"` | PK (`"OutboxId"`) | Primary key |
+| `"IX_OutboxState_Created"` | INDEX (`"Created"`) | Hỗ trợ framework scan/order outbox state |
+
+### 13.5 Bảng `"OutboxMessage"` — Durable serialized broker message
+
+Lưu envelope/message đã serialize để MassTransit relay sang RabbitMQ sau khi transaction database commit thành công. Không chỉnh sửa `Body`, headers, address hoặc delivery columns bằng application SQL.
+
+| Tên Cột | Kiểu & Ràng buộc | Ý nghĩa framework |
+|---|---|---|
+| `"SequenceNumber"` | `BIGINT GENERATED BY DEFAULT AS IDENTITY`, PK | Thứ tự message bền vững trong outbox |
+| `"EnqueueTime"` | `TIMESTAMPTZ NULL` | Thời điểm dự kiến/enqueue theo framework |
+| `"SentTime"` | `TIMESTAMPTZ NOT NULL` | Thời điểm message envelope được tạo/sent logically |
+| `"Headers"` | `TEXT NULL` | Serialized transport headers |
+| `"Properties"` | `TEXT NULL` | Serialized transport properties |
+| `"InboxMessageId"` | `UUID NULL` | Optional FK component tới `"InboxState"` |
+| `"InboxConsumerId"` | `UUID NULL` | Optional FK component tới `"InboxState"` |
+| `"OutboxId"` | `UUID NULL` | Optional FK tới `"OutboxState"` |
+| `"MessageId"` | `UUID NOT NULL` | Message identity |
+| `"ContentType"` | `VARCHAR(256) NOT NULL` | Serialized body content type |
+| `"MessageType"` | `TEXT NOT NULL` | MassTransit message type metadata |
+| `"Body"` | `TEXT NOT NULL` | Serialized message envelope/body |
+| `"ConversationId"` | `UUID NULL` | Conversation correlation metadata |
+| `"CorrelationId"` | `UUID NULL` | Business/transport correlation metadata |
+| `"InitiatorId"` | `UUID NULL` | Initiating message identity |
+| `"RequestId"` | `UUID NULL` | Request/response correlation identity |
+| `"SourceAddress"` | `VARCHAR(256) NULL` | Source endpoint address |
+| `"DestinationAddress"` | `VARCHAR(256) NULL` | Destination/exchange address |
+| `"ResponseAddress"` | `VARCHAR(256) NULL` | Response endpoint address |
+| `"FaultAddress"` | `VARCHAR(256) NULL` | Fault endpoint address |
+| `"ExpirationTime"` | `TIMESTAMPTZ NULL` | Message expiration metadata |
+
+**Constraints / indexes**
+
+| Tên | Định nghĩa | Mục đích |
+|---|---|---|
+| `"PK_OutboxMessage"` | PK (`"SequenceNumber"`) | Primary key / durable ordering |
+| `"FK_OutboxMessage_InboxState_InboxMessageId_InboxConsumerId"` | (`"InboxMessageId"`, `"InboxConsumerId"`) → `"InboxState"` (`"MessageId"`, `"ConsumerId"`) | Liên kết message phát sinh từ inbox-consume flow khi applicable |
+| `"FK_OutboxMessage_OutboxState_OutboxId"` | `"OutboxId"` → `"OutboxState"."OutboxId"` | Liên kết message với bus-outbox state |
+| `"IX_OutboxMessage_EnqueueTime"` | INDEX (`"EnqueueTime"`) | Framework delivery scheduling |
+| `"IX_OutboxMessage_ExpirationTime"` | INDEX (`"ExpirationTime"`) | Framework expiration lookup |
+| `"IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber"` | UNIQUE (`"InboxMessageId"`, `"InboxConsumerId"`, `"SequenceNumber"`) | Stable per-inbox message ordering/identity |
+| `"IX_OutboxMessage_OutboxId_SequenceNumber"` | UNIQUE (`"OutboxId"`, `"SequenceNumber"`) | Stable per-outbox message ordering/identity |
+
+### 13.6 Transactional durability flow
+
+```text
+Application mutation
+        │
+        ├─ business/UserDb changes
+        │
+        └─ MassTransit publish/send captured by Bus Outbox
+                  ↓
+        same PostgreSQL transaction commits
+                  ↓
+          "OutboxState" / "OutboxMessage"
+                  ↓
+      MassTransit delivery service (when enabled)
+                  ↓
+             RabbitMQ durable topology
+                  ↓
+        downstream consumer/service
+```
+
+Key invariants:
+
+- Database commit and durable outbox persistence are coordinated through the configured EF outbox; application code must not implement a second hand-written RabbitMQ publish-after-commit path for the same event.
+- A committed `"OutboxMessage"` is evidence that the message is durably pending/recorded in UserDb, **not** by itself proof that RabbitMQ or a downstream consumer has processed it.
+- `"Delivered"` is framework transport state; do not reinterpret it as business acceptance.
+- Current UserService messaging configuration is publisher-only. The presence of `"InboxState"` in the schema follows MassTransit framework registration and does not imply that UserService currently owns a message consumer.
+- Keep quoted table/column casing exact. These framework mappings intentionally do not follow the snake_case convention used by User & Access business tables.
+- Do not hand-edit framework rows or redefine their schema independently of the MassTransit version/model configuration.
+
+---
+
 ## 14. Bảng `mfa_credentials` — Cấu hình bảo mật 2 lớp
 
-### 13.1 Mục đích nghiệp vụ
+### 14.1 Mục đích nghiệp vụ
 
 Lưu trữ cấu hình MFA (Multi-Factor Authentication) của người dùng, đặc biệt là mã khóa bí mật TOTP (Time-based One-Time Password) để sinh mã qua ứng dụng Authenticator.
 
-### 13.2 Traceability Mapping
+### 14.2 Traceability Mapping
 
 | Mã yêu cầu | Loại | Nội dung liên quan |
 |---|---|---|
 | **FR-AUTH-01** | C | Xác thực đa yếu tố |
 | **§3.1.4** | — | Multi-factor authentication (MFA) dùng TOTP |
 
-### 13.3 Bảng thuộc tính chi tiết
+### 14.3 Bảng thuộc tính chi tiết
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
@@ -647,7 +800,7 @@ Lưu trữ cấu hình MFA (Multi-Factor Authentication) của người dùng, �
 | `attempts` | `INT NOT NULL DEFAULT 0` | Số lần nhập sai mã TOTP | Tăng 1 khi sai | — |
 | `locked_until` | `TIMESTAMPTZ NULL` | Khóa tạm thời nếu nhập sai nhiều lần | Tính toán bởi Application | — |
 
-### 13.4 Constraints & Indexes
+### 14.4 Constraints & Indexes
 
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
@@ -676,6 +829,10 @@ accounts (1) ──── (0..1) operator_grants
 
 operator_grants.created_by ──── users.id  [audit FK]
 owner_applications.reviewed_by ──── users.id [audit FK]
+
+MassTransit framework persistence:
+"InboxState" ("MessageId","ConsumerId") ──── (0..N) "OutboxMessage" [optional composite FK]
+"OutboxState" ("OutboxId") ──────────────── (0..N) "OutboxMessage" [optional FK]
 ```
 
 ---
@@ -688,6 +845,8 @@ owner_applications.reviewed_by ──── users.id [audit FK]
 | `site_id` | `owner_applications` | Facility & Visualization (`FacilityDb.parking_sites.id`) | Logical site ID; review/provisioning/activation/opening must be separately represented (DB27) |
 | `normalized_plate` | `vehicles` | Operations, IoT & Recognition | RabbitMQ event `VehicleRegistered` / `VehiclePlateUpdated`; consumer cache plate |
 | `account_id` | `vehicles` | Operations, Payment & Pricing | Logical ID; consumer services gọi User & Access API để resolve thông tin đầy đủ khi cần |
+
+**Messaging durability note:** RabbitMQ integration events are not cross-service database references. UserDb persists MassTransit transport state locally in `"OutboxState"` / `"OutboxMessage"` (plus framework `"InboxState"` mapping), then the configured delivery service relays to RabbitMQ. Consumer services own their own persistence and idempotency; no physical FK is introduced across service databases.
 
 ---
 
