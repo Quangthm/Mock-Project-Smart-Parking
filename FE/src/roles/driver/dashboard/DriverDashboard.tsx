@@ -4,6 +4,7 @@ import { useApp } from "../../../context/AppContext"
 
 import { driverData as store } from "../data/data"
 import { showUiToast } from "../../../lib/uiToast"
+import { authApi } from "../../../lib/authApi"
 
 import type { ParkingLot } from "../../../lib/types"
 
@@ -55,6 +56,7 @@ export function DriverDashboard() {
   const [accountForm, setAccountForm] = useState({ name: "", phone: "" })
 
   const [profileMessage, setProfileMessage] = useState("")
+  const [accountSaving, setAccountSaving] = useState(false)
   const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
 
   useEffect(() => {
@@ -97,10 +99,10 @@ export function DriverDashboard() {
     }
   }
 
-  function saveAccount(e: FormEvent<HTMLFormElement>) {
+  async function saveAccount(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
-    if (!user) return
+    if (!user || accountSaving) return
 
     const name = accountForm.name.trim()
 
@@ -110,18 +112,20 @@ export function DriverDashboard() {
       return
     }
 
-    const updatedUser = {
-      ...user,
-      name,
-      phone: accountForm.phone.trim() || undefined,
+    setAccountSaving(true)
+    setProfileMessage("")
+    try {
+      const confirmedName = name === user.name ? name : (await authApi.updateOwnProfile(name)).fullName
+      const updatedUser = { ...user, name: confirmedName, phone: accountForm.phone.trim() || undefined }
+      store.saveUser(updatedUser)
+      setUser(updatedUser)
+      setProfileMessage("Name saved to your account. Phone number is stored on this device.")
+      showUiToast("Profile saved", "Your display name has been updated.")
+    } catch (error) {
+      setProfileMessage(error instanceof Error ? error.message : "Unable to save your profile. Please try again.")
+    } finally {
+      setAccountSaving(false)
     }
-
-    store.saveUser(updatedUser)
-
-    setUser(updatedUser)
-
-    setProfileMessage("Your account settings have been saved.")
-    showUiToast("Profile saved", "Your account settings have been saved.")
   }
 
   const navGroups = [
@@ -438,8 +442,8 @@ export function DriverDashboard() {
                     >
                       Cancel
                     </button>
-                    <button className="btn-primary" type="submit">
-                      Save Changes
+                    <button className="btn-primary" type="submit" disabled={accountSaving}>
+                      {accountSaving ? "Saving…" : "Save Changes"}
                     </button>
                   </div>
                 </form>

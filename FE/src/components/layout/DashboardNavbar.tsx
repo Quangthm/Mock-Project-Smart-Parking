@@ -12,6 +12,7 @@ import { AccountSwitcher } from "../account/AccountSwitcher"
 import { PartnerContractDialog } from "../modals/PartnerContractDialog"
 import { listOwnerContractCopies } from "../../lib/partnerContract"
 import { showUiToast } from "../../lib/uiToast"
+import { authApi } from "../../lib/authApi"
 
 const rolePages: Record<string, { id: string; label: string }[]> = {
   driver: [
@@ -84,6 +85,7 @@ export function DashboardNavbar() {
   const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
+  const [profileSaving, setProfileSaving] = useState(false)
   const [recoveryNotice, setRecoveryNotice] = useState(() => sessionStorage.getItem("sp_mfa_recovery_remaining"))
 
   useEffect(() => {
@@ -179,19 +181,28 @@ export function DashboardNavbar() {
     setProfileMsg("")
   }
 
-  function handleSaveProfile(e: React.FormEvent) {
+  async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
-    if (!user) return
+    if (!user || profileSaving) return
     const name = profileForm.name.trim()
     if (!name) {
       setProfileMsg("Please enter your full name.")
       return
     }
-    const updated = { ...user, name, phone: profileForm.phone.trim() || undefined }
-    store.saveUser(updated)
-    setUser(updated)
-    setProfileMsg("Your account settings have been saved.")
-    showUiToast("Profile saved", "Your account settings have been saved.")
+    setProfileSaving(true)
+    setProfileMsg("")
+    try {
+      const confirmedName = name === user.name ? name : (await authApi.updateOwnProfile(name)).fullName
+      const updated = { ...user, name: confirmedName, phone: profileForm.phone.trim() || undefined }
+      store.saveUser(updated)
+      setUser(updated)
+      setProfileMsg("Name saved to your account. Phone number is stored on this device.")
+      showUiToast("Profile saved", "Your display name has been updated.")
+    } catch (error) {
+      setProfileMsg(error instanceof Error ? error.message : "Unable to save your profile. Please try again.")
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   function toggleSearch() {
@@ -531,8 +542,8 @@ export function DashboardNavbar() {
                       >
                         Close
                       </button>
-                      <button type="submit" className="btn-primary text-xs px-4 py-2">
-                        Save Changes
+                      <button type="submit" className="btn-primary text-xs px-4 py-2" disabled={profileSaving}>
+                        {profileSaving ? "Saving…" : "Save Changes"}
                       </button>
                     </div>
                   </form>
