@@ -211,7 +211,7 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) 
                 }
                 await Execute(db, tx, "DELETE FROM structure_backup_policies WHERE site_id=$1", ct, siteId);
                 foreach (var policy in structure.BackupPolicies)
-                    await Execute(db, tx, "INSERT INTO structure_backup_policies(id,site_id,unit_id,vehicle_type,count) VALUES ($1,$2,$3,$4,$5)", ct, Guid.NewGuid(), siteId, policy.UnitId, policy.VehicleType.ToString(), policy.Count);
+                    await Execute(db, tx, "INSERT INTO structure_backup_policies(id,tenant_id,site_id,unit_id,vehicle_type,count) VALUES ($1,$2,$3,$4,$5,$6)", ct, Guid.NewGuid(), site.TenantId, siteId, policy.UnitId, policy.VehicleType.ToString(), policy.Count);
                 if (operationId is { } applied) await Execute(db, tx, "UPDATE structure_operations SET physical_committed=TRUE,updated_at=now() WHERE id=$1", ct, applied);
                 await Execute(db, tx, "INSERT INTO structure_change_audit(id,site_id,actor_id,operation_id,before_state,after_state) VALUES ($1,$2,$3,$4::uuid,$5::jsonb,$6::jsonb)", ct, Guid.NewGuid(), siteId, owner.UserId, operationId, before, AuditState(structure));
                 if (markedSlot is { } marked)
