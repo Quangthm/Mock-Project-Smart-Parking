@@ -44,6 +44,32 @@ export function parentUnitOptions<T extends { id: string; type: string }>(
   return units.filter((unit) => (allowed as string[]).includes(unit.type))
 }
 
+/**
+ * Decides which site the structure screen shows. Pure so the rule can be tested
+ * without a DOM.
+ *
+ * A real site requested by the parent wins. Otherwise the owner's current choice
+ * is kept while the server still serves it, so a background site-list refresh can
+ * never pull the selection back to the first site. The `"all"` sentinel (used by
+ * the dashboard filter) and unknown ids never win. When nothing is valid, fall
+ * back to the first available site, or `""` when there are none.
+ */
+export function resolveActiveSiteId(
+  requestedSiteId: string | null | undefined,
+  currentSiteId: string | null | undefined,
+  siteIds: readonly string[],
+): string {
+  if (
+    requestedSiteId &&
+    requestedSiteId !== "all" &&
+    siteIds.includes(requestedSiteId)
+  ) {
+    return requestedSiteId
+  }
+  if (currentSiteId && siteIds.includes(currentSiteId)) return currentSiteId
+  return siteIds[0] ?? ""
+}
+
 export interface NamedSibling {
   id: string
   name: string

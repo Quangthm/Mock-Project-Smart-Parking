@@ -13,6 +13,7 @@ import {
   validateUnitName,
   type StructureUnitType,
 } from "../../../lib/structureRules"
+import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
 import { ReleasedIdentifierDialog } from "./ReleasedIdentifierDialog"
 import { StructureFeedback } from "./StructureFeedback"
 
@@ -31,12 +32,14 @@ export type UnitDialogModel =
 export function UnitDialog({
   siteId,
   units,
+  modelUrl,
   model,
   onClose,
   onSaved,
 }: {
   siteId: string
   units: Unit[]
+  modelUrl: string
   model: UnitDialogModel
   onClose: () => void
   onSaved: () => void
@@ -84,11 +87,24 @@ export function UnitDialog({
   )
   const showNameError = Boolean(nameError) && (nameTouched || name.trim().length > 0)
 
+  // The site's 3D template is the physical ceiling: a unit cannot declare a layout
+  // limit above the number of bays that model actually provides. `0` still means "no
+  // layout limit" and is always accepted; a failed model read leaves the limit open
+  // and the backend stays the final authority.
+  const modelCapacity = useModelCarCapacity(modelUrl)
+  const bayLimit = modelCapacity.capacity
+
   const capacityValue = Number(capacity)
-  const capacityError =
-    !isRename && (!Number.isInteger(capacityValue) || capacityValue < 0)
-      ? "Enter a non-negative whole number. Zero means no layout limit."
-      : null
+  const capacityError = (() => {
+    if (isRename) return null
+    if (!Number.isInteger(capacityValue) || capacityValue < 0) {
+      return "Enter a non-negative whole number. Zero means no layout limit."
+    }
+    if (bayLimit !== null && capacityValue > bayLimit) {
+      return `This model has ${bayLimit} physical bays, so the layout limit cannot be higher.`
+    }
+    return null
+  })()
 
   const missingParent = isCreate && type === "BLOCK" && !parentId
   const canSubmit =
@@ -240,6 +256,7 @@ export function UnitDialog({
                 className={inputClass}
                 type="number"
                 min="0"
+                max={bayLimit === null ? undefined : bayLimit}
                 step="1"
                 value={capacity}
                 onChange={(event) => {
@@ -257,7 +274,8 @@ export function UnitDialog({
                 </span>
               ) : (
                 <span id="unit-capacity-help" className="block text-[11px] font-normal text-[var(--muted)]">
-                  This is a layout limit, not bookable capacity. It cannot be lower than the live slot count in this unit and its descendants.
+                  This is a layout limit, not bookable capacity. It cannot be lower than the live slot count in this unit and its descendants
+                  {bayLimit === null ? "." : `, nor higher than the ${bayLimit} physical bays in this site's 3D model.`}
                 </span>
               )}
             </label>

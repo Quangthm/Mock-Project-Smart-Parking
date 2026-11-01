@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import {
@@ -90,6 +90,10 @@ export function SlotRegistrationPanel({
   const [formError, setFormError] = useState("")
   const [notice, setNotice] = useState("")
   const [solution, setSolution] = useState<{ mesh: RegistrationMesh; released: ReleasedIdentifier } | null>(null)
+  // Nothing selectable: every template bay is already registered, or the 3D model
+  // has not loaded and the fallback only draws bays for already-registered slots.
+  const noneSelectable = census.unregisteredMeshes === 0
+  const emptyStateId = useId()
 
   useEffect(() => {
     if (!units.some((unit) => unit.id === unitId)) setUnitId(units[0]?.id ?? "")
@@ -280,12 +284,37 @@ export function SlotRegistrationPanel({
           className={registerMode ? "btn-primary px-3 py-1.5 text-xs" : "btn-outline px-3 py-1.5 text-xs"}
           onClick={() => onRegisterModeChange(!registerMode)}
           aria-pressed={registerMode}
+          disabled={noneSelectable && !registerMode}
+          aria-describedby={noneSelectable ? emptyStateId : undefined}
+          title={
+            noneSelectable && !registerMode
+              ? "No unregistered bays are available to select in this site's 3D model."
+              : undefined
+          }
         >
           {registerMode ? "Finish selecting" : "Select meshes in 3D"}
         </button>
       </div>
 
       <StructureFeedback error={formError || undefined} notice={notice} fallback="Registration failed." />
+
+      {noneSelectable && (
+        <div
+          id={emptyStateId}
+          className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-4 text-xs text-[var(--muted)]"
+        >
+          <p className="font-semibold text-[var(--fg)]">No unregistered bays to select</p>
+          <p className="mt-1">
+            This site's 3D model has no unregistered template bay. That happens when every template bay mesh is already
+            mapped to a registered slot code, or when the 3D model has not loaded — the fallback scene only draws bays
+            for slots that are already registered.
+          </p>
+          <p className="mt-1">
+            Next: choose another lot or 3D model, or register bays from the mesh list on a site that still has unmapped
+            bays.
+          </p>
+        </div>
+      )}
 
       {census.unregistered.length > 0 && (
         <details className="rounded-xl border border-[var(--border)] bg-[var(--bg)]">
@@ -314,9 +343,11 @@ export function SlotRegistrationPanel({
       )}
 
       {selection.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-xs text-[var(--muted)]">
-          No template mesh is selected. {registerMode ? "Click an unregistered bay in the 3D view." : "Start selecting to register a bay."}
-        </p>
+        noneSelectable ? null : (
+          <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-xs text-[var(--muted)]">
+            No template mesh is selected. {registerMode ? "Click an unregistered bay in the 3D view." : "Start selecting to register a bay."}
+          </p>
+        )
       ) : (
         <>
           <ul className="space-y-2">

@@ -418,7 +418,8 @@ export function Parking3DViewer({
 
       const slotData = viewerSlotFor(
         mesh,
-        inst.overlayMapping.slotByObjectId.get(mesh.id),
+        inst.overlayMapping.slotByObjectId.get(mesh.id) ??
+          (layout ? undefined : inst.registrationMapping?.slotByObjectId.get(mesh.id)),
       )
 
       const projected =
@@ -910,8 +911,12 @@ export function Parking3DViewer({
 
     reportCensus(registrationMapping, slots.length)
 
-    refreshSlotVisuals()
-  }, [slots, refreshSlotVisuals, reportCensus])
+    // Read the latest repaint callback through its ref instead of depending on it.
+    // Selecting a slot or re-mapping the layout changes `refreshSlotVisuals`'s
+    // identity; depending on it here would re-run the whole scene remap (and its
+    // census report) for a change that only needs a repaint.
+    refreshSlotVisualsRef.current()
+  }, [slots, reportCensus])
 
   // Update visuals whenever selectedSlotId changes
 

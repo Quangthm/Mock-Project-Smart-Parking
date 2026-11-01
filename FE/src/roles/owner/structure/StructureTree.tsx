@@ -22,12 +22,14 @@ export function StructureTree({
   units,
   slots,
   paths,
+  modelUrl,
   onChanged,
 }: {
   siteId: string
   units: Unit[]
   slots: Slot[]
   paths: AccessPath[]
+  modelUrl: string
   onChanged: () => void
 }) {
   const [dialog, setDialog] = useState<UnitDialogModel | null>(null)
@@ -180,6 +182,7 @@ export function StructureTree({
         <UnitDialog
           siteId={siteId}
           units={units}
+          modelUrl={modelUrl}
           model={dialog}
           onClose={() => setDialog(null)}
           onSaved={() => {

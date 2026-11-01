@@ -1,7 +1,8 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   parkingApi,
+  type AccessPath,
   type Site,
   type Slot,
   type Structure,
@@ -18,6 +19,7 @@ import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
 import { formatSlotLabel, mapSlotVisualState, type PhysicalState, type ReservationState } from "../../../lib/operationalLayout"
 import { suggestSlotCode } from "../../../lib/3d/meshSlotMapping"
+import { resolveActiveSiteId } from "../../../lib/structureRules"
 import { AccessPathsPanel } from "./AccessPathsPanel"
 import { CapacitySummary } from "./CapacitySummary"
 import { RegisteredSlotsPanel } from "./RegisteredSlotsPanel"
@@ -30,10 +32,50 @@ import { structureErrorMessage } from "./StructureFeedback"
 interface ParkingStructureProps {
   sites?: Site[]
   selectedSiteId?: string
-  onChanged?: () => void
+  /**
+   * Lets the parent follow the site the Owner picks in this screen's dropdown.
+   * Kept optional so the screen still works when it is rendered on its own.
+   */
+  onSiteChange?: (siteId: string) => void
 }
 
 const inputClass = "input w-full text-sm"
+
+// Stable empty defaults: a fresh `[]` per render would change the `modelSlots`
+// memo identity on every render while the structure is still loading, which in
+// turn re-arms the viewer's slot-sync effect and its census report.
+const EMPTY_UNITS: Unit[] = []
+const EMPTY_SLOTS: Slot[] = []
+const EMPTY_PATHS: AccessPath[] = []
+
+interface MeshCensus {
+  registeredMeshes: number
+  unregisteredMeshes: number
+  unmatchedSlots: number
+  unregistered: Array<{ key: string; name: string }>
+}
+
+const EMPTY_CENSUS: MeshCensus = {
+  registeredMeshes: 0,
+  unregisteredMeshes: 0,
+  unmatchedSlots: 0,
+  unregistered: [],
+}
+
+/**
+ * Stable signature for a census report. The viewer publishes a brand-new object
+ * on every model remap, so comparing the numbers and mesh keys is what makes the
+ * update idempotent: an unchanged report must not push new state (and therefore
+ * a new render) back into this screen.
+ */
+function censusSignature(census: MeshCensus): string {
+  return [
+    census.registeredMeshes,
+    census.unregisteredMeshes,
+    census.unmatchedSlots,
+    census.unregistered.map((mesh) => `${mesh.key}\u0000${mesh.name}`).join("\u0001"),
+  ].join("\u0002")
+}
 
 // Reservation appearances SPARK-228 keeps distinct from a normal reservation.
 const RESERVATION_APPEARANCE_MAP: Record<string, { label: string; status: "reserved" }> = {
@@ -100,7 +142,7 @@ function categoriesOf(slot: Slot) {
     : [slot.primaryVehicleType ?? slot.vehicleType].filter(Boolean)
 }
 
-export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: ParkingStructureProps) {
+export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: ParkingStructureProps) {
   const { user } = useApp()
   const [siteId, setSiteId] = useState("")
   const [structure, setStructure] = useState<Structure | null>(null)
@@ -111,22 +153,27 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
   const [modelStorageReady, setModelStorageReady] = useState(false)
   const [registerMode, setRegisterMode] = useState(false)
   const [registrationSelection, setRegistrationSelection] = useState<RegistrationMesh[]>([])
-  const [census, setCensus] = useState<{
-    registeredMeshes: number
-    unregisteredMeshes: number
-    unmatchedSlots: number
-    unregistered: Array<{ key: string; name: string }>
-  }>({ registeredMeshes: 0, unregisteredMeshes: 0, unmatchedSlots: 0, unregistered: [] })
+  const [census, setCensus] = useState<MeshCensus>(EMPTY_CENSUS)
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [compatibilitySlotId, setCompatibilitySlotId] = useState<string | null>(null)
   const [backupBusy, setBackupBusy] = useState(false)
   const loadedSiteRef = useRef<string | null>(null)
+  // Signature of the last (requested site + available site ids) pair the site effect
+  // resolved. It lets the effect bail out — without touching state at all — when the
+  // parent hands us a brand-new `sites` array with the same contents.
+  const resolvedSiteSignatureRef = useRef<string | null>(null)
 
+  // The site dropdown is authoritative. The parent's `selectedSiteId` is applied on
+  // every change of the request OR of the available site set, so a site that was
+  // requested before the server list included it is still honoured once it appears.
+  // A background site-list refresh with identical contents produces the same
+  // signature and returns early, so it can neither churn `siteId` nor reset state.
   useEffect(() => {
-    setSiteId((current) => {
-      if (selectedSiteId && selectedSiteId !== "all" && sites.some((site) => site.id === selectedSiteId)) return selectedSiteId
-      return sites.some((site) => site.id === current) ? current : (sites[0]?.id ?? "")
-    })
+    const siteIds = sites.map((site) => site.id)
+    const signature = `${selectedSiteId ?? ""}\u0000${siteIds.join("\u0001")}`
+    if (resolvedSiteSignatureRef.current === signature) return
+    resolvedSiteSignatureRef.current = signature
+    setSiteId((current) => resolveActiveSiteId(selectedSiteId, current, siteIds))
   }, [selectedSiteId, sites])
 
   useEffect(() => {
@@ -147,7 +194,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
       setCompatibilitySlotId(null)
       setRegisterMode(false)
       setRegistrationSelection([])
-      setCensus({ registeredMeshes: 0, unregisteredMeshes: 0, unmatchedSlots: 0, unregistered: [] })
+      setCensus(EMPTY_CENSUS)
     }
     setError("")
     if (!siteId) {
@@ -162,11 +209,18 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     return () => { current = false }
   }, [siteId, reload])
 
-  const units = structure?.units ?? []
-  const slots = structure?.slots ?? []
-  const paths = structure?.paths ?? []
+  const units = structure?.units ?? EMPTY_UNITS
+  const slots = structure?.slots ?? EMPTY_SLOTS
+  const paths = structure?.paths ?? EMPTY_PATHS
   const ownerLot = useMemo(() => store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === siteId), [user?.id, siteId, reload])
   const unitById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units])
+
+  // One resolved model URL drives both the 3D viewer and the capacity upper bound in
+  // the unit dialog, so the two can never disagree about which template is in use.
+  const modelUrl =
+    savedModelUrl ??
+    (ownerLot?.modelUrl?.startsWith("blob:") ? undefined : ownerLot?.modelUrl) ??
+    ALLOWED_PARKING_MODELS[ownerLot?.type ?? "outdoor"].path
 
   // The 3D viewer needs the two-axis projection, not only a single status, so a
   // BACKUP hold keeps its cyan appearance (SPARK-228). The single-axis `status`
@@ -199,6 +253,25 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
   const selectedSlot = slots.find((slot) => slot.id === selectedSlotId) ?? null
   const compatibilitySlot = slots.find((slot) => slot.id === compatibilitySlotId) ?? null
 
+  // Idempotent census sink. The viewer reports a new object on every remap; returning
+  // the current state for an unchanged report makes React bail out, which is what
+  // stops the remap -> report -> re-render feedback cycle.
+  const applyCensus = useCallback((next: MeshCensus) => {
+    setCensus((current) =>
+      censusSignature(current) === censusSignature(next) ? current : next,
+    )
+  }, [])
+
+  // Selecting a site is both a local change and a signal to the parent, so the
+  // parent's `selectedSiteId` follows the Owner instead of fighting them.
+  const handleSiteSelect = useCallback(
+    (nextSiteId: string) => {
+      setSiteId(nextSiteId)
+      onSiteChange?.(nextSiteId)
+    },
+    [onSiteChange],
+  )
+
   function location(unitId: string) {
     const names: string[] = []
     const seen = new Set<string>()
@@ -219,9 +292,11 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
     })
   }
 
+  // A structural change only needs to re-read the STRUCTURE. It must not ask the
+  // parent to reload its site list: that produced a new `sites` identity on every
+  // edit and let the parent's refresh race the screen's own state.
   function refresh() {
     setReload((value) => value + 1)
-    onChanged?.()
   }
 
   // SPARK-228 backup mark/clear, carried into the P3 selected-slot card so the
@@ -252,7 +327,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
         actions={
           <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
             <span>Site</span>
-            <RoundedSelect className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)} disabled={!sites.length}>
+            <RoundedSelect className={inputClass} value={siteId} onChange={(event) => handleSiteSelect(event.target.value)} disabled={!sites.length}>
               {!sites.length && <option value="">No sites available</option>}
               {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
             </RoundedSelect>
@@ -270,10 +345,10 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
       {loading && !structure && <p role="status" className="rounded-xl border border-[var(--border)] p-6 text-sm text-[var(--muted)]">Loading parking structure…</p>}
 
       {structure && (
-        <>
+        <Fragment key={siteId}>
           {loading && <p role="status" className="text-xs text-[var(--muted)]">Refreshing the structure after the last change…</p>}
 
-          <ServiceAvailabilityPanel key={siteId} siteId={siteId} structure={structure} onChanged={refresh} />
+          <ServiceAvailabilityPanel siteId={siteId} structure={structure} onChanged={refresh} />
           <CapacitySummary structure={structure} />
 
           {!slots.length && (
@@ -284,7 +359,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
           )}
 
           <div className="grid gap-4 xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
-            <StructureTree key={siteId} siteId={siteId} units={units} slots={slots} paths={paths} onChanged={refresh} />
+            <StructureTree siteId={siteId} units={units} slots={slots} paths={paths} modelUrl={modelUrl} onChanged={refresh} />
 
             <div className="space-y-4">
               <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Owner parking 3D model">
@@ -305,7 +380,8 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
                   <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
                 ) : (
                   <Parking3DViewer
-                    modelUrl={savedModelUrl ?? (ownerLot?.modelUrl?.startsWith("blob:") ? undefined : ownerLot?.modelUrl) ?? ALLOWED_PARKING_MODELS[ownerLot?.type ?? "outdoor"].path}
+                    key={siteId}
+                    modelUrl={modelUrl}
                     lotType={ownerLot?.type ?? "outdoor"}
                     slots={modelSlots}
                     selectedSlotId={registerMode ? null : selectedSlotId}
@@ -313,7 +389,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
                     registerMode={registerMode}
                     selectedMeshKeys={selectedMeshKeys}
                     onToggleMesh={toggleMesh}
-                    onMeshCensus={setCensus}
+                    onMeshCensus={applyCensus}
                     height={380}
                   />
                 )}
@@ -365,7 +441,6 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
               </section>
 
               <SlotRegistrationPanel
-                key={siteId}
                 siteId={siteId}
                 units={units}
                 registeredSlots={slots}
@@ -380,7 +455,6 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
           </div>
 
           <RegisteredSlotsPanel
-            key={siteId}
             siteId={siteId}
             units={units}
             slots={slots}
@@ -390,7 +464,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
             onChanged={refresh}
           />
 
-          <AccessPathsPanel key={siteId} siteId={siteId} units={units} paths={paths} onChanged={refresh} />
+          <AccessPathsPanel siteId={siteId} units={units} paths={paths} onChanged={refresh} />
 
           <details className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-[var(--raised)]">
@@ -409,7 +483,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
               <BackupCapacityPanel structure={structure} onChanged={refresh} />
             </div>
           </details>
-        </>
+        </Fragment>
       )}
 
       {compatibilitySlot && (
