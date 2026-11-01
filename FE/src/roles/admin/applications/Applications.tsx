@@ -13,6 +13,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { request } from "../../../lib/authApi"
 import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 
 export function Applications() {
   const { user } = useApp()
@@ -382,7 +383,7 @@ export function Applications() {
                   color: app.status === "approved" ? "#22c55e" : "#ef4444",
                 }}
               >
-                {app.status.toUpperCase()}
+                {formatStatus(app.status)}
               </span>
             </div>
           ))}

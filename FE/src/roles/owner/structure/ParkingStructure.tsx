@@ -84,6 +84,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
   const [savedModelUrl, setSavedModelUrl] = useState<string | null>(null)
   const [modelStorageReady, setModelStorageReady] = useState(false)
+  const [showModel, setShowModel] = useState(true)
   const [unitForm, setUnitForm] = useState({ type: "FLOOR", name: "", parentId: "", capacity: "0" })
   const [slotForm, setSlotForm] = useState({ unitId: "", code: "", vehicleType: "CAR", type: "STANDARD" })
 
@@ -265,10 +266,17 @@ export function ParkingStructure({ sites = [], selectedSiteId, onChanged }: Park
         <>
           {!slots.length && <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">No live parking slots are configured for this site yet.</p>}
           <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Owner parking 3D model">
-            <div className="mb-3"><h2 className="text-base font-semibold">Site 3D model</h2><p className="mt-1 text-sm text-[var(--muted)]">The same model used in Operator monitoring. Select a bay to inspect its live record where one exists.</p></div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0"><h2 className="text-base font-semibold">Site 3D model</h2><p className="mt-1 text-sm text-[var(--muted)]">The same model used in Operator monitoring. Select a bay to inspect its live record where one exists.</p></div>
+              <button type="button" className="btn-outline shrink-0" aria-controls="owner-parking-model" aria-expanded={showModel} onClick={() => setShowModel(value => !value)}>{showModel ? "Hide model" : "Show model"}</button>
+            </div>
+            <div id="owner-parking-model" className="mt-4" hidden={!showModel}>
+            {showModel && <>
             {!modelStorageReady && ownerLot?.modelUrl?.startsWith("blob:") ? <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
               : savedModelUrl || (ownerLot && !ownerLot.modelUrl?.startsWith("blob:")) ? <Parking3DViewer modelUrl={savedModelUrl ?? ownerLot?.modelUrl ?? ALLOWED_PARKING_MODELS[ownerLot!.type].path} lotType={ownerLot?.type ?? "outdoor"} slots={modelSlots} selectedSlotId={selectedSlot?.id} onSelectSlot={slot => setSelectedSlot(slots.find(item => item.id === slot.id) ?? null)} height={360} />
               : <p className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">No Owner 3D model is available for this site in this browser profile.</p>}
+            </>}
+            </div>
           </section>
           <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] sm:grid-cols-3 lg:grid-cols-6">
             <Metric label="Physical slots" value={slots.length} tone="available" />

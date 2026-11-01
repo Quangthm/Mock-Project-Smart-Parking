@@ -16,11 +16,12 @@
 .app-toast-viewport {
   position: fixed;
   z-index: 1500;
-  top: calc(72px + env(safe-area-inset-top));
-  right: max(16px, env(safe-area-inset-right));
-  width: min(390px, calc(100vw - 32px));
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  width: min(360px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
   pointer-events: none;
 }
+.app-toast-viewport[data-placement="below-header"] { top: calc(72px + env(safe-area-inset-top)); }
 .app-toast {
   --toast-accent: var(--primary);
   position: relative;
@@ -73,7 +74,8 @@
 }
 @keyframes sp-toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (max-width: 640px) {
-  .app-toast-viewport { top: calc(68px + env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: min(390px, calc(100vw - 24px)); }
+  .app-toast-viewport { top: calc(10px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); width: min(360px, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+  .app-toast-viewport[data-placement="below-header"] { top: calc(68px + env(safe-area-inset-top)); }
 }
 
 /* Controls answer immediately on press; hover changes their surface, not size. */

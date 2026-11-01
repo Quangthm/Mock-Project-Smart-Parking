@@ -5,7 +5,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import type { UsersViewModel } from "./useUsers"
 
 export function UsersToolbar({ model }: { model: UsersViewModel }) {
-  const { search, setSearch, query, saving, handleSearchSubmit, handleResetFilters, setFilter } = model
+  const { search, setSearch, query, saving, handleSearchSubmit, handleResetFilters, setFilter, retryList } = model
   return (
       <form
         className="card flex flex-wrap items-center gap-3 p-4"
@@ -89,6 +89,7 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
               Reset
             </Button>
           )}
+          <Button variant="outline" type="button" onClick={retryList} disabled={saving}>Refresh</Button>
         </div>
       </form>
 

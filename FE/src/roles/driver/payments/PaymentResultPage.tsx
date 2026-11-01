@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 import { useApp } from "../../../context/AppContext"
 import { classifyPaymentStatus, isPaymentOrderId, paymentApi, type PaymentStatusResponse } from "../../../lib/paymentApi"
+import { formatStatus } from "../../../lib/formatStatus"
 import "./payment-checkout.css"
 
 type ResultState = "checking" | "success" | "failed" | "pending" | "unavailable"
@@ -55,7 +56,7 @@ export function PaymentResultPage() {
     <div className="payment-result-brand"><BrandLogo height={38} /><BrandWordmark height={21} /></div>
     <span className={`payment-result-icon is-${result}`} aria-hidden="true">{result === "success" ? "✓" : result === "failed" ? "×" : "·"}</span>
     <h1>{title}</h1><p>{description}</p>
-    {detail && <dl className="payment-result-facts"><div><dt>Order code</dt><dd>{detail.orderCode}</dd></div><div><dt>Amount</dt><dd>{detail.amount.toLocaleString("vi-VN")} VND</dd></div><div><dt>Status</dt><dd>{detail.status}</dd></div></dl>}
+    {detail && <dl className="payment-result-facts"><div><dt>Order code</dt><dd>{detail.orderCode}</dd></div><div><dt>Amount</dt><dd>{detail.amount.toLocaleString("vi-VN")} VND</dd></div><div><dt>Status</dt><dd>{formatStatus(detail.status)}</dd></div></dl>}
     {orderId && <p className="payment-result-reference">Payment order: {orderId}</p>}
     <div className="payment-result-actions">
       {(result === "pending" || (result === "unavailable" && !!paymentApi.rememberedCheckout(orderId))) && <button type="button" className="btn-primary" onClick={() => setRefresh(value => value + 1)}>Check status again</button>}

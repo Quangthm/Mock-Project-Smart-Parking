@@ -33,11 +33,11 @@ const LOT_TYPE_INFO: Record<LotType, {
   label: string
   hasFloors: boolean
 }> = {
-  outdoor: { icon: "🌳", label: "Outdoor Lot", hasFloors: false },
+  outdoor: { icon: "leaf", label: "Outdoor Lot", hasFloors: false },
 
-  basement: { icon: "🏢", label: "Basement Parking", hasFloors: true },
+  basement: { icon: "parking", label: "Basement Parking", hasFloors: true },
 
-  "multi-storey": { icon: "🏗️", label: "Multi-Storey", hasFloors: true },
+  "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true },
 }
 
 const DEVICE_OPTIONS = [
@@ -507,8 +507,10 @@ export function OnboardingWizard({
                 LOT_TYPE_INFO,
               ) as [LotType, typeof LOT_TYPE_INFO[LotType]][]).map(
                 ([type, info]) => (
-                  <div
+                  <button
                     key={type}
+                    type="button"
+                    aria-pressed={lotType === type}
                     onClick={() => handleLotTypeSelect(type)}
                     style={{
                       padding: "1rem 1.25rem",
@@ -517,12 +519,14 @@ export function OnboardingWizard({
                         lotType === type ? "var(--primary)" : "var(--border)"
                       }`,
                       cursor: "pointer",
+                      width: "100%",
+                      textAlign: "left",
                       background:
                         lotType === type ? "var(--primary)08" : "var(--bg)",
                       display: "flex",
                       alignItems: "center",
                       gap: "1rem",
-                      transition: "all 0.2s",
+                      transition: "border-color 0.2s, background-color 0.2s, transform 0.2s",
                     }}
                   >
                     <span
@@ -564,7 +568,7 @@ export function OnboardingWizard({
                         <UntitledIcon name="check" size={18} />
                       </span>
                     )}
-                  </div>
+                  </button>
                 ),
               )}
             </div>

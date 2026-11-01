@@ -42,17 +42,19 @@ export function SiteForm({ site, onSaved, onCancel }: {
               ([type, info]) => {
                 const selected = lotType === type
                 return (
-                  <div
+                  <button
                     key={type}
+                    type="button"
+                    aria-pressed={selected}
                     onClick={() => chooseLotType(type)}
-                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] flex flex-col justify-between ${
                       selected
                         ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--fg)] shadow-xs"
                         : "border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--border)]/80"
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xl">{info.icon}</span>
+                      <span className="text-[var(--primary)]"><UntitledIcon name={info.icon} size={22} /></span>
                       {selected && (
                         <span className="text-[var(--primary)]">
                           <UntitledIcon name="check" size={14} />
@@ -63,7 +65,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
                       <div className="font-semibold text-xs text-[var(--fg)]">{info.label}</div>
                       <div className="text-[10px] text-[var(--muted)] line-clamp-1">{info.desc}</div>
                     </div>
-                  </div>
+                  </button>
                 )
               },
             )}

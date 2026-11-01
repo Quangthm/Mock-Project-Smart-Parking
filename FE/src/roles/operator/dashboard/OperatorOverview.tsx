@@ -4,6 +4,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import type { Booking, SupportTicket, AppNotification } from "../../../lib/types"
 import type { OperatorSite } from "../../../lib/operatorApi"
+import { formatStatus } from "../../../lib/formatStatus"
 
 interface OperatorOverviewProps {
   lot: OperatorSite | null
@@ -395,7 +396,7 @@ export function OperatorOverview({
                             : "bg-blue-500/15 text-blue-600"
                         }`}
                       >
-                        {ticket.status}
+                        {formatStatus(ticket.status)}
                       </span>
                     </div>
                     <p className="mt-1 line-clamp-2 text-[var(--muted)]">{ticket.message}</p>

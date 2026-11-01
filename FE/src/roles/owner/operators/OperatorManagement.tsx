@@ -13,6 +13,7 @@ import { CreateOperatorForm } from "./CreateOperatorForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { watchOperators } from "../../../lib/operatorLive"
 import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 
 export function OperatorManagement({
   selectedSiteId,
@@ -192,7 +193,8 @@ export function OperatorManagement({
           </div>
           <button
             type="button"
-            className="text-emerald-700 dark:text-emerald-300 hover:opacity-75"
+            className="grid size-11 place-items-center rounded-full text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300 focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+            aria-label="Dismiss operator notice"
             onClick={() => setMessage("")}
           >
             <UntitledIcon name="x" size={12} />
@@ -216,7 +218,8 @@ export function OperatorManagement({
           {searchTerm && (
             <button
               type="button"
-              className="text-[var(--muted)] hover:text-[var(--fg)]"
+              className="grid size-11 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              aria-label="Clear operator search"
               onClick={() => setSearchTerm("")}
             >
               <UntitledIcon name="x" size={12} />
@@ -274,7 +277,7 @@ export function OperatorManagement({
                           <div className="font-semibold text-xs text-[var(--fg)]">
                             {op.fullName}
                           </div>
-                          <div className="text-[11px] text-[var(--muted)] font-mono">
+                          <div className="text-xs text-[var(--muted)]">
                             {op.email}
                           </div>
                         </div>
@@ -282,8 +285,8 @@ export function OperatorManagement({
                     </td>
 
                     <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase">
-                        {op.status || "active"}
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${op.status === "active" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>
+                        {formatStatus(op.status)}
                       </span>
                     </td>
 
@@ -370,7 +373,8 @@ export function OperatorManagement({
                 </div>
                 <button
                   type="button"
-                  className="text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
+                  className="grid size-11 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  aria-label="Close site assignment"
                   onClick={closeTransferModal}
                 >
                   <UntitledIcon name="x" size={16} />

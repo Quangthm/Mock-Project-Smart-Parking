@@ -66,7 +66,7 @@ export function AppToastHost() {
     return () => window.clearTimeout(timer)
   }, [active?.id])
 
-  return <div className="app-toast-viewport">
+  return <div className="app-toast-viewport" data-placement={active?.title === "Signed out" ? "below-header" : "top"}>
     {active && <div key={active.id} className="app-toast" data-tone={active.tone} role={active.tone === "error" ? "alert" : "status"}>
       <span className="app-toast-mark" aria-hidden="true">{active.tone === "success" ? "✓" : active.tone === "error" ? "!" : "i"}</span>
       <span className="app-toast-copy"><strong>{active.title}</strong><span>{active.message}</span></span>

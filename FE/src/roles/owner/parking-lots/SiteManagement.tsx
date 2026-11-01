@@ -1,12 +1,18 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import type { Site } from "../../../lib/parkingApi"
+import { parkingApi } from "../../../lib/parkingApi"
+import { useState } from "react"
+import { createPortal } from "react-dom"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { useSiteManagement } from "./useSiteManagement"
 import { SiteManagementDialogs } from "./SiteManagementDialogs"
+import { OnboardingWizard } from "./CreateParkingLotForOwner"
 
 export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, created: boolean) => void }) {
   const model = useSiteManagement(onSiteCreated)
+  const [showCreateWizard, setShowCreateWizard] = useState(false)
+  const [createError, setCreateError] = useState("")
   const {
     sites, operators, loading, error, message, reload, setReload,
     editingSite, setEditingSite, showFormModal, setShowFormModal,
@@ -32,8 +38,8 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
             className="btn-primary text-xs px-3.5 py-2 font-medium flex items-center gap-1.5"
             disabled={loading}
             onClick={() => {
-              setEditingSite(undefined)
-              setShowFormModal(true)
+              setCreateError("")
+              setShowCreateWizard(true)
             }}
           >
             <UntitledIcon name="plus" size={14} />
@@ -57,7 +63,8 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
           </div>
           <button
             type="button"
-            className="text-emerald-700 dark:text-emerald-300 hover:opacity-75"
+            className="grid size-11 place-items-center rounded-full text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300 focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+            aria-label="Dismiss site notice"
             onClick={() => setMessage("")}
           >
             <UntitledIcon name="x" size={12} />
@@ -81,7 +88,8 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
           {searchTerm && (
             <button
               type="button"
-              className="text-[var(--muted)] hover:text-[var(--fg)]"
+              className="grid size-11 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              aria-label="Clear site search"
               onClick={() => setSearchTerm("")}
             >
               <UntitledIcon name="x" size={12} />
@@ -243,6 +251,21 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
       )}
 
       <SiteManagementDialogs model={model} />
+      {showCreateWizard && typeof document !== "undefined" && createPortal(
+        <div role="dialog" aria-modal="true" aria-label="Add parking site" className="fixed inset-0 z-[1000] overflow-y-auto bg-black/75 p-3 sm:p-6">
+          <div className="card mx-auto w-full max-w-[800px] p-3 sm:p-5">
+            <div className="flex justify-end"><button type="button" className="btn-outline" onClick={() => setShowCreateWizard(false)} aria-label="Close add site form">Close</button></div>
+            {createError && <p role="alert" className="mx-4 mt-4 text-[var(--badge-danger-strong)]">{createError}</p>}
+            <OnboardingWizard onComplete={(lot) => {
+              void parkingApi.list().then((freshSites) => {
+                const created = freshSites.find(site => site.id === lot.id)
+                if (!created) throw new Error("Site was created, but the server list has not refreshed yet. Use Refresh to load it.")
+                setShowCreateWizard(false)
+                handleSavedSite(created)
+              }).catch(err => setCreateError(err instanceof Error ? err.message : "Refresh the site list to see the new site."))
+            }} />
+          </div>
+        </div>, document.body)}
     </section>
   )
 }

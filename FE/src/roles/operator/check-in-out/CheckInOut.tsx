@@ -4,6 +4,7 @@ import { ParkingHistory, type ParkingHistoryRecord } from "../../../components/h
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { AuthApiError } from "../../../lib/authApi"
 import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 import {
   reservationApi,
   type OperatorSite,
@@ -127,7 +128,7 @@ export function CheckInOut({
       const match = await reservationApi.lookup(lot.id, term)
       const expectedStatus = mode === "check-in" ? "confirmed" : "checked-in"
       if (match.status !== expectedStatus) {
-        setQuickError(`Reservation ${match.id} is ${match.status} and cannot use this gate.`)
+        setQuickError(`Reservation ${match.id} is ${formatStatus(match.status)} and cannot use this gate.`)
         return
       }
       const result: QuickGateResult = {
@@ -610,7 +611,7 @@ export function CheckInOut({
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">Current Status:</span>
-                <span className="font-semibold uppercase">{confirmingAction.booking.status}</span>
+                <span className="font-semibold">{formatStatus(confirmingAction.booking.status)}</span>
               </div>
             </div>
 

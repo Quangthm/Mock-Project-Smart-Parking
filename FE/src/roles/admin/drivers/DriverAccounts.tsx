@@ -7,6 +7,7 @@ import type { User } from "../../../lib/types"
 import { adminData as store } from "../data/data"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 
 function accountStatus(driver: User) {
   if (driver.accountStatus === "suspended") return "Suspended"
@@ -379,8 +380,8 @@ export function DriverAccounts() {
                   key={booking.id}
                   style={{ margin: "0.4rem 0", fontSize: "0.82rem" }}
                 >
-                  {booking.id} · {booking.lotName} · {booking.status} /{" "}
-                  {booking.paymentStatus ?? "pending"} ·{" "}
+                  {booking.id} · {booking.lotName} · {formatStatus(booking.status)} /{" "}
+                  {formatStatus(booking.paymentStatus ?? "pending")} ·{" "}
                   {booking.amount.toLocaleString("vi-VN")} VND
                 </p>
               ))}
@@ -402,7 +403,7 @@ export function DriverAccounts() {
                     key={ticket.id}
                     style={{ margin: "0.4rem 0", fontSize: "0.82rem" }}
                   >
-                    Ticket {ticket.id} · {ticket.subject} · {ticket.status}
+                    Ticket {ticket.id} · {ticket.subject} · {formatStatus(ticket.status)}
                   </p>
                 ))}
               {store
