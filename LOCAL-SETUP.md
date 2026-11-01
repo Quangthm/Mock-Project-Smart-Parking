@@ -311,6 +311,15 @@ PostgreSQL chỉ chạy init SQL khi volume **mới hoàn toàn**. Với volume 
 
 Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ liệu đang dùng. Volume đã init theo baseline mới chạy lại `.\setup.ps1` là an toàn (migration skip và chỉ verify).
 
+**Sau khi `git pull` một branch có thay đổi SQL:** volume đã tồn tại **không** tự nhận script mới — phải chạy lại bước migration. Runner áp nhóm `$features` tăng dần (ví dụ `05.16-Parking-Owner-Onboarding.sql`, `overlay/parking-structure-maintenance.sql`) trên **cả** DB trống và DB đã ở schema hiện tại, rồi verify bảng bắt buộc (Parking hiện gồm `structure_maintenance_windows`):
+
+```powershell
+.\setup.ps1 -SkipRestore                                        # cả 6 DB + đồng bộ user-secrets
+.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .   # hoặc chỉ một DB
+```
+
+Rebuild image app là bước **riêng** (migration không build lại service): xem [QUICK_START.md](QUICK_START.md#8-pull-branch-mới--cập-nhật-image-service-và-schema-db).
+
 #### Volume cũ thiếu bảng overlay
 
 Volume tạo trước baseline mới ở trạng thái legacy — thiếu các bảng như `structure_synchronizations`, `structure_release_receipts`, `tenants`, … Runner sẽ dừng và yêu cầu dựng lại:
