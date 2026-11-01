@@ -7,6 +7,9 @@ import type { LotType } from "../../../lib/types"
 import { ALLOWED_PARKING_MODELS, validateModelUpload } from "../../../lib/3d/parking3DConfig"
 import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
 import { deleteOwnerModel, loadOwnerModelUrl, saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
+import { CITIES, resolveSiteAddress, parseSiteAddress } from "./addressComposition"
+
+export { CITIES }
 
 export const LOT_TYPE_INFO: Record<LotType, {
   icon: string
@@ -18,15 +21,6 @@ export const LOT_TYPE_INFO: Record<LotType, {
   basement: { icon: "🏢", label: "Basement Parking", hasFloors: true, desc: "Underground parking with multiple levels" },
   "multi-storey": { icon: "🏗️", label: "Multi-Storey", hasFloors: true, desc: "Multi-storey parking building" },
 }
-
-export const CITIES = [
-  { code: "HCM", name: "TP. Hồ Chí Minh", defaultLat: 10.7769, defaultLng: 106.7009, districts: ["Quận 1", "Quận 3", "TP. Thủ Đức", "Quận Bình Thạnh", "Quận 7", "Quận Tân Bình"] },
-  { code: "HN", name: "Hà Nội", defaultLat: 21.0285, defaultLng: 105.8542, districts: ["Quận Hoàn Kiếm", "Quận Ba Đình", "Quận Cầu Giấy", "Quận Đống Đa", "Quận Nam Từ Liêm"] },
-  { code: "DN", name: "Đà Nẵng", defaultLat: 16.0544, defaultLng: 108.2022, districts: ["Quận Hải Châu", "Quận Sơn Trà", "Quận Thanh Khê", "Quận Ngũ Hành Sơn"] },
-  { code: "BD", name: "Bình Dương", defaultLat: 10.9804, defaultLng: 106.6519, districts: ["TP. Thủ Dầu Một", "TP. Thuận An", "TP. Dĩ An"] },
-  { code: "HP", name: "Hải Phòng", defaultLat: 20.8449, defaultLng: 106.6881, districts: ["Quận Hồng Bàng", "Quận Ngô Quyền", "Quận Lê Chân"] },
-  { code: "CT", name: "Cần Thơ", defaultLat: 10.0452, defaultLng: 105.7469, districts: ["Quận Ninh Kiều", "Quận Bình Thủy", "Quận Cái Răng"] },
-]
 
 export const DEVICE_OPTIONS = [
   { type: "camera", label: "AI Camera System", desc: "Automatic license plate recognition (ANPR)" },
@@ -55,7 +49,6 @@ type SiteDraft = {
     code: string
     name: string
     address: string
-    totalSlots: string
     floors: string
     latitude: number
     longitude: number
@@ -126,33 +119,53 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     setCustomModelFile(file)
   }
 
-  // Address Parsing
-  const [selectedCity, setSelectedCity] = useState(draft?.selectedCity ?? CITIES[0].code)
-  const [district, setDistrict] = useState(draft?.district ?? CITIES[0].districts[0])
-  const [streetAddress, setStreetAddress] = useState(draft?.streetAddress ?? (site?.address ? site.address.split(",")[0].trim() : ""))
+  // Address parsing. When editing, the stored address is split back into its
+  // structured parts so that a name-only save does not rewrite the district or
+  // city. The previous hardcoded Quận 1 default rewrote every non-HCM address.
+  const parsedAddress = useMemo(() => parseSiteAddress(site?.address), [site?.address])
+  const initialCityCode = draft?.selectedCity ?? parsedAddress.cityCode ?? CITIES[0].code
+  const initialCity = CITIES.find((city) => city.code === initialCityCode) ?? CITIES[0]
+  const [selectedCity, setSelectedCity] = useState(initialCityCode)
+  const [district, setDistrict] = useState(draft?.district ?? parsedAddress.district ?? initialCity.districts[0])
+  const [streetAddress, setStreetAddress] = useState(draft?.streetAddress ?? parsedAddress.street ?? "")
+  // Compose a new address only after the Owner edits city, district or street.
+  const [addressTouched, setAddressTouched] = useState(false)
   const isManualCode = Boolean(site?.code)
+
+  // IoT devices and base pricing are not part of the Facility contract, so they
+  // are read back from the Owner store this form already writes on save.
+  const cachedLot = useMemo(
+    () => (site ? store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id) : undefined),
+    [site, user?.id],
+  )
 
   const [form, setForm] = useState({
     code: site?.code ?? "",
     name: site?.name ?? "",
     address: site?.address ?? "",
-    totalSlots: site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "30",
     floors: "1",
     latitude: site?.latitude ?? CITIES[0].defaultLat,
     longitude: site?.longitude ?? CITIES[0].defaultLng,
     isActive: site?.isActive ?? true,
-    hourlyRate: 15000,
-    dailyRate: 100000,
+    hourlyRate: cachedLot?.hourlyRate ?? 15000,
+    dailyRate: cachedLot?.dailyRate ?? 100000,
     ...draft?.form,
   })
 
-  const [devices, setDevices] = useState<Record<string, boolean>>({
-    camera: true,
-    barrier: true,
-    sensor: true,
-    rfid: false,
-    "ev-charger": false,
-    ...draft?.devices,
+  const [devices, setDevices] = useState<Record<string, boolean>>(() => {
+    const defaults: Record<string, boolean> = {
+      camera: true,
+      barrier: true,
+      sensor: true,
+      rfid: false,
+      "ev-charger": false,
+    }
+    if (draft?.devices) return { ...defaults, ...draft.devices }
+    if (cachedLot) {
+      const installed = new Set<string>(cachedLot.devices.map((device) => device.type))
+      for (const type of Object.keys(defaults)) defaults[type] = installed.has(type)
+    }
+    return defaults
   })
 
   const [busy, setBusy] = useState(false)
@@ -164,14 +177,18 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     return `SPK-${selectedCity}-${slug}`
   }, [selectedCity, form.name])
 
-  // Computed full address
-  const fullAddress = useMemo(() => {
-    const cityObj = CITIES.find((c) => c.code === selectedCity)
-    const parts = [streetAddress.trim(), district, cityObj?.name].filter(Boolean)
-    return parts.join(", ")
-  }, [streetAddress, district, selectedCity])
+  // Computed full address. An untouched edit keeps the server address verbatim;
+  // a real city/district/street change is recomposed from the structured fields.
+  const fullAddress = useMemo(() => resolveSiteAddress({
+    storedAddress: site?.address,
+    addressTouched,
+    street: streetAddress,
+    district,
+    cityCode: selectedCity,
+  }), [site?.address, addressTouched, streetAddress, district, selectedCity])
 
   function handleCityChange(newCityCode: string) {
+    setAddressTouched(true)
     setSelectedCity(newCityCode)
     const found = CITIES.find((c) => c.code === newCityCode)
     if (found) {
@@ -183,6 +200,16 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
         code: isManualCode ? cur.code : `SPK-${newCityCode}-${generateSlug(cur.name) || "PARK"}`,
       }))
     }
+  }
+
+  function updateDistrict(value: string) {
+    setAddressTouched(true)
+    setDistrict(value)
+  }
+
+  function updateStreetAddress(value: string) {
+    setAddressTouched(true)
+    setStreetAddress(value)
   }
 
   function handleNameChange(newName: string) {
@@ -206,17 +233,10 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       return
     }
 
-    const totalSlotsNum = parseInt(form.totalSlots, 10)
+    // Capacity is derived from the slots the Owner registers, not from this form.
+    // The 3D model's bay count is shown read-only, so it must never gate submission.
+    const modelCapacityNum = modelCapacity.capacity ?? site?.totalPhysicalCapacity ?? 0
     const floorsNum = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
-
-    if (modelCapacity.capacity === null) {
-      setError(modelCapacity.error || "Checking the 3D model's car bay capacity. Please wait.")
-      return
-    }
-    if (!Number.isInteger(totalSlotsNum) || totalSlotsNum < 1 || totalSlotsNum > modelCapacity.capacity) {
-      setError(`Planned car spaces must be between 1 and ${modelCapacity.capacity}, the number of bays in this 3D model.`)
-      return
-    }
 
     setError("")
     setBusy(true)
@@ -235,6 +255,28 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           longitude: form.longitude,
         })
 
+        // `profile` never carries the active flag, so a status change has to be
+        // persisted through the dedicated `active` action. Reporting success
+        // without this left the toggle unapplied after the refresh.
+        if (form.isActive !== site.isActive) {
+          await parkingApi.edit(site.id, { action: "active", active: form.isActive })
+        }
+
+        // Re-read the persisted record so success is only reported for what the
+        // server actually stored; a silent no-op must never look like a save.
+        const persistedSite = (await parkingApi.list()).find((item) => item.id === site.id)
+        if (!persistedSite) {
+          throw new Error("The saved parking facility could not be reloaded. Refresh and try again.")
+        }
+        if (
+          persistedSite.code.toUpperCase() !== siteCode.toUpperCase() ||
+          persistedSite.name !== siteName ||
+          persistedSite.address !== finalAddress ||
+          persistedSite.isActive !== form.isActive
+        ) {
+          throw new Error("The parking facility changes were not saved. Refresh and try again.")
+        }
+
         // Also sync local store lot
         try {
           const cachedLot = store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id)
@@ -248,7 +290,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             name: siteName,
             type: lotType,
             address: finalAddress,
-            totalSlots: totalSlotsNum,
+            totalSlots: modelCapacityNum,
             floors: floorsNum,
             modelUrl: savedModelUrl ?? (cachedLot?.type === lotType ? cachedLot.modelUrl : activeModelUrl),
             modelFileName: customModelFileName ?? (cachedLot?.type === lotType ? cachedLot.modelFileName : activeModelDef.fileName),
@@ -272,16 +314,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           // ignore local store sync failures
         }
 
-        onSaved({
-          ...site,
-          code: siteCode,
-          name: siteName,
-          address: finalAddress,
-          latitude: form.latitude,
-          longitude: form.longitude,
-          totalPhysicalCapacity: totalSlotsNum,
-          isActive: form.isActive,
-        })
+        onSaved(persistedSite)
       } else {
         // Create new site via API
         const createdSite = await parkingApi.create({
@@ -303,7 +336,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             name: siteName,
             type: lotType,
             address: finalAddress,
-            totalSlots: totalSlotsNum,
+            totalSlots: modelCapacityNum,
             floors: floorsNum,
             modelUrl: savedModelUrl ?? activeModelUrl,
             modelFileName: customModelFileName ?? activeModelDef.fileName,
@@ -361,8 +394,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   }
 
   return {
-    formId, lotType, chooseLotType, selectedCity, district, setDistrict,
-    streetAddress, setStreetAddress, isManualCode, form, setForm,
+    formId, lotType, chooseLotType, selectedCity, district, setDistrict: updateDistrict,
+    streetAddress, setStreetAddress: updateStreetAddress, isManualCode, form, setForm,
     devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   }
