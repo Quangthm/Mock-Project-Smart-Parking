@@ -14,6 +14,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { Badge } from "../../../components/ui/Badge"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { useApp } from "../../../context/AppContext"
+import { showUiToast } from "../../../lib/uiToast"
 import { ownerData as store } from "../data/data"
 import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
@@ -151,6 +152,9 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
   const [reload, setReload] = useState(0)
   const [savedModelUrl, setSavedModelUrl] = useState<string | null>(null)
   const [modelStorageReady, setModelStorageReady] = useState(false)
+  // FE v2.3 (develop) collapsible 3D section, kept on merge. The SPARK-238 screen
+  // renders its own viewer, so this only controls whether that section is shown.
+  const [showModel, setShowModel] = useState(true)
   const [registerMode, setRegisterMode] = useState(false)
   const [registrationSelection, setRegistrationSelection] = useState<RegistrationMesh[]>([])
   const [census, setCensus] = useState<MeshCensus>(EMPTY_CENSUS)
@@ -309,9 +313,12 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
     setError("")
     try {
       await parkingApi.edit(siteId, { action: "markBackup", resourceId: slot.id, active: !marked })
+      showUiToast("Parking structure updated", marked ? "Backup designation released." : "Slot designated as backup.")
       refresh()
     } catch (cause) {
-      setError(structureErrorMessage(cause, "Cannot change the backup designation."))
+      const message = structureErrorMessage(cause, "Cannot change the backup designation.")
+      setError(message)
+      showUiToast("Structure not saved", message, "error")
     } finally {
       setBackupBusy(false)
     }
@@ -372,10 +379,22 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                         : "Registered bays are interactive. Unregistered template bays stay inert."}
                     </p>
                   </div>
-                  <Badge tone={registerMode ? "warning" : "muted"}>
-                    {registerMode ? "Selecting meshes" : "Live slots only"}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={registerMode ? "warning" : "muted"}>
+                      {registerMode ? "Selecting meshes" : "Live slots only"}
+                    </Badge>
+                    <button
+                      type="button"
+                      className="btn-outline px-2.5 py-1.5 text-xs"
+                      aria-controls="owner-parking-model"
+                      aria-expanded={showModel}
+                      onClick={() => setShowModel((value) => !value)}
+                    >
+                      {showModel ? "Hide model" : "Show model"}
+                    </button>
+                  </div>
                 </div>
+                <div id="owner-parking-model" hidden={!showModel}>
                 {!modelStorageReady ? (
                   <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
                 ) : (
@@ -399,6 +418,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                     is a fixed deployment asset: its extra bays are unregistered and inert until you register them.
                   </p>
                 )}
+                </div>
 
                 {selectedSlot && !registerMode && (
                   <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">

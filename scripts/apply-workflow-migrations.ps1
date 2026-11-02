@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
@@ -85,6 +85,13 @@ if ($state -eq 'legacy') {
     throw "$Service database uses a legacy schema layout (canonical sentinel '$sentinel' is missing while public tables exist). Run .\setup.ps1 -RecreateDb to rebuild all six databases from the canonical scripts; setup never drops existing data on its own."
 }
 
+# Validate an existing User base before running any incremental feature writers.
+# A base sentinel does not establish session/outbox compatibility.
+if ($Service -eq 'User' -and $state -eq 'current') {
+    Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-access-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. No feature migration applied; preserve data and pending messages for reviewed migration or explicit reset.' }
+}
+
 if ($state -eq 'empty') {
     foreach ($script in $scripts) {
         $relative = "scripts/database/$script"
@@ -113,8 +120,12 @@ foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
     if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') { throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts." }
 }
-if ($state -eq 'current') {
-    Write-Output "$Service schema already current; applied incremental features and verified required relations."
+if ($Service -eq 'User') {
+    Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-access-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. Preserve data and pending messages; use a reviewed migration or explicitly authorized reset.' }
+    Write-Output 'User schema already current; full session and outbox verifier passed. Consolidated base skipped; incremental features verified/applied.'
+} elseif ($state -eq 'current') {
+    Write-Output "$Service schema already current; verified required relations, nothing to apply."
 } else {
     Write-Output "$Service workflow migrations applied."
 }

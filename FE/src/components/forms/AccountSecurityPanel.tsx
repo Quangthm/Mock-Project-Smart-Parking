@@ -32,6 +32,13 @@ export function AccountSecurityPanel({
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [savedCodes, setSavedCodes] = useState(false)
+  const [showActivationNotice, setShowActivationNotice] = useState(false)
+
+  useEffect(() => {
+    if (!showActivationNotice) return
+    const timeout = window.setTimeout(() => setShowActivationNotice(false), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [showActivationNotice])
 
   useEffect(() => {
     const blocked = busy || recoveryCodes !== null
@@ -73,6 +80,7 @@ export function AccountSecurityPanel({
 
   function showRecoveryCodes(result: MfaRecoveryCodes) {
     setRecoveryCodes(result)
+    setShowActivationNotice(true)
     setSavedCodes(false)
     setSetup(null)
     setAction(null)
@@ -161,14 +169,14 @@ export function AccountSecurityPanel({
       </p>
       {(busy || recoveryCodes) && <p role="status">Complete this step and save your recovery codes before closing settings.</p>}
       {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
+      {message && <p role="status" className="security-setup-notice">{message}</p>}
       {!status && <p>{error ? "Close and reopen this panel to retry." : "Loading security settings…"}</p>}
 
       {status && !action && !setup && !recoveryCodes && (
         <>
           <p role="status">Status: <strong>{status.enabled ? "Enabled" : "Not enabled"}</strong></p>
           {status.enabled && <p>Unused recovery codes: {status.recoveryCodesRemaining}</p>}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div className="security-action-row">
             <button className="btn-primary" onClick={() => startAction("setup")}>
               {status.enabled ? "Replace authenticator" : "Set up 2FA"}
             </button>
@@ -197,7 +205,7 @@ export function AccountSecurityPanel({
           </label>
           {status?.enabled && <MfaCodeInput recovery={useRecoveryCode} value={verificationCode}
             onChange={setVerificationCode} onMethodChange={setUseRecoveryCode} disabled={busy} />}
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div className="security-action-row">
             <button type="button" className="btn-outline" disabled={busy} onClick={() => {
               setAction(null)
               setPassword("")
@@ -222,7 +230,7 @@ export function AccountSecurityPanel({
               autoComplete="one-time-code" disabled={busy} value={activationCode}
               onChange={(event) => setActivationCode(event.target.value)} />
           </label>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div className="security-action-row">
             <button type="button" className="btn-outline" disabled={busy} onClick={() => {
               setSetup(null)
               setActivationCode("")
@@ -236,11 +244,11 @@ export function AccountSecurityPanel({
 
       {recoveryCodes && (
         <>
-          <p role="status">2FA is enabled. Save these 8 recovery codes now. They are shown only once, and each code works only once.</p>
+          {showActivationNotice && <p role="status" className="security-setup-notice is-success is-transient">2FA is enabled. Save these 8 recovery codes now. They are shown only once, and each code works only once.</p>}
           <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", userSelect: "all", fontSize: "0.8rem" }}>
             {recoveryCodes.recoveryCodes.join("\n")}
           </pre>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div className="security-action-row">
             <button className="btn-outline" onClick={() => void copy(recoveryCodes.recoveryCodes.join("\n"))}>Copy codes</button>
             <button className="btn-outline" onClick={downloadRecoveryCodes}>Download codes</button>
           </div>

@@ -124,10 +124,10 @@ function PasswordStrength({ pw }: { pw: string }) {
 
 const PARTNER_TNC = `THỎA THUẬN ĐỐI TÁC SMARTPARKING
 
-Phiên bản: 1.0 | Ngày hiệu lực: 01/01/2026
+Phiên bản: Dự thảo để xem trước trong quá trình đăng ký
 
 1. TỔNG QUAN
-Thỏa thuận này được ký kết giữa SmartParking Technology Co., Ltd. ("SmartParking") và tổ chức/cá nhân đăng ký làm đối tác quản lý bãi đỗ xe ("Đối tác"). Bằng việc gửi đơn đăng ký, Đối tác xác nhận đã đọc, hiểu và đồng ý với toàn bộ các điều khoản dưới đây.
+Nội dung này mô tả các nguyên tắc hợp tác dự kiến giữa đơn vị vận hành SmartParking và tổ chức/cá nhân đăng ký quản lý bãi đỗ xe ("Đối tác"). Thông tin pháp nhân và các điều khoản thương mại sẽ được hoàn thiện trong hợp đồng chính thức.
 
 2. PHẠM VI HỢP TÁC
 • Đối tác đồng ý cung cấp dịch vụ đỗ xe thông qua nền tảng SmartParking.
@@ -135,10 +135,8 @@ Thỏa thuận này được ký kết giữa SmartParking Technology Co., Ltd. 
 • Đối tác cam kết cung cấp thông tin chính xác về số lượng slot, giá cả, giờ hoạt động và các tiện ích.
 
 3. PHÍ NỀN TẢNG VÀ CHIA SẺ DOANH THU
-• SmartParking thu phí nền tảng là 15% trên mỗi giao dịch booking hoàn thành.
-• Đối tác nhận 85% doanh thu từ mỗi booking.
-• Thanh toán được thực hiện vào ngày 5 hàng tháng qua chuyển khoản ngân hàng.
-• SmartParking cung cấp báo cáo chi tiết về doanh thu hàng tháng.
+• Phí nền tảng, tỷ lệ phân chia doanh thu, chu kỳ đối soát và thời hạn thanh toán do hai bên xác nhận trong Phụ lục thương mại.
+• Hai bên phối hợp đối chiếu giao dịch hoàn thành, giao dịch hủy, hoàn tiền và các khoản điều chỉnh.
 
 4. NGHĨA VỤ CỦA ĐỐI TÁC
 • Duy trì hoạt động bãi đỗ xe theo tiêu chuẩn đã đăng ký.
@@ -149,8 +147,8 @@ Thỏa thuận này được ký kết giữa SmartParking Technology Co., Ltd. 
 • Thông báo trước ít nhất 7 ngày nếu tạm ngừng dịch vụ.
 
 5. NGHĨA VỤ CỦA SMARTPARKING
-• Cung cấp hệ thống đặt chỗ và thanh toán hoạt động ổn định (cam kết uptime 98%).
-• Hỗ trợ kỹ thuật trong giờ hành chính và khẩn cấp 24/7.
+• Cung cấp các chức năng đặt chỗ và quản lý đã được triển khai, theo phạm vi dịch vụ hai bên xác nhận.
+• Cung cấp kênh hỗ trợ kỹ thuật và phối hợp xử lý sự cố theo thỏa thuận.
 • Thanh toán đúng hạn theo thỏa thuận.
 • Cung cấp dashboard quản lý cho Đối tác.
 
@@ -163,9 +161,9 @@ Thỏa thuận này được ký kết giữa SmartParking Technology Co., Ltd. 
 SmartParking không chịu trách nhiệm về mất mát, hư hỏng tài sản xảy ra trong bãi đỗ xe ngoài phạm vi thỏa thuận bảo hiểm riêng của Đối tác. Đối tác chịu trách nhiệm tuân thủ tất cả quy định pháp luật địa phương liên quan đến hoạt động bãi đỗ xe.
 
 8. LUẬT ÁP DỤNG
-Thỏa thuận này được điều chỉnh bởi pháp luật Việt Nam. Mọi tranh chấp được giải quyết tại Tòa án nhân dân có thẩm quyền tại Thành phố Hồ Chí Minh.
+Các bên ưu tiên thương lượng khi có tranh chấp. Luật áp dụng và cơ quan giải quyết tranh chấp được xác định trong hợp đồng chính thức phù hợp với quy định hiện hành.
 
---- Vui lòng cuộn xuống đến cuối để đọc toàn bộ thỏa thuận ---`
+`
 
 function TermsModal({
   onAccept,
@@ -190,6 +188,7 @@ function TermsModal({
 
   return (
     <div
+      role="presentation"
       style={{
         position: "fixed",
         inset: 0,
@@ -203,12 +202,15 @@ function TermsModal({
     >
       <div
         className="card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="partner-terms-title"
         style={{
           width: "100%",
           maxWidth: "560px",
           display: "flex",
           flexDirection: "column",
-          maxHeight: "85vh",
+          maxHeight: "90dvh",
         }}
       >
         <div
@@ -220,6 +222,7 @@ function TermsModal({
           }}
         >
           <h3
+            id="partner-terms-title"
             style={{
               fontFamily: "Be Vietnam Pro",
               fontWeight: 700,
@@ -234,12 +237,17 @@ function TermsModal({
             onClick={onClose}
             aria-label="Close agreement"
             style={{
-              background: "none",
-              border: "none",
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "50%",
               cursor: "pointer",
               color: "var(--muted)",
               display: "flex",
-              padding: 4,
+              alignItems: "center",
+              justifyContent: "center",
+              width: 44,
+              height: 44,
+              flex: "none",
             }}
           >
             <UntitledIcon name="x" size={18} />
@@ -271,14 +279,19 @@ function TermsModal({
             borderRadius: "var(--radius)",
             border: "1px solid var(--border)",
             padding: "1rem",
-            fontSize: "0.82rem",
-            lineHeight: 1.8,
-            color: "var(--muted)",
-            whiteSpace: "pre-wrap",
-            fontFamily: "Inter, sans-serif",
+            fontSize: "0.94rem",
+            lineHeight: 1.65,
+            color: "var(--fg)",
+            fontFamily: "Be Vietnam Pro, sans-serif",
           }}
         >
-          {PARTNER_TNC}
+          {PARTNER_TNC.split("\n").filter(line => line.trim()).map((line, index) =>
+            /^\d+\.\s/.test(line) || index === 0
+              ? <h4 key={index} className="signup-terms-heading">{line}</h4>
+              : line.startsWith("•")
+                ? <p key={index} className="signup-terms-bullet">{line.slice(1).trim()}</p>
+                : <p key={index} className="signup-terms-paragraph">{line}</p>,
+          )}
         </div>
         <div
           style={{
@@ -286,12 +299,13 @@ function TermsModal({
             display: "flex",
             gap: "0.75rem",
             justifyContent: "flex-end",
+            flexWrap: "wrap",
           }}
         >
           <button
             className="btn-outline"
             onClick={onClose}
-            style={{ fontSize: "0.875rem" }}
+            style={{ fontSize: "0.875rem", minHeight: 44, borderRadius: 999 }}
           >
             Cancel
           </button>
@@ -301,6 +315,8 @@ function TermsModal({
             disabled={!readAll}
             style={{
               fontSize: "0.875rem",
+              minHeight: 44,
+              borderRadius: 999,
               opacity: readAll ? 1 : 0.45,
               cursor: readAll ? "pointer" : "not-allowed",
             }}
@@ -341,6 +357,8 @@ export function SignUp() {
     const pending = {
       id: application.id,
       email: application.email,
+      ownerName: application.ownerName,
+      businessName: application.businessName,
       lotType: application.lotType,
       setupToken: application.lotSetupComplete ? undefined : application.setupToken,
       lotSetupComplete: application.lotSetupComplete,

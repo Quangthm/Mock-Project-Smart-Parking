@@ -18,7 +18,7 @@ public sealed class AuthSessionTests
     public async Task OwnerSessionsAndMeUsePersistedOnboardingState(bool complete)
     {
         var fixture = new AuthTestFixture();
-        fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = "BUSINESS_OWNER";
+        fixture.User.Accounts.Single().RoleCode = "BUSINESS_OWNER";
         fixture.User.OnboardingComplete = complete;
         var result = await fixture.SignIn();
         Assert.True(result.IsSuccess);
@@ -118,7 +118,7 @@ public sealed class AuthSessionTests
         if (reason == "pending") f.User.Status = UserStatus.PendingVerification;
         if (reason == "deleted-user") f.User.DeletedOn = f.Clock.Now;
         if (reason == "deleted-account") f.User.Accounts.First().DeletedOn = f.Clock.Now;
-        if (reason == "no-role") f.User.Accounts.First().AccountRoles.Clear();
+        if (reason == "no-role") f.User.Accounts.First().RoleCode = "UNKNOWN";
         Assert.False((await f.SignIn()).IsSuccess);
         Assert.Empty(f.Sessions.Snapshot);
     }
@@ -130,7 +130,8 @@ public sealed class AuthSessionTests
         var first = (await f.SignIn()).Session!;
         var second = (await f.SignIn()).Session!;
         var id = Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(first.AccessToken).Id);
-        await new LogoutCommandHandler(f.Sessions).Handle(new(id, f.User.Id!.Value, first.RefreshToken), default);
+        var actor = new TestCurrentActor(f.User.Id, "driver", f.User.Accounts.Single().Id, id);
+        await new LogoutCommandHandler(f.Sessions, TestAccess.Service(f, actor, f.Clock)).Handle(new(first.RefreshToken), default);
         Assert.False(await f.Tokens.ValidateAccessTokenAsync(first.AccessToken!));
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(second.AccessToken!));
         var refresh = new RefreshCommandHandler(f, f.Sessions, f.Auth, f.Clock);
@@ -144,8 +145,9 @@ public sealed class AuthSessionTests
         var first = (await f.SignIn()).Session!;
         var second = (await f.SignIn()).Session!;
         var id = Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(first.AccessToken).Id);
-        var ex = await Assert.ThrowsAsync<AuthException>(() => new LogoutCommandHandler(f.Sessions)
-            .Handle(new(id, f.User.Id!.Value, second.RefreshToken), default));
+        var actor = new TestCurrentActor(f.User.Id, "driver", f.User.Accounts.Single().Id, id);
+        var ex = await Assert.ThrowsAsync<AuthException>(() => new LogoutCommandHandler(f.Sessions, TestAccess.Service(f, actor, f.Clock))
+            .Handle(new(second.RefreshToken), default));
         Assert.Equal("INVALID_TOKEN", ex.Code);
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(first.AccessToken!));
         Assert.True(await f.Tokens.ValidateAccessTokenAsync(second.AccessToken!));
@@ -179,6 +181,7 @@ public sealed class AuthSessionTests
     [Theory]
     [InlineData("expired")]
     [InlineData("locked")]
+    [InlineData("lock-until")]
     [InlineData("deleted")]
     [InlineData("unknown")]
     public async Task RefreshRejectsUnusableTokenOrAccount(string reason)
@@ -187,6 +190,7 @@ public sealed class AuthSessionTests
         var session = (await f.SignIn()).Session!;
         if (reason == "expired") f.Clock.Now = f.Clock.Now.AddDays(7);
         if (reason == "locked") f.User.Status = UserStatus.Locked;
+        if (reason == "lock-until") f.User.LockedUntil = f.Clock.Now.AddMinutes(15);
         if (reason == "deleted") f.User.DeletedOn = f.Clock.Now;
         Assert.Equal("INVALID_TOKEN", (await Assert.ThrowsAsync<AuthException>(() => new RefreshCommandHandler(f, f.Sessions, f.Auth, f.Clock)
             .Handle(new(reason == "unknown" ? "unknown" : session.RefreshToken), default))).Code);
@@ -218,7 +222,8 @@ public sealed class AuthSessionTests
         var token = new JwtSecurityToken(invalid == "issuer" ? "wrong" : f.Options.Issuer,
             invalid == "audience" ? "wrong" : f.Options.Audience,
             [new Claim("sub", invalid == "other-user" ? Guid.NewGuid().ToString() : f.User.Id.ToString()!),
-             new Claim("jti", invalid == "unknown-session" ? Guid.NewGuid().ToString("N") : jwt.Id)],
+             new Claim("jti", invalid == "unknown-session" ? Guid.NewGuid().ToString("N") : jwt.Id),
+             new Claim("account_id", f.User.Accounts.Single().Id!.Value.ToString())],
             DateTime.UtcNow.AddMinutes(-10), invalid == "expiry" ? DateTime.UtcNow.AddMinutes(-1) : DateTime.UtcNow.AddMinutes(5), credentials);
         Assert.False(await f.Tokens.ValidateAccessTokenAsync(new JwtSecurityTokenHandler().WriteToken(token)));
     }

@@ -10,6 +10,6 @@ namespace SmartParking.UserService.Domain.Entities
 
         public string? Description { get; set; }
 
-        public ICollection<AccountRole> AccountRoles { get; set; } = [];
+        public ICollection<Account> Accounts { get; set; } = [];
     }
 }

@@ -1,4 +1,6 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using SmartParking.UserService.Domain.Entities;
 
 namespace UserService.Persistence
@@ -12,7 +14,6 @@ namespace UserService.Persistence
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<Account> Accounts { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
-        public DbSet<AccountRole> AccountRoles { get; set; } = null!;
         public DbSet<AuthSession> AuthSessions { get; set; } = null!;
         public DbSet<AccessEventOutbox> AccessEventOutbox { get; set; } = null!;
         public DbSet<RotatedSessionProof> RotatedSessionProofs { get; set; } = null!;
@@ -28,6 +29,8 @@ namespace UserService.Persistence
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            // Keep framework entities/mappings exact; the reviewed SQL script is generated from this model.
+            modelBuilder.AddTransactionalOutboxEntities();
             modelBuilder.Entity<RotatedSessionProof>(entity =>
             {
                 entity.ToTable("rotated_session_proofs");
@@ -132,6 +135,10 @@ namespace UserService.Persistence
                 entity.Property(e => e.FullName).HasColumnName("full_name");
                 entity.Property(e => e.AccessVersion).HasColumnName("access_version");
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
+                // Preserve the stored, read-only avatar value without reinterpretation or conversion.
+                entity.Property(e => e.AvatarUrl)
+                    .HasColumnName("avatar_url")
+                    .HasColumnType("text");
                 entity.Property(e=>e.OnboardingComplete).HasColumnName("onboarding_complete");
                 entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
                 entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
@@ -156,9 +163,12 @@ namespace UserService.Persistence
             {
                 entity.ToTable("accounts");
                 entity.HasKey(e => e.Id);
+                entity.HasAlternateKey(e => new { e.Id, e.UserId }).HasName("AK_accounts_id_user_id");
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.UserId).HasColumnName("user_id");
                 entity.Property(e => e.TenantId).HasColumnName("tenant_id");
+                entity.Property(e => e.RoleCode).HasColumnName("role_code").HasMaxLength(50).IsRequired();
+                entity.HasIndex(e => e.RoleCode).HasDatabaseName("idx_accounts_role_code");
                 entity.Property(e => e.SiteId).HasColumnName("site_id");
                 entity.Property(e => e.Status).HasColumnName("status");
                 entity.Property(e => e.Permissions).HasColumnName("permissions").HasColumnType("text[]");
@@ -174,31 +184,19 @@ namespace UserService.Persistence
                 entity.HasOne(e => e.User)
                     .WithMany(u => u.Accounts)
                     .HasForeignKey(e => e.UserId);
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.Accounts)
+                    .HasForeignKey(e => e.RoleCode)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<Role>(entity =>
             {
                 entity.ToTable("roles");
                 entity.HasKey(e => e.Code);
-                entity.Property(e => e.Code).HasColumnName("code");
+                entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(50);
                 entity.Property(e => e.Name).HasColumnName("name");
                 entity.Property(e => e.Description).HasColumnName("description");
-            });
-
-            modelBuilder.Entity<AccountRole>(entity =>
-            {
-                entity.ToTable("account_roles");
-                entity.HasKey(e => new { e.AccountId, e.RoleCode });
-                entity.Property(e => e.AccountId).HasColumnName("account_id");
-                entity.Property(e => e.RoleCode).HasColumnName("role_code");
-
-                entity.HasOne(e => e.Account)
-                    .WithMany(a => a.AccountRoles)
-                    .HasForeignKey(e => e.AccountId);
-
-                entity.HasOne(e => e.Role)
-                    .WithMany(r => r.AccountRoles)
-                    .HasForeignKey(e => e.RoleCode);
             });
 
             modelBuilder.Entity<AuthSession>(entity =>
@@ -206,7 +204,10 @@ namespace UserService.Persistence
                 entity.ToTable("user_refresh_tokens");
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Id).HasColumnName("id");
-                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.UserId).HasColumnName("user_id")
+                    .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+                entity.Property(e => e.AccountId).HasColumnName("account_id")
+                    .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
                 entity.Property(e => e.AccessTokenId).HasColumnName("access_token_id");
                 entity.Property(e => e.TokenHash).HasColumnName("token_hash").HasMaxLength(255);
                 entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
@@ -216,6 +217,10 @@ namespace UserService.Persistence
                 entity.Property(e => e.CreatedAt).HasColumnName("created_at");
                 entity.HasIndex(e => e.TokenHash).IsUnique();
                 entity.HasIndex(e => e.AccessTokenId).IsUnique();
+                entity.HasIndex(e => new { e.AccountId, e.UserId });
+                entity.HasOne<Account>().WithMany().HasForeignKey(e => new { e.AccountId, e.UserId })
+                    .HasPrincipalKey(a => new { a.Id, a.UserId }).OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_user_refresh_tokens_accounts_account_id_user_id");
                 entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId);
             });
         }

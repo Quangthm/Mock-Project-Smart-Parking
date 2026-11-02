@@ -58,7 +58,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         catch { await fixture.DisposeAsync(); throw; }
     }
 
-    public async Task<WebApplication> StartHostAsync(TimeProvider? clock = null, Action<WebApplicationBuilder>? configure = null)
+    public async Task<WebApplication> StartHostAsync(TimeProvider? clock = null, Action<WebApplicationBuilder>? configure = null, Action<WebApplicationBuilder>? configureConfiguration = null)
     {
         using var signingKey = RSA.Create(2048);
         var app = await UserHost.BuildAsync(["--environment", "Testing"], builder =>
@@ -76,6 +76,12 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:User"] = ConnectionString,
+                ["Services:Parking"] = "http://parking.test/",
+                ["SMARTPARK_RABBITMQ_HOST"] = "127.0.0.1",
+                ["SMARTPARK_RABBITMQ_PORT"] = "5672",
+                ["SMARTPARK_RABBITMQ_VHOST"] = "/",
+                ["SMARTPARK_RABBITMQ_USER"] = "guest",
+                ["SMARTPARK_RABBITMQ_PASSWORD"] = "guest",
                 ["Services:Key"] = "isolated-user-service-tests-key-20261012",
                 ["Jwt:Issuer"] = "driver-vehicle-tests",
                 ["Jwt:Audience"] = "driver-vehicle-tests",
@@ -84,6 +90,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
                 ["SeedDemoUser"] = "false",
                 ["DevelopmentAdmin:Email"] = null
             });
+            configureConfiguration?.Invoke(builder);
         }, configure);
         await app.StartAsync();
         // Delivery scheduling is exercised explicitly against PostgreSQL in DriverWorkflowTests.

@@ -39,6 +39,7 @@ export function AuditLogView() {
         <table
           style={{
             width: "100%",
+            minWidth: 640,
             borderCollapse: "collapse",
             fontSize: "0.82rem",
           }}

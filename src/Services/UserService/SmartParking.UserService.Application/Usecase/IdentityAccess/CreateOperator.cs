@@ -29,7 +29,7 @@ public sealed class CreateOperatorValidator : AbstractValidator<CreateOperatorCo
     }
 }
 public sealed class CreateOperatorHandler(IIdentityAccessRepository repository, IUnitOfWork unitOfWork,
-    IOperatorInvitationFactory invitationFactory, TimeProvider clock, IParkingDirectory parking, IAccessEventStore events)
+    IOperatorInvitationFactory invitationFactory, TimeProvider clock, IParkingDirectory parking, IAccessEventStore events, IAccountAuthorizationService authorization)
     : IRequestHandler<CreateOperatorCommand, OperatorDto>
 {
     public async Task<OperatorDto> Handle(CreateOperatorCommand request, CancellationToken cancellationToken)
@@ -40,9 +40,11 @@ public sealed class CreateOperatorHandler(IIdentityAccessRepository repository, 
         var permissions = body.Permissions.Order(StringComparer.Ordinal).ToArray();
         var email = body.Email.Trim().ToLowerInvariant();
         // Remote validation is outside the local transaction. Recheck current identity grants under lock afterwards.
+        await authorization.RequireOwnerManagementAsync(ownerId, false, cancellationToken);
         var candidateTenantIds = await RequireAuthorizedTenantIdsAsync(ownerId, cancellationToken);
         var sites = await parking.ActiveSitesAsync(siteIds, candidateTenantIds, cancellationToken);
         await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
+        await authorization.RequireOwnerManagementAsync(ownerId, true, cancellationToken);
         var tenantIds = await RequireAuthorizedTenantIdsAsync(ownerId, cancellationToken);
         if (sites.Select(site => site.Id).Distinct().Count() != siteIds.Length ||
             sites.Any(site => !siteIds.Contains(site.Id) || !tenantIds.Contains(site.TenantId)))
@@ -74,12 +76,7 @@ public sealed class CreateOperatorHandler(IIdentityAccessRepository repository, 
                 Status = "PENDING_VERIFICATION",
                 CreatedOn = now
             };
-            account.AccountRoles.Add(new AccountRole
-            {
-                Account = account,
-                AccountId = account.Id.Value,
-                RoleCode = "SITE_OPERATOR"
-            });
+            account.RoleCode = "SITE_OPERATOR";
             user.Accounts.Add(account);
             grants.Add(new OperatorGrant
             {

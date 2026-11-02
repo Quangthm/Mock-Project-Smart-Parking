@@ -5,19 +5,19 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import type { UsersViewModel } from "./useUsers"
 
 export function UsersToolbar({ model }: { model: UsersViewModel }) {
-  const { search, setSearch, query, saving, handleSearchSubmit, handleResetFilters, setFilter } = model
+  const { search, setSearch, query, saving, handleSearchSubmit, handleResetFilters, setFilter, retryList } = model
   return (
       <form
         className="card flex flex-wrap items-center gap-3 p-4"
         onSubmit={handleSearchSubmit}
       >
         {/* Search Field */}
-        <div className="relative min-w-[240px] flex-1">
+        <div className="relative min-w-0 basis-full flex-1 sm:min-w-[240px]">
           <span className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 items-center text-[var(--muted)]">
             <UntitledIcon name="search" size={16} />
           </span>
           <Input
-            className="sp-search-input w-full !pl-11 !pr-9"
+            className="sp-search-input w-full !pl-11 !pr-12"
             aria-label="Search users by name, email, or phone number"
             placeholder="Search by name, email, or phone number…"
             maxLength={200}
@@ -28,7 +28,7 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
           {search && (
             <button
               type="button"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--fg)]"
+              className="absolute right-1 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               onClick={() => setSearch("")}
               title="Clear search"
             >
@@ -89,6 +89,7 @@ export function UsersToolbar({ model }: { model: UsersViewModel }) {
               Reset
             </Button>
           )}
+          <Button variant="outline" type="button" onClick={retryList} disabled={saving}>Refresh</Button>
         </div>
       </form>
 

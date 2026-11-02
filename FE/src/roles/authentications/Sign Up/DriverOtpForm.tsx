@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { authApi, type DriverRegistration } from "../../../lib/authApi"
+import { showUiToast } from "../../../lib/uiToast"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 export const pendingDriverKey = "sp_pending_driver_registration"
@@ -94,6 +95,7 @@ export function DriverOtpForm({
       })
       setCode("")
       setMessage("A new code is queued for delivery.")
+      showUiToast("Code requested", "A new verification code is queued for delivery.", "info")
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cannot resend code.")
     } finally {

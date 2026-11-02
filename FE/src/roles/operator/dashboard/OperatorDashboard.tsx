@@ -12,6 +12,7 @@ import { OperatorOverview } from "./OperatorOverview"
 import type { OperatorAccessRole, SupportTicket, AppNotification } from "../../../lib/types"
 import { DashboardSidebar, type DashboardNavGroup } from "../../../components/layout/DashboardSidebar"
 import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
+import { showUiToast } from "../../../lib/uiToast"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import {
   loadOperatorSites,
@@ -570,11 +571,14 @@ function CashierPOS({
     try {
       await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate)
       setFeedback({ type: "success", message: `Checkout completed for ${booking.licensePlate}.` })
+      showUiToast("Checkout complete", `Checkout completed for ${booking.licensePlate}.`)
       setBooking(null)
       setPlate("")
       onDataChanged()
     } catch (error) {
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Could not complete checkout." })
+      const message = error instanceof Error ? error.message : "Could not complete checkout."
+      setFeedback({ type: "error", message })
+      showUiToast("Checkout failed", message, "error")
     } finally {
       setBusy(false)
     }

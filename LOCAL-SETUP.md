@@ -22,7 +22,7 @@ Checklist trước khi setup:
 - [ ] **Git** và đúng branch: `git branch --show-current` (mặc định `develop`).
 - [ ] **Port rảnh:** API `5035/5045/5055/5065`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
 
-`setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Lệnh cũ `.\scripts\setup-local.ps1` vẫn dùng được: script shim này in warning rồi forward toàn bộ tham số sang `setup.ps1` ở repo root.
+`setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Dùng trực tiếp `.\setup.ps1` ở repo root.
 
 ### Thuật ngữ nhanh
 
@@ -60,7 +60,7 @@ Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**E
 
 > **CẢNH BÁO — mất dữ liệu:** **không chạy `-RecreateDb` ở lần setup đầu.** Flag này xóa schema volume và init lại 6 DB, làm mất dữ liệu dev. Chi tiết ở mục 7.3.
 
-Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner hiện tại đọc `.env` (`import-local-config.ps1` chỉ còn là tiện ích cho config dạng flat string). Không commit `.env`, user-secrets hoặc thư mục workflow keys.
+Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner hiện tại đọc `.env`. Không commit `.env`, user-secrets hoặc thư mục workflow keys.
 
 ### Chỉ cấu hình backend, chưa dựng database
 
