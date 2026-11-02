@@ -1,3 +1,5 @@
+-- Fresh installation only. Existing/partial databases require reviewed migration; never replay.
+BEGIN;
 -- ======================================================================================
 -- MICROSERVICE: USER & ACCESS SERVICE DATABASE (UserDb)
 -- Domain: Identity, Authentication, TOTP, RBAC, Legal Agreements, Tenants, Vehicles
@@ -45,26 +47,7 @@ CREATE TABLE tenants (
 CREATE UNIQUE INDEX uq_active_tenant_code ON tenants (code) WHERE deleted_at IS NULL;
 CREATE INDEX idx_tenants_status ON tenants (status);
 
--- 3. BẢNG TÀI KHOẢN NGƯỜI DÙNG PHÂN THEO NGỮ CẢNH (ACCOUNTS)
-CREATE TABLE accounts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL, 
-    -- Cross-domain Logical Reference to FacilityDb
-    site_id UUID, 
-    
-    permissions TEXT[],
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
-);
-CREATE INDEX idx_accounts_user_id ON accounts (user_id);
-CREATE INDEX idx_accounts_tenant_id ON accounts (tenant_id);
-CREATE INDEX idx_accounts_site_id ON accounts (site_id);
-CREATE INDEX idx_accounts_status ON accounts (status);
-
--- 4. BẢNG DANH MỤC VAI TRÒ (ROLES)
+-- 3. BẢNG DANH MỤC VAI TRÒ (ROLES)
 CREATE TABLE roles (
     code VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -72,25 +55,39 @@ CREATE TABLE roles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT INTO roles (code, name) VALUES 
+INSERT INTO roles (code, name) VALUES
 ('ADMIN', 'System Administrator'),
 ('DRIVER', 'Driver'),
 ('OWNER', 'Owner'),
 ('OPERATOR', 'Site Operator / Attendant'),
 ('BUSINESS_OWNER', 'Business Owner'),
 ('SITE_OPERATOR', 'Site Operator'),
-('PLATFORM_ADMIN', 'Platform Administrator') 
+('PLATFORM_ADMIN', 'Platform Administrator')
 ON CONFLICT DO NOTHING;
--- DEVIATION (T4-approved): runtime role codes used by UserService (OwnerRegistrationService.cs:40, OperatorProvisioningService.cs:83, UserManagementService.cs:22)
+-- Runtime aliases remain supported by the existing Owner/Operator/Admin workflows.
 
--- 5. BẢNG PHÂN VAI TRÒ CHO TÀI KHOẢN (ACCOUNT ROLES)
-CREATE TABLE account_roles (
-    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+-- 4. BẢNG TÀI KHOẢN NGƯỜI DÙNG PHÂN THEO NGỮ CẢNH (ACCOUNTS)
+CREATE TABLE accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_code VARCHAR(50) NOT NULL REFERENCES roles(code) ON DELETE RESTRICT,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+    -- Cross-domain Logical Reference to FacilityDb
+    site_id UUID,
+
+    permissions TEXT[],
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (account_id, role_code)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ
 );
-CREATE INDEX idx_account_roles_role_code ON account_roles (role_code);
+ALTER TABLE accounts ADD CONSTRAINT "AK_accounts_id_user_id" UNIQUE (id, user_id);
+
+CREATE INDEX idx_accounts_user_id ON accounts (user_id);
+CREATE INDEX idx_accounts_role_code ON accounts (role_code);
+CREATE INDEX idx_accounts_tenant_id ON accounts (tenant_id);
+CREATE INDEX idx_accounts_site_id ON accounts (site_id);
+CREATE INDEX idx_accounts_status ON accounts (status);
 
 -- 6. BẢNG PHƯƠNG TIỆN (VEHICLES)
 CREATE TABLE vehicles (
@@ -110,6 +107,8 @@ CREATE INDEX idx_vehicles_type ON vehicles (vehicle_type);
 
 -- 7. BẢNG QUẢN LÝ REFRESH TOKEN (SESSION TOKENS)
 CREATE TABLE user_refresh_tokens (
+    account_id UUID NULL,
+    CONSTRAINT "FK_user_refresh_tokens_accounts_account_id_user_id" FOREIGN KEY (account_id, user_id) REFERENCES accounts(id, user_id) ON DELETE RESTRICT,
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash VARCHAR(255) NOT NULL UNIQUE,
@@ -123,6 +122,7 @@ CREATE TABLE user_refresh_tokens (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_expires_at_valid CHECK (expires_at > created_at)
 );
+CREATE INDEX "IX_user_refresh_tokens_account_id_user_id" ON user_refresh_tokens(account_id, user_id);
 CREATE INDEX idx_user_refresh_tokens_user_id ON user_refresh_tokens (user_id);
 CREATE INDEX idx_user_refresh_tokens_expires_at ON user_refresh_tokens (expires_at);
 
@@ -241,3 +241,93 @@ CREATE TABLE mfa_credentials (
     attempts INT NOT NULL DEFAULT 0,
     locked_until TIMESTAMPTZ
 );
+
+CREATE OR REPLACE FUNCTION protect_auth_session_account_binding() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.account_id IS DISTINCT FROM OLD.account_id OR NEW.user_id IS DISTINCT FROM OLD.user_id THEN
+        RAISE EXCEPTION 'Session account binding is immutable' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS tr_auth_session_account_binding ON user_refresh_tokens;
+CREATE TRIGGER tr_auth_session_account_binding BEFORE UPDATE OF account_id, user_id ON user_refresh_tokens
+    FOR EACH ROW EXECUTE FUNCTION protect_auth_session_account_binding();
+
+-- BEGIN FRAMEWORK DDL
+CREATE TABLE "InboxState" (
+    "Id" bigint GENERATED BY DEFAULT AS IDENTITY,
+    "MessageId" uuid NOT NULL,
+    "ConsumerId" uuid NOT NULL,
+    "LockId" uuid NOT NULL,
+    "RowVersion" bytea,
+    "Received" timestamp with time zone NOT NULL,
+    "ReceiveCount" integer NOT NULL,
+    "ExpirationTime" timestamp with time zone,
+    "Consumed" timestamp with time zone,
+    "Delivered" timestamp with time zone,
+    "LastSequenceNumber" bigint,
+    CONSTRAINT "PK_InboxState" PRIMARY KEY ("Id"),
+    CONSTRAINT "AK_InboxState_MessageId_ConsumerId" UNIQUE ("MessageId", "ConsumerId")
+);
+
+
+CREATE TABLE "OutboxState" (
+    "OutboxId" uuid NOT NULL,
+    "LockId" uuid NOT NULL,
+    "RowVersion" bytea,
+    "Created" timestamp with time zone NOT NULL,
+    "Delivered" timestamp with time zone,
+    "LastSequenceNumber" bigint,
+    CONSTRAINT "PK_OutboxState" PRIMARY KEY ("OutboxId")
+);
+
+
+CREATE TABLE "OutboxMessage" (
+    "SequenceNumber" bigint GENERATED BY DEFAULT AS IDENTITY,
+    "EnqueueTime" timestamp with time zone,
+    "SentTime" timestamp with time zone NOT NULL,
+    "Headers" text,
+    "Properties" text,
+    "InboxMessageId" uuid,
+    "InboxConsumerId" uuid,
+    "OutboxId" uuid,
+    "MessageId" uuid NOT NULL,
+    "ContentType" character varying(256) NOT NULL,
+    "MessageType" text NOT NULL,
+    "Body" text NOT NULL,
+    "ConversationId" uuid,
+    "CorrelationId" uuid,
+    "InitiatorId" uuid,
+    "RequestId" uuid,
+    "SourceAddress" character varying(256),
+    "DestinationAddress" character varying(256),
+    "ResponseAddress" character varying(256),
+    "FaultAddress" character varying(256),
+    "ExpirationTime" timestamp with time zone,
+    CONSTRAINT "PK_OutboxMessage" PRIMARY KEY ("SequenceNumber"),
+    CONSTRAINT "FK_OutboxMessage_InboxState_InboxMessageId_InboxConsumerId" FOREIGN KEY ("InboxMessageId", "InboxConsumerId") REFERENCES "InboxState" ("MessageId", "ConsumerId"),
+    CONSTRAINT "FK_OutboxMessage_OutboxState_OutboxId" FOREIGN KEY ("OutboxId") REFERENCES "OutboxState" ("OutboxId")
+);
+
+
+CREATE INDEX "IX_InboxState_Delivered" ON "InboxState" ("Delivered");
+
+
+CREATE INDEX "IX_OutboxMessage_EnqueueTime" ON "OutboxMessage" ("EnqueueTime");
+
+
+CREATE INDEX "IX_OutboxMessage_ExpirationTime" ON "OutboxMessage" ("ExpirationTime");
+
+
+CREATE UNIQUE INDEX "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber" ON "OutboxMessage" ("InboxMessageId", "InboxConsumerId", "SequenceNumber");
+
+
+CREATE UNIQUE INDEX "IX_OutboxMessage_OutboxId_SequenceNumber" ON "OutboxMessage" ("OutboxId", "SequenceNumber");
+
+
+CREATE INDEX "IX_OutboxState_Created" ON "OutboxState" ("Created");
+
+
+-- END FRAMEWORK DDL
+COMMIT;

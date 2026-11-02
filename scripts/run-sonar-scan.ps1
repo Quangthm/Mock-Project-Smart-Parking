@@ -12,7 +12,7 @@
 .PARAMETER SonarUrl
     SonarQube server URL (default: http://localhost:9000)
 .PARAMETER Token
-    SonarQube authentication token or user credential (default: squ_e56510ca3bb5deb87199bd93f127520a40b8370a or admin:admin)
+    SonarQube authentication token. Defaults to the SONAR_TOKEN environment variable; required.
 .PARAMETER Scope
     Target scope for coverage calculation:
     - 'All': Default Sonar analysis
@@ -26,12 +26,15 @@
 param(
     [string]$ProjectKey = "SmartParking",
     [string]$SonarUrl = "http://localhost:9000",
-    [string]$Token = "squ_e56510ca3bb5deb87199bd93f127520a40b8370a",
+    [string]$Token = $env:SONAR_TOKEN,
     [ValidateSet("All", "Backend", "Core")]
     [string]$Scope = "Backend"
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($Token)) {
+    throw 'SONAR_TOKEN is not set. Set $env:SONAR_TOKEN (or pass -Token) before running the scan.'
+}
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
 

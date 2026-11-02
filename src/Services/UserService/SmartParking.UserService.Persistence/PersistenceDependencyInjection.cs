@@ -20,6 +20,8 @@ public static class PersistenceDependencyInjection
 
         services.AddScoped<IIdentityWorkflowStore>(sp => sp.GetRequiredService<AppDbContext>());
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ICurrentAccessStore, CurrentAccessStore>();
+        services.AddScoped<IAuthorizationScopeStore, AuthorizationScopeStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddTransient<DataSeeder>();
         services.TryAddSingleton(TimeProvider.System);

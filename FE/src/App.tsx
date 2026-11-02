@@ -20,6 +20,7 @@ import { RoleRoute } from "./components/navigation/RoleRoute"
 import { Footer } from "./components/layout/Footer"
 
 import { FloatingChatbot } from "./components/chat/FloatingChatbot"
+import { AppToastHost } from "./components/feedback/AppToastHost"
 
 import { Landing } from "./public pages/Landing"
 
@@ -35,6 +36,7 @@ import { SignUp } from "./roles/authentications/Sign Up/SignUp"
 import { BusinessLotSetupPage } from "./roles/owner/parking-lots/CreateParkingLotForOwner"
 
 import { BootstrapPassword } from "./roles/authentications/BootstrapPassword"
+import { PaymentResultPage } from "./roles/driver/payments/PaymentResultPage"
 
 import { DriverDashboard } from "./roles/driver/dashboard/DriverDashboard"
 
@@ -70,6 +72,12 @@ function AppContent() {
 
   const navigate = useNavigate()
 
+  const sessionExpired = authError === "Your session has expired. Please sign in again."
+
+  useEffect(() => {
+    if (sessionExpired && location.pathname !== "/") navigate("/", { replace: true })
+  }, [location.pathname, navigate, sessionExpired])
+
   useLayoutEffect(() => {
     scrollPageToTop()
   }, [location.pathname, view])
@@ -79,6 +87,15 @@ function AppContent() {
     window.history.scrollRestoration = "manual"
     return () => { window.history.scrollRestoration = previous }
   }, [])
+
+  useEffect(() => {
+    const isWorkspacePath = ["/dashboard/finance", "/dashboard/operation", "/pos"].includes(location.pathname)
+    if (!authReady || (location.pathname !== "/" && !isWorkspacePath) || window.history.state?.smartParkingView) return
+    window.history.replaceState({
+      ...window.history.state,
+      smartParkingView: view,
+    }, "", window.location.href)
+  }, [authReady, location.pathname, view])
 
   const isOperatorPath = [
     "/dashboard/finance",
@@ -104,6 +121,7 @@ function AppContent() {
   )
 
   if (location.pathname === "/change-password") return <BootstrapPassword />
+  if (location.pathname === "/payment/success" || location.pathname === "/payment/fail") return <PaymentResultPage />
 
   const usesDashboardNavbar = !isEmailOtpPath && (
     ["driver", "owner", "operator", "admin"].includes(view) || isOperatorPath
@@ -124,11 +142,6 @@ function AppContent() {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
       <main id="main-content" tabIndex={-1} style={{ flex: 1 }}>
-        {authError && (
-          <div role="alert" className="p-4 text-center text-red-600">
-            {authError}
-          </div>
-        )}
         {!authReady && (
           <div className="p-8 text-center text-sm text-[var(--muted)]">
             Loading account…
@@ -207,6 +220,7 @@ export default function App() {
     <BrowserRouter>
       <AppProvider>
         <AppContent />
+        <AppToastHost />
       </AppProvider>
     </BrowserRouter>
   )

@@ -1,5 +1,6 @@
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import type { UsersViewModel } from "./useUsers"
+import { formatStatus } from "../../../lib/formatStatus"
 
 export function UserDetailPanel({ model }: { model: UsersViewModel }) {
   const { selectedId, setSelectedId, detailLoading, saving, detailError, notice, managed, canChange, detail, changeStatus, retryDetail } = model
@@ -89,7 +90,7 @@ export function UserDetailPanel({ model }: { model: UsersViewModel }) {
                     <div className="flex justify-between">
                       <span className="text-[var(--muted)]">Status</span>
                       <span className="font-semibold capitalize text-[var(--fg)]">
-                        {managed.status}
+                        {formatStatus(managed.status)}
                       </span>
                     </div>
                     <div className="flex justify-between">

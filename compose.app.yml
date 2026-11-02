@@ -44,6 +44,14 @@ services:
       # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
       Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
+      Messaging__Enabled: ${SMARTPARK_MESSAGING_ENABLED:-false}
+      SMARTPARK_RABBITMQ_HOST: rabbitmq
+      SMARTPARK_RABBITMQ_PORT: "5672"
+      SMARTPARK_RABBITMQ_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      SMARTPARK_RABBITMQ_PASSWORD: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
+      SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
+      Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
+      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:5035:8080"
     volumes:

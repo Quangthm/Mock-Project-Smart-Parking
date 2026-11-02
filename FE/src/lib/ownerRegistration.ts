@@ -3,7 +3,7 @@ import type { OwnerApplicationRecord } from "./ownerApi"
 export const pendingOwnerKey = "sp_pending_owner_registration"
 
 export type PendingOwnerRegistration = Pick<OwnerApplicationRecord, "email"> &
-  Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete" | "verification">> & {
+  Partial<Pick<OwnerApplicationRecord, "id" | "setupToken" | "lotType" | "lotSetupComplete" | "verification" | "ownerName" | "businessName">> & {
     setupRecovery?: OwnerApplicationRecord["verification"]
     emailVerified?: boolean
   }

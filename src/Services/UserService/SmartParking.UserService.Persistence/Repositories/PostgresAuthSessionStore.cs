@@ -16,7 +16,14 @@ public sealed class PostgresAuthSessionStore(AppDbContext db, TimeProvider clock
     {
         var now = clock.GetUtcNow();
         return db.AuthSessions.AnyAsync(s => s.AccessTokenId == accessTokenId && s.UserId == userId
-            && !s.IsRevoked && s.AccessExpiresAt > now && s.ExpiresAt > now, cancellationToken);
+            && s.AccountId != null && !s.IsRevoked && s.AccessExpiresAt > now && s.ExpiresAt > now, cancellationToken);
+    }
+
+    public Task<bool> IsActiveAsync(Guid accessTokenId, Guid userId, Guid accountId, CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+        return db.AuthSessions.AnyAsync(s => s.AccessTokenId == accessTokenId && s.UserId == userId
+            && s.AccountId == accountId && !s.IsRevoked && s.AccessExpiresAt > now && s.ExpiresAt > now, cancellationToken);
     }
 
     public Task<AuthSession?> FindByRefreshHashAsync(string hash, CancellationToken cancellationToken) =>
@@ -26,6 +33,8 @@ public sealed class PostgresAuthSessionStore(AppDbContext db, TimeProvider clock
         DateTimeOffset accessExpiresAt, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
+        // UPDATE locks the exact session row, participating in the profile guard's last lock.
+        // This writer never subsequently acquires User/Account locks (no inverted lock order).
         // Compare-and-swap: only one concurrent refresh may replace this token.
         var idleCutoff = now - SessionLifetime.RefreshInactivity;
         await using var transaction = db.Database.CurrentTransaction is null

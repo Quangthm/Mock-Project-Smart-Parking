@@ -1,4 +1,4 @@
-param()
+﻿param()
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $projectName = 'smartpark-upgrade-test-' + [Guid]::NewGuid().ToString('N')

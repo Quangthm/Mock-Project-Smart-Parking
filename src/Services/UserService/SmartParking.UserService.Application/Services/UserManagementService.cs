@@ -5,10 +5,11 @@ using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
+using UserService.Application.Authorization;
 
 namespace UserService.Application.Services;
 
-public sealed class UserManagementService(IIdentityWorkflowStore db, TimeProvider clock) : IUserManagementService
+public sealed class UserManagementService(IIdentityWorkflowStore db, TimeProvider clock, IAccountAuthorizationService authorization) : IUserManagementService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
     private static void Validate(object body)
@@ -17,18 +18,14 @@ public sealed class UserManagementService(IIdentityWorkflowStore db, TimeProvide
         if (!Validator.TryValidateObject(body, new ValidationContext(body), errors, true))
             throw Error("VALIDATION_FAILED", string.Join(" ", errors.Select(e => e.ErrorMessage)));
     }
-    private static string? Role(string code) => code.ToUpperInvariant() switch
-    {
-        "PLATFORM_ADMIN" or "ADMIN" => "admin", "BUSINESS_OWNER" or "OWNER" => "owner",
-        "SITE_OPERATOR" or "OPERATOR" => "operator", "DRIVER" => "driver", _ => null
-    };
     private static ManagedUserDto Result(User u) => new(u.Id!.Value, u.FullName, u.Email, u.Phone,
-        u.Accounts.Where(a => a.DeletedOn == null).SelectMany(a => a.AccountRoles)
-            .Select(r => Role(r.RoleCode)).OfType<string>().Distinct().Order().ToArray(),
+        u.Accounts.Where(a => a.DeletedOn == null)
+            .Select(a => AccessRoles.Map(a.RoleCode)).OfType<string>().Distinct().Order().ToArray(),
         char.ToLowerInvariant(u.Status.ToString()[0]) + u.Status.ToString()[1..], u.CreatedOn, u.LockedUntil);
 
-    private async Task RequireAdmin(Guid id, CancellationToken ct)
+    private async Task RequireAdmin(Guid id, CancellationToken ct, bool lockRows = false)
     {
+        await authorization.RequireAdminAsync(id, lockRows, ct);
         if (!await db.IsActiveAdminAsync(id, ct))
             throw Error("FORBIDDEN", "Active Admin access is required.", 403);
     }
@@ -51,7 +48,7 @@ public sealed class UserManagementService(IIdentityWorkflowStore db, TimeProvide
     {
         Validate(body);
         await using var tx = await db.BeginTransactionAsync(ct);
-        await RequireAdmin(adminId, ct);
+        await RequireAdmin(adminId, ct, true);
         var user = await db.LockOptionalUserAsync(id, ct);
         if (user == null || user.DeletedOn != null) throw Error("USER_NOT_FOUND", "User was not found.", 404);
         await db.LoadUserRolesAsync(user, ct);

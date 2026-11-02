@@ -12,6 +12,7 @@ import { resumePendingSignIn } from "../pendingRegistrationSignIn"
 import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
 import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
 import { isValidAccountEmail, isValidSignInContact, signInContactMessage } from "../../../lib/signInContact"
+import { showUiToast } from "../../../lib/uiToast"
 
 export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" } = {}) {
   const { view, user: currentUser, setUser, setView } = useApp()
@@ -114,6 +115,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
       setUser(signedInUser)
       setView(user.role)
       navigate(getUserHomePath(user), { replace: true })
+      showUiToast("Signed in", `Welcome back, ${user.name}.`)
 
     } catch (error) {
       try {
@@ -168,6 +170,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
         }
       } else {
         setError(msg)
+        showUiToast("Sign in failed", msg, "error")
       }
     } finally {
       setSubmitting(false)
@@ -424,7 +427,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                 onMethodChange={setUseRecoveryCode}
                 disabled={submitting}
               />
-              <button type="button" className="text-button" disabled={submitting}
+              <button type="button" className="btn-outline auth-mfa-option-button" disabled={submitting}
                 onClick={() => {
                   setMfaChallenge(null)
                   setMfaValue("")
@@ -490,7 +493,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                 Request another code
               </button>
               <button
-                className="text-button"
+                className="btn-outline auth-mfa-option-button"
                 type="button"
                 disabled={submitting}
                 onClick={() => {
@@ -875,6 +878,8 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "0.75rem",
                     marginTop: "0.5rem",
                   }}
                 >

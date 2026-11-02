@@ -117,7 +117,7 @@ export function Navbar() {
             }
             aria-label={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
-            <span style={{ display: "block", width: 20, height: 20 }}>
+            <span key={theme} className="public-theme-icon" style={{ display: "block", width: 20, height: 20 }}>
               <ThemeIcon mode={theme === "dark" ? "light" : "dark"} />
             </span>
           </button>

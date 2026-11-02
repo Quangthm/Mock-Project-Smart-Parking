@@ -2,7 +2,7 @@ import type { PaymentMethod } from "../../../lib/types"
 
 import visaLogo from "../../../assets/payment-visa.webp"
 
-import applePayLogo from "../../../assets/Apple Pay.png"
+import applePayLogo from "../../../imports/apple-pay-badge.png"
 
 import momoLogo from "../../../assets/Momo.jpg"
 

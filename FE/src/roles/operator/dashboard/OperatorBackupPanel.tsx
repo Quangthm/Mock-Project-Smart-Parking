@@ -1,5 +1,6 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
+import { showUiToast } from "../../../lib/uiToast"
 
 import { request } from "../../../lib/authApi"
 
@@ -99,6 +100,7 @@ export function OperatorBackupPanel() {
       )
       setReload((n) => n + 1)
       setMessage("Slot marked as backup.")
+      showUiToast("Backup slot updated", "Slot marked as backup.")
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Cannot mark backup.")
     } finally {

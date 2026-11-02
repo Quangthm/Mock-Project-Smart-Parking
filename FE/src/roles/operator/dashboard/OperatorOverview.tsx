@@ -5,6 +5,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { formatSlotLabel } from "../../../lib/operationalLayout"
 import type { Booking, SupportTicket, AppNotification } from "../../../lib/types"
 import type { OperatorSite } from "../../../lib/operatorApi"
+import { formatStatus } from "../../../lib/formatStatus"
 
 interface OperatorOverviewProps {
   lot: OperatorSite | null
@@ -315,7 +316,7 @@ export function OperatorOverview({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-xs text-[var(--muted)]">
                       <th className="pb-2 font-medium">Plate / Vehicle</th>
@@ -404,7 +405,7 @@ export function OperatorOverview({
                             : "bg-blue-500/15 text-blue-600"
                         }`}
                       >
-                        {ticket.status}
+                        {formatStatus(ticket.status)}
                       </span>
                     </div>
                     <p className="mt-1 line-clamp-2 text-[var(--muted)]">{ticket.message}</p>

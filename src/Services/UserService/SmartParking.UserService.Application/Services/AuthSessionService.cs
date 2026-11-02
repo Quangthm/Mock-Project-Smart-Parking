@@ -16,15 +16,16 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
 
     public async Task<UserSessionDto> CreateAsync(User user, CancellationToken cancellationToken)
     {
+        var account = AccountRolePolicy.SelectLoginAccount(user) ?? throw AuthException.InvalidToken();
         var now = clock.GetUtcNow();
         var refresh = NewRefreshToken();
         var session = new AuthSession
         {
-            Id = Guid.NewGuid(), UserId = user.Id!.Value, AccessTokenId = Guid.NewGuid(),
+            Id = Guid.NewGuid(), UserId = user.Id!.Value, AccountId = account.Id!.Value, AccessTokenId = Guid.NewGuid(),
             TokenHash = HashRefreshToken(refresh), AccessExpiresAt = now.AddSeconds(SessionLifetime.AccessSeconds),
             ExpiresAt = now.AddDays(Math.Min(policy.RefreshTokenDays, 7)), CreatedAt = now, LastRefreshedAt = now
         };
-        var result = Response(user, session.AccessTokenId, refresh, session.AccessExpiresAt);
+        var result = Response(user, account, session.AccessTokenId, refresh, session.AccessExpiresAt);
         await sessions.AddAsync(session, cancellationToken);
         return result;
     }
@@ -34,25 +35,29 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
         var now = clock.GetUtcNow();
         if (previous.UserId != user.Id || !SessionLifetime.CanRefresh(previous, now))
             throw AuthException.InvalidToken();
+        var account = user.Accounts.SingleOrDefault(a => a.Id == previous.AccountId && a.Id != null
+            && a.UserId == user.Id && a.Status == "ACTIVE" && a.DeletedOn == null);
+        if (account is null || AccountRolePolicy.CurrentRole(account) is null)
+            throw AuthException.InvalidToken();
         var id = Guid.NewGuid();
         var refresh = NewRefreshToken();
         var expires = now.AddSeconds(SessionLifetime.AccessSeconds);
         if (expires > previous.ExpiresAt) expires = previous.ExpiresAt;
-        var result = Response(user, id, refresh, expires);
+        var result = Response(user, account, id, refresh, expires);
         if (!await sessions.RotateAsync(previous, id, HashRefreshToken(refresh), expires, cancellationToken))
             throw AuthException.InvalidToken();
         return result;
     }
 
-    private UserSessionDto Response(User user, Guid id, string refresh, DateTimeOffset expires) => new()
+    private UserSessionDto Response(User user, Account account, Guid id, string refresh, DateTimeOffset expires) => new()
     {
-        AccessToken = tokens.GenerateAccessToken(user, id, expires), RefreshToken = refresh,
+        AccessToken = tokens.GenerateAccessToken(user, account, id, expires), RefreshToken = refresh,
         ExpiresIn = (int)Math.Ceiling((expires - clock.GetUtcNow()).TotalSeconds),
         User = new UserInfoDto
         {
             UserId = user.Id!.Value, FullName = user.FullName, Email = user.Email ?? string.Empty,
+            Role = AccountRolePolicy.CurrentRole(account)!,
             OnboardingComplete = user.OnboardingComplete,
-            Role = AccountRolePolicy.CurrentRole(user)!
         }
     };
 }

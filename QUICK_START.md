@@ -492,3 +492,7 @@ Các lệnh sau **xóa toàn bộ dữ liệu dev** trong 6 DB; chỉ dùng khi 
   docker exec facility-db-1 psql -w -U smartpark_facility -d smartpark_facility_<task> -v ON_ERROR_STOP=1 -f /tmp/01.sql
   ```
   Sau đó trỏ API/runner sang DB đó qua `ConnectionStrings__Parking` (port giữ nguyên, xem [mục 7.3](#73-ports)); xóa an toàn khi xong bằng `DROP DATABASE IF EXISTS smartpark_facility_<task>`. **Không** xóa/recreate container `facility-db-1` — lane khác đang dùng chung.
+
+### 8.7 Tài liệu triển khai liên quan
+
+Own-profile schema, shared RabbitMQ, configuration and safe database recreation: [SPARK-248 deployment guide](docs/04-testing/reports/SPARK-248/follow-up.md).
