@@ -11,6 +11,7 @@ import {
 } from "../../../lib/3d/parking3DConfig"
 import {
   formatSlotLabel,
+  operationalFixtureMode,
   type OperationalLayoutProjection,
   type PhysicalState,
   type ReservationState,
@@ -187,6 +188,12 @@ export function LotStatus({
             <UntitledIcon name="clipboard" size={13} /> Slot List
           </button>
         </div>} />
+
+      {layout && operationalFixtureMode() && (
+        <p role="status" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--fg)]">
+          Demo operational data. Slot states shown here are simulated and cannot authorize a booking or payment.
+        </p>
+      )}
 
       {isStale && (
         <div className="flex flex-wrap items-start gap-2">

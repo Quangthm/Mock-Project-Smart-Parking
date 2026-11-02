@@ -132,10 +132,11 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
         </div>
       ) : filteredData.length > 0 ? (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
-          <table className="w-full text-left text-xs min-w-[840px]">
+          <table className="w-full text-left text-xs min-w-[1080px]">
             <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3 font-semibold">Parking Facility</th>
+                <th className="px-4 py-3 font-semibold">Setup</th>
                 <th className="px-3 py-3 font-semibold text-center">Status</th>
                 <th className="px-3 py-3 font-semibold text-right">Capacity</th>
                 <th className="px-3 py-3 font-semibold text-right">Available / Capacity</th>
@@ -148,7 +149,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {filteredData.map(({ site, metrics, structure, structureError }) => {
+              {filteredData.map(({ site, setup, metrics, structure, structureError }) => {
                 const totalCap = metrics?.total || 1
                 const occupiedPercent = metrics ? Math.min(
                   100,
@@ -166,6 +167,10 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                         {site.code} · {site.address}
                       </div>
                       {structureError && <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-400" title={structureError}>Capacity unavailable · Refresh Data to retry</div>}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-xs text-[var(--fg)]">
+                      {setup ? <><span className="block font-semibold capitalize">{setup.type.replace("-", " ")}</span><span className="block text-[var(--muted)]">{setup.modelFileName ?? "Model not recorded"}</span><span className="block tabular-nums">{setup.hourlyRate.toLocaleString("en-US")} VND/hour</span></> : <span className="text-[var(--muted)]">Setup details unavailable in this browser</span>}
                     </td>
 
                     {/* Operational Status */}
@@ -238,7 +243,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2.5"
-                          onClick={() => setDetailSite({ site, metrics, structure, structureError })}
+                          onClick={() => setDetailSite({ site, setup, metrics, structure, structureError })}
                           title="View detailed floor and vehicle breakdown"
                         >
                           Breakdown

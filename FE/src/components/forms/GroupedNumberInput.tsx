@@ -148,6 +148,7 @@ export function GroupedNumberInput({
 
   function handleBlur() {
     isSelectedRef.current = false
+    if (step) onValueChange(String(Math.max(0, Math.round((Number(value) || 0) / step) * step)))
   }
 
   return (
@@ -165,7 +166,6 @@ export function GroupedNumberInput({
       onBlur={handleBlur}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
-      onBlur={step ? () => onValueChange(String(Math.max(0, Math.round((Number(value) || 0) / step) * step))) : undefined}
     />
   )
 }

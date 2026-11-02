@@ -68,6 +68,7 @@ type SiteDraft = {
 
 export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => void, onCancel: () => void) {
   const { user } = useApp()
+  const savedLot = site ? store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === site.id) : undefined
   const formId = useId()
   const draftKey = `sp_site_create_draft_${user?.id ?? "anonymous"}`
   const [draft] = useState(() => {
@@ -81,6 +82,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   // Infer lot type from existing site or default to outdoor
   const [lotType, setLotType] = useState<LotType>(() => {
     if (draft?.lotType) return draft.lotType
+    if (savedLot?.type) return savedLot.type
     if (site?.name.toLowerCase().includes("hầm") || site?.name.toLowerCase().includes("basement")) return "basement"
     if (site?.name.toLowerCase().includes("tầng") || site?.name.toLowerCase().includes("storey")) return "multi-storey"
     return "outdoor"
@@ -99,7 +101,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     loadOwnerModelUrl(site.id).then(url => {
       if (!active || !url || modelChoiceChangedRef.current) return
       setCustomModelUrl(url)
-      setCustomModelFileName(store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === site.id)?.modelFileName ?? "Owner model.glb")
+      setCustomModelFileName(savedLot?.modelFileName ?? "Owner model.glb")
     }).catch(() => {})
     return () => { active = false }
   }, [site?.id, user?.id])
@@ -136,13 +138,13 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     code: site?.code ?? "",
     name: site?.name ?? "",
     address: site?.address ?? "",
-    totalSlots: site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "30",
-    floors: "1",
+    totalSlots: site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : savedLot ? String(savedLot.totalSlots) : "30",
+    floors: savedLot ? String(savedLot.floors) : "1",
     latitude: site?.latitude ?? CITIES[0].defaultLat,
     longitude: site?.longitude ?? CITIES[0].defaultLng,
     isActive: site?.isActive ?? true,
-    hourlyRate: 15000,
-    dailyRate: 100000,
+    hourlyRate: savedLot?.hourlyRate ?? 15000,
+    dailyRate: savedLot?.dailyRate ?? 100000,
     ...draft?.form,
   })
 
@@ -152,6 +154,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     sensor: true,
     rfid: false,
     "ev-charger": false,
+    ...Object.fromEntries(savedLot?.devices.map(device => [device.type, device.enabled]) ?? []),
     ...draft?.devices,
   })
 
@@ -260,10 +263,10 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             })),
             hourlyRate: form.hourlyRate,
             dailyRate: form.dailyRate,
-            nightRate: Math.round(form.dailyRate / 2),
-            gracePeriodMinutes: 15,
-            subscriptionMonthly: 800000,
-            subscriptionYearly: 8000000,
+            nightRate: cachedLot?.nightRate ?? Math.round(form.dailyRate / 2),
+            gracePeriodMinutes: cachedLot?.gracePeriodMinutes ?? 15,
+            subscriptionMonthly: cachedLot?.subscriptionMonthly ?? 800000,
+            subscriptionYearly: cachedLot?.subscriptionYearly ?? 8000000,
             status: form.isActive ? "active" : "inactive",
             lat: form.latitude,
             lng: form.longitude,

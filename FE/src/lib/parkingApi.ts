@@ -112,7 +112,10 @@ export const parkingApi = {
     opts?: OperationalLayoutOptions,
   ): Promise<OperationalLayoutProjection> {
     const fixture = await operationalLayoutFixture()
-    if (fixture) return fixture
+    if (fixture) {
+      if (fixture.siteId !== id) throw new Error("Fixture site ID does not match the requested parking lot.")
+      return fixture
+    }
 
     const query: string[] = []
     if (opts?.vehicleType) query.push(`vehicleType=${encodeURIComponent(opts.vehicleType)}`)

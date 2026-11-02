@@ -280,7 +280,7 @@ export function OnboardingWizard({
       }
 
       if (registration) {
-        if (customModelFile) await saveOwnerModel(registration.id, customModelFile)
+        const savedModelUrl = customModelFile ? await saveOwnerModel(registration.id, customModelFile) : null
         const setup: OwnerLotSetup = {
           name,
           address,
@@ -304,6 +304,29 @@ export function OnboardingWizard({
           setupToken ?? "",
           setup,
         )
+        // shortcut: the Owner site API omits setup metadata, so this preview is available only in the setup browser.
+        try {
+          store.saveLot({
+            id: application.id,
+            ownerId: application.ownerId,
+            createdAt: new Date().toISOString(),
+            name,
+            address,
+            type: lotType,
+            totalSlots,
+            floors,
+            modelUrl: savedModelUrl ?? activeModelDef.path,
+            modelFileName: activeModelFileName,
+            devices: setup.devices,
+            slots: [],
+            ...numericPricing,
+            status: "pending",
+            lat: 0,
+            lng: 0,
+          })
+        } catch (cacheError) {
+          console.warn("Parking lot setup was submitted, but its local preview could not be saved.", cacheError)
+        }
         registration.onComplete(application)
         return
       }

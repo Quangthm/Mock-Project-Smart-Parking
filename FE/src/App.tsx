@@ -73,10 +73,11 @@ function AppContent() {
   const navigate = useNavigate()
 
   const sessionExpired = authError === "Your session has expired. Please sign in again."
+  const accessRevoked = !user && view === "sign-in" && authError !== "" && !sessionExpired
 
   useEffect(() => {
-    if (sessionExpired && location.pathname !== "/") navigate("/", { replace: true })
-  }, [location.pathname, navigate, sessionExpired])
+    if ((sessionExpired || accessRevoked) && location.pathname !== "/") navigate("/", { replace: true })
+  }, [location.pathname, navigate, sessionExpired, accessRevoked])
 
   useLayoutEffect(() => {
     scrollPageToTop()

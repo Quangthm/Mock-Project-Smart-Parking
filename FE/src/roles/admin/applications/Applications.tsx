@@ -159,67 +159,41 @@ export function Applications() {
             }}
           >
             {pending.map((app) => (
-              <div
-                key={app.id}
-                className="card application-card"
-                style={{ border: "1.5px solid #fde68a" }}
-              >
-                <div className="application-card-header"
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "0.75rem",
-                    flexWrap: "wrap",
-                    gap: "0.5rem",
-                  }}
-                >
+              <div key={app.id} className="card application-card application-card-pending">
+                <div className="application-card-header">
                   <div>
-                    <div
-                      style={{
-                        fontFamily: "Be Vietnam Pro",
-                        fontWeight: 700,
-                        fontSize: "0.95rem",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      {app.businessName}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                      {app.ownerName} ·{" "}
-                      {new Date(app.submittedAt).toLocaleDateString("en-GB")}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                      {app.email} - {app.phone}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                      Type: {app.lotType.replace("-", " ")} · Contacts:{" "}
-                      {app.contactVerified
-                        ? "Verified"
-                        : "Awaiting verification"}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: "0.4rem" }}>
-                      {app.lotSetupComplete && app.lotSetup ? (
-                        <>
-                          <strong>Parking lot:</strong> {app.lotSetup.name} · {app.lotSetup.address}
-                          <br />
-                          {app.lotSetup.totalSlots} slots · {app.lotSetup.floors} floor(s) ·
-                          {" "}{app.lotSetup.hourlyRate.toLocaleString("en-US")} VND/hour
-                          <details style={{ marginTop: "0.35rem" }}>
-                            <summary style={{ cursor: "pointer" }}>View lot setup</summary>
-                            <div>Type: {app.lotSetup.lotType.replace("-", " ")}</div>
-                            <div>3D model: {app.lotSetup.modelFileName}</div>
-                            <div>Devices: {app.lotSetup.devices.map((device) => device.label).join(", ") || "None"}</div>
-                            <div>Daily: {app.lotSetup.dailyRate.toLocaleString("en-US")} VND · Night: {app.lotSetup.nightRate.toLocaleString("en-US")} VND</div>
-                            <div>Monthly: {app.lotSetup.subscriptionMonthly.toLocaleString("en-US")} VND · Yearly: {app.lotSetup.subscriptionYearly.toLocaleString("en-US")} VND</div>
-                            <div>Grace period: {app.lotSetup.gracePeriodMinutes} minutes · Policy: {app.lotSetup.policyAccepted ? "Accepted" : "Not accepted"}</div>
-                          </details>
-                        </>
-                      ) : (
-                        "Parking lot setup incomplete"
-                      )}
-                    </div>
+                    <p className="application-eyebrow">Owner application · {new Date(app.submittedAt).toLocaleDateString("en-GB")}</p>
+                    <h4 className="application-business-name">{app.businessName}</h4>
+                    <p className="application-owner-contact">{app.ownerName} · {app.email} · {app.phone}</p>
                   </div>
+                  <span className="application-pending-badge"><UntitledIcon name="clock" size={15} /> Pending review</span>
                 </div>
+                <div className="application-review-signals" aria-label="Approval checks">
+                  <div className={app.contactVerified ? "application-signal is-ready" : "application-signal is-blocked"}><span>Contact</span><strong>{app.contactVerified ? "Verified" : "Not verified"}</strong></div>
+                  <div className={app.lotSetupComplete && app.lotSetup ? "application-signal is-ready" : "application-signal is-blocked"}><span>Lot setup</span><strong>{app.lotSetupComplete && app.lotSetup ? "Complete" : "Incomplete"}</strong></div>
+                  <div className={app.lotSetup?.policyAccepted ? "application-signal is-ready" : "application-signal is-blocked"}><span>Terms</span><strong>{app.lotSetup?.policyAccepted ? "Accepted" : "Not accepted"}</strong></div>
+                  <div className={contractDrafts[app.id]?.ownerAcknowledgedAt ? "application-signal is-ready" : "application-signal is-blocked"}><span>Owner agreement</span><strong>{contractDrafts[app.id]?.ownerAcknowledgedAt ? "Signed" : contractDrafts[app.id] ? "Awaiting signature" : "Unavailable here"}</strong></div>
+                </div>
+                {app.lotSetup ? (
+                  <section className="application-lot-summary" aria-label="Submitted parking lot">
+                    <div className="application-lot-heading"><span>Submitted parking lot</span><strong>{app.lotSetup.name}</strong><span>{app.lotSetup.address}</span></div>
+                    <div className="application-lot-facts">
+                      <span><strong>Type</strong>{app.lotSetup.lotType.replace("-", " ")}</span>
+                      <span><strong>Capacity</strong>{app.lotSetup.totalSlots} slots · {app.lotSetup.floors} floor(s)</span>
+                      <span><strong>3D model</strong>{app.lotSetup.modelFileName}</span>
+                      <span><strong>Hourly rate</strong>{app.lotSetup.hourlyRate.toLocaleString("en-US")} VND</span>
+                    </div>
+                    <details className="application-lot-details">
+                      <summary>More setup details</summary>
+                      <div className="application-lot-extra">
+                        <p><strong>Devices:</strong> {app.lotSetup.devices.map(device => device.label).join(", ") || "None"}</p>
+                        <p><strong>Day / night:</strong> {app.lotSetup.dailyRate.toLocaleString("en-US")} / {app.lotSetup.nightRate.toLocaleString("en-US")} VND</p>
+                        <p><strong>Monthly / yearly:</strong> {app.lotSetup.subscriptionMonthly.toLocaleString("en-US")} / {app.lotSetup.subscriptionYearly.toLocaleString("en-US")} VND</p>
+                        <p><strong>Grace period:</strong> {app.lotSetup.gracePeriodMinutes} minutes</p>
+                      </div>
+                    </details>
+                  </section>
+                ) : <p className="application-setup-missing">Parking lot setup is incomplete. Review cannot be approved yet.</p>}
                 {app.lotSetup && <div className="application-document-actions">
                   <button type="button" className="btn-outline" onClick={() => setContractApp(app)}>Review contract</button>
                   <button type="button" className="btn-outline" onClick={() => setModelApp(app)}>View 3D model</button>
