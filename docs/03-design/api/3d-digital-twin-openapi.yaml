@@ -2,11 +2,18 @@ openapi: 3.1.0
 info:
   title: SmartPark 3D Digital Twin API Specification
   description: >-
-    Authoritative API contracts for the SmartPark 3D Digital Twin visualization projection,
-    Driver discovery slot selection, and batch facility structure ingestion.
+    Authoritative API contracts for the SmartPark 3D Digital Twin visualization projection
+    and Driver discovery slot selection.
     Refined and hardened for implementation readiness with fail-safe defaults, cross-service hold protocol,
     non-blocking read paths, asset ingestion security, and motorcycle scalar capacity decoupling.
-  version: 1.2.0
+    Facility structure is configured per item, not by batch ingestion: see
+    parking-structure-api-design.md (§SPARK-238 structure configuration contract). The former batch
+    ingestion path POST /api/parking-lots/{id}/structure is deliberately absent from this document as of
+    v1.4.0: it never had an implementation, it was rejected under SPARK-238 Q1, and a deprecated operation
+    left in `paths` still appears in Swagger UI and generated clients. Its schemas remain under
+    components/schemas as review history only. Same-lot atomic batch deactivation is a separate,
+    still-unimplemented proposal documented in parking-structure-api-design.md (§Same-lot batch deactivation).
+  version: 1.4.0
   contact:
     name: SmartPark Engineering Team
 servers:
@@ -68,74 +75,6 @@ paths:
           $ref: '#/components/responses/403Forbidden'
         '404':
           $ref: '#/components/responses/404NotFound'
-        '500':
-          $ref: '#/components/responses/500InternalError'
-        '503':
-          $ref: '#/components/responses/503ServiceUnavailable'
-
-  /api/parking-lots/{id}/structure:
-    post:
-      summary: Batch Ingestion of Parking Structure from 3D Model Manifest
-      description: >-
-        Atomically provisions or reconciles floors, slots, and motorcycle capacity pools extracted from
-        a 3D model manifest. Enforces the SafeChange invariant: if any slot in the facility is physically
-        occupied, has unknown telemetry, or is bound to active reservations, replacement is rejected with
-        HTTP 409 Conflict. Synchronizes cross-service edit holds with ReservationService using durable tokens.
-      operationId: batchIngestStructure
-      tags:
-        - Facility Management
-        - 3D Ingestion
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Unique identifier of the parking facility (UUID v4).
-          schema:
-            type: string
-            format: uuid
-            example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Client-supplied UUID v4 token preventing duplicate transaction execution.
-          schema:
-            type: string
-            format: uuid
-            example: e7a1c2d3-4e5f-6a7b-8c9d-0e1f2a3b4c5d
-        - name: X-Service-Contract
-          in: header
-          required: false
-          description: Client-supplied contract version declaration (e.g. 1.2.0). Defaults to 1.2.0 if omitted.
-          schema:
-            type: string
-            example: "1.2.0"
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BatchStructureIngestRequest'
-      responses:
-        '201':
-          description: Parking structure successfully ingested and reconciled.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BatchStructureIngestResponse'
-        '400':
-          $ref: '#/components/responses/400BadRequest'
-        '401':
-          $ref: '#/components/responses/401Unauthorized'
-        '403':
-          $ref: '#/components/responses/403Forbidden'
-        '404':
-          $ref: '#/components/responses/404NotFound'
-        '409':
-          $ref: '#/components/responses/409Conflict'
-        '422':
-          $ref: '#/components/responses/422Unprocessable'
         '500':
           $ref: '#/components/responses/500InternalError'
         '503':

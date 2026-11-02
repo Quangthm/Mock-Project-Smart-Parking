@@ -179,19 +179,23 @@ export function SiteForm({ site, onSaved, onCancel }: {
           >
             <div>
               <label className="label" htmlFor={`${formId}-slots`}>
-                Planned Car Spaces *
+                Planned Car Spaces
               </label>
               <input
                 id={`${formId}-slots`}
                 className="input"
                 type="number"
-                min={1}
-                max={modelCapacity.capacity ?? undefined}
-                value={form.totalSlots}
-                onChange={(e) => setForm((c) => ({ ...c, totalSlots: e.target.value }))}
-                required
+                value={modelCapacity.capacity ?? site?.totalPhysicalCapacity ?? ""}
+                placeholder="—"
+                readOnly
+                aria-readonly="true"
               />
-              <p className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error || (modelCapacity.capacity === null ? "Checking car bays in the 3D model…" : `Maximum ${modelCapacity.capacity} car spaces in this model.`)}</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Capacity is counted from the slots you register. Set per-area limits in Parking Structure.
+              </p>
+              {modelCapacity.error && (
+                <p role="status" className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error}</p>
+              )}
             </div>
 
             {LOT_TYPE_INFO[lotType].hasFloors && (
@@ -209,9 +213,9 @@ export function SiteForm({ site, onSaved, onCancel }: {
                   onChange={(e) => setForm((c) => ({ ...c, floors: e.target.value }))}
                   required
                 />
-                {form.totalSlots && parseInt(form.floors, 10) > 0 && (
+                {modelCapacity.capacity !== null && parseInt(form.floors, 10) > 0 && (
                   <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    ~ {Math.ceil(parseInt(form.totalSlots, 10) / parseInt(form.floors, 10))} spaces / level
+                    ~ {Math.ceil(modelCapacity.capacity / parseInt(form.floors, 10))} spaces / level
                   </p>
                 )}
               </div>
@@ -224,6 +228,9 @@ export function SiteForm({ site, onSaved, onCancel }: {
           <div className="font-semibold text-xs text-[var(--fg)]">
             Installed IoT Devices
           </div>
+          <p className="text-[10px] text-[var(--muted)]">
+            Saved to this Owner profile. The Facility service does not store installed devices yet.
+          </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {DEVICE_OPTIONS.map((dev) => {
               const checked = Boolean(devices[dev.type])
@@ -272,6 +279,10 @@ export function SiteForm({ site, onSaved, onCancel }: {
               </span>
             </label>
           </div>
+
+          <p className="text-[10px] text-[var(--muted)]">
+            Site status is saved to the Facility service. Base rates are kept in this Owner profile (not persisted by the Facility service).
+          </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

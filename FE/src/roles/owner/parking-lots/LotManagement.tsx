@@ -29,7 +29,15 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
       {error && (
         <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
           <UntitledIcon name="alert" size={14} />
-          <span>{error}</span>
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            className="btn-outline text-[11px] py-1 px-2"
+            disabled={loading}
+            onClick={() => refresh()}
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -267,7 +275,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : error ? null : (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
           {searchTerm || statusFilter !== "all"
             ? "No parking facilities found matching current filters."

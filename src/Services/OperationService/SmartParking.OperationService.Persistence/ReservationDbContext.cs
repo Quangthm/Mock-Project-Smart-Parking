@@ -11,7 +11,6 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<SiteCapacityPoolRow> SiteCapacityPools => Set<SiteCapacityPoolRow>();
     public DbSet<StructureEditHoldRow> StructureEditHolds => Set<StructureEditHoldRow>();
     public DbSet<StructureSiteStateRow> StructureSiteStates => Set<StructureSiteStateRow>();
-    public DbSet<StructureRemovedResourceRow> StructureRemovedResources => Set<StructureRemovedResourceRow>();
     public DbSet<StructureReleaseReceiptRow> StructureReleaseReceipts => Set<StructureReleaseReceiptRow>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
     public DbSet<ProcessedEventRow> ProcessedEvents => Set<ProcessedEventRow>();
@@ -27,7 +26,6 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<SiteCapacityPoolRow>(modelBuilder, "site_capacity_pools");
         Map<StructureEditHoldRow>(modelBuilder, "structure_edit_holds");
         Map<StructureSiteStateRow>(modelBuilder, "structure_site_state");
-        Map<StructureRemovedResourceRow>(modelBuilder, "structure_removed_resources");
         Map<StructureReleaseReceiptRow>(modelBuilder, "structure_release_receipts");
         Map<OutboxEventRow>(modelBuilder, "outbox_events");
         Map<ProcessedEventRow>(modelBuilder, "processed_events");
@@ -38,6 +36,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<OccupancyReleaseLedgerRow>().HasKey(x => x.EventId);
         modelBuilder.Entity<OccupancyReleaseLedgerRow>().HasIndex(x => x.SessionId).IsUnique();
         modelBuilder.Entity<SlotSequenceWatermarkRow>().HasKey(x => x.SlotId);
+        modelBuilder.Entity<StructureEditHoldRow>().HasKey(x => x.SiteId);
         modelBuilder.Entity<StructureEditHoldRow>().HasIndex(x => x.Token).IsUnique();
         modelBuilder.Entity<StructureSiteStateRow>().HasKey(x => x.SiteId);
         modelBuilder.Entity<StructureReleaseReceiptRow>().HasKey(x => x.Token);

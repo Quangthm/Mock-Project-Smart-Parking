@@ -87,13 +87,6 @@ public sealed class StructureSiteStateRow
     public bool Active { get; set; }
 }
 
-public sealed class StructureRemovedResourceRow
-{
-    public Guid Id { get; set; }
-    public Guid SiteId { get; set; }
-    public string Kind { get; set; } = "";
-}
-
 public sealed class StructureReleaseReceiptRow
 {
     public Guid Token { get; set; }

@@ -61,9 +61,15 @@ public sealed class StructureOperationAndEditHandlerTests
         Assert.Equal("B01", structure.Slots[0].Code);
         Assert.Equal(zone2, structure.Slots[0].UnitId);
 
-        StructureEditHandler.Apply(structure, new StructureEdit("configureSlot", ResourceId: slotId, VehicleType: VehicleType.MOTORCYCLE, SlotType: SlotType.STANDARD, Coordinates3D: "{\"x\":1}", Features: "{\"ev\":true}"));
+        StructureEditHandler.Apply(structure, new StructureEdit("configureSlot", ResourceId: slotId, VehicleType: VehicleType.MOTORCYCLE, SlotType: SlotType.STANDARD));
         Assert.Equal(VehicleType.MOTORCYCLE, structure.Slots[0].VehicleType);
-        Assert.Equal("{\"x\":1}", structure.Slots[0].Coordinates3D);
+        Assert.Equal(new[] { VehicleType.MOTORCYCLE }, structure.Slots[0].VehicleTypes);
+
+        // Geometry and features are server-owned: non-null values are rejected instead of persisted.
+        var geometry = Assert.Throws<StructureException>(() => StructureEditHandler.Apply(structure, new StructureEdit(
+            "configureSlot", ResourceId: slotId, VehicleType: VehicleType.MOTORCYCLE, SlotType: SlotType.STANDARD, Coordinates3D: "{\"x\":1}")));
+        Assert.Equal("INVALID_STRUCTURE", geometry.Code);
+        Assert.Equal("Slot geometry comes from the lot's fixed 3D template.", geometry.Message);
     }
 
     [Fact]

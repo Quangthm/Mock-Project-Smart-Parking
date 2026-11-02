@@ -13,6 +13,18 @@ import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 
 type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy';
 
+// A background site-list reload can return an equal list with a brand-new array
+// identity. Keeping the previous array in that case stops every child that depends
+// on `sites` (the structure screen's site effect in particular) from re-running for
+// no reason. Only a genuine content change replaces the list.
+function sameSiteList(current: Site[], next: Site[]): boolean {
+  if (current.length !== next.length) return false;
+  for (let index = 0; index < current.length; index += 1) {
+    if (JSON.stringify(current[index]) !== JSON.stringify(next[index])) return false;
+  }
+  return true;
+}
+
 export function OwnerDashboard() {
   const { user } = useApp();
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -31,7 +43,7 @@ export function OwnerDashboard() {
       .then(([siteResult, operatorResult]) => {
         if (!current) return;
         if (siteResult.status === 'fulfilled') {
-          setSites(siteResult.value);
+          setSites(current => sameSiteList(current, siteResult.value) ? current : siteResult.value);
           setSitesLoaded(true);
           setSelectedSiteId(current => current === setupSiteId || current === 'all' || siteResult.value.some(site => site.id === current) ? current : 'all');
         } else {
@@ -85,7 +97,7 @@ export function OwnerDashboard() {
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
           {tab === 'structure' && (setupSiteId && !sites.some(site => site.id === setupSiteId)
             ? <p role="status" className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Waiting for the new site to appear in the server list. Use Retry above if it does not load.</p>
-            : <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onChanged={() => setSiteRefresh(value => value + 1)} />)}
+            : <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} />)}
           {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}

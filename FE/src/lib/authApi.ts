@@ -88,6 +88,10 @@ export class AuthApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    // Raw failure envelope. Callers that understand a specific contract (for example the
+    // structure API's `released`/`commitments`/`items` members) can read it without
+    // inventing a second HTTP client.
+    public payload?: unknown,
   ) {
     super(message)
   }
@@ -193,6 +197,7 @@ export async function request<T>(
   body?: unknown,
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
@@ -213,6 +218,8 @@ export async function request<T>(
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
 
         ...(token ? { Authorization: "Bearer " + token } : {}),
+
+        ...(extraHeaders ?? {}),
       },
 
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -258,7 +265,7 @@ export async function request<T>(
         ? "Your session has expired. Please sign in again."
         : "Authentication request failed.")
 
-    throw new AuthApiError(message, response.status, payload?.code)
+    throw new AuthApiError(message, response.status, payload?.code, payload)
   }
 
   return payload as T

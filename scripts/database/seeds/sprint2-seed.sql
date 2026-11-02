@@ -45,12 +45,20 @@ INSERT INTO tenants (id, code, name, contact_email, contact_phone, status) VALUE
 ON CONFLICT DO NOTHING;
 
 -- 2. Parking Sites (Floorless vs Multifloor)
+-- total_physical_capacity is a DERIVED count of live registered slots, so a site seeded with no
+-- slots must declare 0. It used to be 100/300, which made both sites permanently un-editable:
+-- the edit path refuses to mutate a structure whose declared capacity differs from its slot count.
+-- It is not a configured limit; configured limits live in spatial_unit_capacities / spatial_units.max_capacity.
 INSERT INTO parking_sites (id, tenant_id, site_code, name, address, total_physical_capacity) VALUES
-('10000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'S-FL', 'Floorless Lot', '123 Flat St', 100),
-('10000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'S-MF', 'Multifloor Lot', '456 Deep St', 300)
+('10000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'S-FL', 'Floorless Lot', '123 Flat St', 0),
+('10000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'S-MF', 'Multifloor Lot', '456 Deep St', 0)
 ON CONFLICT DO NOTHING;
 
 -- 3. Spatial Units (Hierarchy)
+-- NOTE: the path format here ('ZoneA', 'B1', 'B1/VIP') does not match the format the domain
+-- generates for units created through the API ('/{siteId}/{unitId}/'). Reads tolerate it because
+-- paths are opaque and only used for prefix matching, but seeded rows are not byte-identical to
+-- API-created rows. Kept as-is to avoid rewriting existing seed data; recorded as a known drift.
 INSERT INTO spatial_units (id, tenant_id, site_id, parent_id, path, unit_type, name, max_capacity) VALUES
 -- Floorless
 ('10000000-1000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '10000000-0000-0000-0000-000000000001', NULL, 'ZoneA', 'ZONE', 'Zone A', 50),

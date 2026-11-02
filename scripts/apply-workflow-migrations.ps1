@@ -26,7 +26,8 @@ $scripts = @{
         'overlay/parking-tenants.sql',
         'overlay/parking-structure-synchronizations.sql',
         'overlay/parking-operator-tables.sql',
-        'overlay/parking-slot-constraints.sql'
+        'overlay/parking-slot-constraints.sql',
+        'overlay/parking-structure-maintenance.sql'
     )
     Reservation = @(
         'microservices/03b-reservation-operations-service-db.sql',
@@ -49,7 +50,7 @@ $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation=
 $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
-    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs')
+    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','structure_maintenance_windows')
     Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts')
     Payment = @()
     Notification = @()
@@ -97,7 +98,7 @@ if ($state -eq 'empty') {
 # Apply on both empty and current databases; each migration is re-runnable.
 $features = switch ($Service) {
     'User' { '05.13-Mfa-Lifecycle.sql'; '05.14-Identity-Access-Hardening.sql'; '05.15-Owner-Onboarding.sql' }
-    'Parking' { '05.16-Parking-Owner-Onboarding.sql' }
+    'Parking' { '05.16-Parking-Owner-Onboarding.sql'; 'overlay/parking-structure-maintenance.sql' }
     default { }
 }
 foreach ($feature in $features) {
