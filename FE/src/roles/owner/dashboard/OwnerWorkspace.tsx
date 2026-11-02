@@ -2,6 +2,8 @@ import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -152,9 +154,12 @@ export function OwnerWorkspace() {
     try {
       await action()
       setNotice(message)
+      showUiToast("Changes saved", message)
       setReload((value) => value + 1)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed.")
+      const message = err instanceof Error ? err.message : "Request failed."
+      setError(message)
+      showUiToast("Changes not saved", message, "error")
     } finally {
       setSaving(false)
     }
@@ -240,7 +245,7 @@ export function OwnerWorkspace() {
                   {site.code} · {site.address}
                 </p>
                 <p>
-                  {site.status} · {site.totalPhysicalCapacity} physical slots
+                  {formatStatus(site.status)} · {site.totalPhysicalCapacity} physical slots
                 </p>
                 <form
                   key={`${site.id}-${reload}`}
@@ -399,7 +404,7 @@ export function OwnerWorkspace() {
                   onChanged={() => setReload((n) => n + 1)}
                 />
                 <p>
-                  {structure.site.name} · {structure.site.status} ·{" "}
+                  {structure.site.name} · {formatStatus(structure.site.status)} ·{" "}
                   {structure.slots.length} physical slots
                 </p>
                 <button
@@ -669,7 +674,7 @@ export function OwnerWorkspace() {
               >
                 <strong>{operator.fullName}</strong>
                 <p>
-                  {operator.email} · {operator.status}
+                  {operator.email} · {formatStatus(operator.status)}
                 </p>
                 <p>
                   Sites:{" "}
@@ -717,6 +722,7 @@ export function OwnerWorkspace() {
               onCreated={() => {
                 setShowCreateOperator(false)
                 setNotice("Operator created successfully.")
+                showUiToast("Operator created", "Operator created successfully.")
                 setReload((value) => value + 1)
               }}
               onClose={() => setShowCreateOperator(false)}

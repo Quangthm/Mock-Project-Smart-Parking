@@ -14,9 +14,9 @@ export const LOT_TYPE_INFO: Record<LotType, {
   hasFloors: boolean
   desc: string
 }> = {
-  outdoor: { icon: "🌳", label: "Outdoor Lot", hasFloors: false, desc: "Outdoor ground-level parking" },
-  basement: { icon: "🏢", label: "Basement Parking", hasFloors: true, desc: "Underground parking with multiple levels" },
-  "multi-storey": { icon: "🏗️", label: "Multi-Storey", hasFloors: true, desc: "Multi-storey parking building" },
+  outdoor: { icon: "leaf", label: "Outdoor Lot", hasFloors: false, desc: "Outdoor ground-level parking" },
+  basement: { icon: "parking", label: "Basement Parking", hasFloors: true, desc: "Underground parking with multiple levels" },
+  "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true, desc: "Multi-storey parking building" },
 }
 
 export const CITIES = [

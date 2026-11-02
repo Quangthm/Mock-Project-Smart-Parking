@@ -17,7 +17,8 @@ public sealed class OperatorInvitationFactory(IWorkflowProtector protector) : IO
             ExpiresAt = now.AddHours(24), ResendAt = now.AddMinutes(1)
         };
         var message = new WorkflowMessage("email", email, "Verify your SmartPark Operator account",
-            $"Verify your email and choose your own password to activate your account (24 hours): /change-password?challengeId={challenge.Id}&token={token}");
+            $"Verify your email and choose your own password to activate your account (24 hours): /change-password?challengeId={challenge.Id}&token={token}",
+            EmailTemplate: WorkflowEmailTemplates.OperatorInvitation);
         var delivery = new WorkflowDelivery
         {
             Id = Guid.NewGuid(), UserId = userId, ActorId = actorId,

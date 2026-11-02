@@ -35,7 +35,7 @@ export function MfaCodeInput({
       </label>
       <button
         type="button"
-        className="text-button"
+        className="btn-outline auth-mfa-option-button"
         disabled={disabled}
         onClick={() => {
           onMethodChange(!recovery)

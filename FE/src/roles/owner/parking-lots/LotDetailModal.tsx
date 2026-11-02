@@ -44,7 +44,7 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
                   </div>
                 )}
                 {/* Overall stats grid */}
-                <div className="grid grid-cols-3 gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                <div className="grid grid-cols-1 gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-3">
                   <div>
                     <span className="text-[var(--muted)] block">Capacity:</span>
                     <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics?.total ?? "—"}</span>

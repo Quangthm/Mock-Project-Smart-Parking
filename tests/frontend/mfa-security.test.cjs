@@ -11,7 +11,7 @@ function nodes(tree) {
 }
 
 async function fixture(enabled = false, rejected = false) {
-  const states = [], effects = [], calls = [], storage = new Map(), events = [], dismissal = [];
+  const states = [], effects = [], calls = [], storage = new Map(), events = [], dismissal = [], timers = [];
   let cursor = 0, effectCursor = 0;
   const jsx = (type, props) => ({ type, props });
   const api = {
@@ -66,6 +66,8 @@ async function fixture(enabled = false, rejected = false) {
     window: {
       dispatchEvent: event => events.push(event.type), location: { assign: path => events.push(path) },
       addEventListener() {}, removeEventListener() {},
+      setTimeout(callback, duration) { timers.push({ callback, duration }); return timers.length; },
+      clearTimeout() {},
     },
   };
   vm.runInNewContext(javascript, context);
@@ -87,7 +89,7 @@ async function fixture(enabled = false, rejected = false) {
   const button = text => nodes(render()).find(node => node.type === 'button' && node.props.children === text);
   const password = value => nodes(render()).find(node => node.props?.autoComplete === 'current-password').props.onChange({ target: { value } });
   const submit = () => nodes(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
-  return { render, button, password, submit, calls, storage, events, dismissal };
+  return { render, button, password, submit, calls, storage, events, dismissal, timers };
 }
 
 test('setup verifies password, renders a local QR and shows recovery codes only after activation', async () => {
@@ -105,6 +107,10 @@ test('setup verifies password, renders a local QR and shows recovery codes only 
   assert.equal(f.button('Done').props.disabled, true);
   assert.equal(f.dismissal.at(-1), true);
   assert.ok(nodes(f.render()).find(node => node.type === 'pre').props.children.includes('private-code-7'));
+  assert.equal(f.timers.find(timer => timer.duration === 5000)?.duration, 5000);
+  f.timers.find(timer => timer.duration === 5000).callback();
+  assert.equal(nodes(f.render()).find(node => node.props?.className?.includes('is-transient')), undefined);
+  assert.ok(nodes(f.render()).find(node => node.type === 'pre'));
   assert.equal(f.storage.size, 0);
   nodes(f.render()).find(node => node.props?.type === 'checkbox').props.onChange({ target: { checked: true } });
   f.button('Done').props.onClick();
