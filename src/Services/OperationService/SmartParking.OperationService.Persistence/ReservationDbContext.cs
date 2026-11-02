@@ -13,6 +13,10 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<StructureSiteStateRow> StructureSiteStates => Set<StructureSiteStateRow>();
     public DbSet<StructureRemovedResourceRow> StructureRemovedResources => Set<StructureRemovedResourceRow>();
     public DbSet<StructureReleaseReceiptRow> StructureReleaseReceipts => Set<StructureReleaseReceiptRow>();
+    public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
+    public DbSet<ProcessedEventRow> ProcessedEvents => Set<ProcessedEventRow>();
+    public DbSet<OccupancyReleaseLedgerRow> OccupancyReleaseLedger => Set<OccupancyReleaseLedgerRow>();
+    public DbSet<SlotSequenceWatermarkRow> SlotSequenceWatermarks => Set<SlotSequenceWatermarkRow>();
     public DbSet<AuditLogRow> AuditLogs => Set<AuditLogRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -25,12 +29,24 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<StructureSiteStateRow>(modelBuilder, "structure_site_state");
         Map<StructureRemovedResourceRow>(modelBuilder, "structure_removed_resources");
         Map<StructureReleaseReceiptRow>(modelBuilder, "structure_release_receipts");
+        Map<OutboxEventRow>(modelBuilder, "outbox_events");
+        Map<ProcessedEventRow>(modelBuilder, "processed_events");
+        Map<OccupancyReleaseLedgerRow>(modelBuilder, "occupancy_release_ledger");
+        Map<SlotSequenceWatermarkRow>(modelBuilder, "slot_sequence_watermarks");
         Map<AuditLogRow>(modelBuilder, "audit_logs");
-        modelBuilder.Entity<StructureEditHoldRow>().HasKey(x => x.SiteId);
+        modelBuilder.Entity<ProcessedEventRow>().HasKey(x => x.EventId);
+        modelBuilder.Entity<OccupancyReleaseLedgerRow>().HasKey(x => x.EventId);
+        modelBuilder.Entity<OccupancyReleaseLedgerRow>().HasIndex(x => x.SessionId).IsUnique();
+        modelBuilder.Entity<SlotSequenceWatermarkRow>().HasKey(x => x.SlotId);
         modelBuilder.Entity<StructureEditHoldRow>().HasIndex(x => x.Token).IsUnique();
         modelBuilder.Entity<StructureSiteStateRow>().HasKey(x => x.SiteId);
         modelBuilder.Entity<StructureReleaseReceiptRow>().HasKey(x => x.Token);
         modelBuilder.Entity<StructureReleaseReceiptRow>().Property(x => x.Outcome).HasColumnType("jsonb");
+        modelBuilder.Entity<OutboxEventRow>().HasKey(x => x.EventId);
+        modelBuilder.Entity<OutboxEventRow>().Property(x => x.EventType).HasMaxLength(64);
+        modelBuilder.Entity<OutboxEventRow>().Property(x => x.Payload).HasColumnType("jsonb");
+        modelBuilder.Entity<OutboxEventRow>().HasIndex(x => x.SequenceNumber);
+        modelBuilder.Entity<OutboxEventRow>().HasIndex(x => new { x.SiteId, x.SequenceNumber });
     }
 
     private static void Map<TEntity>(ModelBuilder modelBuilder, string table) where TEntity : class

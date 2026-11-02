@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.1.2" />
     <ProjectReference Include="../SmartParking.OperationService.Application/SmartParking.OperationService.Application.csproj" />
     <ProjectReference Include="../SmartParking.OperationService.Persistence/SmartParking.OperationService.Persistence.csproj" />
   </ItemGroup>

@@ -3,6 +3,7 @@ using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.DTOs;
 using SmartParking.OperationService.Domain.Entities;
+using System.Text.Json;
 
 namespace SmartParking.OperationService.Persistence;
 
@@ -98,6 +99,13 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
             SessionStatus = "ACTIVE", CreatedAt = now, Version = 1
         });
         await db.SaveChangesAsync(ct);
+        db.OutboxEvents.Add(new OutboxEventRow
+        {
+            EventId = Guid.NewGuid(), EventType = "OccupancyChanged", OccurredAt = now,
+            SequenceNumber = await NextSequenceAsync(siteId, ct), SiteId = siteId,
+            Payload = JsonSerializer.Serialize(new { sessionId, action = "checkin_walkin" })
+        });
+        await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return new(sessionId, siteId, null, null, plate.Trim(), vehicleType, now, null, imageData, null);
     }
@@ -117,25 +125,31 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
         if (session.VehicleType is not ("CAR" or "MOTORCYCLE"))
             throw new ReservationGateException(409, "INVALID_VEHICLE_TYPE", "This parking session has an unsupported vehicle type.");
 
-        if (session.ExitTime is null)
-        {
-            var now = DateTimeOffset.UtcNow;
-            session.ExitTime = now;
-            session.ExitImageUrl = imageData;
-            session.SessionStatus = "COMPLETED";
-            if (session.CurrentSlotId is not null)
+            if (session.ExitTime is null)
             {
-                var allocations = await db.SlotAllocations
-                    .Where(a => a.ParkingSessionId == sessionId && a.AllocationStatus == "OCCUPIED")
-                    .ToListAsync(ct);
-                foreach (var allocation in allocations)
+                var now = DateTimeOffset.UtcNow;
+                session.ExitTime = now;
+                session.ExitImageUrl = imageData;
+                session.SessionStatus = "COMPLETED";
+                if (session.CurrentSlotId is not null)
                 {
-                    allocation.AllocationStatus = "RELEASED";
-                    allocation.AllocatedEndTime = now;
+                    var allocations = await db.SlotAllocations
+                        .Where(a => a.ParkingSessionId == sessionId && a.AllocationStatus == "OCCUPIED")
+                        .ToListAsync(ct);
+                    foreach (var allocation in allocations)
+                    {
+                        allocation.AllocationStatus = "RELEASED";
+                        allocation.AllocatedEndTime = now;
+                    }
                 }
+                db.OutboxEvents.Add(new OutboxEventRow
+                {
+                    EventId = Guid.NewGuid(), EventType = "OccupancyReleased", OccurredAt = now,
+                    SequenceNumber = await NextSequenceAsync(siteId, ct), SiteId = siteId,
+                    Payload = JsonSerializer.Serialize(new { sessionId, slotId = session.CurrentSlotId?.ToString() })
+                });
+                await db.SaveChangesAsync(ct);
             }
-            await db.SaveChangesAsync(ct);
-        }
 
         var currentSlot = session.CurrentSlotId;
         await transaction.CommitAsync(ct);
@@ -207,6 +221,12 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
                 allocation.ParkingSessionId = sessionId;
             }
             reservation.Status = "PARKING";
+            db.OutboxEvents.Add(new OutboxEventRow
+            {
+                EventId = Guid.NewGuid(), EventType = "SlotStateChanged", OccurredAt = now,
+                SequenceNumber = await NextSequenceAsync(siteId, ct), SiteId = siteId,
+                Payload = JsonSerializer.Serialize(new { reservationId, sessionId, slotId = slotId?.ToString(), physicalState = "OCCUPIED" })
+            });
         }
         else
         {
@@ -227,6 +247,12 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
                 allocation.AllocationStatus = "RELEASED";
                 allocation.AllocatedEndTime = now;
             }
+            db.OutboxEvents.Add(new OutboxEventRow
+            {
+                EventId = Guid.NewGuid(), EventType = "OccupancyReleased", OccurredAt = now,
+                SequenceNumber = await NextSequenceAsync(siteId, ct), SiteId = siteId,
+                Payload = JsonSerializer.Serialize(new { sessionId = session.Id, slotId = allocations.FirstOrDefault()?.SlotId.ToString() })
+            });
         }
 
         db.AuditLogs.Add(new AuditLogRow
@@ -274,6 +300,14 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
                 MapStatus(r.Status), null, null, null, r.ExpectedStartTime, r.ExpectedEndTime,
                 session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt);
         }).ToArray();
+    }
+
+    private async Task<long> NextSequenceAsync(Guid siteId, CancellationToken ct)
+    {
+        var max = await db.OutboxEvents
+            .Where(e => e.SiteId == siteId)
+            .MaxAsync(e => (long?)e.SequenceNumber, ct);
+        return (max ?? 0) + 1;
     }
 
     private Task<int> LockPlateAsync(Guid siteId, string plate, CancellationToken ct) =>

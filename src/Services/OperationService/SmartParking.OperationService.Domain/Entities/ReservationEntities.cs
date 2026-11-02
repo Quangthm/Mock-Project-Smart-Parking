@@ -103,6 +103,29 @@ public sealed class StructureReleaseReceiptRow
     public DateTimeOffset CompletedAt { get; set; }
 }
 
+public sealed class ProcessedEventRow
+{
+    public Guid EventId { get; set; }
+    public string EventType { get; set; } = "";
+    public DateTimeOffset ProcessedAt { get; set; }
+}
+
+public sealed class OccupancyReleaseLedgerRow
+{
+    public Guid EventId { get; set; }
+    public Guid SessionId { get; set; }
+    public Guid SlotId { get; set; }
+    public DateTimeOffset ReleasedAt { get; set; }
+    public DateTimeOffset ProcessedAt { get; set; }
+}
+
+public sealed class SlotSequenceWatermarkRow
+{
+    public Guid SlotId { get; set; }
+    public long LastSequenceNumber { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class AuditLogRow
 {
     public Guid Id { get; set; }
