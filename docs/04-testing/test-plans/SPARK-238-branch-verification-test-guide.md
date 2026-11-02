@@ -922,8 +922,11 @@ dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.Facil
   --nologo -m:1 --no-build
 
 # 4) Gated Postgres tests (cần facility-db-1; host port 5442 = SMARTPARK_DB_PARKING_PORT)
+# Lưu ý: connection string chỉ là anchor để CREATE DATABASE. Fixture tự tạo database
+# tạm (structure_parking_test_* / structure_reservation_test_*) rồi drop sau mỗi test;
+# KHÔNG ghi gì vào chính smartpark_facility.
 $pw = ((Select-String -Path .env -Pattern '^SMARTPARK_DEV_PASSWORD=').Line -split '=',2)[1].Trim()
-$env:SMARTPARK_STRUCTURE_TEST_CONNECTION = "Host=127.0.0.1;Port=5442;Database=smartpark_facility_238;Username=smartpark_facility;Password=$pw"
+$env:SMARTPARK_STRUCTURE_TEST_CONNECTION = "Host=127.0.0.1;Port=5442;Database=smartpark_facility;Username=smartpark_facility;Password=$pw"
 dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj `
   --nologo -m:1 --no-build --filter "FullyQualifiedName~Postgres"
 ```

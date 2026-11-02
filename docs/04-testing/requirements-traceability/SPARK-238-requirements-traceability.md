@@ -55,9 +55,10 @@ dotnet test  SmartParking.slnx --nologo -m:1 --no-build
 dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj `
   --nologo -m:1 --no-build --filter "FullyQualifiedName~FacilityStructureEndpointTests"
 
-# Database-backed cases (needs the isolated facility database on 5442)
+# Database-backed cases (needs the shared facility database on 5442; the connection only
+# serves as a CREATE DATABASE anchor - each test builds and drops its own throw-away database)
 $pw = ((Select-String -Path .env -Pattern '^SMARTPARK_DEV_PASSWORD=').Line -split '=',2)[1].Trim()
-$env:SMARTPARK_STRUCTURE_TEST_CONNECTION = "Host=127.0.0.1;Port=5442;Database=smartpark_facility_238;Username=smartpark_facility;Password=$pw"
+$env:SMARTPARK_STRUCTURE_TEST_CONNECTION = "Host=127.0.0.1;Port=5442;Database=smartpark_facility;Username=smartpark_facility;Password=$pw"
 dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj `
   --nologo -m:1 --no-build --filter "FullyQualifiedName~Postgres"
 
