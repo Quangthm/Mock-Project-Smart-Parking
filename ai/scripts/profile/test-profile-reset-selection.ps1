@@ -1,8 +1,11 @@
 # Executes the real reset branch with a Docker double. No runtime resources are touched.
 $ErrorActionPreference = 'Stop'
 $parseErrors = $null
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+$setupPath = Join-Path $repoRoot 'setup.ps1'
+if (-not (Test-Path -LiteralPath $setupPath -PathType Leaf)) { throw "setup.ps1 not found at $setupPath" }
 $tree = [System.Management.Automation.Language.Parser]::ParseFile(
-    (Join-Path (Split-Path $PSScriptRoot -Parent) 'setup.ps1'), [ref]$null, [ref]$parseErrors)
+    $setupPath, [ref]$null, [ref]$parseErrors)
 if ($parseErrors.Count) { throw 'Setup parse failed.' }
 $reset = $tree.Find({ param($node)
     $node -is [System.Management.Automation.Language.IfStatementAst] -and

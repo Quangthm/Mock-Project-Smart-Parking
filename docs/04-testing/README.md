@@ -9,7 +9,7 @@
 
 ## Manual QA and evidence
 
-- [Demo user journey test cases](test-cases/demo-user-journey-2026-10-15.md) and [button-by-button rehearsal](demo-review-2026-10-15/QUY-TRINH-BAM-TEST-DEMO.md).
+- [Demo user journey test cases](test-cases/demo-user-journey-2026-10-15.md) and [button-by-button rehearsal](QUY-TRINH-BAM-TEST-DEMO.md).
 - [Assigned-workflow API handoff](tester-api-handoff-2026-10-08.md) and [Postman collection](postman/assigned-workflows-2026-10-08.postman_collection.json). The dated handoff is a collection companion; use the current API design when contracts differ.
 - [MFA QA recheck, 20/10/2026](MFA_QA_RECHECK_2026-10-20.md): focused regression evidence and pending tester follow-up.
 - [Acceptance scenarios and traceability](requirements-traceability/acceptance-scenarios.md).
