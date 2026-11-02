@@ -103,26 +103,19 @@ INSERT INTO users (email, password_hash, full_name, email_verified_at, status)
 SELECT :'driver_email', crypt(:'driver_password', gen_salt('bf', 12)), 'Demo Driver', now(), 'ACTIVE'
  WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = :'driver_email');
 
-INSERT INTO accounts (user_id, status)
-SELECT u.id, 'ACTIVE'
+-- A role now lives directly on accounts.role_code (single role per account),
+-- so the driver account carries DRIVER directly.
+INSERT INTO accounts (user_id, role_code, status)
+SELECT u.id, 'DRIVER', 'ACTIVE'
   FROM users u
- WHERE u.email = :'driver_email'
+  WHERE u.email = :'driver_email'
    AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.user_id = u.id);
 
-INSERT INTO account_roles (account_id, role_code)
-SELECT a.id, 'DRIVER'
-  FROM accounts a
-  JOIN users u ON u.id = a.user_id
- WHERE u.email = :'driver_email'
-   AND NOT EXISTS (SELECT 1 FROM account_roles r WHERE r.account_id = a.id AND r.role_code = 'DRIVER');
-
 SELECT u.email, u.status, (u.email_verified_at IS NOT NULL) AS email_verified,
-       a.status AS account_status, string_agg(r.role_code, ',' ORDER BY r.role_code) AS roles
+       a.status AS account_status, a.role_code AS roles
   FROM users u
   LEFT JOIN accounts a ON a.user_id = u.id
-  LEFT JOIN account_roles r ON r.account_id = a.id
  WHERE u.email IN (:'owner_email', :'operator_email', :'admin_email', :'driver_email')
- GROUP BY u.email, u.status, u.email_verified_at, a.status
  ORDER BY u.email;
 '@
 
