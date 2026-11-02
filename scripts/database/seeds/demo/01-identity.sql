@@ -31,6 +31,14 @@ WHERE a.user_id = u.id
   AND a.site_id IS NULL
   AND a.role_code = 'BUSINESS_OWNER';
 
+-- Operator login gate: AccountRolePolicy only maps a verified SITE_OPERATOR, so
+-- clear the PENDING_VERIFICATION state DataSeeder leaves on the demo operator.
+UPDATE users
+SET status = 'ACTIVE',
+    email_verified_at = COALESCE(email_verified_at, now())
+WHERE lower(email) = lower(:'operator_email')
+  AND deleted_at IS NULL;
+
 -- Operator account: assign tenant + demo site.
 UPDATE accounts a
 SET tenant_id = :'tenant_id'::uuid,
