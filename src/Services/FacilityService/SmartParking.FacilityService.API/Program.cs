@@ -42,6 +42,14 @@ public static class FacilityHost
         builder.Services.AddScoped<IStructureSynchronizationStore, PostgresStructureSynchronizationStore>();
         builder.Services.AddScoped<StructureSynchronizationService>();
         builder.Services.AddHostedService<StructureSynchronizationWorker>();
+        builder.Services.AddScoped<IOccupancyProjectionStore, OccupancyProjectionStore>();
+        // Occupancy projection is enabled only when the broker is configured; without it the
+        // projection tables stay untouched and the operator layout keeps serving its snapshot.
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["RabbitMq:ConnectionString"]))
+        {
+            builder.Services.Configure<RabbitMqProjectionOptions>(builder.Configuration.GetSection("RabbitMq"));
+            builder.Services.AddHostedService<OccupancyProjectionWorker>();
+        }
         builder.Services.AddScoped<IStructureOperationStore, StructureOperationStore>();
         builder.Services.AddScoped<StructureOperationService>();
         builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });

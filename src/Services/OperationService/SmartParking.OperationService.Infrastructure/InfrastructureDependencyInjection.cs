@@ -51,7 +51,6 @@ public static class InfrastructureDependencyInjection
 
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            services.AddSingleton<ILoggerFactory, LoggerFactory>();
             services.AddSingleton<IOutboxEventPublisher, DisabledOutboxEventPublisher>();
             return;
         }

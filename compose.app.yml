@@ -63,6 +63,8 @@ services:
     environment:
       <<: *backend-env
       ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      # SPARK-244 realtime: enables OccupancyProjectionWorker (unset -> consumer stays off).
+      RabbitMq__ConnectionString: "amqp://${SMARTPARK_RABBITMQ_USER:-smartpark}:${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}@rabbitmq:5672/${SMARTPARK_RABBITMQ_VHOST:-smartpark}"
     ports:
       - "127.0.0.1:5045:8080"
     networks:
@@ -80,6 +82,10 @@ services:
     environment:
       <<: *backend-env
       ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      # SPARK-244 realtime: outbox publisher + layout broadcaster (unset -> publisher disabled).
+      RabbitMq__ConnectionString: "amqp://${SMARTPARK_RABBITMQ_USER:-smartpark}:${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}@rabbitmq:5672/${SMARTPARK_RABBITMQ_VHOST:-smartpark}"
+      # SPARK-244 realtime: SignalR backplane; empty keeps the in-memory hub (single instance).
+      Redis__ConnectionString: ${SMARTPARK_REDIS_CONNECTION:-}
     ports:
       - "127.0.0.1:5055:8080"
     networks:

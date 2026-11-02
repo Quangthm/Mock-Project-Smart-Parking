@@ -1,9 +1,10 @@
-using System;
 using Microsoft.AspNetCore.SignalR;
+using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
 
 namespace SmartParking.OperationService.API.Hubs;
 
-public sealed class ParkingLotLayoutHub : Hub
+public sealed class ParkingLotLayoutHub(IOperatorIdentityClient identity) : Hub
 {
     public override async Task OnConnectedAsync()
     {
@@ -11,13 +12,27 @@ public sealed class ParkingLotLayoutHub : Hub
         var siteIdRaw = http?.Request.RouteValues["siteId"]?.ToString();
         if (!Guid.TryParse(siteIdRaw, out var siteId)) throw new HubException("INVALID_SITE_ID");
 
-        var assigned = (Context.User?.FindFirst("AssignedLots")?.Value
-                      ?? Context.User?.FindFirst("assigned_lots")?.Value
-                      ?? "").Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var isOverride = Context.User?.IsInRole("SLOT_OVERRIDE") == true
-                      || Context.User?.HasClaim("permission", "SLOT_OVERRIDE") == true;
-        if (!isOverride && !assigned.Contains(siteId.ToString(), StringComparer.OrdinalIgnoreCase))
+        var token = http?.Request.Query["access_token"].ToString();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            var authHeader = http?.Request.Headers.Authorization.ToString();
+            if (!string.IsNullOrWhiteSpace(authHeader)) token = authHeader;
+        }
+        if (string.IsNullOrWhiteSpace(token))
+            throw new HubException("UNAUTHENTICATED");
+
+        try
+        {
+            await identity.AuthorizeSiteAsync(siteId, token, Context.ConnectionAborted);
+        }
+        catch (ReservationGateException ex) when (ex.StatusCode == 401 || ex.Code == "UNAUTHENTICATED")
+        {
+            throw new HubException("UNAUTHENTICATED");
+        }
+        catch (ReservationGateException ex) when (ex.StatusCode == 403)
+        {
             throw new HubException("OPERATOR_LOT_UNASSIGNED");
+        }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"site:{siteId}:operators");
         await Clients.Caller.SendAsync("SnapshotRequired", siteId);

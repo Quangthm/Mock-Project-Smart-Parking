@@ -56,7 +56,10 @@ public sealed class OccupancyOutboxWorker(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var publisher = scope.ServiceProvider.GetRequiredService<IOutboxEventPublisher>();
+        var broadcaster = scope.ServiceProvider.GetService<IRealtimeLayoutBroadcaster>();
 
+        // The FOR UPDATE lock is meaningful only inside a transaction; keep it open for the batch.
+        await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
         var batch = await db.OutboxEvents
             .FromSqlRaw(
                 "SELECT * FROM outbox_events WHERE published_at IS NULL ORDER BY occurred_at, sequence_number LIMIT {0} FOR UPDATE SKIP LOCKED",
@@ -65,20 +68,23 @@ public sealed class OccupancyOutboxWorker(
             .ToListAsync(stoppingToken);
         if (batch.Count == 0) return 0;
 
-        // The FOR UPDATE lock is meaningful only inside a transaction; keep it open for the batch.
-        await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
-        batch = await db.OutboxEvents
-            .FromSqlRaw(
-                "SELECT * FROM outbox_events WHERE published_at IS NULL ORDER BY occurred_at, sequence_number LIMIT {0} FOR UPDATE SKIP LOCKED",
-                BatchSize)
-            .AsAsyncEnumerable()
-            .ToListAsync(stoppingToken);
-
         foreach (var row in batch)
         {
-            await publisher.PublishAsync(
-                new OutboxMessage(row.EventId, row.EventType, row.OccurredAt, row.SequenceNumber, row.SiteId, row.Payload),
-                stoppingToken);
+            var message = new OutboxMessage(row.EventId, row.EventType, row.OccurredAt, row.SequenceNumber, row.SiteId, row.Payload);
+            await publisher.PublishAsync(message, stoppingToken);
+            if (broadcaster is not null)
+            {
+                try
+                {
+                    await broadcaster.BroadcastAsync(message, stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    // A failed broadcast must not block the outbox: the broker message is
+                    // already published and clients recover via SnapshotRequired on reconnect.
+                    logger.LogWarning(ex, "Realtime broadcast failed for event {EventId}.", row.EventId);
+                }
+            }
             row.PublishedAt = DateTimeOffset.UtcNow;
         }
 

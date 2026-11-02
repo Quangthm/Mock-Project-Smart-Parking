@@ -331,35 +331,20 @@ components:
         rowCode:
           type: [string, "null"]
           example: Row_01
-    supportedVehicleType:
-      $ref: '#/components/schemas/SupportedVehicleType'
-    slotType:
-      $ref: '#/components/schemas/SlotType'
-    physicalState:
-      $ref: '#/components/schemas/PhysicalState'
-    reservationState:
-      $ref: '#/components/schemas/ReservationState'
-    eventId:
-      type: string
-      format: uuid
-      description: Immutable event identity for client-side idempotency (SPARK-244 G5). Keyed by slot node in the FE consumer.
-      example: 550e8400-e29b-41d4-a716-446655440000
-    sequenceNumber:
-      type: integer
-      format: int64
-      description: Monotonic per-slot sequence assigned by publisher. Lower or equal than last applied is ignored to prevent replay regression.
-      example: 12
-    siteId:
-      type: string
-      format: uuid
-      description: Parent site this delta belongs to; used for scope gating (SPARK-244 G6).
-      example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
-    sessionType:
-      anyOf:
-        - $ref: '#/components/schemas/SessionType'
-        - type: 'null'
-      description: Active session classification determining vehicle proxy PBR chassis color. Null for Driver/Guest.
-      example: STANDARD
+        supportedVehicleType:
+          $ref: '#/components/schemas/SupportedVehicleType'
+        slotType:
+          $ref: '#/components/schemas/SlotType'
+        physicalState:
+          $ref: '#/components/schemas/PhysicalState'
+        reservationState:
+          $ref: '#/components/schemas/ReservationState'
+        sessionType:
+          anyOf:
+            - $ref: '#/components/schemas/SessionType'
+            - type: 'null'
+          description: Active session classification determining vehicle proxy PBR chassis color. Null for Driver/Guest.
+          example: STANDARD
         isEvCharging:
           type: boolean
           example: false

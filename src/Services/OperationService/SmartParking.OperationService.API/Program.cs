@@ -1,6 +1,10 @@
+using Microsoft.AspNetCore.SignalR;
 using SmartParking.OperationService.Application;
 using SmartParking.OperationService.API.Controllers;
+using SmartParking.OperationService.API.Hubs;
 using SmartParking.OperationService.API.Middleware;
+using SmartParking.OperationService.API.Realtime;
+using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Infrastructure;
 
 namespace SmartParking.OperationService.API;
@@ -16,6 +20,16 @@ public static class OperationHost
         builder.Services.AddApplicationServices();
         builder.Services.AddInfrastructureServices(builder.Configuration);
         builder.Services.AddControllers().AddApplicationPart(typeof(ReservationsController).Assembly);
+
+        // SPARK-244 P2: realtime operator monitoring hub. Redis backplane is
+        // enabled only when a connection string is configured (multi-instance).
+        var signalR = builder.Services.AddSignalR();
+        var redis = builder.Configuration["Redis:ConnectionString"]
+            ?? builder.Configuration.GetConnectionString("Redis");
+        if (!string.IsNullOrWhiteSpace(redis))
+            signalR.AddStackExchangeRedis(redis);
+        builder.Services.AddSingleton<IRealtimeLayoutBroadcaster, SignalRLayoutRealtimeBroadcaster>();
+
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
             .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
             .AllowAnyHeader()
@@ -26,6 +40,7 @@ public static class OperationHost
         app.UseMiddleware<ReservationExceptionMiddleware>();
         app.UseMiddleware<InternalServiceKeyMiddleware>();
         app.MapControllers();
+        app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout");
         return app;
     }
 }
