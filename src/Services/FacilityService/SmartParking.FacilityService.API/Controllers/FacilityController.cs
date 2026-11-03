@@ -189,7 +189,22 @@ public sealed class FacilityController(
     public async Task<IActionResult> OperatorLayout(Guid id, CancellationToken ct)
     {
         await operators.ScopeAsync(id, ct);
-        return Ok(new { success = true, data = await operatorLayout.ReadAsync(id, ct) });
+        var structure = await operatorLayout.ReadAsync(id, ct);
+        // Explicit projection: the aggregate is not serialized directly, so the released
+        // (soft-deleted) collections never reach the wire.
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                structure.Site,
+                structure.Units,
+                structure.Slots,
+                structure.Paths,
+                structure.BackupPolicies,
+                structure.CapacityViews
+            }
+        });
     }
 
     [HttpDelete("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup")]

@@ -57,11 +57,12 @@ public sealed class ParkingStructure
     public IReadOnlyList<SpatialUnit> Units => units.AsReadOnly();
     public IReadOnlyList<ParkingSlot> Slots => slots.AsReadOnly();
     public IReadOnlyList<AccessPath> Paths => paths.AsReadOnly();
-    // Soft-deleted rows are not part of a read: the current aggregate is serialized directly by the
-    // structure route until the typed read DTO lands, so they are excluded from the wire here.
-    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<ParkingSlot> ReleasedSlots => releasedSlots.AsReadOnly();
-    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<SpatialUnit> ReleasedUnits => releasedUnits.AsReadOnly();
-    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<AccessPath> ReleasedPaths => releasedPaths.AsReadOnly();
+    // Soft-deleted rows are read-only restore candidates: they are never part of a live read, and no
+    // response serializes the aggregate directly (the structure and operator-layout routes project
+    // their fields explicitly).
+    public IReadOnlyList<ParkingSlot> ReleasedSlots => releasedSlots.AsReadOnly();
+    public IReadOnlyList<SpatialUnit> ReleasedUnits => releasedUnits.AsReadOnly();
+    public IReadOnlyList<AccessPath> ReleasedPaths => releasedPaths.AsReadOnly();
     public IReadOnlyList<BackupPolicy> BackupPolicies => backupPolicies.AsReadOnly();
     public IReadOnlyList<CapacityView> CapacityViews => Views();
 
