@@ -1,4 +1,5 @@
 using FluentValidation;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -35,6 +36,7 @@ public class DependencyInjectionTests
             .Build();
 
         services.AddLogging();
+        services.AddMassTransit(x => x.UsingInMemory((_, _) => { }));
         services.AddApplicationServices();
         services.AddInfrastructureServices(configuration);
         services.AddPersistenceServices(configuration);

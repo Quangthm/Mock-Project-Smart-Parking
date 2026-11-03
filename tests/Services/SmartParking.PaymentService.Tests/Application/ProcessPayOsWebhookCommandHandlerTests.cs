@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using SmartParking.PaymentService.Application.Common.Interfaces.Services;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
@@ -15,6 +16,7 @@ public class ProcessPayOsWebhookCommandHandlerTests
     private readonly FakePaymentOrderRepository _orderRepo = new();
     private readonly FakePaymentTransactionRepository _txRepo = new();
     private readonly FakeUnitOfWork _uow = new();
+    private readonly FakePaymentSucceededPublisher _publisher = new();
 
     private ProcessPayOsWebhookCommandHandler CreateHandler()
     {
@@ -24,8 +26,15 @@ public class ProcessPayOsWebhookCommandHandlerTests
             _orderRepo,
             _txRepo,
             _uow,
-            NullLogger<ProcessPayOsWebhookCommandHandler>.Instance
+            NullLogger<ProcessPayOsWebhookCommandHandler>.Instance,
+            _publisher
         );
+    }
+
+    private sealed class FakePaymentSucceededPublisher : IPaymentSucceededPublisher
+    {
+        public Task PublishAsync(PaymentSucceededMessage message, CancellationToken ct)
+            => Task.CompletedTask;
     }
 
     [Fact]

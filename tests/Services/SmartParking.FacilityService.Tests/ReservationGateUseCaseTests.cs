@@ -200,5 +200,14 @@ public sealed class ReservationGateUseCaseTests
 
         public Task<ReservationGateEntry> CheckOutAsync(Guid tenantId, Guid siteId, Guid actorId, Guid reservationId, string? recognizedPlate, string? imageData, CancellationToken ct)
             => Task.FromResult(CreateSampleReservationEntry());
+
+        public Task MarkWalkInPaymentPendingAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task MarkReservationPaymentPendingAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task CompletePaymentAsync(Guid tenantId, Guid siteId, string referenceType, Guid referenceId, DateTimeOffset completedAt, CancellationToken ct)
+            => Task.CompletedTask;
     }
 }
