@@ -1,0 +1,170 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
+
+namespace SmartParking.OperationService.Infrastructure.Clients;
+
+public sealed class CheckoutPaymentClient(
+    HttpClient client,
+    IHttpContextAccessor context) : ICheckoutPaymentClient
+{
+    public async Task<CheckoutPricing> CalculateAsync(
+        Guid tenantId,
+        Guid siteId,
+        Guid referenceId,
+        string referenceType,
+        string vehicleType,
+        DateTimeOffset entryTime,
+        DateTimeOffset pricingCutoffAt,
+        CancellationToken ct)
+    {
+        var result = await SendAsync<PaymentEnvelope<PaymentPricing>>(
+            HttpMethod.Post,
+            "/api/v1/pricing/calculate",
+            new
+            {
+                tenantId,
+                siteId,
+                vehicleType,
+                entryTime,
+                exitTime = pricingCutoffAt,
+                sessionId = referenceType == "PARKING_SESSION" ? referenceId : (Guid?)null,
+                reservationId = referenceType == "RESERVATION" ? referenceId : (Guid?)null
+            },
+            ct);
+        return new(result.Data.FinalAmountVnd, result.Data.Currency, result.Data.TotalParkedMinutes, result.Data.IsFreeStay);
+    }
+
+    public async Task<CheckoutPaymentPreparation> PrepareAsync(
+        Guid tenantId,
+        Guid siteId,
+        Guid referenceId,
+        string referenceType,
+        string vehicleType,
+        DateTimeOffset entryTime,
+        DateTimeOffset pricingCutoffAt,
+        Guid? accountId,
+        CancellationToken ct)
+    {
+        var pricing = await CalculateAsync(
+            tenantId, siteId, referenceId, referenceType, vehicleType, entryTime, pricingCutoffAt, ct);
+
+        var order = await SendAsync<PaymentEnvelope<PaymentOrder>>(
+            HttpMethod.Post,
+            "/api/v1/payments/orders",
+            new
+            {
+                tenantId,
+                siteId,
+                referenceId,
+                referenceType,
+                amount = pricing.FinalAmountVnd,
+                accountId,
+                idempotencyKey = $"checkout:{referenceType.ToLowerInvariant()}:{referenceId:N}"
+            },
+            ct);
+
+        return new(
+            pricing,
+            new(order.Data.OrderId, order.Data.OrderCode, order.Data.Amount, order.Data.Status, order.Data.ExpiresAt));
+    }
+
+    public async Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct)
+    {
+        var result = await SendAsync<PaymentEnvelope<PaymentCheckout>>(
+            HttpMethod.Post,
+            $"/api/v1/payments/orders/{orderId}/checkout",
+            new { paymentMethod = "PAYOS" },
+            ct,
+            idempotencyKey);
+        return new(result.Data.PaymentTransactionId, result.Data.OrderCode, result.Data.Amount,
+            result.Data.CheckoutUrl, result.Data.Status, result.Data.ExpiresAt);
+    }
+
+    public async Task<CheckoutPaymentStatus> ConfirmCashAsync(Guid orderId, string idempotencyKey, CancellationToken ct)
+    {
+        var result = await SendAsync<PaymentEnvelope<PaymentStatus>>(
+            HttpMethod.Post,
+            $"/api/v1/payments/orders/{orderId}/cash",
+            new { idempotencyKey },
+            ct);
+        return ToStatus(result.Data);
+    }
+
+    public async Task<CheckoutPaymentStatus> DemoPayAsync(Guid orderId, CancellationToken ct)
+    {
+        var result = await SendAsync<PaymentEnvelope<PaymentStatus>>(
+            HttpMethod.Post,
+            $"/api/v1/payments/orders/{orderId}/demo-pay",
+            null,
+            ct);
+        return ToStatus(result.Data);
+    }
+
+    public async Task<CheckoutPaymentStatus> GetStatusAsync(Guid transactionId, CancellationToken ct)
+    {
+        var result = await SendAsync<PaymentEnvelope<PaymentStatus>>(
+            HttpMethod.Get,
+            $"/api/v1/payments/transactions/{transactionId}/status",
+            null,
+            ct);
+        return ToStatus(result.Data);
+    }
+
+    private async Task<T> SendAsync<T>(
+        HttpMethod method,
+        string path,
+        object? body,
+        CancellationToken ct,
+        string? idempotencyKey = null)
+    {
+        using var request = CreateRequest(method, path);
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+        if (body is not null)
+            request.Content = JsonContent.Create(body);
+
+        try
+        {
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                throw new ReservationGateException(
+                    response.StatusCode == HttpStatusCode.NotFound ? 404 : 503,
+                    "PAYMENT_SERVICE_ERROR",
+                    "Payment service could not process the checkout request.");
+
+            return await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct)
+                ?? throw new ReservationGateException(503, "PAYMENT_SERVICE_ERROR", "Payment service returned an empty response.");
+        }
+        catch (ReservationGateException)
+        {
+            throw;
+        }
+        catch (Exception error) when (error is HttpRequestException or JsonException ||
+                                      error is OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            throw new ReservationGateException(503, "PAYMENT_SERVICE_UNAVAILABLE", "Payment service is unavailable.");
+        }
+    }
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(method, path);
+        var authorization = context.HttpContext?.Request.Headers.Authorization.ToString();
+        if (!string.IsNullOrWhiteSpace(authorization))
+            request.Headers.TryAddWithoutValidation("Authorization", authorization);
+        return request;
+    }
+
+    private static CheckoutPaymentStatus ToStatus(PaymentStatus status) =>
+        new(status.TransactionId, status.OrderId, status.Amount, status.Status, status.PaidAt, status.IsAuthoritative);
+
+    private sealed record PaymentEnvelope<T>(bool Success, T Data);
+    private sealed record PaymentPricing(long FinalAmountVnd, string Currency, decimal TotalParkedMinutes, bool IsFreeStay);
+    private sealed record PaymentOrder(Guid OrderId, string OrderCode, decimal Amount, string Status, DateTimeOffset ExpiresAt);
+    private sealed record PaymentCheckout(Guid PaymentTransactionId, long OrderCode, long Amount, string CheckoutUrl, string Status, DateTimeOffset ExpiresAt);
+    private sealed record PaymentStatus(Guid TransactionId, Guid OrderId, long Amount, string Status, DateTimeOffset? PaidAt, bool IsAuthoritative);
+}
