@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SmartParking.FacilityService.Persistence.Entities;
 
 namespace SmartParking.FacilityService.Persistence;
 
