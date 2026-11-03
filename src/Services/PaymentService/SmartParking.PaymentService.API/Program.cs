@@ -4,6 +4,7 @@ using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
+using SmartParking.PaymentService.Persistence.Outbox;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,8 +41,8 @@ builder.Services.AddAuthorization();
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
-builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
+builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaymentOutbox(builder.Configuration));
 
 var app = builder.Build();
 

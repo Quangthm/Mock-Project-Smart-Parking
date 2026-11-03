@@ -224,3 +224,71 @@ public class FakeEventPublisher : SmartParking.PaymentService.Application.Common
         return Task.CompletedTask;
     }
 }
+
+
+public class FakePublishEndpoint : MassTransit.IPublishEndpoint
+{
+    public readonly List<object> PublishedMessages = new();
+
+    public Task Publish<T>(T message, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(T message, MassTransit.IPipe<MassTransit.PublishContext<T>> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(T message, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, Type messageType, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, Type messageType, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(object values, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(values);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(object values, MassTransit.IPipe<MassTransit.PublishContext<T>> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(values);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(object values, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(values);
+        return Task.CompletedTask;
+    }
+
+    public MassTransit.ConnectHandle ConnectPublishObserver(MassTransit.IPublishObserver observer) => throw new NotImplementedException();
+}
