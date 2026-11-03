@@ -426,7 +426,7 @@ export function OperatorDashboard({
 
           {/* TAB 7: ASSIGNMENTS */}
           {accessRole === "operation" && tab === "assignments" && (
-            <OperatorAssignments currentLot={selectedLot} />
+            <OperatorAssignments currentLot={selectedLot} sites={ownerLots} />
           )}
 
           {/* TAB 8: FINANCIAL REPORTS */}

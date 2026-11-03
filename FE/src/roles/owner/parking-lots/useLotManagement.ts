@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext"
 import { parkingApi, type Site, type Structure, type CapacityView } from "../../../lib/parkingApi"
 import { ownerData as store } from "../data/data"
 import type { ParkingLot } from "../../../lib/types"
+import { reconcileOwnerLotSetups } from "../../../lib/ownerLotSetup"
 
 interface LotCapacityMetrics {
   total: number
@@ -47,6 +48,8 @@ export function useLotManagement(siteFilterId = "all") {
     parkingApi
       .list()
       .then(async (sites) => {
+        if (!current) return
+        await reconcileOwnerLotSetups(sites, user?.id ?? "").catch(() => {})
         if (!current) return
         const savedLots = new Map(store.getLotsByOwner(user?.id ?? "").map(lot => [lot.id, lot]))
 

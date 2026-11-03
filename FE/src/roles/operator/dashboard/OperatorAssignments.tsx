@@ -7,9 +7,10 @@ import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface OperatorAssignmentsProps {
   currentLot?: OperatorSite | null
+  sites?: OperatorSite[]
 }
 
-export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
+export function OperatorAssignments({ currentLot, sites = [] }: OperatorAssignmentsProps) {
   const { user } = useApp()
   const [assignments, setAssignments] = useState<OperatorAssignment[]>([])
   const [error, setError] = useState("")
@@ -83,7 +84,7 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
           <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
             <span className="text-[var(--muted)] block">Assigned Scope:</span>
             <strong className="text-[var(--primary)] text-sm capitalize">
-              {user?.operatorSiteId === "all" ? "All Facilities (Super-Operator)" : (currentLot?.name || "Single Assigned Lot")}
+              {assignments.length > 1 ? `${assignments.length} assigned facilities` : (currentLot?.name || (assignments.length ? "Assigned facility" : "No site assigned"))}
             </strong>
           </div>
           <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
@@ -112,8 +113,9 @@ export function OperatorAssignments({ currentLot }: OperatorAssignmentsProps) {
                 className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 space-y-2 text-xs"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-sm text-[var(--fg)]">
-                    Site ID: {assignment.siteId}
+                  <span className="min-w-0 text-sm font-bold text-[var(--fg)]">
+                    {sites.find(site => site.id === assignment.siteId)?.name || "Assigned parking lot"}
+                    <small className="mt-1 block break-all font-mono text-[var(--muted)]">Site ID: {assignment.siteId}</small>
                   </span>
                   <span className="rounded bg-green-500/10 px-2 py-0.5 text-[10px] font-bold text-green-600">
                     ACTIVE

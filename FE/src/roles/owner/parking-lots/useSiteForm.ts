@@ -7,6 +7,8 @@ import type { LotType } from "../../../lib/types"
 import { ALLOWED_PARKING_MODELS, validateModelUpload } from "../../../lib/3d/parking3DConfig"
 import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
 import { deleteOwnerModel, loadOwnerModelUrl, saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
+import { CITIES } from "../../../lib/vietnamAdministrativeUnits"
+import { validParkingCoordinates, type ParkingCoordinates } from "../../../components/ui/ParkingLocationPicker"
 
 export const LOT_TYPE_INFO: Record<LotType, {
   icon: string
@@ -18,15 +20,6 @@ export const LOT_TYPE_INFO: Record<LotType, {
   basement: { icon: "parking", label: "Basement Parking", hasFloors: true, desc: "Underground parking with multiple levels" },
   "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true, desc: "Multi-storey parking building" },
 }
-
-export const CITIES = [
-  { code: "HCM", name: "TP. Hồ Chí Minh", defaultLat: 10.7769, defaultLng: 106.7009, districts: ["Quận 1", "Quận 3", "TP. Thủ Đức", "Quận Bình Thạnh", "Quận 7", "Quận Tân Bình"] },
-  { code: "HN", name: "Hà Nội", defaultLat: 21.0285, defaultLng: 105.8542, districts: ["Quận Hoàn Kiếm", "Quận Ba Đình", "Quận Cầu Giấy", "Quận Đống Đa", "Quận Nam Từ Liêm"] },
-  { code: "DN", name: "Đà Nẵng", defaultLat: 16.0544, defaultLng: 108.2022, districts: ["Quận Hải Châu", "Quận Sơn Trà", "Quận Thanh Khê", "Quận Ngũ Hành Sơn"] },
-  { code: "BD", name: "Bình Dương", defaultLat: 10.9804, defaultLng: 106.6519, districts: ["TP. Thủ Dầu Một", "TP. Thuận An", "TP. Dĩ An"] },
-  { code: "HP", name: "Hải Phòng", defaultLat: 20.8449, defaultLng: 106.6881, districts: ["Quận Hồng Bàng", "Quận Ngô Quyền", "Quận Lê Chân"] },
-  { code: "CT", name: "Cần Thơ", defaultLat: 10.0452, defaultLng: 105.7469, districts: ["Quận Ninh Kiều", "Quận Bình Thủy", "Quận Cái Răng"] },
-]
 
 export const DEVICE_OPTIONS = [
   { type: "camera", label: "AI Camera System", desc: "Automatic license plate recognition (ANPR)" },
@@ -51,6 +44,7 @@ type SiteDraft = {
   selectedCity: string
   district: string
   streetAddress: string
+  locationConfirmed?: boolean
   form: {
     code: string
     name: string
@@ -90,6 +84,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   const [customModelUrl, setCustomModelUrl] = useState<string | null>(null)
   const [customModelFileName, setCustomModelFileName] = useState<string | null>(null)
   const [customModelFile, setCustomModelFile] = useState<File | null>(null)
+  const [modelStorageReady, setModelStorageReady] = useState(false)
   const modelChoiceChangedRef = useRef(false)
   const [modelError, setModelError] = useState("")
   const activeModelUrl = customModelUrl ?? ALLOWED_PARKING_MODELS[lotType].path
@@ -102,7 +97,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       if (!active || !url || modelChoiceChangedRef.current) return
       setCustomModelUrl(url)
       setCustomModelFileName(savedLot?.modelFileName ?? "Owner model.glb")
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => { if (active) setModelStorageReady(true) })
     return () => { active = false }
   }, [site?.id, user?.id])
 
@@ -113,6 +108,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     setCustomModelUrl(null)
     setCustomModelFileName(null)
     setCustomModelFile(null)
+    setModelStorageReady(true)
     setModelError("")
   }
 
@@ -126,25 +122,40 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     setCustomModelUrl(URL.createObjectURL(file))
     setCustomModelFileName(file.name)
     setCustomModelFile(file)
+    setModelStorageReady(true)
   }
 
   // Address Parsing
-  const [selectedCity, setSelectedCity] = useState(draft?.selectedCity ?? CITIES[0].code)
-  const [district, setDistrict] = useState(draft?.district ?? CITIES[0].districts[0])
-  const [streetAddress, setStreetAddress] = useState(draft?.streetAddress ?? (site?.address ? site.address.split(",")[0].trim() : ""))
+  const addressParts = site?.address.split(",").map(part => part.trim()) ?? []
+  const savedCity = CITIES.find(city => addressParts.at(-1) === city.name || (city.code === "HCM" && ["TP.HCM", "Bình Dương", "Bà Rịa - Vũng Tàu"].includes(addressParts.at(-1) ?? "")))
+  const savedDistrict = savedCity && addressParts.length >= 3 ? addressParts.at(-2) : undefined
+  const [selectedCity, setSelectedCity] = useState(draft?.selectedCity === "BD" ? "HCM" : draft?.selectedCity ?? savedCity?.code ?? (site ? "LEGACY" : CITIES[0].code))
+  const [district, setDistrict] = useState(draft?.district ?? savedDistrict ?? "")
+  const [streetAddress, setStreetAddress] = useState(draft?.streetAddress ?? (site?.address
+    ? savedCity && savedDistrict ? site.address.split(",").slice(0, -2).join(",").trim() : site.address
+    : ""))
+  const [addressChanged, setAddressChanged] = useState(false)
+  const [locationConfirmed, setLocationConfirmed] = useState(() => {
+    if (site) return validParkingCoordinates({ lat: site.latitude ?? 0, lng: site.longitude ?? 0 })
+    return Boolean(draft?.locationConfirmed && validParkingCoordinates({ lat: draft.form.latitude, lng: draft.form.longitude }))
+  })
   const isManualCode = Boolean(site?.code)
 
   const [form, setForm] = useState({
     code: site?.code ?? "",
     name: site?.name ?? "",
     address: site?.address ?? "",
-    totalSlots: site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : savedLot ? String(savedLot.totalSlots) : "30",
+    totalSlots: savedLot ? String(savedLot.totalSlots) : site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "30",
     floors: savedLot ? String(savedLot.floors) : "1",
     latitude: site?.latitude ?? CITIES[0].defaultLat,
     longitude: site?.longitude ?? CITIES[0].defaultLng,
     isActive: site?.isActive ?? true,
     hourlyRate: savedLot?.hourlyRate ?? 15000,
     dailyRate: savedLot?.dailyRate ?? 100000,
+    nightRate: savedLot?.nightRate ?? 50000,
+    gracePeriodMinutes: savedLot?.gracePeriodMinutes ?? 15,
+    subscriptionMonthly: savedLot?.subscriptionMonthly ?? 800000,
+    subscriptionYearly: savedLot?.subscriptionYearly ?? 8000000,
     ...draft?.form,
   })
 
@@ -171,14 +182,16 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   const fullAddress = useMemo(() => {
     const cityObj = CITIES.find((c) => c.code === selectedCity)
     const parts = [streetAddress.trim(), district, cityObj?.name].filter(Boolean)
-    return parts.join(", ")
-  }, [streetAddress, district, selectedCity])
+    return site && !addressChanged ? site.address : parts.join(", ")
+  }, [site, addressChanged, streetAddress, district, selectedCity])
 
   function handleCityChange(newCityCode: string) {
+    setAddressChanged(true)
+    setLocationConfirmed(false)
     setSelectedCity(newCityCode)
     const found = CITIES.find((c) => c.code === newCityCode)
     if (found) {
-      setDistrict(found.districts[0] || "")
+      setDistrict("")
       setForm((cur) => ({
         ...cur,
         latitude: found.defaultLat,
@@ -186,6 +199,16 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
         code: isManualCode ? cur.code : `SPK-${newCityCode}-${generateSlug(cur.name) || "PARK"}`,
       }))
     }
+  }
+
+  function markAddressChanged() {
+    setAddressChanged(true)
+    setLocationConfirmed(false)
+  }
+
+  function setConfirmedLocation(point: ParkingCoordinates) {
+    setForm(current => ({ ...current, latitude: point.lat, longitude: point.lng }))
+    setLocationConfirmed(true)
   }
 
   function handleNameChange(newName: string) {
@@ -208,15 +231,28 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       setError("Please enter the site name and address.")
       return
     }
+    if ((!site || addressChanged) && (selectedCity === "LEGACY" || !district.trim())) {
+      setError("Choose a province or city and enter its district or area.")
+      return
+    }
+    if (!locationConfirmed || !validParkingCoordinates({ lat: form.latitude, lng: form.longitude })) {
+      setError("Confirm the parking entrance on the map before saving.")
+      return
+    }
 
     const totalSlotsNum = parseInt(form.totalSlots, 10)
     const floorsNum = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
 
-    if (modelCapacity.capacity === null) {
+    if (site && savedLot && savedLot.modelFileName !== ALLOWED_PARKING_MODELS[lotType].fileName && !customModelUrl) {
+      setError(modelStorageReady ? "The saved Owner model is unavailable in this browser. Upload it again before changing setup details." : "Loading the saved Owner model. Please wait.")
+      return
+    }
+
+    if ((!site || savedLot) && modelCapacity.capacity === null) {
       setError(modelCapacity.error || "Checking the 3D model's car bay capacity. Please wait.")
       return
     }
-    if (!Number.isInteger(totalSlotsNum) || totalSlotsNum < 1 || totalSlotsNum > modelCapacity.capacity) {
+    if ((!site || savedLot) && (!Number.isInteger(totalSlotsNum) || totalSlotsNum < 1 || totalSlotsNum > modelCapacity.capacity!)) {
       setError(`Planned car spaces must be between 1 and ${modelCapacity.capacity}, the number of bays in this 3D model.`)
       return
     }
@@ -239,7 +275,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
         })
 
         // Also sync local store lot
-        try {
+        if (savedLot) try {
           const cachedLot = store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id)
           if (!customModelFile && cachedLot?.type && cachedLot.type !== lotType) await deleteOwnerModel(site.id).catch(() => {})
           const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
@@ -263,10 +299,10 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             })),
             hourlyRate: form.hourlyRate,
             dailyRate: form.dailyRate,
-            nightRate: cachedLot?.nightRate ?? Math.round(form.dailyRate / 2),
-            gracePeriodMinutes: cachedLot?.gracePeriodMinutes ?? 15,
-            subscriptionMonthly: cachedLot?.subscriptionMonthly ?? 800000,
-            subscriptionYearly: cachedLot?.subscriptionYearly ?? 8000000,
+            nightRate: form.nightRate,
+            gracePeriodMinutes: form.gracePeriodMinutes,
+            subscriptionMonthly: form.subscriptionMonthly,
+            subscriptionYearly: form.subscriptionYearly,
             status: form.isActive ? "active" : "inactive",
             lat: form.latitude,
             lng: form.longitude,
@@ -282,7 +318,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           address: finalAddress,
           latitude: form.latitude,
           longitude: form.longitude,
-          totalPhysicalCapacity: totalSlotsNum,
+          totalPhysicalCapacity: savedLot ? totalSlotsNum : site.totalPhysicalCapacity,
           isActive: form.isActive,
         })
       } else {
@@ -291,6 +327,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           code: siteCode,
           name: siteName,
           address: finalAddress,
+          latitude: form.latitude,
+          longitude: form.longitude,
         })
         if (!createdSite || typeof createdSite.id !== "string" || !createdSite.id.trim()) {
           throw new Error("The server did not return a valid site ID. Please try again.")
@@ -318,10 +356,10 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             })),
             hourlyRate: form.hourlyRate,
             dailyRate: form.dailyRate,
-            nightRate: Math.round(form.dailyRate / 2),
-            gracePeriodMinutes: 15,
-            subscriptionMonthly: 800000,
-            subscriptionYearly: 8000000,
+            nightRate: form.nightRate,
+            gracePeriodMinutes: form.gracePeriodMinutes,
+            subscriptionMonthly: form.subscriptionMonthly,
+            subscriptionYearly: form.subscriptionYearly,
             status: "active",
             lat: form.latitude,
             lng: form.longitude,
@@ -331,12 +369,12 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
         }
 
         sessionStorage.removeItem(draftKey)
-        onSaved(createdSite)
+        onSaved({ ...createdSite, latitude: createdSite.latitude ?? form.latitude, longitude: createdSite.longitude ?? form.longitude })
       }
     } catch (err) {
       if (err instanceof AuthApiError) {
         if (!site && err.status === 401) {
-          sessionStorage.setItem(draftKey, JSON.stringify({ lotType, selectedCity, district, streetAddress, form, devices }))
+          sessionStorage.setItem(draftKey, JSON.stringify({ lotType, selectedCity, district, streetAddress, locationConfirmed, form, devices }))
         }
         const messages: Record<number, string> = {
           400: "Please check the site details and try again.",
@@ -364,8 +402,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   }
 
   return {
-    formId, lotType, chooseLotType, selectedCity, district, setDistrict,
-    streetAddress, setStreetAddress, isManualCode, form, setForm,
+    formId, hasSavedSetup: Boolean(savedLot), lotType, chooseLotType, selectedCity, district, setDistrict,
+    streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
     devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   }

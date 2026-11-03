@@ -1,4 +1,5 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { Button } from "../../../components/ui/Button"
 import { useEffect, useState, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -315,14 +316,15 @@ export function OperatorManagement({
                         >
                           Change Site
                         </button>
-                        <button
+                        <Button
                           type="button"
-                          className="rounded-lg border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400"
+                          variant="danger"
+                          className="px-3 text-xs"
                           onClick={() => void handleDeleteOperator(op)}
-                          title="Delete this operator account"
+                          title="Remove this operator account"
                         >
-                          Delete
-                        </button>
+                          Remove Operator
+                        </Button>
                       </div>
                     </td>
                   </tr>

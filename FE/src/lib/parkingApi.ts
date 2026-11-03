@@ -99,7 +99,7 @@ async function call<T>(
 export const parkingApi = {
   list: () => call<Site[]>(""),
 
-  create: (body: { code: string; name: string; address: string }) =>
+  create: (body: { code: string; name: string; address: string; latitude?: number; longitude?: number }) =>
     call<Site>("", "POST", body),
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),

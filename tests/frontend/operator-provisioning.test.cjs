@@ -272,6 +272,7 @@ test('Owner dashboard shares backend sites with overview and refreshes after sit
     react: h.react, 'react/jsx-runtime': h.runtime,
     '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id', onboardingComplete: true } }) },
     '../../../lib/parkingApi': api,
+    '../../../lib/ownerLotSetup': { reconcileOwnerLotSetups: async () => {} },
     '../parking-lots/CreateParkingLotForOwner': { OnboardingWizard: 'onboarding' },
     './OwnerOverview': { OwnerOverview: 'overview' },
     '../operators/OperatorManagement': { OperatorManagement: 'operators' },

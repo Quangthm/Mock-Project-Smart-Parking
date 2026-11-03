@@ -15,13 +15,15 @@ import { AdminSettings } from "../setting/AdminSettings"
 import { Users } from "../users/Users"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
+import { useLocation } from "react-router-dom"
 
 type Tab = "overview" | "applications" | "drivers" | "audit" | "system" | "settings"
 
 export function AdminDashboard() {
   const { user } = useApp()
+  const location = useLocation()
 
-  const [tab, setTab] = useState<Tab>("overview")
+  const [tab, setTab] = useState<Tab>(location.state?.adminTab === "applications" ? "applications" : "overview")
 
   useEffect(() => {
     const onNavigate = (event: Event) =>
@@ -48,7 +50,7 @@ export function AdminDashboard() {
 
     { id: "audit" as Tab, label: "Audit Log", icon: "🔍" },
 
-    { id: "system" as Tab, label: "System Config", icon: "⚙️" },
+    { id: "system" as Tab, label: "System Config", icon: "sliders" },
 
     { id: "settings" as Tab, label: "Settings", icon: "🔧" },
   ]
@@ -103,7 +105,7 @@ export function AdminDashboard() {
             {
               id: "system",
               label: "System configuration",
-              icon: "⚙",
+              icon: "sliders",
               active: tab === "system",
               onClick: () => setTab("system"),
             },

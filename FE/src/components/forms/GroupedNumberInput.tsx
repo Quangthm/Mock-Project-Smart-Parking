@@ -7,21 +7,25 @@ import {
 } from "../../lib/groupedDigits"
 
 interface GroupedNumberInputProps {
+  id?: string
   className: string
   value: string
   placeholder?: string
   onValueChange: (digits: string) => void
   step?: number
   ariaLabel?: string
+  required?: boolean
 }
 
 export function GroupedNumberInput({
+  id,
   className,
   value,
   placeholder,
   onValueChange,
   step,
   ariaLabel,
+  required,
 }: GroupedNumberInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingCaret = useRef<number | null>(null)
@@ -154,8 +158,10 @@ export function GroupedNumberInput({
   return (
     <input
       ref={inputRef}
+      id={id}
       className={className}
       aria-label={ariaLabel}
+      required={required}
       type="text"
       inputMode="numeric"
       pattern="[0-9,]*"
