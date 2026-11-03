@@ -118,6 +118,123 @@ public sealed class PostgresStructureWorkflowTests
     }
 
     [StructurePostgresFact]
+    public async Task ConcurrentAcquireForTheSameSiteYieldsOneHoldAndACleanConflict()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var firstToken = Guid.NewGuid();
+        var secondToken = Guid.NewGuid();
+
+        // Two independent DbContexts, each with its own pre-opened PostgreSQL connection, so the
+        // two AcquireAsync calls really run against the same database at the same time.
+        await using var firstContext = fixture.CreateReservationContext();
+        await using var secondContext = fixture.CreateReservationContext();
+        await firstContext.Database.OpenConnectionAsync();
+        await secondContext.Database.OpenConnectionAsync();
+        var firstStore = new StructureSafetyStore(firstContext);
+        var secondStore = new StructureSafetyStore(secondContext);
+
+        using var barrier = new Barrier(2);
+        Task<(Guid Token, bool Won, Exception? Error)> Attempt(Guid token, StructureSafetyStore store) =>
+            Task.Run(async () =>
+            {
+                // Release both attempts together so they overlap inside serializable transactions.
+                barrier.SignalAndWait();
+                try
+                {
+                    await store.AcquireAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
+                    return (token, true, (Exception?)null);
+                }
+                catch (Exception error)
+                {
+                    return (token, false, error);
+                }
+            });
+
+        var results = await Task.WhenAll(Attempt(firstToken, firstStore), Attempt(secondToken, secondStore));
+
+        var winner = Assert.Single(results, result => result.Won);
+        var loser = Assert.Single(results, result => !result.Won);
+        // Exactly one physical hold row, owned by the winning token.
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}'"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}' AND token='{winner.Token}'"));
+        // The loser gets the existing clean conflict type, never a raw Npgsql provider exception.
+        Assert.IsType<OperationDomain.HoldConflictException>(loser.Error);
+        Assert.IsNotType<PostgresException>(loser.Error);
+    }
+
+    [StructurePostgresFact]
+    public async Task ReleaseRacingAcquireLeavesOneDeterministicHoldState()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var releasing = Guid.NewGuid();
+        var claiming = Guid.NewGuid();
+        // Seed a committed hold for `releasing` through the normal service path.
+        await fixture.ReservationService.PrepareAsync(
+            fixture.Owner.TenantId, fixture.SiteId, releasing, CancellationToken.None);
+
+        await using var releaseContext = fixture.CreateReservationContext();
+        await using var acquireContext = fixture.CreateReservationContext();
+        await releaseContext.Database.OpenConnectionAsync();
+        await acquireContext.Database.OpenConnectionAsync();
+        var releaseStore = new StructureSafetyStore(releaseContext);
+        var acquireStore = new StructureSafetyStore(acquireContext);
+
+        using var barrier = new Barrier(2);
+        Task<(bool Won, Exception? Error)> Release() => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            try
+            {
+                await releaseStore.ReleaseAsync(
+                    fixture.Owner.TenantId, fixture.SiteId, releasing, null, CancellationToken.None);
+                return (true, (Exception?)null);
+            }
+            catch (Exception error)
+            {
+                return (false, error);
+            }
+        });
+        Task<(bool Won, Exception? Error)> Acquire() => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            try
+            {
+                await acquireStore.AcquireAsync(
+                    fixture.Owner.TenantId, fixture.SiteId, claiming, CancellationToken.None);
+                return (true, (Exception?)null);
+            }
+            catch (Exception error)
+            {
+                return (false, error);
+            }
+        });
+
+        var results = await Task.WhenAll(Release(), Acquire());
+        var released = results[0];
+        var acquired = results[1];
+
+        // Releasing a live hold is always valid; the racing acquire either commits after the release
+        // or observes the older hold and must surface the clean conflict, never a provider exception.
+        Assert.True(released.Won);
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_release_receipts WHERE token='{releasing}'"));
+        if (acquired.Won)
+        {
+            Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+                $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}' AND token='{claiming}'"));
+        }
+        else
+        {
+            Assert.IsType<OperationDomain.HoldConflictException>(acquired.Error);
+            Assert.IsNotType<PostgresException>(acquired.Error);
+            Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation,
+                $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}'"));
+        }
+    }
+
+    [StructurePostgresFact]
     public async Task RecoveryFenceWaitsForUnacknowledgedPhysicalCommitAndReturnsReadyPayload()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -694,6 +811,9 @@ public sealed class PostgresStructureWorkflowTests
         public NpgsqlDataSource Parking { get; }
         public NpgsqlDataSource Reservation { get; }
         private ReservationDbContext ReservationContext { get; }
+        // A fresh context on the fixture's reservation database, used for cross-connection tests.
+        public ReservationDbContext CreateReservationContext() =>
+            new(new DbContextOptionsBuilder<ReservationDbContext>().UseNpgsql(Reservation).Options);
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
         public Guid SiteId { get; private set; }
         public Guid UnitId { get; private set; }
