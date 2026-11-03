@@ -81,6 +81,7 @@ public sealed class PrepareReservationCheckoutCommandHandler(
             reservation.VehicleType,
             reservation.EntryTime ?? reservation.StartTime,
             DateTimeOffset.UtcNow,
+            request.PlateNumber ?? reservation.LicensePlate,
             reservation.AccountId,
             ct);
     }
@@ -112,6 +113,7 @@ public sealed class PrepareSessionCheckoutCommandHandler(
             session.VehicleType,
             session.EntryTime,
             DateTimeOffset.UtcNow,
+            request.PlateNumber ?? session.LicensePlate,
             null,
             ct);
     }

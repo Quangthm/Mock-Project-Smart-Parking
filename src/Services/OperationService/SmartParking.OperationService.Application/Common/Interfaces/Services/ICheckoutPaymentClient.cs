@@ -20,6 +20,7 @@ public interface ICheckoutPaymentClient
         string vehicleType,
         DateTimeOffset entryTime,
         DateTimeOffset pricingCutoffAt,
+        string plateNumber,
         Guid? accountId,
         CancellationToken ct);
 

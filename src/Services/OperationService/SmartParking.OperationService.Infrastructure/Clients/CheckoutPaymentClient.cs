@@ -46,30 +46,37 @@ public sealed class CheckoutPaymentClient(
         string vehicleType,
         DateTimeOffset entryTime,
         DateTimeOffset pricingCutoffAt,
+        string plateNumber,
         Guid? accountId,
         CancellationToken ct)
     {
-        var pricing = await CalculateAsync(
-            tenantId, siteId, referenceId, referenceType, vehicleType, entryTime, pricingCutoffAt, ct);
-
-        var order = await SendAsync<PaymentEnvelope<PaymentOrder>>(
+        var result = await SendAsync<PaymentEnvelope<PreparedPaymentOrder>>(
             HttpMethod.Post,
-            "/api/v1/payments/orders",
+            "/api/v1/payments/orders/prepare",
             new
             {
                 tenantId,
                 siteId,
-                referenceId,
-                referenceType,
-                amount = pricing.FinalAmountVnd,
+                sessionId = referenceId,
+                vehicleType,
+                entryTime,
+                pricingCutoffAt,
+                plateNumber,
                 accountId,
+                penaltyAmount = 0,
+                penaltyReason = (string?)null,
                 idempotencyKey = $"checkout:{referenceType.ToLowerInvariant()}:{referenceId:N}"
             },
             ct);
 
+        var pricing = new CheckoutPricing(
+            checked((long)result.Data.FinalAmount),
+            result.Data.Currency,
+            result.Data.TotalParkedMinutes,
+            result.Data.FinalAmount == 0);
         return new(
             pricing,
-            new(order.Data.OrderId, order.Data.OrderCode, order.Data.Amount, order.Data.Status, order.Data.ExpiresAt));
+            new(result.Data.OrderId, result.Data.OrderCode, result.Data.FinalAmount, result.Data.Status, result.Data.ExpiresAt));
     }
 
     public async Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct)
@@ -165,6 +172,16 @@ public sealed class CheckoutPaymentClient(
     private sealed record PaymentEnvelope<T>(bool Success, T Data);
     private sealed record PaymentPricing(long FinalAmountVnd, string Currency, decimal TotalParkedMinutes, bool IsFreeStay);
     private sealed record PaymentOrder(Guid OrderId, string OrderCode, decimal Amount, string Status, DateTimeOffset ExpiresAt);
+    private sealed record PreparedPaymentOrder(
+        Guid OrderId,
+        string OrderCode,
+        decimal ParkingFee,
+        decimal PenaltyFee,
+        decimal FinalAmount,
+        string Currency,
+        string Status,
+        DateTimeOffset ExpiresAt,
+        decimal TotalParkedMinutes = 0);
     private sealed record PaymentCheckout(Guid PaymentTransactionId, long OrderCode, long Amount, string CheckoutUrl, string Status, DateTimeOffset ExpiresAt);
     private sealed record PaymentStatus(Guid TransactionId, Guid OrderId, long Amount, string Status, DateTimeOffset? PaidAt, bool IsAuthoritative);
 }
