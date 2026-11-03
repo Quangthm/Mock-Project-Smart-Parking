@@ -4,6 +4,8 @@ using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
+using MassTransit;
+using SmartParking.PaymentService.Infrastructure.Messaging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +44,36 @@ builder.Services.AddAuthorization();
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
+if (builder.Configuration.GetValue<bool>("Messaging:Enabled"))
+{
+    builder.Services.AddMassTransit(registration =>
+    {
+        registration.AddEntityFrameworkOutbox<PaymentDbContext>(outbox =>
+        {
+            outbox.UsePostgres();
+            outbox.UseBusOutbox(busOutbox =>
+            {
+                if (!builder.Configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
+                    busOutbox.DisableDeliveryService();
+            });
+        });
+        registration.UsingRabbitMq((context, bus) =>
+        {
+            bus.Message<PaymentSucceededV1>(message =>
+                message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
+            bus.Host(
+                builder.Configuration["SMARTPARK_RABBITMQ_HOST"] ?? "127.0.0.1",
+                builder.Configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
+                builder.Configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark",
+                host =>
+                {
+                    host.Username(builder.Configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark");
+                    host.Password(builder.Configuration["SMARTPARK_RABBITMQ_PASSWORD"]
+                        ?? throw new InvalidOperationException("Configure SMARTPARK_RABBITMQ_PASSWORD."));
+                });
+        });
+    });
+}
 
 var app = builder.Build();
 

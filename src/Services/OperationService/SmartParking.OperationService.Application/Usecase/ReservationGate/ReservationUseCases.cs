@@ -73,6 +73,8 @@ public sealed class PrepareReservationCheckoutCommandHandler(
         if (reservation.Id != request.ReservationId)
             throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
 
+        await store.MarkReservationPaymentPendingAsync(
+            scope.TenantId, request.SiteId, reservation.Id, ct);
         return await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,
@@ -105,6 +107,8 @@ public sealed class PrepareSessionCheckoutCommandHandler(
         if (session is null || session.Id != request.SessionId)
             throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
 
+        await store.MarkWalkInPaymentPendingAsync(
+            scope.TenantId, request.SiteId, session.Id, ct);
         return await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MassTransit;
 using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Persistence;
@@ -19,6 +20,7 @@ public class PaymentDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.AddTransactionalOutboxEntities();
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PaymentDbContext).Assembly);
     }
 }

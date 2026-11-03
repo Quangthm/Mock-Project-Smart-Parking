@@ -43,6 +43,7 @@ public sealed class CreatePaymentOrderCommandHandler(
             TenantId = request.TenantId,
             SiteId = request.SiteId,
             AccountId = request.AccountId,
+            PlateNumber = request.PlateNumber,
             OrderCode = $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
             IdempotencyKey = request.IdempotencyKey,
             ReferenceType = request.ReferenceType,

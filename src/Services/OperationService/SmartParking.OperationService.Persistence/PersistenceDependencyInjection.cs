@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
+using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Persistence.Repositories;
 
 namespace SmartParking.OperationService.Persistence;
@@ -23,6 +24,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.TryAddScoped<IStructureSafetyStore, StructureSafetyStore>();
         services.AddScoped<IReservationGateStore, ReservationGateStore>();
+        services.AddScoped<IPaymentSucceededHandler, PaymentSucceededHandler>();
         return services;
     }
 }

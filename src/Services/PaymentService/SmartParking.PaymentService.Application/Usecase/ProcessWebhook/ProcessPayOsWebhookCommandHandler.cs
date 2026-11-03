@@ -4,6 +4,7 @@ using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Services;
 
 namespace SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 
@@ -15,6 +16,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
     private readonly IPaymentTransactionRepository _transactionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ProcessPayOsWebhookCommandHandler> _logger;
+    private readonly IPaymentSucceededPublisher _publisher;
 
     public ProcessPayOsWebhookCommandHandler(
         IPaymentGatewayPort gatewayPort,
@@ -22,7 +24,8 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         IPaymentOrderRepository orderRepository,
         IPaymentTransactionRepository transactionRepository,
         IUnitOfWork unitOfWork,
-        ILogger<ProcessPayOsWebhookCommandHandler> logger)
+        ILogger<ProcessPayOsWebhookCommandHandler> logger,
+        IPaymentSucceededPublisher publisher)
     {
         _gatewayPort = gatewayPort;
         _webhookRepository = webhookRepository;
@@ -30,6 +33,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         _transactionRepository = transactionRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task<ProcessPayOsWebhookResult> Handle(ProcessPayOsWebhookCommand request, CancellationToken cancellationToken)
@@ -113,6 +117,23 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             order.MarkPaid(parseResult.TransactionTime);
             existingWebhook.MarkProcessed();
 
+            await _publisher.PublishAsync(new(
+                order.Id,
+                tx.Id,
+                tx.PaymentMethod.ToString(),
+                tx.GatewayTransactionId,
+                order.TenantId,
+                order.SiteId,
+                order.ReferenceType.ToString(),
+                order.ReferenceId,
+                order.PlateNumber,
+                order.AccountId,
+                tx.Amount,
+                order.Amount,
+                null,
+                null,
+                "VND",
+                parseResult.TransactionTime), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Successfully processed payOS payment webhook for OrderCode {OrderCode}, TxId {TxId}.", order.OrderCode, tx.Id);
         }

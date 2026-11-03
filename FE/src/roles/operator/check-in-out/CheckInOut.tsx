@@ -311,7 +311,7 @@ export function CheckInOut({
       }
       const updatedBooking = action === "check-in"
         ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
-        : await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate, imageData)
+        : booking
 
       setHistoryRefresh((current) => current + 1)
       setActionFeedback({
@@ -454,7 +454,7 @@ export function CheckInOut({
           sessionId: result.session.id,
           plateNumber: result.plate,
         })
-        session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
+        session = result.session
       }
       setHistoryRefresh((current) => current + 1)
       setActionFeedback({

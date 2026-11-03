@@ -4,6 +4,7 @@ using SmartParking.PaymentService.Application.DTOs.Payments;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Exceptions;
+using SmartParking.PaymentService.Application.Common.Interfaces.Services;
 
 namespace SmartParking.PaymentService.Application.Usecase.ConfirmCashPayment;
 
@@ -16,7 +17,8 @@ public sealed record ConfirmCashPaymentCommand(
 public sealed class ConfirmCashPaymentCommandHandler(
     IPaymentOrderRepository orders,
     IPaymentTransactionRepository transactions,
-    IUnitOfWork unitOfWork) : IRequestHandler<ConfirmCashPaymentCommand, PaymentTransactionStatusDto>
+    IUnitOfWork unitOfWork,
+    IPaymentSucceededPublisher publisher) : IRequestHandler<ConfirmCashPaymentCommand, PaymentTransactionStatusDto>
 {
     public async Task<PaymentTransactionStatusDto> Handle(
         ConfirmCashPaymentCommand request,
@@ -44,6 +46,23 @@ public sealed class ConfirmCashPaymentCommandHandler(
         order.MarkPaid(now);
         await transactions.AddAsync(transaction, cancellationToken);
         orders.Update(order);
+        await publisher.PublishAsync(new(
+            order.Id,
+            transaction.Id,
+            transaction.PaymentMethod.ToString(),
+            transaction.GatewayTransactionId,
+            order.TenantId,
+            order.SiteId,
+            order.ReferenceType.ToString(),
+            order.ReferenceId,
+            order.PlateNumber,
+            order.AccountId,
+            transaction.Amount,
+            order.Amount,
+            null,
+            null,
+            "VND",
+            now), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToResponse(order, transaction);
     }

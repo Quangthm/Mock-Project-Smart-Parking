@@ -8,6 +8,7 @@ using SmartParking.PaymentService.Application.Usecase.CreatePaymentOrder;
 using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Application.Usecase.InitiateCheckout;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
+using SmartParking.PaymentService.Application.Usecase.PreparePaymentOrder;
 
 namespace SmartParking.PaymentService.API.Controllers;
 
@@ -41,6 +42,22 @@ public class PaymentsController : ControllerBase
             : idempotencyKey;
         var result = await _mediator.Send(
             new CreatePaymentOrderCommand(request with { IdempotencyKey = effectiveKey }),
+            cancellationToken);
+        return Ok(new { success = true, data = result });
+    }
+
+    [HttpPost("orders/prepare")]
+    [Authorize]
+    public async Task<IActionResult> PrepareOrder(
+        [FromBody] PreparePaymentOrderRequestDto request,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        var effectiveKey = string.IsNullOrWhiteSpace(idempotencyKey)
+            ? request.IdempotencyKey
+            : idempotencyKey;
+        var result = await _mediator.Send(
+            new PreparePaymentOrderCommand(request with { IdempotencyKey = effectiveKey }),
             cancellationToken);
         return Ok(new { success = true, data = result });
     }

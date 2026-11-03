@@ -58,6 +58,8 @@ public sealed class CheckoutPaymentClient(
                 tenantId,
                 siteId,
                 sessionId = referenceId,
+                referenceId,
+                referenceType,
                 vehicleType,
                 entryTime,
                 pricingCutoffAt,
