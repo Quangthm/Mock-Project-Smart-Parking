@@ -423,7 +423,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                 {selectedSlot && !registerMode && (
                   <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
+                      <div className="min-w-0 break-words">
                         <p className="font-mono text-sm font-semibold">{selectedSlot.code}</p>
                         <p className="mt-0.5 text-xs text-[var(--muted)]">{location(selectedSlot.unitId)}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1">

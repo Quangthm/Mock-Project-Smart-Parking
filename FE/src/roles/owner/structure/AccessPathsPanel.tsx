@@ -150,7 +150,7 @@ export function AccessPathsPanel({
         <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
           {paths.map((path) => (
             <li key={path.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-              <div className="min-w-0">
+              <div className="min-w-0 break-words">
                 <span className="font-mono text-xs font-semibold text-[var(--fg)]">{path.code}</span>
                 <span className="ml-2 text-xs text-[var(--muted)]">
                   {unitName(path.fromUnitId)} → {unitName(path.toUnitId)}

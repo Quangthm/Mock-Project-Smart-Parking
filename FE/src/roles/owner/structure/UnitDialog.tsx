@@ -289,7 +289,7 @@ export function UnitDialog({
 
           <StructureFeedback error={error} notice={notice} fallback="The unit change failed." />
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className="btn-outline" onClick={onClose} disabled={busy}>
               Cancel
             </button>

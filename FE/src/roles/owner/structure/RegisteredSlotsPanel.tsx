@@ -140,7 +140,7 @@ export function RegisteredSlotsPanel({
                 />
                 <button
                   type="button"
-                  className="min-w-0 text-left"
+                  className="min-w-0 break-words text-left"
                   onClick={() => onSelect(slot.id)}
                   aria-pressed={isSelected}
                   aria-label={`Focus slot ${slot.code} in the 3D view`}

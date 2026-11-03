@@ -87,7 +87,7 @@ function WindowRow({
   return (
     <li className="space-y-2 px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 break-words">
           <p className="text-sm font-semibold text-[var(--fg)]">
             {formatInstant(window.start)} <span className="text-[var(--muted)]">→</span> {formatInstant(window.end)}
           </p>
