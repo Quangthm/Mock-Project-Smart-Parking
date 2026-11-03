@@ -1,5 +1,37 @@
 import type { OperatorSite, OperatorSlot } from "../../../lib/operatorApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import {
+  formatSlotLabel,
+  mapSlotVisualState,
+  type PhysicalState,
+  type ReservationState,
+} from "@/lib/operationalLayout"
+import { SLOT_VISUAL_STATE_HEX } from "@/lib/3d/parking3DConfig"
+
+const PHYSICAL_STATE_LABELS: Record<PhysicalState, string> = {
+  AVAILABLE: "AVAILABLE",
+  OCCUPIED: "OCCUPIED",
+  MAINTENANCE: "UNDER MAINTENANCE",
+  UNAVAILABLE: "OUT OF SERVICE",
+  UNKNOWN: "STATE UNKNOWN",
+}
+
+const RESERVATION_STATE_LABELS: Record<ReservationState, string> = {
+  UNRESERVED: "None",
+  RESERVED: "Reserved",
+  PROTECTED: "Protected hold",
+  BACKUP: "Backup hold",
+}
+
+const RESERVATION_STATE_TONE: Record<ReservationState, string> = {
+  UNRESERVED: "text-[var(--muted)]",
+  RESERVED: "bg-[var(--status-reserved-bg)] text-[var(--reserved)]",
+  PROTECTED: "bg-[var(--status-reserved-bg)] text-[var(--reserved)]",
+  // Painted from SLOT_VISUAL_STATE_HEX.backup below, so the chip matches the
+  // 3D mesh, the 2D grid and the legend instead of reusing the amber reserved
+  // tone (the original defect) or the muted `--backup` theme violet.
+  BACKUP: "",
+}
 
 export function SlotInspectionModal({ lot, inspectedSlot, isOutdoor, onClose }: {
   lot: OperatorSite
@@ -7,6 +39,22 @@ export function SlotInspectionModal({ lot, inspectedSlot, isOutdoor, onClose }: 
   isOutdoor: boolean
   onClose: () => void
 }) {
+  const physicalState = inspectedSlot?.physicalState ?? "UNKNOWN"
+  const reservationState = inspectedSlot?.reservationState ?? "UNRESERVED"
+  const visualState = mapSlotVisualState({ physicalState, reservationState })
+  const physicalHex = SLOT_VISUAL_STATE_HEX[visualState]
+  const physicalLabel = PHYSICAL_STATE_LABELS[physicalState] ?? "STATE UNKNOWN"
+  const reservationLabel = RESERVATION_STATE_LABELS[reservationState] ?? "Unknown"
+  const reservationTone = RESERVATION_STATE_TONE[reservationState] ?? "text-[var(--muted)]"
+  const reservationStyle =
+    reservationState === "BACKUP"
+      ? {
+          color: SLOT_VISUAL_STATE_HEX.backup,
+          backgroundColor: `${SLOT_VISUAL_STATE_HEX.backup}1f`,
+        }
+      : undefined
+  const isBookable = inspectedSlot?.isBookable === true
+
   return (
     <>
 {inspectedSlot && (
@@ -27,7 +75,7 @@ export function SlotInspectionModal({ lot, inspectedSlot, isOutdoor, onClose }: 
                   Space Telemetry
                 </span>
                 <h3 id="slot-inspect-title" className="text-xl font-bold font-mono text-[var(--fg)]">
-                  Slot {inspectedSlot.number}
+                  Slot {formatSlotLabel(inspectedSlot.number)}
                 </h3>
               </div>
               <button
@@ -42,24 +90,34 @@ export function SlotInspectionModal({ lot, inspectedSlot, isOutdoor, onClose }: 
             {/* Status Dimensions Table */}
             <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 space-y-2.5 text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-[var(--muted)]">Physical Occupancy:</span>
+                <span className="text-[var(--muted)]">Physical State:</span>
                 <span
-                  className={`font-bold px-2 py-0.5 rounded text-[11px] uppercase ${
-                    inspectedSlot.status === "occupied"
-                      ? "bg-red-500/15 text-red-600"
-                      : (inspectedSlot.status as string) === "maintenance"
-                        ? "bg-orange-500/15 text-orange-600"
-                        : "bg-green-500/15 text-green-600"
-                  }`}
+                  className="font-bold px-2 py-0.5 rounded text-[11px] uppercase"
+                  style={{ color: physicalHex, backgroundColor: `${physicalHex}1f` }}
+                  aria-label={`Physical state: ${physicalLabel}`}
+                  title={physicalState === "UNKNOWN" ? "No reliable physical reading for this bay" : undefined}
                 >
-                  {inspectedSlot.status === "occupied" ? "OCCUPIED" : (inspectedSlot.status as string) === "maintenance" ? "UNDER MAINTENANCE" : "VACANT"}
+                  {physicalLabel}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
                 <span className="text-[var(--muted)]">Reservation / Hold:</span>
-                <span className="font-semibold text-[var(--fg)]">
-                  {inspectedSlot.status === "reserved" ? "Active Reservation Hold" : "None"}
+                <span
+                  className={`font-semibold px-2 py-0.5 rounded text-[11px] ${reservationTone}`}
+                  style={reservationStyle}
+                >
+                  {reservationLabel}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-[var(--muted)]">Bookable:</span>
+                <span
+                  className={`font-semibold ${isBookable ? "text-[var(--available)]" : "text-[var(--muted)]"}`}
+                  title={isBookable ? "Physically available and unreserved" : "Not bookable in its current state"}
+                >
+                  {isBookable ? "Yes" : "No"}
                 </span>
               </div>
 

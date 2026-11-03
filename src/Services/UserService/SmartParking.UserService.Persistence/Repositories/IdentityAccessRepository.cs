@@ -14,13 +14,13 @@ public sealed class IdentityAccessRepository(AppDbContext database) : IIdentityA
     public async Task<Guid[]> OwnerTenantsAsync(Guid actor, string permission, CancellationToken cancellationToken) =>
         (await database.Database.SqlQuery<Guid>($"""
             SELECT a.tenant_id AS "Value" FROM accounts a
-            JOIN users u ON u.id=a.user_id JOIN account_roles r ON r.account_id=a.id
+            JOIN users u ON u.id=a.user_id
             WHERE u.id={actor} AND u.status='ACTIVE' AND u.deleted_at IS NULL
               AND a.status='ACTIVE' AND a.deleted_at IS NULL AND a.tenant_id IS NOT NULL
-              AND a.site_id IS NULL AND r.role_code='BUSINESS_OWNER'
+              AND a.site_id IS NULL AND a.role_code='BUSINESS_OWNER'
               AND {permission} IN ('OPERATOR_MANAGE','PARKING_MANAGE','BACKUP_CONFIGURE','BACKUP_MARK')
               AND ((a.permissions IS NULL AND {permission}<>'BACKUP_MARK') OR {permission}=ANY(a.permissions))
-            ORDER BY a.id FOR SHARE OF u,a,r
+            ORDER BY a.id FOR SHARE OF u,a
             """).ToListAsync(cancellationToken)).Distinct().ToArray();
 
     public async Task<IReadOnlyList<OperatorDto>> ListOperatorsAsync(Guid actor, Guid[] tenants, CancellationToken cancellationToken)
@@ -47,7 +47,7 @@ public sealed class IdentityAccessRepository(AppDbContext database) : IIdentityA
         await database.OperatorGrants.AsNoTracking().Where(grant => grant.Account.UserId == actor &&
             grant.Account.User.Status == UserStatus.Active && grant.Account.User.DeletedOn == null &&
             grant.Account.Status == "ACTIVE" && grant.Account.DeletedOn == null && grant.Account.SiteId != null &&
-            grant.Account.TenantId != null && grant.Account.AccountRoles.Any(r => r.RoleCode == "SITE_OPERATOR"))
+            grant.Account.TenantId != null && grant.Account.RoleCode == "SITE_OPERATOR")
             .Select(grant => new OperatorAssignment(grant.Account.SiteId!.Value, grant.Account.TenantId!.Value, grant.Permissions)).ToArrayAsync(cancellationToken);
 
     public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) =>
@@ -68,7 +68,7 @@ public sealed class IdentityAccessRepository(AppDbContext database) : IIdentityA
         if (userId is null) return null;
         // All identity mutations lock the user before dependent challenge/account rows.
         var user = await database.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={userId.Value} FOR UPDATE")
-            .Include(u => u.Accounts).ThenInclude(a => a.AccountRoles).SingleAsync(cancellationToken);
+            .Include(u => u.Accounts).SingleAsync(cancellationToken);
         var challenge = await database.AuthChallenges.FromSqlInterpolated($"SELECT * FROM auth_challenges WHERE id={id} FOR UPDATE").SingleAsync(cancellationToken);
         return (user, challenge);
     }
@@ -77,7 +77,7 @@ public sealed class IdentityAccessRepository(AppDbContext database) : IIdentityA
 
     public async Task<User?> GetOperatorForUpdateAsync(Guid userId, CancellationToken cancellationToken) =>
         await database.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={userId} FOR UPDATE")
-            .Include(user => user.Accounts).ThenInclude(account => account.AccountRoles).SingleOrDefaultAsync(cancellationToken);
+            .Include(user => user.Accounts).SingleOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<OperatorGrant>> GetOperatorGrantsAsync(Guid userId, CancellationToken cancellationToken) =>
         await database.OperatorGrants.AsNoTracking()

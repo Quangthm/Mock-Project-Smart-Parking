@@ -29,10 +29,17 @@ public sealed class AccessEventStore(AppDbContext db, TimeProvider clock) : IAcc
         await tx.CommitAsync(ct);
         return new(JsonSerializer.Deserialize<OperatorAccessChanged>(row.Payload)!, row.LeaseId.Value);
     }
-    public async Task CompleteAsync(AccessEventLease lease, CancellationToken ct) =>
+    public async Task CompleteAsync(AccessEventLease lease, CancellationToken ct)
+    {
+        // The scoped publisher has captured this event in this DbContext's EF Bus Outbox.
+        // Acknowledgment and capture must commit together, including when delivery is disabled.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.AccessEventOutbox.Where(x => x.Id == lease.Message.EventId && x.LeaseId == lease.LeaseId && x.PublishedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedAt, clock.GetUtcNow())
                 .SetProperty(x => x.LeaseId, (Guid?)null).SetProperty(x => x.LeaseUntil, (DateTimeOffset?)null), ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+    }
 
     public async Task<bool> ApplyProjectionAsync(OperatorAccessChanged message, CancellationToken ct)
     {

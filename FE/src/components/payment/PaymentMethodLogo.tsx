@@ -70,6 +70,7 @@ export function PaymentMethodLogo({
   }
 
   const currentSize = sizeMap[size]
+  const applePayScale = info.id === "applepay" ? 1.2 : 1
 
   const logoImg = (
     <img
@@ -77,9 +78,9 @@ export function PaymentMethodLogo({
       alt={info.name}
       title={info.name}
       style={{
-        height: currentSize.height,
+        height: Math.round(currentSize.height * applePayScale),
 
-        maxWidth: currentSize.maxWidth,
+        maxWidth: Math.round(currentSize.maxWidth * applePayScale),
 
         objectFit: "contain",
 

@@ -1,7 +1,9 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState } from "react"
+import { showUiToast } from "../../../lib/uiToast"
 
 import { parkingApi, type Structure } from "../../../lib/parkingApi"
+import { formatSlotLabel } from "../../../lib/operationalLayout"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 export function BackupCapacityPanel({
@@ -63,11 +65,15 @@ export function BackupCapacityPanel({
           return
         }
       }
-      setNotice(carSlotId && form.vehicleType === "CAR" ? "Capacity and selected car slot saved." : "Backup configuration saved.")
+      const success = carSlotId && form.vehicleType === "CAR" ? "Capacity and selected car slot saved." : "Backup configuration saved."
+      setNotice(success)
+      showUiToast("Backup updated", success)
       setCarSlotId("")
       onChanged()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cannot update backup.")
+      const message = e instanceof Error ? e.message : "Cannot update backup."
+      setError(message)
+      showUiToast("Backup not updated", message, "error")
     } finally {
       setBusy(false)
     }
@@ -138,7 +144,7 @@ export function BackupCapacityPanel({
               {["CAR", "MOTORCYCLE"].map((type) => <option key={type} value={type}>{type}</option>)}
             </RoundedSelect>
           </label>
-          {form.vehicleType === "CAR" && <label className="block space-y-1.5 text-xs font-medium text-[var(--muted)]"><span>Car slot to designate (optional)</span><RoundedSelect className="input w-full text-sm" value={carSlotId} onChange={event => setCarSlotId(event.target.value)}><option value="">Capacity target only</option>{eligibleCarSlots.map(slot => <option key={slot.id} value={slot.id}>{slot.code} · {scopeName(slot.unitId)}</option>)}</RoundedSelect><span className="block text-xs font-normal">Select a vacant car slot to mark it as backup with this configuration.</span></label>}
+          {form.vehicleType === "CAR" && <label className="block space-y-1.5 text-xs font-medium text-[var(--muted)]"><span>Car slot to designate (optional)</span><RoundedSelect className="input w-full text-sm" value={carSlotId} onChange={event => setCarSlotId(event.target.value)}><option value="">Capacity target only</option>{eligibleCarSlots.map(slot => <option key={slot.id} value={slot.id}>{formatSlotLabel(slot.code)} · {scopeName(slot.unitId)}</option>)}</RoundedSelect><span className="block text-xs font-normal">Select a vacant car slot to mark it as backup with this configuration.</span></label>}
           <label className="block space-y-1.5 text-xs font-medium text-[var(--muted)]">
             <span>Configured backup</span>
             <input className="input w-full text-sm" type="number" min={0} step={1} required value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} />

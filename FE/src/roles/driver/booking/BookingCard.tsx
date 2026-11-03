@@ -3,6 +3,7 @@ import { useState } from "react"
 import { createPortal } from "react-dom"
 
 import type { Booking } from "../../../lib/types"
+import { formatStatus } from "../../../lib/formatStatus"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
@@ -149,7 +150,7 @@ export function BookingCard({
             color: bookingColor,
           }}
         >
-          {booking.status.replace("-", " ").toUpperCase()}
+          {formatStatus(booking.status)}
         </div>
 
         <div>

@@ -22,7 +22,7 @@ Checklist trước khi setup:
 - [ ] **Git** và đúng branch: `git branch --show-current` (mặc định `develop`).
 - [ ] **Port rảnh:** API `5035/5045/5055/5065`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
 
-`setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Lệnh cũ `.\scripts\setup-local.ps1` vẫn dùng được: script shim này in warning rồi forward toàn bộ tham số sang `setup.ps1` ở repo root.
+`setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Dùng trực tiếp `.\setup.ps1` ở repo root.
 
 ### Thuật ngữ nhanh
 
@@ -60,7 +60,7 @@ Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**E
 
 > **CẢNH BÁO — mất dữ liệu:** **không chạy `-RecreateDb` ở lần setup đầu.** Flag này xóa schema volume và init lại 6 DB, làm mất dữ liệu dev. Chi tiết ở mục 7.3.
 
-Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner hiện tại đọc `.env` (`import-local-config.ps1` chỉ còn là tiện ích cho config dạng flat string). Không commit `.env`, user-secrets hoặc thư mục workflow keys.
+Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner hiện tại đọc `.env`. Không commit `.env`, user-secrets hoặc thư mục workflow keys.
 
 ### Chỉ cấu hình backend, chưa dựng database
 
@@ -297,7 +297,7 @@ Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết
 
 - Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`.
 - Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
-- `docker-compose.yml` là compose monolith cũ (port `5433`, container `smartparking_db`), **không** được setup hiện tại sử dụng.
+- `docker-compose.yml` (compose monolith cũ, port `5433`, container `smartparking_db`) và `scripts/database/docker-compose-smartpark.yml` **đã bị xoá** khỏi repo. Database được tạo bằng `compose.schema-integration.yml` thông qua `setup.ps1`.
 
 ### 7.3 Volume và migration
 

@@ -7,8 +7,6 @@ namespace SmartParking.UserService.Tests;
 // Vehicle endpoints are covered by VehicleRegistrationTests using the production PostgreSQL adapter.
 internal sealed class UnsupportedVehicleRepository : IVehicleRepository
 {
-    public Task<Guid[]> LockActiveDriverAccountsAsync(Guid userId, CancellationToken ct) =>
-        throw new NotSupportedException("Use the PostgreSQL vehicle fixture.");
     public Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid[] accountIds, CancellationToken ct) =>
         throw new NotSupportedException("Use the PostgreSQL vehicle fixture.");
     public Task<RegisteredVehicle?> FindForUpdateAsync(Guid id, Guid[] accountIds, CancellationToken ct) =>

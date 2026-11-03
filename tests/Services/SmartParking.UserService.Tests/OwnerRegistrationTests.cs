@@ -28,10 +28,20 @@ public sealed class OwnerRegistrationTests
         var passwords = new BcryptPasswordService();
         var adminId = Guid.NewGuid();
         var directory = new TestParkingDirectory();
+        directory.OnProvision = async (id, name, email, phone, ct) =>
+        {
+            await using var tenantDb = new AppDbContext(options);
+            await tenantDb.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO tenants (id, code, name, contact_email, contact_phone)
+                VALUES ({id}, {"tenant-" + id.ToString("N")}, {name}, {email}, {phone})
+                ON CONFLICT (id) DO NOTHING
+                """, ct);
+        };
         async Task<T> Run<T>(Func<OwnerRegistrationService, Task<T>> action)
         {
             await using var db = new AppDbContext(options);
-            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock)));
+            var authorization = await TestAuthorization.ForUserAsync(db, clock, adminId, directory);
+            return await action(new(db, passwords, clock, directory, WorkflowTestSupport.Create(db,clock,authorization), authorization));
         }
         OwnerRegistrationDto Body(string email, string phone) => new() { FullName = "New Owner", BusinessName = "Company",
             Email = email, Phone = phone, Password = "Password@123", LotType = "basement", AgreedToPolicy = true };
@@ -84,9 +94,12 @@ public sealed class OwnerRegistrationTests
             {
                 await ServiceSchema.InitializeAsync(db);
                 await new DataSeeder(db, passwords).SeedAsync();
+                // The schema already seeds PLATFORM_ADMIN; adding it again breaks the roles primary key.
+                if (!await db.Roles.AnyAsync(r => r.Code == "PLATFORM_ADMIN"))
+                    db.Roles.Add(new Role { Code = "PLATFORM_ADMIN", Name = "Admin" });
                 db.Users.Add(new User { Id = adminId, FullName = "Admin", Phone = "0900000000", Email = "admin@example.com",
                     PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
-                    Accounts = [new Account { Id = Guid.NewGuid(), AccountRoles = [new AccountRole { RoleCode = "PLATFORM_ADMIN" }] }] });
+                    Accounts = [new Account { Id = Guid.NewGuid(), RoleCode = "PLATFORM_ADMIN" }] });
                 await db.SaveChangesAsync();
                 var root = new DirectoryInfo(AppContext.BaseDirectory);
                 while (root != null && !File.Exists(Path.Combine(root.FullName, "SmartParking.slnx"))) root = root.Parent;

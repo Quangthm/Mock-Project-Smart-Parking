@@ -13,6 +13,7 @@ public sealed record CompleteStructureEditCommand(
     Guid Token,
     EditOutcome? Outcome) : IRequest;
 public sealed record ReadStructureSnapshotQuery(Guid TenantId, Guid SiteId) : IRequest<HoldSnapshot>;
+public sealed record ForceReleaseStructureHoldsCommand(Guid TenantId, Guid SiteId) : IRequest;
 
 public sealed class PrepareStructureEditCommandHandler(StructureSafetyService service)
     : IRequestHandler<PrepareStructureEditCommand, HoldSnapshot>
@@ -40,4 +41,11 @@ public sealed class ReadStructureSnapshotQueryHandler(StructureSafetyService ser
 {
     public Task<HoldSnapshot> Handle(ReadStructureSnapshotQuery request, CancellationToken ct) =>
         service.ReadSnapshotAsync(request.TenantId, request.SiteId, ct);
+}
+
+public sealed class ForceReleaseStructureHoldsCommandHandler(StructureSafetyService service)
+    : IRequestHandler<ForceReleaseStructureHoldsCommand>
+{
+    public Task Handle(ForceReleaseStructureHoldsCommand request, CancellationToken ct) =>
+        service.ForceReleaseAsync(request.TenantId, request.SiteId, ct);
 }

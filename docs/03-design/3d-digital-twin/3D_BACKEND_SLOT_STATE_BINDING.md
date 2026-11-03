@@ -408,14 +408,16 @@ All production Blender models follow strict standardized regex hierarchies:
 
 ### 4.3. Identifier Mapping Matrix
 
-| Hierarchy Level | Backend Entity Field | Canonical Model Mesh Name | Normalized Match Key |
+> **Authoritative Invariant (v1.2 Canonical Alignment)**: In accordance with `3d-digital-twin-api-design.md §3.3`, the authoritative match key is the **exact raw mesh name** (`slotCode === mesh.name`, preserving casing and prefixes). Earlier prototype drafts that stripped prefixes (e.g. `PARKING_G_CAR_001 -> G-CAR-001`) are superseded by direct 1:1 raw mesh identity matching.
+
+| Hierarchy Level | Backend Entity Field | Canonical Model Mesh Name | Authoritative Match Key (v1.2 Canonical) |
 | :--- | :--- | :--- | :--- |
-| **Outdoor Surface Bay** | `parking_slots.slot_code` | `CarParkingSpace_001` | `001` |
-| **Outdoor EV Bay** | `parking_slots.slot_code` | `PARKING_EV_CAR_001` | `EV-CAR-001` |
-| **Indoor Multi-Story Bay**| `parking_slots.slot_code` | `PARKING_G_CAR_001` | `G-CAR-001` |
-| **Indoor Level 1 EV Bay** | `parking_slots.slot_code` | `PARKING_L1_EV_004` | `L1-EV-004` |
-| **Underground B1 Bay** | `parking_slots.slot_code` | `B1_Car_001` | `B1-CAR-001` |
-| **Underground B2 EV Bay** | `parking_slots.slot_code` | `B2_EV_Car_003` | `B2-EV-CAR-003` |
+| **Outdoor Surface Bay** | `parking_slots.slot_code` | `CarParkingSpace_001` | `CarParkingSpace_001` |
+| **Outdoor EV Bay** | `parking_slots.slot_code` | `PARKING_EV_CAR_001` | `PARKING_EV_CAR_001` |
+| **Indoor Multi-Story Bay**| `parking_slots.slot_code` | `PARKING_G_CAR_001` | `PARKING_G_CAR_001` |
+| **Indoor Level 1 EV Bay** | `parking_slots.slot_code` | `PARKING_L1_EV_004` | `PARKING_L1_EV_004` |
+| **Underground B1 Bay** | `parking_slots.slot_code` | `B1_Car_001` | `B1_Car_001` |
+| **Underground B2 EV Bay** | `parking_slots.slot_code` | `B2_EV_Car_003` | `B2_EV_Car_003` |
 
 ### 4.4. Mapping Registry Implementation (`SlotMappingRegistry`)
 
@@ -424,11 +426,9 @@ The registry constructs an in-memory bi-directional index upon model load:
 ```typescript
 // FE/src/services/3d/SlotMappingRegistry.ts
 import * as THREE from 'three';
-import { normalizeSlotIdentifier } from '../../lib/3d/slotMatcher';
 
 export interface RegisteredSlot {
   slotCode: string;
-  normalizedKey: string;
   mesh: THREE.Mesh;
   floorLevel: string;
   initialMaterial: THREE.Material | THREE.Material[];
@@ -445,6 +445,7 @@ export class SlotMappingRegistry {
 
   /**
    * Traverses scene graph once to discover and index interactive slot meshes
+   * using exact raw mesh names as dictionary keys (1:1 direct identity mapping).
    */
   public registerScene(scene: THREE.Group): void {
     this.keyToSlot.clear();
@@ -457,9 +458,8 @@ export class SlotMappingRegistry {
       // Filter non-slot decorative elements
       if (!this.isSlotMeshName(name)) return;
 
-      const normalizedKey = normalizeSlotIdentifier(name);
-      if (this.keyToSlot.has(normalizedKey)) {
-        console.warn(`[3D Mapping] Duplicate slot identifier detected: "${name}" -> "${normalizedKey}"`);
+      if (this.keyToSlot.has(name)) {
+        console.warn(`[3D Mapping] Duplicate slot mesh name detected: "${name}"`);
         return;
       }
 
@@ -468,20 +468,18 @@ export class SlotMappingRegistry {
 
       const entry: RegisteredSlot = {
         slotCode: name,
-        normalizedKey,
         mesh: child,
         floorLevel,
         initialMaterial: child.material,
       };
 
-      this.keyToSlot.set(normalizedKey, entry);
-      this.meshIdToKey.set(child.id, normalizedKey);
+      this.keyToSlot.set(name, entry);
+      this.meshIdToKey.set(child.id, name);
     });
   }
 
   public resolve(slotCode: string): RegisteredSlot | undefined {
-    const key = normalizeSlotIdentifier(slotCode);
-    return this.keyToSlot.get(key);
+    return this.keyToSlot.get(slotCode);
   }
 
   public getByMeshId(meshId: number): RegisteredSlot | undefined {
@@ -639,7 +637,7 @@ if (mesh.material instanceof THREE.MeshStandardMaterial) {
 * **MVP Polling Interval**: Configured at **$5.0\text{ seconds}$** via `setInterval`.
 * **Request Cancellation**: Each polling tick uses an `AbortController`. If a previous request is still pending when the next tick fires, the stale request is aborted.
 * **Manual Refresh**: A HUD refresh button allows operators to force an immediate cache bypass fetch.
-* **Real-Time Push Architecture (SignalR)**: Real-time event streaming is served via ASP.NET Core SignalR hub (`/hubs/parking-lot`, group `lot_{lotId}`) with the event `SlotStateChanged`.
+* **Real-Time Push Architecture (SignalR)**: Real-time event streaming is served via ASP.NET Core SignalR hub (`/ws/parking-lots/{id}/layout`, superseding legacy prototype route `/hubs/parking-lot`, group `lot_{lotId}`) with the event `SlotStateChanged`.
 * **Authoritative Reconnect Snapshot Rule (FR-MAP-04)**:
   > [!IMPORTANT]
   > When the SignalR connection drops and reconnects (e.g. Wi-Fi drop or tab sleep), the frontend client **MUST NOT** attempt to replay or synthesize missed deltas. Instead, it must immediately execute a full snapshot fetch (`GET /api/parking-lots/{id}/operational-layout`) to guarantee absolute synchronization with backend ground truth.
@@ -803,5 +801,5 @@ The checked items below retain the original prototype record; they do not mark t
 | Version | Date | Author | Description of Changes |
 | :--- | :--- | :--- | :--- |
 | `v1.1.0` | 2026-10-20 | 3D Digital Twin Engineering Group | Formalized Section 2.5 Facility Onboarding & Automated Slot Ingestion Pipeline (dual onboarding paths 1a/1b, scene graph mesh parsing, Floor/Zone classification, automobile physical capacity calculation, motorcycle aggregate capacity decoupling per BR-CAP-01, < 3s batch registration SLA, and Owner post-setup rules). |
-| `v1.0.0` | 2026-10-19 | 3D Digital Twin Engineering Group | Formal approval baseline aligned with **SmartPark SRS v1.0** (FR-MAP-01–04, FR-LOT-01–03, FR-CAP-02, BR-CAP-01) and **Solution Architecture v1.0**. Reconciled with ASP.NET Core SignalR hub (`/hubs/parking-lot`), established Authoritative Reconnect Snapshot Rule, aligned 6-service domain ownership (`Facility & Visualization` vs `Parking Operations`), and formalized Precision Integrity. |
+| `v1.0.0` | 2026-10-19 | 3D Digital Twin Engineering Group | Formal approval baseline aligned with **SmartPark SRS v1.0** (FR-MAP-01–04, FR-LOT-01–03, FR-CAP-02, BR-CAP-01) and **Solution Architecture v1.0**. Reconciled with ASP.NET Core SignalR hub (`/ws/parking-lots/{id}/layout`, superseding legacy `/hubs/parking-lot`), established Authoritative Reconnect Snapshot Rule, aligned 6-service domain ownership (`Facility & Visualization` vs `Parking Operations`), and formalized Precision Integrity. |
 | `v0.1.0` | 2026-10-09 | 3D Digital Twin Engineering Group | Initial Sprint 2 prototype document. Full alignment with SRS v0.9 §3.2.2/§3.2.3, PostgreSQL microservice schemas (`02-parking-service-db.sql`, `03-reservation-session-service-db.sql`), and Blender 5.2.2 LTS production asset specifications. |

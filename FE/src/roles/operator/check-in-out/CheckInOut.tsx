@@ -3,6 +3,8 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { ParkingHistory, type ParkingHistoryRecord } from "../../../components/history/ParkingHistory"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { AuthApiError } from "../../../lib/authApi"
+import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 import {
   reservationApi,
   type OperatorSite,
@@ -207,7 +209,7 @@ export function CheckInOut({
       const match = await reservationApi.lookup(lot.id, term)
       const expectedStatus = mode === "check-in" ? "confirmed" : "checked-in"
       if (match.status !== expectedStatus) {
-        setQuickError(`Reservation ${match.id} is ${match.status} and cannot use this gate.`)
+        setQuickError(`Reservation ${match.id} is ${formatStatus(match.status)} and cannot use this gate.`)
         return
       }
       const result: QuickGateResult = {
@@ -315,6 +317,7 @@ export function CheckInOut({
         type: "success",
         message: `${action === "check-in" ? "Check-in" : "Check-out"} completed for ${updatedBooking.licensePlate} (${slotLabel(updatedBooking)}).`,
       })
+      showUiToast(action === "check-in" ? "Check-in complete" : "Check-out complete", `${updatedBooking.licensePlate} · ${slotLabel(updatedBooking)}`)
       setConfirmingAction(null)
       setQuickResult(null)
       setQuickInput("")
@@ -331,6 +334,7 @@ export function CheckInOut({
         : undefined)
       onDataChanged?.()
     } catch (error) {
+      showUiToast("Gate action failed", error instanceof Error ? error.message : "Failed to execute gate action.", "error")
       setActionFeedback({
         type: "error",
         message: error instanceof Error ? error.message : "Failed to execute gate action.",
@@ -455,6 +459,7 @@ export function CheckInOut({
           ? `Walk-in check-in completed for ${session.licensePlate} (${session.slotNumber ?? "No slot assigned"}).`
           : `Walk-in check-out completed for ${session.licensePlate} (${session.slotNumber ?? "No slot assigned"}).`,
       })
+      showUiToast(action === "check-in" ? "Walk-in checked in" : "Walk-in checked out", `${session.licensePlate} · ${session.slotNumber ?? "No slot assigned"}`)
       setQuickResult(null)
       setQuickInput("")
       setLatestScanImage("")
@@ -471,6 +476,7 @@ export function CheckInOut({
         : undefined)
       onDataChanged?.()
     } catch (error) {
+      showUiToast("Walk-in action failed", error instanceof Error ? error.message : "Failed to execute walk-in gate action.", "error")
       setActionFeedback({
         type: "error",
         message: error instanceof Error ? error.message : "Failed to execute walk-in gate action.",
@@ -853,7 +859,7 @@ export function CheckInOut({
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">Current Status:</span>
-                <span className="font-semibold uppercase">{confirmingAction.booking.status}</span>
+                <span className="font-semibold">{formatStatus(confirmingAction.booking.status)}</span>
               </div>
             </div>
 

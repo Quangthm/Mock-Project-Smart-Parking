@@ -412,6 +412,22 @@ export const authApi = {
     return toUser(response.data)
   },
 
+  async updateOwnProfile(fullName: string): Promise<ApiUser> {
+    let response: ApiResponse<ApiUser>
+    try {
+      response = await request<ApiResponse<ApiUser>>("/me", "PATCH", { fullName })
+    } catch (error) {
+      if (error instanceof AuthApiError && error.status === 405) {
+        throw new Error("Profile editing is unavailable in the running UserService. Please update the UserService container and try again.")
+      }
+      throw error
+    }
+    if (!response.data?.userId || !response.data?.fullName) {
+      throw new Error("The server did not confirm your profile change. Please try again.")
+    }
+    return response.data
+  },
+
   async logout(): Promise<void> {
     const generation = sessionGeneration
     if (refreshInFlight) await refreshInFlight
