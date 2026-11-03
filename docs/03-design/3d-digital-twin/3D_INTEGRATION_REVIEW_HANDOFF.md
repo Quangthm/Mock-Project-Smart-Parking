@@ -1,6 +1,6 @@
 # SmartPark 3D Integration Review Handoff
 
-> Historical review record (12 October 2026), retained without rewriting its original observations/results. It is not current implementation evidence or the v1.1 authority. Use the [current backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) and [service ownership contract](../../02-architecture/service-boundaries/ownership-and-events.md). In particular, any v0.9 claim that legacy ParkingService owns accepted occupancy is superseded by Operations authority under V11-09. Current discovery-to-model requirements are in the [hub](README.md#maptiler-discovery-to-internal-2d3d-booking-v11-12).
+> Historical review record (12 October 2026), retained without rewriting its original observations/results. It is not current implementation evidence or the v1.1 authority. Use the [current backend binding](3D_BACKEND_SLOT_STATE_BINDING.md) and [service ownership contract](../../02-architecture/service-boundaries/ownership-and-events.md). In particular, any v0.9 claim that legacy FacilityService owns accepted occupancy is superseded by Operations authority under V11-09. Current discovery-to-model requirements are in the [hub](README.md#maptiler-discovery-to-internal-2d3d-booking-v11-12).
 
 **Date:** 12 October 2026  
 **Scope:** `3D_MODEL_IMPLEMENTATION_GUIDE.md`, backend slot-state binding implementation/documentation, and `3D_ENTERPRISE_MODEL_INGESTION_RULES.md`  

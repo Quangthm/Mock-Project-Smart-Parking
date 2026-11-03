@@ -121,6 +121,7 @@ export function LotStatus({
     vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
     site, allSlots, filteredSlots, counts, slotView, layout,
+    scanSlots, isScanning, lastScanAt,
     isStale, staleAgeSeconds, isRefreshing, refreshLayout,
   } = useLotStatus(lot, initialSlotCode, initialStatusFilter, {
     layout: layoutProp,
@@ -187,6 +188,22 @@ export function LotStatus({
             <UntitledIcon name="clipboard" size={13} /> Slot List
           </button>
         </div>} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-[var(--muted)]">
+          Check-in camera events remain pending until the next scan.
+          {lastScanAt ? ` Last scan ${new Date(lastScanAt).toLocaleTimeString()}.` : ""}
+        </p>
+        <button
+          type="button"
+          className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-3"
+          onClick={scanSlots}
+          disabled={isScanning}
+        >
+          <UntitledIcon name="scan" size={14} />
+          {isScanning ? "AI scanning..." : "Scan now"}
+        </button>
+      </div>
 
       {isStale && (
         <div className="flex flex-wrap items-start gap-2">

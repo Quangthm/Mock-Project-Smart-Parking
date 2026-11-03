@@ -47,7 +47,8 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
 
         // Authoritative state check:
         // If already in definitive terminal state, return immediately from database
-        if (tx.Status is PaymentStatus.SUCCESS or PaymentStatus.CANCELLED)
+        if (tx.Status is PaymentStatus.SUCCESS or PaymentStatus.CANCELLED ||
+            tx.PaymentMethod == PaymentMethod.CASH)
         {
             return new PaymentTransactionStatusDto(
                 TransactionId: tx.Id,

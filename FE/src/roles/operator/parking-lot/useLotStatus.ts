@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { OperatorSite, OperatorSlot } from "../../../lib/operatorApi"
+import type { DemoSlotSession, OperatorSite, OperatorSlot } from "../../../lib/operatorApi"
 import { parkingApi } from "../../../lib/parkingApi"
 import type { SlotStatus } from "../../../lib/types"
 import {
@@ -32,6 +32,37 @@ export type LotVisualFilter =
   | "unavailable"
 
 type ViewMode = "3d" | "grid" | "list"
+type DemoVehicle = {
+  plate: string
+  imageUrl: string
+  session: DemoSlotSession
+}
+
+function pendingCheckInStorageKey(siteId: string) {
+  return `smartpark:demo-pending-checkins:${siteId}`
+}
+
+function demoVehicleImage(index: number) {
+  const colors = ["#38bdf8", "#a78bfa", "#34d399", "#fbbf24", "#fb7185"]
+  const color = colors[index % colors.length]
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#111827"/><rect x="34" y="34" width="572" height="292" rx="18" fill="${color}" opacity=".22"/><text x="320" y="180" fill="white" text-anchor="middle" font-family="Arial" font-size="24">DEMO CAMERA CAPTURE</text></svg>`)}`
+}
+
+function createDemoSession(plate: string, vehicleType: string, imageUrl: string): DemoSlotSession {
+  const now = new Date().toISOString()
+  return {
+    id: `demo-session-${crypto.randomUUID()}`,
+    originalPlate: plate,
+    normalizedPlate: plate.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(),
+    vehicleType,
+    ticketReference: `WALKIN-${plate.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`,
+    entryTime: now,
+    exitTime: null,
+    status: "ACTIVE",
+    entryImageUrl: imageUrl,
+    exitImageUrl: null,
+  }
+}
 
 /**
  * The data lane attaches the operational snapshot to the operator site. Both
@@ -201,6 +232,10 @@ export function useLotStatus(
   const [now, setNow] = useState(() => Date.now())
   const [refreshing, setRefreshing] = useState(false)
   const [refreshFailed, setRefreshFailed] = useState(false)
+  const [demoAssignments, setDemoAssignments] = useState<Record<string, DemoVehicle>>({})
+  const [pendingDemoAssignments, setPendingDemoAssignments] = useState<Record<string, DemoVehicle>>({})
+  const [isScanning, setIsScanning] = useState(false)
+  const [lastScanAt, setLastScanAt] = useState<number | null>(null)
 
   // Keep the last known site and snapshot so a failed reconnect refetch never
   // blanks the screen or falls back to fixture data.
@@ -309,7 +344,112 @@ export function useLotStatus(
       })
   }, [site, isOutdoor, selectedFloor])
 
-  const allSlots: OperatorSlot[] = useMemo(() => site?.slots ?? [], [site])
+  const scanSlots = useCallback(() => {
+    if (!site || isScanning) return
+    setIsScanning(true)
+    window.setTimeout(() => {
+      setDemoAssignments((current) => ({ ...current, ...pendingDemoAssignments }))
+      setPendingDemoAssignments({})
+      window.localStorage.removeItem(pendingCheckInStorageKey(site.id))
+      setLastScanAt(Date.now())
+      setIsScanning(false)
+    }, 850)
+  }, [isScanning, pendingDemoAssignments, site])
+
+  useEffect(() => {
+    if (!site) return
+    setDemoAssignments({})
+    setPendingDemoAssignments({})
+    setLastScanAt(null)
+    const stored = JSON.parse(
+      window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]",
+    ) as Array<{ plate: string; imageUrl?: string; vehicleType?: string; session?: DemoSlotSession }>
+    if (stored.length === 0) return
+    const assignments: Record<string, DemoVehicle> = {}
+    const availableSlots = site.slots.filter((slot) => slot.status === "available")
+    stored.forEach((checkIn, index) => {
+      const slot = availableSlots.splice(Math.floor(Math.random() * availableSlots.length), 1)[0]
+      if (!slot) return
+      const imageUrl = checkIn.imageUrl || demoVehicleImage(Date.now() + index)
+      assignments[slot.id] = {
+        plate: checkIn.plate,
+        imageUrl,
+        session: checkIn.session ?? createDemoSession(checkIn.plate, checkIn.vehicleType ?? "CAR", imageUrl),
+      }
+    })
+    setPendingDemoAssignments(assignments)
+  }, [site?.id])
+
+  useEffect(() => {
+    const handleCheckIn = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        siteId: string; plate: string; imageUrl?: string; session?: DemoSlotSession; vehicleType?: string
+      }>).detail
+      if (!site || detail.siteId !== site.id) return
+      const imageUrl = detail.imageUrl || demoVehicleImage(Date.now())
+      const vehicle = {
+        plate: detail.plate,
+        imageUrl,
+        session: detail.session ?? createDemoSession(detail.plate, detail.vehicleType ?? "CAR", imageUrl),
+      }
+      setPendingDemoAssignments((current) => {
+        const occupiedIds = new Set(Object.keys(demoAssignments))
+        const pendingIds = new Set(Object.keys(current))
+        const availableSlots = site.slots.filter((slot) =>
+          slot.status === "available" && !occupiedIds.has(slot.id) && !pendingIds.has(slot.id),
+        )
+        const slot = availableSlots[Math.floor(Math.random() * availableSlots.length)]
+        return slot ? { ...current, [slot.id]: vehicle } : current
+      })
+      const stored = JSON.parse(window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]") as Array<{ plate: string }>
+      if (!stored.some((checkIn) => checkIn.plate === detail.plate)) {
+        stored.push(detail)
+        window.localStorage.setItem(pendingCheckInStorageKey(site.id), JSON.stringify(stored))
+      }
+    }
+    const handleCheckOut = (event: Event) => {
+      const detail = (event as CustomEvent<{ siteId: string; plate: string }>).detail
+      if (!site || detail.siteId !== site.id) return
+      const removePlate = (assignments: Record<string, DemoVehicle>) =>
+        Object.fromEntries(Object.entries(assignments).filter(([, vehicle]) => vehicle.plate !== detail.plate))
+      setDemoAssignments(removePlate)
+      setPendingDemoAssignments(removePlate)
+      const stored = JSON.parse(window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]") as Array<{ plate: string }>
+      window.localStorage.setItem(pendingCheckInStorageKey(site.id), JSON.stringify(stored.filter((checkIn) => checkIn.plate !== detail.plate)))
+    }
+    window.addEventListener("smartpark:demo-check-in", handleCheckIn)
+    window.addEventListener("smartpark:demo-check-out", handleCheckOut)
+    return () => {
+      window.removeEventListener("smartpark:demo-check-in", handleCheckIn)
+      window.removeEventListener("smartpark:demo-check-out", handleCheckOut)
+    }
+  }, [demoAssignments, site])
+
+  useEffect(() => {
+    const timer = window.setInterval(scanSlots, 300000)
+    return () => window.clearInterval(timer)
+  }, [scanSlots])
+
+  const allSlots: OperatorSlot[] = useMemo(() => (site?.slots ?? []).map((slot) => {
+    const assignment = demoAssignments[slot.id]
+    const pending = pendingDemoAssignments[slot.id]
+    if (assignment) {
+      return {
+        ...slot,
+        status: "occupied",
+        physicalState: "OCCUPIED",
+        isPhysicallyOccupied: true,
+        isBookable: false,
+        demoPlate: assignment.plate,
+        demoImageUrl: assignment.imageUrl,
+        demoCheckedInAt: assignment.session.entryTime,
+        demoSession: assignment.session,
+      }
+    }
+    return pending
+      ? { ...slot, demoImageUrl: pending.imageUrl, demoCheckedInAt: pending.session.entryTime }
+      : slot
+  }), [site, demoAssignments, pendingDemoAssignments])
 
   const projectionSlots = useMemo(() => {
     const map = new Map<string, SlotVisualStateDto>()
@@ -330,6 +470,13 @@ export function useLotStatus(
   }, [projectionSlots])
 
   const slotView = useCallback((slot: OperatorSlot): SlotView => {
+    if (slot.demoSession) {
+      return {
+        physicalState: "OCCUPIED",
+        reservationState: resolveSlotAxes(slot, projectedFor(slot)).reservationState,
+        visualState: "occupied",
+      }
+    }
     const axes = resolveSlotAxes(slot, projectedFor(slot))
     return { ...axes, visualState: slotVisualState(axes) }
   }, [projectedFor])
@@ -398,5 +545,6 @@ export function useLotStatus(
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
     site, allSlots, filteredSlots, counts, slotView, layout: activeLayout,
     isStale, staleAgeSeconds, isRefreshing: refreshing, refreshFailed, refreshLayout,
+    scanSlots, isScanning, lastScanAt,
   }
 }

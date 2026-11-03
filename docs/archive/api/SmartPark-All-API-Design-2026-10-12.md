@@ -8,9 +8,9 @@ Ngày snapshot: **12/10/2026 (Asia/Saigon)**. Nguồn: code hiện có trong wor
 
 ## Overview
 
-Phạm vi: **49 endpoint nghiệp vụ/nội bộ** (UserService33, ParkingService13, ReservationService3), cộng **1 endpoint OpenAPI Development**. Tên field, response envelope, permissions, success/error status lấy từ controllers/minimal APIs/DTOs/handlers hiện tại. Template sample dùng userName/result/isSuccess/statusCode; repo dùng email/success/data và HTTP status ở transport nên tài liệu giữ contract của code.
+Phạm vi: **49 endpoint nghiệp vụ/nội bộ** (UserService33, FacilityService13, OperationService3), cộng **1 endpoint OpenAPI Development**. Tên field, response envelope, permissions, success/error status lấy từ controllers/minimal APIs/DTOs/handlers hiện tại. Template sample dùng userName/result/isSuccess/statusCode; repo dùng email/success/data và HTTP status ở transport nên tài liệu giữ contract của code.
 
-Local launch profile (không phải production URL): UserService http://localhost:5035; ParkingService http://localhost:5045; ReservationService http://localhost:5055. URLs trong tài liệu là service-relative; gateway routing/production origin phải lấy từ deployment. JSON web camelCase; timestamp UTC; Parking enums serialize thành string và reject enum integer. UserService role trong JWT/API lowercase.
+Local launch profile (không phải production URL): UserService http://localhost:5035; FacilityService http://localhost:5045; OperationService http://localhost:5055. URLs trong tài liệu là service-relative; gateway routing/production origin phải lấy từ deployment. JSON web camelCase; timestamp UTC; Parking enums serialize thành string và reject enum integer. UserService role trong JWT/API lowercase.
 
 Bearer protected requests recheck persistent session/current account; Parking forward caller Bearer sang UserService để xác minh role/tenant/lot action. Internal endpoints dùng X-Service-Key, không đưa shared key vào frontend. Mỗi service chỉ đọc/ghi DB của mình; IDs service khác là logical references.
 
@@ -95,22 +95,22 @@ Reservation Application validates scope/outcome; Domain rejects empty removed re
 | [U31](#u31) | UserService | GET | /api/vehicles | Driver liệt kê xe |
 | [U32](#u32) | UserService | POST | /api/vehicles | Driver đăng ký xe |
 | [U33](#u33) | UserService | PATCH | /api/vehicles/{id} | Driver cập nhật xe |
-| [P01](#p01) | ParkingService | GET | /api/parking-lots | Owner liệt kê bãi |
-| [P02](#p02) | ParkingService | POST | /api/parking-lots | Owner tạo bãi |
-| [P03](#p03) | ParkingService | GET | /api/parking-lots/{id}/structure | Owner đọc cấu trúc bãi |
-| [P04](#p04) | ParkingService | GET | /api/parking-lots/{id}/operational-layout | Operator đọc operational layout |
-| [P05](#p05) | ParkingService | POST | /api/parking-lots/{id}/slots/{slot}/backup | Operator mark slot BACKUP |
-| [P06](#p06) | ParkingService | POST | /api/parking-lots/{id}/operations | Owner yêu cầu impact operation |
-| [P07](#p07) | ParkingService | GET | /api/parking-lots/{id}/operations/{operationId} | Owner đọc trạng thái operation |
-| [P08](#p08) | ParkingService | POST | /api/parking-lots/{id}/units | Owner thêm spatial unit |
-| [P09](#p09) | ParkingService | POST | /api/parking-lots/{id}/slots | Owner thêm parking slot |
-| [P10](#p10) | ParkingService | PATCH | /api/parking-lots/{id}/structure | Owner sửa cấu trúc/action |
-| [P11](#p11) | ParkingService | POST | /api/parking-lots/{id}/paths | Owner thêm access path |
-| [P12](#p12) | ParkingService | PUT | /internal/tenants/{id} | Internal provision tenant |
-| [P13](#p13) | ParkingService | POST | /internal/sites/validate | Internal validate active sites |
-| [R01](#r01) | ReservationService | PUT | /internal/structure/{siteId}/{token} | Internal acquire structure hold |
-| [R02](#r02) | ReservationService | POST | /internal/structure/{siteId}/impact | Internal inspect structure impact |
-| [R03](#r03) | ReservationService | POST | /internal/structure/{siteId}/{token}/release | Internal publish outcome/release hold |
+| [P01](#p01) | FacilityService | GET | /api/parking-lots | Owner liệt kê bãi |
+| [P02](#p02) | FacilityService | POST | /api/parking-lots | Owner tạo bãi |
+| [P03](#p03) | FacilityService | GET | /api/parking-lots/{id}/structure | Owner đọc cấu trúc bãi |
+| [P04](#p04) | FacilityService | GET | /api/parking-lots/{id}/operational-layout | Operator đọc operational layout |
+| [P05](#p05) | FacilityService | POST | /api/parking-lots/{id}/slots/{slot}/backup | Operator mark slot BACKUP |
+| [P06](#p06) | FacilityService | POST | /api/parking-lots/{id}/operations | Owner yêu cầu impact operation |
+| [P07](#p07) | FacilityService | GET | /api/parking-lots/{id}/operations/{operationId} | Owner đọc trạng thái operation |
+| [P08](#p08) | FacilityService | POST | /api/parking-lots/{id}/units | Owner thêm spatial unit |
+| [P09](#p09) | FacilityService | POST | /api/parking-lots/{id}/slots | Owner thêm parking slot |
+| [P10](#p10) | FacilityService | PATCH | /api/parking-lots/{id}/structure | Owner sửa cấu trúc/action |
+| [P11](#p11) | FacilityService | POST | /api/parking-lots/{id}/paths | Owner thêm access path |
+| [P12](#p12) | FacilityService | PUT | /internal/tenants/{id} | Internal provision tenant |
+| [P13](#p13) | FacilityService | POST | /internal/sites/validate | Internal validate active sites |
+| [R01](#r01) | OperationService | PUT | /internal/structure/{siteId}/{token} | Internal acquire structure hold |
+| [R02](#r02) | OperationService | POST | /internal/structure/{siteId}/impact | Internal inspect structure impact |
+| [R03](#r03) | OperationService | POST | /internal/structure/{siteId}/{token}/release | Internal publish outcome/release hold |
 | [D01](#d01) | UserService | GET | /openapi/{documentName}.json | Development OpenAPI document |
 
 ---
@@ -3251,7 +3251,7 @@ actor Caller
 participant "UserService API / middleware" as API
 participant "UsersController / owning handler" as Handler
 database "UserService DB (service-owned)" as DB
-participant "ParkingService via HTTP" as Peer
+participant "FacilityService via HTTP" as Peer
 Caller -> API: POST /api/users
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -3420,7 +3420,7 @@ end
 
 ### Overview
 
-Trả active assignments/grants sau validation qua ParkingService.
+Trả active assignments/grants sau validation qua FacilityService.
 
 Service: **UserService**. Nguồn: `src/Services/UserService/SmartParking.UserService.API/Controllers/OperatorsController.cs`.
 
@@ -3512,7 +3512,7 @@ actor Caller
 participant "UserService API / middleware" as API
 participant "OperatorsController / owning handler" as Handler
 database "UserService DB (service-owned)" as DB
-participant "ParkingService via HTTP" as Peer
+participant "FacilityService via HTTP" as Peer
 Caller -> API: GET /api/operators/me
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -3628,7 +3628,7 @@ actor Caller
 participant "UserService API / middleware" as API
 participant "OperatorsController / owning handler" as Handler
 database "UserService DB (service-owned)" as DB
-participant "ParkingService via HTTP" as Peer
+participant "FacilityService via HTTP" as Peer
 Caller -> API: GET /api/operators/slot-scope
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -4080,7 +4080,7 @@ actor Caller
 participant "UserService API / middleware" as API
 participant "OwnerApplicationsController / owning handler" as Handler
 database "UserService DB (service-owned)" as DB
-participant "ParkingService via HTTP" as Peer
+participant "FacilityService via HTTP" as Peer
 Caller -> API: PATCH /api/owner-applications/{id}/review
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -4533,7 +4533,7 @@ end
 
 Trả non-deleted sites trong authorized tenant. Không phải public Driver parking-search endpoint.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
  Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -4543,14 +4543,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | GET | /api/parking-lots |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 GET /api/parking-lots?tenantId=00000003-0000-4000-8000-000000000003 HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 ```
 
@@ -4636,9 +4636,9 @@ stop
 @startuml
 title P01 GET /api/parking-lots
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 participant "UserService via HTTP" as Peer
 Caller -> API: GET /api/parking-lots
 API -> API: Binding, auth / service-key checks as applicable
@@ -4671,7 +4671,7 @@ end
 
 Tạo site profile và structure-change audit trong Parking DB.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
  Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -4681,14 +4681,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | POST | /api/parking-lots |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 201 |
 
 ### Request sample
 
 ```http
 POST /api/parking-lots HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -4789,9 +4789,9 @@ stop
 @startuml
 title P02 POST /api/parking-lots
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 participant "UserService via HTTP" as Peer
 Caller -> API: POST /api/parking-lots
 API -> API: Binding, auth / service-key checks as applicable
@@ -4824,7 +4824,7 @@ end
 
 Trả site, units, slots, paths, backup policies và computed capacity views; occupied/protected/pending/backup riêng.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 capacityViews sample chỉ minh họa1 entry; runtime trả cả CAR/MOTORCYCLE/OVERSIZED tại site và từng unit. available có thể null khi ancestor backup chưa được split; không tự tính số giả. Enum Parking có OVERSIZED/EV legacy, không được suy diễn thành registration/EV-charging support. Read cần Reservation dependency khả dụng. Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -4834,14 +4834,14 @@ capacityViews sample chỉ minh họa1 entry; runtime trả cả CAR/MOTORCYCLE/
 | --- | --- |
 | GET | /api/parking-lots/{id}/structure |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 GET /api/parking-lots/00000004-0000-4000-8000-000000000004/structure?tenantId=00000003-0000-4000-8000-000000000003 HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 ```
 
@@ -5007,9 +5007,9 @@ stop
 @startuml
 title P03 GET /api/parking-lots/{id}/structure
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 participant "UserService via HTTP" as Peer
 Caller -> API: GET /api/parking-lots/{id}/structure
 API -> API: Binding, auth / service-key checks as applicable
@@ -5042,7 +5042,7 @@ end
 
 Trả site, units, slots, paths, backup policies và computed capacity views; occupied/protected/pending/backup riêng.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 capacityViews sample chỉ minh họa1 entry; runtime trả cả CAR/MOTORCYCLE/OVERSIZED tại site và từng unit. available có thể null khi ancestor backup chưa được split; không tự tính số giả. Enum Parking có OVERSIZED/EV legacy, không được suy diễn thành registration/EV-charging support. Read cần Reservation dependency khả dụng. Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -5052,14 +5052,14 @@ capacityViews sample chỉ minh họa1 entry; runtime trả cả CAR/MOTORCYCLE/
 | --- | --- |
 | GET | /api/parking-lots/{id}/operational-layout |
 | Permission | Bearer; operator assigned lot + current SLOT_OVERRIDE |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 GET /api/parking-lots/00000004-0000-4000-8000-000000000004/operational-layout HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 ```
 
@@ -5223,9 +5223,9 @@ stop
 @startuml
 title P04 GET /api/parking-lots/{id}/operational-layout
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 participant "UserService via HTTP" as Peer
 Caller -> API: GET /api/parking-lots/{id}/operational-layout
 API -> API: Binding, auth / service-key checks as applicable
@@ -5258,7 +5258,7 @@ end
 
 Mark operational BACKUP với reason/audit; không thay physical occupied state.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 Không có Operator unmark endpoint riêng trong code. Owner markBackup là action khác và cần BACKUP_MARK explicit. Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -5268,14 +5268,14 @@ Không có Operator unmark endpoint riêng trong code. Owner markBackup là acti
 | --- | --- |
 | POST | /api/parking-lots/{id}/slots/{slot}/backup |
 | Permission | Bearer; assigned operator + SLOT_OVERRIDE tại lot |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 POST /api/parking-lots/00000004-0000-4000-8000-000000000004/slots/00000006-0000-4000-8000-000000000006/backup HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -5352,9 +5352,9 @@ stop
 @startuml
 title P05 POST /api/parking-lots/{id}/slots/{slot}/backup
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 participant "UserService via HTTP" as Peer
 Caller -> API: POST /api/parking-lots/{id}/slots/{slot}/backup
 API -> API: Binding, auth / service-key checks as applicable
@@ -5387,7 +5387,7 @@ end
 
 Workflow với immutable request và idempotency key; pending không sửa physical structure thành công giả.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 impact field là JSON string, không phải nested JSON object. 202 success=false là trạng thái pending hợp lệ. Chưa có reallocation/refund adapter thì pending; không tuyên bố completed. Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -5397,14 +5397,14 @@ impact field là JSON string, không phải nested JSON object. 202 success=fals
 | --- | --- |
 | POST | /api/parking-lots/{id}/operations |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 202 |
 
 ### Request sample
 
 ```http
 POST /api/parking-lots/00000004-0000-4000-8000-000000000004/operations HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -5527,7 +5527,7 @@ start
 :Validate transport / current permission when required;
 if (Request permitted and well-formed?) then (yes)
   :Require current Owner, persist/reuse operation by key;
-  :Serialize retries, inspect impact qua ReservationService;
+  :Serialize retries, inspect impact qua OperationService;
   :Pending/failed nếu chưa resolve downstream commitments;
   :Resolved: durable lease + physical commit + projection ACK rồi completed;
   if (Operation completed?) then (yes)
@@ -5548,17 +5548,17 @@ stop
 @startuml
 title P06 POST /api/parking-lots/{id}/operations
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
-participant "ReservationService via HTTP" as Peer
+database "FacilityService DB (service-owned)" as DB
+participant "OperationService via HTTP" as Peer
 Caller -> API: POST /api/parking-lots/{id}/operations
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
 Handler -> Peer: Validate scope / snapshot / provision via HTTP
 Peer --> Handler: Authorized result or dependency failure
 Handler -> Handler: Require current Owner, persist/reuse operation by key
-Handler -> Handler: Serialize retries, inspect impact qua ReservationService
+Handler -> Handler: Serialize retries, inspect impact qua OperationService
 Handler -> Handler: Pending/failed nếu chưa resolve downstream commitments
 Handler -> Handler: Resolved: durable lease + physical commit + projection ACK rồi completed
 Handler -> DB: Read/write only owning service tables as applicable
@@ -5583,7 +5583,7 @@ end
 
 Chỉ original actor/tenant được đọc operation scoped theo site.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 success=true nghĩa là read thành công, không nghĩa operation completed; phải đọc data.status. Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -5593,14 +5593,14 @@ success=true nghĩa là read thành công, không nghĩa operation completed; ph
 | --- | --- |
 | GET | /api/parking-lots/{id}/operations/{operationId} |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 GET /api/parking-lots/00000004-0000-4000-8000-000000000004/operations/00000011-0000-4000-8000-000000000011?tenantId=00000003-0000-4000-8000-000000000003 HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 ```
 
@@ -5679,9 +5679,9 @@ stop
 @startuml
 title P07 GET /api/parking-lots/{id}/operations/{operationId}
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 participant "UserService via HTTP" as Peer
 Caller -> API: GET /api/parking-lots/{id}/operations/{operationId}
 API -> API: Binding, auth / service-key checks as applicable
@@ -5715,7 +5715,7 @@ end
 
 Thêm FLOOR/ZONE/BLOCK vào đúng hierarchy; trả UUID, không trả toàn unit DTO.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
  Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -5725,14 +5725,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | POST | /api/parking-lots/{id}/units |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 POST /api/parking-lots/00000004-0000-4000-8000-000000000004/units HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -5818,10 +5818,10 @@ stop
 @startuml
 title P08 POST /api/parking-lots/{id}/units
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
-participant "ReservationService via HTTP" as Peer
+database "FacilityService DB (service-owned)" as DB
+participant "OperationService via HTTP" as Peer
 Caller -> API: POST /api/parking-lots/{id}/units
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -5853,7 +5853,7 @@ end
 
 Thêm physical slot và cập nhật totalPhysicalCapacity; trả generated UUID.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
  Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -5863,14 +5863,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | POST | /api/parking-lots/{id}/slots |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 POST /api/parking-lots/00000004-0000-4000-8000-000000000004/slots HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -5957,10 +5957,10 @@ stop
 @startuml
 title P09 POST /api/parking-lots/{id}/slots
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
-participant "ReservationService via HTTP" as Peer
+database "FacilityService DB (service-owned)" as DB
+participant "OperationService via HTTP" as Peer
 Caller -> API: POST /api/parking-lots/{id}/slots
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -5992,7 +5992,7 @@ end
 
 Dispatch Domain action trong durable Reservation lease; lưu Parking audit và đồng bộ projection.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 Xem bảng action dùng field ở quy ước chung. Middleware map PATH_NOT_FOUND400 (không phải404); docs phản ánh implementation. Tenant scope field không cho phép spoof actor. Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -6002,14 +6002,14 @@ Xem bảng action dùng field ở quy ước chung. Middleware map PATH_NOT_FOUN
 | --- | --- |
 | PATCH | /api/parking-lots/{id}/structure |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant; backup thêm BACKUP_CONFIGURE; markBackup thêm BACKUP_MARK explicit |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 PATCH /api/parking-lots/00000004-0000-4000-8000-000000000004/structure HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -6106,10 +6106,10 @@ stop
 @startuml
 title P10 PATCH /api/parking-lots/{id}/structure
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
-participant "ReservationService via HTTP" as Peer
+database "FacilityService DB (service-owned)" as DB
+participant "OperationService via HTTP" as Peer
 Caller -> API: PATCH /api/parking-lots/{id}/structure
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -6141,7 +6141,7 @@ end
 
 Add path giữa units hoặc external endpoint; mapData là JSON string. Trả UUID.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
  Current branch: durable preparing/ready/acknowledged synchronization and bounded advisory gates; unavailable projection acknowledgement is recoverable by the worker, not proof that the physical transaction rolled back.
 
@@ -6151,14 +6151,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | POST | /api/parking-lots/{id}/paths |
 | Permission | Bearer forwarded tới UserService; owner + PARKING_MANAGE + authorized active tenant |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 POST /api/parking-lots/00000004-0000-4000-8000-000000000004/paths HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 Authorization: Bearer <issued-access-token>
 Content-Type: application/json
 ```
@@ -6244,10 +6244,10 @@ stop
 @startuml
 title P11 POST /api/parking-lots/{id}/paths
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
-participant "ReservationService via HTTP" as Peer
+database "FacilityService DB (service-owned)" as DB
+participant "OperationService via HTTP" as Peer
 Caller -> API: POST /api/parking-lots/{id}/paths
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -6279,7 +6279,7 @@ end
 
 UserService provision tenant theo deterministic application ID; insert-on-conflict rồi kiểm tra identity match.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 ### API Specification
 
@@ -6287,14 +6287,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | PUT | /internal/tenants/{id} |
 | Permission | Internal only; X-Service-Key khớp Services:Key, không dùng JWT/frontend |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 204 |
 
 ### Request sample
 
 ```http
 PUT /internal/tenants/00000003-0000-4000-8000-000000000003 HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 X-Service-Key: <configured-service-key>
 Content-Type: application/json
 ```
@@ -6361,9 +6361,9 @@ stop
 @startuml
 title P12 PUT /internal/tenants/{id}
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 Caller -> API: PUT /internal/tenants/{id}
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -6393,7 +6393,7 @@ end
 
 Trả subset sites active thuộc tenantIds có tenant active; đây không tự authorize end-user.
 
-Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.ParkingService.API/Program.cs`.
+Service: **FacilityService**. Nguồn: `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs`.
 
 ### API Specification
 
@@ -6401,14 +6401,14 @@ Service: **ParkingService**. Nguồn: `src/Services/ParkingService/SmartParking.
 | --- | --- |
 | POST | /internal/sites/validate |
 | Permission | Internal only; X-Service-Key khớp Services:Key, không dùng JWT/frontend |
-| Service | ParkingService |
+| Service | FacilityService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 POST /internal/sites/validate HTTP/1.1
-Host: <ParkingService-host>
+Host: <FacilityService-host>
 X-Service-Key: <configured-service-key>
 Content-Type: application/json
 ```
@@ -6484,9 +6484,9 @@ stop
 @startuml
 title P13 POST /internal/sites/validate
 actor Caller
-participant "ParkingService API / middleware" as API
+participant "FacilityService API / middleware" as API
 participant "ParkingHost / owning handler" as Handler
-database "ParkingService DB (service-owned)" as DB
+database "FacilityService DB (service-owned)" as DB
 Caller -> API: POST /internal/sites/validate
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -6516,7 +6516,7 @@ end
 
 Parking acquire durable site hold; cùng token retry được, token khác conflict.
 
-Service: **ReservationService**. Nguồn: `src/Services/ReservationService/SmartParking.ReservationService.API/Program.cs`.
+Service: **OperationService**. Nguồn: `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`.
 
 Không có automatic hold expiry; không tự release khi physical commit outcome chưa rõ. protectedSlots logical Parking IDs, không cross-database FK/read. A token already recorded in a release receipt cannot reacquire the site; returns STRUCTURE_BUSY409.
 
@@ -6526,14 +6526,14 @@ Không có automatic hold expiry; không tự release khi physical commit outcom
 | --- | --- |
 | PUT | /internal/structure/{siteId}/{token} |
 | Permission | Internal only; X-Service-Key khớp Services:Key, không dùng JWT/frontend |
-| Service | ReservationService |
+| Service | OperationService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 PUT /internal/structure/00000004-0000-4000-8000-000000000004/00000012-0000-4000-8000-000000000012 HTTP/1.1
-Host: <ReservationService-host>
+Host: <OperationService-host>
 X-Service-Key: <configured-service-key>
 Content-Type: application/json
 ```
@@ -6619,9 +6619,9 @@ stop
 @startuml
 title R01 PUT /internal/structure/{siteId}/{token}
 actor Caller
-participant "ReservationService API / middleware" as API
+participant "OperationService API / middleware" as API
 participant "ReservationHost / owning handler" as Handler
-database "ReservationService DB (service-owned)" as DB
+database "OperationService DB (service-owned)" as DB
 Caller -> API: PUT /internal/structure/{siteId}/{token}
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -6652,7 +6652,7 @@ end
 
 Read Reservation-owned live reservations/sessions để downstream plan theo priority/preference.
 
-Service: **ReservationService**. Nguồn: `src/Services/ReservationService/SmartParking.ReservationService.API/Program.cs`.
+Service: **OperationService**. Nguồn: `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`.
 
 confirmedAt có thể null cho historical unknown; không dùng createdAt giả. Route này không reallocate/refund hoặc sửa physical Parking.
 
@@ -6662,14 +6662,14 @@ confirmedAt có thể null cho historical unknown; không dùng createdAt giả.
 | --- | --- |
 | POST | /internal/structure/{siteId}/impact |
 | Permission | Internal only; X-Service-Key khớp Services:Key, không dùng JWT/frontend |
-| Service | ReservationService |
+| Service | OperationService |
 | Success HTTP | 200 |
 
 ### Request sample
 
 ```http
 POST /internal/structure/00000004-0000-4000-8000-000000000004/impact HTTP/1.1
-Host: <ReservationService-host>
+Host: <OperationService-host>
 X-Service-Key: <configured-service-key>
 Content-Type: application/json
 ```
@@ -6764,9 +6764,9 @@ stop
 @startuml
 title R02 POST /internal/structure/{siteId}/impact
 actor Caller
-participant "ReservationService API / middleware" as API
+participant "OperationService API / middleware" as API
 participant "ReservationHost / owning handler" as Handler
-database "ReservationService DB (service-owned)" as DB
+database "OperationService DB (service-owned)" as DB
 Caller -> API: POST /internal/structure/{siteId}/impact
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint
@@ -6797,7 +6797,7 @@ end
 
 Atomic publish capacity/site/removal projection và release đúng durable hold token.
 
-Service: **ReservationService**. Nguồn: `src/Services/ReservationService/SmartParking.ReservationService.API/Program.cs`.
+Service: **OperationService**. Nguồn: `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`.
 
 Outcome null không được dùng để release một physical commit ambiguous; caller/recovery phải publish authoritative outcome trước. Endpoint không kiểm chứng remote Parking DB. Receipt replay requires same tenant/site/outcome; changed JSON payload or non-null publish without an existing hold returns409. Same receipt replay succeeds even when a newer edit owns the site. Null abort receipt fences a delayed acquire.
 
@@ -6807,14 +6807,14 @@ Outcome null không được dùng để release một physical commit ambiguous
 | --- | --- |
 | POST | /internal/structure/{siteId}/{token}/release |
 | Permission | Internal only; X-Service-Key khớp Services:Key, không dùng JWT/frontend |
-| Service | ReservationService |
+| Service | OperationService |
 | Success HTTP | 204 |
 
 ### Request sample
 
 ```http
 POST /internal/structure/00000004-0000-4000-8000-000000000004/00000012-0000-4000-8000-000000000012/release HTTP/1.1
-Host: <ReservationService-host>
+Host: <OperationService-host>
 X-Service-Key: <configured-service-key>
 Content-Type: application/json
 ```
@@ -6900,9 +6900,9 @@ stop
 @startuml
 title R03 POST /internal/structure/{siteId}/{token}/release
 actor Caller
-participant "ReservationService API / middleware" as API
+participant "OperationService API / middleware" as API
 participant "ReservationHost / owning handler" as Handler
-database "ReservationService DB (service-owned)" as DB
+database "OperationService DB (service-owned)" as DB
 Caller -> API: POST /internal/structure/{siteId}/{token}/release
 API -> API: Binding, auth / service-key checks as applicable
 API -> Handler: Execute endpoint

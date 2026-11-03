@@ -9,6 +9,9 @@ public sealed class ParkingSessionRepository(ReservationDbContext db)
 {
     public Task<ParkingSessionRow?> FindForUpdateAsync(
         Guid tenantId, Guid siteId, Guid sessionId, CancellationToken cancellationToken) =>
-        Set.FromSqlInterpolated($"SELECT * FROM parking_sessions WHERE id = {sessionId} AND tenant_id = {tenantId} AND site_id = {siteId} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken);
+        Set.SingleOrDefaultAsync(
+            session => session.Id == sessionId &&
+                session.TenantId == tenantId &&
+                session.SiteId == siteId,
+            cancellationToken);
 }
