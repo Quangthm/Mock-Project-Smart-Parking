@@ -147,3 +147,13 @@ CREATE TABLE provider_webhooks (
     UNIQUE (provider, provider_event_id)
 );
 CREATE INDEX idx_provider_webhooks_state ON provider_webhooks(processing_state, received_at);
+
+-- 8. BẢNG TIN TRANSACTIONAL OUTBOX (OUTBOX MESSAGES - HỖ TRỢ EVENT-DRIVEN RABBITMQ / MASSTRANSIT)
+CREATE TABLE outbox_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_type VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMPTZ NULL
+);
+CREATE INDEX idx_outbox_messages_processed_at ON outbox_messages(processed_at);

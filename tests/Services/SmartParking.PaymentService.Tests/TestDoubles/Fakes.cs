@@ -158,3 +158,69 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
         return Task.FromResult(VerificationResult);
     }
 }
+
+public class FakeInvoiceRepository : IInvoiceRepository
+{
+    public readonly List<Invoice> Invoices = new();
+    private int _sequence = 0;
+
+    public Task<Invoice?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.Id == id));
+    }
+
+    public Task<Invoice?> GetByPaymentOrderIdAsync(Guid paymentOrderId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.PaymentOrderId == paymentOrderId));
+    }
+
+    public Task<Invoice?> GetBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.SessionId == sessionId || x.ReferenceId == sessionId));
+    }
+
+    public Task<Invoice?> GetByInvoiceNumberAsync(string invoiceNumber, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.InvoiceNumber == invoiceNumber));
+    }
+
+    public Task AddAsync(Invoice invoice, CancellationToken cancellationToken = default)
+    {
+        Invoices.Add(invoice);
+        return Task.CompletedTask;
+    }
+
+    public void Update(Invoice invoice)
+    {
+        var idx = Invoices.FindIndex(x => x.Id == invoice.Id);
+        if (idx >= 0) Invoices[idx] = invoice;
+        else Invoices.Add(invoice);
+    }
+
+    public Task<string> GenerateInvoiceNumberAsync(CancellationToken cancellationToken = default)
+    {
+        _sequence++;
+        return Task.FromResult($"INV-{DateTimeOffset.UtcNow:yyyyMMdd}-{_sequence:D4}");
+    }
+}
+
+public class FakeCurrentActor : SmartParking.PaymentService.Application.Common.Interfaces.ICurrentActor
+{
+    public bool IsAuthenticated { get; set; } = true;
+    public Guid? UserId { get; set; }
+    public string? Role { get; set; } = "DRIVER";
+    public Guid? TenantId { get; set; }
+    public Guid? SiteId { get; set; }
+    public bool IsInternalService { get; set; } = false;
+}
+
+public class FakeEventPublisher : SmartParking.PaymentService.Application.Common.Interfaces.IEventPublisher
+{
+    public readonly List<object> PublishedEvents = new();
+
+    public Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : class
+    {
+        PublishedEvents.Add(@event);
+        return Task.CompletedTask;
+    }
+}

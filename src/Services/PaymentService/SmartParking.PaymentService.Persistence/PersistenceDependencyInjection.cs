@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Persistence.Adapters;
+using SmartParking.PaymentService.Persistence.Outbox;
 using SmartParking.PaymentService.Persistence.Repositories;
 
 namespace SmartParking.PaymentService.Persistence;
@@ -33,6 +35,8 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
         services.AddScoped<IPaymentTransactionRepository, PaymentTransactionRepository>();
         services.AddScoped<IProviderWebhookRepository, ProviderWebhookRepository>();
+        services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<IEventPublisher, OutboxEventPublisher>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         return services;

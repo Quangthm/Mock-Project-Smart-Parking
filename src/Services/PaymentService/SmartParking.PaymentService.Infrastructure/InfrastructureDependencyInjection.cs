@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Infrastructure.Adapters;
 using SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
 using SmartParking.PaymentService.Infrastructure.Options;
 
@@ -14,6 +16,9 @@ public static class InfrastructureDependencyInjection
         var reservationServiceBaseUrl = configuration["Services:ReservationService:BaseUrl"] ?? "http://localhost:5002/";
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
+
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentActor, CurrentActorAdapter>();
 
         services.AddHttpClient<IReservationPricingSnapshotPort, ReservationSnapshotHttpAdapter>(client =>
         {
