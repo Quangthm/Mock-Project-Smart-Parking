@@ -11,7 +11,7 @@ public static class InfrastructureDependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        var reservationServiceBaseUrl = configuration["Services:ReservationService:BaseUrl"] ?? "http://localhost:5002/";
+        var reservationServiceBaseUrl = configuration["Services:OperationService:BaseUrl"] ?? "http://localhost:5002/";
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
 
