@@ -193,6 +193,7 @@ export async function request<T>(
   body?: unknown,
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
@@ -213,6 +214,7 @@ export async function request<T>(
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
 
         ...(token ? { Authorization: "Bearer " + token } : {}),
+        ...extraHeaders,
       },
 
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
