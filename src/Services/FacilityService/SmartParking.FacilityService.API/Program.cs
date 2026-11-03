@@ -62,7 +62,12 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorGateSlotService>();
         builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
         builder.Services.AddScoped<MaintenanceWindowService>();
-        builder.Services.AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false)));
+        builder.Services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.Converters.Add(
+                    new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false));
+            });
         var app = builder.Build();
         app.UseCors();
         app.Use(async (context, next) =>

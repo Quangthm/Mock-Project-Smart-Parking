@@ -131,8 +131,12 @@ public sealed class FacilityController(
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new { success = false, code = "INTERNAL_ERROR", message = "An unexpected error occurred." });
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                code = "INTERNAL_ERROR",
+                message = "An unexpected error occurred."
+            });
         }
     }
 
