@@ -84,7 +84,27 @@ public sealed class FacilityController(
                     message = "vehicleType must be CAR, MOTORCYCLE, or OVERSIZED." });
             filter = parsed;
         }
-        return Ok(new { success = true, data = await structures.ReadOperationalAsync(id, filter, floor, ct) });
+        try
+        {
+            return Ok(new { success = true, data = await structures.ReadOperationalAsync(id, filter, floor, ct) });
+        }
+        catch (StructureException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                code = "INTERNAL_ERROR",
+                message = "An unexpected error occurred."
+            });
+        }
     }
 
     [HttpPost("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup")]

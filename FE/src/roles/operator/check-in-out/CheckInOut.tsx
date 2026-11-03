@@ -306,6 +306,7 @@ export function CheckInOut({
           vehicleType: booking.vehicleType ?? "CAR",
           entryTime: booking.entryTime ?? booking.startTime,
           reservationId: booking.id,
+          plateNumber: booking.licensePlate,
         })
       }
       const updatedBooking = action === "check-in"
@@ -349,6 +350,7 @@ export function CheckInOut({
     referenceId: string
     vehicleType: string
     entryTime: string
+    plateNumber?: string
     sessionId?: string
     reservationId?: string
   }) {
@@ -375,23 +377,24 @@ export function CheckInOut({
     accountId?: string
     vehicleType: string
     entryTime: string
+    plateNumber?: string
     sessionId?: string
     reservationId?: string
   }) {
     if (!lot) throw new Error("Select a parking site before processing payment.")
     setPaymentMessage("Calculating parking fee...")
-    const pricing = await paymentApi.calculate({
-      tenantId: lot.tenantId, siteId: lot.id, vehicleType: input.vehicleType || "CAR",
-      entryTime: input.entryTime, exitTime: new Date().toISOString(),
-      sessionId: input.sessionId, reservationId: input.reservationId,
+    const prepared = await paymentApi.prepare({
+      siteId: lot.id,
+      referenceId: input.referenceId,
+      vehicleType: input.vehicleType || "CAR",
+      entryTime: input.entryTime,
+      sessionId: input.sessionId,
+      reservationId: input.reservationId,
+      plateNumber: input.plateNumber,
     })
-    setPaymentMessage(`Amount due: ${pricing.finalAmountVnd.toLocaleString("vi-VN")} VND`)
+    setPaymentMessage(`Amount due: ${prepared.pricing.finalAmountVnd.toLocaleString("vi-VN")} VND`)
     const key = `checkout:${lot.id}:${input.referenceId}`
-    const order = await paymentApi.createOrder({
-      tenantId: lot.tenantId, siteId: lot.id, referenceId: input.referenceId,
-      referenceType: input.sessionId ? "PARKING_SESSION" : "RESERVATION",
-      amount: pricing.finalAmountVnd, accountId: input.accountId, idempotencyKey: key,
-    })
+    const order = prepared.order
     localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
       orderId: order.orderId, referenceId: input.referenceId, siteId: lot.id, paymentMethod: payment,
     }))
@@ -449,6 +452,7 @@ export function CheckInOut({
           vehicleType: result.session.vehicleType,
           entryTime: result.session.entryTime,
           sessionId: result.session.id,
+          plateNumber: result.plate,
         })
         session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
       }

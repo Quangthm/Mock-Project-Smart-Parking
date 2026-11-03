@@ -60,7 +60,12 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorOperationsService>();
         builder.Services.AddScoped<IOperatorGateSlotStore, OperatorGateSlotStore>();
         builder.Services.AddScoped<OperatorGateSlotService>();
-        builder.Services.AddControllers();
+        builder.Services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.Converters.Add(
+                    new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false));
+            });
         var app = builder.Build();
         app.UseCors();
         app.Use(async (context, next) =>

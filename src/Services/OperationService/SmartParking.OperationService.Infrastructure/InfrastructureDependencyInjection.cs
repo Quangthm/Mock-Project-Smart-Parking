@@ -34,6 +34,14 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<IOperatorGateSlotClaims>(provider =>
             provider.GetRequiredService<ParkingGateSlotClient>());
 
+        services.AddHttpClient<CheckoutPaymentClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddScoped<ICheckoutPaymentClient>(provider =>
+            provider.GetRequiredService<CheckoutPaymentClient>());
+
         return services;
     }
 }

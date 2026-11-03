@@ -6,7 +6,7 @@ using SmartParking.OperationService.Domain.Entities;
 
 namespace SmartParking.OperationService.Persistence;
 
-public sealed class ReservationGateStore(ReservationDbContext db) : IReservationGateStore
+public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork unitOfWork) : IReservationGateStore
 {
     public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(
         Guid tenantId, Guid siteId, CancellationToken ct)
@@ -97,7 +97,7 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
             TicketReference = $"WALKIN-{sessionId:N}", EntryTime = now, EntryImageUrl = imageData,
             SessionStatus = "ACTIVE", CreatedAt = now, Version = 1
         });
-        await db.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return new(sessionId, siteId, null, null, plate.Trim(), vehicleType, now, null, imageData, null);
     }
@@ -135,7 +135,7 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
                     allocation.AllocatedEndTime = now;
                 }
             }
-            await db.SaveChangesAsync(ct);
+            await unitOfWork.SaveChangesAsync(ct);
         }
 
         var currentSlot = session.CurrentSlotId;
@@ -176,7 +176,6 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
                 if (await db.ParkingSessions.AnyAsync(s => s.ReservationId == reservationId &&
                     s.TenantId == tenantId && s.SiteId == siteId && s.ExitTime != null, ct))
                 {
-                    await transaction.RollbackAsync(ct);
                     return await FindByIdAsync(tenantId, siteId, reservationId, ct)
                         ?? throw new InvalidOperationException("Reservation disappeared after a completed gate transition.");
                 }
@@ -239,7 +238,7 @@ public sealed class ReservationGateStore(ReservationDbContext db) : IReservation
             TargetEntity = "RESERVATION", TargetId = reservationId,
             Reason = $"Gate action for plate {plate}.", CreatedAt = now
         });
-        await db.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return await FindByIdAsync(tenantId, siteId, reservationId, ct)
             ?? throw new InvalidOperationException("Reservation disappeared after a successful gate transition.");
