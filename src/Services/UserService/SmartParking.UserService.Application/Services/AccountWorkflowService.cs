@@ -15,7 +15,7 @@ using UserService.Application.Common.Models.JwT;
 namespace UserService.Application.Services;
 
 public sealed partial class AccountWorkflowService(IIdentityWorkflowStore db, IPasswordService passwords, IWorkflowProtector protector,
-    TimeProvider clock, AuthenticationPolicy? authenticationPolicy = null) : IMfaPolicy,IAccountWorkflows
+    TimeProvider clock, IAccountAuthorizationService authorization, AuthenticationPolicy? authenticationPolicy = null) : IMfaPolicy,IAccountWorkflows
 {
     private static AuthException Error(string code, string message, int status=400) => new(code,message,status);
     public static void Validate(object body)
@@ -202,8 +202,10 @@ public sealed partial class AccountWorkflowService(IIdentityWorkflowStore db, IP
     public async Task<object> DeliveryAsync(Guid actor,Guid id,bool retry,CancellationToken ct)
     {
         await using var tx=await db.BeginTransactionAsync(ct);
+        await authorization.RequireOwnSecurityAsync(actor, ct);
         var d=await db.LockDeliveryAsync(id, ct);
         if(d is null || d.ActorId!=actor)throw Error("DELIVERY_NOT_FOUND","Delivery was not found.",404);
+        await authorization.RequireDeliveryAsync(actor, d, ct);
         if (d.Kind == "OPERATOR_ONBOARDING")
         {
             var tenants = await db.ReadOwnerTenantsAsync(actor, "OPERATOR_MANAGE", ct);

@@ -33,7 +33,7 @@ public sealed class IdentityMigrationTests
 
         await using var verification = fixture.Open();
         var users = await verification.Users.AsNoTracking().Include(user => user.Accounts)
-            .ThenInclude(account => account.AccountRoles).ToDictionaryAsync(user => user.Id!.Value);
+            .ToDictionaryAsync(user => user.Id!.Value);
         var retained = users[phoneVerified.Id!.Value];
         Assert.Equal(UserStatus.Active, retained.Status);
         Assert.Equal(verifiedAt, retained.PhoneVerifiedAt);
@@ -62,10 +62,7 @@ public sealed class IdentityMigrationTests
             Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             TenantId = Guid.NewGuid(), SiteId = Guid.NewGuid(), Status = "ACTIVE"
         };
-        account.AccountRoles.Add(new AccountRole
-        {
-            Account = account, AccountId = account.Id.Value, RoleCode = "SITE_OPERATOR"
-        });
+        account.RoleCode = "SITE_OPERATOR";
         user.Accounts.Add(account);
         return user;
     }

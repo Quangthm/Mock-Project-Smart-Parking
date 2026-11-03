@@ -5,6 +5,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.JwT;
+using UserService.Application.Authorization;
 
 namespace UserService.Infrastructure.Services;
 
@@ -25,12 +26,15 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
             (!notBefore.HasValue || notBefore.Value <= clock.GetUtcNow().UtcDateTime)
     };
 
-    public string GenerateAccessToken(User user, Guid accessTokenId, DateTimeOffset expiresAt)
+    public string GenerateAccessToken(User user, Account account, Guid accessTokenId, DateTimeOffset expiresAt)
     {
-        var role = AccountRolePolicy.CurrentRole(user) ?? throw new InvalidOperationException("A login account must have an assigned role.");
+        if (account.UserId != user.Id || account.Id is null)
+            throw new InvalidOperationException("The session account must belong to the authenticated User.");
+        var role = AccountRolePolicy.CurrentRole(account) ?? throw new InvalidOperationException("A login account must have an assigned role.");
         var token = new JwtSecurityToken(options.Issuer, options.Audience,
             [new Claim(JwtRegisteredClaimNames.Sub, user.Id!.Value.ToString()),
-             new Claim(JwtRegisteredClaimNames.Jti, accessTokenId.ToString("N")), new Claim("role", role)],
+             new Claim(JwtRegisteredClaimNames.Jti, accessTokenId.ToString("N")),
+             new Claim("account_id", account.Id.Value.ToString()), new Claim("role", role)],
             clock.GetUtcNow().UtcDateTime, expiresAt.UtcDateTime,
             new SigningCredentials(keys.SigningKey, SecurityAlgorithms.RsaSha256));
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -45,7 +49,8 @@ public sealed class AccessTokenService(JwtOptions options, JwtKeyProvider keys,
             var principal = handler.ValidateToken(accessToken, ValidationParameters(options, keys, clock), out _);
             return Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId)
                 && Guid.TryParse(principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value, out var tokenId)
-                && await sessions.IsActiveAsync(tokenId, userId, cancellationToken);
+                && Guid.TryParse(principal.FindFirst("account_id")?.Value, out var accountId)
+                && await sessions.IsActiveAsync(tokenId, userId, accountId, cancellationToken);
         }
         catch (Exception exception) when (exception is SecurityTokenException or ArgumentException)
         {

@@ -105,7 +105,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: smartpark-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      RABBITMQ_DEFAULT_PASS: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
+    ports:
+      - "127.0.0.1:${SMARTPARK_RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${SMARTPARK_RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+
 volumes:
+  rabbitmq-data:
   user-schema-data:
   facility-schema-data:
   operations-schema-data:

@@ -205,5 +205,11 @@ public sealed class StructureHttpContractTests
 
         public Task<object> ImpactAsync(Guid tenant, Guid site, CancellationToken ct)
             => Task.FromResult<object>(new { reservations = Array.Empty<object>(), sessions = Array.Empty<object>() });
+
+        public Task ForceReleaseAsync(Guid tenant, Guid site, CancellationToken ct)
+        {
+            CurrentToken = null;
+            return Task.CompletedTask;
+        }
     }
 }

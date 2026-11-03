@@ -1,8 +1,11 @@
 using UserService.Application;
+using UserService.API.Extensions;
+using UserService.API.Services;
 using UserService.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Services;
 using UserService.Infrastructure.Services;
+using UserService.Infrastructure.Messaging;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace UserService.API;
@@ -17,19 +20,32 @@ public static class UserHost
         var serviceKey = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(serviceKey) || serviceKey.Length < 32)
             throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
+        var parkingUrl = RequireHttpUrl(builder.Configuration["Services:Parking"], "Services:Parking");
+        var origins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
+            .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        foreach (var origin in origins)
+        {
+            var uri = RequireHttpUrl(origin, "Cors:AllowedOrigins");
+            if (uri.AbsolutePath != "/" || uri.Query.Length != 0 || uri.Fragment.Length != 0 || origin.EndsWith('/'))
+                throw new InvalidOperationException("Configure exact CORS origins without paths or trailing slash.");
+        }
 
         // Add services to the container.
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
         builder.Services.AddControllers().AddApplicationPart(typeof(Controllers.AuthController).Assembly);
+        builder.Services.AddApiErrorResponses();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddIdentityWorkflowServices();
         builder.Services.AddPersistenceServices(builder.Configuration);
+        builder.Services.AddProfileMessaging(builder.Configuration,
+            registration => registration.AddProfileOutbox(builder.Configuration));
         builder.Services.AddJWTAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddHttpClient<IParkingDirectory, ParkingDirectoryClient>(client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Services:Facility"] ?? "http://localhost:5045/");
+            client.BaseAddress = parkingUrl;
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
@@ -58,12 +74,10 @@ public static class UserHost
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<UserService.API.Hubs.AccessConnections>();
         builder.Services.AddScoped<IAccessChangeNotifier, UserService.API.Hubs.AccessChangeNotifier>();
-        // Outbox intent is always persisted. Delivery is enabled explicitly when RabbitMQ is configured.
-        if (builder.Configuration.GetValue<bool>("Messaging:Enabled"))
-            builder.Services.AddAccessMessaging(builder.Configuration);
-        // Only allow the local frontend during this demo. Production uses explicit configured origins.
+
+        // Empty configuration permits no cross-origin browser access.
         builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
+            .WithOrigins(origins)
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
@@ -107,7 +121,8 @@ public static class UserHost
             app.MapOpenApi();
         }
 
-        app.UseMiddleware<UserService.API.Middleware.AuthExceptionMiddleware>();
+        app.UseRouting();
+        app.UseApiErrorResponses();
 
         app.UseCors("Frontend");
         app.UseAuthentication();
@@ -116,6 +131,14 @@ public static class UserHost
         app.MapControllers();
         app.MapHub<UserService.API.Hubs.OperatorAccessHub>("/hubs/operators", options => options.CloseOnAuthenticationExpiration = true);
         return app;
+    }
+
+    private static Uri RequireHttpUrl(string? value, string key)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")
+            || uri.UserInfo.Length != 0 || uri.Host.Contains('*'))
+            throw new InvalidOperationException($"Configure a valid HTTP(S) URL for {key}.");
+        return uri;
     }
 }
 public static class Program

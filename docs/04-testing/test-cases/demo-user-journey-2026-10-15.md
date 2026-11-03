@@ -495,7 +495,7 @@ Mẫu bug: `[Case ID] [Role] thao tác — expected / actual`, môi trường/bu
 ## 14. Tài liệu liên quan và kiểm thử tự động đã có
 
 - [Bản bàn giao thay đổi so với commit](../../05-project-management/handoffs/2026-10-15-changes-vs-6165024.md).
-- [Quy trình bấm demo chi tiết](../demo-review-2026-10-15/QUY-TRINH-BAM-TEST-DEMO.md).
+- [Quy trình bấm demo chi tiết](../QUY-TRINH-BAM-TEST-DEMO.md).
 - [Operator API contract hiện tại](../../02-architecture/api/operator-provisioning.md).
 - [Postman workflows](../postman/assigned-workflows-2026-10-08.postman_collection.json): chạy từng request và kiểm tra contract mới; không chạy Runner cả collection vì OTP/MFA/invitation cần tương tác. Ví dụ/status của phần cũ phải đối chiếu current API contract.
 

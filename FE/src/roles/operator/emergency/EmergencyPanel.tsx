@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi, type OperatorIncident } from "../../../lib/operatorApi"
+import { showUiToast } from "../../../lib/uiToast"
 
 export function EmergencyPanel({ siteId }: { siteId: string }) {
   const [incidents, setIncidents] = useState<OperatorIncident[]>([])
@@ -52,8 +53,11 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
       const resolved = await operatorOperationsApi.resolveIncident(siteId, incident.id)
       setIncidents((items) => items.map((item) => item.id === resolved.id ? resolved : item))
       setFeedback(`Incident #${incident.id} resolved.`)
+      showUiToast("Incident resolved", `Incident #${incident.id} was resolved.`)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not resolve this incident.")
+      const message = reason instanceof Error ? reason.message : "Could not resolve this incident."
+      setError(message)
+      showUiToast("Could not resolve incident", message, "error")
     } finally {
       setBusy(false)
     }
@@ -73,9 +77,12 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
       const incident = await operatorOperationsApi.createIncident(siteId, { type: form.type, details })
       setIncidents((items) => [incident, ...items])
       setFeedback("Incident report submitted.")
+      showUiToast("Incident reported", "Incident report submitted.")
       setForm({ plate: "", slot: "", type: "wrong-spot", notes: "" })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not submit the incident report.")
+      const message = reason instanceof Error ? reason.message : "Could not submit the incident report."
+      setError(message)
+      showUiToast("Report not submitted", message, "error")
     } finally {
       setBusy(false)
     }

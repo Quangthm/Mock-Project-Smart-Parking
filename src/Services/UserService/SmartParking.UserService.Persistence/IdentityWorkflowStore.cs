@@ -27,7 +27,7 @@ public partial class AppDbContext : IIdentityWorkflowStore
     Task<bool> IIdentityWorkflowStore.HasOwnerSetupAsync(Guid userId, CancellationToken ct) =>
         db.OwnerApplications.AsNoTracking().AnyAsync(a => a.UserId == userId && a.LotSetupJson != null, ct);
     Task<User?> IIdentityWorkflowStore.LockLoginUserByContactAsync(string contact, CancellationToken ct) =>
-        db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND (lower(email)={contact} OR phone={contact}) FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleOrDefaultAsync(ct);
+        db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE deleted_at IS NULL AND (lower(email)={contact} OR phone={contact}) FOR UPDATE").Include(u=>u.Accounts).SingleOrDefaultAsync(ct);
     Task<AuthChallenge?> IIdentityWorkflowStore.FindOutstandingLoginAsync(Guid? userId, CancellationToken ct) =>
         db.AuthChallenges.Where(c=>c.UserId==userId && c.Purpose=="LOGIN" && c.ConsumedAt==null).OrderByDescending(c=>c.ExpiresAt).FirstOrDefaultAsync(ct);
     Task<Guid?> IIdentityWorkflowStore.FindChallengeUserIdAsync(Guid id, CancellationToken ct) =>
@@ -43,7 +43,7 @@ public partial class AppDbContext : IIdentityWorkflowStore
         db.WorkflowDeliveries.Where(d=>d.UserId==userId && d.Kind=="OWNER_PHONE" && (d.Status=="pending" || d.Status=="failed"))
             .ExecuteUpdateAsync(s=>s.SetProperty(d=>d.Status,"cancelled").SetProperty(d=>d.ProtectedPayload,""),ct);
     Task<User> IIdentityWorkflowStore.LockUserWithRolesAsync(Guid id, CancellationToken ct) =>
-        db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR UPDATE").Include(u=>u.Accounts).ThenInclude(a=>a.AccountRoles).SingleAsync(ct);
+        db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id={id} FOR UPDATE").Include(u=>u.Accounts).SingleAsync(ct);
     Task<MfaCredential?> IIdentityWorkflowStore.LockMfaCredentialAsync(Guid id, CancellationToken ct) =>
         db.MfaCredentials.FromSqlInterpolated($"SELECT * FROM mfa_credentials WHERE user_id={id} FOR UPDATE").SingleOrDefaultAsync(ct);
     Task<WorkflowDelivery?> IIdentityWorkflowStore.LockDeliveryAsync(Guid id, CancellationToken ct) =>
@@ -93,7 +93,7 @@ public partial class AppDbContext : IIdentityWorkflowStore
     Task<bool> IIdentityWorkflowStore.IsActiveAdminAsync(Guid id, CancellationToken ct) =>
         db.Users.AnyAsync(u => u.Id == id && u.DeletedOn == null && u.Status == UserStatus.Active &&
             u.Accounts.Any(a => a.DeletedOn == null && a.Status == "ACTIVE" &&
-                a.AccountRoles.Any(r => r.RoleCode == "PLATFORM_ADMIN" || r.RoleCode == "ADMIN")), ct);
+                (a.RoleCode == "PLATFORM_ADMIN" || a.RoleCode == "ADMIN")), ct);
     Task<List<OwnerApplication>> IIdentityWorkflowStore.ListOwnerApplicationsAsync(CancellationToken ct) =>
         db.OwnerApplications.AsNoTracking().Include(a => a.User)
             .Where(a => a.User.DeletedOn == null).OrderByDescending(a => a.SubmittedAt).ToListAsync(ct);
@@ -102,9 +102,9 @@ public partial class AppDbContext : IIdentityWorkflowStore
     Task<WorkflowDelivery[]> IIdentityWorkflowStore.ReadOwnerDecisionDeliveriesAsync(CancellationToken ct) =>
         db.WorkflowDeliveries.AsNoTracking().Where(d=>d.Kind=="OWNER_DECISION").ToArrayAsync(ct);
     Task IIdentityWorkflowStore.LockOwnerAccountsAsync(Guid userId, CancellationToken ct) =>
-        db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={userId} ORDER BY id FOR UPDATE").Include(a=>a.AccountRoles).LoadAsync(ct);
+        db.Accounts.FromSqlInterpolated($"SELECT * FROM accounts WHERE user_id={userId} ORDER BY id FOR UPDATE").LoadAsync(ct);
     Task<bool> IIdentityWorkflowStore.HasPendingOwnerAccountAsync(Guid userId, CancellationToken ct) =>
-        db.Accounts.AnyAsync(a => a.UserId == userId && a.DeletedOn == null && a.Status == "PENDING_APPROVAL" && a.AccountRoles.Any(r => r.RoleCode == "BUSINESS_OWNER"), ct);
+        db.Accounts.AnyAsync(a => a.UserId == userId && a.DeletedOn == null && a.Status == "PENDING_APPROVAL" && a.RoleCode == "BUSINESS_OWNER", ct);
     async Task IIdentityWorkflowStore.EnsureOwnerTenantAsync(Guid id, string name, string email, string phone, CancellationToken ct)
     {
         if (Database.CurrentTransaction is null)
@@ -132,7 +132,7 @@ public partial class AppDbContext : IIdentityWorkflowStore
     Task<int> IIdentityWorkflowStore.RevokeActiveSessionsAsync(Guid id, CancellationToken ct) =>
         db.AuthSessions.Where(s => s.UserId == id && !s.IsRevoked)
                 .ExecuteUpdateAsync(s => s.SetProperty(s => s.IsRevoked, true), ct);
-    private IQueryable<User> ManagedUsers => db.Users.Where(u => u.DeletedOn == null).Include(u => u.Accounts).ThenInclude(a => a.AccountRoles);
+    private IQueryable<User> ManagedUsers => db.Users.Where(u => u.DeletedOn == null).Include(u => u.Accounts);
     async Task<(List<User> Items, int Total)> IIdentityWorkflowStore.SearchUsersAsync(UserSearchDto query, CancellationToken ct)
     {
         var users = ManagedUsers.AsNoTracking();
@@ -151,7 +151,7 @@ public partial class AppDbContext : IIdentityWorkflowStore
         {
             string[] codes = query.Role switch { "admin" => ["PLATFORM_ADMIN", "ADMIN"],
                 "owner" => ["BUSINESS_OWNER", "OWNER"], "operator" => ["SITE_OPERATOR", "OPERATOR"], _ => ["DRIVER"] };
-            users = users.Where(u => u.Accounts.Any(a => a.DeletedOn == null && a.AccountRoles.Any(r => codes.Contains(r.RoleCode))));
+            users = users.Where(u => u.Accounts.Any(a => a.DeletedOn == null && codes.Contains(a.RoleCode)));
         }
         var total = await users.CountAsync(ct);
         var offset = (long)(query.Page - 1) * query.PageSize;
@@ -160,17 +160,16 @@ public partial class AppDbContext : IIdentityWorkflowStore
         return (items, total);
     }
     Task<User?> IIdentityWorkflowStore.FindManagedUserAsync(Guid id, CancellationToken ct) => ManagedUsers.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, ct);
-    Task IIdentityWorkflowStore.LoadUserRolesAsync(User user, CancellationToken ct) => db.Entry(user).Collection(u => u.Accounts).Query().Include(a => a.AccountRoles).LoadAsync(ct);
+    Task IIdentityWorkflowStore.LoadUserRolesAsync(User user, CancellationToken ct) => db.Entry(user).Collection(u => u.Accounts).Query().LoadAsync(ct);
     async Task<List<Guid>> IIdentityWorkflowStore.LockPermissionRowsAsync(Guid id, string permission, CancellationToken ct)
     {
         return await db.Database.SqlQuery<Guid>($"""
             SELECT a.id AS "Value" FROM accounts a JOIN users u ON u.id=a.user_id
-            JOIN account_roles r ON r.account_id=a.id
             WHERE u.id={id} AND u.status='ACTIVE' AND u.deleted_at IS NULL AND a.status='ACTIVE' AND a.deleted_at IS NULL
-            AND (({permission}='ACCOUNT_ADMIN' AND r.role_code IN ('ADMIN','PLATFORM_ADMIN'))
-              OR ({permission} IN ('OPERATOR_MANAGE','PARKING_MANAGE','BACKUP_CONFIGURE','BACKUP_MARK') AND r.role_code='BUSINESS_OWNER'))
+            AND (({permission}='ACCOUNT_ADMIN' AND a.role_code IN ('ADMIN','PLATFORM_ADMIN'))
+              OR ({permission} IN ('OPERATOR_MANAGE','PARKING_MANAGE','BACKUP_CONFIGURE','BACKUP_MARK') AND a.role_code='BUSINESS_OWNER'))
             AND ((a.permissions IS NULL AND {permission}<>'BACKUP_MARK') OR {permission}=ANY(a.permissions))
-            ORDER BY a.id FOR SHARE OF u,a,r
+            ORDER BY a.id FOR SHARE OF u,a
             """).ToListAsync(ct);
     }
     Task<Guid[]> IIdentityWorkflowStore.ReadOwnerTenantsAsync(Guid actor, string permission, CancellationToken ct) => new Repositories.IdentityAccessRepository(db).OwnerTenantsAsync(actor, permission, ct);

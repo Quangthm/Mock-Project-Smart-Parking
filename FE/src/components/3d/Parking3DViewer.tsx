@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react"
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 
 import * as THREE from "three"
 
@@ -7,13 +7,25 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 
 import type { LotType, ParkingSlot } from "../../lib/types"
+
+import {
+  formatSlotLabel,
+  isLayoutStale,
+  layoutAgeSeconds,
+  type OperationalLayoutProjection,
+  type PhysicalState,
+  type ReservationState,
+  type SlotVisualState,
+  type SlotVisualStateDto,
+} from "../../lib/operationalLayout"
+
 import { UntitledIcon } from "../icon/UntitledIcon"
-import { ParkingStatus } from "../ui/ParkingStatus"
+import { StaleDataBanner, STALE_DIM_OPACITY } from "../ui/StaleDataBanner"
 
 import {
   ALLOWED_PARKING_MODELS,
-  SLOT_STATUS_HEX,
-  validateModelUpload,
+  SLOT_VISUAL_STATE_HEX,
+  SLOT_VISUAL_STATE_LABELS,
 } from "../../lib/3d/parking3DConfig"
 
 import {
@@ -22,11 +34,134 @@ import {
   SlotMatchResult,
 } from "../../lib/3d/slotMatcher"
 
-import { SlotMaterialManager } from "../../lib/3d/slotMaterialManager"
+import {
+  resolveSlotVisualState,
+  SlotMaterialManager,
+} from "../../lib/3d/slotMaterialManager"
 
 import { CameraController } from "../../lib/3d/cameraController"
 
 import { generateProceduralParkingLot } from "../../lib/3d/proceduralLotGenerator"
+
+type ViewerSlotData = ParkingSlot & {
+  physicalState?: PhysicalState | null
+  reservationState?: ReservationState | null
+}
+
+/**
+ * A mesh without bound slot data is not evidence of a free bay. It is rendered
+ * with the fail-closed `unknown` appearance (A4).
+ */
+function viewerSlotFor(mesh: THREE.Object3D): ViewerSlotData {
+  const bound = mesh.userData.slotData as ViewerSlotData | undefined
+
+  // `mapModelSlots` invents `slot-auto-*` records for meshes it cannot bind.
+  // Those are not evidence of a free bay, so they fail closed too.
+  if (!bound || String(bound.id ?? "").startsWith("slot-auto-")) {
+    return {
+      id: mesh.userData.slotId || mesh.name,
+      number: mesh.userData.slotNumber || mesh.name,
+      floor: 1,
+      status: "available",
+      physicalState: "UNKNOWN",
+      reservationState: "UNRESERVED",
+    }
+  }
+
+  return bound
+}
+
+function withProjectedState(
+  slotData: ViewerSlotData,
+  projected: SlotVisualStateDto | undefined,
+): ViewerSlotData {
+  if (!projected) return slotData
+  return {
+    ...slotData,
+    physicalState: projected.physicalState,
+    reservationState: projected.reservationState,
+  }
+}
+
+// Legend order mirrors the 2D KPI strip so the same reading order applies in
+// every view. `backup` sits next to `reserved`: both are intentional holds, and
+// the amber/cyan pair is the whole point of the state.
+const SLOT_LEGEND_STATES: SlotVisualState[] = [
+  "available",
+  "occupied",
+  "reserved",
+  "backup",
+  "maintenance",
+  "unknown",
+  "unavailable",
+]
+
+const BINDING_WARNING_TAG = "[3d]"
+const BINDING_EXAMPLE_LIMIT = 10
+
+export interface BindingDiagnostics {
+  matched: number
+  unmatchedSlotCodes: string[]
+  unmatchedMeshNames: string[]
+  totalUnmatchedSlotCodes: number
+  totalUnmatchedMeshNames: number
+  signature: string
+}
+
+/**
+ * Builds the one-line binding report for a mapping pass. Returns `null` when
+ * every contract slot code found a mesh and every candidate mesh found a slot,
+ * so callers never log a healthy mapping.
+ */
+export function describeBindingDiagnostics(
+  match: Pick<SlotMatchResult, "unmatchedSlotCodes" | "unmatchedMeshNames">,
+  slotCount: number,
+): BindingDiagnostics | null {
+  const unmatchedSlotCodes = Array.isArray(match.unmatchedSlotCodes)
+    ? match.unmatchedSlotCodes
+    : []
+  const unmatchedMeshNames = Array.isArray(match.unmatchedMeshNames)
+    ? match.unmatchedMeshNames
+    : []
+
+  if (unmatchedSlotCodes.length === 0 && unmatchedMeshNames.length === 0) {
+    return null
+  }
+
+  return {
+    matched: Math.max(0, slotCount - unmatchedSlotCodes.length),
+    unmatchedSlotCodes: unmatchedSlotCodes.slice(0, BINDING_EXAMPLE_LIMIT),
+    unmatchedMeshNames: unmatchedMeshNames.slice(0, BINDING_EXAMPLE_LIMIT),
+    totalUnmatchedSlotCodes: unmatchedSlotCodes.length,
+    totalUnmatchedMeshNames: unmatchedMeshNames.length,
+    signature: [
+      slotCount,
+      unmatchedSlotCodes.join("\u0000"),
+      unmatchedMeshNames.join("\u0000"),
+    ].join("\u0001"),
+  }
+}
+
+function logBindingDiagnostics(
+  match: SlotMatchResult,
+  slotCount: number,
+  lastSignatureRef: { current: string | null },
+): void {
+  const diagnostics = describeBindingDiagnostics(match, slotCount)
+
+  if (!diagnostics) {
+    lastSignatureRef.current = null
+    return
+  }
+
+  // Remapping identical data (e.g. a layout refresh that did not change the
+  // slot list) must not repeat the same warning.
+  if (diagnostics.signature === lastSignatureRef.current) return
+  lastSignatureRef.current = diagnostics.signature
+
+  const { signature: _signature, ...payload } = diagnostics
+  console.warn(`${BINDING_WARNING_TAG} slot/mesh binding incomplete`, payload)
+}
 
 export interface Parking3DViewerProps {
   modelUrl?: string
@@ -34,6 +169,16 @@ export interface Parking3DViewerProps {
   lotType?: LotType
 
   slots?: ParkingSlot[]
+
+  /**
+   * Two-axis operational snapshot. When omitted the viewer keeps its previous
+   * behaviour (legacy single-axis slots, no stale treatment). Passing `null`
+   * means "snapshot expected but unavailable" and fails closed as stale.
+   */
+  layout?: OperationalLayoutProjection | null
+
+  /** Suppress the in-viewer banner when the screen already announces staleness. */
+  showStaleBanner?: boolean
 
   selectedSlotId?: string | null
 
@@ -65,6 +210,10 @@ export function Parking3DViewer({
 
   slots = [],
 
+  layout,
+
+  showStaleBanner = true,
+
   selectedSlotId = null,
 
   onSelectSlot,
@@ -86,6 +235,9 @@ export function Parking3DViewer({
   const containerRef = useRef<HTMLDivElement>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Last logged binding signature, so identical remaps do not repeat warnings.
+  const bindingWarningSignatureRef = useRef<string | null>(null)
 
   // Three.js instances ref
 
@@ -114,12 +266,39 @@ export function Parking3DViewer({
   const [loadingError, setLoadingError] = useState<string | null>(null)
 
   const [hoveredSlot, setHoveredSlot] = useState<{
-    slot: ParkingSlot
+    slot: ViewerSlotData
+    visualState: SlotVisualState
     screenX: number
     screenY: number
   } | null>(null)
 
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Staleness is decided by the server threshold, never a hard-coded value.
+  // `layout === undefined` means the caller does not use the operational
+  // snapshot at all (e.g. the owner/driver viewers), so no stale treatment.
+  const [now, setNow] = useState(() => Date.now())
+
+  const staleEnabled = layout !== undefined
+  const isStale = staleEnabled ? isLayoutStale(layout, now) : false
+  const staleAgeSeconds = staleEnabled ? layoutAgeSeconds(layout, now) : null
+
+  useEffect(() => {
+    if (!staleEnabled) return
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 5000)
+    return () => window.clearInterval(id)
+  }, [staleEnabled, layout])
+
+  // Exact contract binding: `slotCode` is the raw mesh name (FR-MAP-03).
+  const layoutSlots = useMemo(() => {
+    const map = new Map<string, SlotVisualStateDto>()
+    for (const slot of layout?.slots ?? []) {
+      map.set(slot.slotCode, slot)
+      map.set(slot.slotId, slot)
+    }
+    return map
+  }, [layout])
 
   // Fullscreen listener
 
@@ -165,33 +344,41 @@ export function Parking3DViewer({
 
     if (!inst || !inst.slotMapping) return
 
-    const { meshBySlotKey } = inst.slotMapping
+    // Iterate every candidate mesh, not only formally bound ones: an unbound
+    // bay must still fail closed to `unknown`, never keep its free-looking GLB
+    // material (A4).
+    const meshes = inst.slotMapping.allSlotMeshes ?? []
 
-    meshBySlotKey.forEach((mesh, key) => {
-      if (mesh instanceof THREE.Mesh) {
-        const slotData = mesh.userData.slotData as ParkingSlot | undefined
+    for (const mesh of meshes) {
+      if (!(mesh instanceof THREE.Mesh)) continue
 
-        const isSelected =
-          !!selectedSlotId &&
-          (slotData?.id === selectedSlotId ||
-            slotData?.number === selectedSlotId ||
-            key === selectedSlotId)
+      const slotData = viewerSlotFor(mesh)
 
-        const isFocused =
-          !!focusSlotId &&
-          (slotData?.id === focusSlotId ||
-            slotData?.number === focusSlotId ||
-            key === focusSlotId)
+      const projected =
+        layoutSlots.get(mesh.name) ??
+        layoutSlots.get(slotData.id) ??
+        layoutSlots.get(slotData.number)
 
-        inst.materialManager.applySlotState(
-          mesh,
-          slotData,
-          isSelected,
-          isFocused,
-        )
-      }
-    })
-  }, [selectedSlotId, focusSlotId])
+      const isSelected =
+        !!selectedSlotId &&
+        (slotData.id === selectedSlotId ||
+          slotData.number === selectedSlotId ||
+          mesh.name === selectedSlotId)
+
+      const isFocused =
+        !!focusSlotId &&
+        (slotData.id === focusSlotId ||
+          slotData.number === focusSlotId ||
+          mesh.name === focusSlotId)
+
+      inst.materialManager.applySlotState(
+        mesh,
+        withProjectedState(slotData, projected),
+        isSelected,
+        isFocused,
+      )
+    }
+  }, [selectedSlotId, focusSlotId, layoutSlots])
 
   const lastFocusedKeyRef = useRef<string | null>(null)
 
@@ -466,6 +653,12 @@ export function Parking3DViewer({
 
       inst.slotMapping = mapping
 
+      logBindingDiagnostics(
+        mapping,
+        slotsRef.current.length,
+        bindingWarningSignatureRef,
+      )
+
       // Visuals
 
       refreshSlotVisualsRef.current()
@@ -565,10 +758,17 @@ export function Parking3DViewer({
 
     if (!inst || !inst.currentSceneContent) return
 
+    // The matcher writes bindings only for meshes it can match. Clear the old
+    // ones so a site switch cannot keep the previous site's slot data.
+    inst.currentSceneContent.traverse((node) => {
+      if (node.userData?.isSlot) delete node.userData.slotData
+    })
+
     const mapping = mapModelSlots(inst.currentSceneContent, slots)
 
     inst.slotMapping = mapping
 
+    logBindingDiagnostics(mapping, slots.length, bindingWarningSignatureRef)
 
     refreshSlotVisuals()
   }, [slots, refreshSlotVisuals])
@@ -629,21 +829,20 @@ export function Parking3DViewer({
       }
 
       if (targetMesh && targetMesh.userData.isSlot) {
-        const slotData = targetMesh.userData.slotData as ParkingSlot || {
-          id: targetMesh.userData.slotId || targetMesh.name,
+        const slotData = viewerSlotFor(targetMesh)
 
-          number: targetMesh.userData.slotNumber || targetMesh.name,
+        const projected =
+          layoutSlots.get(targetMesh.name) ??
+          layoutSlots.get(slotData.id) ??
+          layoutSlots.get(slotData.number)
 
-          floor: 1,
-
-          status: "available",
-        }
+        const visualSlot = withProjectedState(slotData, projected)
 
         if (onSelectSlot) {
-          onSelectSlot(slotData)
+          onSelectSlot(visualSlot)
         }
 
-        lastFocusedKeyRef.current = slotData.id || slotData.number
+        lastFocusedKeyRef.current = visualSlot.id || visualSlot.number
 
         inst.cameraController.focusOnObject(
           targetMesh,
@@ -690,18 +889,19 @@ export function Parking3DViewer({
       }
 
       if (targetMesh && targetMesh.userData.isSlot) {
-        const slotData = targetMesh.userData.slotData as ParkingSlot || {
-          id: targetMesh.userData.slotId || targetMesh.name,
+        const slotData = viewerSlotFor(targetMesh)
 
-          number: targetMesh.userData.slotNumber || targetMesh.name,
+        const projected =
+          layoutSlots.get(targetMesh.name) ??
+          layoutSlots.get(slotData.id) ??
+          layoutSlots.get(slotData.number)
 
-          floor: 1,
-
-          status: "available",
-        }
+        const visualSlot = withProjectedState(slotData, projected)
 
         setHoveredSlot({
-          slot: slotData,
+          slot: visualSlot,
+
+          visualState: resolveSlotVisualState(visualSlot),
 
           screenX: e.clientX - rect.left,
 
@@ -730,8 +930,17 @@ export function Parking3DViewer({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setHoveredSlot(null)}
-        className="w-full h-full block touch-none"
+        className="w-full h-full block touch-none transition-opacity duration-300"
+        style={{ opacity: isStale ? STALE_DIM_OPACITY : 1 }}
       />
+
+      {/* Stale snapshot: the scene stays interactive, only brightness drops 30%. */}
+      {isStale && showStaleBanner && (
+        <StaleDataBanner
+          ageSeconds={staleAgeSeconds}
+          className="absolute left-3 top-3 right-20 sm:right-auto sm:max-w-md z-20 pointer-events-none shadow-lg"
+        />
+      )}
 
       {/* Loading overlay */}
       {loading && (
@@ -792,30 +1001,27 @@ export function Parking3DViewer({
           style={{ left: hoveredSlot.screenX, top: hoveredSlot.screenY }}
         >
           <div className="font-bold flex items-center gap-1.5">
-            <span>Slot: {hoveredSlot.slot.number}</span>
+            <span>Slot: {formatSlotLabel(hoveredSlot.slot.number)}</span>
             <span
               className="w-2 h-2 rounded-full"
               style={{
                 backgroundColor:
                   hoveredSlot.slot.id === selectedSlotId
-                    ? SLOT_STATUS_HEX.selected
-                    : SLOT_STATUS_HEX[hoveredSlot.slot.status || "available"],
+                    ? SLOT_VISUAL_STATE_HEX.selected
+                    : SLOT_VISUAL_STATE_HEX[hoveredSlot.visualState],
               }}
             />
           </div>
-          <div className="text-[10px] text-slate-300 capitalize">
+          <div className="text-[10px] text-slate-300">
             {hoveredSlot.slot.id === selectedSlotId
               ? "Selected"
-              : hoveredSlot.slot.status === "available"
-                ? "Available"
-                : hoveredSlot.slot.status === "occupied"
-                  ? "Occupied"
-                  : hoveredSlot.slot.status === "maintenance"
-                    ? "Under maintenance"
-                    : hoveredSlot.slot.status === "disabled"
-                      ? "Disabled"
-                      : "Reserved"}
+              : SLOT_VISUAL_STATE_LABELS[hoveredSlot.visualState]}
           </div>
+          {hoveredSlot.visualState === "unknown" && (
+            <div className="text-[9px] text-slate-400 mt-0.5">
+              No reliable state reported for this bay
+            </div>
+          )}
           {interactive && (
             <div className="text-[9px] text-sky-400 mt-0.5">
               Click to select this slot
@@ -828,11 +1034,25 @@ export function Parking3DViewer({
       {showLegend && (
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between flex-wrap gap-2 pointer-events-none z-10">
           <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 rounded-lg bg-[#151c1b] border border-white/10 text-[11px] text-slate-200">
-            <ParkingStatus status="available" compact />
-            <ParkingStatus status="occupied" compact />
-            <ParkingStatus status="reserved" compact />
-            <ParkingStatus status="maintenance" compact />
-            <span className="px-2">Selected</span>
+            {SLOT_LEGEND_STATES.map((state) => (
+              <span
+                key={state}
+                className="inline-flex items-center gap-1.5 px-1.5 text-[11px] text-slate-200"
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: SLOT_VISUAL_STATE_HEX[state] }}
+                />
+                {SLOT_VISUAL_STATE_LABELS[state]}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 px-1.5 text-[11px] text-slate-200">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: SLOT_VISUAL_STATE_HEX.selected }}
+              />
+              Selected
+            </span>
           </div>
 
           <div className="text-xs text-white px-2.5 py-1 rounded-md bg-[#151c1b] hidden sm:block">

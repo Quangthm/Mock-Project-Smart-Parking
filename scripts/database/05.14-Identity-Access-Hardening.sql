@@ -12,13 +12,13 @@ ALTER TABLE accounts ADD CONSTRAINT accounts_status_check CHECK
 -- Never infer verified contact for historical Operators. Preserve blocked and multi-role users.
 UPDATE users u SET status='PENDING_VERIFICATION'
 WHERE u.status='ACTIVE' AND u.email_verified_at IS NULL AND u.phone_verified_at IS NULL AND u.deleted_at IS NULL
-  AND EXISTS (SELECT 1 FROM accounts a JOIN account_roles r ON r.account_id=a.id
-    WHERE a.user_id=u.id AND a.deleted_at IS NULL AND r.role_code='SITE_OPERATOR')
-  AND NOT EXISTS (SELECT 1 FROM accounts a JOIN account_roles r ON r.account_id=a.id
-    WHERE a.user_id=u.id AND a.deleted_at IS NULL AND r.role_code<>'SITE_OPERATOR');
+  AND EXISTS (SELECT 1 FROM accounts a
+    WHERE a.user_id=u.id AND a.deleted_at IS NULL AND a.role_code='SITE_OPERATOR')
+  AND NOT EXISTS (SELECT 1 FROM accounts a
+    WHERE a.user_id=u.id AND a.deleted_at IS NULL AND a.role_code<>'SITE_OPERATOR');
 UPDATE accounts a SET status='PENDING_VERIFICATION' FROM users u
 WHERE a.user_id=u.id AND u.status='PENDING_VERIFICATION' AND a.status='ACTIVE'
-  AND EXISTS (SELECT 1 FROM account_roles r WHERE r.account_id=a.id AND r.role_code='SITE_OPERATOR');
+  AND a.role_code='SITE_OPERATOR';
 CREATE TABLE IF NOT EXISTS access_event_outbox (
     id UUID PRIMARY KEY, payload TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL,
     published_at TIMESTAMPTZ, lease_id UUID, lease_until TIMESTAMPTZ);

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import { SiteForm } from "./SiteForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import type { SiteManagementModel } from "./useSiteManagement"
+import { formatStatus } from "../../../lib/formatStatus"
 
 export function SiteManagementDialogs({ model }: { model: SiteManagementModel }) {
   const {
@@ -216,8 +217,8 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
                             </div>
                           </div>
                         </div>
-                        <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          {op.status}
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${op.status === "active" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>
+                          {formatStatus(op.status)}
                         </span>
                       </div>
                     </div>

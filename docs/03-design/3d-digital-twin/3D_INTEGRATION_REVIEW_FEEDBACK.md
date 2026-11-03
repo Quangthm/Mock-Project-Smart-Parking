@@ -85,7 +85,7 @@ Nhóm đã ghi nhận đầy đủ các đóng góp mang tính xây dựng và c
 
 ### 3.3. Thống nhất chuẩn Realtime SignalR & Cơ chế Phục hồi Reconnect Snapshot
 * **Hành động đã thực hiện** (Đã sửa trong `3D_MODEL_IMPLEMENTATION_GUIDE.md §20` & `3D_BACKEND_SLOT_STATE_BINDING.md §6.2`):
-  - Thay thế toàn bộ STOMP/WebSocket bằng **ASP.NET Core SignalR** (`/hubs/parking-lot`, event `SlotStateChanged`).
+  - Thay thế toàn bộ STOMP/WebSocket bằng **ASP.NET Core SignalR** (`/ws/parking-lots/{id}/layout`, superseding legacy prototype route `/hubs/parking-lot`, event `SlotStateChanged`).
   - Thiết lập nguyên tắc bất biến: **Authoritative Reconnect Snapshot Rule**: Khi mất mạng và kết nối lại, Client tuyệt đối không chắp vá message bị thiếu, mà **phải lập tức gọi REST endpoint `GET /api/parking-lots/{id}/operational-layout`** để khôi phục snapshot thẩm quyền đầy đủ.
 
 ### 3.4. Minh bạch hóa số liệu Benchmark (Đã sửa trong `3D_MODEL_IMPLEMENTATION_GUIDE.md §25 & §28`)

@@ -1,5 +1,6 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
+import { showUiToast } from "../../../lib/uiToast"
 
 import {
   formatVietnamesePlate,
@@ -58,8 +59,11 @@ export function VehicleManager() {
       setId(null)
       setForm({ plate: "", vehicleType: "CAR", imageReference: "" })
       setReload((n) => n + 1)
+      showUiToast("Vehicle saved", "Your vehicle details are ready to use.")
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cannot save vehicle.")
+      const message = e instanceof Error ? e.message : "Cannot save vehicle."
+      setError(message)
+      showUiToast("Vehicle not saved", message, "error")
     } finally {
       setBusy(false)
     }

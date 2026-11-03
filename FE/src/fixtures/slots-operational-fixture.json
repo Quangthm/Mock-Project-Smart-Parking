@@ -1,0 +1,1412 @@
+{
+  "success": true,
+  "data": {
+    "siteId": "f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f",
+    "siteCode": "SITE_OUTDOOR_01",
+    "siteName": "SmartPark Central - Outdoor Lot",
+    "contractVersion": "1.2.0",
+    "generatedAt": "2026-10-26T12:00:00.000Z",
+    "isFresh": true,
+    "stalenessThresholdSeconds": 30,
+    "metrics": {
+      "totalPhysicalCapacity": 48,
+      "occupiedCount": 13,
+      "reservedCount": 9,
+      "availableCarSlots": 16,
+      "motorcycleCapacity": {
+        "maxCapacity": 20,
+        "occupiedCount": 8,
+        "availableCount": 12
+      },
+      "zoneCapacities": [
+        {
+          "zoneId": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+          "zoneCode": "Zone_A",
+          "floorCode": "Floor_G",
+          "maxCapacity": 24,
+          "occupiedCount": 4,
+          "zoneOnlyReservedCount": 0
+        },
+        {
+          "zoneId": "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+          "zoneCode": "Zone_B",
+          "floorCode": "Floor_G",
+          "maxCapacity": 24,
+          "occupiedCount": 9,
+          "zoneOnlyReservedCount": 0
+        }
+      ]
+    },
+    "floors": [
+      {
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "name": "Ground Level (Outdoor)",
+        "level": 1,
+        "maxCapacity": 48
+      }
+    ],
+    "slots": [
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000001",
+        "slotCode": "CarParkingSpace_001",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "EV",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -27.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": true,
+          "hasCharger": true,
+          "chargerPowerKw": 22
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000002",
+        "slotCode": "CarParkingSpace_002",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "EV",
+        "physicalState": "AVAILABLE",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -22.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": true,
+          "hasCharger": true,
+          "chargerPowerKw": 22
+        },
+        "operatorContext": {
+          "activeSessionId": null,
+          "maskedPlate": "30A-*****.89",
+          "approachingReservation": {
+            "reservationId": "d1e2f3a4-b5c6-7a8b-9c0d-1e2f3a4b5c6d",
+            "requestedSlotCode": "CarParkingSpace_003",
+            "allocatedSlotCode": "CarParkingSpace_002",
+            "isReallocated": true,
+            "reallocationReason": "OCCUPIED_OVERSTAY_DISPLACEMENT",
+            "expectedArrivalTime": "2026-10-26T12:30:00.000Z",
+            "gracePeriodExpiresAt": "2026-10-26T12:45:00.000Z"
+          }
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000003",
+        "slotCode": "CarParkingSpace_003",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "EV",
+        "physicalState": "AVAILABLE",
+        "reservationState": "PROTECTED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -17.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": true,
+          "hasCharger": true,
+          "chargerPowerKw": 22
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000004",
+        "slotCode": "CarParkingSpace_004",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "EV",
+        "physicalState": "AVAILABLE",
+        "reservationState": "BACKUP",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -12.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": true,
+          "hasCharger": true,
+          "chargerPowerKw": 22
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000005",
+        "slotCode": "CarParkingSpace_005",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "DISABLED",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -7.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.05",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000006",
+        "slotCode": "CarParkingSpace_006",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "DISABLED",
+        "physicalState": "OCCUPIED",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -2.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.06",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000007",
+        "slotCode": "CarParkingSpace_007",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "VIP",
+        "physicalState": "OCCUPIED",
+        "reservationState": "PROTECTED",
+        "sessionType": "VIP",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 2.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.07",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000008",
+        "slotCode": "CarParkingSpace_008 2",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "VIP",
+        "physicalState": "OCCUPIED",
+        "reservationState": "BACKUP",
+        "sessionType": "VIP",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 7.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.08",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000009",
+        "slotCode": "CarParkingSpace_009",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNKNOWN",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 12.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000010",
+        "slotCode": "CarParkingSpace_010",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNKNOWN",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 17.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000011",
+        "slotCode": "CarParkingSpace_011",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNKNOWN",
+        "reservationState": "PROTECTED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 22.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000012",
+        "slotCode": "CarParkingSpace_012 3",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_01",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNKNOWN",
+        "reservationState": "BACKUP",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 27.5,
+          "y": 0,
+          "z": -15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000013",
+        "slotCode": "CarParkingSpace_013",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "MAINTENANCE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -27.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000014",
+        "slotCode": "CarParkingSpace_014",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "MAINTENANCE",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -22.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000015",
+        "slotCode": "CarParkingSpace_015",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "MAINTENANCE",
+        "reservationState": "PROTECTED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -17.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000016",
+        "slotCode": "CarParkingSpace_016",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "MAINTENANCE",
+        "reservationState": "BACKUP",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -12.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000017",
+        "slotCode": "CarParkingSpace_017",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNAVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -7.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000018",
+        "slotCode": "CarParkingSpace_018",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNAVAILABLE",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -2.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000019",
+        "slotCode": "CarParkingSpace_019",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNAVAILABLE",
+        "reservationState": "PROTECTED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 2.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000020",
+        "slotCode": "CarParkingSpace_020",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "UNAVAILABLE",
+        "reservationState": "BACKUP",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 7.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000021",
+        "slotCode": "CarParkingSpace_021",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 12.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000022",
+        "slotCode": "CarParkingSpace_022",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 17.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000023",
+        "slotCode": "CarParkingSpace_023",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 22.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000024",
+        "slotCode": "CarParkingSpace_024",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_A",
+        "rowCode": "Row_02",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 27.5,
+          "y": 0,
+          "z": -5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000025",
+        "slotCode": "CarParkingSpace_025",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -27.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000026",
+        "slotCode": "CarParkingSpace_026",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -22.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000027",
+        "slotCode": "CarParkingSpace_027",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -17.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000028",
+        "slotCode": "CarParkingSpace_028",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -12.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000029",
+        "slotCode": "CarParkingSpace_029",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -7.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000030",
+        "slotCode": "CarParkingSpace_030",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": -2.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000031",
+        "slotCode": "CarParkingSpace_031",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 2.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000032",
+        "slotCode": "CarParkingSpace_032",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 7.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000033",
+        "slotCode": "CarParkingSpace_033",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 12.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000034",
+        "slotCode": "CarParkingSpace_034",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 17.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000035",
+        "slotCode": "CarParkingSpace_035",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": true,
+        "coordinates3d": {
+          "x": 22.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000036",
+        "slotCode": "CarParkingSpace_036",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_03",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 27.5,
+          "y": 0,
+          "z": 5
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.36",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000037",
+        "slotCode": "CarParkingSpace_037",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -27.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.37",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000038",
+        "slotCode": "CarParkingSpace_038",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -22.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.38",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000039",
+        "slotCode": "CarParkingSpace_039",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -17.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.39",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000040",
+        "slotCode": "CarParkingSpace_040",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -12.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.40",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000041",
+        "slotCode": "CarParkingSpace_041",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -7.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.41",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000042",
+        "slotCode": "CarParkingSpace_042",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": -2.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.42",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000043",
+        "slotCode": "CarParkingSpace_043",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "UNRESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 2.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.43",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000044",
+        "slotCode": "CarParkingSpace_044",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 7.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000045",
+        "slotCode": "CarParkingSpace_045",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 12.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000046",
+        "slotCode": "CarParkingSpace_046",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "AVAILABLE",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 17.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000047",
+        "slotCode": "CarParkingSpace_047",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "OCCUPIED",
+        "reservationState": "RESERVED",
+        "sessionType": "STANDARD",
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 22.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": {
+          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+          "maskedPlate": "29B-*****.47",
+          "approachingReservation": null
+        },
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      },
+      {
+        "slotId": "a1b2c3d4-0000-0000-0000-000000000048",
+        "slotCode": "CarParkingSpace_048",
+        "floorId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "floorCode": "Floor_G",
+        "zoneCode": "Zone_B",
+        "rowCode": "Row_04",
+        "supportedVehicleType": "CAR",
+        "slotType": "STANDARD",
+        "physicalState": "MAINTENANCE",
+        "reservationState": "UNRESERVED",
+        "sessionType": null,
+        "isEvCharging": false,
+        "isBookable": false,
+        "coordinates3d": {
+          "x": 27.5,
+          "y": 0,
+          "z": 15
+        },
+        "features": {
+          "covered": false,
+          "hasCharger": false,
+          "chargerPowerKw": null
+        },
+        "operatorContext": null,
+        "updatedAt": "2026-10-26T12:00:00.000Z"
+      }
+    ]
+  }
+}

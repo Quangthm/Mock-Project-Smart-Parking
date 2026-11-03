@@ -45,7 +45,7 @@ Every external `.glb` model must pass all 6 compliance gates:
 | **R1** | **File Format & Draco** | Binary `.glb` format, compressed with Draco (`cl 7`). Download size $\le 8.0\text{ MB}$ ($\le 25.0\text{ MB}$ uncompressed). | **CRITICAL (Blocker)** |
 | **R2** | **Coordinate System & Scale** | Right-handed coordinate system, $+Y$ Up, 1 Unit = 10mm (or 1:1 metric scale). Scene pivot placed at ground center $(0, 0, 0)$. | **CRITICAL (Blocker)** |
 | **R3** | **Scene Graph Hierarchy** | Strict 2-tier tree structure: Model Root $\rightarrow$ `Floor_[Level]` Group $\rightarrow$ Functional Mesh Groups $\rightarrow$ Meshes. | **CRITICAL (Blocker)** |
-| **R4** | **Semantic Naming** | Parking slots prefixed with `PARKING_[ID]`; floors prefixed with `Floor_[Level]`. Dedicated EV slots contain `_EV_`. | **CRITICAL (Blocker)** |
+| **R4** | **Semantic Naming** | Parking slots follow canonical archetype prefixes (`PARKING_*`, `CarParkingSpace_*`, `B*_Car_*`) or enterprise format; floors prefixed with `Floor_[Level]`. Dedicated EV slots contain `_EV_` or `EV`. | **CRITICAL (Blocker)** |
 | **R5** | **Mesh & Geometry Budget** | Total scene triangle count $\le 250,000$. Max active draw calls $\le 250$. No static vehicle meshes baked into the facility model. | **WARNING / Blocker** |
 | **R6** | **Dual-Track Material Policy** | Embedded PBR materials and textures are preserved 100%; untextured clay models automatically receive fallback PBR styling. | **INFO / Auto-Preserve** |
 
@@ -170,12 +170,12 @@ The frontend engine applies business logic, styling, and database synchronizatio
   * `Floor_Roof` (Rooftop open deck)
 
 ### 6.2. Parking Slot Naming Rules (Automobile & EV)
-Parking slot meshes represent physical bays that users can inspect and reserve.
-* **Standard Automobile Slot**: Must start with `PARKING_` followed by an alphanumeric slot code.  
-  * Pattern: `^PARKING_[A-Za-z0-9_-]+$`
-  * Examples: `PARKING_A01`, `PARKING_1F_12`, `PARKING_B1_04`
-* **Dedicated EV Charging Slot**: Must include `_EV_` in the node name.  
-  * Examples: `PARKING_EV_01`, `PARKING_B1_EV_04`, `_EV_Car_Slot_1`
+Parking slot meshes represent physical bays that users can inspect and reserve. In accordance with actual asset models across all archetypes (*Parking House*, *Outdoor*, *Underground*), mesh names are preserved raw and match canonical archetype patterns:
+* **Standard Automobile Slot**: Matches canonical archetype prefixes (`PARKING_`, `CarParkingSpace_`, `B*_Car_`, etc.) with optional single-space duplicate suffix from Blender (e.g. ` 2`, ` 5`).  
+  * Pattern: `^(PARKING_|CarParkingSpace_|B\d+_(?:EV_)?Car_)[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)?$`
+  * Examples: `PARKING_G_CAR_008 2`, `CarParkingSpace_001`, `B1_Car_001`
+* **Dedicated EV Charging Slot**: Must include `_EV_` or `EV` in the node name.  
+  * Examples: `PARKING_G_EV_CAR_002 2`, `B1_EV_Car_001`, `PARKING_EV_01`
 * **EV Charging Hardware Post / Kiosk**: Must contain `EV_Charger`.  
   * Examples: `EV_Charger_01`, `DualGun_EV_Charger_Top`
 
@@ -214,7 +214,7 @@ To allow automatic material application (PBR shading), structure objects should 
 > [!WARNING]
 > **LƯU Ý DÀNH CHO DEV TEAM (PENDING PM & TEAM REVIEW)**:
 > Quy định tại Rule 6 (Dual-Track Material Ingestion Policy) và Rule 7 (Database Synchronization) thuộc phạm vi mở rộng **Phase 2 (Enterprise Self-Service Ingestion)** và hiện là bản đề xuất kỹ thuật đang chờ PM cùng Core Dev Team review chính thức.
-> Để tránh gây nhầm lẫn khi push mã nguồn lên repository, trong giai đoạn phát triển Sprint MVP hiện tại, các Developer vui lòng tuân thủ quy chuẩn tích hợp trực tiếp được hướng dẫn chi tiết tại tài liệu [3D_MODEL_IMPLEMENTATION_GUIDE.md](../3D_MODEL_IMPLEMENTATION_GUIDE.md).
+> Để tránh gây nhầm lẫn khi push mã nguồn lên repository, trong giai đoạn phát triển Sprint MVP hiện tại, các Developer vui lòng tuân thủ quy chuẩn tích hợp trực tiếp được hướng dẫn chi tiết tại tài liệu [3D_MODEL_IMPLEMENTATION_GUIDE.md](3D_MODEL_IMPLEMENTATION_GUIDE.md).
 
 ### 8.1. Problem Context: Avoiding Material Erasure on Enterprise Assets
 In earlier revisions, the SmartPark engine assumed all external models were untextured grey clay exports (common in raw CAD or Spline exports) and forcibly recolored all scene meshes via code. 
@@ -278,7 +278,7 @@ If the owner's database registration states the garage has **85 car slots**, but
 ### 9.2. Slot Code Matching
 The slot code in the 3D model node must match the database `slot_code`:
 * 3D Node Name: `PARKING_B1_24`
-* Backend DB Record: `parking_slot.slot_code = "B1_24"` (Prefix `PARKING_` stripped).
+* Backend DB Record: `parking_slot.slot_code = "PARKING_B1_24"` (Raw mesh name preserved identically; no prefix stripped per canonical mapping invariant).
 
 ---
 
@@ -404,10 +404,10 @@ This section provides the ready-to-integrate UI copy, legal/technical terms, and
 > ---
 >
 > **1. Structural & Naming Compliance (Rules R2 & R4)**  
-> All models must be grouped into designated floor nodes (`Floor_G`, `Floor_1`, `Floor_B1`, etc.) and parking slot meshes must strictly follow the `PARKING_[ID]` naming prefix (with `_EV_` for electric vehicle bays). Flattened meshes or unregistered naming schemes will be blocked automatically.
+> All models must be grouped into designated floor nodes (`Floor_G`, `Floor_1`, `Floor_B1`, etc.) and parking slot meshes must strictly follow canonical archetype prefixes (`PARKING_*`, `CarParkingSpace_*`, `B*_Car_*`, with `_EV_` or `EV` for electric vehicle bays). Flattened meshes or unregistered naming schemes will be blocked automatically.
 >
 > **2. Database & Slot Count Reconciliation (Rule R7 & SRS FR-LOT-03)**  
-> The count of physical 3D bays (`PARKING_*`) within your uploaded file must match the registered capacity entered in your Facility Profile. Any numerical discrepancy will trigger an automated validation warning.
+> The count of physical 3D bays (`PARKING_*`, `CarParkingSpace_*`, etc.) within your uploaded file must match the registered capacity entered in your Facility Profile. Any numerical discrepancy will trigger an automated validation warning.
 >
 > **3. Performance Budget & Mandatory Draco Compression (Rule R1 & Performance SLA < 3s)**  
 > To guarantee sub-3-second load times on broadband/4G networks, uploaded models must not exceed **8.0 MB** (Draco compressed) or **25.0 MB** (raw). The total scene polygon count must remain under **250,000 triangles**, and active draw calls under **250 calls**. Static vehicle meshes must **not** be baked into the parking stalls.

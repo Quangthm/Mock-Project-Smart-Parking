@@ -85,8 +85,19 @@ public sealed class OwnerApprovalCoordinationTests
             var port = DispatchProxy.Create<IIdentityWorkflowStore, StoreProxy>();
             Store = (StoreProxy)port;
             var passwords = new BcryptPasswordService();
-            var workflows = new AccountWorkflowService(port, passwords, new TestWorkflowProtector(), TimeProvider.System);
-            service = new(port, passwords, TimeProvider.System, this, workflows);
+            var identity = new AuthTestFixture();
+            identity.User.Id = admin;
+            var account = identity.User.Accounts.Single();
+            account.UserId = admin;
+            account.RoleCode = "PLATFORM_ADMIN";
+            identity.Auth.CreateAsync(identity.User, default).GetAwaiter().GetResult();
+            var session = identity.Sessions.Snapshot.Single();
+            var authorization = new global::UserService.Application.Authorization.AccountAuthorizationService(
+                TestAccess.Service(identity, new TestCurrentActor(admin, "admin", account.Id, session.AccessTokenId), identity.Clock),
+                UnsupportedFeature.Create<IAuthorizationScopeStore>(), this,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<global::UserService.Application.Authorization.AccountAuthorizationService>.Instance);
+            var workflows = new AccountWorkflowService(port, passwords, new TestWorkflowProtector(), TimeProvider.System, authorization);
+            service = new(port, passwords, TimeProvider.System, this, workflows, authorization);
         }
         public Task<OwnerApplicationDto> Approve() => service.ReviewAsync(admin, Store.Application.Id, new() { Status = "approved" }, default);
         public Task ProvisionOwnerSiteAsync(Guid applicationId, Guid tenantId, string name, string email, string phone, OwnerLotSetupDto lot, CancellationToken ct)
@@ -119,7 +130,7 @@ public sealed class OwnerApprovalCoordinationTests
         {
             User = new() { Id = Application.UserId, FullName = "Owner", Email = "owner@example.com", Phone = "0901234567", EmailVerifiedAt = DateTimeOffset.UtcNow, Status = UserStatus.PendingApproval };
             var account = new Account { Id = Guid.NewGuid(), UserId = User.Id.Value, User = User, Status = "PENDING_APPROVAL" };
-            account.AccountRoles.Add(new AccountRole { Account = account, AccountId = account.Id!.Value, RoleCode = "BUSINESS_OWNER" });
+            account.RoleCode = "BUSINESS_OWNER";
             User.Accounts.Add(account);
         }
         protected override object? Invoke(MethodInfo? method, object?[]? args) => method!.Name switch

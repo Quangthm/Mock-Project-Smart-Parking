@@ -34,16 +34,19 @@ public sealed class IdentityMessagingTests
         var owner=new User {Id=Guid.NewGuid(),Email="owner-live@example.com",EmailVerifiedAt=DateTimeOffset.UtcNow,
             FullName="Live Owner",Status=UserStatus.Active,PasswordHash=new BcryptPasswordService().Hash("Password@123")};
         var account=new Account {Id=Guid.NewGuid(),User=owner,UserId=owner.Id.Value,TenantId=tenant,Status="ACTIVE",Permissions=["OPERATOR_MANAGE"]};
-        account.AccountRoles.Add(new(){Account=account,AccountId=account.Id.Value,RoleCode="BUSINESS_OWNER"});owner.Accounts.Add(account);
+        account.RoleCode = "BUSINESS_OWNER";owner.Accounts.Add(account);
         await using(var db=fixture.Open()){db.Users.Add(owner);await db.SaveChangesAsync();}
-        await using var app=await fixture.StartHostAsync(configure:builder=>
+        await using var app=await fixture.StartHostAsync(configureConfiguration:builder=>
         {
             builder.Configuration.AddInMemoryCollection(new Dictionary<string,string?>
             {
-                ["Messaging:Host"]="127.0.0.1",["Messaging:Port"]=Environment.GetEnvironmentVariable("SMARTPARK_RABBIT_TEST_PORT"),
-                ["Messaging:Username"]="identity_test",["Messaging:Password"]="local-disposable-identity-test"
+                ["Messaging:Enabled"]="true", ["Messaging:OutboxDeliveryEnabled"]="true",
+                ["SMARTPARK_RABBITMQ_HOST"]="127.0.0.1",["SMARTPARK_RABBITMQ_PORT"]=Environment.GetEnvironmentVariable("SMARTPARK_RABBIT_TEST_PORT"),
+                ["SMARTPARK_RABBITMQ_VHOST"]=Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_VHOST") ?? "smartpark",
+                ["SMARTPARK_RABBITMQ_USER"]=Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_USER") ?? "smartpark",
+                ["SMARTPARK_RABBITMQ_PASSWORD"]=Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_PASSWORD")
+                    ?? throw new InvalidOperationException("Configure the isolated broker password privately.")
             });
-            builder.Services.AddAccessMessaging(builder.Configuration);
         });
         using var client=app.GetTestClient();
         var login=await client.PostAsJsonAsync("/api/auth/login",new{email=owner.Email,password="Password@123"});

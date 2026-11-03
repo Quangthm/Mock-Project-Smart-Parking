@@ -10,9 +10,11 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UserService.API.Controllers;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.DTOs;
 using UserService.Infrastructure.Services;
@@ -53,6 +55,8 @@ public sealed class OperatorProvisioningHttpTests
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.Logging.ClearProviders(); builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(UsersController).Assembly);
+        builder.Services.AddApiErrorResponses();
+        builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         var repository = new OperatorRepository();
@@ -66,20 +70,26 @@ public sealed class OperatorProvisioningHttpTests
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
         var fixture = new AuthTestFixture();
+        TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
+        builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
+        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
         // Use the real command handler; only persistence and external ports are substitutes.
         builder.Services.AddSingleton<IUserManagementService, UnusedUsers>();
         await using var app = builder.Build();
-        app.UseMiddleware<AuthExceptionMiddleware>(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
+        app.UseRouting();
+        app.UseApiErrorResponses(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
         await app.StartAsync(); using var client = app.GetTestClient();
         CreateOperatorDto Body() => new() { FullName = "Operator", Email = "staff@personal.example",
             SiteIds = [siteId], Permissions = ["DEVICE_MANAGE"] };
         async Task Login(string role)
         {
-            fixture.User.Accounts.Single().AccountRoles.Single().RoleCode = role;
+            fixture.User.Accounts.Single().RoleCode = role;
+            fixture.User.EmailVerifiedAt = fixture.Clock.Now;
+            fixture.User.Accounts.Single().TenantId = role == "BUSINESS_OWNER" ? repository.TenantId : null;
             var r = await client.PostAsJsonAsync("/api/auth/login", new { email = "driver@gmail.com", password = "Password@123" });
             Assert.Equal(HttpStatusCode.OK, r.StatusCode);
             var token = (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("accessToken").GetString();

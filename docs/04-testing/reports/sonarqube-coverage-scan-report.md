@@ -27,7 +27,7 @@
 - **Compose file:** `compose.sonar.yml` (Project `smartpark-sonar`)
 - **URL Dashboard:** [http://localhost:9000/dashboard?id=SmartParking](http://localhost:9000/dashboard?id=SmartParking)
 - **Tài khoản:** `admin` / `admin`
-- **User Token:** `squ_e56510ca3bb5deb87199bd93f127520a40b8370a`
+- **User Token:** cấp qua biến môi trường `SONAR_TOKEN` (xem `scripts/run-sonar-scan.ps1`). Giá trị thật đã được gỡ khỏi repo; token cũ bắt đầu bằng `squ_e565…` cần được thu hồi trên SonarQube.
 
 ### 2.2. Các công cụ kiểm thử & phân tích mã nguồn
 
