@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Domain.Entities;
 namespace SmartParking.FacilityService.Persistence;
 public sealed class FacilityDirectoryStore(ParkingDbContext database, IUnitOfWork unitOfWork) : IFacilityDirectoryStore
 {
