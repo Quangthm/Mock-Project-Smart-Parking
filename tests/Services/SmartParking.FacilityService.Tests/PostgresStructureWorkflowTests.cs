@@ -425,8 +425,7 @@ public sealed class PostgresStructureWorkflowTests
                     "scripts/database/overlay/parking-tenants.sql",
                     "scripts/database/overlay/parking-structure-synchronizations.sql",
                     "scripts/database/overlay/parking-operator-tables.sql",
-                    "scripts/database/overlay/parking-slot-constraints.sql",
-                    "scripts/database/05.16-Parking-Owner-Onboarding.sql");
+                    "scripts/database/overlay/parking-slot-constraints.sql");
                 await fixture.ApplyAsync(fixture.Reservation, root,
                     "scripts/database/microservices/03b-reservation-operations-service-db.sql",
                     "scripts/database/overlay/reservation-site-capacity-pools.sql",

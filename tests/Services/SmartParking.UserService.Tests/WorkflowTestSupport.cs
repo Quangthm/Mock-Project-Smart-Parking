@@ -41,29 +41,25 @@ internal static class ServiceSchema
         await db.Database.OpenConnectionAsync();
         foreach(var path in new[] {"microservices/01-user-access-service-db.sql"})
         {
-            await using var cmd=new NpgsqlCommand(await File.ReadAllTextAsync(Path.Combine(Root,"scripts/database",path)),(NpgsqlConnection)db.Database.GetDbConnection());
-            await cmd.ExecuteNonQueryAsync();
+            await using var schemaCommand=new NpgsqlCommand(await File.ReadAllTextAsync(Path.Combine(Root,"scripts/database",path)),(NpgsqlConnection)db.Database.GetDbConnection());
+            await schemaCommand.ExecuteNonQueryAsync();
         }
+        await using var cmd = new NpgsqlCommand(await File.ReadAllTextAsync(ScriptPath("test/verify-user-access-schema.sql")),
+            (NpgsqlConnection)db.Database.GetDbConnection());
+        await cmd.ExecuteNonQueryAsync();
         await db.Database.CloseConnectionAsync();
-        await ApplyFeaturesAsync(db);
     }
-    public static string FeaturePath(string file)
+    public static string ScriptPath(string file)
     {
         var dir=new DirectoryInfo(AppContext.BaseDirectory);
         while(dir is not null && !File.Exists(Path.Combine(dir.FullName,"SmartParking.slnx")))dir=dir.Parent;
-        var featurePath = dir is null ? null : Path.Combine(dir.FullName,"scripts/database",file);
-        return featurePath is not null && File.Exists(featurePath) ? featurePath : Path.Combine(Root,"scripts/database",file);
+        var scriptPath = dir is null ? null : Path.Combine(dir.FullName,"scripts/database",file);
+        return scriptPath is not null && File.Exists(scriptPath) ? scriptPath : Path.Combine(Root,"scripts/database",file);
     }
-    public static async Task ApplyFeaturesAsync(AppDbContext db)
+    public static async Task VerifyCanonicalAsync(AppDbContext db)
     {
         await db.Database.OpenConnectionAsync();
-        foreach (var file in new[] { "05.13-Mfa-Lifecycle.sql", "05.14-Identity-Access-Hardening.sql", "05.15-Owner-Onboarding.sql" })
-        {
-            var sql = await File.ReadAllTextAsync(FeaturePath(file));
-            await using var featureCommand = new NpgsqlCommand(sql, (NpgsqlConnection)db.Database.GetDbConnection());
-            await featureCommand.ExecuteNonQueryAsync();
-        }
-        await using var cmd = new NpgsqlCommand(await File.ReadAllTextAsync(FeaturePath("test/verify-user-access-schema.sql")),
+        await using var cmd = new NpgsqlCommand(await File.ReadAllTextAsync(ScriptPath("test/verify-user-access-schema.sql")),
             (NpgsqlConnection)db.Database.GetDbConnection());
         await cmd.ExecuteNonQueryAsync();
         await db.Database.CloseConnectionAsync();

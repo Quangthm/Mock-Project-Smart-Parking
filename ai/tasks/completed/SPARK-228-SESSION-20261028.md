@@ -191,7 +191,7 @@ Chia **2 lane song song, file không giao nhau**: fixer = data layer, designer =
 **Dọn rác build (không xoá source):** `src/Services/ParkingService/`, `src/Services/ReservationService/`, `tests/Services/SmartParking.ParkingService.Tests/` chỉ còn `bin/obj` (gitignored) sau rename → đã xoá. `src/Services` còn đúng 5 service; **không** có service "cũ" nào.
 
 **Dựng lại stack (Docker):**
-- Áp 4 script schema mới vào **volume sẵn có** (idempotent; initdb của compose chỉ chạy khi volume rỗng): `05.13-Mfa-Lifecycle.sql`, `05.14-Identity-Access-Hardening.sql`, `05.15-Owner-Onboarding.sql` (user DB), `05.16-Parking-Owner-Onboarding.sql` (facility DB).
+- Áp 4 script schema mới vào **volume sẵn có** (idempotent; initdb của compose chỉ chạy khi volume rỗng): ba User/Access patches cho MFA, identity hardening, Owner onboarding và một Facility owner-onboarding patch.
 - `docker compose -f compose.app.yml up -d --build` → 5/5 image rebuild; `docker compose -f compose.app.yml exec -T frontend npm ci` (volume `fe-node-modules` thiếu `qrcode.react`, `@microsoft/signalr`) rồi restart frontend.
 - `scripts/seed-demo-site.ps1` chạy lại OK: 48 slot (36 `CarParkingSpace_*` + 12 `PARKING_EV_CAR_*`), DEMO-HQ.
 

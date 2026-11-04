@@ -18,14 +18,14 @@
 - Re-read router, coding convention, operational/session rules; checked staged/unstaged/unmerged state before edits.
 - Confirmed user approval of findings 1-5, with SPARK-248 priority where functionality overlaps.
 - Created active checkpoint before implementation. Rechecked working files: conflict markers had already been removed, but six unmerged index entries remained.
-- Corrected removed AccountRoles usages in activation, registration, access queries, SQL 05.14 and synthetic fixtures. Preserved each query's existing authorization predicates and security locks.
+- Corrected removed AccountRoles usages in activation, registration, access queries, the then-current identity schema patch and synthetic fixtures. Preserved each query's existing authorization predicates and security locks.
 - Restored session AccountId assignment and fixture cloning. Moved pure account selection into existing Application AccountRolePolicy; retained incoming verified-contact login rules and separate role-only profile policy.
 - Unified bearer composition using SPARK-248 CurrentAccountBearerEvents, exact-account checks and safe errors, with incoming clock-aware lifetime validation and scoped SignalR query-token handling.
 - Removed duplicate Application registration, stale UserService chatbot registration (implementation now belongs to IoT), duplicate OperatorAssignment, unused provisioning port and obsolete duplicate bearer extension.
 - Restored current-account authorization inside protected management/provisioning transactions. Name-only handler remains unchanged: fresh check, tracked narrow mutation, scoped publish, one save.
 - Consolidated optional access projection onto SPARK-248's one bus registration. Access staging worker now atomically acknowledges the custom row and saves EF outbox capture; profile uses only the supported EF Bus Outbox.
 - Aligned host secrets, runner, app Compose and test clients to current SMARTPARK_RABBITMQ keys. Preserved existing .env and service state. Exposed optional access messaging flag separately from outbox delivery.
-- Preserved distinct incoming 05.13/05.14/05.15 migrations and consolidated base01. Existing User databases must pass the full base/session/outbox verifier before incremental feature writers run.
+- Preserved distinct incoming MFA, identity-hardening and Owner-onboarding schema patches alongside consolidated base01. Existing User databases must pass the full base/session/outbox verifier before incremental feature writers run.
 - Repaired stale middleware/service/DTO fixture references while retaining business assertions and isolated session identities. Added real PostgreSQL handoff rollback test (deferred) and enabled/disabled messaging DI coverage.
 - Added fixed public mappings for incoming MFA/onboarding errors rather than leaking exception text or translating known rejections to 500.
 
@@ -46,7 +46,7 @@
 | API ApiExceptionMapper | Preserve incoming known workflow error status/code with fixed safe messages |
 | Application AccountRolePolicy, AuthSessionService, ApplicationDependencyInjection | Inward policy, exact binding, single registration |
 | Application AccountWorkflowService, OwnerRegistrationService, UserManagementService, CreateOperator, Management requests | Preserve current-account authorization and adapt changed workflow contracts |
-| Domain OperatorActivation; Persistence IdentityWorkflowStore/IdentityAccessRepository; SQL 05.14 | Direct required RoleCode model without removing locks |
+| Domain OperatorActivation; Persistence IdentityWorkflowStore/IdentityAccessRepository; identity schema patch | Direct required RoleCode model without removing locks |
 | Infrastructure ProfileMessagingRegistration, AccessMessaging; Persistence AccessEventStore/ProfileOutboxRegistration | One bus, durable atomic access handoff, no extra configuration package |
 | .env.example, compose.app.yml, setup.ps1, run-schema-service, apply-workflow-migrations, test-workflow-upgrade | Consistent broker keys and safe schema workflow |
 | UserService tests including fixtures, profile/outbox, auth, identity, owner and vehicle tests | Reconcile actual contracts/DI and preserve meaningful assertions |

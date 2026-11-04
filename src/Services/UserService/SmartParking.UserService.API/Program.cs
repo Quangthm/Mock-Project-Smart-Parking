@@ -7,6 +7,7 @@ using UserService.Application.Services;
 using UserService.Infrastructure.Services;
 using UserService.Infrastructure.Messaging;
 using Microsoft.AspNetCore.DataProtection;
+using MassTransit;
 
 namespace UserService.API;
 
@@ -39,7 +40,8 @@ public static class UserHost
         builder.Services.AddIdentityWorkflowServices();
         builder.Services.AddPersistenceServices(builder.Configuration);
         builder.Services.AddProfileMessaging(builder.Configuration,
-            registration => registration.AddProfileOutbox(builder.Configuration));
+            registration => registration.AddProfileOutbox(builder.Configuration),
+            (endpoint, context) => endpoint.UseEntityFrameworkOutbox<AppDbContext>(context));
         builder.Services.AddJWTAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddApiCurrentActor();

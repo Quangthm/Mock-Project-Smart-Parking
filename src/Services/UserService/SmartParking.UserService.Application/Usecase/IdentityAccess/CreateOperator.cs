@@ -4,6 +4,7 @@ using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.Common.Validation;
 using UserService.Application.DTOs;
@@ -29,7 +30,7 @@ public sealed class CreateOperatorValidator : AbstractValidator<CreateOperatorCo
     }
 }
 public sealed class CreateOperatorHandler(IIdentityAccessRepository repository, IUnitOfWork unitOfWork,
-    IOperatorInvitationFactory invitationFactory, TimeProvider clock, IParkingDirectory parking, IAccessEventStore events, IAccountAuthorizationService authorization)
+    IOperatorInvitationFactory invitationFactory, TimeProvider clock, IParkingDirectory parking, IEventPublisher events, IAccountAuthorizationService authorization)
     : IRequestHandler<CreateOperatorCommand, OperatorDto>
 {
     public async Task<OperatorDto> Handle(CreateOperatorCommand request, CancellationToken cancellationToken)
@@ -91,8 +92,8 @@ public sealed class CreateOperatorHandler(IIdentityAccessRepository repository, 
         var challenge = invitation.Challenge;
         var delivery = invitation.Delivery;
         repository.AddOperator(user, grants, challenge, delivery);
-        events.Stage(new(Guid.NewGuid(), 1, user.Id.Value, user.AccessVersion, now, challenge.Id, ownerId,
-            sites.Select(site => site.TenantId).Distinct().ToArray(), "pending_verification"));
+        await events.PublishAsync(new OperatorAccessChanged(Guid.NewGuid(), 1, user.Id.Value, user.AccessVersion, now,
+            challenge.Id, ownerId, sites.Select(site => site.TenantId).Distinct().ToArray(), "pending_verification"), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(user.Id.Value, user.FullName, email, "operator", "pending_verification", ownerId, siteIds, permissions, delivery.Id);

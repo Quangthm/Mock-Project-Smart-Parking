@@ -113,6 +113,26 @@ SmartPark API default: ignore unknown JSON properties using normal ASP.NET Core 
 
 JSON parsing/model-state errors occur before MediatR; handle them at API. Application validators enforce command rules; Domain maintains invariants. Use ValidateAsync with cancellation; serialize validator execution when shared scoped dependencies are not thread-safe. Keep writes out of input validators. Test actual DI dispatch, not only direct handler calls.
 
+### Controller parameters: omit redundant `[FromBody]`
+
+For JSON endpoints on an `[ApiController]` (including controllers that inherit the attribute), omit `[FromBody]` on an ordinary request DTO when binding-source inference is enabled and the DTO is not registered in DI. ASP.NET Core already reads that parameter from the request body. Name it `request`; its name does not determine how it binds.
+
+```csharp
+[HttpPatch("me")]
+public async Task<IActionResult> Update(
+    UpdateOwnProfileRequest request,
+    CancellationToken cancellationToken)
+{
+    var command = mapper.Map<UpdateOwnProfileCommand>(request);
+    var result = await mediator.Send(command, cancellationToken);
+    return ApiResponseFactory.Success(result).ToActionResult();
+}
+```
+
+Use an explicit binding attribute when omitting it would change the HTTP contract. For example, use `[FromQuery]` for a complex filter supplied in the query string, or `[FromBody]` for a scalar that must come from the JSON body. Leave `CancellationToken` unannotated; ASP.NET Core supplies it.
+
+**Review check:** Before removing an existing `[FromBody]`, verify the controller or its base class has `[ApiController]`, the service has not disabled binding-source inference, and the parameter meets the DTO conditions above. Apply this convention to the action under review; avoid unrelated controller cleanup.
+
 ## 4. Trusted Account identity and shared User data
 
 Authorize using the authenticated Account, exact session and current applicable authority. Resolve User from that trusted relationship. User data is shared across its Accounts; another active Account does not legitimize an operation through a locked Account.
