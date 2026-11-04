@@ -760,7 +760,7 @@ public sealed class PostgresStructureWorkflowTests
         var empty = await operations.ExecuteAsync(fixture.Owner, fixture.SiteId, Guid.NewGuid(),
             new StructureEdit("batch", BatchItems: []), CancellationToken.None);
         Assert.Equal("failed", empty.Status);
-        Assert.Contains("1â€“50 items", empty.Reason);
+        Assert.Contains("1-50 items", empty.Reason);
     }
 
     [StructurePostgresFact]

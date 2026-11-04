@@ -279,12 +279,12 @@ public sealed class ApplicationWorkflowTests
         public int ForceReleaseCalls { get; private set; }
 
         public Task<IParkingStructureEdit> BeginEditAsync(
-            OwnerScope owner, Guid site, CommitmentSnapshot snapshot, Guid? operation, CancellationToken ct)
+            OwnerScope owner, Guid site, CommitmentSnapshot? snapshot, Guid? operation, CancellationToken ct)
         {
             Events.Add("begin");
             return Task.FromResult<IParkingStructureEdit>(new MemoryEdit(this));
         }
-        public Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid site, CommitmentSnapshot snapshot, CancellationToken ct)
+        public Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid site, CommitmentSnapshot? snapshot, CancellationToken ct)
             => Task.FromResult(Structure);
         public Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<SiteProfile>>([Structure.Site]);

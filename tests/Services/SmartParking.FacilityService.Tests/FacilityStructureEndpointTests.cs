@@ -655,7 +655,7 @@ public sealed class FacilityStructureEndpointTests
         }
 
         public Task<ParkingStructure> ReadAsync(
-            OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, CancellationToken cancellationToken)
+            OwnerScope owner, Guid siteId, CommitmentSnapshot? snapshot, CancellationToken cancellationToken)
             => siteId == structure.Site.Id
                 ? Task.FromResult(structure)
                 : Task.FromException<ParkingStructure>(

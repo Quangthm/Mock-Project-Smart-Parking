@@ -143,7 +143,7 @@ public sealed class StructureHoldReleaseTests
             => Task.FromResult(actor == Owner && site == SiteId);
 
         public Task<ParkingStructure> ReadAsync(
-            OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, CancellationToken ct)
+            OwnerScope owner, Guid siteId, CommitmentSnapshot? snapshot, CancellationToken ct)
             => Task.FromResult(Structure);
 
         public Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct)
@@ -153,7 +153,7 @@ public sealed class StructureHoldReleaseTests
             => throw new NotSupportedException();
 
         public Task<IParkingStructureEdit> BeginEditAsync(
-            OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, Guid? operationId, CancellationToken ct)
+            OwnerScope owner, Guid siteId, CommitmentSnapshot? snapshot, Guid? operationId, CancellationToken ct)
             => Task.FromResult<IParkingStructureEdit>(new FakeEdit(Structure));
 
         private sealed class FakeEdit(ParkingStructure structure) : IParkingStructureEdit
