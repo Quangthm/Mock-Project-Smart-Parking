@@ -66,4 +66,13 @@ public class InvoiceRepository : IInvoiceRepository
 
         return candidate;
     }
+
+    public async Task<IReadOnlyList<Invoice>> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Invoices
+            .Include(i => i.PaymentOrder)
+            .Where(i => i.PaymentOrder != null && i.PaymentOrder.AccountId == accountId)
+            .OrderByDescending(i => i.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
 }

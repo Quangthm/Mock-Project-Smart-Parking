@@ -87,7 +87,8 @@ public class PaymentsController : ControllerBase
             AccountId: request.AccountId,
             PenaltyAmount: request.PenaltyAmount,
             PenaltyReason: request.PenaltyReason,
-            IdempotencyKey: request.IdempotencyKey
+            IdempotencyKey: request.IdempotencyKey,
+            DepositAmount: request.DepositAmount
         );
 
         var result = await _mediator.Send(command, cancellationToken);

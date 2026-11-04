@@ -11,7 +11,6 @@ using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
 using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Application.Usecase.InitiateCheckout;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
-using SmartParking.PaymentService.Domain.Ports;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;

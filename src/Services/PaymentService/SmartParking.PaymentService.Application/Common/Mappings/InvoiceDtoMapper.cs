@@ -52,7 +52,9 @@ public static class InvoiceDtoMapper
                 TotalPenaltyFee: snapshot.TotalPenaltyFee,
                 DiscountAmount: snapshot.DiscountAmount,
                 FinalTotalAmount: snapshot.FinalTotalAmount > 0 ? snapshot.FinalTotalAmount : invoice.FinalAmount,
-                Currency: !string.IsNullOrEmpty(snapshot.Currency) ? snapshot.Currency : "VND"
+                Currency: !string.IsNullOrEmpty(snapshot.Currency) ? snapshot.Currency : "VND",
+                DepositDeducted: snapshot.DepositDeducted,
+                SurplusRefund: snapshot.SurplusRefund
             ),
             FinancialStatus: new FinancialStatusDto(
                 Status: status,

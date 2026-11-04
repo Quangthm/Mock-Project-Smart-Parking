@@ -47,6 +47,9 @@ public class InvoicePricingSnapshot
     public decimal SubtotalParkingFee { get; set; }
     public decimal TotalPenaltyFee { get; set; }
     public decimal DiscountAmount { get; set; }
+    public decimal DepositAmount { get; set; }
+    public decimal DepositDeducted { get; set; }
+    public decimal SurplusRefund { get; set; }
     public decimal FinalTotalAmount { get; set; }
     public string Currency { get; set; } = "VND";
 

@@ -92,7 +92,9 @@ services:
     ports:
       - "127.0.0.1:5055:8080"
     networks:
-      - smartpark
+      smartpark:
+        aliases:
+          - operation-service
     healthcheck: *healthcheck
     restart: "no"
 
@@ -106,8 +108,12 @@ services:
     environment:
       <<: *backend-env
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
-      # PaymentService reads Services:ReservationService:BaseUrl (not Services:Reservation).
-      Services__ReservationService__BaseUrl: http://reservation-service:8080/
+      Services__OperationService__BaseUrl: http://operation-service:8080/
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
+      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD}
       # Empty PayOS credentials keep the local sandbox emulation (fake checkout link/QR).
       PayOs__ClientId: ${SMARTPARK_PAYOS_CLIENT_ID:-}
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}

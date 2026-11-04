@@ -11,4 +11,5 @@ public interface IInvoiceRepository
     Task AddAsync(Invoice invoice, CancellationToken cancellationToken = default);
     void Update(Invoice invoice);
     Task<string> GenerateInvoiceNumberAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Invoice>> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default);
 }

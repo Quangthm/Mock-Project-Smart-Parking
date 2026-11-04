@@ -8,7 +8,7 @@ using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Events;
-using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Persistence.Outbox;
 using SmartParking.PaymentService.Tests.TestDoubles;
 using Xunit;

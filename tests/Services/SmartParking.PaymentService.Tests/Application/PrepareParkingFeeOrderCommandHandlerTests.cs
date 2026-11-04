@@ -281,4 +281,244 @@ public class PrepareParkingFeeOrderCommandHandlerTests
         var ex = await Assert.ThrowsAsync<PaymentDomainException>(() => handler.Handle(command, CancellationToken.None));
         Assert.Equal(PaymentDomainException.Unauthorized, ex.ErrorCode);
     }
+
+    [Fact]
+    public async Task Handle_PartialDepositDeduction_DeductsDepositAndComputesFinalAmount()
+    {
+        // Arrange: 2 hours stay (30,000 VND), deposit = 10,000 VND
+        var handler = CreateHandler();
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.Parse("2026-11-02T08:00:00+07:00"),
+            PricingCutoffAt: DateTimeOffset.Parse("2026-11-02T10:00:00+07:00"),
+            AccountId: Guid.NewGuid(),
+            PenaltyAmount: 0,
+            PenaltyReason: null,
+            IdempotencyKey: "test:partial:deposit",
+            DepositAmount: 10000m
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(30000m, result.BaseParkingFee);
+        Assert.Equal(10000m, result.DepositDeducted);
+        Assert.Equal(20000m, result.FinalAmount);
+        Assert.Equal(0m, result.SurplusRefund);
+
+        var order = await _orderRepo.GetByIdAsync(result.OrderId);
+        Assert.NotNull(order);
+        Assert.Equal(30000m, order.Amount);
+        Assert.Equal(10000m, order.DepositDeducted);
+        Assert.Equal(20000m, order.FinalAmount);
+
+        var invoice = await _invoiceRepo.GetByPaymentOrderIdAsync(order.Id);
+        Assert.NotNull(invoice);
+        Assert.Equal(20000m, invoice.FinalAmount);
+        Assert.Equal(10000m, invoice.PricingSnapshot.DepositDeducted);
+        Assert.Equal(0m, invoice.PricingSnapshot.SurplusRefund);
+        Assert.Contains(invoice.PricingSnapshot.LineItems, li => li.ItemType == "DEPOSIT_DEDUCTION" && li.Amount == -10000m);
+    }
+
+    [Fact]
+    public async Task Handle_ExactDepositMatch_FinalAmountIsZero()
+    {
+        // Arrange: 2 hours stay (30,000 VND), deposit = 30,000 VND
+        var handler = CreateHandler();
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.Parse("2026-11-02T08:00:00+07:00"),
+            PricingCutoffAt: DateTimeOffset.Parse("2026-11-02T10:00:00+07:00"),
+            AccountId: Guid.NewGuid(),
+            PenaltyAmount: 0,
+            PenaltyReason: null,
+            IdempotencyKey: "test:exact:deposit",
+            DepositAmount: 30000m
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(30000m, result.BaseParkingFee);
+        Assert.Equal(30000m, result.DepositDeducted);
+        Assert.Equal(0m, result.FinalAmount);
+        Assert.Equal(0m, result.SurplusRefund);
+
+        var order = await _orderRepo.GetByIdAsync(result.OrderId);
+        Assert.NotNull(order);
+        Assert.Equal(30000m, order.Amount);
+        Assert.Equal(30000m, order.DepositDeducted);
+        Assert.Equal(0m, order.FinalAmount);
+    }
+
+    [Fact]
+    public async Task Handle_SurplusDeposit_ComputesSurplusRefundAndFinalAmountZero()
+    {
+        // Arrange: 2 hours stay (30,000 VND), deposit = 100,000 VND (surplus = 70,000 VND)
+        var handler = CreateHandler();
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.Parse("2026-11-02T08:00:00+07:00"),
+            PricingCutoffAt: DateTimeOffset.Parse("2026-11-02T10:00:00+07:00"),
+            AccountId: Guid.NewGuid(),
+            PenaltyAmount: 0,
+            PenaltyReason: null,
+            IdempotencyKey: "test:surplus:deposit",
+            DepositAmount: 100000m
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(30000m, result.BaseParkingFee);
+        Assert.Equal(30000m, result.DepositDeducted);
+        Assert.Equal(0m, result.FinalAmount);
+        Assert.Equal(70000m, result.SurplusRefund);
+
+        var invoice = await _invoiceRepo.GetByPaymentOrderIdAsync(result.OrderId);
+        Assert.NotNull(invoice);
+        Assert.Equal(100000m, invoice.PricingSnapshot.DepositAmount);
+        Assert.Equal(30000m, invoice.PricingSnapshot.DepositDeducted);
+        Assert.Equal(70000m, invoice.PricingSnapshot.SurplusRefund);
+        Assert.Contains(invoice.PricingSnapshot.LineItems, li => li.ItemType == "DEPOSIT_DEDUCTION" && li.Amount == -30000m);
+        Assert.Contains(invoice.PricingSnapshot.LineItems, li => li.ItemType == "SURPLUS_REFUND" && li.Amount == 70000m);
+    }
+
+    [Fact]
+    public async Task Handle_DepositWithPenaltyFee_CalculatesCorrectGrossAndDeduction()
+    {
+        // Arrange: 2 hours stay (30,000 VND), penalty = 20,000 VND, gross = 50,000 VND, deposit = 40,000 VND
+        var handler = CreateHandler();
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.Parse("2026-11-02T08:00:00+07:00"),
+            PricingCutoffAt: DateTimeOffset.Parse("2026-11-02T10:00:00+07:00"),
+            AccountId: Guid.NewGuid(),
+            PenaltyAmount: 20000m,
+            PenaltyReason: "Overstay penalty",
+            IdempotencyKey: "test:penalty:deposit",
+            DepositAmount: 40000m
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(30000m, result.BaseParkingFee);
+        Assert.Equal(20000m, result.PenaltyFee);
+        Assert.Equal(40000m, result.DepositDeducted);
+        Assert.Equal(10000m, result.FinalAmount); // (30,000 + 20,000) - 40,000 = 10,000
+        Assert.Equal(0m, result.SurplusRefund);
+
+        var order = await _orderRepo.GetByIdAsync(result.OrderId);
+        Assert.NotNull(order);
+        Assert.Equal(50000m, order.Amount);
+        Assert.Equal(40000m, order.DepositDeducted);
+        Assert.Equal(10000m, order.FinalAmount);
+    }
+
+    [Fact]
+    public async Task Handle_FreeStayGracePeriodWithDeposit_RefundsEntireDepositAsSurplus()
+    {
+        // Arrange: 10 minutes stay (<= 15m grace, 0 VND fee), deposit = 20,000 VND
+        var handler = CreateHandler();
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.Parse("2026-11-02T08:00:00+07:00"),
+            PricingCutoffAt: DateTimeOffset.Parse("2026-11-02T08:10:00+07:00"),
+            AccountId: Guid.NewGuid(),
+            PenaltyAmount: 0,
+            PenaltyReason: null,
+            IdempotencyKey: "test:freestay:deposit",
+            DepositAmount: 20000m
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0m, result.BaseParkingFee);
+        Assert.Equal(0m, result.DepositDeducted);
+        Assert.Equal(0m, result.FinalAmount);
+        Assert.Equal(20000m, result.SurplusRefund);
+    }
+
+    [Fact]
+    public async Task Handle_IdempotentReplayWithDeposit_ReturnsConsistentDepositDeductedAndSurplus()
+    {
+        // Arrange
+        var handler = CreateHandler();
+        var key = "test:idempotent:deposit:replay";
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.Parse("2026-11-02T08:00:00+07:00"),
+            PricingCutoffAt: DateTimeOffset.Parse("2026-11-02T10:00:00+07:00"),
+            AccountId: Guid.NewGuid(),
+            PenaltyAmount: 0,
+            PenaltyReason: null,
+            IdempotencyKey: key,
+            DepositAmount: 50000m
+        );
+
+        // Act
+        var firstResult = await handler.Handle(command, CancellationToken.None);
+        var replayResult = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(firstResult.OrderId, replayResult.OrderId);
+        Assert.Equal(firstResult.DepositDeducted, replayResult.DepositDeducted);
+        Assert.Equal(firstResult.SurplusRefund, replayResult.SurplusRefund);
+        Assert.Equal(firstResult.FinalAmount, replayResult.FinalAmount);
+    }
+
+    [Fact]
+    public void Validator_NegativeDepositAmount_FailsValidation()
+    {
+        var validator = new PrepareParkingFeeOrderCommandValidator();
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: Guid.NewGuid(),
+            SiteId: Guid.NewGuid(),
+            SessionId: Guid.NewGuid(),
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: DateTimeOffset.UtcNow.AddHours(-1),
+            PricingCutoffAt: DateTimeOffset.UtcNow,
+            AccountId: null,
+            PenaltyAmount: null,
+            PenaltyReason: null,
+            IdempotencyKey: "test:negative:deposit",
+            DepositAmount: -5000m
+        );
+
+        var result = validator.Validate(command);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == "DepositAmount");
+    }
 }

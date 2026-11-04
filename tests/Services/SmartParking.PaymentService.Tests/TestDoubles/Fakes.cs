@@ -1,6 +1,6 @@
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Domain.Entities;
-using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 
 namespace SmartParking.PaymentService.Tests.TestDoubles;
 
@@ -201,6 +201,15 @@ public class FakeInvoiceRepository : IInvoiceRepository
     {
         _sequence++;
         return Task.FromResult($"INV-{DateTimeOffset.UtcNow:yyyyMMdd}-{_sequence:D4}");
+    }
+    public Task<IReadOnlyList<Invoice>> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var list = Invoices
+            .Where(i => (i.PaymentOrder != null && i.PaymentOrder.AccountId == accountId) ||
+                        (i.PricingSnapshot != null && i.PricingSnapshot.AccountId == accountId))
+            .OrderByDescending(i => i.CreatedAt)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<Invoice>>(list);
     }
 }
 

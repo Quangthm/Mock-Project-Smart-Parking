@@ -11,7 +11,8 @@ public sealed record PrepareParkingFeeOrderRequestDto(
     Guid? AccountId,
     decimal? PenaltyAmount,
     string? PenaltyReason,
-    string IdempotencyKey
+    string IdempotencyKey,
+    decimal? DepositAmount = 0
 );
 
 public sealed record PrepareParkingFeeOrderResponseDto(
@@ -27,7 +28,9 @@ public sealed record PrepareParkingFeeOrderResponseDto(
     int TariffVersion,
     int TotalParkedMinutes,
     DateTimeOffset? ExpiresAt,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    decimal DepositDeducted = 0,
+    decimal SurplusRefund = 0
 );
 
 public sealed record CustomerInvoiceResponseDto(
@@ -83,7 +86,9 @@ public sealed record FinancialSummaryDto(
     decimal TotalPenaltyFee,
     decimal DiscountAmount,
     decimal FinalTotalAmount,
-    string Currency
+    string Currency,
+    decimal DepositDeducted = 0,
+    decimal SurplusRefund = 0
 );
 
 public sealed record FinancialStatusDto(

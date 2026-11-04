@@ -94,7 +94,9 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
                 TariffVersion: existingInvoice?.PricingSnapshot.TariffVersion ?? 1,
                 TotalParkedMinutes: existingInvoice?.TotalParkedMinutes ?? 0,
                 ExpiresAt: existingOrder.ExpiresAt,
-                CreatedAt: existingOrder.CreatedAt
+                CreatedAt: existingOrder.CreatedAt,
+                DepositDeducted: existingOrder.DepositDeducted,
+                SurplusRefund: existingInvoice?.PricingSnapshot.SurplusRefund ?? 0m
             );
         }
 
@@ -129,7 +131,11 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
 
         var baseParkingFee = (decimal)calcResult.FinalAmountVnd;
         var penaltyFee = request.PenaltyAmount ?? 0m;
-        var finalAmount = baseParkingFee + penaltyFee;
+        var grossTotal = baseParkingFee + penaltyFee;
+        var deposit = Math.Max(0, request.DepositAmount ?? 0m);
+        var depositDeducted = Math.Min(deposit, grossTotal);
+        var finalAmount = Math.Max(0, grossTotal - depositDeducted);
+        var surplusRefund = Math.Max(0, deposit - grossTotal);
 
         // 5. Generate Order and Invoice
         var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString() + Random.Shared.Next(100, 999).ToString();
@@ -148,9 +154,9 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             OrderType = OrderType.PARKING_FEE,
             ReferenceType = ReferenceType.PARKING_SESSION,
             ReferenceId = request.SessionId,
-            Amount = finalAmount,
+            Amount = grossTotal,
             DiscountAmount = 0,
-            DepositDeducted = 0,
+            DepositDeducted = depositDeducted,
             FinalAmount = finalAmount,
             Status = PaymentOrderStatus.PENDING,
             ExpiresAt = expiresAt,
@@ -196,6 +202,40 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             });
         }
 
+        if (depositDeducted > 0)
+        {
+            lineItems.Add(new InvoiceLineItem
+            {
+                ItemType = "DEPOSIT_DEDUCTION",
+                Description = "Khấu trừ tiền cọc đặt trước",
+                StartTime = null,
+                EndTime = null,
+                DurationMinutes = 0,
+                CoveredMinutes = 0,
+                ChargeableMinutes = 0,
+                UnitRate = -depositDeducted,
+                Unit = "DEPOSIT_CREDIT",
+                Amount = -depositDeducted
+            });
+        }
+
+        if (surplusRefund > 0)
+        {
+            lineItems.Add(new InvoiceLineItem
+            {
+                ItemType = "SURPLUS_REFUND",
+                Description = "Tiền cọc dư cần hoàn trả",
+                StartTime = null,
+                EndTime = null,
+                DurationMinutes = 0,
+                CoveredMinutes = 0,
+                ChargeableMinutes = 0,
+                UnitRate = surplusRefund,
+                Unit = "SURPLUS_REFUND",
+                Amount = surplusRefund
+            });
+        }
+
         var snapshot = new InvoicePricingSnapshot
         {
             OrderCode = orderCode,
@@ -216,6 +256,9 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             SubtotalParkingFee = baseParkingFee,
             TotalPenaltyFee = penaltyFee,
             DiscountAmount = 0m,
+            DepositAmount = deposit,
+            DepositDeducted = depositDeducted,
+            SurplusRefund = surplusRefund,
             FinalTotalAmount = finalAmount,
             Currency = calcResult.Currency ?? "VND",
             Status = "PENDING",
@@ -261,7 +304,9 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             TariffVersion: snapshot.TariffVersion,
             TotalParkedMinutes: invoice.TotalParkedMinutes,
             ExpiresAt: order.ExpiresAt,
-            CreatedAt: order.CreatedAt
+            CreatedAt: order.CreatedAt,
+            DepositDeducted: depositDeducted,
+            SurplusRefund: surplusRefund
         );
     }
 

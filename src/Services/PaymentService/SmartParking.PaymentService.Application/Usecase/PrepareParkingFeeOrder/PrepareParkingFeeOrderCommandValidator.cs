@@ -42,5 +42,10 @@ public sealed class PrepareParkingFeeOrderCommandValidator : AbstractValidator<P
             .MaximumLength(255)
             .When(x => !string.IsNullOrEmpty(x.PenaltyReason))
             .WithMessage("PenaltyReason cannot exceed 255 characters.");
+
+        RuleFor(x => x.DepositAmount)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.DepositAmount.HasValue)
+            .WithMessage("DepositAmount must be greater than or equal to 0.");
     }
 }

@@ -476,14 +476,114 @@ public class InvoiceRepositoryTests
 
 
         // Verify invoice is PAID in database
-
         var savedInvoice = await dbContext.Invoices.FirstOrDefaultAsync(i => i.PaymentOrderId == orderId);
-
         Assert.NotNull(savedInvoice);
-
         Assert.Equal("PAID", savedInvoice.PricingSnapshot.Status);
-
     }
 
+    [Fact]
+    public async Task GetByAccountIdAsync_FiltersByPaymentOrderAccountId_AndSortsDescending()
+    {
+        using var dbContext = CreateInMemoryDbContext();
+        var repository = new InvoiceRepository(dbContext);
+
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var targetAccountId = Guid.NewGuid();
+        var otherAccountId = Guid.NewGuid();
+
+        var order1 = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            AccountId = targetAccountId,
+            OrderCode = "ORD-01",
+            Status = PaymentOrderStatus.PAID,
+            FinalAmount = 25000,
+            ReferenceId = Guid.NewGuid(),
+            ReferenceType = ReferenceType.PARKING_SESSION
+        };
+
+        var order2 = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            AccountId = targetAccountId,
+            OrderCode = "ORD-02",
+            Status = PaymentOrderStatus.PAID,
+            FinalAmount = 50000,
+            ReferenceId = Guid.NewGuid(),
+            ReferenceType = ReferenceType.PARKING_SESSION
+        };
+
+        var otherOrder = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            AccountId = otherAccountId,
+            OrderCode = "ORD-OTHER",
+            Status = PaymentOrderStatus.PAID,
+            FinalAmount = 10000,
+            ReferenceId = Guid.NewGuid(),
+            ReferenceType = ReferenceType.PARKING_SESSION
+        };
+
+        dbContext.PaymentOrders.AddRange(order1, order2, otherOrder);
+
+        var inv1 = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            PaymentOrderId = order1.Id,
+            PaymentOrder = order1,
+            ReferenceId = order1.ReferenceId,
+            InvoiceNumber = "INV-001",
+            FinalAmount = 25000,
+            CreatedAt = DateTimeOffset.UtcNow.AddHours(-2)
+        };
+
+        var inv2 = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            PaymentOrderId = order2.Id,
+            PaymentOrder = order2,
+            ReferenceId = order2.ReferenceId,
+            InvoiceNumber = "INV-002",
+            FinalAmount = 50000,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        var invOther = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            PaymentOrderId = otherOrder.Id,
+            PaymentOrder = otherOrder,
+            ReferenceId = otherOrder.ReferenceId,
+            InvoiceNumber = "INV-OTHER",
+            FinalAmount = 10000,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        dbContext.Invoices.AddRange(inv1, inv2, invOther);
+        await dbContext.SaveChangesAsync();
+
+        // Act
+        var results = await repository.GetByAccountIdAsync(targetAccountId);
+
+        // Assert
+        Assert.NotNull(results);
+        Assert.Equal(2, results.Count);
+        Assert.Equal("INV-002", results[0].InvoiceNumber); // Newest first
+        Assert.Equal("INV-001", results[1].InvoiceNumber);
+        Assert.All(results, inv => Assert.Equal(targetAccountId, inv.PaymentOrder!.AccountId));
+    }
 }
 
