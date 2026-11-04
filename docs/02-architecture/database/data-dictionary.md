@@ -12,7 +12,7 @@ This dictionary records the canonical deployment profile: 6 physical databases, 
 
 ## 2. User & Access DB (`smartpark_user`)
 
-Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship and the canonical UserService runtime schema. Fresh setup applies this base and runs the read-only [UserDb verifier](../../../scripts/database/test/verify-user-access-schema.sql); historical `05.13`–`05.15` User scripts and former separate profile scripts are not setup layers. Existing/partial databases require a separately reviewed migration.
+Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship and the canonical UserService runtime schema. Fresh setup applies this base and runs the read-only [UserDb verifier](../../../scripts/database/test/verify-user-access-schema.sql). Existing/partial databases require a separately reviewed migration.
 
 | Table | Key columns / rules |
 |---|---|
@@ -55,7 +55,7 @@ Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 | `structure_backup_policies` (03a) | `unit_id` (arch name `spatial_unit_id`), `vehicle_type`, `count` (arch name `backup_count`); unique site/unit policy indexes |
 | `operator_incident_events` (03a) | `tenant_id`, `site_id`, `actor_id`, `incident_type`, `details`, `status` (`reported`, `resolved`) |
 
-Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4).
+Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4). Facility base `02-facility-service-db.sql` defines `owner_onboarding_provisions` for idempotent owner provisioning.
 
 ## 4. Reservation & Operations DB (`smartpark_operations`)
 

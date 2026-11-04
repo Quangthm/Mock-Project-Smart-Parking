@@ -16,7 +16,7 @@ The [21 October V11-06 clarification](../../../05-project-management/decision-lo
 |---|---|
 | Database vật lý | `smartpark_user` (PostgreSQL 16, port `5441`) |
 | Base DDL | [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql) |
-| Canonical UserDb layout | Base `01-user-access-service-db.sql` contains the runtime User, Account-bound session, replay-proof, MFA, Owner setup, and MassTransit inbox/outbox schema. Fresh setup applies this base only; historical `05.13`–`05.15` User scripts and the former separate profile scripts are not setup layers. Existing/partial databases still require reviewed migration rather than replay. |
+| Canonical UserDb layout | Base `01-user-access-service-db.sql` contains the runtime User, Account-bound session, replay-proof, MFA, Owner setup, and MassTransit inbox/outbox schema. Fresh setup applies this base and runs the read-only verifier. Existing/partial databases still require a separately reviewed migration rather than replay. |
 | Deployment status | Base hiện tạo trực tiếp `accounts.role_code`; người vận hành thực hiện reset/recreate development DB sau khi review. Không có ALTER migration cho thay đổi role |
 | Runtime deviation | `roles` seed 7 mã thay vì 4 mã SRS; xem §5 |
 

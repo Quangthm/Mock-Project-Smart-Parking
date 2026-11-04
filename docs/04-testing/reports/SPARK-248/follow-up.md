@@ -63,11 +63,11 @@ There is one MassTransit registration. `SMARTPARK_MESSAGING_ENABLED` maps to `Me
 
 Host user-secrets now use the current `SMARTPARK_RABBITMQ_HOST/PORT/USER/PASSWORD/VHOST` keys. Run setup with `-SkipDatabase -SkipRestore` to synchronize configuration without starting databases/broker. The runner and app Compose use those same keys; the container host/port remain `rabbitmq:5672`.
 
-At this historical snapshot, fresh User setup was described as base01 followed by User `05.13`–`05.15`; that setup direction is superseded below.
+At this historical snapshot, fresh User setup was described as a sequence of incremental schema patches; that setup direction is superseded below.
 
 ## Current UserDb/access-event reconciliation (SPARK-319)
 
-Fresh User setup now applies canonical base01 only, followed by the read-only UserDb verifier. Historical User `05.13`–`05.15` scripts and former separate profile scripts are not setup layers. Existing/partial databases require a separately reviewed migration; no startup migration or guessed legacy-session backfill is performed.
+Fresh User setup now applies canonical base01 only, followed by the read-only UserDb verifier. Existing/partial databases require a separately reviewed migration; no startup migration or guessed legacy-session backfill is performed.
 
 `OperatorAccessChanged` remains versioned and is published through the scoped MassTransit EF Bus Outbox in the same transaction as the originating mutation. The custom access event store, relay and access projection are no longer part of runtime persistence. When enabled, the existing endpoint uses MassTransit EF inbox middleware for message/consumer deduplication and sends only a SignalR invalidation hint; clients reload authoritative state. User/Account/session checks remain authoritative for authorization. Generic `users.onboarding_complete` state is removed; Owner status is represented by the application, account and provisioning records. OTP ownership and delivery are unchanged.
 

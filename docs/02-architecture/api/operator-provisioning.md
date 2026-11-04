@@ -65,7 +65,7 @@ Business exceptions use the existing `{ success: false, code, message }` middlew
 
 ## Persistence and permission checks
 
-For the service schema, use the canonical baseline and alignment, then workflow 05.8, MFA 05.13 and identity 05.14 through `scripts/apply-workflow-migrations.ps1 -Service User -SchemaRoot .`. Do not apply old monolith 05.7 over the service schema. This CQRS/no-password change adds no migration beyond the existing 05.14; pending credentials use the existing empty-password representation.
+For a fresh UserDb, run the repository setup so the canonical baseline and read-only verifier are applied. Do not apply retired monolithic schema patches to the service database. Pending operator credentials use the existing empty-password representation; populated databases require a separately reviewed migration.
 
 The command handler owns creation: current Owner authorization, external Facility site validation, then a local Unit of Work transaction with identity authorization rechecked under shared row locks. It persists identity + pending site accounts/roles/grants + challenge + encrypted delivery + access outbox atomically. Facility resources are validated through an external port; no cross-service database locks or distributed transaction are claimed. Duplicate email races are enforced by the database unique index.
 
