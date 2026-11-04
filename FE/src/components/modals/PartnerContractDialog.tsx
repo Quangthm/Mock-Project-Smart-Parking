@@ -82,8 +82,8 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
             {section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
           </section>)}
           <div className="partner-contract-signatures">
-            <div><span>Owner draft signature</span><strong>{record?.ownerAcknowledgedAt ? record.ownerName : "Awaiting Owner"}</strong>{record?.ownerAcknowledgedAt && <small>{new Date(record.ownerAcknowledgedAt).toLocaleString("en-GB")}</small>}</div>
-            <div><span>Admin draft signature</span><strong>{record?.adminAcknowledgedAt ? record.adminName : "Awaiting Admin"}</strong>{record?.adminAcknowledgedAt && <small>{new Date(record.adminAcknowledgedAt).toLocaleString("en-GB")}</small>}{record?.adminAcknowledgedAt && <b className="partner-contract-stamp">SMARTPARKING<br />REVIEWED</b>}</div>
+            <div><span>Owner draft signature</span><strong>{record?.ownerAcknowledgedAt ? record.ownerName.normalize("NFC") : "Awaiting Owner"}</strong>{record?.ownerAcknowledgedAt && <small>{new Date(record.ownerAcknowledgedAt).toLocaleString("en-GB")}</small>}</div>
+            <div><span>Admin draft signature</span><strong>{record?.adminAcknowledgedAt ? record.adminName?.normalize("NFC") : "Awaiting Admin"}</strong>{record?.adminAcknowledgedAt && <small>{new Date(record.adminAcknowledgedAt).toLocaleString("en-GB")}</small>}{record?.adminAcknowledgedAt && <b className="partner-contract-stamp">SMARTPARKING<br />REVIEWED</b>}</div>
           </div>
         </div>
       </div>
@@ -94,7 +94,7 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
           <a className="btn-outline" href="/templates/smartparking-partnership-agreement-draft.docx" download>Download Word draft</a>
           {!readOnly && !signed && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> I have read this draft</label>}
           {!readOnly && <button type="button" className="btn-primary" disabled={signed || !readToEnd || !confirmed || !name.trim() || (signer === "admin" && !record?.ownerAcknowledgedAt)} onClick={() => {
-            try { onSign(name.trim()) } catch { setSignError("Could not save this acknowledgement in your browser. Check browser storage and try again.") }
+            try { onSign(name.trim().normalize("NFC")) } catch { setSignError("Could not save this acknowledgement in your browser. Check browser storage and try again.") }
           }}>
             {signed ? "Signed locally" : `Sign draft as ${signer === "owner" ? "Owner" : "Admin"}`}
           </button>}
