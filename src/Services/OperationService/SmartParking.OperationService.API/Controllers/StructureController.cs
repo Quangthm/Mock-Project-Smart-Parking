@@ -2,7 +2,11 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
 using SmartParking.OperationService.Application;
-using SmartParking.OperationService.Application.Usecase.Structure;
+using SmartParking.OperationService.Application.Usecase.Structure.Commands.CompleteStructureEdit;
+using SmartParking.OperationService.Application.Usecase.Structure.Commands.ForceReleaseStructureHolds;
+using SmartParking.OperationService.Application.Usecase.Structure.Commands.PrepareStructureEdit;
+using SmartParking.OperationService.Application.Usecase.Structure.Queries.ReadStructureImpact;
+using SmartParking.OperationService.Application.Usecase.Structure.Queries.ReadStructureSnapshot;
 using SmartParking.OperationService.Domain;
 
 namespace SmartParking.OperationService.API.Controllers;
