@@ -13,7 +13,7 @@ public interface ISlotOperatorAuthorizer
 public interface IParkingStructureRepository
 {
     Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken cancellationToken);
-    Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, CancellationToken cancellationToken);
+    Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid siteId, CommitmentSnapshot? snapshot, CancellationToken cancellationToken);
     Task<SiteProfile> CreateAsync(OwnerScope owner, SiteProfile site, CancellationToken cancellationToken);
     Task<IParkingStructureEdit> BeginEditAsync(
         OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, Guid? operationId, CancellationToken cancellationToken);

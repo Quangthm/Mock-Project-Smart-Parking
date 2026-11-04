@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.DTOs;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Infrastructure;
@@ -62,6 +63,10 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorGateSlotService>();
         builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
         builder.Services.AddScoped<MaintenanceWindowService>();
+
+        // Application Layer CQRS & Pipeline Behaviors
+        builder.Services.AddApplicationServices();
+
         builder.Services.AddControllers()
             .AddJsonOptions(options =>
             {
@@ -77,15 +82,24 @@ public static class FacilityHost
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
             try { await next(context); }
+            catch (FluentValidation.ValidationException e)
+            {
+                if (context.Response.HasStarted) return;
+                context.Response.StatusCode = 400;
+                var firstError = e.Errors.FirstOrDefault()?.ErrorMessage ?? "Validation failed.";
+                await context.Response.WriteAsJsonAsync(new { success = false, code = "INVALID_STRUCTURE", message = firstError });
+            }
             catch (PostgresException error) when (
                 context.Request.Path.StartsWithSegments("/api/operator") &&
                 (error.SqlState is PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn))
             {
+                if (context.Response.HasStarted) return;
                 context.Response.StatusCode = 503;
                 await context.Response.WriteAsJsonAsync(new { success = false, code = "PROTOTYPE_SCHEMA_NOT_READY", message = "Operator data is unavailable until database reconciliation is complete." });
             }
             catch (ReleasedIdentifierException e)
             {
+                if (context.Response.HasStarted) return;
                 context.Response.StatusCode = 409;
                 await context.Response.WriteAsJsonAsync(new
                 {
@@ -97,6 +111,7 @@ public static class FacilityHost
             }
             catch (StructureBatchException e)
             {
+                if (context.Response.HasStarted) return;
                 context.Response.StatusCode = 409;
                 await context.Response.WriteAsJsonAsync(new
                 {
@@ -108,6 +123,7 @@ public static class FacilityHost
             }
             catch (StructureException e)
             {
+                if (context.Response.HasStarted) return;
                 context.Response.StatusCode = e.Code switch
                 {
                     "UNAUTHENTICATED" => 401,
@@ -124,18 +140,4 @@ public static class FacilityHost
         return app;
     }
 }
-public sealed record GateSlotClaim(Guid TenantId, string VehicleType, Guid? PreferredSlotId = null, Guid? TargetUnitId = null, bool AllowReservedSlot = false);
-public sealed record GateSlotRelease(Guid TenantId);
-[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
-public sealed record BackupMarkBody(string Reason);
-public sealed record OperationBody(Guid IdempotencyKey, StructureEdit Edit, Guid? TenantId = null);
-public sealed record CreateSite(string Code, string Name, string Address, decimal? Latitude, decimal? Longitude, Guid? TenantId = null);
-public sealed record UnitBody(UnitType Type, string Name, Guid? ParentId, int Capacity, Guid? TenantId = null);
-public sealed record SlotBody(Guid UnitId, string Code, VehicleType? VehicleType, SlotType Type = SlotType.STANDARD, IReadOnlyList<VehicleType>? VehicleTypes = null, VehicleType? PrimaryVehicleType = null, Guid? TenantId = null);
-public sealed record PathBody(string Code, Guid? From, Guid? To, string? MapData, Guid? TenantId = null);
-public sealed record EditStructure(string Action, Guid ResourceId, Guid UnitId, string? Code, string? Name, string? Address, bool Active, int Capacity, VehicleType? VehicleType, SlotType SlotType, IReadOnlyList<VehicleType>? VehicleTypes = null, VehicleType? PrimaryVehicleType = null, string? Coordinates3D = null, string? Features = null, decimal? Latitude = null, decimal? Longitude = null, Guid? TenantId = null);
-public sealed record MaintenanceWindowBody(DateTime Start, DateTime End, string Reason, Guid? TenantId = null);
-public sealed record MaintenanceWindowPatch(DateTime? Start, DateTime? End, Guid? TenantId = null);
-public sealed record BatchBody(IReadOnlyList<BatchItemBody> Items, Guid? IdempotencyKey = null, Guid? TenantId = null);
-public sealed record BatchItemBody(Guid ResourceId, string Action, DateTime? ExpectedUpdatedAt = null);
 public partial class Program { public static void Main(string[] args) => FacilityHost.Build(args).Run(); }
