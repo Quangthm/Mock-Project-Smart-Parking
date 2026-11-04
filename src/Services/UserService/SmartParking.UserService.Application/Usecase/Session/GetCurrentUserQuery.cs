@@ -23,7 +23,6 @@ public sealed class GetCurrentUserQueryHandler(IUnitOfWork unitOfWork)
             UserId = user.Id!.Value,
             FullName = user.FullName,
             Email = user.Email ?? string.Empty,
-            OnboardingComplete = user.OnboardingComplete,
             Role = AccountRolePolicy.CurrentRole(user)!
         };
     }

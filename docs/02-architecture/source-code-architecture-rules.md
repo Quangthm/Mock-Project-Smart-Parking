@@ -130,6 +130,14 @@ Mọi dự án `.csproj` trong từng service BẮT BUỘC tuân thủ hướng 
 
 ---
 
+### 3.6. Authentication, authorization freshness and Saga review — approved 2026-11-04
+
+Follow the [authorization ADR](architecture-decisions/authorization-freshness-and-current-access.md), [operation matrix](../01-requirements/srs/authorization-operation-classification.md) and [shared coding guide §4](../07-skills/SmartPark-Coding-Skill-v1.0.md#4-trusted-actor-and-per-operation-authorization-freshness). API owns local JWT validation and the HttpContext-backed actor adapter; Application owns the actor/semantic authorization ports; Domain receives facts and enforces invariants; Persistence owns atomic intent/outbox/state/idempotency storage; Infrastructure owns broker adapters, scheduling and transport. Existing outbound-port naming remains a convention; the ADR's C# examples are conceptual, not a required rename of existing contracts.
+
+Review explicit TOKEN/REQUEST or non-user-origin classification, local resource scope, UserService local authoritative checks, pending admission and finalization gates. Reject automatic current-access calls inside ICurrentActor, synchronous REQUEST freshness calls, raw bearer tokens in Saga/messages, generic freshness-marker pipelines introduced without a later decision, and fabricated customer actors for Payment/device/consumer paths.
+
+For important Sagas require approved branch eligibility, combined-state joins, denial with in-flight effects, current authorization-attempt fencing, bounded calculated retry budgets, stable effect/compensation IDs, unknown-outcome reconciliation, pivot/forward recovery and manual-review rules. Numeric internal-step defaults are in ADR §9; Payment business attempts remain separately governed. No irreversible gate/payment effect is speculatively permitted by this global architecture.
+
 ## 4. Đặc tả Chuyên biệt cho PaymentService (`SmartParking.PaymentService`)
 
 Dành cho nhà phát triển và agent triển khai miền Tài chính:

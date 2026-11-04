@@ -52,6 +52,12 @@ Controllers should normally interact with the Application layer through MediatR/
 - Do not create or retain a parallel custom catch-all `ExceptionHandlingMiddleware` that duplicates the approved `IExceptionHandler` pipeline unless a new architecture decision explicitly requires it.
 - Keep the approved public error envelope (`success`, `code`, `message`, `errors`, `traceId` as applicable) consistent; set the actual HTTP status on the response and do not duplicate HTTP status in the JSON body.
 
+## Authorization freshness and durable workflows
+
+For auth/revocation, CQRS actor handling, Saga reliability or affected client behavior, load the [authorization ADR](../../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md), [classification matrix](../../docs/01-requirements/srs/authorization-operation-classification.md) and shared coding guide §4. They supersede blanket current-session checks for every business request. The matrix does not grant permissions or prove runtime implementation.
+
+Keep JWT validation at API ingress, current-actor extraction separate from authorization, local resource/domain enforcement with its owner, and UserService security checks authoritative and local. REQUEST admission is durable/pending and Account-current checking is asynchronous; only approved speculative work may overlap it, with a guarded join before finalization. Required use-case decisions must be explicit; do not invent hold/pivot/compensation policies. Machine/provider paths do not fabricate human actors.
+
 ## CQRS direction
 
 CQRS + MediatR is the intended application pattern.
@@ -85,9 +91,13 @@ RabbitMQ is the current messaging direction; Kafka is not used. A broker is not 
 Decision shortcut:
 
 ```text
-Immediate authoritative answer needed
+Immediate authoritative response required by approved interaction
         ↓
 Internal service API
+
+REQUEST freshness
+        ↓
+Durable pending intent + outbox → Account-current Saga + approved branches
 
 Durable fact / downstream reaction
         ↓
@@ -101,7 +111,7 @@ For any proposed event-driven interaction, record:
 3. Which services consume it.
 4. Failure behavior when the broker or a consumer is unavailable.
 5. Whether eventual consistency is acceptable.
-6. Whether a simpler synchronous interaction is sufficient for the MVP.
+6. Whether the approved use-case interaction is synchronous or durable/pending; do not replace approved REQUEST orchestration with a synchronous current-access call.
 
 ## AI authority boundary
 

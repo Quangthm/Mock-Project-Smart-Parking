@@ -10,3 +10,7 @@ A decision record must distinguish:
 - proposed change
 - open question
 - deferred work
+
+## Approved decisions
+
+- [Authorization freshness and Account-current access — 2026-11-04](authorization-freshness-and-current-access.md): includes approved CQRS and numeric retry defaults; links the operation matrix and records deferred use-case details.

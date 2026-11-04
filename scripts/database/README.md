@@ -15,12 +15,15 @@ will disagree in ways that look like application bugs.
 | `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
-| `overlay/` | 8 post-schema migrations, applied **after** the six scripts |
+| `overlay/` | 8 post-schema overlays, applied **after** the base scripts |
 | `seeds/` | demo data only, never schema |
 
 The database is created by `compose.schema-integration.yml` (six databases, one per
-service, all six scripts plus the eight overlays mounted as init scripts) and driven
-by `setup.ps1`. There is no single-database compose file any more:
+service, canonical base scripts and remaining approved overlays mounted as init scripts) and driven
+by `setup.ps1`. User & Access MFA, refresh/replay, and Owner lot-setup requirements
+are part of its canonical base schema. Facility owner-onboarding state is part of
+`microservices/02-facility-service-db.sql`.
+There is no single-database compose file any more:
 `docker-compose.yml` and `scripts/database/docker-compose-smartpark.yml` were deleted.
 
 `05.11` and `05.12` also live in `overlay/` now, as
@@ -29,21 +32,22 @@ by `setup.ps1`. There is no single-database compose file any more:
 
 ## 2. Legacy (do not use, do not evaluate against)
 
-`05.1-Database-Scripts.sql` through `05.10-Reservation-Confirmation-Time.sql` are the
-old single-database monolith plus its incremental patches. Their content was merged
-and corrected into the six `microservices/` scripts. They are kept only for history.
+`05.1-Database-Scripts.sql` through `05.12` are the old single-database monolith
+and incremental patches. User-specific MFA, session-hardening and owner-setup
+schema is consolidated into `microservices/01-user-access-service-db.sql`.
+Facility owner-onboarding schema lives in `microservices/02-facility-service-db.sql`.
 
 `integration/01..03` are the originals of the structure-safety guards. The **applied**
 copies are in `overlay/`; the integration folder is reference material.
 
 Rules:
 
-1. Do not mount any `05.x` file into `docker-entrypoint-initdb.d`.
+1. Do not mount legacy `05.1`–`05.12` files into `docker-entrypoint-initdb.d`.
 2. Do not use `05.x` to judge whether a design document is correct. Use
-   `microservices/` + `overlay/`.
+   `microservices/` plus the remaining deployed overlays.
 3. Do not add new statements to `05.x`. Put them in `microservices/` or `overlay/`.
-4. `scripts/apply-workflow-migrations.ps1` already hard-blocks `05.[1-9]*.sql` and
-   `integration/0[123]*.sql` and throws "superseded". That is intentional.
+4. `scripts/apply-workflow-migrations.ps1` registers only canonical base/overlay scripts.
+   Its legacy guard rejects `05.1`–`05.12` and `integration/0[123]*.sql`.
 
 ## 3. Known divergences (why the rule matters)
 

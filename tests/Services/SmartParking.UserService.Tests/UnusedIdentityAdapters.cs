@@ -1,5 +1,6 @@
 using SmartParking.UserService.Domain.Entities;
 using UserService.Application.Common.Interfaces.Persistence;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.DTOs;
 
@@ -20,10 +21,20 @@ internal class UnusedIdentityRepository : IIdentityAccessRepository
     public Task<IReadOnlyList<AuthChallenge>> GetPendingInvitationsAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task ReplaceInvitationAsync(Guid userId, AuthChallenge challenge, WorkflowDelivery delivery, CancellationToken ct) => throw new NotSupportedException();
 }
-internal class UnusedAccessEvents : IAccessEventStore
+internal class RecordingEventPublisher : IEventPublisher
 {
-    public virtual void Stage(OperatorAccessChanged message) => throw new NotSupportedException();
-    public Task<AccessEventLease?> ClaimAsync(CancellationToken ct) => throw new NotSupportedException();
-    public Task CompleteAsync(AccessEventLease lease, CancellationToken ct) => throw new NotSupportedException();
-    public Task<bool> ApplyProjectionAsync(OperatorAccessChanged message, CancellationToken ct) => throw new NotSupportedException();
+    public List<IIntegrationEventMessage> Messages { get; } = [];
+    public virtual Task PublishAsync<TMessage>(TMessage message, CancellationToken cancellationToken)
+        where TMessage : class, IIntegrationEventMessage
+    {
+        Messages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public async Task PublishManyAsync<TMessage>(IEnumerable<TMessage> messages, CancellationToken cancellationToken)
+        where TMessage : class, IIntegrationEventMessage
+    {
+        foreach (var message in messages)
+            await PublishAsync(message, cancellationToken);
+    }
 }

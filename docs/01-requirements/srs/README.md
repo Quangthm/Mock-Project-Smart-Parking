@@ -36,3 +36,7 @@ Scope labels: CONFIRMED/implementation pending; confirmed direction with POST-v1
 ## RC3 payment amendment
 
 [PAY-01 decision](../../05-project-management/decision-log/2026-10-13-payos-priority-pay-01.md) approves payOS implementation priority and controlled low-value production testing plus deterministic failure/race fixtures in place of the sandbox requirement. See the [payment module](modules/06-pricing-payments.md), [adapter design](../../02-architecture/payment-integration/payos.md) and [test plan](../../04-testing/payment-integration/payos-test-plan.md). Unchanged files retain their prior revision labels.
+
+## Authorization freshness amendment — 2026-11-04
+
+Read the [operation matrix](authorization-operation-classification.md) separately from role permissions, and the [ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) for approved CQRS/Saga/retry semantics. Older universal current-session rules are superseded only where they conflict; local security/resource guards remain. Runtime adoption is not implied.

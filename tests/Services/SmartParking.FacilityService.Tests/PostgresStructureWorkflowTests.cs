@@ -1047,8 +1047,8 @@ public sealed class PostgresStructureWorkflowTests
                     "scripts/database/microservices/03a-parking-structure-ops-service-db.sql",
                     "scripts/database/overlay/parking-tenants.sql",
                     "scripts/database/overlay/parking-structure-synchronizations.sql",
-                    "scripts/database/overlay/parking-slot-constraints.sql",
                     "scripts/database/overlay/parking-operator-tables.sql",
+                    "scripts/database/overlay/parking-slot-constraints.sql",
                     "scripts/database/overlay/parking-structure-maintenance.sql");
                 // Post-split reservation schema (smartpark_reservation). Pools first, then the safety
                 // gates that trigger on site_capacity_pools, then receipts, then confirmation time.
