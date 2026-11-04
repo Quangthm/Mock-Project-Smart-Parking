@@ -18,6 +18,106 @@ public sealed record CheckInReservationCommand(Guid SiteId, Guid ReservationId, 
     : IRequest<ReservationGateEntry>;
 public sealed record CheckOutReservationCommand(Guid SiteId, Guid ReservationId, string? PlateNumber, string? ImageData)
     : IRequest<ReservationGateEntry>;
+public sealed record CalculateCheckoutPricingQuery(
+    Guid SiteId,
+    Guid ReferenceId,
+    string ReferenceType,
+    string VehicleType,
+    DateTimeOffset EntryTime,
+    DateTimeOffset ExitTime) : IRequest<CheckoutPricing>;
+public sealed record PrepareReservationCheckoutCommand(
+    Guid SiteId,
+    Guid ReservationId,
+    string? PlateNumber) : IRequest<CheckoutPaymentPreparation>;
+public sealed record PrepareSessionCheckoutCommand(
+    Guid SiteId,
+    Guid SessionId,
+    string? PlateNumber) : IRequest<CheckoutPaymentPreparation>;
+
+public sealed class CalculateCheckoutPricingQueryHandler(
+    IOperatorIdentityClient identity,
+    ICheckoutPaymentClient payment) : IRequestHandler<CalculateCheckoutPricingQuery, CheckoutPricing>
+{
+    public async Task<CheckoutPricing> Handle(CalculateCheckoutPricingQuery request, CancellationToken ct)
+    {
+        if (request.ReferenceType is not ("RESERVATION" or "PARKING_SESSION"))
+            throw new ReservationGateException(400, "INVALID_REFERENCE_TYPE", "Checkout reference type is invalid.");
+        if (request.EntryTime > request.ExitTime)
+            throw new ReservationGateException(400, "INVALID_TIME_RANGE", "Checkout time range is invalid.");
+
+        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
+        return await payment.CalculateAsync(
+            scope.TenantId,
+            request.SiteId,
+            request.ReferenceId,
+            request.ReferenceType,
+            request.VehicleType,
+            request.EntryTime,
+            request.ExitTime,
+            ct);
+    }
+}
+
+public sealed class PrepareReservationCheckoutCommandHandler(
+    IOperatorIdentityClient identity,
+    IReservationGateStore store,
+    ICheckoutPaymentClient payment) : IRequestHandler<PrepareReservationCheckoutCommand, CheckoutPaymentPreparation>
+{
+    public async Task<CheckoutPaymentPreparation> Handle(
+        PrepareReservationCheckoutCommand request,
+        CancellationToken ct)
+    {
+        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
+        var reservation = await store.FindAsync(scope.TenantId, request.SiteId, request.ReservationId.ToString(), ct)
+            ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
+        if (reservation.Id != request.ReservationId)
+            throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
+
+        return await payment.PrepareAsync(
+            scope.TenantId,
+            request.SiteId,
+            reservation.Id,
+            "RESERVATION",
+            reservation.VehicleType,
+            reservation.EntryTime ?? reservation.StartTime,
+            DateTimeOffset.UtcNow,
+            request.PlateNumber ?? reservation.LicensePlate,
+            reservation.AccountId,
+            ct);
+    }
+}
+
+public sealed class PrepareSessionCheckoutCommandHandler(
+    IOperatorIdentityClient identity,
+    IReservationGateStore store,
+    ICheckoutPaymentClient payment) : IRequestHandler<PrepareSessionCheckoutCommand, CheckoutPaymentPreparation>
+{
+    public async Task<CheckoutPaymentPreparation> Handle(
+        PrepareSessionCheckoutCommand request,
+        CancellationToken ct)
+    {
+        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
+        var session = await store.FindActiveWalkInAsync(
+            scope.TenantId,
+            request.SiteId,
+            request.PlateNumber ?? string.Empty,
+            ct);
+        if (session is null || session.Id != request.SessionId)
+            throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
+
+        return await payment.PrepareAsync(
+            scope.TenantId,
+            request.SiteId,
+            session.Id,
+            "PARKING_SESSION",
+            session.VehicleType,
+            session.EntryTime,
+            DateTimeOffset.UtcNow,
+            request.PlateNumber ?? session.LicensePlate,
+            null,
+            ct);
+    }
+}
 
 public sealed class ListReservationsQueryHandler(
     IOperatorIdentityClient identity,
