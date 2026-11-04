@@ -21,6 +21,34 @@ namespace SmartParking.PaymentService.Tests.Integration;
 [Trait("Category", "LiveBroker")]
 public class RabbitMqLiveIntegrationTests
 {
+    private sealed class RabbitMqLiveFactAttribute : FactAttribute
+    {
+        public RabbitMqLiveFactAttribute()
+        {
+            if (!IsRabbitMqAvailable())
+            {
+                Skip = "Requires local RabbitMQ broker running on 127.0.0.1:5672. Skipping live broker test in CI/CD environment.";
+            }
+        }
+
+        private static bool IsRabbitMqAvailable()
+        {
+            try
+            {
+                using var tcp = new System.Net.Sockets.TcpClient();
+                var asyncResult = tcp.BeginConnect("127.0.0.1", 5672, null, null);
+                var success = asyncResult.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(200));
+                if (!success) return false;
+                tcp.EndConnect(asyncResult);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
     private readonly ITestOutputHelper _output;
 
     public RabbitMqLiveIntegrationTests(ITestOutputHelper output)
@@ -116,7 +144,7 @@ public class RabbitMqLiveIntegrationTests
         return services.BuildServiceProvider();
     }
 
-    [Fact]
+    [RabbitMqLiveFact]
     public async Task LiveRabbitMq_PublishAndConsume_DirectOutboxPublisher_Succeeds()
     {
         var collector = new LiveMessageCollector();
@@ -174,7 +202,7 @@ public class RabbitMqLiveIntegrationTests
         }
     }
 
-    [Fact]
+    [RabbitMqLiveFact]
     public async Task LiveRabbitMq_CollectCashPaymentCommandHandler_PublishesToBroker_ConsumerReceives()
     {
         var collector = new LiveMessageCollector();
@@ -279,7 +307,7 @@ public class RabbitMqLiveIntegrationTests
         }
     }
 
-    [Fact]
+    [RabbitMqLiveFact]
     public async Task LiveRabbitMq_ProcessPayOsWebhookCommandHandler_PublishesToBroker_ConsumerReceives()
     {
         var collector = new LiveMessageCollector();
