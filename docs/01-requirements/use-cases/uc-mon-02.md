@@ -13,6 +13,12 @@ Buy a monthly/yearly pass and activate verified rights.
 
 Eligible bound account/vehicle/location and reviewed plan.
 
+## Authorization and pending-workflow boundary — approved 2026-11-04
+
+New monthly/yearly registration/subscription is REQUEST. Enrollment activation and gated irreversible financial effects require accepted Allowed; any reversible preparation needs explicit approval. Renewal/change/cancel of existing plans remains TOKEN initially and is not reclassified by this new-enrollment choice. Payment service interactions use trusted service context and their financial contract.
+
+See the [operation matrix](../srs/authorization-operation-classification.md) and [mandatory REQUEST design checklist](../srs/authorization-operation-classification.md#5-implementation-documentation-checklist). Specify branch eligibility, correlation/attempts, pending observation, combined outcomes, deadlines, idempotency, revocation race, pivot, compensation and late/unknown handling before implementing the affected workflow. This amendment approves direction, not a completed Saga or wire contract.
+
 ## Main flow
 
 1. Select an explicitly enabled monthly/yearly product and reviewed product-specific terms. Monthly calculates immediate S=A or future local-midnight S with original anchor/[S,E); yearly covers 12 calendar months with boundary details specified under Q05.

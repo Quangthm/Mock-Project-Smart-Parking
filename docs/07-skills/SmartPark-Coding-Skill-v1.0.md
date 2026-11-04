@@ -5,7 +5,7 @@ description: Implement or review SmartPark backend and frontend features using t
 
 # SmartPark coding skill — approved final
 
-Decision snapshot: 2026-10-29. This is the reusable shared coding guide for SmartPark implementation and PR review. For coding tasks, it is the primary implementation convention loaded by `ai/AGENTS.md`; it does not replace authoritative SRS/business rules, approved architecture/service ownership, more specific feature contracts, or nonconflicting scoped `AGENTS.md` instructions. Feature-specific rules remain feature-specific unless this guide explicitly promotes them to a shared convention. Examples are illustrative SmartPark examples, not universal product requirements or compiled repository code.
+Decision snapshot: 2026-11-04 (authorization amendment; other conventions retained). This is the reusable shared coding guide for SmartPark implementation and PR review. For coding tasks, it is the primary implementation convention loaded by `ai/AGENTS.md`; it does not replace authoritative SRS/business rules, approved architecture/service ownership, more specific feature contracts, or nonconflicting scoped `AGENTS.md` instructions. Feature-specific rules remain feature-specific unless this guide explicitly promotes them to a shared convention. Examples are illustrative SmartPark examples, not universal product requirements or compiled repository code.
 
 ## 1. Authority and efficient context loading
 
@@ -31,7 +31,7 @@ Read applicable root/nested AGENTS.md and relevant linked skills. Search the act
 | Task | Read first | Trace in source |
 |---|---|---|
 | API/use case | Current requirement/module, permission matrix, API contract | Controller, input/command, validator, behaviors, handler, response |
-| Authorization | Account/session model, permissions, applicable revocation rules | Token issue/validation, actor adapter, authoritative stores, invalidators |
+| Authorization | Authorization ADR, operation classification matrix, permissions, applicable local security/revocation rules | Token issue/validation, actor adapter, authoritative stores, invalidators |
 | Persistence | Entity/schema/mapping, migration policy | Repository, tracking, UoW, transaction and competing writers |
 | Errors/logging | Approved envelope/code catalogue, observability rules | MVC/auth result producers, exception handlers, logging registration |
 | Integration event | Service ownership, event/audit contract | Scoped publisher, outbox context, topology, relay and consumers |
@@ -75,7 +75,7 @@ A useful summary is:
 |---|---|
 | State belongs to the same aggregate | Load aggregate → Domain transition → save |
 | Rule depends on an external fact | Application retrieves fact → passes encapsulated fact/DTO to Domain |
-| Cross-service fact | Application port → Infrastructure HTTP adapter → authoritative owner |
+| Cross-service fact | Application port → Infrastructure adapter → authoritative owner; HTTP for immediate results, approved Saga messages for asynchronous decisions |
 | Domain entity needs DB/service itself | Avoid |
 | Same transition rule is reused in multiple flows | Put the rule/state machine in the aggregate or Domain policy, not individual handlers |
 | Race-sensitive state change | Domain validation + Persistence concurrency enforcement |
@@ -133,22 +133,48 @@ Use an explicit binding attribute when omitting it would change the HTTP contrac
 
 **Review check:** Before removing an existing `[FromBody]`, verify the controller or its base class has `[ApiController]`, the service has not disabled binding-source inference, and the parameter meets the DTO conditions above. Apply this convention to the action under review; avoid unrelated controller cleanup.
 
-## 4. Trusted Account identity and shared User data
+## 4. Trusted actor and per-operation authorization freshness
 
-Authorize using the authenticated Account, exact session and current applicable authority. Resolve User from that trusted relationship. User data is shared across its Accounts; another active Account does not legitimize an operation through a locked Account.
+Approved 2026-11-04: read the [authorization ADR](../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [operation matrix](../01-requirements/srs/authorization-operation-classification.md). The matrix owns classification; [permissions](../01-requirements/srs/permissions.md) owns grants. This replaces the old universal exact-session/current-store rule, not UserService's own authoritative security checks or local resource authorization.
 
-Application defines a small current-actor port. API implements it from authenticated request context. Actual claim names and identifier types must match verified token/session contracts; do not assume sub means AccountId or jti means a GUID session primary key.
+### Authentication and actor context
+
+Protected user APIs validate JWTs through ASP.NET Core authentication (signature/key, issuer, audience, allowed algorithm, lifetime/clock skew and required claims) and enforce `[Authorize]` or equivalent policy. Access-token lifetime is 15 minutes. Controllers/handlers/Domain do not manually decode or revalidate JWTs. Public and machine/provider endpoints declare their distinct trust policy.
+
+Application owns `ICurrentActor`; API implements it from authenticated `HttpContext.User`. Application does not depend on HttpContext, ClaimsPrincipal or ASP.NET types. The approved conceptual shape is:
 
 ```csharp
-// Illustrative shape, subject to actual identifier conventions:
 public interface ICurrentActor
 {
+    Guid? UserId { get; }
     Guid? AccountId { get; }
-    Guid? SessionId { get; }
+    string? RoleCode { get; }
+    bool IsAuthenticated { get; }
 }
 ```
 
-Fail closed when required identity is absent. Never trust raw JWT decoding, body identifiers or spoofable headers. Token claims establish asserted identity; fresh stores determine current Account/session eligibility. Background jobs use explicit trusted execution context, not captured HttpContext.
+Actual names/types must match the real token contract. Do not infer that `sub` is AccountId or `jti` is a GUID session key. Fail closed on missing/malformed required actor claims. This adapter exposes token-time identity only: no automatic account/session fetch, JWT validation, UserService call or current-access authorization. Never trust body-selected actor IDs or spoofable headers. User data can be shared across Accounts; another active Account does not legitimize acting as the bound Account.
+
+### TOKEN, REQUEST and non-user origins
+
+- `TOKEN` is the initial default for authenticated end-user business operations. Enforce endpoint policy, local ownership/scope and Domain invariants; do not contact UserService solely to refresh claims. Remaining token-lifetime staleness is accepted.
+- The matrix selects exactly six `REQUEST` families. The HTTP handler atomically persists pending workflow intent plus outbox and returns accepted/pending, never a premature final success. It does not synchronously query UserService for freshness.
+- A durable Saga obtains Account-current authority asynchronously. Only explicitly approved independent reversible/speculative steps may overlap that check. Persist each branch outcome and cancellation intent; join the current correlated outcomes. Accepted `Allowed` and all required prerequisites gate finalization/irreversible protected effects. Denial with in-flight/unknown work requires reconciliation or compensation before clean cancellation is reported.
+- UserService evaluates current User/Account/role authority, not a token-role echo. The resource owner still decides ownership, facility/lot scope and business truth. Account-current does not guarantee exact browser-session continuity after admission; JWT expiry or session-only revocation does not automatically cancel the Saga.
+- UserService-owned login/refresh/security workflows use authoritative local checks, concurrency and audit without an authorization Saga merely for local data. Existing local security/factor versions are not the deferred distributed AccessVersion.
+- Internal consumers, devices and payment providers use service/device/provider trust; do not fabricate an end-user actor. Chatbot actions inherit the underlying action's freshness and user-confirmation requirement. Checkout preserves approved safety/obligation exceptions; account lock cannot strand physical exit.
+
+Current-access integration uses inward-owned semantic contracts. The approved illustrative `ICurrentAccountAccessRequester.RequestAsync(CurrentAccountAccessRequest, CancellationToken)` dispatches/records a request, not a grant. Include workflow/correlation ID, AuthorizationAttemptId, AttemptNumber, trusted actor snapshot and approved policy context; exact wire fields remain a use-case contract. Infrastructure owns MassTransit/RabbitMQ and scheduling adapters. Never persist raw JWT/refresh/password/MFA credentials in workflows, messages, domain records or logs.
+
+Do not initially introduce `IAuthorizationRequirement`, `IRequiresAuthenticatedActor`, `IRequiresCurrentAccess`, an executable `AuthorizationFreshness` enum or a generic authorization-dispatch MediatR pipeline. Classification is a reviewed design contract, not automatic runtime enforcement. No freshness attribute, property, registry entry or equivalent code-level declaration is required on controllers, commands, queries or handlers. Follow the matrix and implement/test the corresponding behavior directly; references to "declared freshness" mean the documented design choice only. `COMMIT`, general `WORKFLOW`, AccessHandle and AccessVersion remain deferred.
+
+### Saga reliability and design gates
+
+Use the approved numeric policies and profiles in [ADR §9](../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#9-global-saga-retry-redelivery-timeout-and-unknown-outcome-policy); document justified overrides and tests. Do not multiply middleware redelivery with Saga reissue schedules. New current-access evaluations get new AuthorizationAttemptIds; retries of the same business effect reuse its stable OperationId. Fence stale-attempt ALLOW, duplicates, expired commands and terminal-state resurrection. Authorization unavailability is distinct from denial; an unknown effect is distinct from failure. Reconcile by the owner's authoritative evidence; `NotFound` alone does not prove no effect. Compensation has its own stable identity referencing the original effect.
+
+Every important Saga must specify permitted speculative effects and limits, separate branch state/join, authorization gate, actor/policy contract, retry owner and total budget, deadlines, idempotency/retention, status reconciliation, denial with late/in-flight effects, accepted post-ALLOW race, revocation by state, pivot, compensation, forward recovery and manual-review/observability behavior. Missing material details are unfinished design: surface that boundary and continue independent work. No global capacity-hold policy or timestamp cleanup is implied. Preserve historical, physical and financial facts.
+
+SignalR is best-effort revocation UX after backend security commit. Backend targets affected connections; client clears credentials/state/caches, stops reconnect and returns to Sign In without normal logout against an already revoked session. Missing delivery does not enforce freshness; scale-out remains deferred. See ADR §16 for the conceptual contract.
 
 ## 5. Tracked writes, UoW and atomic authorization
 
@@ -263,11 +289,11 @@ Use Microsoft `ILogger<T>` with providers; do not implement an unnecessary custo
 
 ### Service integration decision rule
 
-Use **synchronous internal service APIs** for immediate authoritative decisions required to complete the current command.
+Use **synchronous internal service APIs** when the approved interaction requires an immediate authoritative response. `REQUEST` freshness explicitly uses durable asynchronous admission and Saga coordination; it is not an immediate HTTP dependency.
 
 Use **RabbitMQ/MassTransit** for durable facts, asynchronous commands, downstream reactions and eventually consistent integration.
 
-Do not use publish/subscribe merely as RPC in disguise.
+Do not use publish/subscribe merely as blocking RPC in disguise. Approved asynchronous current-access requests and correlated Saga outcomes are intentional durable workflows.
 
 A business dependency does not automatically require a synchronous network dependency. For example, Parking Operations may business-depend on successful payment without keeping an HTTP request open while waiting for payment confirmation.
 
@@ -346,7 +372,7 @@ A real RabbitMQ integration test is required when the claim depends on broker to
 Select verification categories according to the behavior changed; do not mechanically run irrelevant suites:
 
 - HTTP success plus applicable binding/type/content errors; correct status/envelope; challenge/forbid headers; 404/405/415/429 or other framework producers when relevant.
-- Authorization for every role/scope affected by the feature, including current Account/session validity, own-resource/tenant/site boundaries, revocation/lock behavior, and service-to-service identity where applicable.
+- Authorization for every role/scope affected by the feature, including TOKEN/REQUEST behavior selected by the approved matrix and use-case design, UserService local security checks, own-resource/tenant/site boundaries, accepted stale/revocation windows, and service-to-service identity where applicable. For REQUEST test either branch order, denial during in-flight work, late success, stale authorization attempts, unknown outcomes, deadlines and restart recovery; no speculative step is enabled without its own approval.
 - Input and Domain boundary cases, including unknown JSON fields being ignored without mutating protected/unsupported fields.
 - Concurrency tests proportional to the actual invariant: simple accepted last-write-wins updates do not require lock/race harnesses solely for ceremony; flows that depend on serialization require real PostgreSQL conflicting interleavings, fresh-state verification and every participating writer/protocol.
 - When messaging/outbox is in scope: business/outbox atomicity, no event after rollback, stable event identity across delivery retries, duplicate/redelivery safety, broker outage/recovery, durable routing/topology and consumer idempotency as applicable.
@@ -360,6 +386,7 @@ Deliver actual files changed, request-to-response call path, decisions versus pr
 ## 11. Quick rejection checklist for agent-generated changes
 
 - Reject client-selected actor/owner identifiers used as authorization authority for own-resource operations, and reject authorization that ignores the authenticated/current Account/session/scope required by the contract.
+- Reject blanket current-access network checks for TOKEN, synchronous REQUEST admission, unapproved speculation, finalization before Allowed, fabricated user actors, raw JWT persistence, unbounded retry and unknown-as-failed cleanup.
 - Reject transactions/locks added without an identified concurrency invariant, and reject atomic-authorization claims when competing writers are not coordinated through the same protocol and fresh state.
 - Reject broad tracked-entity Update or request-to-entity mapping that can overwrite security fields.
 - Reject unapproved client-controlled references, ownership claims, media/security-field mutations, or invented read conversions that are not supported by the authoritative contract.

@@ -15,6 +15,20 @@ Final document/package checks: 22 October 2026 (Asia/Saigon). **v1.1 documentati
 
 No application/integration tests, provider calls, database operations, deployment/setup, commits, pushes or Jira writes were performed. The fake VNeID GUID is an approved persisted-user requirement, not an implemented schema/API claim. The development reset remains future work after documentation approval and schema/seed alignment.
 
+## Authorization documentation validation — 4 November 2026
+
+Scope: integration of the two user-supplied approved authorization documents into current docs and agent setup on `develop`, baseline `40f546831047166616ed1f5ec696bad525c246cc`. This is documentation verification, not runtime security acceptance.
+
+- `git diff --check`: PASS at the documentation milestone; final check recorded in the session.
+- Added/changed relative Markdown links and heading anchors: checked against resolved local targets; no newly introduced broken target/anchor at the validation milestone.
+- Imported operation matrix rows and numeric default table: compared programmatically with the supplied source; exact content preserved.
+- Approval status: CQRS §6 and numeric defaults §9 explicitly approved by the user; remaining conceptual wire/use-case details retain their qualifications.
+- Acceptance specifications: 14 unique AF identifiers, all NOT RUN. No claim that source inspection or documentation checks execute those scenarios.
+- Scope: only Markdown under `docs/` and `ai/`; no runtime, schema, package or configuration edits. Existing historical snapshots/reports and unrelated active session preserved.
+- Application build/tests: NOT RUN, documentation-only scope; runtime adoption remains OPEN.
+
+Final inventory and validation results: [completed session](../../ai/tasks/completed/SESSION-20261104-authorization-documentation.md).
+
 ## Historical RC3 validation record
 
 The following record is preserved from its original 13 October preparation context. Its PASS statements/counts do not describe the current checkout or prove v1.1 acceptance.

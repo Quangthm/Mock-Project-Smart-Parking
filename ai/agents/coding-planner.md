@@ -7,6 +7,12 @@
 
 ---
 
+## Canonical routing and authorization amendment — 2026-11-04
+
+Start with [ai/AGENTS.md](../AGENTS.md) before loading the shared coding skill or task-specific references. For authentication, authorization, actor context, Saga/retry or affected API/client work, load the [authorization ADR](../../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md), [operation matrix](../../docs/01-requirements/srs/authorization-operation-classification.md) and [shared coding guide §4](../../docs/07-skills/SmartPark-Coding-Skill-v1.0.md#4-trusted-actor-and-per-operation-authorization-freshness).
+
+Distinguish approved target, verified implementation and missing use-case design. The CQRS contract and numeric Saga defaults are approved; do not reopen those global choices because older files disagree. Check behavior against the matrix/use-case classification and invocation origin; do not require a code-level freshness declaration. Review local UserService security authority, pending admission/finalization gates, explicitly approved speculation, correlation and unknown-outcome recovery. Missing per-use-case details remain OPEN; the matrix neither grants permissions nor proves implementation. Use the current [API template](../../docs/03-design/api/api-design-template.md) and affected canonical feature contract, rather than treating historical API catalogues as overriding the amendment.
+
 ## 1. Intended Responsibilities
 
 1. **Clarification & Requirement Analysis:**
@@ -96,8 +102,8 @@
 
 Read in this order:
 
-1. `../../docs/07-skills/SmartPark-Coding-Skill-v1.0.md` — **primary implementation convention**.
-2. `../AGENTS.md` — router / precedence / context routing.
+1. `../AGENTS.md` — router / precedence / context routing.
+2. `../../docs/07-skills/SmartPark-Coding-Skill-v1.0.md` — **primary implementation convention**.
 3. `../rule.md` — Rule 5 supplements operational execution workflow only; it does not override the shared coding convention.
 4. `../context/architecture-guardrails.md` — architecture guardrails.
 5. `../architecture-reference.md` — verified architecture, service ownership, and conflict register when relevant.

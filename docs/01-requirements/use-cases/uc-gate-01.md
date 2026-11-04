@@ -13,6 +13,12 @@ Check in a reserved, walk-in or monthly vehicle.
 
 Gate arrival/entry requested; current operational scope.
 
+## Authorization and pending-workflow boundary — approved 2026-11-04
+
+User-initiated check-in/admission with an authenticated actor is REQUEST. Device/service paths use SERVICE; a separately authenticated operator path must declare its real actor and policy. Never fabricate a customer JWT for account-free walk-in. Only approved non-physical preparation may overlap authorization; barrier opening remains gated unless a separately approved safety/emergency rule applies.
+
+See the [operation matrix](../srs/authorization-operation-classification.md) and [mandatory REQUEST design checklist](../srs/authorization-operation-classification.md#5-implementation-documentation-checklist). Specify branch eligibility, correlation/attempts, pending observation, combined outcomes, deadlines, idempotency, revocation race, pivot, compensation and late/unknown handling before implementing the affected workflow. This amendment approves direction, not a completed Saga or wire contract.
+
 ## Main flow
 
 1. Verify arrival/identity and ticket/QR/manual evidence separately from actual entry.
