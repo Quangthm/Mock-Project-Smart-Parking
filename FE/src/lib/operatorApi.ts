@@ -35,6 +35,10 @@ const parkingServer = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
 ).replace(/\/$/, "")
 
+const paymentServer = (
+  import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "http://localhost:5065"
+).replace(/\/$/, "")
+
 export interface OperatorSlot extends ParkingSlot {
   unitId: string
   vehicleType: string
@@ -45,6 +49,23 @@ export interface OperatorSlot extends ParkingSlot {
   reservationState: ReservationState
   physicalState: PhysicalState
   isBookable: boolean
+  demoPlate?: string
+  demoImageUrl?: string
+  demoCheckedInAt?: string
+  demoSession?: DemoSlotSession
+}
+
+export interface DemoSlotSession {
+  id: string
+  originalPlate: string
+  normalizedPlate: string
+  vehicleType: string
+  ticketReference: string
+  entryTime: string
+  exitTime: string | null
+  status: string
+  entryImageUrl: string | null
+  exitImageUrl: string | null
 }
 
 /**
@@ -478,6 +499,144 @@ async function operationsRequest<T>(
   )
   if (!result.success) throw new Error("Operator request failed.")
   return result.data
+}
+
+async function paymentRequest<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  prefix = "/api/v1/payments",
+  headers?: Record<string, string>,
+): Promise<T> {
+  const result = await request<Response<T>>(
+    path,
+    method,
+    body,
+    prefix,
+    paymentServer,
+    headers,
+  )
+  if (!result.success) throw new Error("Payment request failed.")
+  return result.data
+}
+
+async function checkoutRequest<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+): Promise<T> {
+  const result = await request<Response<T>>(
+    path,
+    method,
+    body,
+    "/api/checkout",
+    reservationServer,
+  )
+  if (!result.success) throw new Error("Checkout request failed.")
+  return result.data
+}
+
+export interface PricingResult {
+  finalAmountVnd: number
+  currency: string
+  totalParkedMinutes: number
+  isFreeStay: boolean
+}
+
+export interface PaymentOrder {
+  orderId: string
+  orderCode: string
+  amount: number
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentCheckout {
+  paymentTransactionId: string
+  orderCode: number
+  amount: number
+  checkoutUrl: string
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentTransactionStatus {
+  transactionId: string
+  orderId: string
+  amount: number
+  status: string
+  paidAt: string | null
+  isAuthoritative: boolean
+}
+
+export const paymentApi = {
+  prepare: (body: {
+    siteId: string
+    referenceId: string
+    vehicleType: string
+    entryTime: string
+    sessionId?: string
+    reservationId?: string
+    plateNumber?: string
+  }) => {
+    const referenceId = body.reservationId ?? body.sessionId
+    if (!referenceId) throw new Error("A reservation or session is required.")
+    const path = body.reservationId
+      ? `/reservations/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
+      : `/sessions/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
+    return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
+      path,
+      "POST",
+      { plateNumber: body.plateNumber },
+    )
+  },
+  calculate: (body: {
+    tenantId: string
+    siteId: string
+    vehicleType: string
+    entryTime: string
+    exitTime: string
+    sessionId?: string
+    reservationId?: string
+  }) => {
+    const referenceId = body.reservationId ?? body.sessionId
+    if (!referenceId) throw new Error("A reservation or session is required.")
+    return checkoutRequest<PricingResult>("/pricing", "POST", {
+      siteId: body.siteId,
+      referenceId,
+      referenceType: body.reservationId ? "RESERVATION" : "PARKING_SESSION",
+      vehicleType: body.vehicleType,
+      entryTime: body.entryTime,
+      exitTime: body.exitTime,
+    })
+  },
+  createOrder: (body: {
+    tenantId: string
+    siteId: string
+    referenceId: string
+    referenceType: "RESERVATION" | "PARKING_SESSION"
+    amount: number
+    accountId?: string
+    idempotencyKey: string
+  }) => {
+    throw new Error("Payment orders must be prepared by OperationService.")
+  },
+  initiate: (orderId: string, idempotencyKey: string) =>
+    checkoutRequest<PaymentCheckout>(
+      `/orders/${encodeURIComponent(orderId)}/payos`,
+      "POST",
+      { idempotencyKey },
+    ),
+  cash: (orderId: string, idempotencyKey: string) =>
+    checkoutRequest<PaymentTransactionStatus>(
+      `/orders/${encodeURIComponent(orderId)}/cash`,
+      "POST",
+      { idempotencyKey },
+    ),
+  demoPay: (orderId: string) =>
+    checkoutRequest<PaymentTransactionStatus>(`/orders/${encodeURIComponent(orderId)}/demo-pay`, "POST"),
+  status: (transactionId: string) =>
+    checkoutRequest<PaymentTransactionStatus>(`/transactions/${encodeURIComponent(transactionId)}/status`),
 }
 
 export const reservationApi = {

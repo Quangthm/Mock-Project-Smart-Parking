@@ -194,7 +194,7 @@ public sealed class ParkingStructureService(
             var snapshot = await commitments.AcquireAsync(actor.TenantId, siteId, pending.Token, ct);
             // Operational authority may be revoked while recovery/acquire waits.
             // Recheck before opening the local transaction; this does not claim
-            // atomic revocation across UserService and ParkingService databases.
+            // atomic revocation across UserService and FacilityService databases.
             if (markedSlot.HasValue)
                 await AuthorizeAsync(actor, siteId, ct);
 

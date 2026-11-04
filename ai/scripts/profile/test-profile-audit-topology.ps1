@@ -1,6 +1,8 @@
 # PowerShell 5.1 regression checks. HTTP and sleep doubles; no broker writes.
 $ErrorActionPreference = 'Stop'
-$target = Join-Path $PSScriptRoot 'messaging/provision-profile-audit-topology.ps1'
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+$target = Join-Path $repoRoot 'scripts/messaging/provision-profile-audit-topology.ps1'
+if (!(Test-Path -LiteralPath $target -PathType Leaf)) { throw "Profile-audit topology provisioner not found: $target" }
 $credential = New-Object PSCredential('fixture', (ConvertTo-SecureString 'fixture' -AsPlainText -Force))
 Add-Type @'
 public class TopologyTestResponse : System.Net.WebResponse {

@@ -1,80 +1,69 @@
-## Introduction
+# SmartPark — Hệ thống quản lý bãi đỗ xe thông minh
 
-Hướng dẫn chạy test PostgreSQL bằng Visual Studio hoặc terminal: [tests/README.md](tests/README.md).
+SmartPark là hệ thống quản lý bãi đỗ xe gồm backend microservice .NET, frontend React (có phần 3D/digital twin), và bộ cơ sở dữ liệu PostgreSQL theo từng service.
 
-This is a simple pipeline example for a .NET Core application, showing just
-how easy it is to get up and running with .NET development using GitLab.
+## Thành phần chính
 
-# Reference links
+| Khu vực | Nội dung |
+| :--- | :--- |
+| Backend | 5 microservice .NET trong `src/Services/`: `UserService`, `FacilityService`, `OperationService`, `PaymentService`, `IoTService` |
+| Frontend | React (Vite) trong `FE/`, gồm cả chế độ xem 2D/3D bãi xe |
+| Cơ sở dữ liệu | 6 database PostgreSQL, khởi tạo từ `scripts/database/microservices/` qua `compose.schema-integration.yml` |
+| Messaging | RabbitMQ + MassTransit (`compose.schema-integration.yml` cung cấp container `smartpark-rabbitmq`) |
 
-- [GitLab CI Documentation](https://docs.gitlab.com/ee/ci/)
-- [.NET Hello World tutorial](https://dotnet.microsoft.com/learn/dotnet/hello-world-tutorial/)
+## Bắt đầu nhanh
 
-If you're new to .NET you'll want to check out the tutorial, but if you're
-already a seasoned developer considering building your own .NET app with GitLab,
-this should all look very familiar.
+```powershell
+# 1. Tạo file cấu hình môi trường và điền mật khẩu dev
+Copy-Item .env.example .env
 
-## What's contained in this project
+# 2. Khởi tạo schema + build (chạy một lần)
+.\setup.ps1
 
-The root of the repository contains the out of the `dotnet new console` command,
-which generates a new console application that just prints out "Hello, World."
-It's a simple example, but great for demonstrating how easy GitLab CI is to
-use with .NET. Check out the `Program.cs` and `dotnetcore.csproj` files to
-see how these work.
+# 3. Chạy stack ứng dụng
+.\scripts\run-app-service.ps1 -Service All
 
-In addition to the .NET Core content, there is a ready-to-go `.gitignore` file
-sourced from the the .NET Core [.gitignore](https://github.com/dotnet/core/blob/master/.gitignore). This
-will help keep your repository clean of build files and other configuration.
+# 4. Nạp dữ liệu demo (tùy chọn)
+.\scripts\seed-demo-site.ps1
 
-Finally, the `.gitlab-ci.yml` contains the configuration needed for GitLab
-to build your code. Let's take a look, section by section.
-
-First, we note that we want to use the official Microsoft .NET SDK image
-to build our project.
-
-```
-image: microsoft/dotnet:latest
+# 5. Dừng stack
+.\scripts\stop-app-service.ps1 -Service All
 ```
 
-We're defining two stages here: `build`, and `test`. As your project grows
-in complexity you can add more of these.
+- Hướng dẫn chi tiết theo từng bước: [LOCAL-SETUP.md](LOCAL-SETUP.md)
+- Bản rút gọn: [QUICK_START.md](QUICK_START.md)
+- Chạy test PostgreSQL bằng Visual Studio hoặc terminal: [tests/README.md](tests/README.md)
 
-```
-stages:
-    - build
-    - test
-```
+> **Cảnh báo:** `setup.ps1` có nhánh reset chạy `docker compose ... down -v`, tức là xoá volume của cả 6 database. Đọc kỹ trước khi chạy trên môi trường đang có dữ liệu cần giữ.
 
-Next, we define our build job which simply runs the `dotnet build` command and
-identifies the `bin` folder as the output directory. Anything in the `bin` folder
-will be automatically handed off to future stages, and is also downloadable through
-the web UI.
+## Kiểm thử
 
-```
-build:
-    stage: build
-    script:
-        - "dotnet build"
-    artifacts:
-      paths:
-        - bin/
+```powershell
+dotnet build SmartParking.slnx
+dotnet test SmartParking.slnx
 ```
 
-Similar to the build step, we get our test output simply by running `dotnet test`.
+- Bộ test backend nằm trong `tests/Services/`.
+- Một số test tích hợp cần PostgreSQL đang chạy và connection string qua biến môi trường (xem `tests/README.md` và `.\scripts\configure-test-settings.ps1`).
 
-```
-test:
-    stage: test
-    script: 
-        - "dotnet test"
-```
+## Tài liệu
 
-This should be enough to get you started. There are many, many powerful options 
-for your `.gitlab-ci.yml`. You can read about them in our documentation 
-[here](https://docs.gitlab.com/ee/ci/yaml/).
+Bắt đầu từ chỉ mục [docs/README.md](docs/README.md).
 
-## Developing with Gitpod
+| Khu vực | Nội dung |
+| :--- | :--- |
+| `docs/01-requirements/` | SRS, business rules, use cases, traceability (baseline v1.1) |
+| `docs/02-architecture/` | Kiến trúc service, hợp đồng API, thiết kế database |
+| `docs/03-design/api/` | Thiết kế API theo domain — endpoint mới phải theo `api-design-template.md` |
+| `docs/04-testing/` | Kế hoạch test, test case, Postman collection, báo cáo |
+| `docs/05-project-management/` | Decision log, handoff, thay đổi và validation |
 
-This template repository also has a fully-automated dev setup for [Gitpod](https://docs.gitlab.com/ee/integration/gitpod.html).
+## Quy ước cho AI agent
 
-The `.gitpod.yml` ensures that, when you open this repository in Gitpod, you'll get a cloud workspace with .NET Core pre-installed, and your project will automatically be built and start running.
+- [AGENTS.md](AGENTS.md) là điểm vào, trỏ tới router chuẩn [ai/AGENTS.md](ai/AGENTS.md).
+- Mọi task code/review phải nạp `docs/07-skills/SmartPark-Coding-Skill-v1.0.md` theo router.
+
+## Đóng góp và giấy phép
+
+- Quy ước đóng góp: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Giấy phép: [LICENSE](LICENSE)
