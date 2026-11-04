@@ -12,7 +12,7 @@
 | AC-006 | E01 | Online refund unsupported or timeout | Visible pending/reconciliation; no silent cash fallback or duplicate refund | NOT RUN |
 | AC-007 | E01 | Original cash overcollection | Audited cash return, payout proof independent of charge-covered settlement | NOT RUN |
 | AC-008 | E02; V11-06 | Owner invites Operator; Operator verifies email and completes mandatory simulation, with or without password setup | Activation only after verified contact and simulation; password optional; no Admin per-hire approval; assigned-lot access only; cross-owner/self-promotion rejected | NOT RUN |
-| AC-009 | E02 | Revoked Operator replays previous private request/command | No new protected access/effect; historical attribution retained | NOT RUN |
+| AC-009 | E02 + 2026-11-04 freshness amendment | Revoked Operator replays previous private request/command | Apply declared freshness and local scope: TOKEN may retain claims until expiry; REQUEST uses current Account authority at its gate; UserService local security checks remain current. No cross-resource bypass; preserve history. | NOT RUN |
 | AC-010 | E03 | Full monthly-covered booking under fixed-deposit mode | Explicit zero-payment confirmation; one compatible claim; no provider success fabrication | NOT RUN |
 | AC-011 | E03 | Partial monthly booking coverage | Covered ordinary fees excluded before minimum; positive balance uses chosen prepayment | NOT RUN |
 | AC-012 | A-01 | Cancel pass with future zero-priced dependent booking | List blockers; Driver must explicitly cancel booking before pass cancellation completes | NOT RUN |
@@ -105,7 +105,7 @@ Use a real local TOTP implementation with documented security settings and clock
 | AC-059 | Admin TOTP/BOTH reset; grant delivery failure | Old factor/codes/sessions revoked; REPLACEMENT_REQUIRED blocks all ordinary login; no success before required new proof/password completion. | NOT RUN |
 | AC-060 | Sole seeded Admin requests assisted self-reset, or Owner resets Operator | Reject application-level self-approval/Owner reset; seeded Admin uses controlled maintainer recovery. Ordinary own security operations retain their proof requirements. | NOT RUN |
 | AC-061 | No other Admin | Use controlled verified maintainer procedure; if unavailable or verification insufficient remain pending; no public bypass. | NOT RUN |
-| AC-062 | Login races reset; old JWT and refresh after change | Current security/factor version enforced; pre-change session cannot authorize APIs or SignalR. | NOT RUN |
+| AC-062 | Login races reset; old JWT and refresh after change | UserService rejects stale issuance/refresh/local security context. Resource TOKEN may remain usable until expiry; REQUEST evaluates current Account authority, not exact-session continuity. SignalR logout is best effort; test missed notification. | NOT RUN |
 | AC-063 | Duplicate Admin command or support timeout | One mutation; query same operation; approved ticket is not completed reset; durable recovery retains outcome. | NOT RUN |
 | AC-064 | Blocked account/Owner pending approval after recovery | Credential recovery does not unblock, approve or grant rights. | NOT RUN |
 | AC-065 | Evidence/notification export and log inspection | Scoped access and redaction; no secrets/QR/codes/tokens in log/event/export; delivery failure separate from mutation. | NOT RUN |
@@ -186,3 +186,7 @@ Technical design-pending values are prerequisites to execution, not invented fix
 | AC-122 | RA-06 | FR-BAS-03, UC-RES-02 | Reallocation limit and alternative-offer duration are resolved policies | Defaults are 2 accepted Driver requests and 5-minute offer duration; permitted overrides affect future commands/offers while retries/invalid/system recovery remain excluded and offer equality remains expired. | NOT RUN |
 | AC-123 | RA-06 | FR-BAS-04, FR-MAP-02 | Occupancy validity is resolved from configurable policy | Default is 4 hours; permitted override changes projection horizon only. Newer authoritative evidence may end/change projection earlier; expiry never releases physical occupancy. | NOT RUN |
 | AC-124 | RA-06 | FR-MON-03/09/10, M-02/M-03 | Monthly product resolves payment hold, renewal window, expiry notices and max prepaid terms | Defaults are 15 min / 7 days / 7+1 day reminders / 3 terms. Permitted Owner/product overrides within Admin bounds apply prospectively; strict A<H, no capacity hold, no automatic renewal and yearly separation remain. | NOT RUN |
+
+## Authorization freshness amendment — 2026-11-04
+
+[AF-001–AF-014](authorization-freshness-scenarios.md) are additional acceptance specifications, all NOT RUN. AC-009 and AC-062 above are revised unexecuted expectations; historical executed reports are unchanged.

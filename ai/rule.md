@@ -12,7 +12,7 @@
 | **Rule 2** | **Pull Request Skill** | [`docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Pull_Request_SKILL_v1.0.md) |
 | **Rule 3** | **Session Skill** | [`docs/07-skills/SmartParking_Session_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Session_SKILL_v1.0.md) |
 | **Rule 4** | **.env Config Skill** | [`docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md`](../docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) |
-| **Rule 5** | **Coding Skill** | [`ai/architecture-reference.md`](architecture-reference.md) |
+| **Rule 5** | **Coding Skill** | [`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`](../docs/07-skills/SmartPark-Coding-Skill-v1.0.md) |
 
 ---
 
@@ -194,6 +194,7 @@ Trong quá trình thực hiện task, Agent bắt buộc phải cập nhật ses
 ---
 
 ### Rule 5. Coding Skill (Quy chuẩn kiến trúc & Triển khai mã nguồn)
+- **Primary implementation convention:** [shared coding skill](../docs/07-skills/SmartPark-Coding-Skill-v1.0.md), loaded through `ai/AGENTS.md`. For auth/CQRS/Saga work follow the approved [authorization ADR](../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [operation matrix](../docs/01-requirements/srs/authorization-operation-classification.md); this operational rule does not override those decisions.
 - **Tài liệu tham chiếu:** [`ai/architecture-reference.md`](architecture-reference.md) và [`ai/context/architecture-guardrails.md`](context/architecture-guardrails.md).
 - **Yêu cầu cốt lõi khi lập trình:**
   1. **Clean Architecture (5 layers):** Tuân thủ hướng phụ thuộc `Domain ← Application ← Infrastructure/Persistence ← API`.

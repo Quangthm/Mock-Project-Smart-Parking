@@ -1,6 +1,6 @@
 # Action-by-role permission matrix — v1.1
 
-Every action below requires current account/grant state and target resource scope in the owning service. D=Driver acting on own records; O=assigned Operator; W=Owner of the lot/organization; A=Admin with the named platform function. A dash means no grant from this baseline. Multiple roles do not imply unrestricted role inheritance. Stable action names below are technical contract identifiers, not newly granted product privileges. Retries and private cached-result reads reauthorize the caller. Worker execution continues already-authorized durable business work under service credentials; it is not a human privilege bypass.
+Every action below requires the applicable role/permission and target resource scope in the owning service. Authorization freshness follows the [approved operation matrix](authorization-operation-classification.md): `TOKEN` default, six named `REQUEST` families, and separate public/authentication/service origins. `TOKEN` accepts token-time claim freshness; UserService security operations still require authoritative local checks. D=Driver acting on own records; O=assigned Operator; W=Owner of the lot/organization; A=Admin with the named platform function. A dash means no grant from this baseline. Multiple roles do not imply unrestricted role inheritance. Stable action names below are technical contract identifiers, not newly granted product privileges. Retries and private cached-result reads authorize the caller under the operation's declared freshness and local scope policy. Workers use trusted service credentials and the persisted workflow policy: pending `REQUEST` is not final authorization, and its gated effects require an accepted Account-current `Allowed`. Already-authorized work follows its state-specific revocation/continuation contract.
 
 | Action/resource | D | O | W | A | Executor / guard / delegator |
 |---|---|---|---|---|---|
@@ -44,6 +44,10 @@ Every action below requires current account/grant state and target resource scop
 | cancellation-abuse.configure/dispose-alert | — | — | — | platform policy/disposition | Operations authoritative restriction; Audit projects; no automatic ban |
 | retention.execute | — | request scoped holds | request scoped holds | policy/investigation within baseline | Data-owning service; automatic due processing, no blanket private read |
 
+
+## Classification does not grant a permission
+
+Combined action rows above are permission groupings, not freshness classifications: reservation reads are `TOKEN`, creation/cancel-own-future/modify-reschedule are `REQUEST`; new plan registration is `REQUEST`, existing-plan renewal/change/cancel remains `TOKEN` initially. Device/provider/service variants use their own trust contracts. A classification row describing role/permission writes does not introduce an MVP role-management feature. Use the matrix for exact invocation distinctions and the [ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) for enforcement semantics.
 
 ## SEC-02 account security permissions
 

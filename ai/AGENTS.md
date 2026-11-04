@@ -49,8 +49,10 @@ Loading context follows a 3-tier strategy:
 | **Frontend-only changes** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + `FE/AGENTS.md` | Relevant FE requirements/components/stores/styles/tests | Backend architecture/DB docs unless the frontend change crosses that boundary |
 | **Architecture or API contract changes** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + `ai/architecture-reference.md` | `docs/02-architecture/`; `docs/03-design/api/` (template: `docs/03-design/api/api-design-template.md`); `ai/context/architecture-guardrails.md`; affected contracts | Unrelated service code |
 | **Build / test / CI failures** | Verification commands below | Failing build/test output; affected project `.csproj` or config; coding skill when a code change is required | Architecture docs, unless diagnosing root cause |
-| **Security / auth / secrets** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + Safety rules below | `ai/context/architecture-guardrails.md`; affected auth implementations & policies | Unrelated service docs |
+| **Security / auth / secrets** | **`docs/07-skills/SmartPark-Coding-Skill-v1.0.md`** + Safety rules below | Authorization ADR and operation classification matrix (canonical paths below); `ai/context/architecture-guardrails.md`; affected auth implementations & policies | Unrelated service docs |
 | **Unknown or cross-cutting tasks** | Start with smallest context; load the shared coding skill before making code changes | Investigate repo; load `ai/context/project-context.md`, `ai/architecture-reference.md` and relevant contracts | Nothing is unconditionally skipped |
+
+> **Authorization routing:** For authentication, authorization, revocation, CQRS actor handling, Saga/retry design, affected API contracts or client forced logout, load the canonical authorization ADR and operation matrix below. Apply their approved 2026-11-04 decisions; retain explicitly delegated use-case details as OPEN/DEFERRED and distinguish target policy from current runtime. Do not reopen already approved global decisions merely because older guidance conflicts.
 
 > **Conditional skips are not prohibitions.** Always load additional context when evidence shows the task crosses a previously assumed boundary.
 
@@ -60,6 +62,8 @@ Loading context follows a 3-tier strategy:
 |---|---|
 | Requirements (SRS) | `docs/01-requirements/srs/smartpark-srs-v1.1.md` (Module breakdown under `docs/01-requirements/srs/modules/`) |
 | Use cases | `docs/01-requirements/use-cases/` |
+| Authorization freshness & Saga reliability | `docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md` |
+| Operation freshness / invocation classification | `docs/01-requirements/srs/authorization-operation-classification.md` (separate from `permissions.md` role grants) |
 | Business rules | `docs/01-requirements/business-rules/` (and `policy-catalogue.md`) |
 | Architecture & Solution Design | `docs/02-architecture/solution-architecture/smartpark-solution-architecture-v1.1.md` |
 | Service boundaries | `docs/02-architecture/service-boundaries/` |

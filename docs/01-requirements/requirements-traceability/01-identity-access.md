@@ -25,3 +25,7 @@ Original IDs retained; SEC-01/02 adds5 FRs,4 rules,3 UCs and3 cross-role stories
 ## v1.1 decision and acceptance links
 
 V11-01–04, V11-06–07, V11-11; D01–10, D12: [exact changed clauses, API/architecture contracts and acceptance scenarios](v1.1-decision-coverage.md). Existing IDs are retained; these associations describe requirements, not implementation/test completion.
+
+## Authorization freshness amendment — 2026-11-04
+
+FR-AUTH-06 and BR-AUTH-01/07 retain their IDs with revised freshness semantics; BR-AUTH-03 resource ownership remains mandatory; FR-AUTH-02/04 and recovery rules retain UserService local authority. See the [operation matrix](../srs/authorization-operation-classification.md), [ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [AF-001–AF-014 acceptance/coverage map](../../04-testing/requirements-traceability/authorization-freshness-scenarios.md). The map covers affected reservation, gate and plan use cases without inventing missing modify/reschedule APIs. Existing product permissions remain unchanged; no implementation/test completion asserted.
