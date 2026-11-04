@@ -58,7 +58,7 @@ export function OperatorAssignments({ currentLot, sites = [] }: OperatorAssignme
         </button>} />
 
       {loading && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+        <div role="status" className="sr-only">
           Loading assigned facilities and permissions…
         </div>
       )}
@@ -105,7 +105,7 @@ export function OperatorAssignments({ currentLot, sites = [] }: OperatorAssignme
           </p>
         </div>
 
-        {assignments.length > 0 ? (
+        {loading ? null : assignments.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {assignments.map((assignment) => (
               <div

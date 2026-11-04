@@ -368,9 +368,45 @@ function siteFromOperationalLayout(
   }
 }
 
-export async function loadOperatorSites(user: User | null): Promise<OperatorSite[]> {
-  if (!user) return []
+function isStructureBusy(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const response = error as { status?: number; code?: string; message?: string }
+  return response.status === 409 &&
+    (response.code === "STRUCTURE_BUSY" || response.message === "Another request is managing this site.")
+}
 
+async function readOperatorLayout<T>(read: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await read()
+    } catch (error) {
+      if (!isStructureBusy(error)) throw error
+      if (attempt === 2) {
+        throw new Error("This parking site is temporarily busy. Please refresh in a moment.")
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+    }
+  }
+  throw new Error("Could not load the parking site.")
+}
+
+const operatorSiteLoads = new Map<string, Promise<OperatorSite[]>>()
+
+export function loadOperatorSites(user: User | null): Promise<OperatorSite[]> {
+  if (!user) return Promise.resolve([])
+  if (user.role !== "operator") return fetchOperatorSites(user)
+
+  const pending = operatorSiteLoads.get(user.id)
+  if (pending) return pending
+
+  const load = fetchOperatorSites(user).finally(() => {
+    if (operatorSiteLoads.get(user.id) === load) operatorSiteLoads.delete(user.id)
+  })
+  operatorSiteLoads.set(user.id, load)
+  return load
+}
+
+async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
   if (user.role === "owner") {
     const sites = await parkingApi.list()
     const siteById = new Map(sites.map((site) => [site.id, site]))
@@ -393,21 +429,38 @@ export async function loadOperatorSites(user: User | null): Promise<OperatorSite
   }
 
   const assignments = await operatorsApi.assignments()
+  if (!Array.isArray(assignments)) {
+    throw new Error("The assignment service returned an invalid site list. Please try again.")
+  }
   const projections = await Promise.allSettled(
-    assignments.map((assignment) => parkingApi.operationalLayout(assignment.siteId)),
+    assignments.map(async (assignment) => {
+      const projection = await readOperatorLayout(() => parkingApi.operationalLayout(assignment.siteId))
+      if (projection?.siteId && projection.siteId !== assignment.siteId) {
+        throw new Error("The parking service returned a layout for a different site.")
+      }
+      if (projection && projection.siteId === assignment.siteId &&
+          typeof projection.siteCode === "string" && typeof projection.siteName === "string" &&
+          Array.isArray(projection.floors) && Array.isArray(projection.slots)) {
+        return siteFromOperationalLayout(projection, assignment.tenantId)
+      }
+
+      // shortcut: older Facility deployments can return an incomplete projection; use their scoped Operator layout until upgraded.
+      const legacy = await readOperatorLayout(() => parkingApi.operatorLayout(assignment.siteId))
+      if (legacy?.site?.id !== assignment.siteId ||
+          !Array.isArray(legacy.units) || !Array.isArray(legacy.slots) || !Array.isArray(legacy.capacityViews)) {
+        throw new Error("The parking service returned an incomplete layout for this assigned site.")
+      }
+      return siteFromStructure(legacy)
+    }),
   )
-  const available = projections.flatMap((result, index) =>
-    result.status === "fulfilled" ? [{ projection: result.value, assignment: assignments[index] }] : [],
+  const available = projections.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
   )
   if (assignments.length > 0 && available.length === 0) {
     const firstFailure = projections.find(result => result.status === "rejected")
     throw firstFailure?.status === "rejected" ? firstFailure.reason : new Error("Assigned parking sites are unavailable.")
   }
-  return Promise.all(available.map(async ({ projection, assignment }) => {
-    const site = siteFromOperationalLayout(
-      projection,
-      assignment.tenantId,
-    )
+  return Promise.all(available.map(async (site) => {
     const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
     return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
   }))

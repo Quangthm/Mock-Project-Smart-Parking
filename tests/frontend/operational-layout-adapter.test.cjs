@@ -320,6 +320,42 @@ test('operator sites map the authoritative projection and keep both axes on OCCU
   assert.equal(bookableSlot.status, 'available');
 });
 
+test('assigned operator site uses the scoped legacy layout when the live projection lacks its arrays', async () => {
+  const legacy = {
+    site: {
+      id: fresh.siteId, tenantId: 'tenant-1', code: fresh.siteCode, name: fresh.siteName,
+      address: 'Assigned lot', latitude: null, longitude: null, isActive: true,
+    },
+    units: [], slots: [], capacityViews: [],
+  };
+  let legacyCalls = 0;
+  const operatorApi = load('lib/operatorApi.ts', {
+    ...operatorApiImports,
+    './parkingApi': {
+      operatorsApi: { assignments: async () => [{ siteId: fresh.siteId, tenantId: 'tenant-1', permissions: ['SLOT_OVERRIDE'] }] },
+      parkingApi: {
+        operationalLayout: async () => ({ siteId: fresh.siteId, siteName: fresh.siteName }),
+        operatorLayout: async id => { assert.equal(id, fresh.siteId); legacyCalls++; return legacy; },
+      },
+    },
+  }, operatorApiReplacements);
+
+  const sites = await operatorApi.loadOperatorSites({ id: 'operator-1', role: 'operator' });
+  assert.equal(legacyCalls, 1);
+  assert.equal(sites.length, 1);
+  assert.equal(sites[0].id, fresh.siteId);
+  assert.equal(sites[0].name, fresh.siteName);
+  assert.equal(sites[0].freshness, null);
+});
+
+test('invalid operator assignments report an API contract error instead of a map exception', async () => {
+  const operatorApi = load('lib/operatorApi.ts', {
+    ...operatorApiImports,
+    './parkingApi': { operatorsApi: { assignments: async () => undefined }, parkingApi: {} },
+  }, operatorApiReplacements);
+  await assert.rejects(operatorApi.loadOperatorSites({ id: 'operator-1', role: 'operator' }), /invalid site list/);
+});
+
 // F3: the owner path now reads the same authoritative projection as the operator
 // path, and only borrows site metadata (address/lat/lng/isActive/tenantId) from
 // `parkingApi.list()`.

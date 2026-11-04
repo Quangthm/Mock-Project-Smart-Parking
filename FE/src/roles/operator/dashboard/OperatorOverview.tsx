@@ -66,7 +66,7 @@ export function OperatorOverview({
 
   return (
     <div className="space-y-6">
-      <PageHeader title={lot.name} eyebrow={<>{lot.code}{lot.address ? ` · ${lot.address}` : ''}</>} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
+      <PageHeader title={lot.name} eyebrow={lot.address || undefined} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5">
             <span className="text-xs font-medium text-[var(--muted)] pl-2">Site:</span>
             <RoundedSelect
