@@ -804,6 +804,7 @@ export function CheckInOut({
         dateLabel="Entry"
         emptyMessage="Parking sessions for this site will appear here after check-in."
         loading={sessionsLoading}
+        quietLoading
         error={sessionsError}
         onRetry={() => setHistoryRefresh(current => current + 1)}
         showVehicleFilter

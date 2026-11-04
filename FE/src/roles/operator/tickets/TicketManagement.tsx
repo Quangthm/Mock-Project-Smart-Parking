@@ -167,7 +167,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         </div>
       )}
       {loading && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+        <div role="status" className="sr-only">
           Loading support tickets…
         </div>
       )}
@@ -274,7 +274,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
 
       {/* Ticket Cards List */}
       <div className="space-y-3">
-        {filteredTickets.length === 0 ? (
+        {!loading && filteredTickets.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--muted)]">
             No support tickets found matching the filter criteria.
           </div>
