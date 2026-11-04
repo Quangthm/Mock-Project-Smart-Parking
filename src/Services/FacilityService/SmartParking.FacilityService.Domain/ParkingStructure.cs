@@ -89,7 +89,7 @@ public sealed class ParkingStructure
     { if (!valid) throw new StructureException(code, message); }
     private static string Text(string value, int max)
     {
-        Require(!string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max, $"Text must contain 1Ă¢â‚¬â€œ{max} characters.");
+        Require(!string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max, $"Text must contain 1-{max} characters.");
         return value.Trim();
     }
     private SpatialUnit Unit(Guid id) => units.SingleOrDefault(u => u.Id == id)
@@ -299,7 +299,7 @@ public sealed class ParkingStructure
     // no selected resource is ever partially applied.
     public void ApplyBatch(IReadOnlyList<StructureBatchItem> items)
     {
-        Require(items.Count is >= 1 and <= 50, "A batch must contain 1â€“50 items.");
+        Require(items.Count is >= 1 and <= 50, "A batch must contain 1-50 items.");
         var failures = new List<StructureBatchFailure>();
         foreach (var item in items)
             if (BatchFailure(item) is { } failure) failures.Add(failure);

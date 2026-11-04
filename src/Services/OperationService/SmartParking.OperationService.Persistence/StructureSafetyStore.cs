@@ -19,7 +19,7 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
     private const int MaxTransactionAttempts = 3;
     private static readonly TimeSpan RetryBaseDelay = TimeSpan.FromMilliseconds(25);
 
-    public async Task<object> ImpactAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    public async Task<StructureImpactResponse> ImpactAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(
             System.Data.IsolationLevel.RepeatableRead, ct);
@@ -31,23 +31,22 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             .OrderBy(r => r.ExpectedStartTime)
             .ThenBy(r => r.ConfirmedAt)
             .ThenBy(r => r.Id)
-            .Select(r => new
-            {
-                id = r.Id,
-                status = r.Status,
-                expectedStart = r.ExpectedStartTime,
-                confirmedAt = r.ConfirmedAt,
-                unitId = r.TargetSpatialUnitId,
-                slotId = r.TargetSlotId
-            }).ToListAsync(ct);
+            .Select(r => new ReservationImpactItem(
+                r.Id,
+                r.Status,
+                r.ExpectedStartTime,
+                r.ConfirmedAt,
+                r.TargetSpatialUnitId,
+                r.TargetSlotId
+            )).ToListAsync(ct);
         var sessions = await db.ParkingSessions.AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ExitTime == null)
             .OrderBy(s => s.EntryTime)
             .ThenBy(s => s.Id)
-            .Select(s => new { id = s.Id, slotId = s.CurrentSlotId })
+            .Select(s => new SessionImpactItem(s.Id, s.CurrentSlotId))
             .ToListAsync(ct);
         await transaction.CommitAsync(ct);
-        return new { reservations, sessions, priority = "expectedStartThenConfirmation", preference = "sameLotThenZone" };
+        return new StructureImpactResponse(reservations, sessions);
     }
 
     public Task<HoldSnapshot> AcquireAsync(Guid tenantId, Guid siteId, Guid token, CancellationToken ct) =>
@@ -266,12 +265,15 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
         var postgres = DatabaseException(error);
         return postgres is not null &&
             (postgres.SqlState == PostgresErrorCodes.SerializationFailure ||
-             postgres.SqlState == PostgresErrorCodes.DeadlockDetected);
+             postgres.SqlState == PostgresErrorCodes.DeadlockDetected ||
+             postgres.SqlState == PostgresErrorCodes.UniqueViolation ||
+             postgres.SqlState == "55P03");
     }
 
     // 25 ms then 50 ms, plus up to 25 ms of jitter so competing retries do not stay in lockstep.
     private static TimeSpan RetryDelay(int attempt)
         => RetryBaseDelay * Math.Pow(2, attempt - 1) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 25));
+
     private void AddReceipt(Guid tenantId, Guid siteId, Guid token, string payload) =>
         db.StructureReleaseReceipts.Add(new StructureReleaseReceiptRow
         {
@@ -287,4 +289,3 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
     private static Task LockSiteAsync(Guid siteId, CancellationToken ct) =>
         Task.CompletedTask;
 }
-
