@@ -10,7 +10,7 @@ import type { LotType } from "../../../lib/types"
 
 import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 
-import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
+import { PasswordVisibilityButton, PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
@@ -339,6 +339,8 @@ export function SignUp() {
   const [error, setError] = useState("")
 
   const [showPassword, setShowPassword] = useState(false)
+  const [showDriverConfirmPassword, setShowDriverConfirmPassword] = useState(false)
+  const [showOwnerConfirmPassword, setShowOwnerConfirmPassword] = useState(false)
 
   const [showTnC, setShowTnC] = useState(false)
 
@@ -736,20 +738,23 @@ export function SignUp() {
               <PasswordStrength pw={driverForm.password} />
             </Field>
             <Field label="Confirm Password">
-              <input
-                className="input"
-                type="password"
-                value={driverForm.confirmPassword}
-                onChange={(e) =>
-                  setDriverForm((f) => ({
-                    ...f,
-                    confirmPassword: e.target.value,
-                  }))
-                }
-                placeholder="Repeat your password"
-                required={!!driverForm.password}
-                style={{ fontSize: "1rem" }}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className="input"
+                  type={showDriverConfirmPassword ? "text" : "password"}
+                  value={driverForm.confirmPassword}
+                  onChange={(e) =>
+                    setDriverForm((f) => ({
+                      ...f,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="Repeat your password"
+                  required={!!driverForm.password}
+                  style={{ fontSize: "1rem", paddingRight: "3.25rem" }}
+                />
+                <PasswordVisibilityButton visible={showDriverConfirmPassword} onToggle={() => setShowDriverConfirmPassword((value) => !value)} />
+              </div>
             </Field>
             {error && <Err>{error}</Err>}
             <button
@@ -917,20 +922,23 @@ export function SignUp() {
               <PasswordStrength pw={ownerForm.password} />
             </Field>
             <Field label="Confirm Password">
-              <input
-                className="input"
-                type="password"
-                value={ownerForm.confirmPassword}
-                onChange={(e) =>
-                  setOwnerForm((f) => ({
-                    ...f,
-                    confirmPassword: e.target.value,
-                  }))
-                }
-                placeholder="Repeat password"
-                required={!!ownerForm.password}
-                style={{ fontSize: "1rem" }}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className="input"
+                  type={showOwnerConfirmPassword ? "text" : "password"}
+                  value={ownerForm.confirmPassword}
+                  onChange={(e) =>
+                    setOwnerForm((f) => ({
+                      ...f,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="Repeat password"
+                  required={!!ownerForm.password}
+                  style={{ fontSize: "1rem", paddingRight: "3.25rem" }}
+                />
+                <PasswordVisibilityButton visible={showOwnerConfirmPassword} onToggle={() => setShowOwnerConfirmPassword((value) => !value)} />
+              </div>
             </Field>
 
             {/* T&C — must click to read, shows modal, can't check until read */}

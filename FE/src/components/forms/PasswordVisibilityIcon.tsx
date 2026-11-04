@@ -53,3 +53,42 @@ export function PasswordVisibilityIcon({
     </svg>
   )
 }
+
+export function PasswordVisibilityButton({
+  visible,
+  onToggle,
+  label = "confirm password",
+}: {
+  visible: boolean
+  onToggle: () => void
+  label?: string
+}) {
+  const action = `${visible ? "Hide" : "Show"} ${label}`
+  return (
+    <button
+      type="button"
+      aria-label={action}
+      title={action}
+      aria-pressed={visible}
+      onClick={onToggle}
+      style={{
+        position: "absolute",
+        right: 4,
+        top: "50%",
+        transform: "translateY(-50%)",
+        display: "grid",
+        placeItems: "center",
+        width: 44,
+        height: 44,
+        padding: 0,
+        border: 0,
+        borderRadius: "50%",
+        background: "transparent",
+        color: "var(--muted)",
+        cursor: "pointer",
+      }}
+    >
+      <PasswordVisibilityIcon visible={visible} />
+    </button>
+  )
+}

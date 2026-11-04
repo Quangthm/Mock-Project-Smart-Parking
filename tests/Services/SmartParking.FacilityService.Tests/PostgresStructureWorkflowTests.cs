@@ -1,3 +1,6 @@
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.Common.Persistence;
+using SmartParking.FacilityService.Application.Common.Security;
 using Npgsql;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -790,17 +793,193 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal("DUPLICATE_IDENTIFIER", different.Code);
     }
 
-    private static MaintenanceWindowService MaintenanceWindows(DatabaseFixture fixture)
+    private static PostgresMaintenanceWindowTestFacade MaintenanceWindows(DatabaseFixture fixture)
         => new(new PostgresMaintenanceWindowStore(fixture.Parking), fixture);
 
-    private static StructureOperationService Operations(DatabaseFixture fixture)
-        => new(new StructureOperationStore(fixture.Parking, fixture.Gates), new ResolvedPlanner(), fixture.Service, fixture);
+    private sealed class PostgresMaintenanceWindowTestFacade(IMaintenanceWindowStore store, IOwnerAuthorizer owners)
+    {
+        public async Task<MaintenanceWindow> CreateAsync(
+            OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason,
+            Guid? unitId, Guid? slotId, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            (start, end) = (Utc(start), Utc(end));
+            MaintenanceWindowRules.ValidateCreate(unitId, slotId, reason, start, end, DateTime.UtcNow);
+            return await store.CreateAsync(owner, siteId, start, end, reason.Trim(), ct);
+        }
+
+        public async Task<ServiceState> StateAsync(
+            OwnerScope owner, Guid siteId, string siteStatus, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            var windows = await store.ListAsync(owner, siteId, ct);
+            var now = DateTime.UtcNow;
+            return new(MaintenanceWindowState.Derive(windows, siteStatus, now),
+                MaintenanceWindowState.ClosedUntil(windows, now), windows);
+        }
+
+        public async Task<MaintenanceWindow> ExtendAsync(
+            OwnerScope owner, Guid siteId, Guid windowId, DateTime? start, DateTime? end, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            return await store.ExtendAsync(owner, siteId, windowId,
+                start is { } from ? Utc(from) : null, end is { } to ? Utc(to) : null, ct);
+        }
+
+        public async Task CancelAsync(OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            await store.CancelAsync(owner, siteId, windowId, ct);
+        }
+
+        private static DateTime Utc(DateTime value) => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+    }
+
+    private static PostgresStructureOperationTestFacade Operations(DatabaseFixture fixture)
+        => new(new StructureOperationStore(fixture.Parking, fixture.Gates), new ResolvedPlanner(), fixture.UnitOfWork, fixture);
+
+    private sealed class PostgresStructureOperationTestFacade(
+        IStructureOperationStore store,
+        IStructureImpactPlanner planner,
+        IStructureUnitOfWork unitOfWork,
+        IOwnerAuthorizer owners)
+    {
+        public async Task<StructureOperation> ReadAsync(
+            OwnerScope owner, Guid site, Guid id, CancellationToken cancellationToken)
+        {
+            if (!await owners.IsOwnerAsync(owner, cancellationToken))
+                throw new StructureException("FORBIDDEN", "Current Owner access is required.");
+            return await store.ReadAsync(owner, site, id, cancellationToken);
+        }
+
+        public async Task<StructureOperation> ExecuteAsync(
+            OwnerScope owner, Guid site, Guid key, StructureEdit edit, CancellationToken cancellationToken)
+        {
+            if (!await owners.IsOwnerAsync(owner, cancellationToken))
+                throw new StructureException("FORBIDDEN", "Current Owner access is required.");
+            if (key == Guid.Empty)
+                throw new StructureException("INVALID_STRUCTURE", "Provide an idempotency key.");
+            if (edit.Action is not ("removeSlot" or "removeUnit" or "capacity" or "active" or "moveSlot" or "configureSlot" or "batch"))
+                throw new StructureException("INVALID_STRUCTURE", "Unsupported impact operation.");
+
+            var operation = await store.BeginAsync(owner, site, key, edit, cancellationToken);
+            await using var gate = await store.LockAsync(operation.Id, cancellationToken);
+            operation = await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+            if (operation.Status == "completed") return operation;
+
+            await unitOfWork.RecoverAsync(owner, site, cancellationToken);
+            operation = await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+            if (operation.Status == "completed") return operation;
+
+            var plan = await planner.PlanAsync(owner, site, operation.Id, edit, cancellationToken);
+            if (plan.Status != "resolved")
+            {
+                return await store.UpdateAsync(
+                    owner, operation.Id, plan.Status == "failed" ? "failed" : "pending",
+                    plan.Reason, plan.Impact, cancellationToken);
+            }
+
+            await store.UpdateAsync(
+                owner, operation.Id, "pending",
+                "Impact resolved; awaiting physical commit and projection acknowledgement.",
+                plan.Impact, cancellationToken);
+
+            try
+            {
+                await using (var session = await unitOfWork.BeginEditAsync(
+                    owner, site, cancellationToken, operationId: operation.Id))
+                {
+                    StructureEditHandler.Apply(session.Structure, edit);
+                    await session.CommitAsync(cancellationToken);
+                }
+
+                return await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+            }
+            catch (StructureBatchException error)
+            {
+                await store.UpdateAsync(owner, operation.Id, "failed", error.Message, plan.Impact, cancellationToken);
+                throw;
+            }
+            catch (StructureException error)
+            {
+                var status = error.Code is "STRUCTURE_IN_USE" or "STRUCTURE_BUSY" or "COMMITMENTS_UNAVAILABLE"
+                    ? "pending" : "failed";
+                return await store.UpdateAsync(
+                    owner, operation.Id, status, error.Message, plan.Impact, cancellationToken);
+            }
+        }
+    }
 
     private sealed class ResolvedPlanner : IStructureImpactPlanner
     {
         public Task<ReallocationPlan> PlanAsync(
             OwnerScope owner, Guid siteId, Guid operationId, StructureEdit edit, CancellationToken cancellationToken)
             => Task.FromResult(new ReallocationPlan("resolved", null, "{}"));
+    }
+
+    private sealed class PostgresStructureTestFacade(
+        IParkingStructureRepository repository,
+        IStructureUnitOfWork unitOfWork)
+    {
+        public async Task<SiteProfile> CreateAsync(
+            OwnerScope owner, string code, string name, string address,
+            decimal? latitude = null, decimal? longitude = null, CancellationToken ct = default)
+        {
+            var structure = new ParkingStructure(
+                new SiteProfile(Guid.NewGuid(), owner.TenantId, "", "", "", null, null, true, 0));
+            structure.UpdateProfile(code, name, address, latitude, longitude);
+            return await repository.CreateAsync(owner, structure.Site, ct);
+        }
+
+        public Task<ParkingStructure> GetAsync(OwnerScope owner, Guid siteId, CancellationToken ct = default)
+            => repository.ReadAsync(owner, siteId, null, ct);
+
+        public async Task<Guid> AddSlotAsync(
+            OwnerScope owner, Guid siteId, Guid unitId, string code, VehicleType? vehicle,
+            SlotType type = SlotType.STANDARD, IReadOnlyList<VehicleType>? vehicleTypes = null,
+            VehicleType? primaryVehicleType = null, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            var primary = SlotCompatibility.Primary(vehicle, primaryVehicleType, vehicleTypes);
+            var id = session.Structure.AddSlot(unitId, code, primary, type, vehicleTypes);
+            await session.CommitAsync(ct);
+            return id;
+        }
+
+        public async Task<Guid> AddUnitAsync(
+            OwnerScope owner, Guid siteId, UnitType type, string name,
+            Guid? parentId = null, int capacity = 0, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            var id = session.Structure.AddUnit(type, name, parentId, capacity);
+            await session.CommitAsync(ct);
+            return id;
+        }
+
+        public async Task ApplyAsync(
+            OwnerScope owner, Guid siteId, StructureEdit edit, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            StructureEditHandler.Apply(session.Structure, edit);
+            await session.CommitAsync(ct);
+        }
+
+        public async Task ChangeAsync(
+            OwnerScope owner, Guid siteId, Action<ParkingStructure> change, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            change(session.Structure);
+            await session.CommitAsync(ct);
+        }
     }
 
     private sealed class DatabaseFixture : IAsyncDisposable, IOwnerAuthorizer, ISlotOperatorAuthorizer
@@ -821,7 +1000,9 @@ public sealed class PostgresStructureWorkflowTests
         public ParkingGateConnectionPool Gates { get; }
         public OperationApplication.StructureSafetyService ReservationService { get; }
         public ReservationBridge Transport { get; }
-        public ParkingStructureService Service { get; }
+        public IParkingStructureRepository Repository { get; }
+        public IStructureUnitOfWork UnitOfWork { get; }
+        public PostgresStructureTestFacade Service { get; }
 
         private DatabaseFixture(string admin, string parking, string reservation)
         {
@@ -840,7 +1021,9 @@ public sealed class PostgresStructureWorkflowTests
             ReservationService = new(new StructureSafetyStore(ReservationContext));
             Transport = new(ReservationService);
             var synchronization = new StructureSynchronizationService(Store, Transport);
-            Service = new(new PostgresParkingStructureRepository(Parking), this, this, Transport, Store, synchronization);
+            Repository = new PostgresParkingStructureRepository(Parking);
+            UnitOfWork = new StructureUnitOfWork(Repository, this, this, Transport, Store, synchronization);
+            Service = new PostgresStructureTestFacade(Repository, UnitOfWork);
         }
 
         public static async Task<DatabaseFixture> CreateAsync()

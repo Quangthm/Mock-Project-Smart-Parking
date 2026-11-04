@@ -1,12 +1,13 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 
 namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.UpdateSiteProfile;
 
 public sealed class UpdateSiteProfileCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    ParkingStructureService structureService,
+    IStructureUnitOfWork unitOfWork,
     ILogger<UpdateSiteProfileCommandHandler> logger)
     : IRequestHandler<UpdateSiteProfileCommand>
 {
@@ -14,7 +15,8 @@ public sealed class UpdateSiteProfileCommandHandler(
     {
         logger.LogInformation("Updating site profile for SiteId {SiteId}", request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await structureService.ChangeAsync(owner, request.SiteId,
-            structure => structure.UpdateProfile(request.Code, request.Name, request.Address, request.Latitude, request.Longitude), ct);
+        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        session.Structure.UpdateProfile(request.Code, request.Name, request.Address, request.Latitude, request.Longitude);
+        await session.CommitAsync(ct);
     }
 }

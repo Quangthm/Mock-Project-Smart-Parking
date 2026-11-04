@@ -164,7 +164,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Backup Slot & Capacity Operations" eyebrow={<>SRS 3.4.5 Capacity Management · {lot.name}</>} description="Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow." />
+      <PageHeader title="Backup Slot & Capacity Operations" eyebrow={lot.name} description="Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow." />
 
       {/* Permission Alert if missing */}
       {!hasOverridePermission && (

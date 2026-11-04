@@ -1,10 +1,11 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 
 namespace SmartParking.FacilityService.Application.Usecases.Gate.Commands.ReleaseGateSlot;
 
 public sealed class ReleaseGateSlotCommandHandler(
-    OperatorGateSlotService gateSlots,
+    IOperatorGateSlotStore store,
     ILogger<ReleaseGateSlotCommandHandler> logger)
     : IRequestHandler<ReleaseGateSlotCommand>
 {
@@ -12,6 +13,6 @@ public sealed class ReleaseGateSlotCommandHandler(
     {
         logger.LogInformation("Releasing gate slot {SlotId} at site {SiteId} for tenant {TenantId}",
             request.SlotId, request.SiteId, request.TenantId);
-        await gateSlots.ReleaseAsync(request.TenantId, request.SiteId, request.SlotId, ct);
+        await store.ReleaseAsync(request.TenantId, request.SiteId, request.SlotId, ct);
     }
 }

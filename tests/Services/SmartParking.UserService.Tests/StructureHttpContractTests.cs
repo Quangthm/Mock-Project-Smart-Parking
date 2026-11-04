@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
 using SmartParking.OperationService.API;

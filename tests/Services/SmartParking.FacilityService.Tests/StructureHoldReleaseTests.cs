@@ -1,5 +1,8 @@
 using System.Net;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.Common.Persistence;
+using SmartParking.FacilityService.Application.Common.Security;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
 
@@ -110,6 +113,16 @@ public sealed class StructureHoldReleaseTests
     private static HttpClient Client(HttpStatusCode status) =>
         new(new StatusHandler(status)) { BaseAddress = new Uri("http://localhost/") };
 
+    private sealed class StructureTestHelper(IStructureUnitOfWork unitOfWork)
+    {
+        public async Task ChangeAsync(OwnerScope owner, Guid siteId, Action<ParkingStructure> change, CancellationToken ct)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            change(session.Structure);
+            await session.CommitAsync(ct);
+        }
+    }
+
     private sealed class Fixture : IOwnerAuthorizer, ISlotOperatorAuthorizer, IParkingStructureRepository
     {
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
@@ -117,15 +130,17 @@ public sealed class StructureHoldReleaseTests
         public ParkingStructure Structure { get; }
         public FakeStore Store { get; } = new();
         public FakeCommitments Commitments { get; } = new();
-        public ParkingStructureService Service { get; }
+        public IStructureUnitOfWork UnitOfWork { get; }
+        public StructureTestHelper Service { get; }
 
         public Fixture()
         {
             Structure = new(new SiteProfile(SiteId, Owner.TenantId, "TEST", "Test", "Address", null, null, true, 0));
             var zone = Structure.AddUnit(UnitType.ZONE, "A", maxCapacity: 1);
             Structure.AddSlot(zone, "A01", VehicleType.CAR);
-            Service = new(this, this, this, Commitments, Store,
+            UnitOfWork = new StructureUnitOfWork(this, this, this, Commitments, Store,
                 new StructureSynchronizationService(Store, Commitments));
+            Service = new StructureTestHelper(UnitOfWork);
         }
 
         public bool CompensationFails
@@ -153,7 +168,7 @@ public sealed class StructureHoldReleaseTests
             => throw new NotSupportedException();
 
         public Task<IParkingStructureEdit> BeginEditAsync(
-            OwnerScope owner, Guid siteId, CommitmentSnapshot? snapshot, Guid? operationId, CancellationToken ct)
+            OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, Guid? operationId, CancellationToken ct)
             => Task.FromResult<IParkingStructureEdit>(new FakeEdit(Structure));
 
         private sealed class FakeEdit(ParkingStructure structure) : IParkingStructureEdit

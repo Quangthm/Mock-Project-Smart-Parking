@@ -76,39 +76,8 @@ export function useSiteManagement(onSiteCreated: (site: Site, created: boolean) 
     setAssignError("")
   }
 
-  async function handleConfirmAssign() {
-    if (!assignModal || !assignModal.selectedOpId) return
-    const op = operators.find((o) => o.id === assignModal.selectedOpId)
-    if (!op) return
-
-    setAssignBusy(true)
-    setAssignError("")
-
-    // Add target site to operator's site list if not present
-    const updatedSiteIds = Array.from(
-      new Set([...op.siteIds, assignModal.targetSite.id]),
-    )
-
-    try {
-      const updated = await operatorsApi.reassignSite(op.id, updatedSiteIds)
-      setOperators((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      )
-      setMessage(
-        `Assigned operator ${op.fullName} to site ${assignModal.targetSite.name}.`,
-      )
-      setAssignModal(null)
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Site assignment update failed. Backend endpoint may not be available yet."
-      setAssignError(
-        `${msg} (Previous operator assignments were kept unchanged).`,
-      )
-    } finally {
-      setAssignBusy(false)
-    }
+  function handleConfirmAssign() {
+    setAssignError("Site reassignment is unavailable until the service provides an assignment endpoint.")
   }
 
   function handleNavigateToStructure(siteId: string) {
@@ -134,7 +103,7 @@ export function useSiteManagement(onSiteCreated: (site: Site, created: boolean) 
   }, [sites, statusFilter, searchTerm])
 
   return {
-    sites, operators, loading, error, message, reload, setReload,
+    sites, operators, loading, error, message, setMessage, reload, setReload,
     editingSite, setEditingSite, showFormModal, setShowFormModal,
     inspectSite, setInspectSite, assignModal, setAssignModal,
     assignBusy, assignError, searchTerm, setSearchTerm, statusFilter, setStatusFilter,

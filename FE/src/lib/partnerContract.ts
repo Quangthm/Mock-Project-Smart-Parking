@@ -10,17 +10,41 @@ export interface ContractDraftRecord {
   setupFingerprint?: string
 }
 
-const key = (applicationId: string) => `sp_contract_draft_${applicationId}`
+export const contractDraftStorageKey = (applicationId: string) => `sp_contract_draft_${applicationId}`
+
+export interface OwnerContractHandoff {
+  applicationId: string
+  ownerName: string
+  ownerEmail: string
+  businessName: string
+  lotName: string
+  setupFingerprint: string
+  modelFileName?: string
+}
+
+const ownerHandoffKey = (applicationId: string) => `sp_owner_contract_handoff_${applicationId}`
+
+export function saveOwnerContractHandoff(handoff: OwnerContractHandoff): void {
+  localStorage.setItem(ownerHandoffKey(handoff.applicationId), JSON.stringify(handoff))
+}
+
+export function loadOwnerContractHandoff(applicationId: string): OwnerContractHandoff | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(ownerHandoffKey(applicationId)) ?? "null") as OwnerContractHandoff | null
+    return value?.applicationId === applicationId && typeof value.setupFingerprint === "string" &&
+      typeof value.ownerEmail === "string" ? value : null
+  } catch { return null }
+}
 
 export function loadContractDraft(applicationId: string): ContractDraftRecord | null {
   try {
-    const value = JSON.parse(localStorage.getItem(key(applicationId)) ?? "null")
+    const value = JSON.parse(localStorage.getItem(contractDraftStorageKey(applicationId)) ?? "null")
     return value && typeof value.ownerName === "string" ? value as ContractDraftRecord : null
   } catch { return null }
 }
 
 export function saveContractDraft(applicationId: string, record: ContractDraftRecord): void {
-  localStorage.setItem(key(applicationId), JSON.stringify(record))
+  localStorage.setItem(contractDraftStorageKey(applicationId), JSON.stringify(record))
 }
 
 export function listOwnerContractCopies(email: string): { applicationId: string; record: ContractDraftRecord }[] {

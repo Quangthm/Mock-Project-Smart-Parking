@@ -1,13 +1,15 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
+using SmartParking.FacilityService.Application.Usecases.Operations.Commands.ExecuteStructureOperation;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.BatchEditStructure;
 
 public sealed class BatchEditStructureCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    StructureOperationService operations,
+    IMediator mediator,
     ILogger<BatchEditStructureCommandHandler> logger)
     : IRequestHandler<BatchEditStructureCommand, StructureOperation>
 {
@@ -24,12 +26,13 @@ public sealed class BatchEditStructureCommandHandler(
             ? "BACKUP_MARK"
             : "PARKING_MANAGE";
 
-        var owner = await scopeResolver.ResolveAsync(request.TenantId, ct, requiredPermission);
+        await scopeResolver.ResolveAsync(request.TenantId, ct, requiredPermission);
 
         var edit = new StructureEdit("batch", BatchItems: request.Items
             .Select(item => new StructureBatchItem(item.ResourceId, item.Action, item.ExpectedUpdatedAt))
             .ToArray());
 
-        return await operations.ExecuteAsync(owner, request.SiteId, request.IdempotencyKey, edit, ct);
+        return await mediator.Send(new ExecuteStructureOperationCommand(
+            request.SiteId, request.IdempotencyKey, edit, request.TenantId), ct);
     }
 }

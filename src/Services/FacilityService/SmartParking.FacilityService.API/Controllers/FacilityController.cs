@@ -53,21 +53,21 @@ public sealed class FacilityController(
     public IActionResult Health() => Ok(new { status = "ok" });
 
     [HttpPut("/internal/owner-onboarding/{id:guid}")]
-    public async Task<IActionResult> ProvisionOwner(Guid id, Application.OwnerOnboardingBody body, CancellationToken ct)
+    public async Task<IActionResult> ProvisionOwner(Guid id, OwnerOnboardingBody body, CancellationToken ct)
     {
         await mediator.Send(new ProvisionOwnerCommand(id, body), ct);
         return NoContent();
     }
 
     [HttpPut("/internal/tenants/{id:guid}")]
-    public async Task<IActionResult> ProvisionTenant(Guid id, Application.TenantBody body, CancellationToken ct)
+    public async Task<IActionResult> ProvisionTenant(Guid id, TenantBody body, CancellationToken ct)
     {
         var result = await mediator.Send(new ProvisionTenantCommand(id, body), ct);
         return result ? NoContent() : Conflict();
     }
 
     [HttpPost("/internal/sites/validate")]
-    public async Task<IActionResult> ValidateSites(Application.SiteValidation body, CancellationToken ct)
+    public async Task<IActionResult> ValidateSites(SiteValidation body, CancellationToken ct)
     {
         var result = await mediator.Send(new ValidateSitesQuery(body), ct);
         return Ok(result);

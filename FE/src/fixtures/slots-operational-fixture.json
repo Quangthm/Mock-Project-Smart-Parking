@@ -15,8 +15,8 @@
       "availableCarSlots": 16,
       "motorcycleCapacity": {
         "maxCapacity": 20,
-        "occupiedCount": 8,
-        "availableCount": 12
+        "occupiedCount": 0,
+        "availableCount": 20
       },
       "zoneCapacities": [
         {
@@ -25,7 +25,8 @@
           "floorCode": "Floor_G",
           "maxCapacity": 24,
           "occupiedCount": 4,
-          "zoneOnlyReservedCount": 0
+          "zoneOnlyReservedCount": 5,
+          "allocatedSlotCount": 5
         },
         {
           "zoneId": "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
@@ -33,7 +34,8 @@
           "floorCode": "Floor_G",
           "maxCapacity": 24,
           "occupiedCount": 9,
-          "zoneOnlyReservedCount": 0
+          "zoneOnlyReservedCount": 4,
+          "allocatedSlotCount": 4
         }
       ]
     },
@@ -85,7 +87,7 @@
         "slotType": "EV",
         "physicalState": "AVAILABLE",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -98,19 +100,7 @@
           "hasCharger": true,
           "chargerPowerKw": 22
         },
-        "operatorContext": {
-          "activeSessionId": null,
-          "maskedPlate": "30A-*****.89",
-          "approachingReservation": {
-            "reservationId": "d1e2f3a4-b5c6-7a8b-9c0d-1e2f3a4b5c6d",
-            "requestedSlotCode": "CarParkingSpace_003",
-            "allocatedSlotCode": "CarParkingSpace_002",
-            "isReallocated": true,
-            "reallocationReason": "OCCUPIED_OVERSTAY_DISPLACEMENT",
-            "expectedArrivalTime": "2026-10-26T12:30:00.000Z",
-            "gracePeriodExpiresAt": "2026-10-26T12:45:00.000Z"
-          }
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -124,7 +114,7 @@
         "slotType": "EV",
         "physicalState": "AVAILABLE",
         "reservationState": "PROTECTED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -178,7 +168,7 @@
         "slotType": "DISABLED",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -191,11 +181,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.05",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -209,7 +195,7 @@
         "slotType": "DISABLED",
         "physicalState": "OCCUPIED",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -222,11 +208,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.06",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -240,7 +222,7 @@
         "slotType": "VIP",
         "physicalState": "OCCUPIED",
         "reservationState": "PROTECTED",
-        "sessionType": "VIP",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -253,11 +235,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.07",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -271,7 +249,7 @@
         "slotType": "VIP",
         "physicalState": "OCCUPIED",
         "reservationState": "BACKUP",
-        "sessionType": "VIP",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -284,11 +262,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.08",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -329,7 +303,7 @@
         "slotType": "STANDARD",
         "physicalState": "UNKNOWN",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -356,7 +330,7 @@
         "slotType": "STANDARD",
         "physicalState": "UNKNOWN",
         "reservationState": "PROTECTED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -437,7 +411,7 @@
         "slotType": "STANDARD",
         "physicalState": "MAINTENANCE",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -464,7 +438,7 @@
         "slotType": "STANDARD",
         "physicalState": "MAINTENANCE",
         "reservationState": "PROTECTED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -545,7 +519,7 @@
         "slotType": "STANDARD",
         "physicalState": "UNAVAILABLE",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -572,7 +546,7 @@
         "slotType": "STANDARD",
         "physicalState": "UNAVAILABLE",
         "reservationState": "PROTECTED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1031,7 +1005,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1044,11 +1018,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.36",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1062,7 +1032,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1075,11 +1045,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.37",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1093,7 +1059,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1106,11 +1072,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.38",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1124,7 +1086,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1137,11 +1099,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.39",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1155,7 +1113,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1168,11 +1126,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.40",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1186,7 +1140,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1199,11 +1153,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.41",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1217,7 +1167,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1230,11 +1180,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.42",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1248,7 +1194,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "UNRESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1261,11 +1207,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.43",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {
@@ -1279,7 +1221,7 @@
         "slotType": "STANDARD",
         "physicalState": "AVAILABLE",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1306,7 +1248,7 @@
         "slotType": "STANDARD",
         "physicalState": "AVAILABLE",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1333,7 +1275,7 @@
         "slotType": "STANDARD",
         "physicalState": "AVAILABLE",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1360,7 +1302,7 @@
         "slotType": "STANDARD",
         "physicalState": "OCCUPIED",
         "reservationState": "RESERVED",
-        "sessionType": "STANDARD",
+        "sessionType": null,
         "isEvCharging": false,
         "isBookable": false,
         "coordinates3d": {
@@ -1373,11 +1315,7 @@
           "hasCharger": false,
           "chargerPowerKw": null
         },
-        "operatorContext": {
-          "activeSessionId": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
-          "maskedPlate": "29B-*****.47",
-          "approachingReservation": null
-        },
+        "operatorContext": null,
         "updatedAt": "2026-10-26T12:00:00.000Z"
       },
       {

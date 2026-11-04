@@ -1,12 +1,13 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 
 namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.MarkBackup;
 
 public sealed class MarkBackupCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    ParkingStructureService structureService,
+    IStructureUnitOfWork unitOfWork,
     ILogger<MarkBackupCommandHandler> logger)
     : IRequestHandler<MarkBackupCommand>
 {
@@ -16,7 +17,8 @@ public sealed class MarkBackupCommandHandler(
             request.SlotId, request.SiteId, request.Active);
         // Explicit BACKUP_MARK check (H-2 / DEC-LOT-04)
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct, "BACKUP_MARK");
-        await structureService.ChangeAsync(
-            owner, request.SiteId, aggregate => aggregate.MarkBackup(request.SlotId, request.Active), ct);
+        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        session.Structure.MarkBackup(request.SlotId, request.Active);
+        await session.CommitAsync(ct);
     }
 }

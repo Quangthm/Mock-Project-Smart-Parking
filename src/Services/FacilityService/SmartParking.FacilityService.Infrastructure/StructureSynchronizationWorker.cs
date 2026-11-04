@@ -18,7 +18,7 @@ public sealed class StructureSynchronizationWorker(
             try
             {
                 using var scope = scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<StructureSynchronizationService>();
+                var service = scope.ServiceProvider.GetRequiredService<IStructureSynchronizationService>();
                 var failures = await service.RecoverPendingAsync(stoppingToken);
                 foreach (var failure in failures)
                 {

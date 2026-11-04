@@ -1,11 +1,13 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.Common.Security;
 
 namespace SmartParking.FacilityService.Application.Usecases.Gate.Commands.ReleaseOperationalBackup;
 
 public sealed class ReleaseOperationalBackupCommandHandler(
     ISlotOperatorAuthorizer operators,
-    ParkingStructureService structures,
+    IStructureUnitOfWork unitOfWork,
     ILogger<ReleaseOperationalBackupCommandHandler> logger)
     : IRequestHandler<ReleaseOperationalBackupCommand>
 {
@@ -14,7 +16,10 @@ public sealed class ReleaseOperationalBackupCommandHandler(
         logger.LogInformation("Releasing operational backup for slot {SlotId} at site {SiteId}",
             request.SlotId, request.SiteId);
         var operatorScope = await operators.ScopeAsync(request.SiteId, ct);
-        await structures.SetOperationalBackupAsync(
-            operatorScope, request.SiteId, request.SlotId, false, "Backup designation released by operator.", ct);
+        const string reason = "Backup designation released by operator.";
+        await using var session = await unitOfWork.BeginEditAsync(
+            operatorScope, request.SiteId, ct, markedSlot: request.SlotId, reason: reason);
+        session.Structure.MarkBackup(request.SlotId, false);
+        await session.CommitAsync(ct);
     }
 }
