@@ -37,7 +37,7 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 
 `compose.schema-integration.yml` mount theo thứ tự số trong `docker-entrypoint-initdb.d`:
 
-**User DB:** Compose chỉ mount `01-user-access-service-db.sql`. Base tạo `accounts.role_code → roles.code`, nhưng chưa có session binding và outbox của SPARK-248. Trước khi chạy UserService hiện tại, người vận hành phải review/apply riêng [`13-own-profile-session-account.sql`](../../../scripts/database/microservices/13-own-profile-session-account.sql) rồi [`14-user-profile-outbox.sql`](../../../scripts/database/microservices/14-user-profile-outbox.sql), sau đó chạy [`verify-user-access-schema.sql`](../../../scripts/database/verify-user-access-schema.sql) với `psql -v ON_ERROR_STOP=1` trên đúng User DB. Script 13 bổ sung immutable session Account/User binding; script 14 tạo schema MassTransit outbox một lần. Không gộp hai script này vào base hoặc auto-migrate khi startup. Xem [hướng dẫn deploy](../../04-testing/reports/SPARK-248/own-profile-outbox.md).
+**User DB:** Compose và migration runner chỉ áp dụng [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql). Canonical base already contains direct `accounts.role_code → roles.code`, immutable Account/User session binding, refresh/replay proofs, MFA, Owner setup, and MassTransit inbox/outbox schema. Historical User `05.13`–`05.15` and former separate profile scripts are not setup layers. The runner executes the read-only [`verify-user-access-schema.sql`](../../../scripts/database/test/verify-user-access-schema.sql) against UserDb; existing/partial databases still require a separately reviewed migration. No startup migration or guessed legacy-session backfill is performed. See the [profile deployment guide](../../04-testing/reports/SPARK-248/own-profile-outbox.md) for profile-event routing and delivery operations.
 
 **Facility DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`.
 
@@ -65,7 +65,7 @@ Các flag hữu ích: `-SkipDatabase` (không đụng Docker), `-SkipRestore`, `
 
 `setup.ps1` thực hiện: validate `.env`/port → (tuỳ chọn) recreate volume → `docker compose -f compose.schema-integration.yml up -d` → chạy `scripts/apply-workflow-migrations.ps1` cho 6 service → probe bảng bắt buộc → tạo user-secrets `ConnectionStrings:User/Parking/Reservation` → build/restore → (tuỳ chọn) SonarQube/AI.
 
-Đối với User DB, runner chỉ xác nhận các base relation và thông báo rõ chưa xác minh runtime readiness. Nó không deploy scripts 13/14 hoặc chạy verifier tự động. Hoàn tất bước User thủ công ở §4 và kiểm tra read-only trước khi khởi động UserService; schema thiếu `user_refresh_tokens.account_id` không tương thích với current session store.
+Đối với User DB, runner chỉ áp dụng canonical base trên database trống và thực hiện verifier read-only; trên database hiện hữu, nó xác minh schema trước khi bỏ qua việc áp dụng. Verifier không sửa schema hoặc backfill dữ liệu. Schema thiếu `user_refresh_tokens.account_id` hoặc các bảng framework là không tương thích với runtime.
 
 Sau khi setup và hoàn tất prerequisite tương ứng, chạy 3 service tích hợp:
 
@@ -103,8 +103,8 @@ Chi tiết: report 01 và report 10 trong `docs/04-testing/reports/refactor-Dock
 ## 9. Kiểm chứng
 
 - `docker compose -f compose.schema-integration.yml config` — validate 6 service/15 mount.
-- `scripts/apply-workflow-migrations.ps1` — pre-check bảng theo DB, block-list script legacy `05.1–05.9`/`integration/01–03`.
-- `scripts/database/verify-user-access-schema.sql` — kiểm tra read-only direct RoleCode, session Account/User ownership FK và immutable trigger, token uniqueness, outbox columns/constraints/indexes; lỗi có hướng dẫn review/apply base01 → 13 → 14. Không sửa schema/dữ liệu.
+- `scripts/apply-workflow-migrations.ps1` — pre-check bảng theo DB, block-list script legacy User `05.1–05.15`/`integration/01–03`; approved Parking `05.16` remains separate.
+- `scripts/database/test/verify-user-access-schema.sql` — kiểm tra read-only direct RoleCode, session Account/User ownership FK và immutable trigger, token uniqueness, access/session/MFA/Owner setup fields, and MassTransit inbox/outbox columns/constraints/indexes. Không sửa schema/dữ liệu.
 - `setup.ps1 -RecreateDb` + probe 6 DB — đường chạy T6; xem report 07 và checklist T6 (chưa có evidence chạy đầy đủ trong repo).
 - BE tests: `dotnet test SmartParking.slnx` (DB tests cần `SMARTPARK_AUTH_TEST_CONNECTION` trỏ PostgreSQL test có quyền tạo/xóa database test UUID riêng).
 - FE: `npm run build`.

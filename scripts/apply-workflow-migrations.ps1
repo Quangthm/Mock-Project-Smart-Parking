@@ -61,7 +61,7 @@ $sentinel = @{ User='uq_active_vehicle_plate'; Parking='tenants'; Reservation='s
 
 # Block list: legacy 05.x workflow scripts and integration/* alignment scripts are
 # superseded by the new base files + overlays; applying them would double-apply or conflict.
-$blockedPattern = '(^|[\\/])05\.[1-9][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
+$blockedPattern = '(^|[\\/])05\.(?:[1-9]|1[0-5])[-.][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
 foreach ($script in $scripts) {
     $relative = "scripts/database/$script"
     if ($relative -match $blockedPattern) {
@@ -100,10 +100,8 @@ if ($state -eq 'empty') {
     }
 }
 
-# These incremental features are not included in the canonical baseline.
-# Apply on both empty and current databases; each migration is re-runnable.
+# Parking owner onboarding remains a reviewed incremental feature.
 $features = switch ($Service) {
-    'User' { '05.13-Mfa-Lifecycle.sql'; '05.14-Identity-Access-Hardening.sql'; '05.15-Owner-Onboarding.sql' }
     'Parking' { '05.16-Parking-Owner-Onboarding.sql' }
     default { }
 }

@@ -162,7 +162,6 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         {
             // Deterministic ID makes remote provisioning retryable if the local commit fails.
             var tenantId = application.Id;
-            user.OnboardingComplete = true;
             account.TenantId = tenantId;
             account.Status = "ACTIVE";
         }

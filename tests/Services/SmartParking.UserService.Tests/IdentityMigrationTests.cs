@@ -26,7 +26,7 @@ public sealed class IdentityMigrationTests
         await using (var connection = new NpgsqlConnection(fixture.ConnectionString))
         {
             await connection.OpenAsync();
-            var sql = await File.ReadAllTextAsync(ServiceSchema.FeaturePath("05.14-Identity-Access-Hardening.sql"));
+            var sql = await File.ReadAllTextAsync(ServiceSchema.ScriptPath("05.14-Identity-Access-Hardening.sql"));
             await using var command = new NpgsqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
         }

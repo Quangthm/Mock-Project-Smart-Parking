@@ -14,8 +14,8 @@ using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Application;
 using UserService.Application.Common.Interfaces.Services;
-using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.MessageBroker;
+using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Infrastructure.Services;
 using UserService.Application.DTOs;
 
@@ -47,7 +47,6 @@ public sealed class DriverRegistrationHttpTests
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
-        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         var fixture = new AuthTestFixture();
         TestAuthorization.AddServices(builder.Services, fixture);

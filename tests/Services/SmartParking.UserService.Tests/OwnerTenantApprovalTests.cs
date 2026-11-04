@@ -88,7 +88,6 @@ public sealed class OwnerTenantApprovalTests
             Assert.NotNull((await check.OwnerApplications.SingleAsync()).ApprovalRequestedBy);
             var owner = await check.Users.Include(u => u.Accounts).SingleAsync(u => u.Id == application.UserId);
             Assert.Equal(UserStatus.PendingApproval, owner.Status);
-            Assert.False(owner.OnboardingComplete);
             Assert.Null(owner.Accounts.Single().TenantId);
             Assert.Equal("PENDING_APPROVAL", owner.Accounts.Single().Status);
             Assert.Empty(await check.WorkflowDeliveries.ToListAsync());
@@ -106,7 +105,6 @@ public sealed class OwnerTenantApprovalTests
         Assert.Equal(1, await TenantCountAsync(final, application.Id));
         var active = await final.Users.Include(u => u.Accounts).SingleAsync(u => u.Id == application.UserId);
         Assert.Equal(UserStatus.Active, active.Status);
-        Assert.True(active.OnboardingComplete);
         Assert.Equal(application.Id, active.Accounts.Single().TenantId);
         Assert.Equal("ACTIVE", active.Accounts.Single().Status);
         Assert.Single(await final.WorkflowDeliveries.Where(d => d.Kind == "OWNER_DECISION").ToListAsync());

@@ -32,7 +32,7 @@ public sealed class ProfileOutboxTests
             "CREATE TABLE \"(?:InboxState|OutboxState|OutboxMessage)\"[\\s\\S]*?;|CREATE (?:UNIQUE )?INDEX \"IX_(?:InboxState|OutboxState|OutboxMessage)[\\s\\S]*?;")
             .Select(match => match.Value).ToArray();
         Assert.Equal(9, statements.Length);
-        var script = File.ReadAllText(ServiceSchema.FeaturePath("microservices/01-user-access-service-db.sql"));
+        var script = File.ReadAllText(ServiceSchema.ScriptPath("microservices/01-user-access-service-db.sql"));
         var reviewed = script.Split("-- BEGIN FRAMEWORK DDL")[1].Split("-- END FRAMEWORK DDL")[0];
         Assert.Equal(Normalize(string.Join("\n", statements)), Normalize(reviewed));
     }
@@ -194,43 +194,34 @@ public sealed class ProfileOutboxTests
     }
 
     [PostgresFact]
-    public async Task AccessHandoffCommitsAcknowledgmentAndFrameworkCaptureTogether()
+    public async Task VersionedAccessEventUsesTransactionalMassTransitBusOutbox()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
         await using var provider = Services(fixture.ConnectionString).BuildServiceProvider();
-        var clock = TimeProvider.System;
         var message = new global::UserService.Application.Common.Interfaces.Services.OperatorAccessChanged(
-            Guid.NewGuid(), 1, Guid.NewGuid(), 1, clock.GetUtcNow(), Guid.NewGuid(), Guid.NewGuid(), [], "active");
-        await using (var db = fixture.Open())
-        {
-            new AccessEventStore(db, clock).Stage(message);
-            await db.SaveChangesAsync();
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"OutboxMessage\" ADD CONSTRAINT test_reject_handoff CHECK (false)");
-        }
-        async Task Handoff()
+            Guid.NewGuid(), 1, Guid.NewGuid(), 7, DateTimeOffset.UtcNow, Guid.NewGuid(), Guid.NewGuid(), [], "active");
+        async Task Publish(bool commit)
         {
             await using var scope = provider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var store = new AccessEventStore(db, clock);
-            var lease = (await store.ClaimAsync(default))!;
-            await new global::UserService.Infrastructure.Services.RabbitAccessEventTransport(
-                scope.ServiceProvider.GetRequiredService<IPublishEndpoint>()).PublishAsync(lease.Message, default);
-            await store.CompleteAsync(lease, default);
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            await scope.ServiceProvider.GetRequiredService<IEventPublisher>().PublishAsync(message, default);
+            await db.SaveChangesAsync();
+            if (commit) await transaction.CommitAsync();
         }
-        await Assert.ThrowsAsync<DbUpdateException>(Handoff);
+        await Publish(false);
         await using (var db = fixture.Open())
         {
-            Assert.Null((await db.AccessEventOutbox.SingleAsync()).PublishedAt);
             Assert.Empty(await db.Set<OutboxMessage>().ToArrayAsync());
-            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"OutboxMessage\" DROP CONSTRAINT test_reject_handoff");
-            // Release this failed test lease deterministically; no sleep or shared resource.
-            await db.AccessEventOutbox.ExecuteUpdateAsync(s => s.SetProperty(x => x.LeaseUntil, (DateTimeOffset?)null));
         }
-        await Handoff();
+        await Publish(true);
         await using (var db = fixture.Open())
         {
-            Assert.NotNull((await db.AccessEventOutbox.SingleAsync()).PublishedAt);
-            Assert.Equal(message.EventId, (await db.Set<OutboxMessage>().SingleAsync()).MessageId);
+            var stored = await db.Set<OutboxMessage>().SingleAsync();
+            Assert.Equal(message.EventId, stored.MessageId);
+            Assert.Contains(nameof(global::UserService.Application.Common.Interfaces.Services.OperatorAccessChanged), stored.MessageType);
+            using var payload = JsonDocument.Parse(stored.Body);
+            Assert.Equal(7, payload.RootElement.GetProperty("aggregateVersion").GetInt64());
             Assert.Single(await db.Set<OutboxState>().ToArrayAsync());
         }
     }
