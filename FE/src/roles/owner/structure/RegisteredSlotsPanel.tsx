@@ -1,20 +1,12 @@
 import { useState } from "react"
 import { Badge } from "../../../components/ui/Badge"
 import { parkingApi, type Slot, type Unit } from "../../../lib/parkingApi"
+import { categoriesOfSlot as categoriesOf, primaryCategoryOfSlot as primaryOf } from "../../../lib/structureRules"
 import { StructureFeedback } from "./StructureFeedback"
 import { useStructureAction } from "./useStructureAction"
 
 const MAX_BATCH = 50
 
-function categoriesOf(slot: Slot) {
-  return slot.vehicleTypes && slot.vehicleTypes.length > 0
-    ? slot.vehicleTypes
-    : [slot.primaryVehicleType ?? slot.vehicleType].filter(Boolean)
-}
-
-function primaryOf(slot: Slot) {
-  return slot.primaryVehicleType ?? slot.vehicleType
-}
 
 export function RegisteredSlotsPanel({
   siteId,

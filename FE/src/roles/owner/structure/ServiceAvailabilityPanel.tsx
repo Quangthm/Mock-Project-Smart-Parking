@@ -79,7 +79,7 @@ function WindowRow({
     if (!confirm("Cancel this maintenance window? Reopening is refused if another live closure still covers now.")) return
     setError("")
     await run(
-      () => parkingApi.cancelMaintenanceWindow(window.id, window.id),
+      () => parkingApi.cancelMaintenanceWindow(siteId, window.id),
       "Maintenance window cancelled.",
     )
   }
