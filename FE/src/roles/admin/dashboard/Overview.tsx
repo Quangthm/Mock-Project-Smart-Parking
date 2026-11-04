@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 
 import { adminData as store } from "../data/data"
 import { usersApi } from "../../../lib/usersApi"
+import { ownerApi } from "../../../lib/ownerApi"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import {
@@ -29,6 +30,21 @@ export function Overview() {
   const [userStatsLoading, setUserStatsLoading] = useState(true)
   const [userStatsError, setUserStatsError] = useState("")
   const [userStatsReload, setUserStatsReload] = useState(0)
+  const [pendingApps, setPendingApps] = useState<number | null>(null)
+  const [applicationsError, setApplicationsError] = useState("")
+  const [applicationsReload, setApplicationsReload] = useState(0)
+
+  useEffect(() => {
+    let current = true
+    setPendingApps(null)
+    setApplicationsError("")
+    ownerApi.list().then(applications => {
+      if (current) setPendingApps(applications.filter(application => application.status === "pending").length)
+    }).catch(error => {
+      if (current) setApplicationsError(error instanceof Error ? error.message : "Cannot load applications.")
+    })
+    return () => { current = false }
+  }, [applicationsReload])
 
   useEffect(() => {
     let current = true
@@ -70,15 +86,11 @@ export function Overview() {
 
   const bookings = store.getBookings()
 
-  const apps = store.getApplications()
-
   const logs = store.getAuditLogs().slice(0, 5)
 
   const totalRevenue = bookings
     .filter((b) => b.status === "completed")
     .reduce((s, b) => s + b.amount, 0)
-
-  const pendingApps = apps.filter((a) => a.status === "pending").length
 
   // Build booking trend: last 7 days
 
@@ -166,14 +178,15 @@ export function Overview() {
 
           {
             label: "Pending Applications",
-            value: pendingApps,
+            value: pendingApps ?? "—",
             sub:
-              pendingApps > 0
+              applicationsError ? "Cannot load applications" : pendingApps === null ? "Loading applications…" : pendingApps > 0
                 ? "Requires administrative review"
                 : "All applications reviewed",
             icon: "clipboard",
-            badge: pendingApps > 0 ? "Action required" : "Up to date",
-            alert: pendingApps > 0,
+            badge: pendingApps === null ? "Applications" : pendingApps > 0 ? "Action required" : "Up to date",
+            alert: pendingApps !== null && pendingApps > 0,
+            retry: !!applicationsError,
           },
         ].map((k) => (
           <div
@@ -242,7 +255,7 @@ export function Overview() {
               {k.retry && (
                 <button
                   type="button"
-                  onClick={() => setUserStatsReload((value) => value + 1)}
+                  onClick={() => k.label === "Pending Applications" ? setApplicationsReload(value => value + 1) : setUserStatsReload(value => value + 1)}
                   style={{ color: "var(--primary)", textDecoration: "underline" }}
                 >
                   Retry
@@ -387,10 +400,13 @@ export function Overview() {
                     contentStyle={{
                       background: "var(--card)",
                       border: "1px solid var(--border)",
-                      borderRadius: "6px",
+                      borderRadius: "12px",
                       fontSize: "0.8rem",
                       color: "var(--fg)",
                     }}
+                    labelStyle={{ color: "var(--fg)", fontWeight: 700 }}
+                    itemStyle={{ color: "var(--fg)", fontWeight: 600 }}
+                    cursor={{ fill: "var(--border)", fillOpacity: 0.22 }}
                   />
                   <Bar dataKey="count" name="Users" radius={[4, 4, 0, 0]}>
                     {userRoleData.map((entry, i) => (

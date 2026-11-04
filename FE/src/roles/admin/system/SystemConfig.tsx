@@ -24,10 +24,10 @@ export function SystemConfig() {
   }
 
   return (
-    <div style={{ maxWidth: "700px" }}>
-      <PageHeader title="System Configuration" variant="compact" />
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        <section className="card">
+    <div className="system-config-page">
+      <PageHeader title="System Configuration" variant="compact" description="Review device connectivity and platform defaults." />
+      <div className="system-config-grid">
+        <section className="card system-config-card">
           <h3
             style={{
               fontFamily: "Be Vietnam Pro",
@@ -37,7 +37,7 @@ export function SystemConfig() {
               color: "var(--fg)",
             }}
           >
-            Device Connectivity
+            <UntitledIcon name="link" size={18} /> Device Connectivity
           </h3>
           {[
             {
@@ -92,7 +92,7 @@ export function SystemConfig() {
               >
                 <input
                   type="checkbox"
-                  checked={(config as any)[d.key]}
+                  checked={config[d.key as "cameraAI" | "barrier" | "sensorNetwork"]}
                   onChange={(e) =>
                     setConfig((c) => ({ ...c, [d.key]: e.target.checked }))
                   }
@@ -100,17 +100,17 @@ export function SystemConfig() {
                 <span
                   style={{
                     fontSize: "0.8rem",
-                    color: (config as any)[d.key] ? "#22c55e" : "#ef4444",
+                    color: config[d.key as "cameraAI" | "barrier" | "sensorNetwork"] ? "var(--badge-success-fg)" : "var(--badge-danger-strong)",
                     fontWeight: 600,
                   }}
                 >
-                  {(config as any)[d.key] ? "Online" : "Offline"}
+                  {config[d.key as "cameraAI" | "barrier" | "sensorNetwork"] ? "Online" : "Offline"}
                 </span>
               </label>
             </div>
           ))}
         </section>
-        <section className="card">
+        <section className="card system-config-card">
           <h3
             style={{
               fontFamily: "Be Vietnam Pro",
@@ -120,18 +120,19 @@ export function SystemConfig() {
               color: "var(--fg)",
             }}
           >
-            Platform Parameters
+            <UntitledIcon name="sliders" size={18} /> Platform Parameters
           </h3>
           <div
+            className="system-config-parameters"
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
               gap: "0.875rem",
             }}
           >
             <div>
-              <label className="label">Platform Fee (%)</label>
+              <label className="label" htmlFor="system-platform-fee">Platform Fee (%)</label>
               <input
+                id="system-platform-fee"
                 className="input"
                 type="number"
                 min={0}
@@ -143,8 +144,9 @@ export function SystemConfig() {
               />
             </div>
             <div>
-              <label className="label">Default Grace Period (min)</label>
+              <label className="label" htmlFor="system-grace-period">Default Grace Period (min)</label>
               <input
+                id="system-grace-period"
                 className="input"
                 type="number"
                 min={0}
@@ -221,7 +223,7 @@ export function SystemConfig() {
               <UntitledIcon name="check" size={16} /> Saved
             </>
           ) : (
-            "Save Configuration"
+            "Save Preview"
           )}
         </button>
       </div>

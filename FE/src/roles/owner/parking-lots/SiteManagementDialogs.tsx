@@ -127,7 +127,7 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
                 <UntitledIcon name="alert" size={15} className="shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  Confirming assignment authorizes this operator to monitor barrier controls, manage check-in tickets, and supervise slots at <strong>{assignModal.targetSite.name}</strong>.
+                  Site reassignment is unavailable until the service provides an assignment endpoint. Existing operator assignments are unchanged.
                 </p>
               </div>
 
@@ -144,9 +144,9 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
                   type="button"
                   className="btn-primary text-xs px-4 py-2 font-medium"
                   onClick={handleConfirmAssign}
-                  disabled={assignBusy || !assignModal.selectedOpId}
+                  disabled
                 >
-                  {assignBusy ? "Confirming…" : "Confirm Assignment"}
+                  Assignment unavailable
                 </button>
               </div>
             </div>

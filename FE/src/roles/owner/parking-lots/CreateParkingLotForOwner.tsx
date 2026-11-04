@@ -7,6 +7,8 @@ import { AuthApiError } from "../../../lib/authApi"
 import { restoreOwnerRegistration, ownerRegistrationStage, type PendingOwnerRegistration } from "../../../lib/ownerRegistration"
 import { OwnerRegistrationRecovery } from "../../authentications/Sign Up/OwnerRegistrationRecovery"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { CITIES, DISTRICTS_BY_PROVINCE } from "../../../lib/vietnamAdministrativeUnits"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { formatGroupedDigits } from "../../../lib/groupedDigits"
 
@@ -22,9 +24,9 @@ import {
 } from "../../../lib/3d/parking3DConfig"
 import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
 import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
-import { loadContractDraft, saveContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
-import { PartnerContractDialog } from "../../../components/modals/PartnerContractDialog"
+import { contractDraftStorageKey, loadContractDraft, saveOwnerContractHandoff, type ContractDraftRecord } from "../../../lib/partnerContract"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ParkingLocationPicker, validParkingCoordinates, type ParkingCoordinates } from "../../../components/ui/ParkingLocationPicker"
 
 type OnboardStep = 1 | 2 | 3 | 4 | 5
 
@@ -131,6 +133,12 @@ export function OnboardingWizard({
     totalSlots: "",
     floors: "",
   })
+  const [provinceCode, setProvinceCode] = useState<string>(CITIES[0].code)
+  const [district, setDistrict] = useState("")
+  const [selectedLocation, setSelectedLocation] = useState<ParkingCoordinates | null>(null)
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false)
+  const [otherDistrict, setOtherDistrict] = useState(false)
+  const address = [lotConfig.address.trim(), district.trim(), CITIES.find(city => city.code === provinceCode)?.name].filter(Boolean).join(", ")
 
   const [devices, setDevices] = useState<Record<string, boolean>>({
     camera: false,
@@ -151,7 +159,6 @@ export function OnboardingWizard({
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
   const [contractDraft, setContractDraft] = useState<ContractDraftRecord | null>(() => registration ? loadContractDraft(registration.id) : null)
-  const [showContract, setShowContract] = useState(false)
   const [showModelPreview, setShowModelPreview] = useState(false)
 
   const [completionError, setCompletionError] = useState("")
@@ -174,8 +181,45 @@ export function OnboardingWizard({
   const activeModelUrl = customModelUrl || activeModelDef.path
 
   const activeModelFileName = customModelFileName || activeModelDef.fileName
-  const setupFingerprint = JSON.stringify({ lotType, lotConfig, devices, pricing, customModelFileName })
+  const setupFingerprint = JSON.stringify({ lotType, lotConfig, provinceCode, district, selectedLocation, devices, pricing, customModelFileName })
   const activeContractDraft = contractDraft?.setupFingerprint === setupFingerprint ? contractDraft : null
+
+  useEffect(() => {
+    if (!registration) return
+    const syncContract = () => {
+      const latest = loadContractDraft(registration.id)
+      setContractDraft(latest)
+      if (latest?.ownerAcknowledgedAt) setCompletionError("")
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === contractDraftStorageKey(registration.id)) syncContract()
+    }
+    window.addEventListener("storage", onStorage)
+    window.addEventListener("focus", syncContract)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener("focus", syncContract)
+    }
+  }, [registration?.id])
+
+  function prepareContractPage() {
+    if (!registration) return
+    try {
+      saveOwnerContractHandoff({
+        applicationId: registration.id,
+        ownerName: registration.ownerName || user?.name || "Owner",
+        ownerEmail: registration.email,
+        businessName: registration.businessName || "Owner business",
+        lotName: lotConfig.name || "Parking lot",
+        setupFingerprint,
+        modelFileName: customModelFileName || undefined,
+      })
+      setCompletionError("")
+    } catch {
+      setCompletionError("Cannot open the agreement because browser storage is unavailable.")
+      return false
+    }
+  }
 
   useEffect(() => () => { if (customModelUrl) URL.revokeObjectURL(customModelUrl) }, [customModelUrl])
   const modelCapacity = useModelCarCapacity(activeModelUrl)
@@ -247,9 +291,11 @@ export function OnboardingWizard({
 
     try {
       const name = lotConfig.name.trim()
-      const address = lotConfig.address.trim()
-      if (!name || !address) {
-        throw new Error("Please enter the parking lot name and address.")
+      if (!name || !lotConfig.address.trim() || !district.trim()) {
+        throw new Error("Please enter the parking lot name, street address, and district.")
+      }
+      if (!validParkingCoordinates(selectedLocation)) {
+        throw new Error("Confirm the parking entrance on the map before continuing.")
       }
 
       const totalSlots = Number(lotConfig.totalSlots)
@@ -280,7 +326,7 @@ export function OnboardingWizard({
       }
 
       if (registration) {
-        if (customModelFile) await saveOwnerModel(registration.id, customModelFile)
+        const savedModelUrl = customModelFile ? await saveOwnerModel(registration.id, customModelFile) : null
         const setup: OwnerLotSetup = {
           name,
           address,
@@ -304,6 +350,29 @@ export function OnboardingWizard({
           setupToken ?? "",
           setup,
         )
+        // shortcut: the Owner site API omits setup metadata, so this preview is available only in the setup browser.
+        try {
+          store.saveLot({
+            id: application.id,
+            ownerId: application.ownerId,
+            createdAt: new Date().toISOString(),
+            name,
+            address,
+            type: lotType,
+            totalSlots,
+            floors,
+            modelUrl: savedModelUrl ?? activeModelDef.path,
+            modelFileName: activeModelFileName,
+            devices: setup.devices,
+            slots: [],
+            ...numericPricing,
+            status: "pending",
+            lat: selectedLocation.lat,
+            lng: selectedLocation.lng,
+          })
+        } catch (cacheError) {
+          console.warn("Parking lot setup was submitted, but its local preview could not be saved.", cacheError)
+        }
         registration.onComplete(application)
         return
       }
@@ -312,6 +381,8 @@ export function OnboardingWizard({
         code: `SPK-ONB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
         name,
         address,
+        latitude: selectedLocation.lat,
+        longitude: selectedLocation.lng,
       })
       if (!site || typeof site.id !== "string" || !site.id.trim()) {
         throw new Error("The server did not return a valid site ID. Please try again.")
@@ -348,8 +419,8 @@ export function OnboardingWizard({
         ...numericPricing,
         status: "active",
 
-        lat: 10.77 + Math.random() * 0.1,
-        lng: 106.69 + Math.random() * 0.1,
+        lat: selectedLocation.lat,
+        lng: selectedLocation.lng,
       }
 
       try {
@@ -852,16 +923,62 @@ export function OnboardingWizard({
                 />
               </div>
               <div>
-                <label className="label">Address *</label>
+                <label className="label" htmlFor="owner-setup-street">Street Address / Complex *</label>
                 <input
+                  id="owner-setup-street"
                   className="input"
                   value={lotConfig.address}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setLotConfig((c) => ({ ...c, address: e.target.value }))
-                  }
-                  placeholder="Full address"
+                    setSelectedLocation(null)
+                    setLocationPickerOpen(false)
+                  }}
+                  placeholder="e.g. 72 Le Thanh Ton Street"
                 />
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="owner-setup-province">Province *</label>
+                  <RoundedSelect id="owner-setup-province" className="input" value={provinceCode} onChange={event => {
+                    setProvinceCode(event.target.value)
+                    setDistrict("")
+                    setOtherDistrict(false)
+                    setSelectedLocation(null)
+                    setLocationPickerOpen(false)
+                  }}>
+                    {CITIES.map(city => <option key={city.code} value={city.code}>{city.code === "HCM" ? "TP.HCM" : city.name}</option>)}
+                  </RoundedSelect>
+                </div>
+                <div>
+                  <label className="label" htmlFor="owner-setup-district">District *</label>
+                  <RoundedSelect id="owner-setup-district" className="input" value={otherDistrict ? "__other__" : district} required onChange={event => {
+                    const custom = event.target.value === "__other__"
+                    setOtherDistrict(custom)
+                    setDistrict(custom ? "" : event.target.value)
+                    setSelectedLocation(null)
+                    setLocationPickerOpen(false)
+                  }}>
+                    <option value="" disabled>Select a district</option>
+                    {(DISTRICTS_BY_PROVINCE[provinceCode] ?? []).map(name => <option key={name} value={name}>{name}</option>)}
+                    <option value="__other__">Other district / area</option>
+                  </RoundedSelect>
+                  {otherDistrict && <input className="input mt-2" aria-label="Other district or area" value={district} onChange={event => { setDistrict(event.target.value); setSelectedLocation(null); setLocationPickerOpen(false) }} placeholder="Enter district or area" maxLength={120} required />}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
+                <div className="space-y-1">
+                  <p className="text-sm text-[var(--muted)]">{validParkingCoordinates(selectedLocation) ? `Entrance pin confirmed · ${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}` : "Confirm the exact parking entrance so the map pin matches this site."}</p>
+                  {registration && <p className="text-xs text-[var(--muted)]">During registration, this pin is saved in this browser. Confirm it again in Owner Parking Lots after approval to save it to the parking service.</p>}
+                </div>
+                <button type="button" className="btn-outline" disabled={!lotConfig.address.trim() || !district.trim()} onClick={() => setLocationPickerOpen(open => !open)}>{locationPickerOpen ? "Close map" : selectedLocation ? "Move entrance pin" : "Set entrance pin"}</button>
+              </div>
+              {locationPickerOpen && <ParkingLocationPicker
+                address={address}
+                center={{ lat: CITIES.find(city => city.code === provinceCode)?.defaultLat ?? CITIES[0].defaultLat, lng: CITIES.find(city => city.code === provinceCode)?.defaultLng ?? CITIES[0].defaultLng }}
+                initial={selectedLocation}
+                onConfirm={point => { setSelectedLocation(point); setLocationPickerOpen(false) }}
+                onCancel={() => setLocationPickerOpen(false)}
+              />}
               <div
                 style={{
                   display: "grid",
@@ -936,7 +1053,7 @@ export function OnboardingWizard({
                 onClick={() => setStep(3)}
                 disabled={
                   !lotConfig.name ||
-                  !lotConfig.address ||
+                  !lotConfig.address || !district.trim() || !validParkingCoordinates(selectedLocation) ||
                   !lotConfig.totalSlots ||
                   (LOT_TYPE_INFO[lotType].hasFloors && !lotConfig.floors)
                 }
@@ -1248,7 +1365,7 @@ export function OnboardingWizard({
                 value={`${activeModelFileName} (${customModelFile ? "Owner import · local preview" : "System model"})`}
               />
               <Row label="Name" value={lotConfig.name} />
-              <Row label="Address" value={lotConfig.address} />
+              <Row label="Address" value={address} />
               <Row
                 label="Total Slots"
                 value={String(parseInt(String(lotConfig.totalSlots)) || 0)}
@@ -1299,7 +1416,7 @@ export function OnboardingWizard({
                 <p>Read the agreement and add your draft signature before submitting your parking lot for review.</p>
                 <span>{activeContractDraft?.ownerAcknowledgedAt ? `Draft signed by ${activeContractDraft.ownerName}` : "Owner draft signature required"}</span>
               </div>
-              <button type="button" className="btn-outline" onClick={() => setShowContract(true)}>{activeContractDraft?.ownerAcknowledgedAt ? "View contract" : "Read and sign draft"}</button>
+              <a className="btn-outline" href={`/owner/contract/${encodeURIComponent(registration.id)}`} target="_blank" rel="noopener" onClick={event => { if (prepareContractPage() === false) event.preventDefault() }}>{activeContractDraft?.ownerAcknowledgedAt ? "View contract" : "Read and sign draft"}</a>
             </div>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button className="btn-outline" onClick={() => setStep(4)}>
@@ -1345,30 +1462,6 @@ export function OnboardingWizard({
           </div>
         )}
       </div>
-      {registration && showContract && <PartnerContractDialog
-        applicationId={registration.id}
-        ownerName={registration.ownerName || user?.name || "Owner"}
-        businessName={registration.businessName || "Owner business"}
-        lotName={lotConfig.name || "Parking lot"}
-        record={activeContractDraft}
-        signer="owner"
-        signerName={registration.ownerName || user?.name || ""}
-        onClose={() => setShowContract(false)}
-        onSign={(name) => {
-          const next: ContractDraftRecord = {
-            ...activeContractDraft,
-            ownerName: name,
-            ownerEmail: registration.email,
-            businessName: registration.businessName || "Owner business",
-            lotName: lotConfig.name || "Parking lot",
-            ownerAcknowledgedAt: new Date().toISOString(),
-            modelFileName: customModelFileName || undefined,
-            setupFingerprint,
-          }
-          saveContractDraft(registration.id, next)
-          setContractDraft(next)
-          setShowContract(false)
-        }} />}
     </div>
   )
 }

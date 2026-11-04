@@ -99,7 +99,7 @@ async function call<T>(
 export const parkingApi = {
   list: () => call<Site[]>(""),
 
-  create: (body: { code: string; name: string; address: string }) =>
+  create: (body: { code: string; name: string; address: string; latitude?: number; longitude?: number }) =>
     call<Site>("", "POST", body),
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),
@@ -112,7 +112,10 @@ export const parkingApi = {
     opts?: OperationalLayoutOptions,
   ): Promise<OperationalLayoutProjection> {
     const fixture = await operationalLayoutFixture()
-    if (fixture) return fixture
+    if (fixture) {
+      if (fixture.siteId !== id) throw new Error("Fixture site ID does not match the requested parking lot.")
+      return fixture
+    }
 
     const query: string[] = []
     if (opts?.vehicleType) query.push(`vehicleType=${encodeURIComponent(opts.vehicleType)}`)

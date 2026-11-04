@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
 import { CheckInOut } from "../check-in-out/CheckInOut"
 import { LotStatus } from "../parking-lot/LotStatus"
+import type { SlotStatusFilter } from "../parking-lot/useLotStatus"
 import { EmergencyPanel } from "../emergency/EmergencyPanel"
 import { SlotManagement } from "../parking-slots/SlotManagement"
 import { TicketManagement } from "../tickets/TicketManagement"
@@ -425,7 +426,7 @@ export function OperatorDashboard({
 
           {/* TAB 7: ASSIGNMENTS */}
           {accessRole === "operation" && tab === "assignments" && (
-            <OperatorAssignments currentLot={selectedLot} />
+            <OperatorAssignments currentLot={selectedLot} sites={ownerLots} />
           )}
 
           {/* TAB 8: FINANCIAL REPORTS */}

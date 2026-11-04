@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { getUserHomePath } from "../../operator/data/roleRoutes"
 import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 import { PageHeader } from "../../../components/ui/PageHeader"
-import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
+import { PasswordVisibilityButton, PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { authApi, AuthApiError, type MfaLoginChallenge } from "../../../lib/authApi"
 import { resumePendingSignIn } from "../pendingRegistrationSignIn"
@@ -49,6 +49,7 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
   const [fpNewPassword, setFpNewPassword] = useState("")
   const [fpConfirmPassword, setFpConfirmPassword] = useState("")
   const [fpShowPassword, setFpShowPassword] = useState(false)
+  const [fpShowConfirmPassword, setFpShowConfirmPassword] = useState(false)
   const [fpError, setFpError] = useState("")
   const [fpSubmitting, setFpSubmitting] = useState(false)
 
@@ -225,6 +226,8 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
     setFpOtp("")
     setFpNewPassword("")
     setFpConfirmPassword("")
+    setFpShowPassword(false)
+    setFpShowConfirmPassword(false)
     setFpError("")
     setShowForgotPassword(true)
   }
@@ -862,15 +865,19 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                   <label className="label" style={{ fontSize: "0.85rem" }}>
                     Confirm New Password
                   </label>
-                  <input
-                    className="input"
-                    type={fpShowPassword ? "text" : "password"}
-                    placeholder="Re-enter new password"
-                    value={fpConfirmPassword}
-                    onChange={(e) => setFpConfirmPassword(e.target.value)}
-                    minLength={8}
-                    required
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      className="input"
+                      type={fpShowConfirmPassword ? "text" : "password"}
+                      placeholder="Re-enter new password"
+                      value={fpConfirmPassword}
+                      onChange={(e) => setFpConfirmPassword(e.target.value)}
+                      minLength={8}
+                      required
+                      style={{ paddingRight: "3.25rem" }}
+                    />
+                    <PasswordVisibilityButton visible={fpShowConfirmPassword} onToggle={() => setFpShowConfirmPassword((value) => !value)} label="new password confirmation" />
+                  </div>
                 </div>
 
                 <div

@@ -64,6 +64,7 @@ function fixture(mode, fail = false, mfaRequired = false, recoveryView = null) {
     '../Sign Up/DriverOtpForm': { pendingDriverKey: 'sp_pending_driver_registration' },
     '../../../components/forms/MfaCodeInput': { MfaCodeInput: 'mfa-input' },
     '../../../lib/authApi': { authApi: api, AuthApiError: class extends Error {} }, '../../../lib/signInContact': contact,
+    '../../../lib/uiToast': { showUiToast() {} },
   }).SignIn;
   const render = () => { cursor = 0; return component({ flow: mode === "otp" ? "email-otp" : "password" }); };
   const input = () => nodes(render()).find(node => node.props?.autoComplete === 'username');

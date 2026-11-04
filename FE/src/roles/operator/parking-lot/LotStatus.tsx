@@ -11,6 +11,7 @@ import {
 } from "../../../lib/3d/parking3DConfig"
 import {
   formatSlotLabel,
+  operationalFixtureMode,
   type OperationalLayoutProjection,
   type PhysicalState,
   type ReservationState,

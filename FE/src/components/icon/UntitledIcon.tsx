@@ -1,7 +1,7 @@
 import type { ReactNode, SVGProps } from "react"
 import switchAccountImage from "../../assets/switch-account.png"
 
-type IconName = "activity" | "alert" | "arrow-left" | "arrow-right" | "banknote" | "building" | "calendar" | "car" | "chart" | "check" | "check-circle" | "chevron-down" | "clipboard" | "clock" | "credit-card" | "database" | "file" | "filter" | "graduation-cap" | "grid" | "help" | "house" | "leaf" | "life-buoy" | "link" | "lock" | "log-out" | "mail" | "map" | "map-pin" | "menu" | "phone" | "globe" | "motorcycle" | "parking" | "search" | "settings" | "shield" | "sparkles" | "switch-account" | "target" | "ticket" | "users" | "wallet" | "wrench" | "x" | "plus" | "youtube" | "zap" | "tag" | "flame" | "star" | "shopping-bag" | "percent" | "award"
+type IconName = "activity" | "alert" | "arrow-left" | "arrow-right" | "banknote" | "building" | "calendar" | "car" | "chart" | "check" | "check-circle" | "chevron-down" | "clipboard" | "clock" | "credit-card" | "database" | "file" | "filter" | "graduation-cap" | "grid" | "help" | "house" | "leaf" | "life-buoy" | "link" | "lock" | "log-out" | "mail" | "map" | "map-pin" | "menu" | "phone" | "globe" | "motorcycle" | "parking" | "search" | "settings" | "sliders" | "shield" | "sparkles" | "switch-account" | "target" | "ticket" | "users" | "wallet" | "wrench" | "x" | "plus" | "youtube" | "zap" | "tag" | "flame" | "star" | "shopping-bag" | "percent" | "award"
 
 const paths: Record<IconName, ReactNode> = {
   filter: <><path d="M4 7h16M7 12h10m-7 5h4" /><circle cx="8" cy="7" r="1" /><circle cx="15" cy="12" r="1" /></>,
@@ -280,6 +280,15 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
       <path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.8-.6a8 8 0 0 1-1.7 1l-.3 1.9h-2.8l-.3-1.9a8 8 0 0 1-1.7-1l-1.8.6-1.4-2.4 1.4-1.1a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.8.6a8 8 0 0 1 1.7-1l.3-1.9h2.8l.3 1.9a8 8 0 0 1 1.7 1l1.8-.6 1.4 2.4-1.4 1.1a8 8 0 0 1-.1 1.9Z" />
+    </>
+  ),
+
+  sliders: (
+    <>
+      <path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h10m4 0h2" />
+      <circle cx="13" cy="6" r="2" />
+      <circle cx="9" cy="12" r="2" />
+      <circle cx="16" cy="18" r="2" />
     </>
   ),
 

@@ -134,7 +134,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                           <td className="px-4 py-3.5 text-right">
                             <button
                               type="button"
-                              className={`btn-outline text-xs px-2.5 py-1 ${
+                              className={`btn-outline text-xs px-3 py-1.5 transition-[transform,background-color,border-color] duration-150 motion-safe:active:scale-[0.97] ${
                                 isSelected
                                   ? "border-[var(--primary)] bg-[var(--primary)] text-white"
                                   : ""

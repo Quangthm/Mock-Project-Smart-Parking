@@ -393,13 +393,20 @@ export async function loadOperatorSites(user: User | null): Promise<OperatorSite
   }
 
   const assignments = await operatorsApi.assignments()
-  const projections = await Promise.all(
+  const projections = await Promise.allSettled(
     assignments.map((assignment) => parkingApi.operationalLayout(assignment.siteId)),
   )
-  return Promise.all(projections.map(async (projection, index) => {
+  const available = projections.flatMap((result, index) =>
+    result.status === "fulfilled" ? [{ projection: result.value, assignment: assignments[index] }] : [],
+  )
+  if (assignments.length > 0 && available.length === 0) {
+    const firstFailure = projections.find(result => result.status === "rejected")
+    throw firstFailure?.status === "rejected" ? firstFailure.reason : new Error("Assigned parking sites are unavailable.")
+  }
+  return Promise.all(available.map(async ({ projection, assignment }) => {
     const site = siteFromOperationalLayout(
       projection,
-      assignments[index]?.tenantId ?? "",
+      assignment.tenantId,
     )
     const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
     return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
