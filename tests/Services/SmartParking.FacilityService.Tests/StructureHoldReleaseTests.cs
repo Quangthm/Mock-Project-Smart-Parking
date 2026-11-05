@@ -1,7 +1,7 @@
 using System.Net;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
-using SmartParking.FacilityService.Application.Common.Persistence;
+using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;

@@ -3,7 +3,6 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.FacilityService.Application.Common.Behaviors;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
-using SmartParking.FacilityService.Application.Common.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 
 namespace SmartParking.FacilityService.Application;
@@ -19,7 +18,6 @@ public static class ApplicationDependencyInjection
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         });
         services.AddScoped<IOwnerScopeResolver, OwnerScopeResolver>();
-        services.AddScoped<IStructureUnitOfWork, StructureUnitOfWork>();
         return services;
     }
 }

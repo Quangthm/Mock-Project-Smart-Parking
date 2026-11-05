@@ -1,8 +1,9 @@
+using SmartParking.FacilityService.Application.Common.Helpers;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 using SmartParking.FacilityService.Domain;
 
-namespace SmartParking.FacilityService.Application.Common.Persistence;
+namespace SmartParking.FacilityService.Persistence;
 
 public sealed class StructureUnitOfWork(
     IParkingStructureRepository repository,

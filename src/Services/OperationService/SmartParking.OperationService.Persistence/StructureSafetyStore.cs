@@ -200,6 +200,14 @@ public sealed class StructureSafetyStore(ReservationDbContext db) : IStructureSa
             if (hold.TenantId != tenantId)
                 throw new HoldConflictException();
 
+            // Ghi nhận biên nhận bồi hoàn (Compensated Abort Receipt) để bảo toàn Correlation ID và Audit Trail
+            var abortPayload = JsonSerializer.Serialize(new
+            {
+                status = "COMPENSATED_ABORT",
+                reason = "Force released by saga compensation"
+            }, JsonOptions);
+            AddReceipt(tenantId, siteId, hold.Token, abortPayload);
+
             db.StructureEditHolds.Remove(hold);
             await SaveAsync(ct);
             await transaction.CommitAsync(ct);

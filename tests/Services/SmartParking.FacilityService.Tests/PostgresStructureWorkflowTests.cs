@@ -1,5 +1,5 @@
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
-using SmartParking.FacilityService.Application.Common.Persistence;
+using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 using Npgsql;
 using System.Text.Json;
@@ -825,8 +825,11 @@ public sealed class PostgresStructureWorkflowTests
         {
             if (!await owners.IsOwnerAsync(owner, ct))
                 throw new StructureException("FORBIDDEN", "Current parking management access is required.");
-            return await store.ExtendAsync(owner, siteId, windowId,
-                start is { } from ? Utc(from) : null, end is { } to ? Utc(to) : null, ct);
+            var current = await store.GetByIdAsync(owner, siteId, windowId, ct)
+                ?? throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
+            var newEnd = MaintenanceWindowRules.Extend(
+                current.Start, current.End, start is { } from ? Utc(from) : null, end is { } to ? Utc(to) : null, DateTime.UtcNow);
+            return await store.ExtendAsync(owner, siteId, windowId, newEnd, ct);
         }
 
         public async Task CancelAsync(OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct)

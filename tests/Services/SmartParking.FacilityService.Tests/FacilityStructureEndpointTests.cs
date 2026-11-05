@@ -830,15 +830,21 @@ public sealed class FacilityStructureEndpointTests
             return Task.FromResult(window);
         }
 
+        public Task<MaintenanceWindow?> GetByIdAsync(
+            OwnerScope owner, Guid siteId, Guid windowId, CancellationToken cancellationToken)
+        {
+            var found = windows.FirstOrDefault(window => window.Id == windowId && window.CancelledAt is null);
+            return Task.FromResult<MaintenanceWindow?>(found);
+        }
+
         public Task<MaintenanceWindow> ExtendAsync(
-            OwnerScope owner, Guid siteId, Guid windowId, DateTime? start, DateTime? end, CancellationToken cancellationToken)
+            OwnerScope owner, Guid siteId, Guid windowId, DateTime newEnd, CancellationToken cancellationToken)
         {
             var index = windows.FindIndex(window => window.Id == windowId && window.CancelledAt is null);
             if (index < 0)
                 throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
 
             var current = windows[index];
-            var newEnd = MaintenanceWindowRules.Extend(current.Start, current.End, start, end, DateTime.UtcNow);
             var updated = current with
             {
                 End = newEnd,

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using SmartParking.FacilityService.API.Middleware;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.DTOs;
@@ -40,6 +41,7 @@ public static class FacilityHost
         builder.Services.AddScoped<IOwnerOnboardingStore, OwnerOnboardingStore>();
         builder.Services.AddScoped<IFacilityDirectoryStore, FacilityDirectoryStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+        builder.Services.AddScoped<IStructureUnitOfWork, StructureUnitOfWork>();
         builder.Services.AddSingleton(_ => new ParkingGateConnectionPool(
             builder.Configuration.GetConnectionString("Parking")
                 ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking."),
@@ -68,66 +70,13 @@ public static class FacilityHost
             });
         var app = builder.Build();
         app.UseCors();
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.Use(async (context, next) =>
         {
-            context.Response.Headers.CacheControl = "no-store";
             if (context.Request.Path.StartsWithSegments("/internal") && !CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
-            try { await next(context); }
-            catch (FluentValidation.ValidationException e)
-            {
-                if (context.Response.HasStarted) return;
-                context.Response.StatusCode = 400;
-                var firstError = e.Errors.FirstOrDefault()?.ErrorMessage ?? "Validation failed.";
-                await context.Response.WriteAsJsonAsync(new { success = false, code = "INVALID_STRUCTURE", message = firstError });
-            }
-            catch (PostgresException error) when (
-                context.Request.Path.StartsWithSegments("/api/operator") &&
-                (error.SqlState is PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn))
-            {
-                if (context.Response.HasStarted) return;
-                context.Response.StatusCode = 503;
-                await context.Response.WriteAsJsonAsync(new { success = false, code = "PROTOTYPE_SCHEMA_NOT_READY", message = "Operator data is unavailable until database reconciliation is complete." });
-            }
-            catch (ReleasedIdentifierException e)
-            {
-                if (context.Response.HasStarted) return;
-                context.Response.StatusCode = 409;
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    success = false,
-                    code = e.Code,
-                    message = e.Message,
-                    released = new { id = e.ResourceId, code = e.ReleasedCode, deletedAt = e.DeletedAt }
-                });
-            }
-            catch (StructureBatchException e)
-            {
-                if (context.Response.HasStarted) return;
-                context.Response.StatusCode = 409;
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    success = false,
-                    code = e.Code,
-                    message = e.Message,
-                    items = e.Failures.Select(f => new { resourceId = f.ResourceId, code = f.Code, message = f.Message })
-                });
-            }
-            catch (StructureException e)
-            {
-                if (context.Response.HasStarted) return;
-                context.Response.StatusCode = e.Code switch
-                {
-                    "UNAUTHENTICATED" => 401,
-                    "FORBIDDEN" => 403,
-                    "SITE_NOT_FOUND" or "UNIT_NOT_FOUND" or "SLOT_NOT_FOUND" => 404,
-                    "IDENTITY_UNAVAILABLE" or "COMMITMENTS_UNAVAILABLE" => 503,
-                    "STRUCTURE_BUSY" or "STRUCTURE_IN_USE" or "STRUCTURE_CONFLICT" or "DUPLICATE_IDENTIFIER" or "NO_AVAILABLE_SLOT" => 409,
-                    _ => 400
-                };
-                await context.Response.WriteAsJsonAsync(new { success = false, code = e.Code, message = e.Message });
-            }
+            await next(context);
         });
         app.MapControllers();
         return app;

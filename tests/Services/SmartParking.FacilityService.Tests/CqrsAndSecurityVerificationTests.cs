@@ -163,7 +163,8 @@ public sealed class CqrsAndSecurityVerificationTests
     {
         public Task CancelAsync(OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct) => Task.CompletedTask;
         public Task<MaintenanceWindow> CreateAsync(OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason, CancellationToken ct) => throw new NotImplementedException();
-        public Task<MaintenanceWindow> ExtendAsync(OwnerScope owner, Guid siteId, Guid windowId, DateTime? start, DateTime? end, CancellationToken ct) => throw new NotImplementedException();
+        public Task<MaintenanceWindow?> GetByIdAsync(OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct) => Task.FromResult<MaintenanceWindow?>(null);
+        public Task<MaintenanceWindow> ExtendAsync(OwnerScope owner, Guid siteId, Guid windowId, DateTime newEnd, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyList<MaintenanceWindow>> ListAsync(OwnerScope owner, Guid siteId, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<MaintenanceWindow>>([]);
     }

@@ -24,7 +24,12 @@ public sealed class ExtendMaintenanceWindowCommandHandler(
         var start = request.Start is { } from ? ToUtc(from) : (DateTime?)null;
         var end = request.End is { } to ? ToUtc(to) : (DateTime?)null;
 
-        return await store.ExtendAsync(owner, request.SiteId, request.WindowId, start, end, ct);
+        var current = await store.GetByIdAsync(owner, request.SiteId, request.WindowId, ct)
+            ?? throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
+
+        var newEnd = MaintenanceWindowRules.Extend(current.Start, current.End, start, end, DateTime.UtcNow);
+
+        return await store.ExtendAsync(owner, request.SiteId, request.WindowId, newEnd, ct);
     }
 
     private static DateTime ToUtc(DateTime value) => value.Kind switch
