@@ -6,6 +6,7 @@ import type { Site } from "../../../lib/parkingApi"
 import type { LotType } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { ParkingLocationPicker } from "../../../components/ui/ParkingLocationPicker"
+import { WardField } from "../../../components/forms/WardField"
 import { useSiteForm, LOT_TYPE_INFO, DEVICE_OPTIONS } from "./useSiteForm"
 
 export function SiteForm({ site, onSaved, onCancel }: {
@@ -14,7 +15,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
   onCancel: () => void
 }) {
   const {
-    formId, hasSavedSetup, lotType, chooseLotType, selectedCity, district, setDistrict,
+    formId, hasSavedSetup, lotType, chooseLotType, selectedCity, district, setDistrict, ward, setWard,
     streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
     devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
@@ -135,11 +136,10 @@ export function SiteForm({ site, onSaved, onCancel }: {
 
             <div>
               <label className="label" htmlFor={`${formId}-district`}>
-                District *
+                Former district / area (optional)
               </label>
               {districtOptions.length > 0 ? <>
                 <RoundedSelect id={`${formId}-district`} className="input" value={otherDistrict ? "__other__" : district}
-                  required={!site || addressChanged}
                   onChange={(event) => {
                     const isOther = event.target.value === "__other__"
                     setOtherDistrict(isOther)
@@ -151,14 +151,17 @@ export function SiteForm({ site, onSaved, onCancel }: {
                   {districtOptions.map(districtName => <option key={districtName} value={districtName}>{districtName}</option>)}
                   <option value="__other__">Other district / area</option>
                 </RoundedSelect>
-                {otherDistrict && <input className="input mt-2" aria-label="Other district or area" placeholder="Enter district or area"
+                {otherDistrict && <input className="input mt-2" aria-label="Other district or area" placeholder="Enter former district or area"
                   value={district} onChange={event => { setDistrict(event.target.value); markAddressChanged(); setPickerOpen(false) }}
-                  maxLength={120} required={!site || addressChanged} />}
+                  maxLength={120} />}
               </> : <input id={`${formId}-district`} className="input" placeholder="Enter a district"
                 value={district} onChange={event => { setDistrict(event.target.value); markAddressChanged(); setPickerOpen(false) }}
-                maxLength={120} required={!site || addressChanged} />}
+                maxLength={120} />}
             </div>
           </div>
+
+          <WardField key={selectedCity} id={`${formId}-ward`} provinceCode={selectedCity} value={ward}
+            required={!site || addressChanged} onChange={value => { setWard(value); markAddressChanged(); setPickerOpen(false) }} />
 
           <div>
             <label className="label" htmlFor={`${formId}-street`}>
@@ -188,6 +191,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
             <button type="button" className="btn-outline" onClick={() => setPickerOpen(open => !open)}>{pickerOpen ? "Close map" : locationConfirmed ? "Move entrance pin" : "Set entrance pin"}</button>
           </div>
           {pickerOpen && <ParkingLocationPicker
+            name={form.name}
             address={fullAddress}
             center={CITIES.find(city => city.code === selectedCity) ? { lat: CITIES.find(city => city.code === selectedCity)!.defaultLat, lng: CITIES.find(city => city.code === selectedCity)!.defaultLng } : { lat: form.latitude, lng: form.longitude }}
             initial={locationConfirmed ? { lat: form.latitude, lng: form.longitude } : null}

@@ -43,6 +43,7 @@ type SiteDraft = {
   lotType: LotType
   selectedCity: string
   district: string
+  ward?: string
   streetAddress: string
   locationConfirmed?: boolean
   form: {
@@ -127,12 +128,22 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
 
   // Address Parsing
   const addressParts = site?.address.split(",").map(part => part.trim()) ?? []
-  const savedCity = CITIES.find(city => addressParts.at(-1) === city.name || (city.code === "HCM" && ["TP.HCM", "Bình Dương", "Bà Rịa - Vũng Tàu"].includes(addressParts.at(-1) ?? "")))
-  const savedDistrict = savedCity && addressParts.length >= 3 ? addressParts.at(-2) : undefined
+  const savedCity = CITIES.find(city => addressParts.at(-1) === city.name ||
+    (city.code === "HCM" && ["TP.HCM", "Bình Dương", "Bà Rịa - Vũng Tàu"].includes(addressParts.at(-1) ?? "")) ||
+    ({ QN: "Quảng Ninh", BN: "Bắc Ninh", DNAI: "Đồng Nai" } as Record<string, string>)[city.code] === addressParts.at(-1))
+  const addressLocalParts = savedCity ? addressParts.slice(0, -1) : []
+  const savedWardIndex = addressLocalParts.findIndex(part => /^(Phường|Xã|Đặc khu)\s/u.test(part))
+  const savedWard = savedWardIndex >= 0 ? addressLocalParts[savedWardIndex] : undefined
+  const savedDistrictIndex = savedWardIndex >= 0
+    ? savedWardIndex + 1 < addressLocalParts.length ? savedWardIndex + 1 : -1
+    : addressLocalParts.length >= 2 ? addressLocalParts.length - 1 : -1
+  const savedDistrict = savedDistrictIndex >= 0 ? addressLocalParts[savedDistrictIndex] : undefined
+  const savedStreet = addressLocalParts.filter((_, index) => index !== savedWardIndex && index !== savedDistrictIndex).join(", ")
   const [selectedCity, setSelectedCity] = useState(draft?.selectedCity === "BD" ? "HCM" : draft?.selectedCity ?? savedCity?.code ?? (site ? "LEGACY" : CITIES[0].code))
   const [district, setDistrict] = useState(draft?.district ?? savedDistrict ?? "")
+  const [ward, setWard] = useState(draft?.ward ?? savedWard ?? "")
   const [streetAddress, setStreetAddress] = useState(draft?.streetAddress ?? (site?.address
-    ? savedCity && savedDistrict ? site.address.split(",").slice(0, -2).join(",").trim() : site.address
+    ? savedCity ? savedStreet : site.address
     : ""))
   const [addressChanged, setAddressChanged] = useState(false)
   const [locationConfirmed, setLocationConfirmed] = useState(() => {
@@ -181,9 +192,9 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   // Computed full address
   const fullAddress = useMemo(() => {
     const cityObj = CITIES.find((c) => c.code === selectedCity)
-    const parts = [streetAddress.trim(), district, cityObj?.name].filter(Boolean)
+    const parts = [streetAddress.trim(), ward.trim(), district.trim(), cityObj?.name].filter(Boolean)
     return site && !addressChanged ? site.address : parts.join(", ")
-  }, [site, addressChanged, streetAddress, district, selectedCity])
+  }, [site, addressChanged, streetAddress, ward, district, selectedCity])
 
   function handleCityChange(newCityCode: string) {
     setAddressChanged(true)
@@ -192,6 +203,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     const found = CITIES.find((c) => c.code === newCityCode)
     if (found) {
       setDistrict("")
+      setWard("")
       setForm((cur) => ({
         ...cur,
         latitude: found.defaultLat,
@@ -231,8 +243,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       setError("Please enter the site name and address.")
       return
     }
-    if ((!site || addressChanged) && (selectedCity === "LEGACY" || !district.trim())) {
-      setError("Choose a province or city and enter its district or area.")
+    if ((!site || addressChanged) && (selectedCity === "LEGACY" || !ward.trim())) {
+      setError("Choose a province or city and its current ward, commune or special zone.")
       return
     }
     if (!locationConfirmed || !validParkingCoordinates({ lat: form.latitude, lng: form.longitude })) {
@@ -374,7 +386,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     } catch (err) {
       if (err instanceof AuthApiError) {
         if (!site && err.status === 401) {
-          sessionStorage.setItem(draftKey, JSON.stringify({ lotType, selectedCity, district, streetAddress, locationConfirmed, form, devices }))
+          sessionStorage.setItem(draftKey, JSON.stringify({ lotType, selectedCity, district, ward, streetAddress, locationConfirmed, form, devices }))
         }
         const messages: Record<number, string> = {
           400: "Please check the site details and try again.",
@@ -402,7 +414,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   }
 
   return {
-    formId, hasSavedSetup: Boolean(savedLot), lotType, chooseLotType, selectedCity, district, setDistrict,
+    formId, hasSavedSetup: Boolean(savedLot), lotType, chooseLotType, selectedCity, district, setDistrict, ward, setWard,
     streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
     devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,

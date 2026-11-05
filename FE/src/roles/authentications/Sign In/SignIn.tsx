@@ -131,8 +131,9 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
         setError(recoveryError instanceof Error ? recoveryError.message : "Unable to resume registration. Please try again.")
         return
       }
-      const msg =
-        error instanceof Error
+      const msg = error instanceof AuthApiError && error.code === "AUTH_FAILED"
+        ? "Email or password is incorrect. New to SmartParking? Select Sign Up below."
+        : error instanceof Error
           ? error.message
           : "Sign in failed. Please try again."
 
