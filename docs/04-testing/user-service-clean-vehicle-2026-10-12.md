@@ -19,7 +19,7 @@ Repo đúng: `D:\DataFPTU\Semester6\Mock-Project-Smart-Parking`, branch `develop
 
 ## Kiểm chứng
 
-Baseline và sau refactor: UserService 77 passed, 0 failed, 0 skipped; ParkingService 24 passed, 0 failed, 8 skipped. Các test integration Parking skip do thiếu cấu hình riêng, không được tính là pass. Build qua dotnet test và git diff --check thành công.
+Baseline và sau refactor: UserService 77 passed, 0 failed, 0 skipped; FacilityService 24 passed, 0 failed, 8 skipped. Các test integration Parking skip do thiếu cấu hình riêng, không được tính là pass. Build qua dotnet test và git diff --check thành công.
 
 PostgreSQL container test riêng: smartpark-user-clean-correct-20261012, loopback 65435, không mount volume dự án. Mỗi UserService integration test tạo/drop DB UUID riêng. Không áp schema hoặc migration lên DB deployment.
 

@@ -9,7 +9,7 @@
 -- Evidence: StructureSafetyStore.cs:92 (token lookup before taking a hold), :156, :214.
 -- ======================================================================================
 -- Reproduced from scripts/database/05.12-Reservation-Structure-Receipts.sql.
--- ReservationService only; apply after the structure safety overlay.
+-- OperationService only; apply after the structure safety overlay.
 -- ======================================================================================
 BEGIN;
 CREATE TABLE IF NOT EXISTS structure_release_receipts (

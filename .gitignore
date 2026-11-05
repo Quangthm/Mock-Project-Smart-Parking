@@ -123,6 +123,7 @@ coverage*.xml
 # Test result artifacts
 TestResults/
 *.trx
+*.local.runsettings
 
 # Agents
 .agents/*
@@ -180,3 +181,5 @@ debug_output/
 # OS junk
 .DS_Store
 Thumbs.db
+
+.claude

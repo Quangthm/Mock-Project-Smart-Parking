@@ -53,8 +53,8 @@ Checklist trước khi setup:
 | `[2/7]` | Dùng lại credential đã có, chỉ sinh giá trị còn thiếu. |
 | `[3/7]` | Validate service key (≥32 ký tự), policy password (8–15 ký tự, đủ hoa/thường/số/ký tự đặc biệt) và 6 port DB. |
 | `[4/7]` | Dựng 6 DB `user`, `facility`, `operations`, `payment`, `notification`, `iot`, probe authentication, áp migration. |
-| `[5/7]` | Đồng bộ user-secrets cho User/Parking/Reservation/Payment theo `.env`. |
-| `[6/7]` | Chuẩn bị `FE/.env`, MapTiler, API base URLs; khởi động SonarQube (mặc định). |
+| `[5/7]` | Đồng bộ user-secrets cho User/Facility/Operation/Payment theo `.env`. |
+| `[6/7]` | Chuẩn bị `FE/.env`, MapTiler, AI endpoints; khởi động SonarQube (mặc định). |
 | `[7/7]` | `dotnet restore`. |
 
 Mặc định `CredentialMode = Local`: credential trong `.env`/user-secrets được **dùng lại**, chỉ sinh khi thiếu. Setup kết thúc bằng dòng `Setup complete...` khi mọi bước pass.
@@ -82,7 +82,7 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 ```powershell
 .\scripts\run-app-service.ps1 -Service User       # 1 service, mở CMD log riêng
 .\scripts\run-app-service.ps1 -Service Parking
-.\scripts\run-app-service.ps1 -Service Reservation
+.\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Payment
 .\scripts\run-app-service.ps1 -Service Notification
 .\scripts\run-app-service.ps1 -Service Frontend
@@ -98,7 +98,7 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | `smartpark-app-notification-service-1` | http://localhost:5068/health | Dùng `notification-db` |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
-> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** ParkingService (dùng `facility-db` trên port 5442) đang được đổi tên thành FacilityService trong branch `Fix2FA` theo SRS v1.1 (quyết định V11-09). Tương tự, ReservationService (dùng `operations-db` trên port 5443) sẽ hợp nhất vào Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
+> **Lưu ý chuyển tiếp v1.1 / Fix2FA:** Mã nguồn trên branch `Fix2FA` đã dùng `FacilityService` tại `src/Services/FacilityService/` (dùng `facility-db` trên port 5442) theo SRS v1.1 (quyết định V11-09). `OperationService` tại `src/Services/OperationService/` dùng `operations-db` trên port 5443 và triển khai luồng Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
 
 - Lần đầu build 6 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
 - `-NoBuild` bỏ qua bước build khi image đã có; `-NoLogWindow` không mở cửa sổ CMD (dùng cho CI/automation).
@@ -115,7 +115,7 @@ Mở 4 terminal PowerShell tại repo root, mỗi terminal chạy một API:
 # Terminal khác:
 .\scripts\run-schema-service.ps1 -Service Parking
 # Terminal khác:
-.\scripts\run-schema-service.ps1 -Service Reservation
+.\scripts\run-schema-service.ps1 -Service Operation
 # Terminal khác:
 .\scripts\run-schema-service.ps1 -Service Payment
 ```
@@ -287,6 +287,23 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 **Volume cũ (schema cũ hơn baseline hiện tại):** chạy `.\setup.ps1 -RecreateDb` để build lại 6 DB theo schema canonical; runner tự phân biệt DB trống / schema hiện tại / schema cũ và chỉ áp script khi cần. Chi tiết ở [LOCAL-SETUP.md](LOCAL-SETUP.md).
 
+**Frontend (Docker) — `[vite] (client) Pre-transform error: Failed to resolve import "<package>" from "src/..."`**
+
+- **Triệu chứng:** Container `smartpark-app-frontend-1` báo lỗi `Internal server error: Failed to resolve import "..."` hoặc `Pre-transform error: Failed to resolve import ... Does the file exist?` (ví dụ `motion/react`, `animejs`).
+- **Nguyên nhân:** Mã nguồn vừa thêm dependency mới vào `FE/package.json`, nhưng Docker Compose đang mount named volume `fe-node-modules` vào `/app/node_modules`. Docker giữ nguyên cache volume cũ từ các lần chạy trước chứ không tự động đồng bộ package mới.
+- **Cách xử lý:** Chọn một trong hai cách:
+  - **Cách 1 (Nhanh nhất — không cần restart):** Chạy `npm install` trực tiếp vào container đang chạy:
+    ```powershell
+    docker exec -it smartpark-app-frontend-1 npm install
+    ```
+  - **Cách 2 (Làm mới volume sạch):** Dừng frontend, xóa volume cache cũ và build/chạy lại:
+    ```powershell
+    docker compose -f compose.app.yml stop frontend
+    docker volume rm smartpark-app_fe-node-modules
+    .\scripts\run-app-service.ps1 -Service Frontend
+    ```
+  *(Nếu chạy frontend trên host bằng `npm run dev`, chỉ cần chạy `cd FE; npm install`)*
+
 > Khi gặp lỗi mới: **note lại dòng `[n/7]` (hoặc `[migrationIndex/6]`) + thông báo lỗi** vào mục này để dev sau tra cứu nhanh.
 
 ## 7. Advanced Options
@@ -320,8 +337,8 @@ SonarQube tự khởi động cùng `.\setup.ps1`; bỏ qua bằng `-SkipSonarQu
 
 | Thành phần | Port | Ghi chú |
 | --- | --- | --- |
-| User/Parking/Reservation/Payment/Notification API | `5035` / `5045` / `5055` / `5065` / `5068` | Docker app stack bind `127.0.0.1` |
-| User/Parking/Reservation DB | `5441` / `5442` / `5443` | Bind loopback (`127.0.0.1`) |
+| User/Facility/Operation/Payment/Notification API | 5035 / 5045 / 5055 / 5065 / 5068 | Docker app stack bind 127.0.0.1 |
+| User/Facility/Operation DB | 5441 / 5442 / 5443 | Bind loopback (127.0.0.1) |
 | Payment/Notification/IoT DB | `5444` / `5445` / `5446` | Bind loopback (`127.0.0.1`) |
 | `ai-rest` / `ai-live` | `5001` / `5002` | Chỉ dựng bằng `.\setup.ps1 -WithAiCamera` |
 | Frontend (Vite) | `5173` | Host hoặc Docker |
@@ -375,3 +392,6 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 - [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
+
+
+Own-profile schema, shared RabbitMQ, configuration and safe database recreation: [SPARK-248 deployment guide](docs/04-testing/reports/SPARK-248/follow-up.md).

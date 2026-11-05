@@ -41,7 +41,7 @@ flowchart TD
 
 ## Concurrency, errors and session enforcement
 
-Serialize administrative changes against current target/security version, login issuance and other restrictions; audit actor/target/action/reason/time/outcome. Current session/security checks reject subsequent protected actions after lock/disable; revocation is not delayed until refresh. Preserve **15-minute access**, **7-day absolute refresh**, **24-hour inactivity**, **three OTP failures/fifteen-minute lock** and optional staged TOTP. Do not copy the former five-failure or 24-hour-access examples.
+Serialize administrative changes against current target/security version, login issuance and other restrictions; audit actor/target/action/reason/time/outcome. UserService retains authoritative local current-admin/target/session checks for its security writes. Other resource APIs follow the [freshness matrix](../../01-requirements/srs/authorization-operation-classification.md), including TOKEN stale claims until expiry and async Account-current REQUEST. Do not promise immediate invalidation of every protected resource request. Preserve **15-minute access**, **7-day absolute refresh**, **24-hour inactivity**, **three OTP failures/fifteen-minute lock** and optional staged TOTP. Do not copy the former five-failure or 24-hour-access examples.
 
 Retain safe validation/authentication, `FORBIDDEN`, `USER_NOT_FOUND`, `ADMIN_ACCOUNT_PROTECTED`, `INVALID_STATUS_TRANSITION` and concurrency outcomes; final restriction/re-enable error payloads are V11-DES-03/V11-DES-11. Repeating the same authorized request cannot repeat grants or revive a session. Notifications retry independently of the committed change.
 

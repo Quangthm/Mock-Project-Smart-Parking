@@ -4,8 +4,8 @@ Date: 2026-10-09
 
 ## Changes
 
-- Owner site selectors, site count/capacity and employee count use ParkingService/UserService data.
-- Sites and My parking lots display backend site records; create/edit profiles are saved through ParkingService.
+- Owner site selectors, site count/capacity and employee count use FacilityService/UserService data.
+- Sites and My parking lots display backend site records; create/edit profiles are saved through FacilityService.
 - With no active sites, New Operator opens site creation and then continues to operator creation.
 - Operator creation uses POST /api/users, including real site IDs, permissions and the backend password policy.
 - Parking Structure reads saved units and slots, and supports creating floor/zone/block units and slots, plus removal through backend operations. It no longer seeds local demo layouts.
@@ -14,7 +14,7 @@ Date: 2026-10-09
 
 ## Team prerequisites
 
-Run UserService and ParkingService. Structure reads/updates also require ReservationService because the backend checks reservations and structural commitments. Configure service keys, connection strings and schema migrations using the team's existing local setup. Never commit .cache credentials or local key rings.
+Run UserService and FacilityService. Structure reads/updates also require OperationService because the backend checks reservations and structural commitments. Configure service keys, connection strings and schema migrations using the team's existing local setup. Never commit .cache credentials or local key rings.
 
 ## Manual acceptance
 
@@ -45,7 +45,7 @@ npm run build
 Backend tests require SMARTPARK_AUTH_TEST_CONNECTION and SMARTPARK_SCHEMA_ROOT. Use a local PostgreSQL test server where the test user can create databases. Tests create randomly named databases and clean them afterward.
 
 ```powershell
-dotnet test tests/Services/SmartParking.ParkingService.Tests/SmartParking.ParkingService.Tests.csproj --artifacts-path .cache/parking-review-artifacts
+dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --artifacts-path .cache/parking-review-artifacts
 dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --artifacts-path .cache/operator-review-artifacts --filter 'FullyQualifiedName~OperatorProvisioning'
 ```
 
@@ -73,11 +73,11 @@ dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserServi
 
 At the user's request, the standalone `SignInValidationTests.cs` and `RegistrationEmailValidationTests.cs` files were removed after verification. The previously committed `PostgresStructureTests.cs`, `AuthHttpTests.cs`, `DatabaseIntegrationTests.cs`, `OperatorProvisioningTests.cs`, `ServiceSchema.cs` and `WorkflowFeatureTests.cs` files were also removed. Shared schema/directory helpers were moved into the existing `WorkflowTestSupport.cs` to keep remaining tests compilable. Test counts and workflow coverage recorded above describe the runs before this cleanup; the deleted tests are no longer part of the current suite.
 
-Final checks after cleanup: 73 frontend tests and the frontend build passed. The 33 remaining selected backend tests (`AuthSessionTests`, `OperatorProvisioningHttpTests`, `DriverRegistrationHttpTests`, `OwnerRegistrationHttpTests`) passed. Both UserService.Tests and ParkingService.Tests build successfully. `git diff --check` passed after removing a trailing blank line in the combined helper. Live browser acceptance and the entire backend test project have not been verified after cleanup.
+Final checks after cleanup: 73 frontend tests and the frontend build passed. The 33 remaining selected backend tests (`AuthSessionTests`, `OperatorProvisioningHttpTests`, `DriverRegistrationHttpTests`, `OwnerRegistrationHttpTests`) passed. Both UserService.Tests and FacilityService.Tests build successfully. `git diff --check` passed after removing a trailing blank line in the combined helper. Live browser acceptance and the entire backend test project have not been verified after cleanup.
 
 Email validation follow-up: account creation for Operator, Owner and Driver, plus development Admin bootstrap, now uses the same email rule as Password/OTP login. The Operator form also checks that rule before sending a request. Phone-only Driver registration remains supported. Invalid examples such as `a@example`, `a..b@example.com` and `a@example..com` must be rejected without creating an operator, grant, challenge or delivery. Verify uppercase emails, plus addressing and surrounding spaces still work.
 
-Updated verification: 73 frontend tests and frontend build passed; the selected UserService suite passed 111 tests, including registration DTO validation and actual operator provisioning followed by login. The separate integration test using real UserService, ParkingService and ReservationService hosts and isolated PostgreSQL databases also passed (112 backend tests in total across these runs). Two older migration-upgrade tests (`DriverRegistrationTests` and `OwnerRegistrationTests`) could not run because migrations `05.4-Driver-Registration-OTP.sql` and `05.5-Owner-Registration-Approval.sql` are absent from both this checkout and the configured schema checkout. Current registration/OTP workflows are covered by `WorkflowFeatureTests`; do not interpret the selected-suite pass as a pass of the entire test project.
+Updated verification: 73 frontend tests and frontend build passed; the selected UserService suite passed 111 tests, including registration DTO validation and actual operator provisioning followed by login. The separate integration test using real UserService, FacilityService and OperationService hosts and isolated PostgreSQL databases also passed (112 backend tests in total across these runs). Two older migration-upgrade tests (`DriverRegistrationTests` and `OwnerRegistrationTests`) could not run because migrations `05.4-Driver-Registration-OTP.sql` and `05.5-Owner-Registration-Approval.sql` are absent from both this checkout and the configured schema checkout. Current registration/OTP workflows are covered by `WorkflowFeatureTests`; do not interpret the selected-suite pass as a pass of the entire test project.
 
 - Operator Lock/Remove/site reassignment remain unavailable; they no longer pretend to persist local changes.
 - Revenue and booking reports remain based on local booking data. Payment/reservation reporting integration is outside this fix.

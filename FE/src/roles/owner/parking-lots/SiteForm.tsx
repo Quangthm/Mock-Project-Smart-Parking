@@ -1,8 +1,12 @@
+import { useState } from "react"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+import { CITIES, DISTRICTS_BY_PROVINCE } from "../../../lib/vietnamAdministrativeUnits"
 import type { Site } from "../../../lib/parkingApi"
 import type { LotType } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { useSiteForm, LOT_TYPE_INFO, CITIES, DEVICE_OPTIONS } from "./useSiteForm"
+import { ParkingLocationPicker } from "../../../components/ui/ParkingLocationPicker"
+import { useSiteForm, LOT_TYPE_INFO, DEVICE_OPTIONS } from "./useSiteForm"
 
 export function SiteForm({ site, onSaved, onCancel }: {
   site?: Site
@@ -10,14 +14,17 @@ export function SiteForm({ site, onSaved, onCancel }: {
   onCancel: () => void
 }) {
   const {
-    formId, lotType, chooseLotType, selectedCity, district, setDistrict,
-    streetAddress, setStreetAddress, isManualCode, form, setForm,
+    formId, hasSavedSetup, lotType, chooseLotType, selectedCity, district, setDistrict,
+    streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
     devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   } = useSiteForm(site, onSaved, onCancel)
+  const [otherDistrict, setOtherDistrict] = useState(() => Boolean(district && !DISTRICTS_BY_PROVINCE[selectedCity]?.includes(district)))
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const districtOptions = DISTRICTS_BY_PROVINCE[selectedCity] ?? []
 
   return (
-    <form className="space-y-5 text-[var(--fg)] max-h-[85vh] overflow-y-auto pr-1" onSubmit={submit}>
+    <form className="space-y-5 text-[var(--fg)] max-h-[85dvh] overflow-y-auto pr-1" onSubmit={submit}>
       {/* Header */}
       <div className="border-b border-[var(--border)] pb-3">
         <h3 className="text-lg font-bold text-[var(--fg)] flex items-center gap-2">
@@ -34,7 +41,9 @@ export function SiteForm({ site, onSaved, onCancel }: {
       </div>
 
       <fieldset disabled={busy} className="space-y-4.5" style={{ border: 0, padding: 0, margin: 0 }}>
+        {site && !hasSavedSetup && <p role="status" className="rounded-xl border border-[var(--border)] p-3 text-sm text-[var(--muted)]">This browser has no saved setup for this site. Only the site name and address can be edited here; type, 3D model and pricing cannot be restored from the current Owner API.</p>}
         {/* Section 1: Choose Lot Type (Giống form Owner) */}
+        {(!site || hasSavedSetup) && <>
         <div className="space-y-2">
           <label className="label font-semibold text-xs">Parking Structure Type *</label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -42,17 +51,19 @@ export function SiteForm({ site, onSaved, onCancel }: {
               ([type, info]) => {
                 const selected = lotType === type
                 return (
-                  <div
+                  <button
                     key={type}
+                    type="button"
+                    aria-pressed={selected}
                     onClick={() => chooseLotType(type)}
-                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] flex flex-col justify-between ${
                       selected
                         ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--fg)] shadow-xs"
                         : "border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:border-[var(--border)]/80"
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xl">{info.icon}</span>
+                      <span className="text-[var(--primary)]"><UntitledIcon name={info.icon} size={22} /></span>
                       {selected && (
                         <span className="text-[var(--primary)]">
                           <UntitledIcon name="check" size={14} />
@@ -63,12 +74,13 @@ export function SiteForm({ site, onSaved, onCancel }: {
                       <div className="font-semibold text-xs text-[var(--fg)]">{info.label}</div>
                       <div className="text-[10px] text-[var(--muted)] line-clamp-1">{info.desc}</div>
                     </div>
-                  </div>
+                  </button>
                 )
               },
             )}
           </div>
         </div>
+        </>}
 
         {/* Section 2: Site Identification with Smart Code Logic */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3.5">
@@ -101,20 +113,21 @@ export function SiteForm({ site, onSaved, onCancel }: {
             Location & Coordinates
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
             <div>
               <label className="label" htmlFor={`${formId}-city`}>
-                Province / City *
+                Province *
               </label>
               <RoundedSelect
                 id={`${formId}-city`}
                 className="input"
                 value={selectedCity}
-                onChange={(e) => handleCityChange(e.target.value)}
+                onChange={(e) => { setOtherDistrict(false); setPickerOpen(false); handleCityChange(e.target.value) }}
               >
+                {selectedCity === "LEGACY" && <option value="LEGACY" disabled>Existing address — choose a current province or city to update</option>}
                 {CITIES.map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.name} ({c.code})
+                    {c.code === "HCM" ? "TP.HCM" : c.name}
                   </option>
                 ))}
               </RoundedSelect>
@@ -124,18 +137,26 @@ export function SiteForm({ site, onSaved, onCancel }: {
               <label className="label" htmlFor={`${formId}-district`}>
                 District *
               </label>
-              <RoundedSelect
-                id={`${formId}-district`}
-                className="input"
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-              >
-                {(CITIES.find((c) => c.code === selectedCity)?.districts ?? []).map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </RoundedSelect>
+              {districtOptions.length > 0 ? <>
+                <RoundedSelect id={`${formId}-district`} className="input" value={otherDistrict ? "__other__" : district}
+                  required={!site || addressChanged}
+                  onChange={(event) => {
+                    const isOther = event.target.value === "__other__"
+                    setOtherDistrict(isOther)
+                    setDistrict(isOther ? "" : event.target.value)
+                    markAddressChanged()
+                    setPickerOpen(false)
+                  }}>
+                  <option value="" disabled>Select a district</option>
+                  {districtOptions.map(districtName => <option key={districtName} value={districtName}>{districtName}</option>)}
+                  <option value="__other__">Other district / area</option>
+                </RoundedSelect>
+                {otherDistrict && <input className="input mt-2" aria-label="Other district or area" placeholder="Enter district or area"
+                  value={district} onChange={event => { setDistrict(event.target.value); markAddressChanged(); setPickerOpen(false) }}
+                  maxLength={120} required={!site || addressChanged} />}
+              </> : <input id={`${formId}-district`} className="input" placeholder="Enter a district"
+                value={district} onChange={event => { setDistrict(event.target.value); markAddressChanged(); setPickerOpen(false) }}
+                maxLength={120} required={!site || addressChanged} />}
             </div>
           </div>
 
@@ -147,9 +168,9 @@ export function SiteForm({ site, onSaved, onCancel }: {
               id={`${formId}-street`}
               className="input"
               maxLength={500}
-              placeholder="e.g. 72 Le Thanh Ton Street, Ben Nghe Ward"
+              placeholder="e.g. 72 Le Thanh Ton Street"
               value={streetAddress}
-              onChange={(e) => setStreetAddress(e.target.value)}
+              onChange={(e) => { setStreetAddress(e.target.value); markAddressChanged(); setPickerOpen(false) }}
               required
             />
           </div>
@@ -162,9 +183,21 @@ export function SiteForm({ site, onSaved, onCancel }: {
               <span>{fullAddress || "Address is incomplete"}</span>
             </div>
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[var(--muted)]">{locationConfirmed ? `Entrance pin confirmed · ${form.latitude.toFixed(6)}, ${form.longitude.toFixed(6)}` : "Confirm the exact entrance pin so Drivers see this site in the right place."}</p>
+            <button type="button" className="btn-outline" onClick={() => setPickerOpen(open => !open)}>{pickerOpen ? "Close map" : locationConfirmed ? "Move entrance pin" : "Set entrance pin"}</button>
+          </div>
+          {pickerOpen && <ParkingLocationPicker
+            address={fullAddress}
+            center={CITIES.find(city => city.code === selectedCity) ? { lat: CITIES.find(city => city.code === selectedCity)!.defaultLat, lng: CITIES.find(city => city.code === selectedCity)!.defaultLng } : { lat: form.latitude, lng: form.longitude }}
+            initial={locationConfirmed ? { lat: form.latitude, lng: form.longitude } : null}
+            onConfirm={point => { setConfirmedLocation(point); setPickerOpen(false) }}
+            onCancel={() => setPickerOpen(false)}
+          />}
         </div>
 
         {/* Section 4: Physical Capacity & Structure */}
+        {(!site || hasSavedSetup) && <>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/50 p-4 space-y-3.5">
           <div className="font-semibold text-xs text-[var(--fg)]">
             Capacity & Levels
@@ -278,30 +311,39 @@ export function SiteForm({ site, onSaved, onCancel }: {
               <label className="label" htmlFor={`${formId}-hourly-rate`}>
                 Hourly Rate (VND / hour)
               </label>
-              <input
+              <GroupedNumberInput
                 id={`${formId}-hourly-rate`}
                 className="input"
-                type="number"
                 step={1000}
-                min={0}
-                value={form.hourlyRate}
-                onChange={(e) => setForm((c) => ({ ...c, hourlyRate: Number(e.target.value) }))}
+                value={String(form.hourlyRate)}
+                onValueChange={(digits) => setForm((c) => ({ ...c, hourlyRate: Number(digits) }))}
               />
             </div>
             <div>
               <label className="label" htmlFor={`${formId}-daily-rate`}>
                 Daily Rate (VND / day)
               </label>
-              <input
+              <GroupedNumberInput
                 id={`${formId}-daily-rate`}
                 className="input"
-                type="number"
                 step={1000}
-                min={0}
-                value={form.dailyRate}
-                onChange={(e) => setForm((c) => ({ ...c, dailyRate: Number(e.target.value) }))}
+                value={String(form.dailyRate)}
+                onValueChange={(digits) => setForm((c) => ({ ...c, dailyRate: Number(digits) }))}
               />
             </div>
+            {([
+              ["nightRate", "Night Rate (VND)", 1000],
+              ["gracePeriodMinutes", "Grace Period (minutes)", 1],
+              ["subscriptionMonthly", "Monthly Pass (VND)", 1000],
+              ["subscriptionYearly", "Yearly Pass (VND)", 1000],
+            ] as const).map(([key, label, step]) => <div key={key}>
+              <label className="label" htmlFor={`${formId}-${key}`}>{label}</label>
+              {key === "gracePeriodMinutes"
+                ? <input id={`${formId}-${key}`} className="input" type="number" step={step} min={0}
+                    value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: Number(event.target.value) }))} />
+                : <GroupedNumberInput id={`${formId}-${key}`} className="input" step={step}
+                    value={String(form[key])} onValueChange={digits => setForm(current => ({ ...current, [key]: Number(digits) }))} />}
+            </div>)}
           </div>
         </div>
 
@@ -313,6 +355,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
         )}
 
         {/* Buttons */}
+        </>}
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
           <button type="button" className="btn-outline text-xs px-4 py-2" onClick={cancel} disabled={busy}>
             Cancel

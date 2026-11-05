@@ -1,0 +1,19 @@
+name: Architecture and unit tests
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+permissions:
+  contents: read
+jobs:
+  architecture-and-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore SmartParking.slnx
+      - run: dotnet test SmartParking.slnx --no-restore --verbosity normal
+# PostgreSQL integration tests require the separate DB fixture environment.
+# Passing this job does not certify the deferred admission/payment invariants.

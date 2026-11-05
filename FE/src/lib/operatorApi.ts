@@ -5,7 +5,14 @@ import {
   operatorsApi,
   parkingApi,
   type Structure,
+  type Unit,
 } from "./parkingApi"
+import { isSlotBookable } from "./operationalLayout"
+import type {
+  OperationalLayoutProjection,
+  PhysicalState,
+  ReservationState,
+} from "./operationalLayout"
 import type {
   AppNotification,
   Booking,
@@ -28,12 +35,96 @@ const parkingServer = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
 ).replace(/\/$/, "")
 
+const paymentServer = (
+  import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "http://localhost:5065"
+).replace(/\/$/, "")
+
 export interface OperatorSlot extends ParkingSlot {
   unitId: string
   vehicleType: string
+  /** Legacy presentation string kept for existing consumers; `physicalState` is authoritative. */
   operationalStatus: string
   isPhysicallyOccupied: boolean
-  reservationState: string | null
+  /** Normalised reservation axis: legacy `null`/`NONE` becomes `UNRESERVED`. */
+  reservationState: ReservationState
+  physicalState: PhysicalState
+  isBookable: boolean
+  demoPlate?: string
+  demoImageUrl?: string
+  demoCheckedInAt?: string
+  demoSession?: DemoSlotSession
+}
+
+export interface DemoSlotSession {
+  id: string
+  originalPlate: string
+  normalizedPlate: string
+  vehicleType: string
+  ticketReference: string
+  entryTime: string
+  exitTime: string | null
+  status: string
+  entryImageUrl: string | null
+  exitImageUrl: string | null
+}
+
+/**
+ * Physical axis -> derived `ParkingSlot.status` presentation value. UNKNOWN and
+ * UNAVAILABLE fail closed to `disabled`, never `available`.
+ */
+const PHYSICAL_SLOT_STATUS: Record<PhysicalState, SlotStatus> = {
+  AVAILABLE: "available",
+  OCCUPIED: "occupied",
+  UNKNOWN: "disabled",
+  MAINTENANCE: "maintenance",
+  UNAVAILABLE: "disabled",
+}
+
+/** Reservation overlay, applied only when the physical axis is AVAILABLE. */
+const RESERVATION_SLOT_STATUS: Record<ReservationState, SlotStatus> = {
+  UNRESERVED: "available",
+  RESERVED: "reserved",
+  PROTECTED: "reserved",
+  BACKUP: "reserved",
+}
+
+const LEGACY_OPERATIONAL_STATUS: Record<PhysicalState, string> = {
+  AVAILABLE: "OPERATIONAL",
+  OCCUPIED: "OPERATIONAL",
+  UNKNOWN: "UNKNOWN",
+  MAINTENANCE: "MAINTENANCE",
+  UNAVAILABLE: "UNAVAILABLE",
+}
+
+/** Derived presentation status; unknown axis values fail closed to `disabled`. */
+function derivedSlotStatus(
+  physicalState: PhysicalState,
+  reservationState: ReservationState,
+): SlotStatus {
+  const physical = PHYSICAL_SLOT_STATUS[physicalState]
+  if (physical !== "available") return physical || "disabled"
+  return RESERVATION_SLOT_STATUS[reservationState] || "disabled"
+}
+
+/** Explicit normalisation: legacy `null`/`NONE`/empty means UNRESERVED. */
+function normalizeReservationState(raw: string | null | undefined): ReservationState {
+  const value = (raw ?? "").trim().toUpperCase()
+  if (value === "" || value === "NONE" || value === "UNRESERVED") return "UNRESERVED"
+  if (value === "RESERVED") return "RESERVED"
+  if (value === "PROTECTED") return "PROTECTED"
+  if (value === "BACKUP") return "BACKUP"
+  // Unknown legacy values stay non-bookable instead of looking unreserved.
+  return "RESERVED"
+}
+
+function physicalStateFromLegacy(slot: Structure["slots"][number]): PhysicalState {
+  if (slot.isPhysicallyOccupied) return "OCCUPIED"
+  const operational = (slot.operationalStatus ?? "").toUpperCase()
+  if (operational === "OPERATIONAL") return "AVAILABLE"
+  if (operational === "MAINTENANCE") return "MAINTENANCE"
+  if (operational === "UNAVAILABLE" || operational === "DISABLED" || operational === "BLOCKED")
+    return "UNAVAILABLE"
+  return "UNKNOWN"
 }
 
 export interface OperatorSite {
@@ -48,6 +139,16 @@ export interface OperatorSite {
   totalSlots: number
   floors: number
   configuredBackupCount: number
+  /**
+   * Server freshness triple from the operational-layout projection. `null` on
+   * the legacy owner aggregate, which carries no freshness metadata, so callers
+   * must treat it as unknown rather than fresh.
+   */
+  freshness?: {
+    generatedAt: string
+    isFresh: boolean
+    stalenessThresholdSeconds: number
+  } | null
   modelUrl?: string
   modelFileName?: string
   slots: OperatorSlot[]
@@ -159,54 +260,207 @@ function siteFromStructure(structure: Structure): OperatorSite {
     totalSlots: structure.slots.length,
     floors: floorUnits.length,
     configuredBackupCount: structure.capacityViews.find((view) => view.unitId === null)?.configuredBackup ?? 0,
+    // The legacy aggregate has no freshness triple; never fabricate one.
+    freshness: null,
     units: structure.units,
     slots: structure.slots.map((slot) => {
-      const operational = slot.operationalStatus.toUpperCase()
-      const reservation = slot.reservationState?.toUpperCase() ?? ""
-      const status: SlotStatus = slot.isPhysicallyOccupied
-        ? "occupied"
-        : operational === "MAINTENANCE"
-          ? "maintenance"
-          : operational !== "OPERATIONAL"
-            ? "disabled"
-            : reservation !== "" && reservation !== "NONE"
-              ? "reserved"
-              : "available"
+      const physicalState = physicalStateFromLegacy(slot)
+      const reservationState = normalizeReservationState(slot.reservationState)
 
       return {
         id: slot.id,
         unitId: slot.unitId,
         number: slot.code,
         floor: floorFor(slot.unitId),
-        status,
+        status: derivedSlotStatus(physicalState, reservationState),
         vehicleType: slot.vehicleType,
         operationalStatus: slot.operationalStatus,
-        isPhysicallyOccupied: slot.isPhysicallyOccupied,
-        reservationState: slot.reservationState,
+        isPhysicallyOccupied: physicalState === "OCCUPIED",
+        reservationState,
+        physicalState,
+        isBookable: isSlotBookable({ physicalState, reservationState }),
       }
     }),
   }
 }
 
-export async function loadOperatorSites(user: User | null): Promise<OperatorSite[]> {
-  if (!user) return []
+/**
+ * Maps the authoritative operational-layout projection into the existing
+ * `OperatorSite`/`OperatorSlot` shape used by the operator screens. The two
+ * contract axes are preserved; `status` is only a derived presentation value.
+ *
+ * The projection does not carry site address/latitude/longitude/isActive, so
+ * those legacy display-only fields are left neutral here. Operators cannot read
+ * `GET /api/parking-lots`, so we intentionally do not make an extra call for them.
+ * The projection's freshness triple is carried through so the screen never has to
+ * fetch a second response just to decide staleness.
+ */
+function siteFromOperationalLayout(
+  projection: OperationalLayoutProjection,
+  tenantId: string,
+): OperatorSite {
+  const floorById = new Map(projection.floors.map((floor) => [floor.floorId, floor]))
+  const floorIndex = new Map(projection.floors.map((floor, index) => [floor.floorId, index + 1]))
+  const units: Unit[] = projection.floors.map((floor) => ({
+    id: floor.floorId,
+    parentId: null,
+    name: floor.name,
+    type: "FLOOR",
+    maxCapacity: floor.maxCapacity,
+  }))
+  const zoneUnitIds = new Map<string, string>()
 
+  for (const slot of projection.slots) {
+    if (!slot.zoneCode) continue
+    const key = `${slot.floorId}:${slot.zoneCode}`
+    if (zoneUnitIds.has(key)) continue
+    const id = `zone:${key}`
+    zoneUnitIds.set(key, id)
+    units.push({
+      id,
+      parentId: slot.floorId,
+      name: slot.zoneCode,
+      type: "ZONE",
+      maxCapacity: 0,
+    })
+  }
+
+  return {
+    id: projection.siteId,
+    tenantId,
+    code: projection.siteCode,
+    name: projection.siteName,
+    address: "",
+    latitude: null,
+    longitude: null,
+    isActive: true,
+    totalSlots: projection.slots.length,
+    floors: projection.floors.length,
+    configuredBackupCount: projection.slots.filter(
+      (slot) => slot.reservationState === "BACKUP",
+    ).length,
+    freshness: {
+      generatedAt: projection.generatedAt,
+      isFresh: projection.isFresh,
+      stalenessThresholdSeconds: projection.stalenessThresholdSeconds,
+    },
+    units,
+    slots: projection.slots.map((slot) => {
+      const floor = floorById.get(slot.floorId)
+      const zoneId = slot.zoneCode
+        ? zoneUnitIds.get(`${slot.floorId}:${slot.zoneCode}`)
+        : undefined
+
+      return {
+        id: slot.slotId,
+        unitId: zoneId ?? slot.floorId,
+        number: slot.slotCode,
+        floor: floor?.level ?? floorIndex.get(slot.floorId) ?? 1,
+        status: derivedSlotStatus(slot.physicalState, slot.reservationState),
+        vehicleType: slot.supportedVehicleType,
+        operationalStatus: LEGACY_OPERATIONAL_STATUS[slot.physicalState] || "UNKNOWN",
+        isPhysicallyOccupied: slot.physicalState === "OCCUPIED",
+        reservationState: slot.reservationState,
+        physicalState: slot.physicalState,
+        isBookable: isSlotBookable(slot),
+      }
+    }),
+  }
+}
+
+function isStructureBusy(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const response = error as { status?: number; code?: string; message?: string }
+  return response.status === 409 &&
+    (response.code === "STRUCTURE_BUSY" || response.message === "Another request is managing this site.")
+}
+
+async function readOperatorLayout<T>(read: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await read()
+    } catch (error) {
+      if (!isStructureBusy(error)) throw error
+      if (attempt === 2) {
+        throw new Error("This parking site is temporarily busy. Please refresh in a moment.")
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+    }
+  }
+  throw new Error("Could not load the parking site.")
+}
+
+const operatorSiteLoads = new Map<string, Promise<OperatorSite[]>>()
+
+export function loadOperatorSites(user: User | null): Promise<OperatorSite[]> {
+  if (!user) return Promise.resolve([])
+  if (user.role !== "operator") return fetchOperatorSites(user)
+
+  const pending = operatorSiteLoads.get(user.id)
+  if (pending) return pending
+
+  const load = fetchOperatorSites(user).finally(() => {
+    if (operatorSiteLoads.get(user.id) === load) operatorSiteLoads.delete(user.id)
+  })
+  operatorSiteLoads.set(user.id, load)
+  return load
+}
+
+async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
   if (user.role === "owner") {
     const sites = await parkingApi.list()
-    const structures = await Promise.all(sites.map((site) => parkingApi.structure(site.id)))
-    return Promise.all(structures.map(async structure => {
-      const site = siteFromStructure(structure)
+    const siteById = new Map(sites.map((site) => [site.id, site]))
+    const projections = await Promise.all(
+      sites.map((site) => parkingApi.operationalLayout(site.id)),
+    )
+    return Promise.all(projections.map(async (projection, index) => {
+      const siteMeta = siteById.get(sites[index].id)
+      const site = siteFromOperationalLayout(projection, siteMeta?.tenantId ?? "")
+      const merged: OperatorSite = {
+        ...site,
+        address: siteMeta?.address ?? site.address,
+        latitude: siteMeta?.latitude ?? site.latitude,
+        longitude: siteMeta?.longitude ?? site.longitude,
+        isActive: siteMeta?.isActive ?? site.isActive,
+      }
       const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
-      return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+      return savedModelUrl ? { ...merged, modelUrl: savedModelUrl } : merged
     }))
   }
 
   const assignments = await operatorsApi.assignments()
-  const structures = await Promise.all(
-    assignments.map((assignment) => parkingApi.operatorLayout(assignment.siteId)),
+  if (!Array.isArray(assignments)) {
+    throw new Error("The assignment service returned an invalid site list. Please try again.")
+  }
+  const projections = await Promise.allSettled(
+    assignments.map(async (assignment) => {
+      const projection = await readOperatorLayout(() => parkingApi.operationalLayout(assignment.siteId))
+      if (projection?.siteId && projection.siteId !== assignment.siteId) {
+        throw new Error("The parking service returned a layout for a different site.")
+      }
+      if (projection && projection.siteId === assignment.siteId &&
+          typeof projection.siteCode === "string" && typeof projection.siteName === "string" &&
+          Array.isArray(projection.floors) && Array.isArray(projection.slots)) {
+        return siteFromOperationalLayout(projection, assignment.tenantId)
+      }
+
+      // shortcut: older Facility deployments can return an incomplete projection; use their scoped Operator layout until upgraded.
+      const legacy = await readOperatorLayout(() => parkingApi.operatorLayout(assignment.siteId))
+      if (legacy?.site?.id !== assignment.siteId ||
+          !Array.isArray(legacy.units) || !Array.isArray(legacy.slots) || !Array.isArray(legacy.capacityViews)) {
+        throw new Error("The parking service returned an incomplete layout for this assigned site.")
+      }
+      return siteFromStructure(legacy)
+    }),
   )
-  return Promise.all(structures.map(async structure => {
-    const site = siteFromStructure(structure)
+  const available = projections.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  )
+  if (assignments.length > 0 && available.length === 0) {
+    const firstFailure = projections.find(result => result.status === "rejected")
+    throw firstFailure?.status === "rejected" ? firstFailure.reason : new Error("Assigned parking sites are unavailable.")
+  }
+  return Promise.all(available.map(async (site) => {
     const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
     return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
   }))
@@ -298,6 +552,144 @@ async function operationsRequest<T>(
   )
   if (!result.success) throw new Error("Operator request failed.")
   return result.data
+}
+
+async function paymentRequest<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  prefix = "/api/v1/payments",
+  headers?: Record<string, string>,
+): Promise<T> {
+  const result = await request<Response<T>>(
+    path,
+    method,
+    body,
+    prefix,
+    paymentServer,
+    headers,
+  )
+  if (!result.success) throw new Error("Payment request failed.")
+  return result.data
+}
+
+async function checkoutRequest<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+): Promise<T> {
+  const result = await request<Response<T>>(
+    path,
+    method,
+    body,
+    "/api/checkout",
+    reservationServer,
+  )
+  if (!result.success) throw new Error("Checkout request failed.")
+  return result.data
+}
+
+export interface PricingResult {
+  finalAmountVnd: number
+  currency: string
+  totalParkedMinutes: number
+  isFreeStay: boolean
+}
+
+export interface PaymentOrder {
+  orderId: string
+  orderCode: string
+  amount: number
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentCheckout {
+  paymentTransactionId: string
+  orderCode: number
+  amount: number
+  checkoutUrl: string
+  status: string
+  expiresAt: string
+}
+
+export interface PaymentTransactionStatus {
+  transactionId: string
+  orderId: string
+  amount: number
+  status: string
+  paidAt: string | null
+  isAuthoritative: boolean
+}
+
+export const paymentApi = {
+  prepare: (body: {
+    siteId: string
+    referenceId: string
+    vehicleType: string
+    entryTime: string
+    sessionId?: string
+    reservationId?: string
+    plateNumber?: string
+  }) => {
+    const referenceId = body.reservationId ?? body.sessionId
+    if (!referenceId) throw new Error("A reservation or session is required.")
+    const path = body.reservationId
+      ? `/reservations/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
+      : `/sessions/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
+    return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
+      path,
+      "POST",
+      { plateNumber: body.plateNumber },
+    )
+  },
+  calculate: (body: {
+    tenantId: string
+    siteId: string
+    vehicleType: string
+    entryTime: string
+    exitTime: string
+    sessionId?: string
+    reservationId?: string
+  }) => {
+    const referenceId = body.reservationId ?? body.sessionId
+    if (!referenceId) throw new Error("A reservation or session is required.")
+    return checkoutRequest<PricingResult>("/pricing", "POST", {
+      siteId: body.siteId,
+      referenceId,
+      referenceType: body.reservationId ? "RESERVATION" : "PARKING_SESSION",
+      vehicleType: body.vehicleType,
+      entryTime: body.entryTime,
+      exitTime: body.exitTime,
+    })
+  },
+  createOrder: (body: {
+    tenantId: string
+    siteId: string
+    referenceId: string
+    referenceType: "RESERVATION" | "PARKING_SESSION"
+    amount: number
+    accountId?: string
+    idempotencyKey: string
+  }) => {
+    throw new Error("Payment orders must be prepared by OperationService.")
+  },
+  initiate: (orderId: string, idempotencyKey: string) =>
+    checkoutRequest<PaymentCheckout>(
+      `/orders/${encodeURIComponent(orderId)}/payos`,
+      "POST",
+      { idempotencyKey },
+    ),
+  cash: (orderId: string, idempotencyKey: string) =>
+    checkoutRequest<PaymentTransactionStatus>(
+      `/orders/${encodeURIComponent(orderId)}/cash`,
+      "POST",
+      { idempotencyKey },
+    ),
+  demoPay: (orderId: string) =>
+    checkoutRequest<PaymentTransactionStatus>(`/orders/${encodeURIComponent(orderId)}/demo-pay`, "POST"),
+  status: (transactionId: string) =>
+    checkoutRequest<PaymentTransactionStatus>(`/transactions/${encodeURIComponent(transactionId)}/status`),
 }
 
 export const reservationApi = {

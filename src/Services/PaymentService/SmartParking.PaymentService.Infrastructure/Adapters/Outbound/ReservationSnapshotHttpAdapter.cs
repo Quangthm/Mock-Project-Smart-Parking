@@ -4,11 +4,13 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Domain.Pricing;
+using SmartParking.PaymentService.Infrastructure.Adapters.Outbound.Models;
 
 namespace SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
 
 public sealed class ReservationSnapshotHttpAdapter : IReservationPricingSnapshotPort
 {
+    private static readonly JsonSerializerOptions DefaultJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly ILogger<ReservationSnapshotHttpAdapter> _logger;
 
@@ -37,22 +39,30 @@ public sealed class ReservationSnapshotHttpAdapter : IReservationPricingSnapshot
 
             response.EnsureSuccessStatusCode();
 
-            return await response.Content.ReadFromJsonAsync<PricingPolicySnapshot>(
+            var dto = await response.Content.ReadFromJsonAsync<ReservationPricingSnapshotHttpDto>(
+                DefaultJsonOptions,
                 cancellationToken: cancellationToken);
+
+            if (dto == null)
+            {
+                throw new PricingDomainException("CORRUPTED_POLICY_SNAPSHOT", "Snapshot response body is empty.", "reservationId");
+            }
+
+            return dto.ToDomain();
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to call ReservationService at {Url}", url);
+            _logger.LogError(ex, "Failed to call OperationService at {Url}", url);
             throw new PricingDomainException("RESERVATION_SERVICE_UNAVAILABLE", "Reservation service is temporarily unavailable.");
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to deserialize snapshot from ReservationService");
+            _logger.LogError(ex, "Failed to deserialize snapshot from OperationService");
             throw new PricingDomainException("CORRUPTED_POLICY_SNAPSHOT", "Invalid snapshot format from Reservation service.", "reservationId");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError("Timeout calling ReservationService at {Url}", url);
+            _logger.LogError("Timeout calling OperationService at {Url}", url);
             throw new PricingDomainException("RESERVATION_SERVICE_TIMEOUT", "Reservation service request timed out.");
         }
     }

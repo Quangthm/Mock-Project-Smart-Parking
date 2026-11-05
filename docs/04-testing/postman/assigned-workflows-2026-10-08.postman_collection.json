@@ -1319,7 +1319,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"QA Operator\",\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{password}}\",\n  \"siteIds\": [\n    \"{{siteId}}\"\n  ],\n  \"permissions\": [\n    \"SLOT_OVERRIDE\"\n  ]\n}",
+              "raw": "{\n  \"fullName\": \"QA Operator\",\n  \"email\": \"{{operatorEmail}}\",\n  \"siteIds\": [\n    \"{{siteId}}\"\n  ],\n  \"permissions\": [\n    \"SLOT_OVERRIDE\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

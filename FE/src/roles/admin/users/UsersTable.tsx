@@ -1,5 +1,6 @@
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import type { UsersViewModel } from "./useUsers"
+import { formatStatus } from "../../../lib/formatStatus"
 
 const ROLE_TONES: Record<string, BadgeTone> = {
   admin: "danger",
@@ -21,7 +22,9 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   active: "success",
   locked: "danger",
   pendingVerification: "warning",
+  pending_verification: "warning",
   pendingApproval: "warning",
+  pending_approval: "warning",
   rejected: "muted",
 }
 const statusTone = (status: string): BadgeTone => STATUS_TONES[status] ?? "muted"
@@ -29,11 +32,13 @@ const statusTone = (status: string): BadgeTone => STATUS_TONES[status] ?? "muted
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
   locked: "Locked",
-  pendingVerification: "Pending Verify",
+  pendingVerification: "Pending Verification",
+  pending_verification: "Pending Verification",
   pendingApproval: "Pending Approval",
+  pending_approval: "Pending Approval",
   rejected: "Rejected",
 }
-const statusLabel = (status: string) => STATUS_LABELS[status] ?? status
+const statusLabel = (status: string) => STATUS_LABELS[status] ?? formatStatus(status)
 
 export function UsersTable({ model }: { model: UsersViewModel }) {
   const { selectedId, setSelectedId, loading, page, saving, totalItems, currentPage, totalPages, startIdx, endIdx, setPageNumber } = model
@@ -129,7 +134,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                           <td className="px-4 py-3.5 text-right">
                             <button
                               type="button"
-                              className={`btn-outline text-xs px-2.5 py-1 ${
+                              className={`btn-outline text-xs px-3 py-1.5 transition-[transform,background-color,border-color] duration-150 motion-safe:active:scale-[0.97] ${
                                 isSelected
                                   ? "border-[var(--primary)] bg-[var(--primary)] text-white"
                                   : ""

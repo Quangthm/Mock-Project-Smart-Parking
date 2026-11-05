@@ -4,7 +4,7 @@ Date: 2026-10-06. Scope: backend core (domain/application/PostgreSQL repository)
 
 ## Implemented
 
-- Separate ParkingService projects registered in SmartParking.slnx; no UserService assembly dependency.
+- Separate FacilityService projects registered in SmartParking.slnx; no UserService assembly dependency.
 - Owner/tenant-scoped site creation, listing, profile editing and guarded deactivation.
 - Floor/zone hierarchy with optional floors for outdoor lots; sibling identifiers and descendant physical capacity limits.
 - Explicit motorcycle/car categories, slot creation, movement, configuration/map associations and soft deletion preserving slot identity/history.
@@ -27,7 +27,7 @@ Date: 2026-10-06. Scope: backend core (domain/application/PostgreSQL repository)
 
 ## Validation
 
-`dotnet test SmartParking.slnx --no-restore --verbosity minimal` with SMARTPARK_AUTH_TEST_CONNECTION pointing to the isolated existing test container (127.0.0.1:65433): **71 passed, 0 failed, 0 skipped** (11 ParkingService + 60 UserService regression tests).
+`dotnet test SmartParking.slnx --no-restore --verbosity minimal` with SMARTPARK_AUTH_TEST_CONNECTION pointing to the isolated existing test container (127.0.0.1:65433): **71 passed, 0 failed, 0 skipped** (11 FacilityService + 60 UserService regression tests).
 
 Parking tests create and remove only a random `smartpark_structure_test_<UUID>` database. They run baseline 05.1 and upgrade 05.6 twice, exercise real Npgsql persistence, optional coordinates/map metadata, Owner/tenant authorization, invalid cross-site references, duplicate/concurrent identifiers, transaction rollback, capacity/occupancy/reservation/session protection, soft deletion, history retention and database guards.
 

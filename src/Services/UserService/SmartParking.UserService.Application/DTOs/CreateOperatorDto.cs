@@ -8,10 +8,6 @@ public sealed class CreateOperatorDto : IValidatableObject
 {
     [Required, StringLength(255)] public string FullName { get; set; } = "";
     [Required, AccountEmail, StringLength(255)] public string Email { get; set; } = "";
-    // BCrypt considers at most 72 UTF-8 bytes. Match existing login's 8-15 character policy.
-    [Required, StringLength(15, MinimumLength = 8)]
-    [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$")]
-    public string Password { get; set; } = "";
     [Required] public Guid[] SiteIds { get; set; } = [];
     [Required] public string[] Permissions { get; set; } = [];
 

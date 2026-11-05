@@ -1,5 +1,7 @@
 import * as THREE from "three"
 
+import { matchSlotCodes } from "@/lib/operationalLayout"
+
 import type { ParkingSlot } from "../types"
 
 /**
@@ -73,6 +75,14 @@ export interface SlotMatchResult {
   /** All slot keys found in the 3D model */
 
   detectedSlotKeys: string[]
+
+  /** Contract slot codes that have no matching mesh (FR-MAP-03 diagnostics) */
+
+  unmatchedSlotCodes: string[]
+
+  /** Candidate meshes whose raw name matches no contract slot code */
+
+  unmatchedMeshNames: string[]
 }
 
 /**
@@ -175,50 +185,32 @@ export function mapModelSlots(
     return a.worldPos.x - b.worldPos.x
   })
 
-  // 3. Build lookup index for provided ParkingSlot data
+  // 3. Bind only by the raw contract slotCode (FR-MAP-03): exact, case-sensitive,
 
-  const slotByIndex = new Map<string, ParkingSlot>()
+  // with no prefix stripping, normalisation, spatial index fallback or invented slots.
 
-  for (const s of slots) {
-    const keyNum = normalizeSlotIdentifier(s.number)
+  const slotByCode = new Map<string, ParkingSlot>()
 
-    const keyId = normalizeSlotIdentifier(s.id)
-
-    if (keyNum) slotByIndex.set(keyNum, s)
-
-    if (keyId) slotByIndex.set(keyId, s)
-
-    const noHyphen = keyNum.replace(/-/g, "")
-
-    if (noHyphen) slotByIndex.set(noHyphen, s)
+  for (const slot of slots) {
+    if (slot.number) slotByCode.set(slot.number, slot)
   }
 
-  // 4. Map each candidate mesh to its slot:
+  const meshNames = candidateList.map((item) => item.mesh.name)
 
-  // Spatial ordering guarantees every physical spot gets a distinct slot!
+  const contractMatch = matchSlotCodes(meshNames, Array.from(slotByCode.keys()))
 
-  candidateList.forEach((item, index) => {
+  // 4. Map each candidate mesh to its slot only on an exact raw-code match.
+
+  for (const item of candidateList) {
     const mesh = item.mesh
 
     allSlotMeshes.push(mesh)
 
-    // Prefer spatial index match with slots array, fallback to auto-generated slot
-
-    let targetSlot = slots[index]
-
-    if (!targetSlot) {
-      targetSlot = {
-        id: `slot-auto-${index + 1}`,
-
-        number: `A-${String(index + 1).padStart(3, "0")}`,
-
-        floor: 1,
-
-        status: "available",
-      }
-    }
-
     mesh.userData.isSlot = true
+
+    const targetSlot = slotByCode.get(mesh.name)
+
+    if (!targetSlot) continue
 
     mesh.userData.slotData = targetSlot
 
@@ -232,26 +224,16 @@ export function mapModelSlots(
 
     slotByObjectId.set(mesh.id, targetSlot)
 
-    // Register all access keys
-
     meshBySlotKey.set(targetSlot.number, mesh)
 
+    // Exact aliases kept for existing consumers (selection by slot id / mesh id).
+
     meshBySlotKey.set(targetSlot.id, mesh)
-
-    meshBySlotKey.set(targetSlot.number.replace(/-/g, ""), mesh)
-
-    const digitsOnly = targetSlot.number.replace(/\D/g, "")
-
-    if (digitsOnly) {
-      meshBySlotKey.set(digitsOnly, mesh)
-
-      meshBySlotKey.set(String(parseInt(digitsOnly, 10)), mesh)
-    }
 
     meshBySlotKey.set(mesh.name, mesh)
 
     meshBySlotKey.set(String(mesh.id), mesh)
-  })
+  }
 
   return {
     meshBySlotKey,
@@ -261,11 +243,18 @@ export function mapModelSlots(
     allSlotMeshes,
 
     detectedSlotKeys: Array.from(detectedKeysSet).sort(),
+
+    unmatchedSlotCodes: contractMatch.unmatchedSlotCodes,
+
+    unmatchedMeshNames: contractMatch.unmatchedMeshNames,
   }
 }
 
 /**
- * Given a target slot ID or number, finds the corresponding Three.js Object3D.
+ * Given a target slot code (or the exact slot/mesh id registered by
+ * {@link mapModelSlots}), finds the corresponding Three.js Object3D.
+ *
+ * Exact lookup only: a miss returns `null`, never a normalised or fuzzy match.
  */
 
 export function findSlotMesh(
@@ -277,20 +266,7 @@ export function findSlotMesh(
 
   const target = typeof slot === "string" ? slot : slot.number || slot.id
 
-  const normalized = normalizeSlotIdentifier(target)
+  if (!target) return null
 
-  const noHyphen = normalized.replace(/-/g, "")
-
-  const digitsOnly = normalized.replace(/\D/g, "")
-
-  const trimmedDigits = digitsOnly ? String(parseInt(digitsOnly, 10)) : ""
-
-  return (
-    meshBySlotKey.get(target) ||
-    meshBySlotKey.get(normalized) ||
-    meshBySlotKey.get(noHyphen) ||
-    (digitsOnly ? meshBySlotKey.get(digitsOnly) : null) ||
-    (trimmedDigits ? meshBySlotKey.get(trimmedDigits) : null) ||
-    null
-  )
+  return meshBySlotKey.get(target) ?? null
 }

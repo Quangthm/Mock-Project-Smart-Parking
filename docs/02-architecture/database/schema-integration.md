@@ -1,6 +1,6 @@
 # Tích hợp database với code ứng dụng
 
-Tài liệu này mô tả **profile triển khai đã ghi nhận trước SPARK-296** trên branch `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` tại lần ghi nhận `58df087`). Nguồn runtime là 7 base DDL + 8 overlay + `compose.schema-integration.yml` + `scripts/apply-workflow-migrations.ps1` + `setup.ps1`, không phải checkout arch.
+Tài liệu này giữ **profile triển khai đã ghi nhận trước SPARK-296** trên branch `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` tại lần ghi nhận `58df087`). Nguồn bootstrap là 7 base DDL + 8 overlay + `compose.schema-integration.yml` + `scripts/apply-workflow-migrations.ps1` + `setup.ps1`, không phải checkout arch. Phần User & Access dưới đây bổ sung thứ tự deploy thủ công SPARK-248 và kiểm tra schema hiện tại; không xác nhận đã reset/deploy database thực tế.
 
 ## 1. Baseline và quan hệ với nhánh arch
 
@@ -25,8 +25,8 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 | DB vật lý | Port | Base DDL | Overlay | Service dùng |
 |---|---|---|---|---|
 | `smartpark_user` | 5441 | `01-user-access-service-db.sql` | — | UserService |
-| `smartpark_facility` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | ParkingService |
-| `smartpark_operations` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | ReservationService |
+| `smartpark_facility` | 5442 | `02-facility-service-db.sql`, `03a-parking-structure-ops-service-db.sql` | `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints` | FacilityService |
+| `smartpark_operations` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | OperationService |
 | `smartpark_payment` | 5444 | `04-payment-pricing-service-db.sql` | — | PaymentService |
 | `smartpark_notification` | 5445 | `05-notification-audit-service-db.sql` | — | NotificationService |
 | `smartpark_iot` | 5446 | `06-iot-recognition-service-db.sql` | — | IoTService |
@@ -37,13 +37,15 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 
 `compose.schema-integration.yml` mount theo thứ tự số trong `docker-entrypoint-initdb.d`:
 
-**Facility DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`.
+**User DB:** Compose and the migration runner apply [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql) for a fresh database. The canonical base contains direct `accounts.role_code → roles.code`, immutable Account/User session binding, refresh/replay proofs, MFA, Owner setup, and MassTransit inbox/outbox schema. The runner executes the read-only [`verify-user-access-schema.sql`](../../../scripts/database/test/verify-user-access-schema.sql) against UserDb; existing/partial databases still require a separately reviewed migration. No startup migration or guessed legacy-session backfill is performed. See the [profile deployment guide](../../04-testing/reports/SPARK-248/own-profile-outbox.md) for profile-event routing and delivery operations.
+
+**Facility DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`. Owner-onboarding provisioning state is created by the Facility base script.
 
 **Operations DB:** `01-base` (03b) → `02-overlay-capacity-pools` → `03-overlay-structure-safety` → `04-overlay-receipts` → `05-overlay-confirmation`.
 
-`reservation-site-capacity-pools.sql` phải chạy trước `reservation-structure-safety.sql` vì guard trigger tham chiếu `site_capacity_pools`.
+`microservices/02-facility-service-db.sql` defines Facility's owner-onboarding provisioning table. Existing Facility databases missing this relation require a separately reviewed migration; the base script is for clean database initialization only. `reservation-site-capacity-pools.sql` phải chạy trước `reservation-structure-safety.sql` vì guard trigger tham chiếu `site_capacity_pools`.
 
-Overlay dùng `CREATE TABLE IF NOT EXISTS` / `IF NOT EXISTS` / `NOT VALID` để chạy lại được trên DB dev. Base DDL là `CREATE TABLE`, không phải migration cho DB đã có dữ liệu: **không chạy base lên volume cũ**, không dùng EF `EnsureCreated` thay thế.
+Các overlay Facility/Operations dùng `CREATE TABLE IF NOT EXISTS` / `IF NOT EXISTS` / `NOT VALID` để chạy lại được trên DB dev. The User verifier is read-only and refuses incompatible existing schemas; populated databases require a separately reviewed migration. Base DDL is not a migration for populated databases: **do not run a base script against an existing volume**, and do not substitute EF `EnsureCreated`.
 
 ## 5. Recorded local setup procedure — gated future use
 
@@ -63,12 +65,14 @@ Các flag hữu ích: `-SkipDatabase` (không đụng Docker), `-SkipRestore`, `
 
 `setup.ps1` thực hiện: validate `.env`/port → (tuỳ chọn) recreate volume → `docker compose -f compose.schema-integration.yml up -d` → chạy `scripts/apply-workflow-migrations.ps1` cho 6 service → probe bảng bắt buộc → tạo user-secrets `ConnectionStrings:User/Parking/Reservation` → build/restore → (tuỳ chọn) SonarQube/AI.
 
-Sau khi setup, chạy 3 service tích hợp:
+Đối với User DB, runner chỉ áp dụng canonical base trên database trống và thực hiện verifier read-only; trên database hiện hữu, nó xác minh schema trước khi bỏ qua việc áp dụng. Verifier không sửa schema hoặc backfill dữ liệu. Schema thiếu `user_refresh_tokens.account_id` hoặc các bảng framework là không tương thích với runtime.
+
+Sau khi setup và hoàn tất prerequisite tương ứng, chạy 3 service tích hợp:
 
 ```powershell
 ./scripts/run-schema-service.ps1 -Service User        # API 5035 → DB 5441
 ./scripts/run-schema-service.ps1 -Service Parking     # API 5045 → DB 5442
-./scripts/run-schema-service.ps1 -Service Reservation # API 5055 → DB 5443
+./scripts/run-schema-service.ps1 -Service Operation # API 5055 → DB 5443
 ```
 
 `run-schema-service.ps1` đọc `.env`, đặt `ConnectionStrings__<Service>` đúng DB/port và `Services__Key`. Payment/Notification/IoT chưa có runner tương ứng trong phạm vi tích hợp này.
@@ -99,7 +103,8 @@ Chi tiết: report 01 và report 10 trong `docs/04-testing/reports/refactor-Dock
 ## 9. Kiểm chứng
 
 - `docker compose -f compose.schema-integration.yml config` — validate 6 service/15 mount.
-- `scripts/apply-workflow-migrations.ps1` — pre-check bảng theo DB, block-list script legacy `05.1–05.9`/`integration/01–03`.
+- `scripts/apply-workflow-migrations.ps1` — pre-check tables per database and reject retired legacy User patches plus `integration/01–03`.
+- `scripts/database/test/verify-user-access-schema.sql` — kiểm tra read-only direct RoleCode, session Account/User ownership FK và immutable trigger, token uniqueness, access/session/MFA/Owner setup fields, and MassTransit inbox/outbox columns/constraints/indexes. Không sửa schema/dữ liệu.
 - `setup.ps1 -RecreateDb` + probe 6 DB — đường chạy T6; xem report 07 và checklist T6 (chưa có evidence chạy đầy đủ trong repo).
 - BE tests: `dotnet test SmartParking.slnx` (DB tests cần `SMARTPARK_AUTH_TEST_CONNECTION` trỏ PostgreSQL test có quyền tạo/xóa database test UUID riêng).
 - FE: `npm run build`.

@@ -1,10 +1,13 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
+import { showUiToast } from "../../../lib/uiToast"
 import { useApp } from "../../../context/AppContext"
 import { operatorsApi, type OperatorAssignment } from "../../../lib/parkingApi"
 import { parkingApi } from "../../../lib/parkingApi"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { formatSlotLabel } from "../../../lib/operationalLayout"
+import { SLOT_VISUAL_STATE_HEX } from "../../../lib/3d/parking3DConfig"
 import type { OperatorSite } from "../../../lib/operatorApi"
 
 interface SlotManagementProps {
@@ -62,25 +65,25 @@ export function SlotManagement({ lot }: SlotManagementProps) {
 
   const allSpaces = lot?.slots ?? []
   const backupSlots = useMemo(
-    () => allSpaces.filter((slot) => slot.reservationState?.toUpperCase() === "BACKUP").map((slot) => ({
+    () => allSpaces.filter((slot) => slot.reservationState === "BACKUP").map((slot) => ({
       id: slot.id,
       code: slot.number,
       vehicleType: slot.vehicleType.toLowerCase().includes("motorcycle") ? "motorcycle" as const : "car" as const,
-      physicalState: slot.isPhysicallyOccupied ? "OCCUPIED" : "AVAILABLE",
+      physicalState: slot.physicalState,
     })),
     [allSpaces],
   )
 
-  // Slots eligible for being designated as backup:
-  // Must be AVAILABLE, not physically occupied, not reserved, operational
+  // Slots eligible for being designated as backup: physically AVAILABLE,
+  // unreserved and bookable. The axis checks are strict on purpose, so a bay
+  // with a missing or drifted axis fails closed and never reaches the dropdown.
   const eligibleSlots: OperationalSpaceItem[] = useMemo(() => {
     if (!lot) return []
     return lot.slots
       .filter((slot) =>
-        slot.status === "available" &&
-        slot.operationalStatus.toUpperCase() === "OPERATIONAL" &&
-        !slot.isPhysicallyOccupied &&
-        (!slot.reservationState || slot.reservationState.toUpperCase() === "NONE"),
+        slot.physicalState === "AVAILABLE" &&
+        slot.reservationState === "UNRESERVED" &&
+        slot.isBookable === true,
       )
       .map((s) => ({
         id: s.id,
@@ -90,6 +93,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
       }))
   }, [lot])
 
+  // Derived from slots currently marked reservationState === 'BACKUP', not configured capacity; BACKUP is masked for operators without SLOT_OVERRIDE, so 0 is legitimate.
   const configuredBackupCount = lot?.configuredBackupCount ?? 0
 
   // Handle Mark Slot as Backup
@@ -109,9 +113,11 @@ export function SlotManagement({ lot }: SlotManagementProps) {
       })
 
       setSelectedSlotId("")
+      showUiToast("Backup slot designated", "The selected slot is reserved for backup capacity.")
       setDesignateReason("")
       window.dispatchEvent(new Event("sp-operator-refresh"))
     } catch (err) {
+      showUiToast("Backup slot not designated", err instanceof Error ? err.message : "Failed to designate backup slot.", "error")
       setFeedback({
         type: "error",
         message: err instanceof Error ? err.message : "Failed to designate backup slot.",
@@ -135,8 +141,10 @@ export function SlotManagement({ lot }: SlotManagementProps) {
         message: `Backup designation released. The slot is now available for regular bookings.`,
       })
       setReleasingSlot(null)
+      showUiToast("Backup slot released", "The slot is available for regular bookings.")
       window.dispatchEvent(new Event("sp-operator-refresh"))
     } catch (err) {
+      showUiToast("Backup slot not released", err instanceof Error ? err.message : "Failed to release backup slot.", "error")
       setFeedback({
         type: "error",
         message: err instanceof Error ? err.message : "Failed to release backup slot.",
@@ -156,7 +164,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Backup Slot & Capacity Operations" eyebrow={<>SRS 3.4.5 Capacity Management · {lot.name}</>} description="Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow." />
+      <PageHeader title="Backup Slot & Capacity Operations" eyebrow={lot.name} description="Designate and manage operational backup spaces for high-demand buffer, VIP allocations, and emergency overflow." />
 
       {/* Permission Alert if missing */}
       {!hasOverridePermission && (
@@ -222,16 +230,16 @@ export function SlotManagement({ lot }: SlotManagementProps) {
           </div>
         </div>
 
-        {/* Card 2: Configured Policy Target */}
+        {/* Card 2: Backup Bays Marked */}
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-            <span>Configured Backup Capacity</span>
+            <span>Currently Marked Backup</span>
             <UntitledIcon name="building" size={16} />
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-bold text-[var(--fg)]">{configuredBackupCount} slots</div>
+            <div className="text-2xl font-bold text-[var(--fg)]">{configuredBackupCount} slots marked backup</div>
             <div className="mt-0.5 text-[11px] text-[var(--muted)]">
-              Configured by the site owner
+              Bays now in BACKUP state
             </div>
           </div>
         </div>
@@ -281,7 +289,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                 <option value="">-- Choose an eligible space --</option>
                 {eligibleSlots.map((s) => (
                   <option key={s.id} value={s.id}>
-                    Slot {s.code} ({s.vehicleType === "motorcycle" ? "Motorcycle" : "Car"})
+                    Slot {formatSlotLabel(s.code)} ({s.vehicleType === "motorcycle" ? "Motorcycle" : "Car"})
                   </option>
                 ))}
               </RoundedSelect>
@@ -333,7 +341,13 @@ export function SlotManagement({ lot }: SlotManagementProps) {
               Spaces protected from general bookings and held for operational contingencies
             </p>
           </div>
-          <span className="rounded bg-[var(--status-maintenance-bg)] px-2.5 py-1 text-sm font-medium text-[var(--maintenance)]">
+          <span
+            className="rounded px-2.5 py-1 text-sm font-medium"
+            style={{
+              color: SLOT_VISUAL_STATE_HEX.backup,
+              backgroundColor: `${SLOT_VISUAL_STATE_HEX.backup}1f`,
+            }}
+          >
             Backup active
           </span>
         </div>
@@ -361,7 +375,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                   <tr key={space.id} className="hover:bg-[var(--card)]/50 transition">
                     <td className="px-4 py-3 font-mono font-bold text-[var(--fg)]">
                       <span className="bg-[var(--card)] px-2 py-0.5 rounded border border-[var(--border)]">
-                        {space.code}
+                        {formatSlotLabel(space.code)}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-medium capitalize">
@@ -372,8 +386,16 @@ export function SlotManagement({ lot }: SlotManagementProps) {
                         {space.physicalState || "AVAILABLE"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[var(--muted)]">
-                      BACKUP
+                    <td className="px-4 py-3">
+                      <span
+                        className="rounded px-2 py-0.5 text-[10px] font-bold uppercase"
+                        style={{
+                          color: SLOT_VISUAL_STATE_HEX.backup,
+                          backgroundColor: `${SLOT_VISUAL_STATE_HEX.backup}1f`,
+                        }}
+                      >
+                        BACKUP
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -424,7 +446,7 @@ export function SlotManagement({ lot }: SlotManagementProps) {
               <div className="flex justify-between">
                 <span className="text-[var(--muted)]">Slot Code:</span>
                 <span className="font-mono font-bold text-[var(--fg)]">
-                  {releasingSlot.code}
+                  {formatSlotLabel(releasingSlot.code)}
                 </span>
               </div>
               <div className="flex justify-between">

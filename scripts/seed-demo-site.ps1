@@ -66,20 +66,18 @@ SELECT
   (SELECT count(DISTINCT a.id)
      FROM users u
      JOIN accounts a ON a.user_id = u.id
-     JOIN account_roles r ON r.account_id = a.id
     WHERE lower(u.email) = lower(:'owner_email')
       AND u.deleted_at IS NULL
       AND a.deleted_at IS NULL
-      AND r.role_code = 'BUSINESS_OWNER')::text
+      AND a.role_code = 'BUSINESS_OWNER')::text
   || '|' ||
   (SELECT count(DISTINCT a.id)
      FROM users u
      JOIN accounts a ON a.user_id = u.id
-     JOIN account_roles r ON r.account_id = a.id
     WHERE lower(u.email) = lower(:'operator_email')
       AND u.deleted_at IS NULL
       AND a.deleted_at IS NULL
-      AND r.role_code = 'SITE_OPERATOR')::text;
+      AND a.role_code = 'SITE_OPERATOR')::text;
 '@
 $checkArgs = $composeArgs + @(
     'exec', '-T', 'user-db', 'psql', '-U', 'smartpark_user', '-d', 'smartpark_user',
@@ -205,8 +203,8 @@ SELECT
   (SELECT count(*) FROM spatial_unit_capacities WHERE site_id = :'site_id'::uuid)::text || '|' ||
   (SELECT count(*) FROM slot_compatibilities WHERE site_id = :'site_id'::uuid)::text;
 '@
-Assert-Counts -Label 'facility' -Actual $facilityCounts -Expected @('1','2','8','2','8')
-Write-Host '      OK (1 site, 2 units, 8 slots)' -ForegroundColor DarkGray
+Assert-Counts -Label 'facility' -Actual $facilityCounts -Expected @('1','2','48','2','48')
+Write-Host '      OK (1 site, 2 units, 48 slots)' -ForegroundColor DarkGray
 
 Write-Host '[5/6] Seeding reservation DB...' -ForegroundColor Cyan
 Invoke-SeedFile -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Path (Join-Path $demoDir '03-reservation.sql')

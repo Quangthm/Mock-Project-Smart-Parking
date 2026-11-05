@@ -13,6 +13,12 @@ Check out and resolve identity/ticket exceptions.
 
 Open visit and current identity/evidence.
 
+## Authorization and pending-workflow boundary — approved 2026-11-04
+
+User-initiated checkout/settlement with an authenticated actor is REQUEST. Operational device/service exit uses SERVICE or a separately authorized operator path. Only approved safe preparation/calculation may overlap authorization; irreversible payment/gate effects follow their explicit authority/safety contracts. Account lock must not strand physical exit or erase debt; exact exception/continuation handling remains design work.
+
+See the [operation matrix](../srs/authorization-operation-classification.md) and [mandatory REQUEST design checklist](../srs/authorization-operation-classification.md#5-implementation-documentation-checklist). Specify branch eligibility, correlation/attempts, pending observation, combined outcomes, deadlines, idempotency, revocation race, pivot, compensation and late/unknown handling before implementing the affected workflow. This amendment approves direction, not a completed Saga or wire contract.
+
 ## Main flow
 
 1. Resolve ticket/session/vehicle identity; use scoped entry-evidence lookup for lost ticket.

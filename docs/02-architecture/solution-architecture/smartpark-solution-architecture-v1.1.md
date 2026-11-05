@@ -43,7 +43,7 @@ The diagram shows the synchronous entry path, persistence ownership, durable eve
 
 | Service | Owns | Key boundary |
 |---|---|---|
-| User & Access | Accounts, credentials, sessions, roles/current grants, organization membership, Partner applications/review/document versions, Operator scopes, profiles and registered-vehicle binding history. | Facility validates referenced site existence; resource services still authorize current access. |
+| User & Access | Accounts, credentials, sessions, roles/current grants, organization membership, Partner applications/review/document versions, Operator scopes, profiles and registered-vehicle binding history. | Facility validates referenced site existence; resource services enforce their declared freshness and local resource scope. |
 | Facility & Visualization | Sites/floors/zones/slots, paths, categories, configured capacity, layout, maintenance/closure configuration and fixed 3D asset references. | Defines resources; does not own accepted occupancy or reservation availability. |
 | Parking Operations | Reservations, claims, allocations, accepted occupancy/uncertainty, admission, visits, checkout/departure, tickets/QR/cards, incidents/appeals, monthly/yearly Driver rights/plan definitions and Search. | Owns compatible fulfillment and business availability. |
 | Payment & Pricing | Tariffs, financial snapshots, orders/attempts, online adapters/cash records, verification/reconciliation, refunds, invoices and monthly/yearly paid financial periods. | Payment success is not proof that Operations committed a right. |
@@ -108,7 +108,7 @@ Details: [command/event contract matrix](../service-boundaries/ownership-and-eve
 | Additional-lot application | User & Access owns proposal/review; Facility owns authorized configuration. | Immutable rejection leaves Owner/other lots unaffected; Draft as new creates a distinct proposal; identical content allowed, retries deduplicated. |
 | Planned capacity reduction | Facility proposes structural change; Operations commits restriction/recovery before planned reduction completes. | Emergency physical closure is recorded promptly and safe admission restrictions preserve occupants and rights. Explicit descendant/dependency handling and same-lot all-or-nothing batches return per-item validation errors. |
 | Refund | Authorized case or automatic surplus obligation feeds Payment. | Reserve eligible balance including pending/UNKNOWN refunds; completion needs payout evidence. |
-| Account recovery | Support owns case history; authorized Admin review leads to User & Access credential workflow. | Current security/session version invalidates prior access; no self-approved Admin recovery or support-database credential writes. |
+| Account recovery | Support owns case history; authorized Admin review leads to User & Access credential workflow. | UserService locally invalidates security/session authority; resource enforcement follows TOKEN/REQUEST freshness. No self-approved Admin recovery or support-database credential writes. |
 
 A lost response is not evidence of failure. Lookup/reconcile the same logical operation before retrying an uncertain external effect. Three extra payment attempts after the initial attempt apply only to definitive retryable failure; broker redelivery does not consume a new business attempt.
 
@@ -124,7 +124,7 @@ MapTiler discovery uses backend facts from Operations/Facility/Payment, a consen
 
 ## 9. Security, media and live projections
 
-User & Access owns passwords, primary OTP, optional TOTP, backup codes, sessions and current grants. Enabled TOTP gates normal login after primary proof. Each consuming service checks current resource authority, including private cached results and SignalR subscriptions. Gateway checks alone are insufficient. Turnstile is an abuse-control component, not authentication or authorization.
+User & Access owns passwords, primary OTP, optional TOTP, backup codes, sessions and current grants. Enabled TOTP gates normal login after primary proof. Each consuming service enforces local resource authority and its declared freshness policy, including private cached results and SignalR subscriptions. Gateway checks alone are insufficient. Turnstile is an abuse-control component, not authentication or authorization.
 
 ACCOUNT_RECOVERY is a reviewed, restricted workflow. Admin authorizes a user-chosen password reset; a TOTP reset requires replacement enrollment rather than silently restoring unrestricted access. MVP has one protected seeded Admin, no Admin registration and no role-management feature. Application-level lock/disable/delete/role changes targeting that account are prohibited; ordinary own profile/security actions and authentication lockouts remain. Admin recovery follows the controlled maintainer runbook. Neither workflow grants business privileges.
 
@@ -133,6 +133,18 @@ Asset bytes sit behind a provider adapter; the business owner stores stable asse
 SignalR supplies authorized updates and stale/disconnected indicators. On reconnect the client reloads current facts. It never becomes an admission/capacity ledger, and recognition observations do not automatically free an occupied space.
 
 Details: [security flows](../../01-requirements/srs/authentication-recovery.md) · [last-Admin runbook](../service-boundaries/admin-recovery-runbook.md) · [media lifecycle](../service-boundaries/media-contract.md) · [live views and reporting](../../01-requirements/srs/modules/08-notifications-reporting.md).
+
+### Authorization architecture amendment — approved 2026-11-04
+
+The [authorization ADR](../architecture-decisions/authorization-freshness-and-current-access.md) owns the full policy and [operation matrix](../../01-requirements/srs/authorization-operation-classification.md) owns the initial classifications. Locally validated 15-minute JWT claims establish trusted actor context. `TOKEN` is the end-user business default, with no UserService round trip solely for freshness. UserService retains current local security/refresh checks; resource services own resource/scope rules and domain invariants.
+
+For the six named `REQUEST` families, API authentication precedes atomic pending-intent/outbox admission and an accepted/pending response. MassTransit Saga orchestration requests Account-current authorization while any independently approved reversible work may progress. Persist separate branch outcomes and cancellation intent; join them before authorized finalization. A pending or missing outcome never grants final success. Denial during in-flight effects requires late-result reconciliation/compensation. Preserve physical/financial facts and forward recovery after the use-case pivot. No universal reservation hold, cleanup algorithm or exact response schema is approved here.
+
+UserService evaluates current User/Account/role state, not the saved role assertion. Persist minimal trusted actor/policy context, never bearer JWTs or refresh credentials. Exact initiating-session continuity, AccessHandle, AccessVersion, COMMIT and general WORKFLOW guarantees remain deferred. A selected workflow may react to revocation at explicit states without claiming general WORKFLOW freshness.
+
+The ADR defines bounded retry profiles, attempt correlation, stable effect idempotency and unknown-outcome reconciliation. Generic internal-step budgets do not replace Payment's distinct business-attempt contract. Local security/factor versions remain valid; they do not establish a distributed AccessVersion. Internal messages require service/broker trust, not merely user identifiers.
+
+SignalR access revocation is best-effort UX after security commit. Backend targets affected User/Account/session connections; frontend clears credentials/state, stops reconnect and returns to Sign In without normal logout against an already revoked session. Missed delivery leaves the accepted TOKEN stale window. Scale-out and stronger continuity are explicit debt; runtime adoption is not established by this amendment.
 
 ## 10. AI and external-provider boundaries
 

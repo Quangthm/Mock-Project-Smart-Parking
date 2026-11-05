@@ -40,9 +40,20 @@ services:
       Otp__Smtp__Username: ${SMARTPARK_SMTP_USERNAME:-}
       Otp__Smtp__Password: ${SMARTPARK_SMTP_PASSWORD:-}
       Otp__Smtp__From: ${SMARTPARK_SMTP_FROM:-}
+      # Operator activation links must point to the browser-facing frontend.
+      Onboarding__PublicOrigin: ${SMARTPARK_ONBOARDING_PUBLIC_ORIGIN:-http://localhost:5173}
+      Onboarding__AllowHttpLoopback: ${SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK:-true}
       # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
       Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
+      Messaging__Enabled: ${SMARTPARK_MESSAGING_ENABLED:-false}
+      SMARTPARK_RABBITMQ_HOST: rabbitmq
+      SMARTPARK_RABBITMQ_PORT: "5672"
+      SMARTPARK_RABBITMQ_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      SMARTPARK_RABBITMQ_PASSWORD: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
+      SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
+      Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
+      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:5035:8080"
     volumes:
@@ -57,7 +68,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
-        SERVICE: ParkingService
+        SERVICE: FacilityService
     image: smartpark/parking-service:local
     environment:
       <<: *backend-env
@@ -74,10 +85,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
-        SERVICE: ReservationService
+        SERVICE: OperationService
     image: smartpark/reservation-service:local
     environment:
       <<: *backend-env
+      Services__Payment: http://payment-service:8080/
       ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5055:8080"

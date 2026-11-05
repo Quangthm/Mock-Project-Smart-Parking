@@ -24,7 +24,9 @@ function dotnet {
     if ($args[0] -eq '--version') { $global:LASTEXITCODE = 0; return '10.0.302' }
     if ($args[0] -eq 'user-secrets') {
         $project = $args[[Array]::IndexOf($args, '--project') + 1]
-        $service = @('User','Parking','Reservation','Payment','Notification') | Where-Object { $project -match "SmartParking\.${_}(Audit)?Service\.API" }
+        $service = @('User','Facility','Operation','Payment','Notification') | Where-Object { $project -match "(${_}|SmartParking\.NotificationAudit)Service(\.API)?$" -or $project -match "SmartParking\.(Audit)?Service\.API" }
+        if ($service -eq 'Facility') { $service = 'Parking' }
+        if ($service -eq 'Operation') { $service = 'Reservation' }
         if (!$global:setupTestSecretMaps.ContainsKey($service)) { $global:setupTestSecretMaps[$service] = @{} }
         if ($args[1] -eq 'remove') {
             $null = $global:setupTestSecretMaps[$service].Remove($args[2])
@@ -48,10 +50,16 @@ function New-Fixture($name) {
     foreach ($file in @('setup.ps1','.env.example','scripts/load-env.ps1')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $fixture $file) }
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'FE/.env.example') -Destination (Join-Path $fixture 'FE/.env.example')
     foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
-        $serviceFolder = if ($service -eq 'Notification') { 'NotificationAuditService' } else { "${service}Service" }
-        $project = Join-Path $fixture "src/Services/$serviceFolder/SmartParking.${serviceFolder}.API"
-        New-Item -ItemType Directory -Force -Path $project | Out-Null
-        [IO.File]::WriteAllText((Join-Path $project "SmartParking.${serviceFolder}.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
+        if ($service -eq 'Notification') {
+            $project = Join-Path $fixture "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
+            New-Item -ItemType Directory -Force -Path $project | Out-Null
+            [IO.File]::WriteAllText((Join-Path $project "SmartParking.NotificationAuditService.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
+        } else {
+            $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
+            $project = Join-Path $fixture "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
+            New-Item -ItemType Directory -Force -Path $project | Out-Null
+            [IO.File]::WriteAllText((Join-Path $project "SmartParking.${projectService}Service.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
+        }
     }
     return $fixture
 }
@@ -67,19 +75,28 @@ function Expect-Failure($action, $pattern) {
 $local = New-Fixture 'local'
 Invoke-Fixture $local
 $localBytes = [IO.File]::ReadAllBytes((Join-Path $local '.env'))
+$localSettings = & (Join-Path $local 'scripts/load-env.ps1') -EnvPath (Join-Path $local '.env') -NoExport
+foreach ($pair in @{ Username='USER'; Password='PASSWORD'; VirtualHost='VHOST'; Port='PORT' }.GetEnumerator()) {
+    Assert-Setup ($global:setupTestSecretMaps['User']["SMARTPARK_RABBITMQ_$($pair.Value)"] -ceq $localSettings["SMARTPARK_RABBITMQ_$($pair.Value)"]) 'Shared broker setting was not mapped to host configuration.'
+}
+Assert-Setup ($global:setupTestSecretMaps['User']['SMARTPARK_RABBITMQ_HOST'] -eq '127.0.0.1') 'Host broker address must be loopback.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Messaging:OutboxDeliveryEnabled'] -eq 'false') 'Delivery enabled without explicit configuration.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Cors:AllowedOrigins'] -eq $localSettings['SMARTPARK_USER_CORS_ORIGINS']) 'CORS origins were not mapped.'
 $writes = $global:setupTestSecretWrites
 Invoke-Fixture $local
 Assert-Setup ([Convert]::ToBase64String($localBytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $local '.env')))) 'Rerun changed .env.'
 Assert-Setup ($global:setupTestSecretWrites -eq $writes) 'Rerun rewrote existing secrets.'
 $key = $global:setupTestSecretMaps['User']['Services:Key']
 Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Notification']['Services:Key']) 'Local service keys differ.'
+Assert-Setup ($global:setupTestSecretMaps['Parking']['ConnectionStrings:Parking'] -match 'Database=smartpark_facility;Username=smartpark_facility;') 'Facility database mapping differs from compose.'
+Assert-Setup ($global:setupTestSecretMaps['Reservation']['ConnectionStrings:Reservation'] -match 'Database=smartpark_operations;Username=smartpark_operations;') 'Operations database mapping differs from compose.'
 $global:setupTestSecretMaps = @{}
 $teamFile = Join-Path $testRoot 'team-private.env'
 [IO.File]::WriteAllText($teamFile, "SMARTPARK_DEV_PASSWORD=review-team-password`nSMARTPARK_SERVICE_KEY=review-team-service-key-at-least-32-characters`nSMARTPARK_ADMIN_PASSWORD=Review@123`nVITE_MAPTILER_API_KEY=review-map-key`nSMARTPARK_SERVICE_PARKING_URL=http://parking.example.test:5045/`n")
 $teamA = New-Fixture 'team-a'
 Invoke-Fixture $teamA @{CredentialMode='Team'; TeamEnvPath=$teamFile}
 $teamKey = $global:setupTestSecretMaps['User']['Services:Key']
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
 $previousKey = $env:SMARTPARK_SERVICE_KEY
 $env:SMARTPARK_SERVICE_KEY = 'no-export-sentinel'
 $null = & (Join-Path $teamA 'scripts/load-env.ps1') -EnvPath $teamFile -NoExport
@@ -98,9 +115,9 @@ $global:setupTestSecretMaps['Parking']['Services:Key'] = 'different-service-key-
 Invoke-Fixture $teamB
 Assert-Setup ($global:setupTestSecretMaps['Parking']['Services:Key'] -ceq $teamKey) 'Services:Key was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true}
-$global:setupTestSecretMaps['User']['Services:Parking'] = 'http://old-parking.example.test/'
+$global:setupTestSecretMaps['User']['Services:Facility'] = 'http://old-parking.example.test/'
 Invoke-Fixture $teamB
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -ceq 'http://parking.example.test:5045/') 'Services:Parking URL was not synced from .env.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -ceq 'http://parking.example.test:5045/') 'Services:Facility URL was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true; SkipSonarQube=$true}
 $global:setupTestSecretMaps['User']['DevelopmentAdmin:Password'] = 'Different@Admin1'
 $global:setupTestSecretMaps['User']['Jwt:PrivateKeyPem'] = 'stale-jwt-key-material'

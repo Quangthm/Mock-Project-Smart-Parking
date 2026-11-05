@@ -1,10 +1,27 @@
 import { request } from "./authApi"
+import type { OperationalLayoutProjection } from "./operationalLayout"
 
 const server = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
 ).replace(/\/$/, "")
 
 type Response<T> = { success: boolean; data: T }
+
+export interface OperationalLayoutOptions {
+  vehicleType?: string
+  floor?: string
+}
+
+/**
+ * Lazily loaded so the existing CommonJS test harnesses can stub
+ * `./operationalLayout` without parsing a second `import.meta.env` reference.
+ */
+let operationalLayoutModule: Promise<typeof import("./operationalLayout")> | null = null
+
+async function operationalLayoutFixture(): Promise<OperationalLayoutProjection | null> {
+  operationalLayoutModule ??= import("./operationalLayout")
+  return (await operationalLayoutModule).readOperationalLayoutFixture()
+}
 
 export interface Site {
   id: string
@@ -82,13 +99,33 @@ async function call<T>(
 export const parkingApi = {
   list: () => call<Site[]>(""),
 
-  create: (body: { code: string; name: string; address: string }) =>
+  create: (body: { code: string; name: string; address: string; latitude?: number; longitude?: number }) =>
     call<Site>("", "POST", body),
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),
 
   operatorLayout: (id: string) =>
     call<Structure>(`/${encodeURIComponent(id)}/operator-layout`),
+
+  async operationalLayout(
+    id: string,
+    opts?: OperationalLayoutOptions,
+  ): Promise<OperationalLayoutProjection> {
+    const fixture = await operationalLayoutFixture()
+    if (fixture) {
+      if (fixture.siteId !== id) throw new Error("Fixture site ID does not match the requested parking lot.")
+      return fixture
+    }
+
+    const query: string[] = []
+    if (opts?.vehicleType) query.push(`vehicleType=${encodeURIComponent(opts.vehicleType)}`)
+    if (opts?.floor) query.push(`floor=${encodeURIComponent(opts.floor)}`)
+    const suffix = query.length ? `?${query.join("&")}` : ""
+
+    return call<OperationalLayoutProjection>(
+      `/${encodeURIComponent(id)}/operational-layout${suffix}`,
+    )
+  },
 
   markBackup: (siteId: string, slotId: string, reason: string) =>
     call<void>(
@@ -179,8 +216,11 @@ export interface OperatorAssignment {
 }
 
 export const operatorsApi = {
+  async reissueInvitation(id: string) {
+    return request(`/${encodeURIComponent(id)}/invitation`, "POST", undefined, "/api/operators")
+  },
   async assignments() {
-    return (
+    const assignments = (
       await request<Response<OperatorAssignment[]>>(
         "/me",
         "GET",
@@ -188,6 +228,12 @@ export const operatorsApi = {
         "/api/operators",
       )
     ).data
+    if (!Array.isArray(assignments) || assignments.some((assignment) =>
+      !assignment || typeof assignment.siteId !== "string" || typeof assignment.tenantId !== "string" ||
+      !Array.isArray(assignment.permissions))) {
+      throw new Error("The assignment service returned an invalid site list. Please try again.")
+    }
+    return assignments
   },
 
   async list() {
@@ -204,7 +250,6 @@ export const operatorsApi = {
   async create(body: {
     fullName: string
     email: string
-    password: string
     siteIds: string[]
     permissions: string[]
   }) {
@@ -219,6 +264,7 @@ export const operatorsApi = {
 
     return result.data
   },
+
 
   async remove(operatorId: string) {
     await request<void>(`/${operatorId}`, "DELETE", undefined, "/api/operators")

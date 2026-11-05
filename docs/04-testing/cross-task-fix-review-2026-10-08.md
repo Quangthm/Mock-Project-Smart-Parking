@@ -25,7 +25,7 @@ Final results được ghi ở [test execution inventory](reports/cross-task-202
 
 | Check | Kết quả |
 | --- | --- |
-| .NET solution tests, PostgreSQL isolated | 91 pass (77 UserService + 14 ParkingService), 0 fail, 0 skip. |
+| .NET solution tests, PostgreSQL isolated | 91 pass (77 UserService + 14 FacilityService), 0 fail, 0 skip. |
 | Frontend regression tests | 30 pass, 0 fail/skip. |
 | FE production build | Pass; cảnh báo bundle >500 kB còn tồn tại. |
 | TypeScript `tsc --noEmit` | Pass sau Operator UI. |

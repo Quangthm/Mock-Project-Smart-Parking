@@ -31,6 +31,19 @@ export function useUsers() {
   }, [query, reload, admin?.id, admin?.role])
 
   useEffect(() => {
+    if (admin?.role !== "admin") return
+    let current = true
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return
+      void usersApi.list(query).then(result => { if (current) setPage(result) }).catch(() => {})
+      if (selectedId) void usersApi.get(selectedId).then(result => { if (current) setDetail(result) }).catch(() => {})
+    }
+    const timer = window.setInterval(refresh, 20_000)
+    document.addEventListener("visibilitychange", refresh)
+    return () => { current = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh) }
+  }, [query, selectedId, admin?.role])
+
+  useEffect(() => {
     setDetail(null)
     setDetailError("")
     setNotice("")

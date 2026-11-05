@@ -33,10 +33,19 @@ public sealed class MfaCredential
 {
     public Guid UserId { get; set; }
     public string ProtectedSecret { get; set; } = "";
+    public string? PendingProtectedSecret { get; set; }
+    public DateTimeOffset? PendingExpiresAt { get; set; }
     public bool Enabled { get; set; }
     public long LastStep { get; set; } = -1;
     public int Attempts { get; set; }
     public DateTimeOffset? LockedUntil { get; set; }
+}
+public sealed class MfaRecoveryCode
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string CodeHash { get; set; } = "";
+    public DateTimeOffset? UsedAt { get; set; }
 }
 public sealed class RegisteredVehicle
 {

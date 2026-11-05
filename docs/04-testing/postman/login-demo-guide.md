@@ -1,6 +1,6 @@
 # Debug Login/Logout qua Clean Architecture
 
-Cập nhật 06/10/2026: xem [hướng dẫn hiện tại](../login-logout-frontend-guide.md) để migration PostgreSQL và cấu hình RSA. Các kết quả ngày 02/10 ở cuối chỉ là lịch sử.
+Đây là hướng dẫn debug demo ngày 06/10/2026; cấu hình và contract bên dưới mang tính lịch sử. Khi chạy bản hiện tại, dùng [local setup](../../../LOCAL-SETUP.md), [hướng dẫn test tự động](../../../tests/README.md) và [API design hiện tại](../../02-architecture/api/SmartPark-All-API-Design.md).
 
 ## Chạy API
 
@@ -32,7 +32,7 @@ Content-Type: application/json
 }
 ```
 
-Kết quả thành công: HTTP `200`, `success: true`, `data.accessToken`, refresh token thực, `data.expiresIn: 3600` và `data.user` có tên `Demo Driver`, ID là một `UUID` hợp lệ, role `driver`. Response không trả password/hash. Từ 06/10/2026 phát refresh token thực và lưu hash PostgreSQL; collection kiểm tra thêm `me`, `logout` và từ chối token đã thu hồi. Hướng dẫn frontend: [login/logout](../login-logout-frontend-guide.md).
+Kết quả thành công tại thời điểm demo: HTTP `200`, `success: true`, `data.accessToken`, refresh token thực, `data.expiresIn: 3600` và `data.user` có tên `Demo Driver`, ID là một `UUID` hợp lệ, role `driver`. Response không trả password/hash. Từ 06/10/2026 phát refresh token thực và lưu hash PostgreSQL; collection kiểm tra thêm `me`, `logout` và từ chối token đã thu hồi. Contract hiện tại: [API design](../../02-architecture/api/SmartPark-All-API-Design.md).
 
 | Request | HTTP mong đợi | Đi đến Persistence? |
 | --- | --- | --- |

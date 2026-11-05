@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Configuration;
-using SmartParking.ParkingService.Application;
-using SmartParking.ParkingService.Infrastructure;
+using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Infrastructure;
 namespace SmartParking.UserService.Tests;
 public sealed class StructureImpactPlannerTests
 {

@@ -1,6 +1,6 @@
 -- ======================================================================================
 -- OVERLAY 1/4 — Reservation capacity pools (smartpark_reservation)
--- Purpose : Recreate site_capacity_pools with the shape the ReservationService BE
+-- Purpose : Recreate site_capacity_pools with the shape the OperationService BE
 --           actually uses. The original DDL (microservices/03-reservation-session-
 --           service-db.sql on develop) was lost in the arch SRS split (T4 D7, gap R3);
 --           the newer 05.1 variant has a different shape (missing tenant_id,

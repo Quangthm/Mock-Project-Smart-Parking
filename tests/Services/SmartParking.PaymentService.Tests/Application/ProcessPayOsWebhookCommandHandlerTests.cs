@@ -119,4 +119,62 @@ public class ProcessPayOsWebhookCommandHandlerTests
         Assert.Equal(PaymentStatus.SUCCESS, tx.Status);
         Assert.Equal(1, _uow.SaveCount);
     }
+    [Fact]
+    public async Task Handle_AmountMismatch_ReturnsFailureAndSavesWebhook()
+    {
+        var order = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            OrderCode = "123456",
+            FinalAmount = 25000,
+            Status = PaymentOrderStatus.PENDING
+        };
+        _orderRepo.Orders.Add(order);
+
+        _gatewayPort.CallbackResult = new PaymentCallbackResult(
+            IsValidSignature: true,
+            OrderCode: 123456,
+            AmountVnd: 25001,
+            GatewayTransactionId: "LINK-123",
+            BankReference: "REF-123",
+            PaymentStatus: "SUCCESS",
+            TransactionTime: DateTimeOffset.UtcNow,
+            RawPayload: "{}"
+        );
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(
+            new ProcessPayOsWebhookCommand("{}", "valid-sig"), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("AMOUNT_MISMATCH", result.ErrorCode);
+        Assert.Single(_webhookRepo.Webhooks);
+        Assert.Equal(WebhookProcessingState.FAILED, _webhookRepo.Webhooks[0].ProcessingState);
+        Assert.Equal(1, _uow.SaveCount);
+    }
+
+    [Fact]
+    public async Task Handle_OrderNotFound_ReturnsFailureAndSavesWebhook()
+    {
+        _gatewayPort.CallbackResult = new PaymentCallbackResult(
+            IsValidSignature: true,
+            OrderCode: 999999,
+            AmountVnd: 25000,
+            GatewayTransactionId: "LINK-999",
+            BankReference: "REF-999",
+            PaymentStatus: "SUCCESS",
+            TransactionTime: DateTimeOffset.UtcNow,
+            RawPayload: "{}"
+        );
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(
+            new ProcessPayOsWebhookCommand("{}", "valid-sig"), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("ORDER_NOT_FOUND", result.ErrorCode);
+        Assert.Single(_webhookRepo.Webhooks);
+        Assert.Equal(WebhookProcessingState.FAILED, _webhookRepo.Webhooks[0].ProcessingState);
+        Assert.Equal(1, _uow.SaveCount);
+    }
 }

@@ -1,37 +1,41 @@
 # SmartPark Data Dictionary — Recorded Deployment Profile
 
-This dictionary summarizes the recorded data structures of branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays. It preserves the schema evidence, including T4-approved deviations from the arch design baseline; this documentation update did not query a running database. Target v1.1 gaps are [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending), not newly deployed fields.
+This dictionary records the canonical deployment profile: 6 physical databases, 7 base DDL files, and 8 deployment overlays, including T4-approved deviations. The User & Access section reflects the one-role-per-Account clean-install schema and the consolidated UserDb base, including session/replay, MFA, Owner setup and MassTransit persistence. These are repository definitions, not a claim that a development database has been reset. Other v1.1 gaps remain [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending).
 
 ## 1. Global persistence strategies
 
 - **UTC:** all `TIMESTAMPTZ` values are stored in UTC; presentation converts to the site's local timezone.
-- **GUIDs:** primary keys use `UUIDv4` (`uuid_generate_v4()`); tests may use fixed UUIDs.
+- **GUIDs:** entity identifiers generally use `UUIDv4` (`uuid_generate_v4()`); tests may use fixed UUIDs. `roles.code` is a `VARCHAR(50)` business primary key, not a UUID.
 - **Tenant scope:** `tenant_id` is denormalized on most business tables. Cross-database references (`tenant_id`, `site_id`, `account_id`, `slot_id`, `reservation_id`) are **logical UUIDs**, not physical FKs.
 - **RLS:** Row-Level Security is **not enabled** in the deployed schema. It must be enabled with explicit policies if required.
 - **Soft delete:** identities and physical resources use `deleted_at`; audit tables retain history via `RESTRICT`/`SET NULL`.
 
 ## 2. User & Access DB (`smartpark_user`)
 
-Base: `01-user-access-service-db.sql`; no overlays.
+Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship and the canonical UserService runtime schema. Fresh setup applies this base and runs the read-only [UserDb verifier](../../../scripts/database/test/verify-user-access-schema.sql). Existing/partial databases require a separately reviewed migration.
 
 | Table | Key columns / rules |
 |---|---|
-| `users` | `id`, `phone`, `email`, `password_hash`, `full_name`, `company_name`, `status` (`ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_APPROVAL`, `PENDING_VERIFICATION`, `REJECTED`), `failed_login_attempts`, `locked_until` |
+| `users` | `id`, `phone`, `email`, `password_hash`, `full_name`, `company_name`, `access_version`, `status` (`ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_APPROVAL`, `PENDING_VERIFICATION`, `REJECTED`), `failed_login_attempts`, `locked_until`; no generic `onboarding_complete` |
 | `tenants` | Organization root; `code`, `name`, `contact_email`, `contact_phone`, `tax_code`, `status` (`ACTIVE`, `INACTIVE`, `SUSPENDED`) |
-| `accounts` | Contextual account; `user_id`, nullable `tenant_id`/`site_id`, `permissions`, `status`; one user may have multiple accounts |
-| `roles` | **7 seeded codes:** `DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN` |
-| `account_roles` | PK `(account_id, role_code)`; FKs to `accounts.id` (CASCADE) and `roles.code` (RESTRICT) |
+| `accounts` | Contextual account; `user_id`, required `role_code VARCHAR(50)` FK to `roles.code` with `ON DELETE RESTRICT`, nullable `tenant_id`/`site_id`, `permissions`, `status`; one user may have multiple accounts, each with exactly one role. Nonunique `idx_accounts_role_code` allows many accounts to share a role |
+| `roles` | `code VARCHAR(50)` PK; **7 seeded codes:** `DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN` |
 | `vehicles` | `account_id`, `original_plate`, `normalized_plate`, `vehicle_type`; active-plate uniqueness via `uq_active_vehicle_plate` |
-| `user_refresh_tokens` | Refresh-token lifecycle; `access_token_id` unique for strict revocation |
+| `user_refresh_tokens` | Refresh-token lifecycle; unique `token_hash` and `access_token_id`, `last_refreshed_at`, nullable legacy `account_id` and composite FK `(account_id,user_id) → accounts(id,user_id)` with restrictive deletion; trigger freezes both binding identifiers. New sessions always bind an Account; legacy NULL bindings require new login |
+| `rotated_session_proofs` | Consumed access-token IDs and session/user proof data for refresh replay checks; session/user FKs cascade |
 | `driver_registrations` | OTP hash, channel, expiry, failed attempts |
 | `system_terms_and_conditions` | Versioned legal terms |
 | `owner_applications` | Owner onboarding; `status` (`pending`, `approved`, `rejected`), review fields, `tenant_id` |
 | `operator_grants` | 1-1 with operator account; permission array checked by `CHECK` constraints |
 | `auth_challenges` | Short-lived authentication challenges |
 | `workflow_deliveries` | Durable workflow/event delivery records |
-| `mfa_credentials` | TOTP/MFA credentials |
+| `mfa_credentials`, `mfa_recovery_codes` | TOTP/MFA credentials, pending protected secret and hashed one-time recovery codes |
+
+Versioned `OperatorAccessChanged` integration events are captured through the scoped MassTransit EF Bus Outbox in the same UserDb transaction as their mutations. The EF inbox deduplicates the consumer; its only action is a SignalR invalidation hint, after which clients reload authoritative state.
 
 Runtime role mapping: `PLATFORM_ADMIN`/`ADMIN` → admin; `BUSINESS_OWNER`/`OWNER` → owner; `SITE_OPERATOR`/`OPERATOR` → operator; `DRIVER` → driver.
+
+The authenticated session's exact Account remains authoritative. Current access rechecks User, Account, Role and session state; action permissions and resource membership are separate checks. `accounts.permissions` and `operator_grants.permissions` retain their existing ownership and semantics. Role codes do not grant implicit Admin access to Owner/Operator resources. Account creation/bootstrap supplies `role_code` directly; the Admin seed receives `ADMIN`. Account creation time remains `accounts.created_at`, with no separate role-assignment timestamp.
 
 ## 3. Facility & Parking DB (`smartpark_facility`)
 
@@ -51,7 +55,7 @@ Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 | `structure_backup_policies` (03a) | `unit_id` (arch name `spatial_unit_id`), `vehicle_type`, `count` (arch name `backup_count`); unique site/unit policy indexes |
 | `operator_incident_events` (03a) | `tenant_id`, `site_id`, `actor_id`, `incident_type`, `details`, `status` (`reported`, `resolved`) |
 
-Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4).
+Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4). Facility base `02-facility-service-db.sql` defines `owner_onboarding_provisions` for idempotent owner provisioning.
 
 ## 4. Reservation & Operations DB (`smartpark_operations`)
 

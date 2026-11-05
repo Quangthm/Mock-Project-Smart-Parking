@@ -13,6 +13,12 @@ Cancel, expire or mark no-show; inspect reservation history.
 
 Existing reservation and current lifecycle/version.
 
+## Authorization and pending-workflow boundary — approved 2026-11-04
+
+Cancel own future reservation is REQUEST; own history/status reads remain TOKEN; expiry/no-show scheduler work uses SERVICE. These paths must not share an assumed customer actor or blanket freshness label. Cancellation/release sequencing and pre-ALLOW preparation require an explicit state/compensation contract.
+
+See the [operation matrix](../srs/authorization-operation-classification.md) and [mandatory REQUEST design checklist](../srs/authorization-operation-classification.md#5-implementation-documentation-checklist). Specify branch eligibility, correlation/attempts, pending observation, combined outcomes, deadlines, idempotency, revocation race, pivot, compensation and late/unknown handling before implementing the affected workflow. This amendment approves direction, not a completed Saga or wire contract.
+
 ## Main flow
 
 1. Show own history and independent money/visit state.

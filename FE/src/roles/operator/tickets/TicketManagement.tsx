@@ -5,6 +5,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi } from "../../../lib/operatorApi"
 import type { SupportTicket } from "../../../lib/types"
 import { store } from "../../../lib/store"
+import { showUiToast } from "../../../lib/uiToast"
 import { formatTicketDecision, ticketPresentation } from "../../../lib/ticketPresentation"
 import "../../../booking-support.css"
 
@@ -108,11 +109,14 @@ export function TicketManagement({ siteId }: { siteId: string }) {
       setTickets((current) => current.map((item) => item.id === ticket.id ? updated : item))
       if (selectedTicket?.id === ticket.id) setSelectedTicket(updated)
       setActionFeedback(`Ticket #${ticket.id} ${ticketDecision || `updated to ${status}`}.`)
+      showUiToast("Ticket updated", `Ticket #${ticket.id} ${ticketDecision || `updated to ${status}`}.`)
       if (local && ticketDecision) store.createNotification({ recipientId: ticket.userId, recipientRole: "driver", type: "TICKET_RESOLVED", title: `Ticket ${ticketDecision}`, message: note || "Your ticket was reviewed.", relatedEntityId: ticket.id })
       setDecisionReason("")
       setDecisionDetail("")
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not update the support ticket.")
+      const message = error instanceof Error ? error.message : "Could not update the support ticket."
+      setLoadError(message)
+      showUiToast("Ticket not updated", message, "error")
     } finally {
       setBusyTicketId(null)
     }
@@ -163,7 +167,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         </div>
       )}
       {loading && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+        <div role="status" className="sr-only">
           Loading support tickets…
         </div>
       )}
@@ -270,7 +274,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
 
       {/* Ticket Cards List */}
       <div className="space-y-3">
-        {filteredTickets.length === 0 ? (
+        {!loading && filteredTickets.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--muted)]">
             No support tickets found matching the filter criteria.
           </div>

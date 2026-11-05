@@ -1,9 +1,23 @@
 import { createPortal } from "react-dom"
+import { useEffect, useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
+import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
 import type { LotManagementModel } from "./useLotManagement"
 
 export function LotDetailModal({ model }: { model: LotManagementModel }) {
   const { detailSite, setDetailSite, refresh } = model
+  const [savedModelUrl, setSavedModelUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    setSavedModelUrl(null)
+    if (detailSite?.site.id) loadOwnerModelUrl(detailSite.site.id).then(url => { if (active) setSavedModelUrl(url) }).catch(() => {})
+    return () => { active = false }
+  }, [detailSite?.site.id])
+  const setup = detailSite?.setup
+  const customModel = setup && setup.modelFileName !== ALLOWED_PARKING_MODELS[setup.type].fileName
+  const previewUrl = setup ? (customModel ? savedModelUrl : ALLOWED_PARKING_MODELS[setup.type].path) : null
   return (
     <>
 {detailSite &&
@@ -17,7 +31,7 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
               if (e.target === e.currentTarget) setDetailSite(null)
             }}
           >
-            <div className="relative w-full max-w-xl max-h-[85vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl p-6 space-y-4 text-[var(--fg)] animate-in">
+            <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl p-6 space-y-4 text-[var(--fg)] animate-in">
               <div className="flex items-start justify-between border-b border-[var(--border)] pb-3">
                 <div>
                   <h3 className="text-base font-bold text-[var(--fg)]">
@@ -29,7 +43,8 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
                 </div>
                 <button
                   type="button"
-                  className="text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
+                  className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] cursor-pointer"
+                  aria-label="Close lot details"
                   onClick={() => setDetailSite(null)}
                 >
                   <UntitledIcon name="x" size={16} />
@@ -37,6 +52,16 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-4 text-xs">
+                {setup ? <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4" aria-label="Parking lot setup">
+                  <h4 className="text-base font-semibold">Parking lot setup</h4>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div><span className="block text-[var(--muted)]">Type</span><strong className="text-sm capitalize">{setup.type.replace("-", " ")}</strong></div>
+                    <div><span className="block text-[var(--muted)]">3D model</span><strong className="break-all text-sm">{setup.modelFileName ?? "Model not recorded"}</strong></div>
+                    <div><span className="block text-[var(--muted)]">Hourly / daily / night</span><strong className="text-sm tabular-nums">{setup.hourlyRate.toLocaleString("en-US")} / {setup.dailyRate.toLocaleString("en-US")} / {setup.nightRate.toLocaleString("en-US")} VND</strong></div>
+                    <div><span className="block text-[var(--muted)]">Monthly / yearly</span><strong className="text-sm tabular-nums">{setup.subscriptionMonthly.toLocaleString("en-US")} / {setup.subscriptionYearly.toLocaleString("en-US")} VND</strong></div>
+                  </div>
+                  {previewUrl ? <Parking3DViewer modelUrl={previewUrl} lotType={setup.type} interactive={false} showLegend={false} height={280} /> : <p className="text-sm text-[var(--muted)]">The imported 3D file is unavailable in this browser.</p>}
+                </section> : <p className="rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--muted)]">Setup type, model and pricing are unavailable in this browser. Live capacity below still comes from the parking service.</p>}
                 {detailSite.structureError && (
                   <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">
                     <span>{detailSite.structureError}</span>
@@ -44,7 +69,7 @@ export function LotDetailModal({ model }: { model: LotManagementModel }) {
                   </div>
                 )}
                 {/* Overall stats grid */}
-                <div className="grid grid-cols-3 gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                <div className="grid grid-cols-1 gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-3">
                   <div>
                     <span className="text-[var(--muted)] block">Capacity:</span>
                     <span className="font-bold text-sm text-[var(--fg)]">{detailSite.metrics?.total ?? "—"}</span>

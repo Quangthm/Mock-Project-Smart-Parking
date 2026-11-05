@@ -84,7 +84,7 @@ CREATE TABLE parking_slots (
     UNIQUE (tenant_id, site_id, slot_code),
     CONSTRAINT ck_deleted_slot_not_occupied CHECK (deleted_at IS NULL OR (physical_state NOT IN ('OCCUPIED', 'UNKNOWN')))
 );
--- DEVIATION (T4-approved): columns required by live ParkingService reads/writes (P1)
+-- DEVIATION (T4-approved): columns required by live FacilityService reads/writes (P1)
 CREATE UNIQUE INDEX uq_active_slot_code_ci ON parking_slots(spatial_unit_id, upper(slot_code)) WHERE deleted_at IS NULL;
 CREATE INDEX idx_parking_slots_tenant_id ON parking_slots(tenant_id);
 CREATE INDEX idx_parking_slots_site_id ON parking_slots(site_id);
@@ -163,3 +163,13 @@ CREATE TABLE structure_change_audit (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX ix_structure_change_history ON structure_change_audit(site_id, created_at);
+
+-- FacilityService owner-onboarding provisioning state.
+BEGIN;
+CREATE TABLE IF NOT EXISTS owner_onboarding_provisions (
+    application_id uuid PRIMARY KEY,
+    site_id uuid NOT NULL UNIQUE REFERENCES parking_sites(id),
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+COMMIT;

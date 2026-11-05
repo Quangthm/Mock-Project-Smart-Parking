@@ -4,27 +4,21 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   type ReactNode,
 } from "react"
 
-import type { User, LotType } from "../lib/types"
-import type { OwnerApplicationRecord } from "../lib/ownerApi"
+import type { User } from "../lib/types"
 
 import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
+import { watchAccessRevocation, type AccessRevokedReason } from "../lib/accessRealtime"
+import { showUiToast } from "../lib/uiToast"
 import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
+import { restoreOwnerRegistration } from "../lib/ownerRegistration"
 
 export type View = "landing" | "pricing" | "support" | "faq" | "sign-in" | "sign-up" | "parking-lot-setup" | "pending-approval" | "business" | "about" | "affiliates" | "careers" | "driver" | "owner" | "operator" | "admin" | "terms" | "privacy" | "payment-refund"
-
-export type PendingOwnerSetup = {
-  id: string
-  email: string
-  lotType: LotType
-  setupToken?: string
-  verification?: OwnerApplicationRecord["verification"]
-  lotSetupComplete?: boolean
-}
 
 interface AppCtx {
   user: User | null
@@ -40,10 +34,6 @@ interface AppCtx {
   authReady: boolean
 
   authError: string
-
-  pendingOwnerSetup: PendingOwnerSetup | null
-
-  setPendingOwnerSetup: (val: PendingOwnerSetup | null) => void
 
   setUser: (u: User | null) => void
 
@@ -64,20 +54,7 @@ export const useApp = () => useContext(Ctx)
 
 function hasPendingVerification() {
   if (restoreDriverRegistration()) return true
-  try {
-    const owner = JSON.parse(
-      sessionStorage.getItem("sp_pending_owner_registration") ?? "null",
-    )
-    return (
-      typeof owner?.email === "string" &&
-      owner?.lotSetupComplete === true &&
-      typeof owner?.verification?.challengeId === "string" &&
-      Number.isFinite(Date.parse(owner.verification.expiresAt)) &&
-      Number.isFinite(Date.parse(owner.verification.resendAt))
-    )
-  } catch {
-    return false
-  }
+  return restoreOwnerRegistration() !== null
 }
 
 function initialView(): View {
@@ -89,13 +66,44 @@ function initialView(): View {
   } catch {
     /* Login remains available through the navigation. */
   }
+  const savedView = window.history.state?.smartParkingView
+  if (isView(savedView) && !["driver", "owner", "operator", "admin"].includes(savedView)) return savedView
   return "landing"
+}
+
+const views: ReadonlySet<string> = new Set<View>([
+  "landing", "pricing", "support", "faq", "sign-in", "sign-up",
+  "parking-lot-setup", "pending-approval", "business", "about",
+  "affiliates", "careers", "driver", "owner", "operator", "admin",
+  "terms", "privacy", "payment-refund",
+])
+
+function isView(value: unknown): value is View {
+  return typeof value === "string" && views.has(value)
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
 
-  const [view, setView] = useState<View>(initialView)
+  const [view, setViewState] = useState<View>(initialView)
+  const viewRef = useRef(view)
+  const userRef = useRef(user)
+  const historyReady = useRef(false)
+
+  const setView = useCallback((next: View) => {
+    if (viewRef.current === next) return
+    if (historyReady.current && window.location.pathname === "/") {
+      const current = window.history.state ?? {}
+      window.history.pushState({
+        ...current,
+        idx: typeof current.idx === "number" ? current.idx + 1 : 1,
+        smartParkingView: next,
+        smartParkingPage: undefined,
+      }, "", window.location.href)
+    }
+    viewRef.current = next
+    setViewState(next)
+  }, [])
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
@@ -115,11 +123,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [authError, setAuthError] = useState("")
 
-  const [pendingOwnerSetup, setPendingOwnerSetup] = useState<PendingOwnerSetup | null>(null)
-
   const logoutPending = useRef(false)
 
   const authRevision = useRef(0)
+
+  useEffect(() => {
+    if (!authReady) return
+    if (window.location.pathname === "/") {
+      window.history.replaceState({
+        ...window.history.state,
+        smartParkingView: viewRef.current,
+      }, "", window.location.href)
+    }
+    historyReady.current = true
+  }, [authReady])
+
+  useEffect(() => {
+    const restoreView = (event: PopStateEvent) => {
+      if (!["/", "/dashboard/finance", "/dashboard/operation", "/pos"].includes(window.location.pathname) || !isView(event.state?.smartParkingView)) return
+      const requested = event.state.smartParkingView as View
+      const isProtected = ["driver", "owner", "operator", "admin"].includes(requested)
+      const next = isProtected && userRef.current?.role !== requested ? "landing" : requested
+      if (next !== requested) {
+        window.history.replaceState({ ...event.state, smartParkingView: next }, "", window.location.href)
+      }
+      viewRef.current = next
+      setViewState(next)
+    }
+    window.addEventListener("popstate", restoreView)
+    return () => window.removeEventListener("popstate", restoreView)
+  }, [])
 
   useEffect(() => {
     store.init()
@@ -159,12 +192,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       authApi.clearSession()
 
       setUserState(null)
+      userRef.current = null
 
       store.setCurrentUserId(null)
 
       setDashboardMenuOpen(false)
 
-      setView("sign-in")
+      setView("landing")
 
       setAuthError("Your session has expired. Please sign in again.")
     }
@@ -182,6 +216,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           store.setCurrentUserId(account.id)
 
           setUserState(account)
+          userRef.current = account
 
           setView(account.role)
         }
@@ -209,17 +244,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!user) return
-
-    const remaining = authApi.expiresAt() - Date.now()
-
-    const timer = window.setTimeout(
-      () => window.dispatchEvent(new Event(authExpiredEvent)),
-      Math.max(0, remaining),
-    )
-
+    if (authError !== "Your session has expired. Please sign in again.") return
+    const timer = window.setTimeout(() => setAuthError(""), 5_200)
     return () => window.clearTimeout(timer)
-  }, [user])
+  }, [authError])
+
+  useEffect(() => {
+    if (!authReady || !user) return
+    let revoked = false
+    const messages: Record<AccessRevokedReason, string> = {
+      USER_LOCKED: "Your account has been locked. Please contact support or an administrator if you believe this is incorrect.",
+      ACCOUNT_DISABLED: "This account is no longer available. Please sign in again or contact support.",
+      SESSION_REVOKED: "Your session is no longer valid. Please sign in again.",
+    }
+    return watchAccessRevocation((reason) => {
+      if (revoked) return
+      revoked = true
+      authRevision.current++
+      authApi.clearSession()
+      setUserState(null)
+      userRef.current = null
+      store.setCurrentUserId(null)
+      setDashboardMenuOpen(false)
+      setView("sign-in")
+      setAuthError(messages[reason])
+    })
+  }, [authReady, user, setView])
+
+  // Requests refresh an expiring access token on demand. An unattended tab must
+  // neither discard a valid refresh session nor keep it alive with a timer.
 
   useEffect(() => {
     store.remindExpiringBookings()
@@ -236,6 +289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authRevision.current++
 
     setUserState(u)
+    userRef.current = u
 
     setAuthError("")
 
@@ -293,6 +347,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         action: "SIGN_OUT",
         details: "User signed out",
       })
+      showUiToast("Signed out", "You have signed out of SmartParking.")
     } catch (error) {
       // Keep the session visible so the user can retry; do not claim revocation succeeded.
 
@@ -318,8 +373,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dashboardMenuOpen,
         authReady,
         authError,
-        pendingOwnerSetup,
-        setPendingOwnerSetup,
         setUser,
         setView,
         toggleTheme,

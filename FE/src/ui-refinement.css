@@ -71,6 +71,12 @@
 .parking-hero-3d-pause { position: absolute; z-index: 1; left: 9%; bottom: 8%; min-height: 44px; padding: 0 16px; border: 1px solid #a7e8c767; border-radius: 999px; background: #172b26e8; color: #e9f9ef; font: inherit; font-size: .8125rem; font-weight: 650; cursor: pointer; }
 .parking-hero-3d-pause:hover { background: #285040; }
 .parking-hero-3d-pause:focus-visible { outline: 3px solid #8be0b8; outline-offset: 3px; }
+.landing-page .parking-hero-3d-caption,
+.landing-page .parking-hero-3d-pause { border-color: var(--hero-outline); background: color-mix(in srgb, var(--hero-bg) 92%, transparent); color: var(--hero-fg); transition: background-color 320ms ease, border-color 320ms ease, color 320ms ease; }
+.landing-page .parking-hero-3d-pause:hover { background: color-mix(in srgb, var(--hero-accent) 13%, var(--hero-bg)); }
+.landing-page .parking-hero-3d-pause:focus-visible { outline-color: var(--hero-accent); }
+.landing-page .parking-hero-3d-pulse { background: var(--hero-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--hero-accent) 20%, transparent); }
+.landing-page .parking-hero-3d-fallback span:nth-child(n+2) { background: var(--hero-bg); }
 @media (prefers-reduced-motion: reduce) { .parking-hero-3d-pause { display: none; } .parking-hero-3d-caption { animation: none; } }
 .parking-hero-3d-fallback { position: absolute; inset: 15%; display: grid; align-content: center; justify-items: center; gap: 0; }
 .parking-hero-3d-fallback span:first-child { width: min(76%, 330px); height: 106px; border-radius: 76px 110px 28px 28px; background: #66d4a4; transform: translateY(25px); }
@@ -95,6 +101,34 @@
 .dashboard-theme .application-card { padding: 24px; border-color: var(--border) !important; }
 .dashboard-theme .application-card-header { margin-bottom: 22px !important; }
 .dashboard-theme .application-card-header > div { display: grid; gap: 6px; }
+.dashboard-theme .application-card-pending { border: 1px solid var(--border) !important; border-left: 4px solid var(--primary) !important; }
+.dashboard-theme .application-card-pending .application-card-header { display: grid; gap: 14px; align-items: start; }
+.dashboard-theme .application-card-pending .application-card-header > div { min-width: 0; gap: 5px; }
+.application-eyebrow { color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.application-business-name { color: var(--fg); font-size: 1.3rem; font-weight: 700; line-height: 1.3; }
+.application-owner-contact { color: var(--muted); font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+.application-pending-badge { display: inline-flex; justify-self: start; align-items: center; gap: 7px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--fg); font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.application-review-signals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
+.application-signal { display: grid; gap: 5px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); }
+.application-signal span { color: var(--muted); font-size: .75rem; }
+.application-signal strong { color: var(--fg); font-size: .875rem; }
+.application-signal.is-ready { border-color: var(--primary); }
+.application-signal.is-blocked { border-color: var(--maintenance); }
+.application-lot-summary { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg); }
+.application-lot-heading { display: grid; gap: 3px; overflow-wrap: anywhere; }
+.application-lot-heading span:first-child { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.application-lot-heading strong { color: var(--fg); font-size: 1rem; }
+.application-lot-heading span:last-child { color: var(--muted); font-size: .875rem; }
+.application-lot-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.application-lot-facts > span { display: grid; gap: 4px; min-width: 0; color: var(--fg); font-size: .875rem; overflow-wrap: anywhere; }
+.application-lot-facts strong { color: var(--muted); font-size: .75rem; font-weight: 600; }
+.application-lot-details { border-top: 1px solid var(--border); padding-top: 12px; color: var(--muted); font-size: .875rem; }
+.application-lot-details summary { color: var(--primary); cursor: pointer; font-weight: 700; }
+.application-lot-extra { display: grid; gap: 7px; margin-top: 12px; line-height: 1.5; }
+.application-lot-extra strong { color: var(--fg); }
+.application-setup-missing { margin: 0 0 18px; color: var(--maintenance); font-weight: 600; }
+@media (max-width: 900px) { .application-review-signals, .application-lot-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 500px) { .application-review-signals, .application-lot-facts { grid-template-columns: 1fr; } }
 .dashboard-theme .application-review-form { display: grid !important; gap: 18px !important; align-items: stretch !important; padding-top: 20px; border-top: 1px solid var(--border); }
 .dashboard-theme .application-review-note { min-width: 0 !important; }
 .dashboard-theme .application-review-note .label { display: block; margin-bottom: 8px; }
@@ -112,17 +146,19 @@
 .auth-panel .auth-alt-actions > button:disabled { opacity: .62; cursor: not-allowed; }
 .auth-email-icon { font-size: 1.2rem; line-height: 1; }
 .auth-google-icon { display: block; flex: none; width: 19px; height: 19px; }
+.auth-mfa-option-button { align-self: center; width: min(100%, 280px); min-height: 44px; border-radius: 999px; }
 
 /* Dashboard hierarchy follows the work: figures, trend, then the sites or events. */
 .management-title-row { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-gap-3); }
 .management-site-filter { display: flex; align-items: center; gap: var(--ui-gap-2); color: var(--fg); font-size: .875rem; font-weight: 650; }
 .management-site-filter .input { min-width: 210px; min-height: 44px; border-radius: 999px; }
-.dashboard-theme .management-dashboard-grid { grid-template-columns: minmax(0, 1.8fr) minmax(260px, .95fr); align-items: start; gap: var(--ui-gap-4); }
+.dashboard-theme .management-dashboard-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: var(--ui-gap-4); }
 .dashboard-theme .management-dashboard-grid .owner-kpi-strip { grid-column: 1 / -1; grid-row: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1; grid-row: 2; min-height: 354px; padding: var(--ui-gap-4); }
+.dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1 / span 2; grid-row: 2; min-height: 354px; padding: var(--ui-gap-4); }
+.dashboard-theme .management-dashboard-grid .management-side-panel { grid-column: 3; grid-row: 2; }
 .dashboard-theme .management-dashboard-grid .owner-kpi { min-height: 124px; justify-content: space-between; }
 .dashboard-theme .management-dashboard-grid .owner-kpi p:last-child { overflow-wrap: anywhere; font-size: clamp(1.25rem, 1.9vw, 1.75rem); }
-.management-side-panel { min-width: 0; min-height: 354px; padding: var(--ui-gap-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); }
+.management-side-panel { min-width: 0; min-height: 354px; height: 100%; padding: var(--ui-gap-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card); }
 .management-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ui-gap-3); margin-bottom: var(--ui-gap-4); }
 .management-panel-heading h2 { margin: 0; color: var(--fg); font-size: 1.125rem; font-weight: 700; }
 .management-panel-heading p { margin: 5px 0 0; color: var(--muted); font-size: .875rem; }
@@ -141,6 +177,68 @@
 .dashboard-theme .management-dashboard .admin-kpi > div:nth-child(2) { font-size: clamp(1.25rem, 1.8vw, 1.75rem) !important; overflow-wrap: anywhere; }
 .dashboard-theme .management-dashboard .admin-kpi > div:last-child,
 .dashboard-theme .management-dashboard :is(.admin-overview-charts, .admin-overview-details) p { font-size: .875rem !important; line-height: 1.5; }
+
+/* Keep form actions visibly separated in every workspace. */
+.settings-form-actions,
+.booking-flow-header-actions,
+.find-parking-details-actions,
+.find-parking-detail-actions,
+.parking-history-pagination > div { gap: 12px; }
+.security-recovery-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; max-width: 1180px; margin: 12px auto !important; padding: 14px 18px; border-radius: 18px !important; }
+.security-recovery-notice > span { flex: 1 1 320px; min-width: 0; line-height: 1.5; }
+.security-recovery-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.security-recovery-actions > button { min-height: 44px; border-radius: 999px; }
+.security-recovery-notice :is(button):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.security-recovery-notice.is-transient { animation: security-recovery-slide 5s linear both; }
+@keyframes security-recovery-slide {
+  0% { opacity: 0; transform: translateX(28px); }
+  7% { opacity: 1; transform: translateX(0); }
+  88% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-28px); }
+}
+.dashboard-theme .find-parking-search-tools { gap: 10px; }
+@media (min-width: 1025px) {
+  .security-recovery-notice { max-width: calc(100% - 124px); margin-left: 100px !important; margin-right: 24px !important; }
+}
+@media (max-width: 1024px) {
+  .security-recovery-notice { max-width: calc(100% - 24px); margin-left: 12px !important; margin-right: 12px !important; }
+}
+.security-action-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.security-action-row > button { min-height: 44px; }
+.security-setup-notice { margin: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--raised); color: var(--fg); line-height: 1.5; }
+.security-setup-notice.is-success { border-color: var(--available); background: var(--status-available-bg); color: var(--badge-success-fg); }
+.owner-partner-terms{margin:0 0 16px;padding-left:22px;display:grid;gap:8px;color:var(--fg);font-size:.9rem;line-height:1.55;list-style:decimal}
+.signup-terms-heading{margin:22px 0 8px;font-size:1rem;line-height:1.4;color:var(--fg)}
+.signup-terms-heading:first-child{margin-top:0;text-align:center;font-size:1.1rem}
+.signup-terms-paragraph{margin:0 0 10px;color:var(--fg)}
+.signup-terms-bullet{margin:0 0 9px;padding-left:18px;position:relative;color:var(--fg)}
+.signup-terms-bullet::before{content:"•";position:absolute;left:3px;color:var(--primary)}
+.owner-contract-step{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;padding:18px;margin:0 0 20px;border:1px solid var(--border);border-radius:18px;background:var(--raised)}
+.owner-contract-step strong{font-size:1rem;color:var(--fg)}
+.owner-contract-step p{margin:5px 0;color:var(--muted);font-size:.88rem;line-height:1.5}
+.owner-contract-step span{font-size:.8rem;color:var(--primary)}
+.owner-contract-step button{min-height:44px;border-radius:999px}
+.application-document-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0 18px}
+.application-document-actions button{min-height:44px;border-radius:999px}
+.application-document-actions span{font-size:.8rem;color:var(--muted)}
+.owner-model-import:focus-within>span{outline:3px solid var(--primary);outline-offset:3px}
+.application-model-import{display:inline-flex;margin:4px 0 16px;cursor:pointer}
+.application-model-import>span{min-height:44px;display:inline-flex;align-items:center;border-radius:999px}
+.security-setup-notice.is-transient { animation: security-notice-slide 5s ease-in-out both; }
+@keyframes security-notice-slide {
+  0% { opacity: 0; transform: translateX(24px); }
+  8%, 84% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-24px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .security-recovery-notice.is-transient { animation: none; }
+  .security-setup-notice.is-transient { animation: none; }
+}
+.owner-recovery-card, .owner-recovery-form { display: grid; gap: 16px; }
+.owner-recovery-card { padding: 24px; }
+.owner-recovery-card > p, .owner-recovery-form > p { margin: 0; }
+.owner-recovery-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.owner-recovery-actions > button { min-height: 44px; }
 .dashboard-theme .management-dashboard .recharts-text { font-size: .75rem; }
 .dashboard-theme .management-dashboard :is(.admin-overview-charts, .admin-overview-details) { gap: var(--ui-gap-4) !important; }
 .dashboard-theme .management-dashboard :is(.admin-overview-charts, .admin-overview-details) > .card { padding: var(--ui-gap-4) !important; }
@@ -179,6 +277,7 @@
   .dashboard-theme .management-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
   .dashboard-theme .management-dashboard-grid .owner-kpi-strip { grid-column: 1; }
   .dashboard-theme .management-dashboard-grid .owner-revenue-panel { grid-column: 1; grid-row: 2; }
+  .dashboard-theme .management-dashboard-grid .management-side-panel { grid-column: 1; grid-row: 3; }
   .management-side-panel { min-height: 0; }
   .dashboard-theme .management-dashboard .admin-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .parking-hero-3d { height: 480px; min-height: 0; margin-top: 0; }
@@ -321,13 +420,6 @@
   .dashboard-theme.driver-theme .find-parking-results.is-open { max-height: min(30dvh, 270px); }
   .dashboard-theme.driver-theme .find-parking-map-menu-list { max-height: min(320px, 45dvh); overflow-y: auto; }
 }
-@media (max-width: 640px) {
-  .dashboard-theme.driver-theme .find-parking:not(.is-search-collapsed) .find-parking-map-menu-list {
-    top: auto;
-    bottom: calc(100% + 9px);
-    transform-origin: bottom right;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .dashboard-theme.driver-theme .find-parking-filter-toggle svg:last-child,
   .dashboard-theme.driver-theme .find-parking-results { transition: none; }
@@ -400,13 +492,6 @@
 .dashboard-theme .find-parking-map-style-list button[aria-checked="true"] { background: var(--raised); }
 .dashboard-theme .find-parking-map-style-list button[aria-checked="true"] { color: var(--primary); font-weight: 700; }
 .dashboard-theme .find-parking-map-style-check { width: 18px; text-align: center; }
-@media (max-width: 640px) {
-  .dashboard-theme .find-parking:not(.is-search-collapsed) .find-parking-map-style-list {
-    top: auto;
-    bottom: calc(100% + 9px);
-    transform-origin: bottom left;
-  }
-}
 
 /* Shared rounded select: the native control remains in the form while its
    options are shown in a consistent, viewport-aware surface. */
@@ -555,10 +640,9 @@
   .sp-rounded-select-menu[data-open="true"] { transform: none; transition: opacity 160ms ease-out, visibility 0s; }
 }
 
-/* Keep Search Parking, Map Type and Options on one aligned row. */
-.dashboard-theme .find-parking.is-search-collapsed .find-parking-map-toolbar { top: 16px; right: 16px; align-items: center; }
-.dashboard-theme .find-parking:not(.is-search-collapsed) .find-parking-map-toolbar { top: 38px; align-items: center; }
-.dashboard-theme .find-parking:not(.is-search-collapsed) .find-parking-map-toolbar .find-parking-map-style { inset: auto; }
+/* Keep map controls anchored while the search panel opens and closes. */
+.dashboard-theme .find-parking .find-parking-map-toolbar { top: 16px; right: 16px; align-items: center; }
+.dashboard-theme .find-parking .find-parking-map-toolbar .find-parking-map-style { inset: auto; }
 .dashboard-theme .find-parking-search-heading { align-items: center; flex-wrap: nowrap; }
 .dashboard-theme .find-parking-search-heading > header { flex: 1 1 auto; min-width: 0; }
 .dashboard-theme .find-parking-panel .find-parking-search-heading h1 { margin: 0; font-size: 18px; line-height: 1.2; white-space: nowrap; }
@@ -566,7 +650,7 @@
 .dashboard-theme .find-parking-search-tools .find-parking-location { width: 44px; height: 44px; border-radius: 50%; }
 .dashboard-theme .find-parking.has-details .find-parking-map-toolbar { display: none; }
 @media (max-width: 900px) {
-  .dashboard-theme .find-parking.is-search-collapsed .find-parking-map-toolbar { top: 10px; right: 10px; }
+  .dashboard-theme .find-parking .find-parking-map-toolbar { top: 10px; right: 10px; }
 }
 @media (max-width: 420px) {
   .dashboard-theme .find-parking-reopen,
@@ -575,10 +659,132 @@
   .dashboard-theme .find-parking-reopen svg { display: none; }
 }
 @media (max-width: 640px) {
-  .dashboard-theme .find-parking:not(.is-search-collapsed) .find-parking-map-toolbar { top: calc(min(45dvh, 340px) + 20px); }
+  .dashboard-theme .find-parking:not(.is-search-collapsed) .find-parking-panel {
+    top: 70px;
+    max-height: min(60dvh, calc(100% - 86px));
+  }
 }
 @media (max-width: 360px) {
   .dashboard-theme .find-parking-reopen { padding-inline: 6px; }
   .dashboard-theme .find-parking-map-style-label { display: none; }
   .dashboard-theme .find-parking-map-style-value { font-size: 14px; }
 }
+
+/* Keep the smallest phone layouts readable without page-level horizontal scrolling. */
+@media (max-width: 420px) {
+  .landing-page .strata-hero-copy h1 > * { white-space: normal; }
+  .site-footer-columns { grid-template-columns: minmax(0, 1fr) !important; }
+  .site-footer-brand, .site-footer-contact { grid-column: auto; }
+  .auth-panel .auth-alt-actions { grid-template-columns: minmax(0, 1fr); }
+  .auth-panel .auth-alt-actions > button { justify-content: center; white-space: normal; }
+  .dashboard-theme .driver-bookings-page .current-bookings-tabs { flex-wrap: wrap; }
+  .dashboard-theme .driver-bookings-page .current-bookings-tabs button { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Shared narrow-viewport safeguards: preserve content instead of clipping it. */
+#root, #main-content, .dashboard-theme, .dashboard-content, .dashboard-workspace { min-width: 0; }
+.dashboard-theme :is(.card, .feature-guide, .overflow-x-auto, .booking-stage-right, .booking-model-panel) { min-width: 0; max-width: 100%; }
+.dashboard-theme :is(input, select, textarea, button) { max-width: 100%; }
+.dashboard-theme :is(input, select, textarea) { min-width: 0; }
+.dashboard-theme :is(.overflow-x-auto, [style*="overflow-x: auto"]) { overscroll-behavior-inline: contain; }
+.dashboard-theme :is(.card, [role="dialog"]) :is(h1, h2, h3, h4, p, dt, dd, label) { overflow-wrap: anywhere; }
+.smartparking-chat-shell { max-width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)); max-height: calc(100dvh - 76px - env(safe-area-inset-bottom)); }
+
+@media (max-width: 640px) {
+  :is(input, select, textarea) { font-size: max(16px, 1em); }
+  .dashboard-theme .dashboard-content { width: 100%; }
+  .dashboard-theme .dashboard-content :is(.overflow-x-auto, [style*="overflow-x: auto"]) { max-width: 100%; }
+  .dashboard-theme :is(.btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-danger, .btn-accent) { min-height: 44px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+  .dashboard-theme :is(.icon-button, .profile-trigger, .dashboard-nav-item) { min-width: 44px; min-height: 44px; }
+  .dashboard-theme [role="dialog"] { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px - env(safe-area-inset-bottom)); }
+  .dashboard-theme .settings-dialog { width: 100%; }
+  .dashboard-theme .settings-dialog-content { padding: 18px 16px calc(22px + env(safe-area-inset-bottom)); }
+  .dashboard-theme .dashboard-popover { position: fixed; top: 64px; right: 8px; bottom: auto; left: auto; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 80px); overflow-y: auto; }
+  .dashboard-theme .notification-pop-in { position: fixed !important; top: 64px !important; right: 8px !important; bottom: auto !important; left: auto !important; width: min(360px, calc(100vw - 16px)) !important; max-height: calc(100dvh - 80px) !important; }
+  .dashboard-theme .notification-pop-in header { flex-wrap: wrap; gap: 8px; }
+  .dashboard-theme .booking-flow-stage-grid.is-form-stage > .booking-stage-right:not(.booking-time-vehicle-stage) { width: 100%; }
+  .dashboard-theme .booking-datetime-fields { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-theme .booking-time-vehicle-grid { gap: 14px; }
+  .dashboard-theme .find-parking-map { min-width: 0; }
+  .dashboard-theme .find-parking-details-wrap { max-width: 100%; }
+  .dashboard-theme .smartparking-chat-shell.is-open { max-width: calc(100vw - 16px); }
+  .dashboard-theme .driver-bookings-page .current-booking-card { flex-wrap: wrap; }
+  .dashboard-theme .driver-bookings-page .current-booking-info { flex-basis: min(100%, 210px); }
+  .dashboard-theme .owner-overview-canvas .owner-kpi-strip { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-theme .management-dashboard :is(.admin-kpi-strip, .operator-kpi-strip) { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .dashboard-theme .dashboard-popover { right: 6px; width: calc(100vw - 12px); }
+  .dashboard-theme .find-parking-panel { width: calc(100% - 16px); left: 8px; }
+  .dashboard-theme .find-parking-search { padding: 10px; }
+  .dashboard-theme .find-parking-map-toolbar { right: 8px; }
+  .dashboard-theme .find-parking-details-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .dashboard-theme .smartparking-chat-shell { max-width: calc(100vw - 12px); }
+  .dashboard-theme .management-dashboard .admin-kpi-strip { grid-template-columns: minmax(0, 1fr); }
+}
+@media (hover: none) {
+  .dashboard-nav-hint { display: none; }
+}
+
+.app-route-view { min-height: 100%; }
+.system-config-page { max-width: 1100px; margin-inline: auto; }
+.policy-flow-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.policy-flow-nav button { display: grid; align-content: start; gap: 8px; min-height: 124px; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); color: var(--fg); text-align: left; cursor: pointer; transition: transform .18s ease, border-color .18s ease, background-color .18s ease; }
+.policy-flow-nav button:hover, .policy-flow-nav button:focus-visible { transform: translateY(-2px); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, var(--card)); }
+.policy-flow-nav button.is-active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
+.policy-flow-nav button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.policy-flow-nav .policy-flow-number { color: var(--primary); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.policy-flow-nav strong { font-size: .9375rem; line-height: 1.35; }
+.policy-flow-nav small { color: var(--muted); font-size: .75rem; line-height: 1.4; }
+@media (max-width: 900px) { .policy-flow-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .policy-flow-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .policy-flow-nav button { min-height: 0; padding: 14px; } .policy-flow-nav small { display: none; } }
+@media (prefers-reduced-motion: reduce) { .policy-flow-nav button { transition: none; } .policy-flow-nav button:hover, .policy-flow-nav button:focus-visible { transform: none; } }
+.policy-content-panel[hidden] { display: none !important; }
+.policy-scope-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.policy-scope-bar label { color: var(--muted); font-size: .875rem; font-weight: 600; }
+.policy-scope-bar .input { width: min(100%, 320px); min-height: 44px; }
+#owner-policy-document, #owner-policy-sections-heading, #platform-policy-heading, #pricing-policy-settings { scroll-margin-top: 90px; }
+.system-config-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 20px; align-items: start; }
+.system-config-card { min-width: 0; height: 100%; border-radius: 20px; padding: 24px; }
+.system-config-card h3 { display: flex; align-items: center; gap: 10px; }
+.system-config-card h3 svg { color: var(--primary); }
+.system-config-parameters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.system-config-grid > .btn-primary { grid-column: 1 / -1; justify-self: start; }
+.owner-lots-comparison-table tbody td { vertical-align: top; }
+.owner-lots-comparison-table tbody td:nth-child(n+4):nth-child(-n+9) { font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .system-config-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .system-config-parameters { grid-template-columns: minmax(0, 1fr); } }
+.audit-log-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); }
+.dashboard-theme .application-collapsible { padding: 0 !important; overflow: hidden; border-radius: 18px; }
+.application-collapse-summary { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(135px, auto) 20px; align-items: center; gap: 16px; min-height: 72px; padding: 15px 20px; cursor: pointer; list-style: none; }
+.application-collapse-summary::-webkit-details-marker { display: none; }
+.application-collapse-summary:hover { background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
+.application-collapse-summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.application-collapse-summary > svg:last-child { transition: transform .2s ease; }
+.application-collapsible[open] .application-collapse-summary > svg:last-child { transform: rotate(180deg); }
+.application-collapse-name { display: grid; gap: 4px; min-width: 0; }
+.application-collapse-name strong { color: var(--fg); font-size: .9375rem; overflow-wrap: anywhere; }
+.application-collapse-name small { color: var(--muted); font-size: .75rem; }
+.application-collapse-delivery { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.application-collapse-delivery[data-status="failed"] { color: var(--badge-danger-strong); background: var(--status-occupied-bg); }
+.application-collapse-delivery[data-status="sent"], .application-collapse-delivery[data-status="delivered"] { color: var(--badge-success-fg); background: var(--status-available-bg); }
+.application-delivery-detail { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: .8125rem; }
+.application-delivery-detail strong { color: var(--fg); }
+.application-reviewed-status { border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: .75rem; font-weight: 700; }
+.application-reviewed-status[data-status="approved"] { color: var(--badge-success-fg); background: var(--status-available-bg); }
+.application-reviewed-status[data-status="rejected"] { color: var(--badge-danger-strong); background: var(--status-occupied-bg); }
+.application-expanded { display: grid; gap: 18px; padding: 20px; border-top: 1px solid var(--border); }
+.application-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; margin-top: 20px; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .application-collapse-summary { grid-template-columns: minmax(0, 1fr) 20px; gap: 9px; } .application-collapse-summary > :nth-child(2), .application-collapse-summary > :nth-child(3) { grid-column: 1; } .application-collapse-summary > svg:last-child { grid-column: 2; grid-row: 1; } }
+@media (prefers-reduced-motion: reduce) { .application-collapse-summary > svg:last-child { transition: none; } }
+.audit-log-count { display: inline-flex; align-items: center; gap: 8px; color: var(--fg); font-size: .875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.audit-log-count svg { color: var(--primary); }
+.audit-log-search { width: min(100%, 320px); min-height: 44px; }
+.audit-log-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 18px; background: var(--card); }
+.audit-log-table { font-variant-numeric: tabular-nums; }
+.audit-log-table thead { background: var(--bg); }
+.audit-log-table tbody tr { transition: background-color .18s ease; }
+.audit-log-table tbody tr:hover { background: color-mix(in srgb, var(--primary) 5%, var(--card)); }
+.audit-log-table td { vertical-align: top; line-height: 1.5; }
+@media (max-width: 640px) { .audit-log-search { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .audit-log-table tbody tr { transition: none; } }

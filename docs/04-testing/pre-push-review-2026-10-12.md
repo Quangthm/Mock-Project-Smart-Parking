@@ -12,7 +12,7 @@ Vehicle API/validation/error/ownership/filter/locks/transaction và test asserti
 
 ## Bằng chứng
 
-- TRX solution cuối: `.cache/review-results/setup-fix-20261012-final/`: 109 passed, 0 failed, 0 skipped (77 UserService + 32 ParkingService).
+- TRX solution cuối: `.cache/review-results/setup-fix-20261012-final/`: 109 passed, 0 failed, 0 skipped (77 UserService + 32 FacilityService).
 - Không có executable delta sau lượt 109 tests; lượt review này chỉ chỉnh checklist tester. Không chạy lại solution khi không có thay đổi code mới.
 - Scratch setup suite chạy lại trên Windows PowerShell 5.1 pass trong lượt pre-push.
 - `git diff --check` pass; repeated-upgrade/old-volume restart và adversarial COMPOSE_PROJECT_NAME đã pass trong `.cache/review-results/setup-upgrade-final.log`.

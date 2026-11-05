@@ -4,10 +4,13 @@ public sealed class AuthSession
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
+    /// <summary>Immutable session account. Null identifies a legacy session requiring sign-in.</summary>
+    public Guid? AccountId { get; init; }
     public Guid AccessTokenId { get; set; }
     public string TokenHash { get; set; } = string.Empty;
     public DateTimeOffset AccessExpiresAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public bool IsRevoked { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? LastRefreshedAt { get; set; }
 }

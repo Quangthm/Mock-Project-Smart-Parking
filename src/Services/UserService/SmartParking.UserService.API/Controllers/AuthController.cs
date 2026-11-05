@@ -3,7 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using System.IdentityModel.Tokens.Jwt;
+using UserService.API.Common;
 using UserService.API.Controllers.Base;
 using UserService.Application.DTOs;
 using UserService.Application.Usecase.Login;
@@ -23,6 +23,12 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
     public async Task<IActionResult> RegisterOwner([FromBody] OwnerRegistrationDto body,
         [FromServices] IOwnerRegistrationService registrations, CancellationToken ct) =>
         StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
+
+    [AllowAnonymous, HttpPost("register/owner/lot-setup")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    public async Task<IActionResult> SaveOwnerLot(OwnerLotSetupRequest body,
+        [FromServices] IOwnerRegistrationService registrations, CancellationToken ct) =>
+        Ok(new { success = true, data = await registrations.SaveLotSetupAsync(body, ct) });
 
     [AllowAnonymous]
     [HttpPost("register/driver")]
@@ -61,17 +67,9 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
             var failure = SignInErrors.ForCode(result.ErrorCode);
             return StatusCode(failure.StatusCode, new { success = false, code = failure.Code, message = failure.Message });
         }
-        return Ok(new { success = true, message = "Login successful", data = result.Session });
-    }
-
-    [Authorize]
-    [HttpGet("me")]
-    public async Task<IActionResult> Me(CancellationToken cancellationToken)
-    {
-        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
-            return InvalidToken();
-        var user = await Mediator.Send(new GetCurrentUserQuery(userId), cancellationToken);
-        return user is null ? InvalidToken() : Ok(new { success = true, data = user });
+        if (result.MfaChallenge is not null)
+            return Ok(new { success = true, mfaRequired = true, data = result.MfaChallenge });
+        return Ok(new { success = true, mfaRequired = false, message = "Login successful", data = result.Session });
     }
 
     [Authorize]
@@ -80,10 +78,7 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenDto? body,
         CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value, out var tokenId)
-            || !Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
-            return InvalidToken();
-        await Mediator.Send(new LogoutCommand(tokenId, userId, body?.RefreshToken), cancellationToken);
+        await Mediator.Send(new LogoutCommand(body?.RefreshToken), cancellationToken);
         return Ok(new { success = true, message = "Logout successful" });
     }
 
@@ -97,8 +92,4 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
         return Ok(new { success = true, data = session });
     }
 
-    private UnauthorizedObjectResult InvalidToken() => Unauthorized(new
-    {
-        success = false, code = "INVALID_TOKEN", message = "Token is invalid, expired or revoked."
-    });
 }

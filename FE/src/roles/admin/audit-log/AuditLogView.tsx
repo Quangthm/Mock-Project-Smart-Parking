@@ -1,22 +1,26 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { adminData as store } from "../data/data"
 
 import type { AuditLog } from "../../../lib/types"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 export function AuditLogView() {
-  const [logs] = useState<AuditLog[]>(store.getAuditLogs)
+  const [logs, setLogs] = useState<AuditLog[]>(store.getAuditLogs)
 
   const [filter, setFilter] = useState("")
 
-  const filtered = filter
-    ? logs.filter(
-        (l) =>
-          l.action.includes(filter.toUpperCase()) ||
-          l.userName.toLowerCase().includes(filter.toLowerCase()),
-      )
-    : logs
+  useEffect(() => {
+    const refresh = () => setLogs(store.getAuditLogs())
+    window.addEventListener("sp-data-change", refresh)
+    window.addEventListener("storage", refresh)
+    return () => { window.removeEventListener("sp-data-change", refresh); window.removeEventListener("storage", refresh) }
+  }, [])
+
+  const filtered = useMemo(() => logs
+    .filter(log => `${log.action} ${log.userName} ${log.userRole} ${log.details}`.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), [logs, filter])
 
   const ROLE_COLORS: Record<string, string> = {
     admin: "#ef4444",
@@ -26,19 +30,25 @@ export function AuditLogView() {
   }
 
   return (
-    <div>
-      <PageHeader title="Audit Log" variant="compact" actions={<input
-        className="input sp-search-input max-w-[260px]"
+    <div className="space-y-5">
+      <PageHeader title="Audit Log" variant="compact" description="Review recent account and system actions in one timeline." />
+      <div className="audit-log-toolbar">
+        <span className="audit-log-count"><UntitledIcon name="activity" size={17} />{filtered.length} events</span>
+        <input
+        className="input sp-search-input audit-log-search"
         aria-label="Search audit log by action or user"
         autoComplete="off"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Search by action or user…"
-      />} />
-      <div style={{ overflowX: "auto" }}>
+      />
+      </div>
+      <div className="audit-log-table-wrap">
         <table
+          className="audit-log-table"
           style={{
             width: "100%",
+            minWidth: 640,
             borderCollapse: "collapse",
             fontSize: "0.82rem",
           }}
@@ -67,7 +77,7 @@ export function AuditLogView() {
                 key={log.id}
                 style={{ borderBottom: "1px solid var(--border)" }}
               >
-                <td
+                <td title={log.details}
                   style={{
                     padding: "0.5rem 0.75rem",
                     color: "var(--muted)",

@@ -23,9 +23,10 @@ function fixture() {
   let cursor = 0, mounted = false, cleared = 0, logoutCalls = 0, currentId = null;
   const react = {
     createContext: () => ({ Provider: 'provider' }),
+    useCallback: callback => callback,
     useState: initial => {
       const index = cursor++;
-      if (!(index in slots)) slots[index] = initial;
+      if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
       return [slots[index], value => { slots[index] = value; }];
     },
     useRef: initial => {
@@ -48,12 +49,20 @@ function fixture() {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
       if (name === '../lib/authApi') return { authApi: api, authExpiredEvent: 'sp-auth-expired' };
+      if (name === '../lib/accessRealtime') return { watchAccessRevocation: () => () => {} };
+      if (name === '../lib/uiToast') return { showUiToast() {} };
+      if (name === '../roles/authentications/Sign Up/DriverOtpForm') return { restoreDriverRegistration: () => null };
+      if (name === '../lib/ownerRegistration') return { restoreOwnerRegistration: () => null };
       if (name === '../lib/store') return { store };
       throw new Error(`Unexpected import: ${name}`);
     },
     localStorage: { getItem: () => null },
-    document: { documentElement: { dataset: {}, classList: { add() {} } } },
+    sessionStorage: { getItem: () => null },
+    document: { querySelector: () => null, documentElement: { dataset: {}, classList: { add() {}, toggle() {} } } },
     window: {
+      location: { pathname: '/', href: 'http://localhost/' },
+      history: { state: null, pushState(state) { this.state = state; }, replaceState(state) { this.state = state; } },
+      matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
       addEventListener: (name, handler) => listeners.set(name, handler),
       removeEventListener: name => listeners.delete(name),
       setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {},
@@ -109,7 +118,7 @@ for (const success of [true, false]) {
   });
 }
 
-test('expiry during logout keeps the sign-in view and expiry message', async () => {
+test('expiry during logout keeps the landing view and expiry message', async () => {
   const f = fixture();
   f.restore.resolve(account('old-user'));
   await settle();
@@ -119,7 +128,7 @@ test('expiry during logout keeps the sign-in view and expiry message', async () 
   await pending;
   assert.equal(f.render().user, null);
   assert.equal(f.currentId, null);
-  assert.equal(f.render().view, 'sign-in');
+  assert.equal(f.render().view, 'landing');
   assert.match(f.render().authError, /session has expired/);
 });
 
@@ -130,7 +139,7 @@ test('late restore cannot bring back an expired session', async () => {
   await settle();
   assert.equal(f.render().user, null);
   assert.equal(f.currentId, null);
-  assert.equal(f.render().view, 'sign-in');
+  assert.equal(f.render().view, 'landing');
   assert.equal(f.cleared, 1);
   assert.match(f.render().authError, /session has expired/);
 });

@@ -1,5 +1,5 @@
-﻿-- Overlay: tenants table for ParkingService single-connection JOINs
--- Purpose: duplicate of SRS 01.tenants so ParkingService single-connection JOINs keep working (P4)
+﻿-- Overlay: tenants table for FacilityService single-connection JOINs
+-- Purpose: duplicate of SRS 01.tenants so FacilityService single-connection JOINs keep working (P4)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS tenants (

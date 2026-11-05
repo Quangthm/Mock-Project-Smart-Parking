@@ -1,0 +1,268 @@
+{
+  "item": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications",
+        "header": []
+      },
+      "name": "Anonymous list",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 401', function () { pm.response.to.have.status(401); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications/00000000-0000-0000-0000-000000000000",
+        "header": []
+      },
+      "name": "Anonymous detail",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 401', function () { pm.response.to.have.status(401); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "body": {
+          "raw": "{\"status\":\"approved\",\"reviewNote\":\"SPARK-197 read-only authorization check\"}",
+          "mode": "raw"
+        },
+        "method": "PATCH",
+        "url": "{{apiBase}}/api/owner-applications/00000000-0000-0000-0000-000000000000/review",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "name": "Anonymous review denied",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 401', function () { pm.response.to.have.status(401); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          }
+        ]
+      },
+      "name": "Owner list denied",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 403', function () { pm.response.to.have.status(403); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications/00000000-0000-0000-0000-000000000000",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          }
+        ]
+      },
+      "name": "Owner detail denied",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 403', function () { pm.response.to.have.status(403); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "body": {
+          "raw": "{\"status\":\"approved\",\"reviewNote\":\"SPARK-197 read-only authorization check\"}",
+          "mode": "raw"
+        },
+        "method": "PATCH",
+        "url": "{{apiBase}}/api/owner-applications/00000000-0000-0000-0000-000000000000/review",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "name": "Owner review denied",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 403', function () { pm.response.to.have.status(403); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "name": "Admin list",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 200', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "const apps = Array.isArray(body.data) ? body.data : [];",
+              "const a = apps.find(x => x.businessName === \"SPARK197 QA Parking A\");",
+              "const b = apps.find(x => x.businessName === \"SPARK197 QA Parking B\");",
+              "pm.test(\"Approved Owner A and Rejected Owner B retained\", function () {",
+              "    pm.expect(a, \"Owner A exists\").to.exist;",
+              "    pm.expect(b, \"Owner B exists\").to.exist;",
+              "    pm.expect(a.status).to.eql(\"approved\");",
+              "    pm.expect(b.status).to.eql(\"rejected\");",
+              "});",
+              "if (a) pm.environment.set(\"ownerAId\", a.id);",
+              "if (b) pm.environment.set(\"ownerBId\", b.id);"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications/{{ownerAId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "name": "Admin detail A",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Status is approved', function () { pm.expect(pm.response.json().data.status).to.eql('approved'); });",
+              "pm.test(\"Review metadata recorded\", function () { const d=pm.response.json().data; pm.expect(d.reviewedBy).to.exist; pm.expect(d.reviewedAt).to.exist; });",
+              "pm.test(\"Notification delivery sent\", function () { pm.expect(pm.response.json().data.deliveryStatus).to.eql(\"sent\"); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications/{{ownerBId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "name": "Admin detail B",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Status is rejected', function () { pm.expect(pm.response.json().data.status).to.eql('rejected'); });",
+              "pm.test(\"Review metadata recorded\", function () { const d=pm.response.json().data; pm.expect(d.reviewedBy).to.exist; pm.expect(d.reviewedAt).to.exist; });",
+              "pm.test(\"Notification delivery sent\", function () { pm.expect(pm.response.json().data.deliveryStatus).to.eql(\"sent\"); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "{{apiBase}}/api/owner-applications/00000000-0000-0000-0000-000000000000",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "name": "Admin nonexistent ID",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test('Expected HTTP 404', function () { pm.response.to.have.status(404); });"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    }
+  ],
+  "info": {
+    "name": "SPARK-197 Read-only Authorization and Audit QA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  }
+}

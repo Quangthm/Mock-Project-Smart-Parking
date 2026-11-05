@@ -12,6 +12,14 @@ Driver monthly/yearly products, MapTiler discovery, explicit spatial batch deact
 
 The [21 October V11-06 clarification](decision-log/2026-10-21-vneid-simulation-guid.md) requires the fake VNeID API to return a GUID substitute persisted against the user. Canonical requirements, API/schema backlog and AC-113 reflect this direction; field names and implementation remain pending.
 
+## Authorization amendment — approved 4 November 2026
+
+Integrated the user-supplied finalized architecture review and initial operation classification matrix into the [canonical ADR](../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [SRS operation matrix](../01-requirements/srs/authorization-operation-classification.md). The user explicitly approved both the CQRS contract and numeric Saga retry defaults during this update, resolving the source document's mixed approval labels.
+
+Updated canonical requirements, security/race rules, affected use cases, solution/source-code architecture, API template, shared coding skill, agent router/profiles and conflict/implementation registers. TOKEN is the end-user default; six REQUEST families use asynchronous Account-current Saga authorization with only explicitly approved speculation. Local UserService security checks and resource/domain authority remain. This supersedes blanket immediate resource-session revocation guarantees; it does not introduce role-management features, speculative reservation holds or exact endpoint schemas.
+
+Added [AF-001–AF-014 acceptance obligations](../04-testing/requirements-traceability/authorization-freshness-scenarios.md), all NOT RUN, and reconciled unexecuted AC-009/AC-062 expectations. Runtime implementation, schema, packages and configuration are outside this documentation change. Historical baselines and execution reports retain their original evidence/status.
+
 ## Historical change records
 
 The following RC1–RC3 records describe earlier review candidates and their original preparation context. Historical package-only comparison/patch paths are not current repository artifacts. Their counts, completion statements and earlier proposals do not override v1.1 or establish signed product acceptance.

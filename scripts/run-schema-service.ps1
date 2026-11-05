@@ -1,7 +1,12 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Payment','Notification')][string]$Service
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification')][string]$Service
+)
 )
 $ErrorActionPreference = 'Stop'
+# Parking remains an alias so existing scripts and configuration continue to work.
+if ($Service -eq 'Facility') { $Service = 'Parking' }
+# Keep Reservation configuration keys and database settings compatible.
+if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
 
@@ -61,6 +66,15 @@ if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     $env:DevelopmentAdmin__Password = $env:SMARTPARK_ADMIN_PASSWORD
 }
 if ($Service -eq 'User') {
+    $env:SMARTPARK_RABBITMQ_HOST = '127.0.0.1'
+    $env:SMARTPARK_RABBITMQ_PORT = $env:SMARTPARK_RABBITMQ_PORT
+    $env:SMARTPARK_RABBITMQ_USER = $env:SMARTPARK_RABBITMQ_USER
+    $env:SMARTPARK_RABBITMQ_PASSWORD = $env:SMARTPARK_RABBITMQ_PASSWORD
+    $env:SMARTPARK_RABBITMQ_VHOST = $env:SMARTPARK_RABBITMQ_VHOST
+    $env:Cors__AllowedOrigins = $env:SMARTPARK_USER_CORS_ORIGINS
+    if (!$env:Messaging__OutboxDeliveryEnabled) { $env:Messaging__OutboxDeliveryEnabled = 'false' }
+}
+if ($Service -eq 'User') {
     if ($env:SMARTPARK_OWNER_PASSWORD) {
         Assert-DevPassword 'SMARTPARK_OWNER_PASSWORD' $env:SMARTPARK_OWNER_PASSWORD
         if ($env:SMARTPARK_OWNER_EMAIL) {
@@ -90,6 +104,9 @@ if ($Service -eq 'Payment') {
     if ($env:SMARTPARK_PAYOS_BASE_URL) { $env:PayOs__BaseUrl = $env:SMARTPARK_PAYOS_BASE_URL }
 }
 if ($Service -eq 'User') {
+    if ($env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN) { $env:Onboarding__PublicOrigin = $env:SMARTPARK_ONBOARDING_PUBLIC_ORIGIN }
+    if ($env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK) { $env:Onboarding__AllowHttpLoopback = $env:SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK }
+    if ($env:SMARTPARK_MESSAGING_ENABLED) { $env:Messaging__Enabled = $env:SMARTPARK_MESSAGING_ENABLED }
     foreach ($field in @('Host','Port','Username','Password','From')) {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
@@ -101,7 +118,13 @@ if ($Service -eq 'User') {
         $env:Workflow__KeyDirectory = $keyDirectory
     }
 }
-$serviceFolder = if ($Service -eq 'Notification') { 'NotificationAuditService' } else { "${Service}Service" }
-$projectDir = Join-Path $taskRoot "src/Services/$serviceFolder/SmartParking.${serviceFolder}.API"
+if ($Service -eq 'Notification') {
+    $projectDir = Join-Path $taskRoot "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
+    $serviceDisplay = 'NotificationAuditService'
+} else {
+    $projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $Service } }
+    $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
+    $serviceDisplay = "${projectService}Service"
+}
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
-if ($LASTEXITCODE -ne 0) { throw "${Service}Service exited with code $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "$serviceDisplay exited with code $LASTEXITCODE" }

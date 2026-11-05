@@ -1,4 +1,5 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { Button } from "../../../components/ui/Button"
 import { useEffect, useState, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -11,6 +12,9 @@ import {
 } from "../../../lib/parkingApi"
 import { CreateOperatorForm } from "./CreateOperatorForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { watchOperators } from "../../../lib/operatorLive"
+import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 
 export function OperatorManagement({
   selectedSiteId,
@@ -29,6 +33,19 @@ export function OperatorManagement({
   const [reload, setReload] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSite, setFilterSite] = useState(selectedSiteId)
+  const [inviting, setInviting] = useState<string | null>(null)
+  useEffect(() => watchOperators(() => setReload(value => value + 1)), [user?.id])
+
+  async function resendInvitation(id: string) {
+    setInviting(id)
+    setError("")
+    try {
+      await operatorsApi.reissueInvitation(id)
+      setMessage("A new activation invitation is queued. Previous links are no longer valid.")
+      showUiToast("Invitation queued", "A new activation invitation is on its way.")
+    } catch (err) { setError(err instanceof Error ? err.message : "Cannot send invitation.") }
+    finally { setInviting(null) }
+  }
 
   // Reassign Site State & Confirmation
   const [transferOp, setTransferOp] = useState<Operator | null>(null)
@@ -72,15 +89,16 @@ export function OperatorManagement({
 
   function onCreated(operator: Operator) {
     setOperators((current) =>
-      [...current, operator].sort((a, b) =>
+      current.some(existing => existing.id === operator.id) ? current : [...current, operator].sort((a, b) =>
         a.fullName.localeCompare(b.fullName),
       ),
     )
     setShowCreate(false)
     setMessage(
-      `Account created for ${operator.email}. The operator can sign in with this email and the password you provided.`,
+      `Invitation queued for ${operator.email}. The operator must verify their email and choose their own password before signing in.`,
     )
     onOperatorsChanged()
+    showUiToast("Operator invited", `An activation invitation is queued for ${operator.email}.`)
   }
 
   async function handleDeleteOperator(operator: Operator) {
@@ -92,6 +110,7 @@ export function OperatorManagement({
       await operatorsApi.remove(operator.id)
       setOperators((current) => current.filter((item) => item.id !== operator.id))
       setMessage(`Operator account ${operator.email} was deleted.`)
+      showUiToast("Operator deleted", `${operator.email} was removed.`)
       onOperatorsChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete operator account.")
@@ -175,7 +194,8 @@ export function OperatorManagement({
           </div>
           <button
             type="button"
-            className="text-emerald-700 dark:text-emerald-300 hover:opacity-75"
+            className="grid size-11 place-items-center rounded-full text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300 focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+            aria-label="Dismiss operator notice"
             onClick={() => setMessage("")}
           >
             <UntitledIcon name="x" size={12} />
@@ -185,7 +205,7 @@ export function OperatorManagement({
 
       {/* Filters Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <div className="sp-search-field flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+        <div className="sp-search-field flex w-full min-w-0 basis-full items-center gap-2 sm:w-auto sm:min-w-[200px] sm:basis-auto sm:flex-1 sm:max-w-sm">
           <UntitledIcon name="search" size={14} className="text-[var(--muted)] shrink-0" />
           <input
             className="w-full bg-transparent text-xs text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
@@ -199,7 +219,8 @@ export function OperatorManagement({
           {searchTerm && (
             <button
               type="button"
-              className="text-[var(--muted)] hover:text-[var(--fg)]"
+              className="grid size-11 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              aria-label="Clear operator search"
               onClick={() => setSearchTerm("")}
             >
               <UntitledIcon name="x" size={12} />
@@ -257,7 +278,7 @@ export function OperatorManagement({
                           <div className="font-semibold text-xs text-[var(--fg)]">
                             {op.fullName}
                           </div>
-                          <div className="text-[11px] text-[var(--muted)] font-mono">
+                          <div className="text-xs text-[var(--muted)]">
                             {op.email}
                           </div>
                         </div>
@@ -265,8 +286,8 @@ export function OperatorManagement({
                     </td>
 
                     <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase">
-                        {op.status || "active"}
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${op.status === "active" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>
+                        {formatStatus(op.status)}
                       </span>
                     </td>
 
@@ -281,6 +302,12 @@ export function OperatorManagement({
 
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {op.status === "pending_verification" && (
+                          <button type="button" className="btn-outline text-[11px] py-1 px-2.5"
+                            disabled={inviting !== null} onClick={() => void resendInvitation(op.id)}>
+                            {inviting === op.id ? "Sending…" : "Resend invitation"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2.5"
@@ -289,14 +316,15 @@ export function OperatorManagement({
                         >
                           Change Site
                         </button>
-                        <button
+                        <Button
                           type="button"
-                          className="rounded-lg border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400"
+                          variant="danger"
+                          className="px-3 text-xs"
                           onClick={() => void handleDeleteOperator(op)}
-                          title="Delete this operator account"
+                          title="Remove this operator account"
                         >
-                          Delete
-                        </button>
+                          Remove Operator
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -347,7 +375,8 @@ export function OperatorManagement({
                 </div>
                 <button
                   type="button"
-                  className="text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
+                  className="grid size-11 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  aria-label="Close site assignment"
                   onClick={closeTransferModal}
                 >
                   <UntitledIcon name="x" size={16} />

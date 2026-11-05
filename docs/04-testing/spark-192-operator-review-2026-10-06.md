@@ -10,7 +10,7 @@ Task changes:
 - Added the Owner-only POST action to the existing local `UsersController`; moved Admin authorization to each existing GET/PATCH action and renamed its caller-ID helper to `ActorId`. Admin-only read/status operations remain covered by regression tests.
 - Added grant mapping/DbSet and DI registration to the existing locally modified persistence files.
 - Added `05.7-Operator-Provisioning.sql`, API contract and two test scenarios (HTTP and real PostgreSQL).
-- Preserved all pre-existing registration, approval, user-management, ParkingService and frontend changes. No frontend files were edited in this task.
+- Preserved all pre-existing registration, approval, user-management, FacilityService and frontend changes. No frontend files were edited in this task.
 
 ## Review findings and decisions
 
@@ -24,7 +24,7 @@ Task changes:
 
 ## Verification
 
-- `dotnet test SmartParking.slnx --no-restore --verbosity minimal` with the existing isolated PostgreSQL test server at `127.0.0.1:65433`: **73 passed, 0 failed, 0 skipped** (62 UserService + 11 ParkingService).
+- `dotnet test SmartParking.slnx --no-restore --verbosity minimal` with the existing isolated PostgreSQL test server at `127.0.0.1:65433`: **73 passed, 0 failed, 0 skipped** (62 UserService + 11 FacilityService).
 - New HTTP test: anonymous/Driver/Operator/Admin rejection; Owner accepted; Owner cannot use Admin list; malformed and missing input; empty/duplicate/invalid sites; unsupported/duplicate/null permissions; password policy; authenticated creator ID; 201/no-store/secret-free response; current caller lock invalidates session.
 - New PostgreSQL test uses the actual base schema and migrations, applies 05.7 twice, validates case-normalized arbitrary-domain email, trimmed name, real stored BCrypt hash, login as Operator, two-site account/grant creation, foreign/missing/inactive-site rejection and no partial writes, unsupported permission rejection, email duplicate/concurrent race, creator metadata, user/account locks, permission removal, site deactivation, tenant suspension and pending Owner rejection.
 - Tests create/remove only their own `smartpark_auth_test_<guid>` databases; the project database was not migrated or modified.

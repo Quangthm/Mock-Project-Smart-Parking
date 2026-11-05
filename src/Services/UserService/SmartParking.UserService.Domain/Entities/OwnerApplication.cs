@@ -5,6 +5,11 @@ public sealed class OwnerApplication
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public User User { get; set; } = null!;
+    public string? LotSetupJson { get; set; }
+    public string? SetupTokenHash { get; set; }
+    public DateTimeOffset? SetupTokenExpiresAt { get; set; }
+    // A durable approval intent prevents rejection after remote provisioning starts.
+    public Guid? ApprovalRequestedBy { get; set; }
     public string BusinessName { get; set; } = "";
     public string LotType { get; set; } = "";
     public string Status { get; set; } = "pending";

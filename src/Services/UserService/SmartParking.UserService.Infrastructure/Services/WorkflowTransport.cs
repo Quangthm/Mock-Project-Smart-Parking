@@ -3,6 +3,8 @@ using System.Net.Mail;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using UserService.Application.Common.Interfaces.Services;
 namespace UserService.Infrastructure.Services;
 public sealed class WorkflowProtector(IDataProtectionProvider provider):IWorkflowProtector
@@ -11,24 +13,40 @@ public sealed class WorkflowProtector(IDataProtectionProvider provider):IWorkflo
     public string Protect(string value)=>protector.Protect(value);
     public string Unprotect(string value)=>protector.Unprotect(value);
 }
-public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory clients):IWorkflowTransport
+public sealed class WorkflowTransport(IConfiguration config,IHttpClientFactory clients,IHostEnvironment environment,
+    ILogger<WorkflowTransport>? logger = null):IWorkflowTransport
 {
     public async Task SendAsync(WorkflowMessage message,Guid deliveryId,CancellationToken ct)
     {
         var body=message.Body;
         if(body.Contains("/change-password?"))
         {
-            if(!Uri.TryCreate(config["Onboarding:PublicOrigin"],UriKind.Absolute,out var origin) || origin.Scheme!="https")throw new InvalidOperationException("Configure HTTPS Onboarding:PublicOrigin.");
+            if(!Uri.TryCreate(config["Onboarding:PublicOrigin"],UriKind.Absolute,out var origin) ||
+                (origin.Scheme!="https" && !(environment.IsDevelopment() && config.GetValue<bool>("Onboarding:AllowHttpLoopback") &&
+                    origin.Scheme=="http" && origin.IsLoopback)))
+                throw new InvalidOperationException("Configure HTTPS Onboarding:PublicOrigin (or explicitly allow loopback HTTP in Development).");
             body=body.Replace("/change-password?",origin.GetLeftPart(UriPartial.Authority)+"/change-password?");
         }
         if(message.Channel=="email")
         {
+            var renderedMessage = message with { Body = body };
             if(string.IsNullOrWhiteSpace(config["Otp:Smtp:Host"]))throw new InvalidOperationException("Configure SMTP delivery.");
             using var smtp=new SmtpClient(config["Otp:Smtp:Host"],config.GetValue("Otp:Smtp:Port",587)){EnableSsl=true,Credentials=new NetworkCredential(config["Otp:Smtp:Username"],config["Otp:Smtp:Password"])};
-            using var mail=message.OtpCode is null
-                ? new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body)
-                : OtpEmailTemplate.Create(config["Otp:Smtp:From"]!,message);
-            mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());await smtp.SendMailAsync(mail,ct);return;
+            using var mail=message.OtpCode is not null
+                ? OtpEmailTemplate.Create(config["Otp:Smtp:From"]!,renderedMessage)
+                : WorkflowNotificationEmailTemplate.CanRender(renderedMessage)
+                    ? WorkflowNotificationEmailTemplate.Create(config["Otp:Smtp:From"]!,renderedMessage)
+                    : new MailMessage(config["Otp:Smtp:From"]!,message.Destination,message.Subject,body);
+            mail.Headers.Add("X-SmartPark-Delivery-Id",deliveryId.ToString());
+            try { await smtp.SendMailAsync(mail,ct); }
+            catch (SmtpException error)
+            {
+                // Provider messages may contain recipient addresses; log only safe diagnostics.
+                logger?.LogWarning("SMTP delivery {DeliveryId} failed: StatusCode={SmtpStatusCode} ({SmtpStatus}), FailureType={FailureType}, InnerType={InnerType}",
+                    deliveryId, (int)error.StatusCode, error.StatusCode, error.GetType().Name, error.InnerException?.GetType().Name ?? "none");
+                throw;
+            }
+            return;
         }
         if(message.Channel=="sms" && Uri.TryCreate(config["Otp:Sms:Url"],UriKind.Absolute,out var url) && url.Scheme=="https")
         {

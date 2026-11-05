@@ -1,10 +1,10 @@
+using UserService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
-using UserService.Infrastructure.Services;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 using UserService.Application.Services;
@@ -111,7 +111,7 @@ public sealed class DriverRegistrationTests
             {
                 var user = await new UserRepository(db).GetByEmailForLoginAsync("DRIVER@example.com", default);
                 Assert.Equal(UserStatus.Active, user!.Status);
-                Assert.Equal("DRIVER", user.Accounts.Single().AccountRoles.Single().RoleCode);
+                Assert.Equal("DRIVER", user.Accounts.Single().RoleCode);
             }
             var parallel = await Register("parallel@example.com");
             var attempts = await Task.WhenAll(Enumerable.Range(0, 3).Select(async _ =>

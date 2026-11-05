@@ -28,7 +28,7 @@ Cần nối form vào API sau khi có danh sách bãi thật và permission mapp
 
 ### 3. [P1] SPARK-188 chưa có đường truy cập ứng dụng, FE vẫn lưu bãi local
 
-ParkingService hiện có Domain/Application/Persistence, không có API host/controllers hoặc adapter được đăng ký trong UserService. `SmartParking.slnx` xác nhận chỉ ba project core. `FE/src/roles/owner/parking-lots/CreateParkingLotForOwner.tsx:56–69` tạo bãi, slot và đánh dấu onboarding hoàn thành bằng local store; `SiteManagement.tsx:106` cũng gọi store.createLot.
+FacilityService hiện có Domain/Application/Persistence, không có API host/controllers hoặc adapter được đăng ký trong UserService. `SmartParking.slnx` xác nhận chỉ ba project core. `FE/src/roles/owner/parking-lots/CreateParkingLotForOwner.tsx:56–69` tạo bãi, slot và đánh dấu onboarding hoàn thành bằng local store; `SiteManagement.tsx:106` cũng gọi store.createLot.
 
 Bãi vừa tạo trên màn hình không xuất hiện trong parking_sites và không thể làm tài nguyên cho API Create Operator. Thay trình duyệt sẽ không thấy bãi này. Core đáp ứng phạm vi đã ghi trong báo cáo SPARK-188, nhưng task tạo/quản lý cấu trúc bãi end to end còn thiếu.
 
@@ -53,7 +53,7 @@ SRS §3.1.4 yêu cầu OTP authentication, MFA TOTP tùy chọn và session toke
 
 ## Kiểm chứng thực hiện trong lần review này
 
-- `dotnet test SmartParking.slnx --no-restore --verbosity minimal`, với SMARTPARK_AUTH_TEST_CONNECTION trỏ tới PostgreSQL test hiện có tại 127.0.0.1:65433: **73 passed, 0 failed, 0 skipped** (62 UserService + 11 ParkingService).
+- `dotnet test SmartParking.slnx --no-restore --verbosity minimal`, với SMARTPARK_AUTH_TEST_CONNECTION trỏ tới PostgreSQL test hiện có tại 127.0.0.1:65433: **73 passed, 0 failed, 0 skipped** (62 UserService + 11 FacilityService).
 - Các integration test tự tạo/xóa database UUID riêng. Không migrate hoặc thay dữ liệu database dự án ở cổng 5433; không tạo/dừng container.
 - `npm run build --prefix FE`: **pass**, còn warning chunk lớn (bundle JS khoảng 2.23 MB trước gzip).
 - `git diff --check`: **pass**, có cảnh báo chuyển LF/CRLF ở một số file hiện có.

@@ -6,6 +6,7 @@ public interface IAuthSessionStore
 {
     Task AddAsync(AuthSession session, CancellationToken cancellationToken);
     Task<bool> IsActiveAsync(Guid accessTokenId, Guid userId, CancellationToken cancellationToken);
+    Task<bool> IsActiveAsync(Guid accessTokenId, Guid userId, Guid accountId, CancellationToken cancellationToken);
     Task<AuthSession?> FindByRefreshHashAsync(string hash, CancellationToken cancellationToken);
     Task<bool> RotateAsync(AuthSession previous, Guid accessTokenId, string tokenHash,
         DateTimeOffset accessExpiresAt, CancellationToken cancellationToken);

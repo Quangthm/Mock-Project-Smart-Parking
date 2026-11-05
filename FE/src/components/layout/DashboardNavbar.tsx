@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react"
+import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useApp } from "../../context/AppContext"
 import { NotificationBell } from "../navigation/NotificationBell"
@@ -8,6 +8,10 @@ import { UntitledIcon } from "../icon/UntitledIcon"
 import { AccountSecurityPanel } from "../forms/AccountSecurityPanel"
 import { store } from "../../lib/store"
 import { scrollPageToTop } from "../../lib/scrollPageToTop"
+import { AccountSwitcher } from "../account/AccountSwitcher"
+import { listOwnerContractCopies } from "../../lib/partnerContract"
+import { showUiToast } from "../../lib/uiToast"
+import { authApi } from "../../lib/authApi"
 
 const rolePages: Record<string, { id: string; label: string }[]> = {
   driver: [
@@ -60,21 +64,36 @@ export function DashboardNavbar() {
     theme,
     toggleTheme,
     signOut,
+    authError,
+    dashboardMenuOpen,
     setDashboardMenuOpen,
     accentColor,
     setAccentColor,
   } = useApp()
 
   const [panel, setPanel] = useState<"profile" | "search" | null>(null)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [query, setQuery] = useState("")
   const profileTriggerRef = useRef<HTMLButtonElement>(null)
   const settingsDialogRef = useRef<HTMLDivElement>(null)
   const settingsCloseRef = useRef<HTMLButtonElement>(null)
 
   // Universal Account & Security Modal state
-  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "security" | null>(null)
+  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | null>(null)
+  const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [recoveryNotice, setRecoveryNotice] = useState(() => sessionStorage.getItem("sp_mfa_recovery_remaining"))
+
+  useEffect(() => {
+    if (recoveryNotice === null) return
+    const timeout = window.setTimeout(() => {
+      setRecoveryNotice(null)
+      sessionStorage.removeItem("sp_mfa_recovery_remaining")
+    }, 5000)
+    return () => window.clearTimeout(timeout)
+  }, [recoveryNotice])
 
   useEffect(() => {
     if (user) {
@@ -89,8 +108,10 @@ export function DashboardNavbar() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault()
-        setAccountModalTab(null)
-        profileTriggerRef.current?.focus()
+        if (!securityDismissBlocked) {
+          setAccountModalTab(null)
+          profileTriggerRef.current?.focus()
+        }
       }
       if (event.key !== "Tab" || !settingsDialogRef.current) return
       const focusable = Array.from(settingsDialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]"))
@@ -102,11 +123,26 @@ export function DashboardNavbar() {
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [settingsOpen])
+  }, [settingsOpen, securityDismissBlocked])
+
+  const ownerContractCopies = user?.role === "owner" ? listOwnerContractCopies(user.email) : []
 
   function closeSettings() {
+    if (securityDismissBlocked) return
     setAccountModalTab(null)
     profileTriggerRef.current?.focus()
+  }
+
+  const closeSwitcher = useCallback(() => {
+    setSwitcherOpen(false)
+    profileTriggerRef.current?.focus()
+  }, [])
+
+  function openSwitcher() {
+    setPanel(null)
+    setAccountModalTab(null)
+    setDashboardMenuOpen(false)
+    setSwitcherOpen(true)
   }
 
   const pages =
@@ -135,25 +171,35 @@ export function DashboardNavbar() {
     setQuery("")
   }
 
-  function handleOpenAccountModal(tab: "profile" | "appearance" | "security") {
+  function handleOpenAccountModal(tab: "profile" | "appearance" | "roles" | "security") {
     setPanel(null)
     setDashboardMenuOpen(false)
     setAccountModalTab(tab)
     setProfileMsg("")
   }
 
-  function handleSaveProfile(e: React.FormEvent) {
+  async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
-    if (!user) return
+    if (!user || profileSaving) return
     const name = profileForm.name.trim()
     if (!name) {
       setProfileMsg("Please enter your full name.")
       return
     }
-    const updated = { ...user, name, phone: profileForm.phone.trim() || undefined }
-    store.saveUser(updated)
-    setUser(updated)
-    setProfileMsg("Your account settings have been saved.")
+    setProfileSaving(true)
+    setProfileMsg("")
+    try {
+      const confirmedName = name === user.name ? name : (await authApi.updateOwnProfile(name)).fullName
+      const updated = { ...user, name: confirmedName, phone: profileForm.phone.trim() || undefined }
+      store.saveUser(updated)
+      setUser(updated)
+      setProfileMsg("Name saved to your account. Phone number is stored on this device.")
+      showUiToast("Profile saved", "Your display name has been updated.")
+    } catch (error) {
+      setProfileMsg(error instanceof Error ? error.message : "Unable to save your profile. Please try again.")
+    } finally {
+      setProfileSaving(false)
+    }
   }
 
   function toggleSearch() {
@@ -172,6 +218,17 @@ export function DashboardNavbar() {
     <>
       <nav className="dashboard-topbar">
         <div className="dashboard-topbar-left">
+          <button
+            type="button"
+            className="dashboard-mobile-menu-button icon-button"
+            data-dashboard-menu-trigger
+            aria-label={dashboardMenuOpen ? "Close navigation" : "Open navigation"}
+            aria-controls="dashboard-navigation"
+            aria-expanded={dashboardMenuOpen}
+            onClick={() => { setPanel(null); setDashboardMenuOpen(!dashboardMenuOpen) }}
+          >
+            <UntitledIcon name={dashboardMenuOpen ? "x" : "menu"} size={22} />
+          </button>
           <button
             type="button"
             className="dashboard-brand"
@@ -306,6 +363,12 @@ export function DashboardNavbar() {
 
                 <div className="popover-divider" />
 
+                {user?.role !== "admin" && (
+                  <button type="button" className="popover-item popover-item-switch" onClick={openSwitcher}>
+                    <UntitledIcon name="switch-account" size={20} />
+                    <span>Switch account</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="popover-item signout-item"
@@ -330,6 +393,28 @@ export function DashboardNavbar() {
           />
         )}
       </nav>
+
+      <AccountSwitcher
+        open={switcherOpen && !!user && user.role !== "admin"}
+        user={user}
+        accentColor={accentColor}
+        authError={authError}
+        onClose={closeSwitcher}
+        onSignOut={signOut}
+      />
+
+      {recoveryNotice !== null && (
+        <div role="status" className="card security-recovery-notice is-transient">
+          <span>You signed in with a recovery code. {recoveryNotice} codes remain. If you lost your authenticator, set up a new one.</span>
+          <div className="security-recovery-actions">
+            <button type="button" className="btn-outline" onClick={() => {
+              handleOpenAccountModal("security")
+              setRecoveryNotice(null)
+              sessionStorage.removeItem("sp_mfa_recovery_remaining")
+            }}>Review 2FA settings</button>
+          </div>
+        </div>
+      )}
 
       {/* Universal Account & Security Modal for ALL ROLES */}
       {accountModalTab &&
@@ -358,6 +443,7 @@ export function DashboardNavbar() {
                   ref={settingsCloseRef}
                   type="button"
                   className="btn-ghost settings-close"
+                  disabled={securityDismissBlocked}
                   onClick={closeSettings}
                   aria-label="Close settings"
                 >
@@ -370,6 +456,8 @@ export function DashboardNavbar() {
                   {([
                     ["profile", "Account", "users"],
                     ["appearance", "Interface", "settings"],
+                    ...(user?.role === "admin" ? [] : [["roles", "My Roles", "switch-account"] as const]),
+                    ...(user?.role === "owner" ? [["contracts", "Agreements", "file"] as const] : []),
                     ["security", "Security", "shield"],
                   ] as const).map(([id, label, icon]) => (
                     <button
@@ -377,7 +465,8 @@ export function DashboardNavbar() {
                       type="button"
                       className={`settings-nav-item${accountModalTab === id ? " selected" : ""}`}
                       aria-current={accountModalTab === id ? "page" : undefined}
-                      onClick={() => setAccountModalTab(id)}
+                      disabled={securityDismissBlocked}
+                      onClick={() => { if (!securityDismissBlocked) setAccountModalTab(id) }}
                     >
                       <UntitledIcon name={icon} size={18} />
                       <span>{label}</span>
@@ -450,8 +539,8 @@ export function DashboardNavbar() {
                       >
                         Close
                       </button>
-                      <button type="submit" className="btn-primary text-xs px-4 py-2">
-                        Save Changes
+                      <button type="submit" className="btn-primary text-xs px-4 py-2" disabled={profileSaving}>
+                        {profileSaving ? "Saving…" : "Save Changes"}
                       </button>
                     </div>
                   </form>
@@ -509,10 +598,37 @@ export function DashboardNavbar() {
                   </div>
                 )}
 
+                {accountModalTab === "roles" && user && user.role !== "admin" && (
+                  <div className="settings-roles">
+                    <div className="settings-section-heading">
+                      <h3>My Roles</h3>
+                      <p>Your current workspace is verified by SmartParking.</p>
+                    </div>
+                    <div className="settings-role-row">
+                      <span className="settings-role-mark"><UntitledIcon name={user.role === "driver" ? "car" : user.role === "owner" ? "building" : "parking"} size={22} /></span>
+                      <span><strong>{user.role === "driver" ? "Driver" : user.role === "owner" ? "Owner" : "Operator"}</strong><small>Active workspace</small></span>
+                      <UntitledIcon name="check" size={18} />
+                    </div>
+                    <button type="button" className="btn-outline settings-open-switcher" onClick={openSwitcher}>
+                      Choose workspace
+                    </button>
+                  </div>
+                )}
+
                 {accountModalTab === "security" && (
                   <div className="settings-security">
                     <div className="settings-section-heading"><h3>Security</h3><p>Manage extra protection for your account.</p></div>
-                    <AccountSecurityPanel key={user?.id} />
+                    <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
+                  </div>
+                )}
+                {accountModalTab === "contracts" && user?.role === "owner" && (
+                  <div className="settings-contracts">
+                    <div className="settings-section-heading"><h3>Partnership agreements</h3><p>Review your locally saved agreement copies after both parties acknowledge them.</p></div>
+                    {ownerContractCopies.length === 0 ? <p className="settings-contracts-empty">No completed agreement is saved in this browser yet.</p> : ownerContractCopies.map(({ applicationId, record }) => <article className="settings-contract-card" key={applicationId}>
+                      <div><strong>{record.lotName || record.businessName || "SmartParking partnership"}</strong><span>{record.businessName || "Owner business"} · Signed {new Date(record.adminAcknowledgedAt!).toLocaleDateString("en-GB")}</span></div>
+                      <a className="btn-outline" href={`/owner/contract/${encodeURIComponent(applicationId)}`}>View agreement</a>
+                    </article>)}
+                    <p className="settings-helper">These draft acknowledgements are stored in this browser only. Download the Word draft for a separate copy.</p>
                   </div>
                 )}
                 </div>

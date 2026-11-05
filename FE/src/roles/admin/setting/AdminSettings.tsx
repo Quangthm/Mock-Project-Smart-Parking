@@ -4,6 +4,9 @@ import { useApp } from "../../../context/AppContext"
 
 import { adminData as store } from "../data/data"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { showUiToast } from "../../../lib/uiToast"
+import { authApi } from "../../../lib/authApi"
+import { PasswordVisibilityButton } from "../../../components/forms/PasswordVisibilityIcon"
 
 export function AdminSettings() {
   const { user, setUser } = useApp()
@@ -18,14 +21,23 @@ export function AdminSettings() {
   const [error, setError] = useState("")
 
   const [success, setSuccess] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  function saveProfile(e: React.FormEvent) {
+  async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
+    if (saving) return
 
     setError("")
     setSuccess("")
 
     if (!user) return
+
+    const name = form.name.trim()
+    if (!name) {
+      setError("Please enter your display name.")
+      return
+    }
 
     if (form.newPassword) {
       if (form.currentPassword !== user.password) {
@@ -44,32 +56,33 @@ export function AdminSettings() {
       }
     }
 
-    const updated = {
-      ...user,
-      name: form.name,
-      password: form.newPassword || user.password,
+    setSaving(true)
+    try {
+      const confirmedName = name === user.name ? name : (await authApi.updateOwnProfile(name)).fullName
+      const updated = { ...user, name: confirmedName, password: form.newPassword || user.password }
+      store.saveUser(updated)
+      setUser(updated)
+
+      store.addAuditLog({
+        userId: user.id,
+        userName: user.name,
+        userRole: "admin",
+        action: "PROFILE_UPDATED",
+        details: "Admin profile updated",
+      })
+
+      const message = form.newPassword
+        ? "Display name saved to your account. Password changes on this page are stored on this device only."
+        : "Display name saved to your account."
+      setSuccess(message)
+      showUiToast("Profile saved", message)
+      setForm((f) => ({ ...f, name: confirmedName, currentPassword: "", newPassword: "", confirmPassword: "" }))
+      setShowConfirmPassword(false)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to save your profile. Please try again.")
+    } finally {
+      setSaving(false)
     }
-
-    store.saveUser(updated)
-
-    setUser(updated)
-
-    store.addAuditLog({
-      userId: user.id,
-      userName: user.name,
-      userRole: "admin",
-      action: "PROFILE_UPDATED",
-      details: "Admin profile updated",
-    })
-
-    setSuccess("Profile updated successfully.")
-
-    setForm((f) => ({
-      ...f,
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    }))
   }
 
   return (
@@ -132,14 +145,18 @@ export function AdminSettings() {
             </div>
             <div>
               <label className="label">Confirm New Password</label>
-              <input
-                className="input"
-                type="password"
-                value={form.confirmPassword}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, confirmPassword: e.target.value }))
-                }
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className="input"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={form.confirmPassword}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, confirmPassword: e.target.value }))
+                  }
+                  style={{ paddingRight: "3.25rem" }}
+                />
+                <PasswordVisibilityButton visible={showConfirmPassword} onToggle={() => setShowConfirmPassword((value) => !value)} label="new password confirmation" />
+              </div>
             </div>
           </div>
         </div>
@@ -175,8 +192,9 @@ export function AdminSettings() {
           type="submit"
           className="btn-primary"
           style={{ alignSelf: "flex-start" }}
+          disabled={saving}
         >
-          Save Changes
+          {saving ? "Saving…" : "Save Changes"}
         </button>
       </form>
     </div>

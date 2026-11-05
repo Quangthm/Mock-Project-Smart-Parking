@@ -1,4 +1,4 @@
-﻿namespace UserService.Application.Common.Interfaces.Persistence
+namespace UserService.Application.Common.Interfaces.Persistence
 {
     /// <summary>
     /// Interface Generic Repository.
@@ -34,16 +34,5 @@
         /// <param name="entity">The entity.</param>
         void Remove(TEntity entity);
 
-        /// <summary>
-        /// Queries this instance.
-        /// </summary>
-        /// <returns></returns>
-        IQueryable<TEntity> Query();
-
-        /// <summary>
-        /// Queries the including deleted.
-        /// </summary>
-        /// <returns></returns>
-        IQueryable<TEntity> QueryIncludingDeleted();
     }
 }

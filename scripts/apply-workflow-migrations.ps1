@@ -1,10 +1,12 @@
-param(
-    [Parameter(Mandatory)][ValidateSet('User','Parking','Reservation','Payment','Notification','Iot')][string]$Service,
+﻿param(
+    [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
     [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$ProjectName = 'smartpark-schema'
 )
 $ErrorActionPreference = 'Stop'
+# Existing schema maps retain Reservation as their compatibility key.
+if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $codeRoot = Split-Path $PSScriptRoot -Parent
 $composeFile = Join-Path $SchemaRoot 'compose.schema-integration.yml'
 if (!(Test-Path -LiteralPath $composeFile -PathType Leaf)) { throw 'SchemaRoot must contain the canonical schema compose file.' }
@@ -47,7 +49,7 @@ $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation=
 $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
-    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs')
+    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions')
     Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts')
     Payment = @()
     Notification = @()
@@ -57,9 +59,9 @@ $required = @{
 # this database. Index for User (partial unique on normalized_plate), table elsewhere.
 $sentinel = @{ User='uq_active_vehicle_plate'; Parking='tenants'; Reservation='site_capacity_pools'; Payment='payment_orders'; Notification='notification_templates'; Iot='devices' }[$Service]
 
-# Block list: legacy 05.x workflow scripts and integration/* alignment scripts are
+# Block list: remaining legacy 05.1–05.12 workflow scripts and integration/* alignment scripts are
 # superseded by the new base files + overlays; applying them would double-apply or conflict.
-$blockedPattern = '(^|[\\/])05\.[1-9][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
+$blockedPattern = '(^|[\\/])05\.(?:[1-9]|1[0-2])[-.][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
 foreach ($script in $scripts) {
     $relative = "scripts/database/$script"
     if ($relative -match $blockedPattern) {
@@ -82,6 +84,13 @@ if ($state -eq 'legacy') {
     throw "$Service database uses a legacy schema layout (canonical sentinel '$sentinel' is missing while public tables exist). Run .\setup.ps1 -RecreateDb to rebuild all six databases from the canonical scripts; setup never drops existing data on its own."
 }
 
+# Validate an existing User base before running any incremental feature writers.
+# A base sentinel does not establish session/outbox compatibility.
+if ($Service -eq 'User' -and $state -eq 'current') {
+    Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-access-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. No feature migration applied; preserve data and pending messages for reviewed migration or explicit reset.' }
+}
+
 if ($state -eq 'empty') {
     foreach ($script in $scripts) {
         $relative = "scripts/database/$script"
@@ -95,9 +104,18 @@ if ($state -eq 'empty') {
 # and when skipping because the schema is already current.
 foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
-    if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') { throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts." }
+    if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') {
+        if ($Service -eq 'Parking' -and $table -eq 'owner_onboarding_provisions') {
+            throw 'Missing required Facility relation owner_onboarding_provisions. Existing Facility data requires a separately reviewed migration; do not replay the base schema or recreate database volumes unless a reset is explicitly authorized.'
+        }
+        throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts."
+    }
 }
-if ($state -eq 'current') {
+if ($Service -eq 'User') {
+    Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-access-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. Preserve data and pending messages; use a reviewed migration or explicitly authorized reset.' }
+    Write-Output 'User schema already current; full session and outbox verifier passed. Consolidated base skipped; incremental features verified/applied.'
+} elseif ($state -eq 'current') {
     Write-Output "$Service schema already current; verified required relations, nothing to apply."
 } else {
     Write-Output "$Service workflow migrations applied."

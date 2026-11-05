@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { useApp } from "../../../context/AppContext"
+import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
+import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
+import { contractDraftStorageKey, loadContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
 
 import { ownerApi, type OwnerApplicationRecord } from "../../../lib/ownerApi"
 
@@ -6,9 +12,19 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { request } from "../../../lib/authApi"
+import { showUiToast } from "../../../lib/uiToast"
+import { formatStatus } from "../../../lib/formatStatus"
 
 export function Applications() {
+  const { accentColor } = useApp()
   const [apps, setApps] = useState<OwnerApplicationRecord[]>([])
+  const [contractDrafts, setContractDrafts] = useState<Record<string, ContractDraftRecord | null>>({})
+  const [modelApp, setModelApp] = useState<OwnerApplicationRecord | null>(null)
+  const [modelUrl, setModelUrl] = useState<string | null>(null)
+  const [modelLoading, setModelLoading] = useState(false)
+  const [modelError, setModelError] = useState("")
+  const [reviewFileUrl, setReviewFileUrl] = useState<string | null>(null)
+  const [reviewFileName, setReviewFileName] = useState("")
 
   const [notes, setNotes] = useState<Record<string, string>>({})
 
@@ -19,6 +35,7 @@ export function Applications() {
   const [error, setError] = useState("")
 
   const [reload, setReload] = useState(0)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     let active = true
@@ -30,7 +47,10 @@ export function Applications() {
     ownerApi
       .list()
       .then((data) => {
-        if (active) setApps(data)
+        if (active) {
+          setApps(data)
+          setContractDrafts(Object.fromEntries(data.map(app => [app.id, loadContractDraft(app.id)])))
+        }
       })
 
       .catch((e) => {
@@ -46,6 +66,46 @@ export function Applications() {
       active = false
     }
   }, [reload])
+
+  useEffect(() => {
+    const refreshDrafts = () => setContractDrafts(Object.fromEntries(apps.map(app => [app.id, loadContractDraft(app.id)])))
+    const onStorage = (event: StorageEvent) => {
+      if (apps.some(app => event.key === contractDraftStorageKey(app.id))) refreshDrafts()
+    }
+    window.addEventListener("storage", onStorage)
+    window.addEventListener("focus", refreshDrafts)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener("focus", refreshDrafts)
+    }
+  }, [apps])
+
+  function openContract(applicationId: string) {
+    const tab = window.open(`/admin/applications/${encodeURIComponent(applicationId)}/contract`, "_blank")
+    if (!tab) {
+      showUiToast("Could not open agreement", "Allow pop-ups for SmartParking and try again.", "error")
+      return
+    }
+    // The new same-origin tab inherits this session's credentials before its opener is detached.
+    tab.opener = null
+  }
+
+  useEffect(() => {
+    if (!modelApp) { setReviewFileUrl(null); setReviewFileName(""); return }
+    let active = true
+    setModelUrl(null)
+    setModelError("")
+    setReviewFileUrl(null)
+    setReviewFileName("")
+    setModelLoading(true)
+    loadOwnerModelUrl(modelApp.id)
+      .then(url => { if (active) setModelUrl(url) })
+      .catch(() => { if (active) setModelError("The Owner model is unavailable in this browser.") })
+      .finally(() => { if (active) setModelLoading(false) })
+    return () => { active = false }
+  }, [modelApp])
+
+  useEffect(() => () => { if (reviewFileUrl) URL.revokeObjectURL(reviewFileUrl) }, [reviewFileUrl])
 
   async function review(
     app: OwnerApplicationRecord,
@@ -65,20 +125,22 @@ export function Applications() {
       )
 
       setNotes((current) => ({ ...current, [app.id]: "" }))
+      showUiToast("Application reviewed", `Owner application ${status}.`)
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Review failed. Refresh and try again.",
-      )
+      const message = e instanceof Error ? e.message : "Review failed. Refresh and try again."
+      setError(message)
+      showUiToast("Review failed", message, "error")
     } finally {
       setBusy(null)
     }
   }
 
-  const pending = apps.filter((a) => a.status === "pending")
-
-  const reviewed = apps.filter((a) => a.status !== "pending")
+  const orderedApps = [...apps.filter(a => a.status === "pending"), ...apps.filter(a => a.status !== "pending")]
+  const pageCount = Math.max(1, Math.ceil(orderedApps.length / 8))
+  const currentPage = Math.min(page, pageCount)
+  const pageItems = orderedApps.slice((currentPage - 1) * 8, currentPage * 8)
+  const pending = pageItems.filter((a) => a.status === "pending")
+  const reviewed = pageItems.filter((a) => a.status !== "pending")
 
   return (
     <div className="admin-applications">
@@ -92,7 +154,7 @@ export function Applications() {
           Refresh applications
         </button>
       </div>
-      {loading && <p role="status">Loading applications...</p>}
+      {loading && <p role="status">Loading applications…</p>}
       {error && (
         <p role="alert" style={{ color: "#dc2626" }}>
           {error}
@@ -123,67 +185,55 @@ export function Applications() {
             }}
           >
             {pending.map((app) => (
-              <div
-                key={app.id}
-                className="card application-card"
-                style={{ border: "1.5px solid #fde68a" }}
-              >
-                <div className="application-card-header"
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "0.75rem",
-                    flexWrap: "wrap",
-                    gap: "0.5rem",
-                  }}
-                >
+              <details key={app.id} className="card application-card application-card-pending application-collapsible">
+                <summary className="application-collapse-summary">
+                  <span className="application-collapse-name"><strong>{app.lotSetup?.name || app.businessName}</strong><small>{app.businessName}</small></span>
+                  <span className="application-pending-badge"><UntitledIcon name="clock" size={15} /> Pending review</span>
+                  <span className="application-collapse-delivery" data-status={app.deliveryStatus || "none"}><UntitledIcon name="mail" size={14} /> {formatStatus(app.deliveryStatus || "Not queued")}</span>
+                  <UntitledIcon name="chevron-down" size={18} />
+                </summary>
+                <div className="application-expanded">
+                <div className="application-card-header">
                   <div>
-                    <div
-                      style={{
-                        fontFamily: "Be Vietnam Pro",
-                        fontWeight: 700,
-                        fontSize: "0.95rem",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      {app.businessName}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                      {app.ownerName} ·{" "}
-                      {new Date(app.submittedAt).toLocaleDateString("en-GB")}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                      {app.email} - {app.phone}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                      Type: {app.lotType.replace("-", " ")} · Contacts:{" "}
-                      {app.contactVerified
-                        ? "Verified"
-                        : "Awaiting verification"}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: "0.4rem" }}>
-                      {app.lotSetupComplete && app.lotSetup ? (
-                        <>
-                          <strong>Parking lot:</strong> {app.lotSetup.name} · {app.lotSetup.address}
-                          <br />
-                          {app.lotSetup.totalSlots} slots · {app.lotSetup.floors} floor(s) ·
-                          {" "}{app.lotSetup.hourlyRate.toLocaleString("en-US")} VND/hour
-                          <details style={{ marginTop: "0.35rem" }}>
-                            <summary style={{ cursor: "pointer" }}>View lot setup</summary>
-                            <div>Type: {app.lotSetup.lotType.replace("-", " ")}</div>
-                            <div>3D model: {app.lotSetup.modelFileName}</div>
-                            <div>Devices: {app.lotSetup.devices.map((device) => device.label).join(", ") || "None"}</div>
-                            <div>Daily: {app.lotSetup.dailyRate.toLocaleString("en-US")} VND · Night: {app.lotSetup.nightRate.toLocaleString("en-US")} VND</div>
-                            <div>Monthly: {app.lotSetup.subscriptionMonthly.toLocaleString("en-US")} VND · Yearly: {app.lotSetup.subscriptionYearly.toLocaleString("en-US")} VND</div>
-                            <div>Grace period: {app.lotSetup.gracePeriodMinutes} minutes · Policy: {app.lotSetup.policyAccepted ? "Accepted" : "Not accepted"}</div>
-                          </details>
-                        </>
-                      ) : (
-                        "Parking lot setup incomplete"
-                      )}
-                    </div>
+                    <p className="application-eyebrow">Owner application · {new Date(app.submittedAt).toLocaleDateString("en-GB")}</p>
+                    <h4 className="application-business-name">{app.businessName}</h4>
+                    <p className="application-owner-contact">{app.ownerName} · {app.email} · {app.phone}</p>
                   </div>
+                  <span className="application-pending-badge"><UntitledIcon name="clock" size={15} /> Pending review</span>
                 </div>
+                <div className="application-review-signals" aria-label="Approval checks">
+                  <div className={app.contactVerified ? "application-signal is-ready" : "application-signal is-blocked"}><span>Contact</span><strong>{app.contactVerified ? "Verified" : "Not verified"}</strong></div>
+                  <div className={app.lotSetupComplete && app.lotSetup ? "application-signal is-ready" : "application-signal is-blocked"}><span>Lot setup</span><strong>{app.lotSetupComplete && app.lotSetup ? "Complete" : "Incomplete"}</strong></div>
+                  <div className={app.lotSetup?.policyAccepted ? "application-signal is-ready" : "application-signal is-blocked"}><span>Terms</span><strong>{app.lotSetup?.policyAccepted ? "Accepted" : "Not accepted"}</strong></div>
+                  <div className={contractDrafts[app.id]?.ownerAcknowledgedAt ? "application-signal is-ready" : "application-signal is-blocked"}><span>Owner agreement</span><strong>{contractDrafts[app.id]?.ownerAcknowledgedAt ? "Signed" : contractDrafts[app.id] ? "Awaiting signature" : "Unavailable here"}</strong></div>
+                </div>
+                {app.lotSetup ? (
+                  <section className="application-lot-summary" aria-label="Submitted parking lot">
+                    <div className="application-lot-heading"><span>Submitted parking lot</span><strong>{app.lotSetup.name}</strong><span>{app.lotSetup.address}</span></div>
+                    <div className="application-lot-facts">
+                      <span><strong>Type</strong>{app.lotSetup.lotType.replace("-", " ")}</span>
+                      <span><strong>Capacity</strong>{app.lotSetup.totalSlots} slots · {app.lotSetup.floors} floor(s)</span>
+                      <span><strong>3D model</strong>{app.lotSetup.modelFileName}</span>
+                      <span><strong>Hourly rate</strong>{app.lotSetup.hourlyRate.toLocaleString("en-US")} VND</span>
+                    </div>
+                    <details className="application-lot-details">
+                      <summary>More setup details</summary>
+                      <div className="application-lot-extra">
+                        <p><strong>Devices:</strong> {app.lotSetup.devices.map(device => device.label).join(", ") || "None"}</p>
+                        <p><strong>Day / night:</strong> {app.lotSetup.dailyRate.toLocaleString("en-US")} / {app.lotSetup.nightRate.toLocaleString("en-US")} VND</p>
+                        <p><strong>Monthly / yearly:</strong> {app.lotSetup.subscriptionMonthly.toLocaleString("en-US")} / {app.lotSetup.subscriptionYearly.toLocaleString("en-US")} VND</p>
+                        <p><strong>Grace period:</strong> {app.lotSetup.gracePeriodMinutes} minutes</p>
+                      </div>
+                    </details>
+                  </section>
+                ) : <p className="application-setup-missing">Parking lot setup is incomplete. Review cannot be approved yet.</p>}
+                {app.lotSetup && <div className="application-document-actions">
+                  <button type="button" className="btn-outline" onClick={() => openContract(app.id)}>Review contract</button>
+                  <button type="button" className="btn-outline" onClick={() => setModelApp(app)}>View 3D model</button>
+                  {contractDrafts[app.id]?.adminAcknowledgedAt && <span>Admin acknowledged</span>}
+                  {contractDrafts[app.id]?.ownerAcknowledgedAt && !contractDrafts[app.id]?.adminAcknowledgedAt && <span>Sign the draft before approving this application.</span>}
+                  {!contractDrafts[app.id] && <span>Contract draft is not available in this browser.</span>}
+                </div>}
                 <div className="application-review-form"
                   style={{
                     display: "flex",
@@ -193,8 +243,9 @@ export function Applications() {
                   }}
                 >
                   <div className="application-review-note" style={{ flex: 1, minWidth: "200px" }}>
-                    <label className="label">Review Note (optional)</label>
+                    <label className="label" htmlFor={`application-review-note-${app.id}`}>Review Note (optional)</label>
                     <input
+                      id={`application-review-note-${app.id}`}
                       className="input"
                       value={notes[app.id] ?? ""}
                       maxLength={2000}
@@ -209,7 +260,7 @@ export function Applications() {
                   </div>
                   <div className="application-review-actions">
                   <button
-                    disabled={!!busy || loading || !app.contactVerified || !app.lotSetupComplete || !app.lotSetup}
+                    disabled={!!busy || loading || !app.contactVerified || !app.lotSetupComplete || !app.lotSetup || (!!contractDrafts[app.id] && !contractDrafts[app.id]?.adminAcknowledgedAt)}
                     onClick={() => review(app, "approved")}
                     className="application-approve"
                     style={{
@@ -248,7 +299,8 @@ export function Applications() {
                   </button>
                   </div>
                 </div>
-              </div>
+                </div>
+              </details>
             ))}
           </div>
         </section>
@@ -268,16 +320,17 @@ export function Applications() {
           style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
         >
           {reviewed.map((app) => (
-            <div
+            <details
               key={app.id}
-              className="card application-reviewed-card"
-              style={{
-                padding: "0.75rem 1rem",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+              className="card application-reviewed-card application-collapsible"
             >
+              <summary className="application-collapse-summary">
+                <span className="application-collapse-name"><strong>{app.lotSetup?.name || app.businessName}</strong><small>{app.businessName}</small></span>
+                <span className="application-reviewed-status" data-status={app.status}>{app.status === "approved" ? "Active" : formatStatus(app.status)}</span>
+                <span className="application-collapse-delivery" data-status={app.deliveryStatus || "none"}><UntitledIcon name="mail" size={14} /> {formatStatus(app.deliveryStatus || "Not queued")}</span>
+                <UntitledIcon name="chevron-down" size={18} />
+              </summary>
+              <div className="application-expanded">
               <div>
                 <div
                   style={{
@@ -291,8 +344,12 @@ export function Applications() {
                 <div style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
                   {app.ownerName} · {app.lotType}
                 </div>
+                {app.lotSetup && <div className="application-document-actions">
+                  <button type="button" className="btn-outline" onClick={() => openContract(app.id)}>View contract</button>
+                  <button type="button" className="btn-outline" onClick={() => setModelApp(app)}>View 3D model</button>
+                </div>}
                 {app.deliveryStatus && (
-                  <p>Notification: {app.deliveryStatus}</p>
+                  <p className="application-delivery-detail" role="status"><UntitledIcon name="mail" size={16} /> Notification delivery: <strong>{formatStatus(app.deliveryStatus)}</strong></p>
                 )}
                 {app.deliveryStatus === "failed" && app.deliveryId && (
                   <button
@@ -306,6 +363,7 @@ export function Applications() {
                           "POST",
                         )
                         setReload((n) => n + 1)
+                        showUiToast("Notification retried", "The delivery request was submitted again.")
                       } catch (e) {
                         setError(
                           e instanceof Error ? e.message : "Retry failed.",
@@ -335,12 +393,38 @@ export function Applications() {
                   color: app.status === "approved" ? "#22c55e" : "#ef4444",
                 }}
               >
-                {app.status.toUpperCase()}
+                {app.status === "approved" ? "Active" : formatStatus(app.status)}
               </span>
-            </div>
+              </div>
+            </details>
           ))}
         </div>
       </section>
+      {!loading && pageCount > 1 && <nav className="application-pagination" aria-label="Application pages">
+        <button type="button" className="btn-outline" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
+        <span>Page {currentPage} of {pageCount} · {orderedApps.length} applications</span>
+        <button type="button" className="btn-outline" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next</button>
+      </nav>}
+      {modelApp && createPortal(<div className="dashboard-theme partner-contract-backdrop" data-accent={accentColor} onMouseDown={event => { if (event.target === event.currentTarget) setModelApp(null) }}>
+        <section className="partner-contract-dialog" role="dialog" aria-modal="true" aria-label="Parking lot 3D model">
+          <header className="partner-contract-header"><div><p className="partner-contract-eyebrow">Owner application</p><h2>{modelApp.lotSetup?.name || "Parking lot"} · 3D model</h2></div><button type="button" className="partner-contract-close" aria-label="Close 3D model" onClick={() => setModelApp(null)}>×</button></header>
+          <div className="partner-contract-content">
+            <p>{contractDrafts[modelApp.id]?.modelFileName ? `Owner import: ${contractDrafts[modelApp.id]?.modelFileName}` : `System model: ${modelApp.lotSetup?.modelFileName || "Not specified"}`}</p>
+            {modelError && <p role="alert">{modelError}</p>}
+            <label className="owner-model-import application-model-import"><span className="btn-outline">Open GLB for local review</span><input className="sr-only" type="file" accept=".glb,model/gltf-binary" onChange={event => {
+              const file = event.target.files?.[0]
+              if (file && file.name.toLowerCase().endsWith(".glb") && file.size <= 30 * 1024 * 1024) {
+                setReviewFileUrl(URL.createObjectURL(file))
+                setReviewFileName(file.name)
+                setModelError("")
+              } else if (file) setModelError("Choose a GLB file smaller than 30 MB.")
+              event.target.value = ""
+            }} /></label>
+            {reviewFileName && <p>Previewing local file: {reviewFileName}</p>}
+            {modelLoading ? <p role="status">Loading 3D model…</p> : contractDrafts[modelApp.id]?.modelFileName && !modelUrl && !reviewFileUrl ? <p>The imported model is stored only in the Owner's browser. Ask the Owner for the GLB file to review it on this device.</p> : <Parking3DViewer modelUrl={reviewFileUrl || modelUrl || ALLOWED_PARKING_MODELS[modelApp.lotType].path} lotType={modelApp.lotType} interactive={false} showLegend={false} showControls={true} height={340} />}
+          </div>
+        </section>
+      </div>, document.body)}
     </div>
   )
 }
