@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
@@ -22,19 +22,10 @@ $scripts = @{
     )
     Parking = @(
         'microservices/02-facility-service-db.sql',
-        'microservices/03a-parking-structure-ops-service-db.sql',
-        'overlay/parking-tenants.sql',
-        'overlay/parking-structure-synchronizations.sql',
-        'overlay/parking-operator-tables.sql',
-        'overlay/parking-slot-constraints.sql',
-        'overlay/parking-structure-maintenance.sql'
+        'microservices/03a-parking-structure-ops-service-db.sql'
     )
     Reservation = @(
-        'microservices/03b-reservation-operations-service-db.sql',
-        'overlay/reservation-site-capacity-pools.sql',
-        'overlay/reservation-structure-safety.sql',
-        'overlay/reservation-structure-receipts.sql',
-        'overlay/reservation-confirmation-time.sql'
+        'microservices/03b-reservation-operations-service-db.sql'
     )
     Payment = @(
         'microservices/04-payment-pricing-service-db.sql'

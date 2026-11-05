@@ -31,7 +31,7 @@ Checklist trước khi setup:
 | **Schema volume** | Named volume Docker giữ dữ liệu PostgreSQL. Xóa volume = mất dữ liệu dev. |
 | **Runner** | `scripts/run-schema-service.ps1` chạy một API với biến môi trường nạp từ `.env`. |
 | **user-secrets** | Kho secret .NET cho Visual Studio/`dotnet run`; setup đồng bộ từ `.env` ở `[5/7]`. |
-| **Canonical script** | SQL baseline trong `scripts/database/microservices` + overlay, được mount theo thứ tự của compose. |
+| **Canonical script** | SQL baseline trong `scripts/database/microservices` (các script overlay trước đây đã được gộp hoàn toàn vào các file này). |
 | **Sentinel** | Bảng/cột đánh dấu schema đã đúng để runner biết có cần áp migration hay không. |
 | **Block-list** | Danh sách script legacy bị runner chặn, không được áp lại. |
 
@@ -295,7 +295,7 @@ Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết
 
 ### 7.2 Schema baseline, overlay và script legacy
 
-- Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`.
+- Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service). Toàn bộ các overlay trước đây đã được hợp nhất trực tiếp vào các file canonical này theo đúng thứ tự khởi tạo của `compose.schema-integration.yml`.
 - Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
 - `docker-compose.yml` (compose monolith cũ, port `5433`, container `smartparking_db`) và `scripts/database/docker-compose-smartpark.yml` **đã bị xoá** khỏi repo. Database được tạo bằng `compose.schema-integration.yml` thông qua `setup.ps1`.
 
@@ -311,7 +311,7 @@ PostgreSQL chỉ chạy init SQL khi volume **mới hoàn toàn**. Với volume 
 
 Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ liệu đang dùng. Volume đã init theo baseline mới chạy lại `.\setup.ps1` là an toàn (migration skip và chỉ verify).
 
-**Sau khi `git pull` một branch có thay đổi SQL:** volume đã tồn tại **không** tự nhận script mới — phải chạy lại bước migration. Runner áp nhóm `$features` tăng dần (ví dụ `05.16-Parking-Owner-Onboarding.sql`, `overlay/parking-structure-maintenance.sql`) trên **cả** DB trống và DB đã ở schema hiện tại, rồi verify bảng bắt buộc (Parking hiện gồm `structure_maintenance_windows`):
+**Sau khi `git pull` một branch có thay đổi SQL:** volume đã tồn tại **không** tự nhận script mới — phải chạy lại bước migration. Runner probe trạng thái và verify bảng bắt buộc (Parking hiện gồm `structure_maintenance_windows`, Reservation gồm `site_capacity_pools`):
 
 ```powershell
 .\setup.ps1 -SkipRestore                                        # cả 6 DB + đồng bộ user-secrets

@@ -412,7 +412,7 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 | Branch mới thay đổi | Việc phải làm | Lệnh |
 | --- | --- | --- |
 | Code service BE (`.cs`, `Program.cs`, `docker/Dockerfile.backend`, `compose.app.yml`) | Build lại image + recreate container | `.\scripts\run-app-service.ps1 -Service All` (một service thì `-Service Parking` / `-Service User` / `-Service Operation` / `-Service Payment`) |
-| Schema SQL: `scripts/database/microservices/*.sql`, `scripts/database/overlay/*.sql`, hoặc danh sách `$scripts` / `$features` / `$required` trong `scripts/apply-workflow-migrations.ps1` | Áp migration lên volume hiện có; **không** cần build image | `.\setup.ps1 -SkipRestore` (cả 6 DB) hoặc `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .` (một DB) |
+| Schema SQL: `scripts/database/microservices/*.sql`, hoặc danh sách `$scripts` / `$required` trong `scripts/apply-workflow-migrations.ps1` | Áp migration lên volume hiện có; **không** cần build image | `.\setup.ps1 -SkipRestore` (cả 6 DB) hoặc `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .` (một DB) |
 | FE source (`FE/src/**`) | Không cần làm gì — container chạy Vite dev + HMR và bind mount trực tiếp `FE/` | Hard reload trang (`Ctrl+Shift+R`) |
 | FE dependency (`FE/package.json`, `FE/package-lock.json`) | Cài lại package trong container (volume `fe-node-modules` giữ cache cũ) | `docker exec -it smartpark-app-frontend-1 npm install` — chi tiết ở [mục 6.2](#62-lỗi-đã-biết--triệu-chứng--nguyên-nhân--cách-xử-lý) |
 | `.env` / `.env.example` | Xem [mục 7.5](#75-cập-nhật-env--chạy-lại-script-gì) và [mục 7.6](#76-thêm-key-mới-vào-envexample-và-env) | — |
@@ -428,7 +428,7 @@ git pull
 Lưu ý:
 
 - Migration cần 6 container DB đang chạy — kiểm tra bằng `docker compose --project-name smartpark-schema --env-file .env -f compose.schema-integration.yml ps`.
-- `apply-workflow-migrations.ps1` áp thêm nhóm `$features` (các script tăng dần như `05.16-Parking-Owner-Onboarding.sql`, `overlay/parking-structure-maintenance.sql`) trên **cả** DB trống và DB đã ở schema hiện tại, nên chạy lại là idempotent.
+- `apply-workflow-migrations.ps1` kiểm tra sentinel và áp các script canonical tương ứng trên **cả** DB trống và DB đã ở schema hiện tại, nên chạy lại là idempotent.
 - DB ở **schema legacy** (có bảng cũ nhưng thiếu sentinel) thì runner **dừng** và yêu cầu `-RecreateDb` — xem cảnh báo ở [mục 8.5](#85-không-được-làm-gì-khi-chưa-chấp-nhận-mất-dữ-liệu).
 - `.\setup.ps1` hỏi `[O]verwrite / [K]eep / [A]bort` khi `.env` đã tồn tại (**Enter = Keep** — không mất credential local).
 

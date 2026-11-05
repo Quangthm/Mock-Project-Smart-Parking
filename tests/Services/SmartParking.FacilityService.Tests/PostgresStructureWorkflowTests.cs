@@ -1041,23 +1041,13 @@ public sealed class PostgresStructureWorkflowTests
             try
             {
                 var root = FindRepositoryRoot();
-                // Post-split facility schema (smartpark_parking). Overlay order follows each file's header.
+                // Post-split facility schema (smartpark_facility).
                 await fixture.ApplyAsync(fixture.Parking, root,
                     "scripts/database/microservices/02-facility-service-db.sql",
-                    "scripts/database/microservices/03a-parking-structure-ops-service-db.sql",
-                    "scripts/database/overlay/parking-tenants.sql",
-                    "scripts/database/overlay/parking-structure-synchronizations.sql",
-                    "scripts/database/overlay/parking-operator-tables.sql",
-                    "scripts/database/overlay/parking-slot-constraints.sql",
-                    "scripts/database/overlay/parking-structure-maintenance.sql");
-                // Post-split reservation schema (smartpark_reservation). Pools first, then the safety
-                // gates that trigger on site_capacity_pools, then receipts, then confirmation time.
+                    "scripts/database/microservices/03a-parking-structure-ops-service-db.sql");
+                // Post-split reservation schema (smartpark_operations).
                 await fixture.ApplyAsync(fixture.Reservation, root,
-                    "scripts/database/microservices/03b-reservation-operations-service-db.sql",
-                    "scripts/database/overlay/reservation-site-capacity-pools.sql",
-                    "scripts/database/overlay/reservation-structure-safety.sql",
-                    "scripts/database/overlay/reservation-structure-receipts.sql",
-                    "scripts/database/overlay/reservation-confirmation-time.sql");
+                    "scripts/database/microservices/03b-reservation-operations-service-db.sql");
                 await fixture.ExecuteAsync(fixture.Parking, $"""
                     INSERT INTO tenants(id,code,name,contact_email,contact_phone)
                     VALUES ('{fixture.Owner.TenantId}','TEST','Test','test@example.com','0000000000')
