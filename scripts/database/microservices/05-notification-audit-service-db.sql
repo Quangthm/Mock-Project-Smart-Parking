@@ -45,7 +45,11 @@ CREATE TABLE durable_notifications (
     recipient_id UUID NOT NULL, -- Logical ID user/operator
     channel VARCHAR(50) NOT NULL CHECK (channel IN ('IN_APP', 'EMAIL', 'SMS', 'PUSH')),
     template_code VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
     payload JSONB NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    read_at TIMESTAMPTZ NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'DELIVERED', 'FAILED', 'DEAD_LETTER')),
     attempts INT NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     max_attempts INT NOT NULL DEFAULT 3,
@@ -57,6 +61,7 @@ CREATE TABLE durable_notifications (
 );
 CREATE INDEX idx_durable_notifications_recipient ON durable_notifications(recipient_id, status, created_at DESC);
 CREATE INDEX idx_durable_notifications_dispatch ON durable_notifications(status, scheduled_at) WHERE status IN ('PENDING', 'PROCESSING');
+CREATE INDEX idx_durable_notifications_unread ON durable_notifications(recipient_id, is_read, created_at DESC);
 
 -- 4. BẢNG TIẾP NHẬN HỖ TRỢ CHUNG & ACCOUNT RECOVERY (SUPPORT TICKETS)
 -- Tiếp nhận từ FacilityDb sang làm trung tâm hỗ trợ người dùng theo kiến trúc v1.0

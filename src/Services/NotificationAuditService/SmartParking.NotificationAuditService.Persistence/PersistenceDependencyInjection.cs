@@ -26,7 +26,13 @@ public static class PersistenceDependencyInjection
                 connectionString = "Host=localhost;Port=5445;Database=smartpark_notification;Username=postgres;Password=postgres";
             }
 
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsqlOptions =>
+            {
+                npgsqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorCodesToAdd: null);
+            });
         });
 
         services.AddScoped<INotificationRepository, NotificationRepository>();

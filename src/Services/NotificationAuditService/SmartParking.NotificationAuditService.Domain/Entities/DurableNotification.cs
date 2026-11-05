@@ -11,7 +11,11 @@ public class DurableNotification : BaseEntity
     public Guid RecipientId { get; private set; }
     public NotificationChannel Channel { get; private set; } = NotificationChannel.IN_APP;
     public string TemplateCode { get; private set; } = string.Empty;
+    public string Title { get; private set; } = string.Empty;
+    public string Message { get; private set; } = string.Empty;
     public string Payload { get; private set; } = "{}";
+    public bool IsRead { get; private set; } = false;
+    public DateTimeOffset? ReadAt { get; private set; }
     public NotificationStatus Status { get; private set; } = NotificationStatus.PENDING;
     public int Attempts { get; private set; } = 0;
     public int MaxAttempts { get; private set; } = 3;
@@ -30,7 +34,9 @@ public class DurableNotification : BaseEntity
         string templateCode,
         string payload,
         int maxAttempts = 3,
-        DateTimeOffset? scheduledAt = null)
+        DateTimeOffset? scheduledAt = null,
+        string title = "",
+        string message = "")
     {
         if (string.IsNullOrWhiteSpace(originatingEvent))
             throw new NotificationDomainException("OriginatingEvent cannot be empty.");
@@ -50,14 +56,27 @@ public class DurableNotification : BaseEntity
             RecipientId = recipientId,
             Channel = channel,
             TemplateCode = templateCode.Trim(),
+            Title = title?.Trim() ?? string.Empty,
+            Message = message?.Trim() ?? string.Empty,
             Payload = string.IsNullOrWhiteSpace(payload) ? "{}" : payload.Trim(),
             Status = NotificationStatus.PENDING,
             Attempts = 0,
             MaxAttempts = maxAttempts,
             ScheduledAt = scheduledAt ?? DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
+            UpdatedAt = DateTimeOffset.UtcNow,
+            IsRead = false
         };
+    }
+
+    public void MarkAsRead()
+    {
+        if (!IsRead)
+        {
+            IsRead = true;
+            ReadAt = DateTimeOffset.UtcNow;
+            UpdatedAt = DateTimeOffset.UtcNow;
+        }
     }
 
     public void MarkProcessing()

@@ -103,6 +103,11 @@ services:
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}
       PayOs__ChecksumKey: ${SMARTPARK_PAYOS_CHECKSUM_KEY:-}
       PayOs__BaseUrl: ${SMARTPARK_PAYOS_BASE_URL:-https://api-merchant.payos.vn}
+      RabbitMQ__Host: ${SMARTPARK_RABBITMQ_HOST:-rabbitmq}
+      RabbitMQ__Port: "${SMARTPARK_RABBITMQ_PORT:-5672}"
+      RabbitMQ__VirtualHost: "${SMARTPARK_RABBITMQ_VHOST:-/}"
+      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-guest}
+      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD:-guest}
     ports:
       - "127.0.0.1:5065:8080"
     networks:
@@ -121,8 +126,11 @@ services:
       <<: *backend-env
       ConnectionStrings__Notification: "Host=notification-db;Port=5432;Database=smartpark_notification;Username=smartpark_notification;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       ConnectionStrings__NotificationAudit: "Host=notification-db;Port=5432;Database=smartpark_notification;Username=smartpark_notification;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
-      # Fallback to MassTransit InMemory when RabbitMQ broker is not present
-      RabbitMQ__UseInMemory: "true"
+      RabbitMQ__Host: ${SMARTPARK_RABBITMQ_HOST:-rabbitmq}
+      RabbitMQ__Port: "${SMARTPARK_RABBITMQ_PORT:-5672}"
+      RabbitMQ__VirtualHost: "${SMARTPARK_RABBITMQ_VHOST:-/}"
+      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-guest}
+      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD:-guest}
     ports:
       - "127.0.0.1:5068:8080"
     networks:

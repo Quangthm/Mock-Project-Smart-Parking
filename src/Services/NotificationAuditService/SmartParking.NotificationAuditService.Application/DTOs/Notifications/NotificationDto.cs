@@ -9,7 +9,11 @@ public record NotificationDto
     public Guid RecipientId { get; init; }
     public string Channel { get; init; } = string.Empty;
     public string TemplateCode { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
     public string Payload { get; init; } = "{}";
+    public bool IsRead { get; init; }
+    public DateTimeOffset? ReadAt { get; init; }
     public string Status { get; init; } = string.Empty;
     public int Attempts { get; init; }
     public int MaxAttempts { get; init; }
@@ -28,7 +32,11 @@ public record NotificationDto
             RecipientId = entity.RecipientId,
             Channel = entity.Channel.ToString(),
             TemplateCode = entity.TemplateCode,
+            Title = entity.Title,
+            Message = entity.Message,
             Payload = entity.Payload,
+            IsRead = entity.IsRead,
+            ReadAt = entity.ReadAt,
             Status = entity.Status.ToString(),
             Attempts = entity.Attempts,
             MaxAttempts = entity.MaxAttempts,

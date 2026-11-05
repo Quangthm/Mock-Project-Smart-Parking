@@ -59,6 +59,16 @@ public class FakeNotificationRepository : INotificationRepository
         }
         return Task.CompletedTask;
     }
+
+    public Task<int> MarkAllAsReadAsync(Guid recipientId, CancellationToken cancellationToken = default)
+    {
+        var unreadList = Notifications.Where(n => n.RecipientId == recipientId && !n.IsRead).ToList();
+        foreach (var notification in unreadList)
+        {
+            notification.MarkAsRead();
+        }
+        return Task.FromResult(unreadList.Count);
+    }
 }
 
 public class FakeNotificationTemplateRepository : INotificationTemplateRepository

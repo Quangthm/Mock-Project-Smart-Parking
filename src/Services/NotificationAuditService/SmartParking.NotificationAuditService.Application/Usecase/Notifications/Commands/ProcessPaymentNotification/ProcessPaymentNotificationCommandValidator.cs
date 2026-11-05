@@ -12,10 +12,13 @@ public class ProcessPaymentNotificationCommandValidator : AbstractValidator<Proc
         RuleFor(x => x.PaymentOrderId)
             .NotEmpty().WithMessage("PaymentOrderId is required.");
 
-        RuleFor(x => x.DriverId)
-            .NotEmpty().WithMessage("DriverId is required.");
-
         RuleFor(x => x.Amount)
-            .GreaterThan(0).WithMessage("Amount must be greater than zero.");
+            .GreaterThanOrEqualTo(0).WithMessage("Amount must be non-negative.");
+
+        RuleFor(x => x.Currency)
+            .NotEmpty().WithMessage("Currency is required.");
+
+        RuleFor(x => x.PaymentMethod)
+            .NotEmpty().WithMessage("PaymentMethod is required.");
     }
 }

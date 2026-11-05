@@ -44,10 +44,27 @@ public class DurableNotificationConfiguration : IEntityTypeConfiguration<Durable
             .HasMaxLength(100)
             .IsRequired();
 
+        builder.Property(n => n.Title)
+            .HasColumnName("title")
+            .HasMaxLength(255)
+            .IsRequired();
+
+        builder.Property(n => n.Message)
+            .HasColumnName("message")
+            .IsRequired();
+
         builder.Property(n => n.Payload)
             .HasColumnName("payload")
             .HasColumnType("jsonb")
             .IsRequired();
+
+        builder.Property(n => n.IsRead)
+            .HasColumnName("is_read")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(n => n.ReadAt)
+            .HasColumnName("read_at");
 
         builder.Property(n => n.Status)
             .HasColumnName("status")
@@ -95,5 +112,8 @@ public class DurableNotificationConfiguration : IEntityTypeConfiguration<Durable
         builder.HasIndex(n => new { n.RecipientId, n.Status, n.CreatedAt });
 
         builder.HasIndex(n => new { n.Status, n.ScheduledAt });
+
+        builder.HasIndex(n => new { n.RecipientId, n.IsRead, n.CreatedAt })
+            .HasDatabaseName("idx_durable_notifications_unread");
     }
 }

@@ -1,12 +1,12 @@
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
-using SmartParking.NotificationAuditService.Application.Contracts.Notifications;
+using SmartParking.PaymentService.Domain.Events;
 using SmartParking.NotificationAuditService.Application.Usecase.Notifications.Commands.ProcessPaymentNotification;
 
 namespace SmartParking.NotificationAuditService.Infrastructure.Consumers;
 
-public class PaymentNotificationConsumer : IConsumer<PaymentVerifiedNotificationEvent>
+public class PaymentNotificationConsumer : IConsumer<PaymentSucceededV1>
 {
     private readonly IMediator _mediator;
     private readonly ILogger<PaymentNotificationConsumer> _logger;
@@ -19,26 +19,37 @@ public class PaymentNotificationConsumer : IConsumer<PaymentVerifiedNotification
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<PaymentVerifiedNotificationEvent> context)
+    public async Task Consume(ConsumeContext<PaymentSucceededV1> context)
     {
         var message = context.Message;
 
         _logger.LogInformation(
-            "Consuming payment notification event {EventId} for payment order {PaymentOrderId}, recipient {DriverId}.",
+            "Consuming PaymentSucceededV1 event {EventId} for order {PaymentOrderId}, account {AccountId}, amount {Amount}.",
             message.EventId,
             message.PaymentOrderId,
-            message.DriverId);
+            message.AccountId,
+            message.Amount);
 
         var command = new ProcessPaymentNotificationCommand
         {
             EventId = message.EventId,
+            OccurredAt = message.OccurredAt,
+            CorrelationId = message.CorrelationId,
             PaymentOrderId = message.PaymentOrderId,
-            DriverId = message.DriverId,
-            Amount = message.Amount,
-            Currency = message.Currency,
+            PaymentTransactionId = message.PaymentTransactionId,
             PaymentMethod = message.PaymentMethod,
-            TransactionId = message.TransactionId,
-            OccurredAt = message.OccurredAt
+            GatewayReference = message.GatewayReference,
+            TenantId = message.TenantId,
+            SiteId = message.SiteId,
+            ReferenceType = message.ReferenceType,
+            ReferenceId = message.ReferenceId,
+            PlateNumber = message.PlateNumber,
+            AccountId = message.AccountId,
+            Amount = message.Amount,
+            ParkingFee = message.ParkingFee,
+            PenaltyFee = message.PenaltyFee,
+            PenaltyReason = message.PenaltyReason,
+            Currency = message.Currency
         };
 
         var result = await _mediator.Send(command, context.CancellationToken);
@@ -46,20 +57,20 @@ public class PaymentNotificationConsumer : IConsumer<PaymentVerifiedNotification
         if (result.IsDuplicate)
         {
             _logger.LogInformation(
-                "Consumer acknowledged duplicate payment notification event {EventId}.",
+                "Consumer acknowledged duplicate payment event {EventId}.",
                 message.EventId);
         }
         else if (result.Success)
         {
             _logger.LogInformation(
-                "Consumer successfully processed payment notification for event {EventId} (NotificationId: {NotificationId}).",
+                "Consumer successfully processed payment event {EventId} (NotificationId: {NotificationId}).",
                 message.EventId,
                 result.NotificationId);
         }
         else
         {
             _logger.LogWarning(
-                "Payment notification for event {EventId} resulted in delivery failure: {ErrorMessage}. Persisted independently.",
+                "Payment notification event {EventId} resulted in delivery failure: {ErrorMessage}.",
                 message.EventId,
                 result.ErrorMessage);
         }

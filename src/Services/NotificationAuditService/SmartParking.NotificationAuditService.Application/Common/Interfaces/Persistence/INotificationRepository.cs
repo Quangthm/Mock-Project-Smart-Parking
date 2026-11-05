@@ -10,4 +10,5 @@ public interface INotificationRepository
     Task<IReadOnlyList<DurableNotification>> GetPendingDispatchAsync(int limit, CancellationToken cancellationToken = default);
     Task AddAsync(DurableNotification notification, CancellationToken cancellationToken = default);
     Task UpdateAsync(DurableNotification notification, CancellationToken cancellationToken = default);
+    Task<int> MarkAllAsReadAsync(Guid recipientId, CancellationToken cancellationToken = default);
 }

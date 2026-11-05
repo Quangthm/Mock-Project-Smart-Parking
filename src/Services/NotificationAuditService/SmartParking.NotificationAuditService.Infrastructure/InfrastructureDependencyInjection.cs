@@ -5,6 +5,7 @@ using SmartParking.NotificationAuditService.Application.Common.Interfaces.Ports;
 using SmartParking.NotificationAuditService.Infrastructure.Adapters.Delivery;
 using SmartParking.NotificationAuditService.Infrastructure.Consumers;
 using SmartParking.NotificationAuditService.Infrastructure.Options;
+using SmartParking.PaymentService.Domain.Events;
 
 namespace SmartParking.NotificationAuditService.Infrastructure;
 
@@ -36,6 +37,18 @@ public static class InfrastructureDependencyInjection
             {
                 x.UsingInMemory((context, cfg) =>
                 {
+                    cfg.ReceiveEndpoint("notification-audit-service.payment-succeeded", e =>
+                    {
+                        e.PrefetchCount = 32;
+                        e.ConcurrentMessageLimit = 16;
+                        e.UseMessageRetry(r => r.Intervals(
+                            TimeSpan.FromSeconds(2),
+                            TimeSpan.FromSeconds(5),
+                            TimeSpan.FromSeconds(10)));
+
+                        e.ConfigureConsumer<PaymentNotificationConsumer>(context);
+                    });
+
                     cfg.ConfigureEndpoints(context);
                 });
             }
@@ -53,6 +66,24 @@ public static class InfrastructureDependencyInjection
                     });
 
                     cfg.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(1)));
+
+                    cfg.ReceiveEndpoint("notification-audit-service.payment-succeeded", e =>
+                    {
+                        e.PrefetchCount = 32;
+                        e.ConcurrentMessageLimit = 16;
+                        e.UseMessageRetry(r => r.Intervals(
+                            TimeSpan.FromSeconds(2),
+                            TimeSpan.FromSeconds(5),
+                            TimeSpan.FromSeconds(10)));
+
+                        e.Bind("payment.payment-succeeded", b =>
+                        {
+                            b.ExchangeType = "topic";
+                        });
+                        e.Bind<PaymentSucceededV1>();
+
+                        e.ConfigureConsumer<PaymentNotificationConsumer>(context);
+                    });
 
                     cfg.ConfigureEndpoints(context);
                 });

@@ -34,7 +34,7 @@ public class CentralAuditProjection
             throw new NotificationDomainException("OriginatingService cannot be empty.");
         if (eventId == Guid.Empty)
             throw new NotificationDomainException("EventId cannot be empty.");
-        if (actorId == Guid.Empty)
+        if (actorId == Guid.Empty && !string.Equals(actorRole, "GUEST", StringComparison.OrdinalIgnoreCase))
             throw new NotificationDomainException("ActorId cannot be empty.");
         if (string.IsNullOrWhiteSpace(actorRole))
             throw new NotificationDomainException("ActorRole cannot be empty.");

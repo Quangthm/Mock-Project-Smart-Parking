@@ -55,4 +55,19 @@ public class NotificationRepository : INotificationRepository
         _context.DurableNotifications.Update(notification);
         return Task.CompletedTask;
     }
+
+    public async Task<int> MarkAllAsReadAsync(Guid recipientId, CancellationToken cancellationToken = default)
+    {
+        var unread = await _context.DurableNotifications
+            .Where(n => n.RecipientId == recipientId && !n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        foreach (var notification in unread)
+        {
+            notification.MarkAsRead();
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return unread.Count;
+    }
 }
