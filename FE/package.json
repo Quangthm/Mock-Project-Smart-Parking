@@ -7,7 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "test": "vitest run && node tests/owner-onboarding.test.mjs",
+    "test:unit": "vitest run src/test/unit",
+    "test:component": "vitest run src/test/component",
+    "test:integration": "vitest run src/test/integration",
+    "test:e2e": "playwright test",
+    "test:coverage": "vitest run --coverage",
+    "test:regression": "node tests/owner-onboarding.test.mjs"
   },
   "dependencies": {
     "@maptiler/sdk": "^4.1.0",
