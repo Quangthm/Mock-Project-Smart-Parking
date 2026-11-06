@@ -5,9 +5,9 @@
 - **Task:** SPARK-257 — [SEC-AUTH] Protect public authentication flows from automated abuse.
 - **Jira:** SPARK-257 (Story, 5 SP, backlog, no owner, not in Sprint 2). Related: SPARK-234 (Driver registration), SPARK-235 (Owner registration).
 - **Branch:** `docs/SPARK-257-bot-protection-api-design` (created from `develop`).
-- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phase 1 & Phase 2 Implementation).
-- **Scope this session:** Phase 2 execution — Wiring verification into 3 public auth flows (Driver Registration, Owner Registration, Login), updating public DTOs & Command, configuring rate limiting policies, and comprehensive test suite.
-- **Decision status:** Phase 1 & Phase 2 **COMPLETED & VALIDATED**; ready for Phase 3 (environment / Docker configuration) and Phase 4 (frontend integration).
+- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phase 1, Phase 2 & Phase 3 Implementation).
+- **Scope this session:** Phase 3 execution — Multi-environment configuration templates (.env.example, FE/.env.example, compose.app.yml, appsettings.json, run-schema-service.ps1) and deployment parity.
+- **Decision status:** Phase 1, Phase 2 & Phase 3 **COMPLETED & VALIDATED**; ready for Phase 4 (frontend Turnstile integration).
 
 ## 2. Objectives
 
@@ -30,6 +30,13 @@
      - `LoginCommandHandler.Handle` (action `"password_login"`).
    - Configure separate rate limiting policies `RegistrationRateLimit` and `LoginRateLimit` (10 req/min/IP) with `UseForwardedHeaders` in `Program.cs` and decorate `AuthController.cs`.
    - Write unit and HTTP pipeline integration tests in `BotProtectionFlowTests.cs` covering all verification flows, bypass when disabled, failure before DB transactions, and HTTP pipeline integration.
+6. Phase 3 Implementation:
+   - Add Turnstile variables to root `.env.example` (`SMARTPARK_TURNSTILE_ENABLED`, `SMARTPARK_TURNSTILE_SECRET_KEY`, `SMARTPARK_TURNSTILE_EXPECTED_HOSTNAMES`).
+   - Add public Turnstile site key to `FE/.env.example` (`VITE_TURNSTILE_SITE_KEY`).
+   - Wire Turnstile environment variables into `user-service` in `compose.app.yml`.
+   - Add default `Turnstile` section to `src/Services/UserService/SmartParking.UserService.API/appsettings.json`.
+   - Forward Turnstile environment variables in `scripts/run-schema-service.ps1`.
+   - Ensure zero committed real secrets or keys.
 
 ## 3. Work Completed
 
@@ -90,6 +97,16 @@
       - Rate limiting quota isolation between registration and login.
     - Verified `LayerBoundaryTests` passes (0 layer boundary leaks).
     - Full test suite execution: 279 passed, 0 failed, 54 skipped.
+  - Committed Phase 2: `270754ec feat(auth): wire bot verification into registration, login flows and rate limiting [SPARK-257]`.
+- **Phase 3 Implementation Completed:**
+  - **Task 3.1 (Root .env.example):** Added `SMARTPARK_TURNSTILE_ENABLED=true`, `SMARTPARK_TURNSTILE_SECRET_KEY=` (empty placeholder), and `SMARTPARK_TURNSTILE_EXPECTED_HOSTNAMES=localhost,127.0.0.1,::1`.
+  - **Task 3.2 (FE/.env.example):** Added `VITE_TURNSTILE_SITE_KEY=` (empty placeholder) for frontend injection.
+  - **Task 3.3 (compose.app.yml):** Forwarded `Turnstile__Enabled`, `Turnstile__SecretKey`, and indexed `Turnstile__ExpectedHostnames__0..2` into `user-service` environment.
+  - **Task 3.4 (appsettings.json):** Added default `Turnstile` configuration section with `Enabled: true` and `ExpectedHostnames: ["localhost", "127.0.0.1", "::1"]`.
+  - **Task 3.5 (run-schema-service.ps1):** Added environment variable forwarding for `SMARTPARK_TURNSTILE_ENABLED` and `SMARTPARK_TURNSTILE_SECRET_KEY` in the `User` service runner block.
+  - **Configuration Hardening:** Sanitized `ExpectedHostnames` in `Program.cs` to filter empty/whitespace entries, and updated `TurnstileVerifierTests.cs` to override base appsettings array during isolated unit tests.
+  - **Security Audit:** Verified 0 secrets committed; all keys use empty placeholders.
+  - **Test Suite:** Full UserService tests passed (279 passed, 0 failed, 54 skipped).
 
 ## 4. Technical Decisions
 
@@ -124,12 +141,19 @@
 | `tests/Services/SmartParking.UserService.Tests/DriverRegistrationHttpTests.cs` | Modified | Updated rate limit policies in test fixture |
 | `tests/Services/SmartParking.UserService.Tests/OwnerRegistrationHttpTests.cs` | Modified | Updated rate limit policies in test fixture |
 | `tests/Services/SmartParking.UserService.Tests/BotProtectionFlowTests.cs` | Created | Comprehensive unit & pipeline tests for 3 auth flows, invariants, and rate limiting |
-| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session log tracking Phase 1 & 2 completion |
+| `.env.example` | Modified | Added Turnstile configuration placeholders |
+| `FE/.env.example` | Modified | Added `VITE_TURNSTILE_SITE_KEY` placeholder |
+| `compose.app.yml` | Modified | Wired Turnstile environment variables into `user-service` |
+| `scripts/run-schema-service.ps1` | Modified | Forwarded Turnstile environment variables to UserService |
+| `src/Services/UserService/SmartParking.UserService.API/appsettings.json` | Modified | Added default Turnstile section |
+| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Sanitized `ExpectedHostnames` to strip empty entries |
+| `tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs` | Modified | Overwrote appsettings array indices for clean test isolation |
+| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session log tracking Phase 1, 2 & 3 completion |
 
 ## 6. Issues and Blockers
 
 - None. All Phase 2 deliverables completed and validated with 0 errors and 0 warnings.
-- Next phase: Phase 3 (Docker configuration, secrets management & environment parity) / Phase 4 (Frontend integration).
+- Next phase: Phase 4 (Frontend integration - Turnstile script, hook, widget, and form integration).
 
 ## 7. Validation Results
 
@@ -159,22 +183,12 @@
 
 ## 9. Handoff / Next Steps
 
-1. Commit Phase 2 changes:
+1. Commit Phase 3 changes:
    ```text
-   feat(auth): wire bot verification into registration, login flows and rate limiting [SPARK-257]
+   chore(config): add turnstile multi-environment templates and compose wiring [SPARK-257]
    ```
-2. Proceed to Phase 3 (Docker & environment configuration) and Phase 4 (Frontend Cloudflare Turnstile integration).
+2. Proceed to Phase 4 (Frontend Cloudflare Turnstile integration: hook, widget, and registration/login forms).
 
 ## 10. Context for Next Session
 
-- Turnstile tokens are single-use and short-lived; `timeout-or-duplicate` maps to expired/reused (`BOT_VERIFICATION_EXPIRED`, 400).
-- Verification runs first and fails closed; `503` is a retryable temporary failure, not a bypass.
-- Secret key is backend-only; the site key is the only `VITE_*` value.
-- `ApiExceptionMapper` uses an explicit whitelist; 4 bot protection codes are mapped to 400/503.
-- Registration DTOs validate manually; login uses FluentValidation. Do not introduce `[Required]` model-state errors on `turnstileToken`.
 
-- Turnstile tokens are single-use and short-lived; `timeout-or-duplicate` maps to expired/reused (`BOT_VERIFICATION_EXPIRED`, 400).
-- Verification runs first and fails closed; `503` is a retryable temporary failure, not a bypass.
-- Secret key is backend-only; the site key is the only `VITE_*` value.
-- `ApiExceptionMapper` uses an explicit whitelist; 4 bot protection codes are mapped to 400/503.
-- Registration DTOs validate manually; login uses FluentValidation. Do not introduce `[Required]` model-state errors on `turnstileToken`.

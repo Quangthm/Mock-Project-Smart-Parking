@@ -451,9 +451,9 @@ public sealed class TurnstileVerifierTests
             ["Jwt:Audience"] = "test",
             ["Jwt:PrivateKeyPem"] = key.ExportRSAPrivateKeyPem()
         };
-        for (var i = 0; i < hostnames.Length; i++)
+        for (var i = 0; i < Math.Max(10, hostnames.Length); i++)
         {
-            config[$"Turnstile:ExpectedHostnames:{i}"] = hostnames[i];
+            config[$"Turnstile:ExpectedHostnames:{i}"] = i < hostnames.Length ? hostnames[i] : string.Empty;
         }
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>

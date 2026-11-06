@@ -64,6 +64,12 @@ services:
       SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
       Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-}
+      # Cloudflare Turnstile Bot Protection (SPARK-257)
+      Turnstile__Enabled: ${SMARTPARK_TURNSTILE_ENABLED:-true}
+      Turnstile__SecretKey: ${SMARTPARK_TURNSTILE_SECRET_KEY:-}
+      Turnstile__ExpectedHostnames__0: localhost
+      Turnstile__ExpectedHostnames__1: 127.0.0.1
+      Turnstile__ExpectedHostnames__2: ::1
     ports:
       - "127.0.0.1:5035:8080"
     volumes:

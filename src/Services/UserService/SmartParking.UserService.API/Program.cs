@@ -55,6 +55,9 @@ public static class UserHost
         builder.Services.AddHttpClient("Otp", client => client.Timeout = TimeSpan.FromSeconds(10));
 
         var turnstileOptions = builder.Configuration.GetSection(TurnstileOptions.SectionName).Get<TurnstileOptions>() ?? new();
+        turnstileOptions.ExpectedHostnames = turnstileOptions.ExpectedHostnames
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .ToArray();
         builder.Services.AddSingleton(turnstileOptions);
         builder.Services.AddHttpClient<IBotVerificationService, TurnstileVerifier>(client =>
         {
