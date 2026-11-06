@@ -5,7 +5,7 @@ namespace SmartParking.FacilityService.Tests;
 
 public sealed class GateAuthenticationTests
 {
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task GatePoolPreservesConfiguredPasswordDuringAuthentication()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_STRUCTURE_TEST_CONNECTION")!;

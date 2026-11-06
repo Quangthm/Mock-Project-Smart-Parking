@@ -37,7 +37,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.All(model.GetEntityTypes(), entity => Assert.NotNull(entity.FindPrimaryKey()));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task OwnerOnboardingIsAtomicRetryableAndPreservesSubsequentEdits()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -58,7 +58,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Parking, $"SELECT count(*) FROM tenants WHERE id='{conflict}'"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task CommittedEditSurvivesLostResponseAndRecoversWithANewApplicationInstance()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -95,7 +95,7 @@ public sealed class PostgresStructureWorkflowTests
 
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReservationTriggerBlocksCapacityWritesUntilTheHoldCompletes()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -116,7 +116,7 @@ public sealed class PostgresStructureWorkflowTests
             """);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReactivatingSitePublishesStateBeforeCapacityWithBackup()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -137,7 +137,7 @@ public sealed class PostgresStructureWorkflowTests
             "SELECT count(*) FROM site_capacity_pools WHERE total_capacity=2 AND backup_count=1"));
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation, "SELECT count(*) FROM structure_edit_holds"));
     }
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReceiptReplayCannotReleaseANewerHoldAndAbortedTokenCannotBeReused()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -158,7 +158,7 @@ public sealed class PostgresStructureWorkflowTests
                 new(true, [], [], []), CancellationToken.None));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReleaseDeletesTheHoldBeforeGuardedCapacityWrites()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -185,7 +185,7 @@ public sealed class PostgresStructureWorkflowTests
             "SELECT count(*) FROM site_capacity_pools WHERE total_capacity=1 AND max_reservation_quota=1"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task RecoveryFenceWaitsForUnacknowledgedPhysicalCommitAndReturnsReadyPayload()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -222,7 +222,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(0, durable.Outcome.Capacities.Single().Capacity);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task RecoveryWinningTheFenceForcesAllLatePhysicalWritesToRollBack()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -245,7 +245,7 @@ public sealed class PostgresStructureWorkflowTests
     }
 
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task GateConnectionsLeaveATwoConnectorQueryPoolAvailable()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -271,7 +271,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Null(rejected);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task CompletedOperationCannotBeRevertedByAForegroundErrorUpdate()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -288,7 +288,7 @@ public sealed class PostgresStructureWorkflowTests
             new(Guid.NewGuid(), fixture.Owner.TenantId), operation.Id, "pending", "Other actor", null, CancellationToken.None));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ProjectionFailureRollsBackReceiptProjectionAndHoldReleaseTogether()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -333,7 +333,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation, "SELECT count(*) FROM structure_edit_holds"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ForceReleaseRejectsAHoldOwnedByAnotherTenantThenReleasesItsOwn()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();

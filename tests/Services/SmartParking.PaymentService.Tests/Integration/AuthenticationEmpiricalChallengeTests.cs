@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -34,9 +35,9 @@ public class AuthenticationEmpiricalChallengeTests
         _rsaPublicKeyPem = _rsa.ExportSubjectPublicKeyInfoPem();
     }
 
-    private TestServer CreateServer(bool includeRsa = true, bool includeSymmetric = true)
+    private async Task<IHost> CreateHostAsync(bool includeRsa = true, bool includeSymmetric = true)
     {
-        var builder = new WebHostBuilder()
+        var builder = new HostBuilder().ConfigureWebHost(web => web.UseTestServer()
             .UseEnvironment("Production")
             .ConfigureServices(services =>
             {
@@ -103,9 +104,9 @@ public class AuthenticationEmpiricalChallengeTests
                         return Results.Ok(new { message = "driver-ok" });
                     });
                 });
-            });
+            }));
 
-        return new TestServer(builder);
+        return await builder.StartAsync();
     }
 
     private string GenerateSymmetricToken(
@@ -169,8 +170,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task MissingToken_Returns401Unauthorized_WithoutCrashingRuntime()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
 
         var response = await client.GetAsync("/api/secure");
 
@@ -180,8 +181,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task EmptyBearerHeader_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "");
 
         var response = await client.GetAsync("/api/secure");
@@ -192,8 +193,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task MalformedToken_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "not.a.valid.jwt.token");
 
         var response = await client.GetAsync("/api/secure");
@@ -204,8 +205,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task ExpiredSymmetricToken_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         var expiredToken = GenerateSymmetricToken(expires: DateTime.UtcNow.AddMinutes(-10));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", expiredToken);
 
@@ -217,8 +218,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task ExpiredRsaToken_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         var expiredToken = GenerateRsaToken(expires: DateTime.UtcNow.AddMinutes(-10));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", expiredToken);
 
@@ -230,8 +231,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task InvalidSignatureSymmetricToken_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         var invalidToken = GenerateSymmetricToken(secret: "wrong-symmetric-key-must-be-min-32-chars-long-12345678");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", invalidToken);
 
@@ -243,8 +244,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task InvalidSignatureRsaToken_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         using var foreignRsa = RSA.Create(2048);
         var invalidToken = GenerateRsaToken(rsa: foreignRsa);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", invalidToken);
@@ -257,8 +258,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task ValidRsaToken_SucceedsWith200AndPreservesClaims()
     {
-        using var server = CreateServer(includeRsa: true, includeSymmetric: true);
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync(includeRsa: true, includeSymmetric: true);
+        var client = server.GetTestClient();
         var token = GenerateRsaToken(role: "DRIVER");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -273,8 +274,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task ValidSymmetricToken_DualKeyConfig_SucceedsWith200()
     {
-        using var server = CreateServer(includeRsa: true, includeSymmetric: true);
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync(includeRsa: true, includeSymmetric: true);
+        var client = server.GetTestClient();
         var token = GenerateSymmetricToken(role: "DRIVER");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -289,8 +290,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task RoleBasedEndpoint_DriverRole_Authorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         var token = GenerateRsaToken(role: "DRIVER");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -302,8 +303,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task RoleBasedEndpoint_WrongRole_Returns403Forbidden()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         var token = GenerateRsaToken(role: "ADMIN");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -315,8 +316,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task InvalidIssuer_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         var token = GenerateSymmetricToken(issuer: "Wrong.Issuer");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -328,8 +329,8 @@ public class AuthenticationEmpiricalChallengeTests
     [Fact]
     public async Task FutureNotBefore_Returns401Unauthorized()
     {
-        using var server = CreateServer();
-        var client = server.CreateClient();
+        using var server = await CreateHostAsync();
+        var client = server.GetTestClient();
         
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_symmetricSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -360,7 +361,7 @@ public class AuthenticationEmpiricalChallengeTests
     public async Task PrivateKeyPemInConfig_ValidatesSuccessfully()
     {
         // When configuration supplies PrivateKeyPem instead of PublicKeyPem
-        var builder = new WebHostBuilder()
+        var builder = new HostBuilder().ConfigureWebHost(web => web.UseTestServer()
             .UseEnvironment("Production")
             .ConfigureServices(services =>
             {
@@ -403,10 +404,10 @@ public class AuthenticationEmpiricalChallengeTests
                 {
                     endpoints.MapGet("/api/secure-pk", [Authorize] () => Results.Ok(new { status = "pk-ok" }));
                 });
-            });
+            }));
 
-        using var server = new TestServer(builder);
-        var client = server.CreateClient();
+        using var server = await builder.StartAsync();
+        var client = server.GetTestClient();
         var token = GenerateRsaToken(role: "DRIVER");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 

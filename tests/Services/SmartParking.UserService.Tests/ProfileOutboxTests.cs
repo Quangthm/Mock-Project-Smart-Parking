@@ -47,7 +47,7 @@ public sealed class ProfileOutboxTests
         Assert.IsType<MassTransitEventPublisher>(scope.ServiceProvider.GetRequiredService<IEventPublisher>());
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task CaptureOnlyHostStartsAndRecordsDurablyWithoutAnAvailableBroker()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -79,7 +79,33 @@ public sealed class ProfileOutboxTests
         finally { await host.StopAsync().WaitAsync(TimeSpan.FromSeconds(15)); }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
+    public async Task DatabaseOnlyHttpHostCapturesOutboxWithoutConnectingToBroker()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        var userId = await SeedAsync(fixture);
+        using var unavailableBroker = new TcpListener(IPAddress.Loopback, 0);
+        unavailableBroker.Start();
+        var port = ((IPEndPoint)unavailableBroker.LocalEndpoint).Port;
+        await using var host = await fixture.StartHostAsync(configureConfiguration: builder =>
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["SMARTPARK_RABBITMQ_PORT"] = port.ToString()
+            }));
+
+        var committed = NewEvent(userId);
+        await WriteAsync(host.Services, userId, "Captured in HTTP host", committed, commit: true);
+        await WriteAsync(host.Services, userId, "Rolled back in HTTP host", NewEvent(userId), commit: false);
+        await using var db = fixture.Open();
+        Assert.Equal("Captured in HTTP host", (await db.Users.SingleAsync()).FullName);
+        Assert.Equal(committed.EventId, (await db.Set<OutboxMessage>().SingleAsync()).MessageId);
+        Assert.Single(await db.Set<OutboxState>().ToListAsync());
+        Assert.DoesNotContain(host.Services.GetServices<IHostedService>(), worker =>
+            worker is MassTransitHostedService or BusOutboxDeliveryService<AppDbContext>);
+        Assert.False(unavailableBroker.Pending());
+    }
+
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ScopedPublicationCommitsWithNameAndRollsBackWithName()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -109,7 +135,7 @@ public sealed class ProfileOutboxTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ActualProfileHandlerCapturesChangedOnlyAndRejectedWritesCaptureNothing()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -168,7 +194,7 @@ public sealed class ProfileOutboxTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task DatabaseFailureInEitherWriteLeavesNeitherMutationNorOutboxRecord()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -193,7 +219,7 @@ public sealed class ProfileOutboxTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task VersionedAccessEventUsesTransactionalMassTransitBusOutbox()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

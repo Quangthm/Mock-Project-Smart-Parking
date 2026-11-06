@@ -64,7 +64,7 @@ public sealed class IdentityAccessHardeningTests
         await Assert.ThrowsAsync<AuthException>(() => handler.Handle(new(session.RefreshToken), default));
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ScopedOwnerGrantsAndOperatorActivationThroughProductionHttpPipeline()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -154,7 +154,7 @@ public sealed class IdentityAccessHardeningTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/auth/owner-scope")).StatusCode);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RefreshDatabaseCasEnforcesIdleBoundaryAndUpdatesOnlySuccessfulRefresh()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
@@ -181,7 +181,7 @@ public sealed class IdentityAccessHardeningTests
         await using(var db=fixture.Open()) Assert.Equal(issued.AddHours(23),(await db.AuthSessions.SingleAsync()).LastRefreshedAt);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RefreshedAccessTokenImmediatelyOpensProtectedProfileWithPostgres()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
