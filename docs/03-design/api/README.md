@@ -14,6 +14,7 @@ All new API endpoint specifications and refactors must follow the standard templ
 | Partner / Owner Registration & First Lot Setup | [owner-register-api-design.md](owner-register-api-design.md) | UserService |
 | Admin Review & Owner Approval | [admin-approve-owner-api-design.md](admin-approve-owner-api-design.md) | UserService |
 | Driver Registration & Verification | [driver-register-api-design.md](driver-register-api-design.md) | UserService |
+| Public Auth Bot Protection — SPARK-257 (Cloudflare Turnstile, cross-cutting) | [bot-protection-spark-257-api-design.md](bot-protection-spark-257-api-design.md) | UserService |
 | Owner Create Operator & Invitation | [owner-create-operator-api-design.md](owner-create-operator-api-design.md) | UserService |
 | Admin User Directory & Role Management | [admin-manage-users-api-design.md](admin-manage-users-api-design.md) | UserService |
 | Parking Structure & Slot Capacity | [parking-structure-api-design.md](parking-structure-api-design.md) | FacilityService |
