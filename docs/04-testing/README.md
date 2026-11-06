@@ -17,6 +17,7 @@
 - [MFA QA recheck, 20/10/2026](MFA_QA_RECHECK_2026-10-20.md): focused regression evidence and pending tester follow-up.
 - [Acceptance scenarios and traceability](requirements-traceability/acceptance-scenarios.md).
 - [Payment integration test plan](payment-integration/payos-test-plan.md).
+- [Payment Postman setup and webhook regression guide](postman/PaymentService-guide.md): dedicated local environment, corrected 3.10/3.11 signing/replay, Desktop Vault handling, and focused synthetic versus live test evidence.
 
 `evidence/` and `reports/` retain QA artifacts; `test-cases/` and `test-plans/` contain reusable test documentation. Dated evidence applies only to the reviewed code and environment. Obsolete standalone implementation reviews and push notes can be retrieved from Git history.
 

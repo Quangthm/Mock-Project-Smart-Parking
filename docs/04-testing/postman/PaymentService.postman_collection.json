@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "c8e76a91-2a1d-48ef-b5bb-76f5c8bf3d82",
     "name": "SmartParking - PaymentService",
-    "description": "# SmartParking PaymentService — Postman Collection\n\nBộ kiểm thử tích hợp và Smoke Test toàn diện cho **PaymentService** (Cổng `5065`).\nTuân thủ chuẩn [manage-postman-collections Skill](.agents/skills/manage-postman-collections/SKILL.md).\n\n## Cấu trúc 4 Thư mục (40 Requests):\n1. **00 - System Health**: Kiểm tra liveness / readiness của microservice.\n2. **01 - Pricing Calculator Engine**: Thuật toán tính cước đỗ xe (day/night shift, grace period, motorcycle, walk-in DB tariff, validation).\n3. **02 - Customer Invoice & Gate Checkout (SPARK-321)**: Bàn giao cước bốt ra S2S, thu tiền mặt tại bốt, xuất hóa đơn tài chính và đối soát.\n4. **03 - Online Payment & payOS Gateway**: Tạo đơn hàng online, sinh VietQR payOS, xử lý webhook IPN HMAC-SHA256, và fast demo-pay.\n\n## Hướng dẫn Chạy (Collection Runner / Newman):\nChạy theo thứ tự thư mục từ 00 đến 03. Các biến `spark321OrderId`, `spark321InvoiceId`, `onlineOrderId`, `transactionId` tự động chain nối tiếp giữa các request.",
+    "description": "# SmartParking PaymentService — Postman Collection\n\nBộ kiểm thử tích hợp và Smoke Test toàn diện cho **PaymentService** (Cổng `5065`).\nTuân thủ chuẩn [manage-postman-collections Skill](.agents/skills/manage-postman-collections/SKILL.md).\n\n## Cấu trúc 4 Thư mục (40 Requests):\n1. **00 - System Health**: Kiểm tra liveness / readiness của microservice.\n2. **01 - Pricing Calculator Engine**: Thuật toán tính cước đỗ xe (day/night shift, grace period, motorcycle, walk-in DB tariff, validation).\n3. **02 - Customer Invoice & Gate Checkout (SPARK-321)**: Bàn giao cước bốt ra S2S, thu tiền mặt tại bốt, xuất hóa đơn tài chính và đối soát.\n4. **03 - Online Payment & payOS Gateway**: Tạo đơn hàng online, sinh VietQR payOS, xử lý webhook IPN HMAC-SHA256, và fast demo-pay.\n\n## Hướng dẫn Chạy (Collection Runner / Newman):\nChạy theo thứ tự thư mục từ 00 đến 03. Các biến `spark321OrderId`, `spark321InvoiceId`, `onlineOrderId`, `transactionId` tự động chain nối tiếp giữa các request.\n\n## Webhook fix (2026-11-06)\nImport PaymentService-Local.postman_environment.example.json and follow PaymentService-guide.md. Requests 3.10/3.11 use a raw-body variable and exact replay; payosChecksumKey resolves from the selected environment, including Desktop Vault references. Use disposable local Payment data only. Do not use the SPARK-327 environment for this collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -138,6 +138,11 @@
     },
     {
       "key": "currentIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentWebhookReplay",
       "value": "",
       "type": "string"
     }
@@ -1728,6 +1733,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "// A fresh order must not reuse a previous checkout or accepted callback.",
+                  "['onlineOrderId', 'onlineOrderCode', 'onlineAmount', 'payosOrderCode', 'transactionId', 'checkoutUrl', 'paymentWebhookReplay'].forEach(key => pm.collectionVariables.unset(key));",
                   "const refId = pm.variables.replaceIn('{{$guid}}');",
                   "pm.collectionVariables.set('onlineReferenceId', refId);",
                   "pm.collectionVariables.set('onlineIdempotencyKey', 'order:ref:' + refId);"
@@ -2236,28 +2243,42 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const orderCode = Number(pm.collectionVariables.get('payosOrderCode') || pm.collectionVariables.get('onlineOrderCode') || 202610200001);",
-                  "const amount = Number(pm.collectionVariables.get('onlineAmount') || 25000);",
-                  "const dataObj = {",
-                  "    accountNumber: '0123456789',",
-                  "    amount: amount,",
-                  "    currency: 'VND',",
-                  "    description: 'Thanh toan do xe',",
-                  "    orderCode: orderCode,",
-                  "    paymentLinkId: 'mock-link-12345',",
-                  "    reference: 'FT' + Date.now(),",
-                  "    transactionDateTime: '2026-10-20 14:30:00'",
-                  "};",
-                  "const sortedKeys = Object.keys(dataObj).sort();",
-                  "const dataString = sortedKeys.map(k => `${k}=${dataObj[k]}`).join('&');",
-                  "const checksumKey = pm.collectionVariables.get('payosChecksumKey') || '';",
-                  "const signature = CryptoJS.HmacSHA256(dataString, checksumKey).toString(CryptoJS.enc.Hex);",
-                  "pm.request.body.raw = JSON.stringify({",
-                  "    code: '00',",
-                  "    desc: 'success',",
-                  "    data: dataObj,",
-                  "    signature: signature",
-                  "});"
+                  "// Body is immutable in Postman scripts: populate the raw-body template instead.",
+                  "pm.variables.unset('paymentWebhookBody');",
+                  "pm.collectionVariables.unset('paymentWebhookReplay');",
+                  "try {",
+                  "    const orderCode = Number(pm.collectionVariables.get('payosOrderCode'));",
+                  "    const amount = Number(pm.collectionVariables.get('onlineAmount'));",
+                  "    if (!Number.isSafeInteger(orderCode) || orderCode <= 0 ||",
+                  "        !Number.isSafeInteger(amount) || amount <= 0 ||",
+                  "        String(orderCode) !== String(pm.collectionVariables.get('onlineOrderCode'))) {",
+                  "        throw new Error('Run 3.1 and 3.4 successfully for the same order before 3.10.');",
+                  "    }",
+                  "    let checksumKey = pm.variables.get('payosChecksumKey');",
+                  "    const vaultRef = typeof checksumKey === 'string' && checksumKey.match(/^\\{\\{vault:([^{}]+)\\}\\}$/);",
+                  "    if (vaultRef) checksumKey = await pm.vault.get(vaultRef[1]);",
+                  "    if (typeof checksumKey !== 'string' || !checksumKey.trim() || checksumKey.includes('{{')) {",
+                  "        throw new Error('Set payosChecksumKey in the selected Payment environment to the running service checksum key (or a resolvable Vault reference).');",
+                  "    }",
+                  "    const data = {",
+                  "        accountNumber: '0123456789',",
+                  "        amount: amount,",
+                  "        currency: 'VND',",
+                  "        description: 'Thanh toan do xe',",
+                  "        orderCode: orderCode,",
+                  "        paymentLinkId: 'local-fixture-' + orderCode,",
+                  "        reference: 'POSTMAN-' + pm.variables.replaceIn('{{$guid}}'),",
+                  "        transactionDateTime: new Date().toISOString()",
+                  "    };",
+                  "    const canonical = Object.keys(data).sort().map(key => key + '=' + data[key]).join('&');",
+                  "    const crypto = require('crypto-js');",
+                  "    const signature = crypto.HmacSHA256(canonical, checksumKey).toString(crypto.enc.Hex);",
+                  "    pm.variables.set('paymentWebhookBody', JSON.stringify({ code: '00', desc: 'success', data, signature }));",
+                  "} catch (error) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "    pm.execution.skipRequest();",
+                  "    throw error;",
+                  "}"
                 ]
               }
             },
@@ -2270,7 +2291,16 @@
                   "pm.test('Webhook accepted with success=true', () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.true;",
-                  "});"
+                  "});",
+                  "// Persist only an accepted callback, so Send and Runner can both replay it.",
+                  "if (pm.response.code === 200 && pm.response.json().success === true) {",
+                  "    pm.collectionVariables.set('paymentWebhookReplay', JSON.stringify({",
+                  "        baseUrl: pm.variables.get('baseUrl'),",
+                  "        body: pm.variables.get('paymentWebhookBody')",
+                  "    }));",
+                  "} else {",
+                  "    pm.execution.setNextRequest(null);",
+                  "}"
                 ]
               }
             }
@@ -2302,13 +2332,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"to-be-replaced-by-prerequest-script\"\n}",
+              "raw": "{{paymentWebhookBody}}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "Local synthetic callback only. See PaymentService-guide.md. Body comes from a run-local variable; 3.11 replays the exact accepted 3.10 payload."
           }
         },
         {
@@ -2319,28 +2350,25 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const orderCode = Number(pm.collectionVariables.get('payosOrderCode') || pm.collectionVariables.get('onlineOrderCode') || 202610200001);",
-                  "const amount = Number(pm.collectionVariables.get('onlineAmount') || 25000);",
-                  "const dataObj = {",
-                  "    accountNumber: '0123456789',",
-                  "    amount: amount,",
-                  "    currency: 'VND',",
-                  "    description: 'Thanh toan do xe',",
-                  "    orderCode: orderCode,",
-                  "    paymentLinkId: 'mock-link-12345',",
-                  "    reference: 'FT' + Date.now(),",
-                  "    transactionDateTime: '2026-10-20 14:30:00'",
-                  "};",
-                  "const sortedKeys = Object.keys(dataObj).sort();",
-                  "const dataString = sortedKeys.map(k => `${k}=${dataObj[k]}`).join('&');",
-                  "const checksumKey = pm.collectionVariables.get('payosChecksumKey') || '';",
-                  "const signature = CryptoJS.HmacSHA256(dataString, checksumKey).toString(CryptoJS.enc.Hex);",
-                  "pm.request.body.raw = JSON.stringify({",
-                  "    code: '00',",
-                  "    desc: 'success',",
-                  "    data: dataObj,",
-                  "    signature: signature",
-                  "});"
+                  "pm.variables.unset('paymentWebhookBody');",
+                  "try {",
+                  "    const saved = pm.collectionVariables.get('paymentWebhookReplay');",
+                  "    if (!saved) throw new Error('Run 3.10 successfully before replaying 3.11.');",
+                  "    const replay = JSON.parse(saved);",
+                  "    const payload = JSON.parse(replay.body);",
+                  "    if (replay.baseUrl !== pm.variables.get('baseUrl') ||",
+                  "        String(payload.data.orderCode) !== String(pm.collectionVariables.get('payosOrderCode')) ||",
+                  "        String(payload.data.orderCode) !== String(pm.collectionVariables.get('onlineOrderCode')) ||",
+                  "        Number(payload.data.amount) !== Number(pm.collectionVariables.get('onlineAmount'))) {",
+                  "        throw new Error('Callback belongs to a different target or order. Run 3.1, 3.4 and 3.10 again.');",
+                  "    }",
+                  "    // Exact same bytes, signature and bank reference: do not generate another event.",
+                  "    pm.variables.set('paymentWebhookBody', replay.body);",
+                  "} catch (error) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "    pm.execution.skipRequest();",
+                  "    throw error;",
+                  "}"
                 ]
               }
             },
@@ -2385,13 +2413,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"to-be-replaced-by-prerequest-script\"\n}",
+              "raw": "{{paymentWebhookBody}}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "Local synthetic callback only. See PaymentService-guide.md. Body comes from a run-local variable; 3.11 replays the exact accepted 3.10 payload."
           }
         },
         {
@@ -2406,7 +2435,8 @@
                   "pm.test('Webhook rejected with error', () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.false;",
-                  "});"
+                  "});",
+                  "pm.test('Specific signature rejection code', () => pm.expect(pm.response.json().errorCode).to.eql('INVALID_WEBHOOK_SIGNATURE'));"
                 ]
               }
             }
