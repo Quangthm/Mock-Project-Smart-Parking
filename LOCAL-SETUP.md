@@ -249,22 +249,35 @@ SMARTPARK_JWT_JWKS_PATH=/.well-known/jwks.json
 
 `replace-with-*` không phải private key. Setup không sinh RSA key, không tự merge key template mới vào `.env` hiện có và không thay signing key khi chọn Keep. Enter và `-NonInteractive` giữ `.env`; Overwrite vẫn backup thành `.env.bak` rồi tạo lại từ template, nên cần tự khôi phục signing key mong muốn trước khi chạy UserService. Bảo vệ cả `.env.bak` như secret. Không cần recreate database cho thay đổi JWT.
 
-**Tạo key local bằng OpenSSL hiện có, từ PowerShell 5.1+:** ví dụ sau tạo RSA 3072 bit (tối thiểu được chấp nhận là 2048), ghi PEM và Base64 vào thư mục cá nhân ngoài checkout, không in private key ra console. Không chạy lại để thay key đang dùng.
+**Tạo key local bằng OpenSSL đi kèm Git for Windows, từ PowerShell 5.1+:** ví dụ sau tạo RSA 3072 bit (tối thiểu được chấp nhận là 2048), ghi PEM và Base64 vào thư mục cá nhân ngoài checkout, không in private key ra console. Không chạy lại để thay key đang dùng.
+
+Cần cài Git for Windows tại `C:\Program Files\Git`; nếu cài ở nơi khác, sửa `$openssl` cho đúng đường dẫn. Dán và chạy toàn bộ block bên dưới cùng lúc. Script gọi executable trực tiếp nên không cần `openssl` trong PATH, dừng khi lỗi và mở file Base64 bằng Notepad khi thành công.
 
 ```powershell
-$jwtKeyDirectory = Join-Path $env:LOCALAPPDATA 'SmartPark\keys'
-$jwtPemPath = Join-Path $jwtKeyDirectory 'userservice-rs256.pem'
-$jwtBase64Path = Join-Path $jwtKeyDirectory 'userservice-rs256.base64.txt'
-if ((Test-Path -LiteralPath $jwtPemPath) -or (Test-Path -LiteralPath $jwtBase64Path)) {
-    throw 'Key files already exist; preserve them or plan a deliberate rotation.'
+& {
+    $ErrorActionPreference = 'Stop'
+    $openssl = 'C:\Program Files\Git\mingw64\bin\openssl.exe'
+    $keyDir = Join-Path $env:LOCALAPPDATA 'SmartPark\keys'
+    $pemFile = Join-Path $keyDir 'userservice-rs256.pem'
+    $base64File = Join-Path $keyDir 'userservice-rs256.base64.txt'
+
+    if ((Test-Path $pemFile) -or (Test-Path $base64File)) {
+        throw 'Key files already exist. Check them before generating another key.'
+    }
+
+    New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
+
+    & $openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out $pemFile
+    if ($LASTEXITCODE -ne 0) { throw 'Key generation failed.' }
+
+    [IO.File]::WriteAllText(
+        $base64File,
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes($pemFile)),
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    notepad $base64File
 }
-New-Item -ItemType Directory -Path $jwtKeyDirectory -Force | Out-Null
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out $jwtPemPath
-if ($LASTEXITCODE -ne 0) { throw 'RSA key generation failed.' }
-[IO.File]::WriteAllText(
-    $jwtBase64Path,
-    [Convert]::ToBase64String([IO.File]::ReadAllBytes($jwtPemPath)),
-    [Text.UTF8Encoding]::new($false))
 ```
 
 Mở file `.base64.txt` bằng editor cá nhân và **tự dán** nguyên dòng vào `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` trong ignored `.env`. Đây là Base64 của **toàn bộ nội dung PEM**, không phải DER và **không phải mã hóa bảo mật**. Giữ quyền đọc file cho tài khoản cần sử dụng; không gửi file, key, `.env`, user-secrets hoặc ảnh màn hình chứa key lên Git/chat/log. Không thêm key vào `FE/.env`, build arguments hoặc cấu hình consumer.
