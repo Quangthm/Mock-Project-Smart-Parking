@@ -15,4 +15,9 @@
     <ProjectReference Include="..\SmartParking.PaymentService.Domain\SmartParking.PaymentService.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MassTransit.EntityFrameworkCore" Version="9.2.5" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="9.2.5" />
+  </ItemGroup>
+
 </Project>

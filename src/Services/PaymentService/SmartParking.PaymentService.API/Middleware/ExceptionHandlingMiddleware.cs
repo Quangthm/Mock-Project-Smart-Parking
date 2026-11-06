@@ -60,10 +60,28 @@ public sealed class ExceptionHandlingMiddleware
             case PaymentDomainException paymentEx:
                 statusCode = paymentEx.Code switch
                 {
-                    "ORDER_NOT_FOUND" or "TRANSACTION_NOT_FOUND" => (int)HttpStatusCode.NotFound,
-                    "ORDER_ALREADY_PAID" or "IDEMPOTENCY_CONFLICT" or "PAYMENT_RETRY_LIMIT_EXCEEDED" => (int)HttpStatusCode.Conflict,
-                    "ORDER_EXPIRED" => (int)HttpStatusCode.UnprocessableEntity,
+                    PaymentDomainException.InvoiceNotFound or
+                    PaymentDomainException.OrderNotFound or
+                    PaymentDomainException.TariffNotFound or
+                    "TRANSACTION_NOT_FOUND" => (int)HttpStatusCode.NotFound,
+
+                    PaymentDomainException.ForbiddenInvoiceAccess or
+                    PaymentDomainException.OperatorSiteMismatch or
+                    PaymentDomainException.CrossTenantAccessDenied => (int)HttpStatusCode.Forbidden,
+
+                    PaymentDomainException.Unauthorized => (int)HttpStatusCode.Unauthorized,
+
+                    PaymentDomainException.OrderAlreadyPaid or
+                    PaymentDomainException.IdempotencyPayloadMismatch or
+                    "IDEMPOTENCY_CONFLICT" or
+                    "PAYMENT_RETRY_LIMIT_EXCEEDED" => (int)HttpStatusCode.Conflict,
+
+                    PaymentDomainException.UnsettledPaymentOrder or
+                    PaymentDomainException.OrderExpired => (int)HttpStatusCode.UnprocessableEntity,
+
+                    PaymentDomainException.InvalidCutoffTime or
                     "INVALID_WEBHOOK_SIGNATURE" => (int)HttpStatusCode.BadRequest,
+
                     "GATEWAY_TIMEOUT" => (int)HttpStatusCode.GatewayTimeout,
                     _ => (int)HttpStatusCode.BadRequest
                 };

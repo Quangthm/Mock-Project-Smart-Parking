@@ -19,8 +19,6 @@ public record CreatePaymentOrderRequestDto(
     string? IdempotencyKey = null
 );
 
-public record CashPaymentRequestDto(string? IdempotencyKey = null);
-
 public record PaymentCheckoutResponseDto(
     Guid PaymentTransactionId,
     long OrderCode,

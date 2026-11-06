@@ -1,4 +1,4 @@
-namespace SmartParking.PaymentService.Domain.Ports;
+namespace SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 
 public interface IPaymentGatewayPort
 {
