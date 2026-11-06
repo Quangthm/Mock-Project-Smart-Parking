@@ -244,6 +244,10 @@ public sealed class ApiErrorHandlingTests
     [InlineData("ADMIN_ACCOUNT_PROTECTED", 409)]
     [InlineData("INVALID_STATUS_TRANSITION", 409)]
     [InlineData("PARKING_UNAVAILABLE", 503)]
+    [InlineData("BOT_VERIFICATION_REQUIRED", 400)]
+    [InlineData("BOT_VERIFICATION_FAILED", 400)]
+    [InlineData("BOT_VERIFICATION_EXPIRED", 400)]
+    [InlineData("BOT_VERIFICATION_UNAVAILABLE", 503)]
     public void ExistingWorkflowErrorsRetainKnownStatusWithoutExposingExceptionText(string code, int status)
     {
         var mapped = ApiExceptionMapper.CreateDefault().Map(new AuthException(code, "secret SQL password", status));

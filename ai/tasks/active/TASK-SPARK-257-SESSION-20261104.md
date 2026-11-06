@@ -1,55 +1,55 @@
-# Session Review — 2026-11-04
+# Session Review — 2026-11-04 (Updated 2026-11-06)
 
 ## 1. Session Information
 
 - **Task:** SPARK-257 — [SEC-AUTH] Protect public authentication flows from automated abuse.
 - **Jira:** SPARK-257 (Story, 5 SP, backlog, no owner, not in Sprint 2). Related: SPARK-234 (Driver registration), SPARK-235 (Owner registration).
 - **Branch:** `docs/SPARK-257-bot-protection-api-design` (created from `develop`).
-- **Date:** 2026-11-04.
-- **Scope this session:** documentation and planning only — no application code, no configuration values, no dependency changes, no tests executed.
-- **Decision status:** design **APPROVED** — direction and OQ-1..OQ-7 resolutions approved by user/lead (Coding Skill §1); ready for implementation.
+- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phase 1 Implementation).
+- **Scope this session:** Phase 1 execution — Core backend abstraction for Cloudflare Turnstile bot verification (Port, Adapter, Error Mapping, DI, Startup Guard, and comprehensive Unit Tests).
+- **Decision status:** Phase 1 **COMPLETED & VALIDATED**; ready for Phase 2 (handler wiring & DTO additions).
 
 ## 2. Objectives
 
-1. Produce a reviewable, cross-cutting API design for Cloudflare Turnstile bot verification on the three public auth flows.
-2. Update the existing contract documents and indexes so the addition is discoverable and consistent.
-3. Create an external planning document to track execution against the design.
-4. Create this session file per `ai/rule.md` Rule 3.
-5. Do **not** implement backend/frontend or change runtime configuration in this session.
+1. Produce a reviewable, cross-cutting API design for Cloudflare Turnstile bot verification on the three public auth flows. (Done)
+2. Update the existing contract documents and indexes so the addition is discoverable and consistent. (Done)
+3. Create an external planning document to track execution against the design. (Done)
+4. Phase 1 Implementation:
+   - Declare `IBotVerificationService` port in Application Layer.
+   - Implement `TurnstileOptions` configuration & `TurnstileVerifyResponse` DTO in Infrastructure Layer.
+   - Implement `TurnstileVerifier` adapter in Infrastructure Layer with fail-closed semantics, hardened HTTP client, and safe logging.
+   - Register 4 bot verification error codes in `ApiExceptionMapper.cs`.
+   - Configure typed `HttpClient` with 5s timeout, auto-redirect disabled, singleton options, and Startup Guard in `Program.cs`.
+   - Write comprehensive unit tests in `TurnstileVerifierTests.cs` and `ApiErrorHandlingTests.cs` covering all 13 required scenarios + startup guard + error mapper.
 
 ## 3. Work Completed
 
-- Created branch `docs/SPARK-257-bot-protection-api-design` from `develop` (clean tree at creation).
-- Wrote new cross-cutting design: `docs/03-design/api/bot-protection-spark-257-api-design.md` (Status: APPROVED).
-  - Scope locked to `POST /api/auth/register/driver`, `POST /api/auth/register/owner`, `POST /api/auth/login`.
-  - Documents the additive body field `turnstileToken`, the Application port, Infrastructure adapter, client-recovery behavior and fail-closed semantics.
-  - Resolved Cloudflare siteverify protocol bug (backend does not POST `action`; verifies `action` returned in Cloudflare response).
-  - Clarified database lock safety: `VerifyAsync` runs before `BeginTransactionAsync`.
-  - Clarified error propagation: throws `AuthException` directly to bypass `SignInErrors` default 401.
-  - Forgot-password/recovery protection explicitly deferred (no backend endpoint exists).
-- Updated `docs/03-design/api/driver-register-api-design.md`:
-  - Header notes the SPARK-257 design.
-  - Register row includes `turnstileToken` when verification is enabled.
-  - New "Bot verification (SPARK-257)" section.
-  - Errors paragraph lists the four new codes and their ordering.
-- Updated `docs/03-design/api/owner-register-api-design.md` with the same four changes.
-- Updated `docs/02-architecture/api/v1.1-contracts.md`:
-  - Password-login row includes `turnstileToken` and bot verification ordering.
-  - New "Bot verification (SPARK-257)" paragraph.
-- Added index rows in `docs/03-design/api/README.md` and `docs/02-architecture/api/README.md`.
-- Created and updated external planning doc `D:\My file\FA26 - OJT FSoft\Planning\SPARK-257-planning.md`.
-- Evaluated design, resolved OQ-1..OQ-7 with user approval, and updated API design to v1.0 APPROVED.
-- Finalized contract to v1.2.1 (APPROVED — IMPLEMENTATION READY) addressing all targeted security & resilience points:
-  - P0-01: Production hostname allowlist enforces strict production-only hostnames, crashing on `localhost`, `127.0.0.1`, `::1`, staging domains, wildcards, ports, or schemes.
-  - P0-02: Sửa dứt điểm frontend token lifecycle: nếu lỗi validation local trước submit thì giữ token; nếu đã submit lên backend (dù fail `VALIDATION_FAILED` ở business layer, `401`, hay `503`) thì token đã bị tiêu thụ và bắt buộc phải reset widget.
-  - P0-03 & P0-04: Chốt quota dùng chung có chủ đích cho registration (`RegistrationRateLimit`), tách biệt với `LoginRateLimit`; mô hình proxy trust qua `UseForwardedHeaders` và fallback "unknown" được ghi nhận rõ.
-  - P1-01: Khóa cứng hằng số `VerifyUri` trong Adapter; xóa bỏ biến config `Turnstile:VerifyUrl`.
-  - P1-02: Bổ sung trọn vẹn exception handling cho `HttpRequestException`, `JsonException`, `IOException` (đồng bộ mẫu `ParkingDirectoryClient.cs`); sạch lỗi 500 ngoài ý muốn.
-  - P1-03: Body request vượt 64KB trả HTTP 413 Payload Too Large.
-  - P1-04: `TurnstileOptions.Enabled` mặc định là `true` (không vô tình disable).
-  - P1-05: Chốt vị trí gọi verifier tại dòng đầu tiên của 3 handlers/services, không gọi trùng, không DB transaction trước verify.
-  - P1-06: Runbook secret rotation 2 giờ với `invalidate_immediately = false`; tách metric `auth.rate_limited` về đúng middleware callback.
-  - Mở rộng trọn vẹn bộ Acceptance Checklist lên 30 kịch bản kiểm thử.
+- Created branch `docs/SPARK-257-bot-protection-api-design` from `develop`.
+- Wrote new cross-cutting design: `docs/03-design/api/bot-protection-spark-257-api-design.md` (Status: APPROVED v1.2.1).
+- Updated existing API contracts: `driver-register-api-design.md`, `owner-register-api-design.md`, `v1.1-contracts.md`, and relevant indexes.
+- **Phase 1 Implementation Completed:**
+  - **Task 1.1 (Application Port):** Created `IBotVerificationService.cs` in `SmartParking.UserService.Application/Common/Interfaces/Services/` with no HTTP or infrastructure dependencies.
+  - **Task 1.2 (Infrastructure Options & DTO):**
+    - Created `TurnstileOptions.cs` in `SmartParking.UserService.Infrastructure/Configurations/` (`Enabled = true` by default).
+    - Created `TurnstileVerifyResponse.cs` in `SmartParking.UserService.Infrastructure/Services/` with explicit JSON property mappings.
+  - **Task 1.3 (Infrastructure Adapter):**
+    - Created `TurnstileVerifier.cs` in `SmartParking.UserService.Infrastructure/Services/`.
+    - Hardcoded endpoint `private static readonly Uri VerifyUri = new("https://challenges.cloudflare.com/turnstile/v0/siteverify");`.
+    - Local checks before network call: missing/whitespace token (`400 BOT_VERIFICATION_REQUIRED`), length > 2048 (`400 BOT_VERIFICATION_FAILED`), missing secret key when enabled (`503 BOT_VERIFICATION_UNAVAILABLE`).
+    - Outbound `FormUrlEncodedContent` sending `secret`, `response`, and optional `remoteip`.
+    - Strict result evaluation: non-2xx status $\to$ 503, `timeout-or-duplicate` $\to$ 400 `BOT_VERIFICATION_EXPIRED`, `invalid-input-response` $\to$ 400 `BOT_VERIFICATION_FAILED`, other provider errors $\to$ 503 `BOT_VERIFICATION_UNAVAILABLE`.
+    - Flow binding: verifies `action == expectedAction` and `hostname` in `ExpectedHostnames` allowlist (case-insensitive) $\to$ 400 `BOT_VERIFICATION_FAILED` on mismatch.
+    - Exception handling mirrors `ParkingDirectoryClient.cs`: cancellation clean propagation, provider timeout $\to$ 503, `HttpRequestException`/`JsonException`/`IOException` $\to$ 503.
+    - Privacy logging: never logs `token` or `SecretKey`.
+  - **Task 1.4 (API Error Mapping):**
+    - Registered `BOT_VERIFICATION_REQUIRED` (400), `BOT_VERIFICATION_FAILED` (400), `BOT_VERIFICATION_EXPIRED` (400), and `BOT_VERIFICATION_UNAVAILABLE` (503) in `ApiExceptionMapper.cs`.
+  - **Task 1.5 (DI Registration & Startup Guard):**
+    - Registered singleton `TurnstileOptions` and typed `HttpClient<IBotVerificationService, TurnstileVerifier>` with 5s timeout and `SocketsHttpHandler.AllowAutoRedirect = false` in `Program.cs`.
+    - Added environment startup guard enforcing enabled Turnstile, secret key, and non-empty `ExpectedHostnames` in Staging/Production, with strict rejection of localhost/loopback/staging/wildcards/ports/schemes in Production.
+  - **Task 1.6 (Unit Tests):**
+    - Created `TurnstileVerifierTests.cs` (48 test variations) testing all 13 core scenarios + remoteip + case-insensitivity + IO/network errors + Startup Guard + error mapper.
+    - Updated `ApiErrorHandlingTests.cs` verifying error envelopes for all 4 bot verification error codes.
+    - Verified `LayerBoundaryTests` passes (0 layer boundary leaks).
 
 ## 4. Technical Decisions
 
@@ -69,61 +69,62 @@
 
 ## 5. Files Changed
 
-| File | Change |
-| --- | --- |
-| `docs/03-design/api/bot-protection-spark-257-api-design.md` | **Added & Updated** — cross-cutting APPROVED & IMPLEMENTATION READY design (v1.2.1). |
-| `docs/03-design/api/driver-register-api-design.md` | Modified — header, register row, new section, errors. |
-| `docs/03-design/api/owner-register-api-design.md` | Modified — header, register row, new section, errors. |
-| `docs/02-architecture/api/v1.1-contracts.md` | Modified — header, login row, new paragraph. |
-| `docs/03-design/api/README.md` | Modified — index row. |
-| `docs/02-architecture/api/README.md` | Modified — index row. |
-| `D:\My file\FA26 - OJT FSoft\Planning\SPARK-257-planning.md` | **Added & Updated** — external planning doc (P0 complete, OQ-1..OQ-7 resolved). |
-| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | **Added & Updated** — this session file. |
+| File | Change | Reason |
+| --- | --- | --- |
+| `src/Services/UserService/SmartParking.UserService.Application/Common/Interfaces/Services/IBotVerificationService.cs` | Created | Application port for bot verification |
+| `src/Services/UserService/SmartParking.UserService.Infrastructure/Configurations/TurnstileOptions.cs` | Created | Infrastructure configuration options (`Turnstile`) |
+| `src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifyResponse.cs` | Created | Cloudflare siteverify JSON response DTO |
+| `src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifier.cs` | Created | Infrastructure adapter implementing `IBotVerificationService` |
+| `src/Services/UserService/SmartParking.UserService.API/Common/ApiExceptionMapper.cs` | Modified | Registered 4 bot verification error codes |
+| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Bound options, registered typed HttpClient (timeout 5s, no redirect), added Startup Guard |
+| `tests/Services/SmartParking.UserService.Tests/ApiErrorHandlingTests.cs` | Modified | Tested envelope mapping for 4 bot verification error codes |
+| `tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs` | Created | 48 unit tests verifying all adapter scenarios and startup guards |
+| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Updated progress snapshot and phase completion record |
 
 ## 6. Issues and Blockers
 
-- **Direction approval gate (UNBLOCKED):** Direction and OQ-1..OQ-7 resolutions approved by user/lead. Ready for Phase 1 implementation.
-- **Forgot-password deferred:** SPARK-257 lists it, but there is no backend endpoint; the FE flow is a client-side mock. Protect it only after a real endpoint exists.
-- **Login has no HTTP rate limiting today:** Turnstile is not a replacement; rate limiting remains a separate follow-up task.
+- None. All Phase 1 deliverables completed with 0 errors and 0 warnings.
+- Next phase: Phase 2 (wire verification into registration services and login command handler, add `turnstileToken` to DTOs).
 
 ## 7. Validation Results
 
-- **No code, build, or test execution this session.** No `dotnet build`, `dotnet test`, or `node --test` was run.
-- Documentation reviewed for internal consistency and template alignment only.
-- `git status` confirms only the intended documentation files changed (see §8).
+- `dotnet build SmartParking.slnx -nr:false -m:1 --nologo`: **Build succeeded. 0 Warning(s), 0 Error(s)**.
+- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~TurnstileVerifierTests" --no-build --nologo`: **Passed! 48 passed, 0 failed**.
+- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~LayerBoundaryTests" --no-build --nologo`: **Passed! 12 passed, 0 failed**.
+- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~ApiErrorHandlingTests" --no-build --nologo`: **Passed! 46 passed, 0 failed**.
+- Full test suite: **Passed! 269 passed, 0 failed, 54 skipped (DB-container integration tests)**.
 
 ## 8. Git Status
 
-```
+```text
 ## docs/SPARK-257-bot-protection-api-design
- M docs/02-architecture/api/README.md
- M docs/02-architecture/api/v1.1-contracts.md
- M docs/03-design/api/README.md
- M docs/03-design/api/driver-register-api-design.md
- M docs/03-design/api/owner-register-api-design.md
-?? docs/03-design/api/bot-protection-spark-257-api-design.md
+ M ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md
+ M src/Services/UserService/SmartParking.UserService.API/Common/ApiExceptionMapper.cs
+ M src/Services/UserService/SmartParking.UserService.API/Program.cs
+ M tests/Services/SmartParking.UserService.Tests/ApiErrorHandlingTests.cs
+?? src/Services/UserService/SmartParking.UserService.Application/Common/Interfaces/Services/IBotVerificationService.cs
+?? src/Services/UserService/SmartParking.UserService.Infrastructure/Configurations/
+?? src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifier.cs
+?? src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifyResponse.cs
+?? tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs
 ```
-
-`ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` is also new but lives outside the tracked documentation set above; it will appear as untracked after creation.
 
 ## 9. Handoff / Next Steps
 
-1. Review `bot-protection-spark-257-api-design.md` and resolve OQ-1…OQ-7 (or explicitly defer them).
-2. Obtain project-lead approval of the direction (port/adapter, code names, fail-closed behavior, config keys).
-3. After approval, implement in lanes:
-   - L1: options + `IBotVerificationService` + `TurnstileVerifier` + DI + `ApiExceptionMapper` codes.
-   - L2: wire verification into `LoginCommandHandler`, `DriverRegistrationService.RegisterAsync`, `OwnerRegistrationService.RegisterAsync`; add `TurnstileToken` to the three DTOs and `LoginMapperProfile`.
-   - L3: configuration surface (`compose.app.yml`, `.env.example`, `FE/.env.example`, `scripts/run-schema-service.ps1`, user-secrets).
-   - L4: FE hook, widget, `SignUp.tsx` (driver + owner), `SignIn.tsx`, `authApi`/`ownerApi`, widget reset.
-   - L5/L6: backend and frontend tests for valid, missing, invalid, expired/reused, provider failure, success→normal auth.
-   - L7: verification commands.
-4. Only after implementation: run `dotnet build SmartParking.slnx --nologo`, `dotnet test SmartParking.slnx --nologo`, `node --test tests/frontend/*.test.cjs`.
+1. Commit Phase 1 changes:
+   ```text
+   feat(auth): implement bot verification port, adapter and error mapping [SPARK-257]
+   ```
+2. Proceed to Phase 2:
+   - Wire `IBotVerificationService.VerifyAsync` as first statement in `DriverRegistrationService.RegisterAsync`, `OwnerRegistrationService.RegisterAsync`, and `LoginCommandHandler.Handle`.
+   - Add `public string? TurnstileToken { get; set; }` to `DriverRegistrationDto`, `OwnerRegistrationDto`, `LoginDto`, and `LoginCommand`.
+   - Update mapping profiles (e.g. `LoginMapperProfile`).
+   - Add unit/integration tests for Phase 2 flows.
 
 ## 10. Context for Next Session
 
-- Turnstile tokens are single-use and short-lived; `timeout-or-duplicate` maps to expired/reused.
+- Turnstile tokens are single-use and short-lived; `timeout-or-duplicate` maps to expired/reused (`BOT_VERIFICATION_EXPIRED`, 400).
 - Verification runs first and fails closed; `503` is a retryable temporary failure, not a bypass.
 - Secret key is backend-only; the site key is the only `VITE_*` value.
-- `ApiExceptionMapper` uses an explicit whitelist, so every new code must be added with its status.
-- Registration DTOs validate manually; login uses FluentValidation. Do not introduce `[Required]` model-state errors.
-- Frontend rules: no new dependency without asking; do not run verification unless the user asks.
+- `ApiExceptionMapper` uses an explicit whitelist; 4 bot protection codes are mapped to 400/503.
+- Registration DTOs validate manually; login uses FluentValidation. Do not introduce `[Required]` model-state errors on `turnstileToken`.
