@@ -12,21 +12,18 @@ public static class ProfileMessagingRegistration
 {
     public const string ProfileNameChangedExchange = "smartpark.user-access.user-profile-name-changed.v1";
     public const string ProfileAuditQueue = "smartpark.notification-audit.user-profile-name-changed.v1";
-
     public static IServiceCollection AddProfileMessaging(this IServiceCollection services,
-        IConfiguration configuration, Action<IBusRegistrationConfigurator> configureOutbox)
+        IConfiguration configuration, Action<IBusRegistrationConfigurator> configureOutbox,
+        Action<IReceiveEndpointConfigurator, IBusRegistrationContext>? configureAccessEndpoint = null)
     {
         var accessEnabled = configuration.GetValue<bool>("Messaging:Enabled");
+        if (accessEnabled && configureAccessEndpoint is null)
+            throw new InvalidOperationException("Configure the access consumer with its owning EF outbox.");
         services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
-        if (accessEnabled)
-        {
-            services.AddScoped<IAccessEventTransport, RabbitAccessEventTransport>();
-            services.AddHostedService<AccessOutboxWorker>();
-        }
         services.AddMassTransit(registration =>
         {
             configureOutbox(registration);
-            if (accessEnabled) registration.AddConsumer<AccessProjectionConsumer>();
+            if (accessEnabled) registration.AddConsumer<OperatorAccessChangedConsumer>();
             registration.UsingRabbitMq((context, bus) =>
             {
                 // Host setup uses loopback/published port; app Compose uses broker DNS/internal port.
@@ -51,7 +48,8 @@ public static class ProfileMessagingRegistration
                     {
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<AccessProjectionConsumer>(context);
+                        configureAccessEndpoint?.Invoke(endpoint, context);
+                        endpoint.ConfigureConsumer<OperatorAccessChangedConsumer>(context);
                     });
             });
         });

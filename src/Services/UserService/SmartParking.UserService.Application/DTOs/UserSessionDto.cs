@@ -26,8 +26,6 @@ namespace UserService.Application.DTOs
 
         public string Email { get; set; } = string.Empty;
 
-        public bool OnboardingComplete { get; set; }
-
         public string Role { get; set; } = string.Empty;
     }
 }

@@ -15,7 +15,6 @@ namespace UserService.Persistence
         public DbSet<Account> Accounts { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<AuthSession> AuthSessions { get; set; } = null!;
-        public DbSet<AccessEventOutbox> AccessEventOutbox { get; set; } = null!;
         public DbSet<RotatedSessionProof> RotatedSessionProofs { get; set; } = null!;
         public DbSet<DriverRegistration> DriverRegistrations { get; set; } = null!;
         public DbSet<OwnerApplication> OwnerApplications { get; set; } = null!;
@@ -41,17 +40,6 @@ namespace UserService.Persistence
                 entity.Property(e => e.TokenHash).HasColumnName("token_hash");
                 entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
                 entity.HasOne<AuthSession>().WithMany().HasForeignKey(e => e.SessionId).OnDelete(DeleteBehavior.Cascade);
-            });
-            modelBuilder.Entity<AccessEventOutbox>(entity =>
-            {
-                entity.ToTable("access_event_outbox");
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Id).HasColumnName("id");
-                entity.Property(e => e.Payload).HasColumnName("payload");
-                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-                entity.Property(e => e.PublishedAt).HasColumnName("published_at");
-                entity.Property(e => e.LeaseId).HasColumnName("lease_id");
-                entity.Property(e => e.LeaseUntil).HasColumnName("lease_until");
             });
             MapWorkflow<AuthChallenge>(modelBuilder, "auth_challenges", "Id");
             MapWorkflow<WorkflowDelivery>(modelBuilder, "workflow_deliveries", "Id");
@@ -139,7 +127,6 @@ namespace UserService.Persistence
                 entity.Property(e => e.AvatarUrl)
                     .HasColumnName("avatar_url")
                     .HasColumnType("text");
-                entity.Property(e=>e.OnboardingComplete).HasColumnName("onboarding_complete");
                 entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
                 entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(
