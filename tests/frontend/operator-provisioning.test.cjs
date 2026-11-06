@@ -19,6 +19,7 @@ function load(file, imports = {}, globals = {}) {
     if (name.endsWith("/forms/PasswordVisibilityIcon")) return { PasswordVisibilityIcon: "password-icon" };
     if (name.endsWith("/ui/Button")) return { Button: "button" };
     if (name.endsWith("/icon/UntitledIcon")) return { UntitledIcon: 'icon' };
+    if (name.endsWith("/feedback/ErrorBoundary")) return { ErrorBoundary: ({ children }) => children };
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];
   } };
@@ -314,6 +315,7 @@ function structureScreen(h, parkingApi = {}) {
     '../../../lib/uiToast': { showUiToast() {} },
     '../data/data': { ownerData: { getLotsByOwner: () => [] } },
     '../../../lib/3d/parking3DConfig': { ALLOWED_PARKING_MODELS: { outdoor: { path: '/models/outdoor.glb' } } },
+    '../../../lib/3d/modelSlotCapacity': { useModelStructure: () => ({ url: '', analysis: null, loading: false, error: '' }) },
     '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null },
     '../../../lib/operationalLayout': { formatSlotLabel: value => value, mapSlotVisualState: () => 'available' },
     '../../../lib/3d/meshSlotMapping': { suggestSlotCode: () => '' },

@@ -9,6 +9,7 @@ import { SiteManagement } from '../parking-lots/SiteManagement';
 import { LotManagement } from '../parking-lots/LotManagement';
 import { RevenueDashboard } from '../revenue/RevenueDashboard';
 import { ParkingStructure } from '../structure/ParkingStructure';
+import { ErrorBoundary } from '../../../components/feedback/ErrorBoundary';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 import { reconcileOwnerLotSetups } from '../../../lib/ownerLotSetup';
 
@@ -100,7 +101,11 @@ export function OwnerDashboard() {
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
           {tab === 'structure' && (setupSiteId && !sites.some(site => site.id === setupSiteId)
             ? <p role="status" className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Waiting for the new site to appear in the server list. Use Retry above if it does not load.</p>
-            : <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} />)}
+            : (
+                <ErrorBoundary name="Parking Structure">
+                  <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} />
+                </ErrorBoundary>
+              ))}
           {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}

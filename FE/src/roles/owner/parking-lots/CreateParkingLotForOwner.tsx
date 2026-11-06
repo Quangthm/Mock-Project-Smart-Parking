@@ -22,7 +22,7 @@ import {
   ALLOWED_PARKING_MODELS,
   validateModelUpload,
 } from "../../../lib/3d/parking3DConfig"
-import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { useModelCarCapacity, useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
 import { contractDraftStorageKey, loadContractDraft, saveOwnerContractHandoff, type ContractDraftRecord } from "../../../lib/partnerContract"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
@@ -222,6 +222,8 @@ export function OnboardingWizard({
 
   useEffect(() => () => { if (customModelUrl) URL.revokeObjectURL(customModelUrl) }, [customModelUrl])
   const modelCapacity = useModelCarCapacity(activeModelUrl)
+  const modelStructure = useModelStructure(activeModelUrl)
+  const modelFloors = modelStructure.analysis?.floors ?? []
 
   function handleLotTypeSelect(type: LotType) {
     setLotType(type)
@@ -232,6 +234,8 @@ export function OnboardingWizard({
     setCustomModelFile(null)
 
     setModelUploadError(null)
+    const defaultFloors = type === "basement" ? "2" : type === "multi-storey" ? "3" : "1"
+    setLotConfig((cur) => ({ ...cur, floors: defaultFloors }))
   }
 
   function handleModelFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -383,6 +387,21 @@ export function OnboardingWizard({
       })
       if (!site || typeof site.id !== "string" || !site.id.trim()) {
         throw new Error("The server did not return a valid site ID. Please try again.")
+      }
+
+      // Auto-create FLOOR units based on active floors
+      const targetFloors = modelFloors.slice(0, Math.min(floors, modelFloors.length))
+      for (const fl of targetFloors) {
+        try {
+          await parkingApi.unit(site.id, {
+            type: "FLOOR",
+            name: fl.displayName,
+            parentId: null,
+            capacity: fl.capacity,
+          })
+        } catch (unitErr) {
+          console.warn("Could not auto-create floor unit:", unitErr)
+        }
       }
 
       const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null

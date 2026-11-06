@@ -80,6 +80,10 @@ export class SlotMaterialManager {
 
   private activeMaterials = new Map<number, THREE.MeshStandardMaterial>()
 
+  // Dirty check: cache applied visual state signature per mesh to avoid
+  // redundant WebGL material recompilation / updates when state has not changed.
+  private appliedSlotState = new Map<number, string>()
+
   /**
    * Applies the correct material color and state to a slot mesh.
    */
@@ -112,6 +116,16 @@ export class SlotMaterialManager {
     const { opacity, emissiveIntensity } = isHighlighted
       ? HIGHLIGHT_MATERIAL_CONFIG
       : (STATUS_MATERIAL_CONFIG[visualState] ?? STATUS_MATERIAL_CONFIG.unknown)
+
+    const stateSignature = `state:${targetColor}:${opacity}:${emissiveIntensity}:${isHighlighted ? 1 : 0}`
+    if (
+      this.appliedSlotState.get(mesh.id) === stateSignature &&
+      this.activeMaterials.has(mesh.id) &&
+      mesh.material === this.activeMaterials.get(mesh.id)
+    ) {
+      return
+    }
+    this.appliedSlotState.set(mesh.id, stateSignature)
 
     // Get or create dedicated slot material
 
@@ -148,6 +162,8 @@ export class SlotMaterialManager {
 
       mat.opacity = opacity
 
+      mesh.material = mat
+
       mat.needsUpdate = true
     }
   }
@@ -169,6 +185,16 @@ export class SlotMaterialManager {
       return
     }
 
+    const regSignature = "reg:selected"
+    if (
+      this.appliedSlotState.get(mesh.id) === regSignature &&
+      this.activeMaterials.has(mesh.id) &&
+      mesh.material === this.activeMaterials.get(mesh.id)
+    ) {
+      return
+    }
+    this.appliedSlotState.set(mesh.id, regSignature)
+
     const targetColor = 0xf59e0b
     let mat = this.activeMaterials.get(mesh.id)
     if (!mat) {
@@ -185,6 +211,7 @@ export class SlotMaterialManager {
     mat.emissive.setHex(targetColor)
     mat.emissiveIntensity = 0.5
     mat.opacity = 0.9
+    mesh.material = mat
     mat.needsUpdate = true
   }
 
@@ -209,6 +236,8 @@ export class SlotMaterialManager {
    */
 
   public restoreOriginal(mesh: THREE.Mesh): void {
+    this.appliedSlotState.delete(mesh.id)
+
     const orig = this.originalMaterials.get(mesh.id)
 
     if (orig) {
@@ -221,6 +250,8 @@ export class SlotMaterialManager {
    */
 
   public dispose(): void {
+    this.appliedSlotState.clear()
+
     this.activeMaterials.forEach((mat) => mat.dispose())
 
     this.activeMaterials.clear()

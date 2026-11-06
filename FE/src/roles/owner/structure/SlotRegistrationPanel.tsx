@@ -63,6 +63,7 @@ export function SlotRegistrationPanel({
   onSelectionChange,
   census,
   onChanged,
+  activeFloor = null,
 }: {
   siteId: string
   units: Unit[]
@@ -78,6 +79,7 @@ export function SlotRegistrationPanel({
     unregistered: Array<{ key: string; name: string }>
   }
   onChanged: () => void
+  activeFloor?: string | null
 }) {
   const [unitId, setUnitId] = useState(units[0]?.id ?? "")
   const [slotType, setSlotType] = useState<string>("STANDARD")
@@ -96,8 +98,26 @@ export function SlotRegistrationPanel({
   const emptyStateId = useId()
 
   useEffect(() => {
+    if (activeFloor && activeFloor !== "all" && units.length > 0) {
+      const clean = activeFloor.trim().toUpperCase()
+      const matched = units.find(
+        (u) =>
+          u.name.trim().toUpperCase() === clean ||
+          u.name.trim().toUpperCase() === `TẦNG ${clean}` ||
+          u.name.trim().toUpperCase() === `FLOOR_${clean}` ||
+          u.name.trim().toUpperCase().includes(clean) ||
+          ((clean === "GROUND" || clean === "OUTDOOR" || clean === "OUTDOORPARKING") &&
+            (u.name.toLowerCase().includes("ngoài trời") ||
+              u.name.toLowerCase().includes("trệt") ||
+              u.name.toLowerCase().includes("ground"))),
+      )
+      if (matched) {
+        setUnitId(matched.id)
+        return
+      }
+    }
     if (!units.some((unit) => unit.id === unitId)) setUnitId(units[0]?.id ?? "")
-  }, [units, unitId])
+  }, [units, unitId, activeFloor])
 
   const issues = useMemo(() => registrationCodeIssues(selection), [selection])
   const resolution = resolveSlotPrimary(categories, primary || null)
@@ -221,6 +241,25 @@ export function SlotRegistrationPanel({
 
     setCurrentKey(null)
     setBusy(false)
+
+    // Requirement 5: Automatically remove successfully registered meshes from selection
+    // so the panel is clear and ready for the next slot selections.
+    const succeededKeys = new Set(
+      Object.values(next)
+        .filter((outcome) => outcome.status === "succeeded")
+        .map((outcome) => outcome.key),
+    )
+
+    if (succeededKeys.size > 0) {
+      const remainingSelection = selection.filter((item) => !succeededKeys.has(item.key))
+      onSelectionChange(remainingSelection)
+
+      const remainingOutcomes = Object.fromEntries(
+        Object.entries(next).filter(([key]) => !succeededKeys.has(key)),
+      )
+      setOutcomes(remainingOutcomes)
+    }
+
     if (changed) onChanged()
     const failed = Object.values(next).filter(
       (outcome) => items.some((item) => item.key === outcome.key) && outcome.status === "failed",

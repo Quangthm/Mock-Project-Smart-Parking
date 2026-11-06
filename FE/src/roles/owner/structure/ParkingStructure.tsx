@@ -13,11 +13,14 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { Badge } from "../../../components/ui/Badge"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { useApp } from "../../../context/AppContext"
 import { showUiToast } from "../../../lib/uiToast"
 import { ownerData as store } from "../data/data"
+import type { LotType } from "../../../lib/types"
 import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
+import { useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { formatSlotLabel, mapSlotVisualState, type PhysicalState, type ReservationState } from "../../../lib/operationalLayout"
 import { suggestSlotCode } from "../../../lib/3d/meshSlotMapping"
 import { resolveActiveSiteId } from "../../../lib/structureRules"
@@ -130,7 +133,7 @@ function slotAppearance(slot: Slot) {
   }
   if (!ACTIVE_OPERATIONAL_SET.has(slot.operationalStatus)) {
     return {
-      label: slot.operationalStatus.replace(/_/g, " "),
+      label: (slot.operationalStatus || "MAINTENANCE").replace(/_/g, " "),
       status: "maintenance" as const,
     }
   }
@@ -193,6 +196,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
     const siteChanged = loadedSiteRef.current !== siteId
     if (siteChanged) {
       loadedSiteRef.current = siteId
+      setActiveFloor("")
       setStructure(null)
       setSelectedSlotId(null)
       setCompatibilitySlotId(null)
@@ -219,12 +223,79 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
   const ownerLot = useMemo(() => store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === siteId), [user?.id, siteId, reload])
   const unitById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units])
 
+  const safeLotType: LotType =
+    ownerLot?.type && ownerLot.type in ALLOWED_PARKING_MODELS
+      ? (ownerLot.type as LotType)
+      : "outdoor"
+  const defaultModelPath = ALLOWED_PARKING_MODELS[safeLotType].path
+
   // One resolved model URL drives both the 3D viewer and the capacity upper bound in
   // the unit dialog, so the two can never disagree about which template is in use.
   const modelUrl =
     savedModelUrl ??
     (ownerLot?.modelUrl?.startsWith("blob:") ? undefined : ownerLot?.modelUrl) ??
-    ALLOWED_PARKING_MODELS[ownerLot?.type ?? "outdoor"].path
+    defaultModelPath
+
+  const modelStructure = useModelStructure(modelUrl)
+
+  const modelFloors = modelStructure.analysis?.floors ?? []
+  const maxAllowedFloors = ownerLot?.floors
+    ? Math.min(ownerLot.floors, modelFloors.length)
+    : modelFloors.length
+  const floors = useMemo(
+    () => modelFloors.slice(0, Math.max(1, maxAllowedFloors)),
+    [modelFloors, maxAllowedFloors],
+  )
+
+  const [activeFloor, setActiveFloor] = useState<string>("")
+
+  useEffect(() => {
+    if (floors.length > 0) {
+      if (!activeFloor || (activeFloor !== "all" && !floors.some((f) => f.floorKey === activeFloor))) {
+        setActiveFloor(floors[0].floorKey)
+      }
+    } else if (activeFloor) {
+      setActiveFloor("")
+    }
+  }, [floors, activeFloor])
+
+  // Auto-initialize floor units if site has no FLOOR units in structure tree
+  const autoInitRef = useRef<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (!siteId || loading || !structure || structure.units.some((u) => u.type === "FLOOR")) return
+    if (!modelStructure.analysis || modelStructure.analysis.floors.length === 0) return
+    if (autoInitRef.current[siteId]) return
+    autoInitRef.current[siteId] = true
+
+    let active = true
+    const init = async () => {
+      const targetFloors = modelStructure.analysis!.floors.slice(
+        0,
+        ownerLot?.floors
+          ? Math.min(ownerLot.floors, modelStructure.analysis!.floors.length)
+          : modelStructure.analysis!.floors.length,
+      )
+      for (const fl of targetFloors) {
+        if (!active) break
+        try {
+          await parkingApi.unit(siteId, {
+            type: "FLOOR",
+            name: fl.displayName,
+            parentId: null,
+            capacity: fl.capacity,
+          })
+        } catch (err) {
+          console.warn("Auto-initializing floor unit failed:", err)
+        }
+      }
+      if (active) refresh()
+    }
+    void init()
+    return () => {
+      active = false
+    }
+  }, [siteId, loading, structure, modelStructure.analysis, ownerLot?.floors])
 
   // The 3D viewer needs the two-axis projection, not only a single status, so a
   // BACKUP hold keeps its cyan appearance (SPARK-228). The single-axis `status`
@@ -395,22 +466,85 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                   </div>
                 </div>
                 <div id="owner-parking-model" hidden={!showModel}>
+                {floors.length > 1 && (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--raised)] px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-[var(--muted)]">Tầng / Khu vực:</span>
+                      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Chọn tầng 3D">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeFloor === "all"}
+                          onClick={() => setActiveFloor("all")}
+                          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                            activeFloor === "all"
+                              ? "bg-[var(--primary)] text-white shadow-xs"
+                              : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
+                          }`}
+                        >
+                          <span>Toàn bộ model</span>
+                          <span
+                            className={`rounded px-1.5 py-0.2 text-[10px] font-mono ${
+                              activeFloor === "all" ? "bg-white/20 text-white" : "bg-[var(--raised)] text-[var(--muted)]"
+                            }`}
+                          >
+                            {floors.reduce((sum, f) => sum + f.capacity, 0)} slots
+                          </span>
+                        </button>
+                        {floors.map((floor) => {
+                          const isActive = activeFloor === floor.floorKey
+                          return (
+                            <button
+                              key={floor.floorKey}
+                              type="button"
+                              role="tab"
+                              aria-selected={isActive}
+                              onClick={() => setActiveFloor(floor.floorKey)}
+                              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                                isActive
+                                  ? "bg-[var(--primary)] text-white shadow-xs"
+                                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
+                              }`}
+                            >
+                              <span>{floor.displayName}</span>
+                              <span
+                                className={`rounded px-1.5 py-0.2 text-[10px] font-mono ${
+                                  isActive ? "bg-white/20 text-white" : "bg-[var(--raised)] text-[var(--muted)]"
+                                }`}
+                              >
+                                {floor.capacity} slots
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-[var(--muted)]">
+                      {activeFloor === "all"
+                        ? "Đang hiển thị toàn bộ mô hình (tất cả các tầng)"
+                        : "Cô lập tầng: Chỉ render đối tượng tầng đang chọn"}
+                    </span>
+                  </div>
+                )}
                 {!modelStorageReady ? (
                   <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
                 ) : (
-                  <Parking3DViewer
-                    key={siteId}
-                    modelUrl={modelUrl}
-                    lotType={ownerLot?.type ?? "outdoor"}
-                    slots={modelSlots}
-                    selectedSlotId={registerMode ? null : selectedSlotId}
-                    onSelectSlot={(slot) => setSelectedSlotId(slot.id)}
-                    registerMode={registerMode}
-                    selectedMeshKeys={selectedMeshKeys}
-                    onToggleMesh={toggleMesh}
-                    onMeshCensus={applyCensus}
-                    height={380}
-                  />
+                  <ErrorBoundary name="Site 3D Viewer">
+                    <Parking3DViewer
+                      key={siteId}
+                      modelUrl={modelUrl}
+                      lotType={safeLotType}
+                      slots={modelSlots}
+                      selectedSlotId={registerMode ? null : selectedSlotId}
+                      onSelectSlot={(slot) => setSelectedSlotId(slot.id)}
+                      registerMode={registerMode}
+                      selectedMeshKeys={selectedMeshKeys}
+                      onToggleMesh={toggleMesh}
+                      onMeshCensus={applyCensus}
+                      height={380}
+                      activeFloor={activeFloor}
+                    />
+                  </ErrorBoundary>
                 )}
                 {!ownerLot && modelStorageReady && (
                   <p className="mt-2 text-[11px] text-[var(--muted)]">
@@ -470,6 +604,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                 onSelectionChange={setRegistrationSelection}
                 census={census}
                 onChanged={refresh}
+                activeFloor={activeFloor}
               />
             </div>
           </div>

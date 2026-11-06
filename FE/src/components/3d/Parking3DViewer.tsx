@@ -4,7 +4,7 @@ import * as THREE from "three"
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
+import { loadGltfWithCache } from "../../lib/3d/gltfModelCache"
 
 import type { LotType, ParkingSlot } from "../../lib/types"
 
@@ -27,6 +27,12 @@ import {
   SLOT_VISUAL_STATE_HEX,
   SLOT_VISUAL_STATE_LABELS,
 } from "../../lib/3d/parking3DConfig"
+import {
+  describeBindingDiagnostics,
+  isObjectVisible,
+  applyFloorIsolation,
+  type UnregisteredMeshRef,
+} from "../../lib/3d/floorIsolation"
 
 // SPARK-228 raw-exact contract matcher: the sole source of operational-overlay state.
 import {
@@ -114,50 +120,6 @@ const SLOT_LEGEND_STATES: SlotVisualState[] = [
 ]
 
 const BINDING_WARNING_TAG = "[3d]"
-const BINDING_EXAMPLE_LIMIT = 10
-
-export interface BindingDiagnostics {
-  matched: number
-  unmatchedSlotCodes: string[]
-  unmatchedMeshNames: string[]
-  totalUnmatchedSlotCodes: number
-  totalUnmatchedMeshNames: number
-  signature: string
-}
-
-/**
- * Builds the one-line binding report for a mapping pass. Returns `null` when
- * every contract slot code found a mesh and every candidate mesh found a slot,
- * so callers never log a healthy mapping.
- */
-export function describeBindingDiagnostics(
-  match: Pick<SlotMatchResult, "unmatchedSlotCodes" | "unmatchedMeshNames">,
-  slotCount: number,
-): BindingDiagnostics | null {
-  const unmatchedSlotCodes = Array.isArray(match.unmatchedSlotCodes)
-    ? match.unmatchedSlotCodes
-    : []
-  const unmatchedMeshNames = Array.isArray(match.unmatchedMeshNames)
-    ? match.unmatchedMeshNames
-    : []
-
-  if (unmatchedSlotCodes.length === 0 && unmatchedMeshNames.length === 0) {
-    return null
-  }
-
-  return {
-    matched: Math.max(0, slotCount - unmatchedSlotCodes.length),
-    unmatchedSlotCodes: unmatchedSlotCodes.slice(0, BINDING_EXAMPLE_LIMIT),
-    unmatchedMeshNames: unmatchedMeshNames.slice(0, BINDING_EXAMPLE_LIMIT),
-    totalUnmatchedSlotCodes: unmatchedSlotCodes.length,
-    totalUnmatchedMeshNames: unmatchedMeshNames.length,
-    signature: [
-      slotCount,
-      unmatchedSlotCodes.join("\u0000"),
-      unmatchedMeshNames.join("\u0000"),
-    ].join("\u0001"),
-  }
-}
 
 function logBindingDiagnostics(
   match: SlotMatchResult,
@@ -181,10 +143,6 @@ function logBindingDiagnostics(
 
   const { signature: _signature, ...payload } = diagnostics
   console.warn(`${BINDING_WARNING_TAG} slot/mesh binding incomplete`, payload)
-}
-export interface UnregisteredMeshRef {
-  key: string
-  name: string
 }
 
 // Stable empty default: a fresh `[]` on every render would make the registration
@@ -243,6 +201,9 @@ export interface Parking3DViewerProps {
     unmatchedSlots: number
     unregistered: UnregisteredMeshRef[]
   }) => void
+
+  /** Floor grouping isolation: isolates and renders only the selected floor group. */
+  activeFloor?: string | null
 }
 
 export function Parking3DViewer({
@@ -281,6 +242,8 @@ export function Parking3DViewer({
   onToggleMesh,
 
   onMeshCensus,
+
+  activeFloor = null,
 }: Parking3DViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -577,7 +540,7 @@ export function Parking3DViewer({
 
     controls.minDistance = 3
 
-    controls.maxDistance = 120
+    controls.maxDistance = 500
 
     controls.target.set(0, 0, 0)
 
@@ -714,13 +677,18 @@ export function Parking3DViewer({
 
   refreshSlotVisualsRef.current = refreshSlotVisuals
 
+  const lastFramedFloorRef = useRef<string | null>(null)
+
   const reportCensus = useCallback(
     (mapping: RegisteredMeshMapping, slotCount: number) => {
+      const visibleUnregistered = mapping.unregisteredSlotMeshes.filter((mesh) =>
+        isObjectVisible(mesh),
+      )
       onMeshCensusRef.current?.({
         registeredMeshes: mapping.allSlotMeshes.length,
-        unregisteredMeshes: mapping.unregisteredSlotMeshes.length,
+        unregisteredMeshes: visibleUnregistered.length,
         unmatchedSlots: Math.max(0, slotCount - mapping.allSlotMeshes.length),
-        unregistered: mapping.unregisteredSlotMeshes.map((mesh) => ({
+        unregistered: visibleUnregistered.map((mesh) => ({
           key: mesh.uuid,
           name: mesh.name || "Template mesh",
         })),
@@ -752,6 +720,8 @@ export function Parking3DViewer({
       inst.scene.remove(inst.currentSceneContent)
 
       inst.currentSceneContent = null
+
+      lastFramedFloorRef.current = null
     }
 
     const applySceneContent = (
@@ -788,6 +758,9 @@ export function Parking3DViewer({
         bindingWarningSignatureRef,
       )
 
+      // Apply floor grouping isolation if an active floor is requested
+      const activeTarget = applyFloorIsolation(loadedObject, activeFloor)
+
       reportCensus(registrationMapping, slotsRef.current.length)
 
       // Visuals
@@ -795,9 +768,9 @@ export function Parking3DViewer({
       refreshSlotVisualsRef.current()
 
       // Frame camera overview only on initial model load
-
+      lastFramedFloorRef.current = activeFloor || ""
       inst.cameraController.resetToOverview(
-        loadedObject,
+        activeTarget || loadedObject,
         inst.camera,
         inst.controls,
       )
@@ -815,20 +788,14 @@ export function Parking3DViewer({
       setLoading(false)
     }
 
-    // Attempt to load GLB file
-
-    const loader = new GLTFLoader()
+    // Attempt to load GLB file from in-memory cache / singleton loader
 
     const cleanUrl = targetUrl
 
     if (cleanUrl) {
-      loader.load(
-        cleanUrl,
-
-        (gltf) => {
-          // Successfully loaded GLB!
-
-          const modelScene = gltf.scene
+      loadGltfWithCache(cleanUrl)
+        .then((modelScene) => {
+          if (!inst) return
 
           // Add default lighting if model has no lights
 
@@ -851,15 +818,12 @@ export function Parking3DViewer({
           }
 
           applySceneContent(modelScene, true, expectedFileName)
-        },
-
-        undefined,
-
-        (err) => {
-          // File not found or not yet put in folder: Fallback to procedural model with slots
+        })
+        .catch((err) => {
+          if (!inst) return
 
           console.info(
-            `[3D Viewer] Model file "${cleanUrl}" not yet found on disk. Initializing high-fidelity procedural 3D model with matching naming convention (${expectedFileName}).`,
+            `[3D Viewer] Model file "${cleanUrl}" not loaded (${err instanceof Error ? err.message : String(err)}). Initializing procedural 3D model with matching naming convention (${expectedFileName}).`,
           )
 
           const proceduralLot = generateProceduralParkingLot(
@@ -869,8 +833,7 @@ export function Parking3DViewer({
           )
 
           applySceneContent(proceduralLot, false, expectedFileName)
-        },
-      )
+        })
     } else {
       const proceduralLot = generateProceduralParkingLot(
         lotType,
@@ -930,6 +893,28 @@ export function Parking3DViewer({
     refreshSlotVisualsRef.current()
   }, [registerMode, selectedMeshKeys])
 
+  // Active floor isolation & camera gliding effect
+  useEffect(() => {
+    const inst = threeRef.current
+    if (!inst || !inst.currentSceneContent) return
+
+    const activeTarget = applyFloorIsolation(inst.currentSceneContent, activeFloor)
+    const effectiveFloor = activeFloor || ""
+    if (lastFramedFloorRef.current !== effectiveFloor) {
+      lastFramedFloorRef.current = effectiveFloor
+      inst.cameraController.resetToOverview(
+        activeTarget || inst.currentSceneContent,
+        inst.camera,
+        inst.controls,
+      )
+    }
+
+    if (inst.registrationMapping) {
+      reportCensus(inst.registrationMapping, slotsRef.current.length)
+    }
+    refreshSlotVisualsRef.current()
+  }, [activeFloor, reportCensus])
+
   // Camera focus when focusSlotId or selectedSlotId changes
 
   useEffect(() => {
@@ -958,6 +943,7 @@ export function Parking3DViewer({
     const intersects = raycaster.intersectObjects(meshes, true)
     const allowed = new Set(meshes)
     for (const hit of intersects) {
+      if (!isObjectVisible(hit.object)) continue
       let target: THREE.Object3D | null = hit.object
       while (target) {
         if (target instanceof THREE.Mesh && allowed.has(target)) return target
