@@ -15,7 +15,7 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
             ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
         if (session.SessionStatus == "COMPLETED")
             throw new ReservationGateException(409, "SESSION_ALREADY_COMPLETED", "Parking session is already completed.");
-        session.SessionStatus = "PAYMENT_PENDING";
+        session.SessionStatus = "PENDING_PAYMENT";
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -26,12 +26,12 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
             ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
         if (reservation.Status == "COMPLETED")
             throw new ReservationGateException(409, "RESERVATION_ALREADY_COMPLETED", "Reservation is already completed.");
-        reservation.Status = "PAYMENT_PENDING";
+        reservation.Status = "PENDING_PAYMENT";
         var session = await db.ParkingSessions.FirstOrDefaultAsync(
             s => s.ReservationId == reservationId && s.TenantId == tenantId && s.SiteId == siteId &&
                  s.SessionStatus == "ACTIVE", ct);
         if (session is not null)
-            session.SessionStatus = "PAYMENT_PENDING";
+            session.SessionStatus = "PENDING_PAYMENT";
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -45,7 +45,7 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
                 s => s.Id == referenceId && s.TenantId == tenantId && s.SiteId == siteId, ct);
             if (session is null || session.SessionStatus == "COMPLETED")
                 return;
-            if (session.SessionStatus != "PAYMENT_PENDING")
+            if (session.SessionStatus != "PENDING_PAYMENT")
                 throw new ReservationGateException(409, "INVALID_SESSION_STATE", "Parking session is not awaiting payment.");
             session.ExitTime = completedAt;
             session.SessionStatus = "COMPLETED";
@@ -62,11 +62,11 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
                 r => r.Id == referenceId && r.TenantId == tenantId && r.SiteId == siteId, ct);
             if (reservation is null || reservation.Status == "COMPLETED")
                 return;
-            if (reservation.Status != "PAYMENT_PENDING")
+            if (reservation.Status != "PENDING_PAYMENT")
                 throw new ReservationGateException(409, "INVALID_RESERVATION_STATE", "Reservation is not awaiting payment.");
             reservation.Status = "COMPLETED";
             var session = await db.ParkingSessions.FirstOrDefaultAsync(
-                s => s.ReservationId == referenceId && s.SessionStatus == "PAYMENT_PENDING", ct);
+                s => s.ReservationId == referenceId && s.SessionStatus == "PENDING_PAYMENT", ct);
             if (session is not null)
             {
                 session.ExitTime = completedAt;
@@ -136,7 +136,7 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
         var normalizedPlate = NormalizePlate(plate);
         var session = await db.ParkingSessions.AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ReservationId == null &&
-                (s.SessionStatus == "ACTIVE" || s.SessionStatus == "PAYMENT_PENDING") &&
+                (s.SessionStatus == "ACTIVE" || s.SessionStatus == "PENDING_PAYMENT") &&
                 s.NormalizedPlate == normalizedPlate)
             .OrderByDescending(s => s.EntryTime)
             .FirstOrDefaultAsync(ct);
