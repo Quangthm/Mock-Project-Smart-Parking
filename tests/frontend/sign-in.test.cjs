@@ -30,7 +30,7 @@ function fixture(mode, fail = false, mfaRequired = false, recoveryView = null) {
   const state = [], calls = [], identities = [], navigations = [];
   let cursor = 0, failRequests = fail, currentView = "sign-in", routeActive = true;
   const effects = [], views = [];
-  const react = { useEffect(effect) { effects.push(effect); }, useState(initial) {
+  const react = { useEffect(effect) { effects.push(effect); }, useRef(initial) { return { current: initial }; }, useState(initial) {
     const i = cursor++;
     if (!(i in state)) state[i] = typeof initial === 'function' ? initial() : initial;
     return [state[i], value => { state[i] = typeof value === 'function' ? value(state[i]) : value; }];
@@ -64,6 +64,7 @@ function fixture(mode, fail = false, mfaRequired = false, recoveryView = null) {
     '../Sign Up/DriverOtpForm': { pendingDriverKey: 'sp_pending_driver_registration' },
     '../../../components/forms/MfaCodeInput': { MfaCodeInput: 'mfa-input' },
     '../../../lib/authApi': { authApi: api, AuthApiError: class extends Error {} }, '../../../lib/signInContact': contact,
+    '../../../components/common/TurnstileWidget': { TurnstileWidget: () => null },
     '../../../lib/uiToast': { showUiToast() {} },
   }).SignIn;
   const render = () => { cursor = 0; return component({ flow: mode === "otp" ? "email-otp" : "password" }); };

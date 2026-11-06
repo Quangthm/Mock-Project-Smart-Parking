@@ -170,6 +170,15 @@ public static class UserHost
         app.UseRouting();
         app.UseApiErrorResponses();
 
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.ContentLength > 65536)
+            {
+                throw new BadHttpRequestException("Request body too large.", StatusCodes.Status413PayloadTooLarge);
+            }
+            await next();
+        });
+
         app.UseCors("Frontend");
         app.UseAuthentication();
         app.UseAuthorization();

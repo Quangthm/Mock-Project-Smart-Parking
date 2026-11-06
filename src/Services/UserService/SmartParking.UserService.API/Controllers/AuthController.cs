@@ -15,6 +15,7 @@ namespace UserService.API.Controllers;
 
 [Route("api/auth")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+[RequestSizeLimit(65536)]
 public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerBase(mediator, mapper)
 {
     [AllowAnonymous]

@@ -11,12 +11,16 @@ function loadTurnstileScript(): Promise<void> {
   const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null
   if (existing) {
     return new Promise((resolve, reject) => {
-      if (window.turnstile) {
-        resolve()
-        return
+      const checkReady = () => {
+        if (window.turnstile) {
+          resolve()
+        } else {
+          setTimeout(checkReady, 50)
+        }
       }
-      existing.addEventListener("load", () => resolve(), { once: true })
+      existing.addEventListener("load", checkReady, { once: true })
       existing.addEventListener("error", (e) => reject(e), { once: true })
+      checkReady()
     })
   }
 
@@ -26,7 +30,16 @@ function loadTurnstileScript(): Promise<void> {
     script.src = SCRIPT_URL
     script.async = true
     script.defer = true
-    script.onload = () => resolve()
+    script.onload = () => {
+      const checkReady = () => {
+        if (window.turnstile) {
+          resolve()
+        } else {
+          setTimeout(checkReady, 50)
+        }
+      }
+      checkReady()
+    }
     script.onerror = (e) => reject(e)
     document.head.appendChild(script)
   })

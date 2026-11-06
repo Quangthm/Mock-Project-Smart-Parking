@@ -5,9 +5,9 @@
 - **Task:** SPARK-257 — [SEC-AUTH] Protect public authentication flows from automated abuse.
 - **Jira:** SPARK-257 (Story, 5 SP, backlog, no owner, not in Sprint 2). Related: SPARK-234 (Driver registration), SPARK-235 (Owner registration).
 - **Branch:** `docs/SPARK-257-bot-protection-api-design` (created from `develop`).
-- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phases 1, 2, 3 & 4 Implementation).
-- **Scope this session:** Phase 4 execution — Frontend Turnstile integration (`useTurnstile.ts`, `TurnstileWidget.tsx`), API payload updates, and token lifecycle management in `SignIn.tsx` and `SignUp.tsx`.
-- **Decision status:** Phases 1, 2, 3 & 4 **COMPLETED & VALIDATED**; SPARK-257 end-to-end fullstack implementation complete.
+- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phases 1–6 Implementation, Test Planning & Verification).
+- **Scope this session:** Phase 5 (Backend Integration Testing, Scenarios 1–18) & Phase 6 (Frontend Testing & Verification, Scenarios 19–27) for SPARK-257.
+- **Decision status:** Phases 1, 2, 3, 4, 5 & 6 **COMPLETED & VALIDATED**; SPARK-257 full automated test suite, test plan, and test report complete.
 
 ## 2. Objectives
 
@@ -43,6 +43,12 @@
    - Update API clients (`authApi.ts` and `ownerApi.ts`) with `turnstileToken?: string` payload.
    - Integrate widget into `SignIn.tsx` (`password_login`) and `SignUp.tsx` (`driver_register`, `owner_register`).
    - Enforce token lifecycle rules: preserve token on local validation/429/required; reset on server verification rejection, 400 validation, 401/403 auth errors, 503/network errors, or success; clear on expiry.
+8. Phase 5 & 6 Implementation (Testing & Verification):
+   - Document comprehensive Test Plan at `docs/04-testing/test-plans/SPARK-257-bot-protection-test-plan.md` covering all 30 acceptance scenarios across AC1–AC6.
+   - Implement Backend Integration Tests in `tests/Services/SmartParking.UserService.Tests/BotProtectionIntegrationTests.cs` covering Scenarios 1–18 (valid, missing, whitespace, >2048 chars, Cloudflare error codes, timeout, cancellation, HTTP errors, infrastructure errors, request size limit, log sanitization, DB transaction safety, and bypassing SignInErrors).
+   - Enforce Stage 2 defense: HTTP 413 `PAYLOAD_TOO_LARGE` for request bodies exceeding 64KB (`[RequestSizeLimit(65536)]` on `AuthController` and early pipeline middleware).
+   - Implement Frontend Contract & Lifecycle Tests in `FE/tests/turnstile-auth-lifecycle.test.cjs` covering Scenarios 19–27 (widget render/action binding, payload attachment, pre-submit retention, 429 retention, 400/401/403/503 widget resets, expired callback, and tab switching isolation).
+   - Generate detailed verification report at `docs/04-testing/reports/SPARK-257/bot-protection-test-report.md`.
 
 ## 3. Work Completed
 
@@ -131,6 +137,42 @@
     - Wired `turnstileToken` into `authApi.registerDriver` and `ownerApi.register`.
     - Implemented tab isolation and token lifecycle: local validation errors do not reset the widget; server validation/bot/auth rejections reset the widget.
   - **Validation:** Frontend `npm run build` and `npx tsc --noEmit` pass with 0 errors; Backend `dotnet build` succeeds with 0 errors and 0 warnings.
+- **Phase 5 & 6 Implementation Completed (Testing & Verification):**
+  - **Task 5.1 (Test Plan Authoring):**
+    - Created `docs/04-testing/test-plans/SPARK-257-bot-protection-test-plan.md` defining goals, environment configurations, and mapping 30 test scenarios to AC1–AC6.
+  - **Task 5.2 (Backend Integration Tests - Scenarios 1–18):**
+    - Implemented `tests/Services/SmartParking.UserService.Tests/BotProtectionIntegrationTests.cs` (35 test cases) covering:
+      - Valid token flows across driver register, owner register, and password login (returns 201/200).
+      - Missing, null, and whitespace token rejection (`400 BOT_VERIFICATION_REQUIRED` without outbound Cloudflare call).
+      - Token length exceeding 2048 chars rejection (`400 BOT_VERIFICATION_FAILED`).
+      - Cloudflare error codes: `invalid-input-response` (400), `timeout-or-duplicate` (`400 BOT_VERIFICATION_EXPIRED`).
+      - Action mismatch (`driver_register` submitted to `password_login`) and Hostname mismatch (`evil.com`).
+      - Independent rate limiting quotas (10 req/min/IP) for registration vs login.
+      - Fail-closed behavior on timeout (>5s) and Cloudflare HTTP 429/500/502/503 errors (`503 BOT_VERIFICATION_UNAVAILABLE`).
+      - Clean client cancellation propagation (`OperationCanceledException` without 503 conversion).
+      - Malformed JSON and provider infrastructure errors (`missing-input-response`, `bad-request`) mapping to 503.
+      - Request body size limit enforcement (payload > 64KB rejected with `413 PAYLOAD_TOO_LARGE`).
+      - Log sanitization assertion ensuring `turnstileToken` and `SecretKey` never appear in logger outputs.
+      - Invariant test: verification strictly executes before DB transactions (`BeginTransactionAsync`).
+      - Login pipeline bypass invariant: bot verification errors are never coerced into `401 AUTH_FAILED`.
+  - **Task 5.3 (Pipeline Hardening for Stage 2 Defense):**
+    - Added HTTP 413 mapping (`PAYLOAD_TOO_LARGE`) in `ApiResponseFactory.cs`.
+    - Decorated `AuthController.cs` endpoints with `[RequestSizeLimit(65536)]`.
+    - Added early Content-Length validation middleware in `Program.cs` rejecting bodies > 64KB with HTTP 413.
+  - **Task 6.1 (Frontend Contract & Lifecycle Tests - Scenarios 19–27):**
+    - Implemented `FE/tests/turnstile-auth-lifecycle.test.cjs` (15 test cases) using `node:test` covering:
+      - Widget render & action binding (`password_login`, `driver_register`, `owner_register`).
+      - Payload attachment for driver registration, owner registration, and login.
+      - Pre-submit client validation errors retain token and DO NOT reset widget.
+      - HTTP 429 Rate Limit retention: keeps token and DOES NOT reset widget.
+      - Server rejection resets: 400 `VALIDATION_FAILED`, 401 `AUTH_FAILED`, 403 `ACCOUNT_INACTIVE`, 400 `BOT_VERIFICATION_FAILED`, 400 `BOT_VERIFICATION_EXPIRED`, and 503 `BOT_VERIFICATION_UNAVAILABLE` all reset widget.
+      - Expired callback clears form `turnstileToken` state.
+      - Tab switching isolation between Driver and Owner forms.
+  - **Task 6.2 (Regression & Build Verification):**
+    - Updated `tests/frontend/sign-in.test.cjs` mock environment with `TurnstileWidget` and `useRef` (28/28 tests passing).
+    - Verified `FE` production build: `npm run build` completed with 0 errors.
+  - **Task 6.3 (Comprehensive Test Report):**
+    - Documented final outcomes in `docs/04-testing/reports/SPARK-257/bot-protection-test-report.md` confirming 100% test pass and AC1–AC6 compliance.
 
 ## 4. Technical Decisions
 
@@ -152,71 +194,54 @@
 
 | File | Change | Reason |
 | --- | --- | --- |
-| `src/Services/UserService/SmartParking.UserService.Application/DTOs/DriverRegistrationDto.cs` | Modified | Added `TurnstileToken` property |
-| `src/Services/UserService/SmartParking.UserService.Application/DTOs/OwnerRegistrationDto.cs` | Modified | Added `TurnstileToken` property |
-| `src/Services/UserService/SmartParking.UserService.Application/DTOs/LoginDto.cs` | Modified | Added `TurnstileToken` property |
-| `src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommand.cs` | Modified | Added `TurnstileToken` property |
-| `src/Services/UserService/SmartParking.UserService.Application/Common/MapperProfile/LoginMapperProfile.cs` | Modified | Explicit mapping for `TurnstileToken` |
-| `src/Services/UserService/SmartParking.UserService.Application/Services/DriverRegistrationService.cs` | Modified | Injected `IBotVerificationService` and verified before DB transaction |
-| `src/Services/UserService/SmartParking.UserService.Application/Services/OwnerRegistrationService.cs` | Modified | Injected `IBotVerificationService` and verified before DB transaction |
-| `src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommandHandler.cs` | Modified | Injected `IBotVerificationService` and verified before DB transaction |
-| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Added rate limiting policies `RegistrationRateLimit` and `LoginRateLimit`, forwarded headers |
-| `src/Services/UserService/SmartParking.UserService.API/Controllers/AuthController.cs` | Modified | Applied `[EnableRateLimiting("RegistrationRateLimit")]` and `[EnableRateLimiting("LoginRateLimit")]` |
-| `tests/Services/SmartParking.UserService.Tests/DriverRegistrationHttpTests.cs` | Modified | Updated rate limit policies in test fixture |
-| `tests/Services/SmartParking.UserService.Tests/OwnerRegistrationHttpTests.cs` | Modified | Updated rate limit policies in test fixture |
-| `tests/Services/SmartParking.UserService.Tests/BotProtectionFlowTests.cs` | Created | Comprehensive unit & pipeline tests for 3 auth flows, invariants, and rate limiting |
-| `.env.example` | Modified | Added Turnstile configuration placeholders |
-| `FE/.env.example` | Modified | Added `VITE_TURNSTILE_SITE_KEY` placeholder |
-| `compose.app.yml` | Modified | Wired Turnstile environment variables into `user-service` |
-| `scripts/run-schema-service.ps1` | Modified | Forwarded Turnstile environment variables to UserService |
-| `src/Services/UserService/SmartParking.UserService.API/appsettings.json` | Modified | Added default Turnstile section |
-| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Sanitized `ExpectedHostnames` to strip empty entries |
-| `tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs` | Modified | Overwrote appsettings array indices for clean test isolation |
-| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session log tracking Phases 1, 2, 3 & 4 completion |
-| `FE/src/vite-env.d.ts` | Modified | Declared Turnstile window and env types |
-| `FE/src/hooks/useTurnstile.ts` | Created | Custom hook for Cloudflare Turnstile script loading & widget lifecycle |
-| `FE/src/components/common/TurnstileWidget.tsx` | Created | Reusable Turnstile challenge widget component |
-| `FE/src/lib/authApi.ts` | Modified | Added `turnstileToken` to `registerDriver` and `login` |
-| `FE/src/lib/ownerApi.ts` | Modified | Added `turnstileToken` to `register` |
-| `FE/src/roles/authentications/Sign In/SignIn.tsx` | Modified | Integrated Turnstile widget & token lifecycle for password login |
-| `FE/src/roles/authentications/Sign Up/SignUp.tsx` | Modified | Integrated Turnstile widget & token lifecycle for driver and owner registration |
+| `docs/04-testing/test-plans/SPARK-257-bot-protection-test-plan.md` | Created | Test plan covering 30 acceptance scenarios and AC1–AC6 matrix |
+| `tests/Services/SmartParking.UserService.Tests/BotProtectionIntegrationTests.cs` | Created | 35 integration test cases covering Scenarios 1–18 (Pipeline, Cloudflare, Size Limit, Logging, Invariants) |
+| `FE/tests/turnstile-auth-lifecycle.test.cjs` | Created | 15 frontend test cases covering Scenarios 19–27 (Action binding, Retention, Reset, Lifecycle) |
+| `docs/04-testing/reports/SPARK-257/bot-protection-test-report.md` | Created | Comprehensive test execution report and sign-off |
+| `src/Services/UserService/SmartParking.UserService.API/Common/ApiResponseFactory.cs` | Modified | Added HTTP 413 mapping for `PAYLOAD_TOO_LARGE` |
+| `src/Services/UserService/SmartParking.UserService.API/Controllers/AuthController.cs` | Modified | Added `[RequestSizeLimit(65536)]` attribute on public auth endpoints |
+| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Added early 64KB request body size validation middleware |
+| `tests/frontend/sign-in.test.cjs` | Modified | Added TurnstileWidget and useRef mocks to prevent regression |
+| `FE/src/hooks/useTurnstile.ts` | Modified | Hardened window.turnstile script readiness check |
+| `compose.app.yml` | Modified | Forwarded `VITE_TURNSTILE_SITE_KEY` to frontend container |
+| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session tracking for Phase 5 & 6 completion |
 
 ## 6. Issues and Blockers
 
-- None. All deliverables across Phases 1, 2, 3, and 4 are completed and validated with 0 errors and 0 warnings.
-- SPARK-257 fullstack implementation is ready for end-to-end verification and PR review.
+- None. All deliverables across Phases 1 through 6 are completed and validated with 0 errors and 0 warnings.
+- SPARK-257 automated test plan and test executions satisfy 100% of acceptance criteria (AC1–AC6).
 
 ## 7. Validation Results
 
 - `dotnet build SmartParking.slnx -nr:false -m:1 --nologo`: **Build succeeded. 0 Warning(s), 0 Error(s)**.
-- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~BotProtectionFlowTests|FullyQualifiedName~LayerBoundaryTests" --no-build --nologo`: **Passed! 22 passed, 0 failed**.
-- Full UserService test suite: **Passed! 279 passed, 0 failed, 54 skipped (DB-container integration tests)**.
+- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~BotProtectionIntegrationTests" --nologo`: **Passed! 35 passed, 0 failed** (Duration: 16s).
+- Full UserService test suite: **Passed! 314 passed, 0 failed, 54 skipped (DB-container integration tests)**.
+- `node --test FE/tests/turnstile-auth-lifecycle.test.cjs`: **Passed! 15 passed, 0 failed** (Duration: 1.07s).
+- `node --test tests/frontend/sign-in.test.cjs`: **Passed! 28 passed, 0 failed** (Duration: 855ms).
+- `npm run build` in `FE`: **Built in 2.35s, 0 errors**.
 
 ## 8. Git Status
 
 ```text
 ## docs/SPARK-257-bot-protection-api-design
- M ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md
+ M FE/src/hooks/useTurnstile.ts
+ M compose.app.yml
+ M src/Services/UserService/SmartParking.UserService.API/Common/ApiResponseFactory.cs
  M src/Services/UserService/SmartParking.UserService.API/Controllers/AuthController.cs
  M src/Services/UserService/SmartParking.UserService.API/Program.cs
- M src/Services/UserService/SmartParking.UserService.Application/Common/MapperProfile/LoginMapperProfile.cs
- M src/Services/UserService/SmartParking.UserService.Application/DTOs/DriverRegistrationDto.cs
- M src/Services/UserService/SmartParking.UserService.Application/DTOs/LoginDto.cs
- M src/Services/UserService/SmartParking.UserService.Application/DTOs/OwnerRegistrationDto.cs
- M src/Services/UserService/SmartParking.UserService.Application/Services/DriverRegistrationService.cs
- M src/Services/UserService/SmartParking.UserService.Application/Services/OwnerRegistrationService.cs
- M src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommand.cs
- M src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommandHandler.cs
- M tests/Services/SmartParking.UserService.Tests/DriverRegistrationHttpTests.cs
- M tests/Services/SmartParking.UserService.Tests/OwnerRegistrationHttpTests.cs
-?? tests/Services/SmartParking.UserService.Tests/BotProtectionFlowTests.cs
+ M tests/frontend/sign-in.test.cjs
+ M ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md
+?? FE/tests/turnstile-auth-lifecycle.test.cjs
+?? docs/04-testing/reports/SPARK-257/
+?? docs/04-testing/test-plans/SPARK-257-bot-protection-test-plan.md
+?? tests/Services/SmartParking.UserService.Tests/BotProtectionIntegrationTests.cs
 ```
 
 ## 9. Handoff / Next Steps
 
-1. Commit Phase 4 changes:
+1. Commit Phase 5 & 6 changes:
    ```text
-   feat(fe-auth): integrate turnstile challenge widget and token lifecycle [SPARK-257]
+   test(auth): add automated test plan, backend integration and frontend lifecycle tests [SPARK-257]
    ```
 2. Prepare PR / review for SPARK-257 on branch `docs/SPARK-257-bot-protection-api-design`.
 
