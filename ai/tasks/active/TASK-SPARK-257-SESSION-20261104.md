@@ -5,9 +5,9 @@
 - **Task:** SPARK-257 — [SEC-AUTH] Protect public authentication flows from automated abuse.
 - **Jira:** SPARK-257 (Story, 5 SP, backlog, no owner, not in Sprint 2). Related: SPARK-234 (Driver registration), SPARK-235 (Owner registration).
 - **Branch:** `docs/SPARK-257-bot-protection-api-design` (created from `develop`).
-- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phase 1, Phase 2 & Phase 3 Implementation).
-- **Scope this session:** Phase 3 execution — Multi-environment configuration templates (.env.example, FE/.env.example, compose.app.yml, appsettings.json, run-schema-service.ps1) and deployment parity.
-- **Decision status:** Phase 1, Phase 2 & Phase 3 **COMPLETED & VALIDATED**; ready for Phase 4 (frontend Turnstile integration).
+- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phases 1, 2, 3 & 4 Implementation).
+- **Scope this session:** Phase 4 execution — Frontend Turnstile integration (`useTurnstile.ts`, `TurnstileWidget.tsx`), API payload updates, and token lifecycle management in `SignIn.tsx` and `SignUp.tsx`.
+- **Decision status:** Phases 1, 2, 3 & 4 **COMPLETED & VALIDATED**; SPARK-257 end-to-end fullstack implementation complete.
 
 ## 2. Objectives
 
@@ -37,6 +37,12 @@
    - Add default `Turnstile` section to `src/Services/UserService/SmartParking.UserService.API/appsettings.json`.
    - Forward Turnstile environment variables in `scripts/run-schema-service.ps1`.
    - Ensure zero committed real secrets or keys.
+7. Phase 4 Implementation:
+   - Declare Turnstile types and `VITE_TURNSTILE_SITE_KEY` in `FE/src/vite-env.d.ts`.
+   - Build reusable `useTurnstile.ts` hook and `TurnstileWidget.tsx` component with imperative reset and cleanup on unmount/action change.
+   - Update API clients (`authApi.ts` and `ownerApi.ts`) with `turnstileToken?: string` payload.
+   - Integrate widget into `SignIn.tsx` (`password_login`) and `SignUp.tsx` (`driver_register`, `owner_register`).
+   - Enforce token lifecycle rules: preserve token on local validation/429/required; reset on server verification rejection, 400 validation, 401/403 auth errors, 503/network errors, or success; clear on expiry.
 
 ## 3. Work Completed
 
@@ -107,6 +113,24 @@
   - **Configuration Hardening:** Sanitized `ExpectedHostnames` in `Program.cs` to filter empty/whitespace entries, and updated `TurnstileVerifierTests.cs` to override base appsettings array during isolated unit tests.
   - **Security Audit:** Verified 0 secrets committed; all keys use empty placeholders.
   - **Test Suite:** Full UserService tests passed (279 passed, 0 failed, 54 skipped).
+  - Committed Phase 3: `a9d7c54e chore(config): add turnstile multi-environment templates and compose wiring [SPARK-257]`.
+- **Phase 4 Implementation Completed:**
+  - **Task 4.1 (Types):** Declared `VITE_TURNSTILE_SITE_KEY` in `ImportMetaEnv` and full `window.turnstile` / `TurnstileRenderOptions` interfaces in `FE/src/vite-env.d.ts`.
+  - **Task 4.2 (Hook & Component):**
+    - Created `FE/src/hooks/useTurnstile.ts` for safe single script loading, widget rendering, token state, error/expire callbacks, and clean unmount removal.
+    - Created `FE/src/components/common/TurnstileWidget.tsx` exposing imperative `reset()` and `getToken()` via `forwardRef`.
+  - **Task 4.3 (API Clients):**
+    - Updated `FE/src/lib/authApi.ts`: added `turnstileToken?: string` to `registerDriver` body and `login` parameters/body.
+    - Updated `FE/src/lib/ownerApi.ts`: added `turnstileToken?: string` to `register` body.
+  - **Task 4.4 (SignIn Integration):**
+    - Embedded `TurnstileWidget` with `action="password_login"` in `SignIn.tsx`.
+    - Passed `turnstileToken` to `authApi.login`.
+    - Implemented token lifecycle: local validation and 429 rate-limit preserve the token; server rejection, 401/403, 400, 503, network errors, and successful login reset the widget.
+  - **Task 4.5 (SignUp Integration):**
+    - Embedded `TurnstileWidget` for Driver tab (`action="driver_register"`) and Owner tab (`action="owner_register"`).
+    - Wired `turnstileToken` into `authApi.registerDriver` and `ownerApi.register`.
+    - Implemented tab isolation and token lifecycle: local validation errors do not reset the widget; server validation/bot/auth rejections reset the widget.
+  - **Validation:** Frontend `npm run build` and `npx tsc --noEmit` pass with 0 errors; Backend `dotnet build` succeeds with 0 errors and 0 warnings.
 
 ## 4. Technical Decisions
 
@@ -148,12 +172,19 @@
 | `src/Services/UserService/SmartParking.UserService.API/appsettings.json` | Modified | Added default Turnstile section |
 | `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Sanitized `ExpectedHostnames` to strip empty entries |
 | `tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs` | Modified | Overwrote appsettings array indices for clean test isolation |
-| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session log tracking Phase 1, 2 & 3 completion |
+| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session log tracking Phases 1, 2, 3 & 4 completion |
+| `FE/src/vite-env.d.ts` | Modified | Declared Turnstile window and env types |
+| `FE/src/hooks/useTurnstile.ts` | Created | Custom hook for Cloudflare Turnstile script loading & widget lifecycle |
+| `FE/src/components/common/TurnstileWidget.tsx` | Created | Reusable Turnstile challenge widget component |
+| `FE/src/lib/authApi.ts` | Modified | Added `turnstileToken` to `registerDriver` and `login` |
+| `FE/src/lib/ownerApi.ts` | Modified | Added `turnstileToken` to `register` |
+| `FE/src/roles/authentications/Sign In/SignIn.tsx` | Modified | Integrated Turnstile widget & token lifecycle for password login |
+| `FE/src/roles/authentications/Sign Up/SignUp.tsx` | Modified | Integrated Turnstile widget & token lifecycle for driver and owner registration |
 
 ## 6. Issues and Blockers
 
-- None. All Phase 2 deliverables completed and validated with 0 errors and 0 warnings.
-- Next phase: Phase 4 (Frontend integration - Turnstile script, hook, widget, and form integration).
+- None. All deliverables across Phases 1, 2, 3, and 4 are completed and validated with 0 errors and 0 warnings.
+- SPARK-257 fullstack implementation is ready for end-to-end verification and PR review.
 
 ## 7. Validation Results
 
@@ -183,11 +214,11 @@
 
 ## 9. Handoff / Next Steps
 
-1. Commit Phase 3 changes:
+1. Commit Phase 4 changes:
    ```text
-   chore(config): add turnstile multi-environment templates and compose wiring [SPARK-257]
+   feat(fe-auth): integrate turnstile challenge widget and token lifecycle [SPARK-257]
    ```
-2. Proceed to Phase 4 (Frontend Cloudflare Turnstile integration: hook, widget, and registration/login forms).
+2. Prepare PR / review for SPARK-257 on branch `docs/SPARK-257-bot-protection-api-design`.
 
 ## 10. Context for Next Session
 
