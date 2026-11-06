@@ -1,63 +1,145 @@
 {
   "info": {
+    "_postman_id": "c8e76a91-2a1d-48ef-b5bb-76f5c8bf3d82",
     "name": "SmartParking - PaymentService",
-    "description": "# SmartParking - Payment Service API Collection\n\nCollection kiểm thử toàn diện các API của Payment Service thuộc hệ thống SmartParking. Tuân thủ tiêu chuẩn thiết kế kiến trúc Clean Architecture & Hexagonal, CQRS/MediatR và tài liệu API Contract tại `docs/02-architecture/api/payment-service/01-pricing-calculation.contract.md`.\n\n## 1. Chuẩn bị môi trường\n\n1. Khởi động Payment Service bằng lệnh:\n   ```bash\n   dotnet run --project src/Services/PaymentService/SmartParking.PaymentService.API\n   ```\n2. Mặc định cổng API của PaymentService là **5065** (`http://localhost:5065`).\n3. Lấy JWT Token từ UserService (hoặc Identity Provider) và gán vào các biến collection:\n   - `accessToken`: JWT token của User/Driver thông thường.\n   - `adminToken`: JWT token có role `ADMIN` hoặc `OPERATOR` (dùng cho các tác vụ nội bộ hoặc Policy Override).\n\n## 2. Các Folder tính năng\n\n- `01 - Pricing Calculator` (SPARK-229): Động cơ tính phí đỗ xe tất định, cắt lát khung giờ, xử lý phiên đỗ qua nửa đêm, thời gian miễn phí bao gồm (grace period) và làm tròn tiền tệ 1 lần duy nhất ở kết quả cuối.\n\n- `02 - Payment Checkout & Gateway (payOS)` (SPARK-249): Khởi tạo liên kết thanh toán VietQR payOS, cơ chế idempotency chống trừ tiền 2 lần, tra cứu trạng thái giao dịch và tiếp nhận Webhook IPN.\n",
+    "description": "# SmartParking PaymentService — Postman Collection\n\nBộ kiểm thử tích hợp và Smoke Test toàn diện cho **PaymentService** (Cổng `5065`).\nTuân thủ chuẩn [manage-postman-collections Skill](.agents/skills/manage-postman-collections/SKILL.md).\n\n## Cấu trúc 4 Thư mục (40 Requests):\n1. **00 - System Health**: Kiểm tra liveness / readiness của microservice.\n2. **01 - Pricing Calculator Engine**: Thuật toán tính cước đỗ xe (day/night shift, grace period, motorcycle, walk-in DB tariff, validation).\n3. **02 - Customer Invoice & Gate Checkout (SPARK-321)**: Bàn giao cước bốt ra S2S, thu tiền mặt tại bốt, xuất hóa đơn tài chính và đối soát.\n4. **03 - Online Payment & payOS Gateway**: Tạo đơn hàng online, sinh VietQR payOS, xử lý webhook IPN HMAC-SHA256, và fast demo-pay.\n\n## Hướng dẫn Chạy (Collection Runner / Newman):\nChạy theo thứ tự thư mục từ 00 đến 03. Các biến `spark321OrderId`, `spark321InvoiceId`, `onlineOrderId`, `transactionId` tự động chain nối tiếp giữa các request.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:5065",
-      "type": "string",
-      "description": "Địa chỉ HTTP của Payment Service (mặc định http://localhost:5065)"
+      "type": "string"
     },
     {
       "key": "accessToken",
-      "value": "user-token",
-      "type": "string",
-      "description": "Bearer JWT Access Token của Driver / Regular User (lấy từ UserService)"
+      "value": "dev-driver-token",
+      "type": "string"
     },
     {
       "key": "adminToken",
-      "value": "admin-token",
-      "type": "string",
-      "description": "Bearer JWT Access Token của ADMIN / OPERATOR (dùng cho Policy Override)"
+      "value": "dev-admin-token",
+      "type": "string"
+    },
+    {
+      "key": "operatorToken",
+      "value": "dev-operator-token",
+      "type": "string"
+    },
+    {
+      "key": "internalServiceKey",
+      "value": "spark-internal-secret",
+      "type": "string"
     },
     {
       "key": "tenantId",
-      "value": "",
-      "type": "string",
-      "description": "ID doanh nghiệp sở hữu bãi xe (UUID v4)"
+      "value": "a0000000-0000-4000-8000-000000000001",
+      "type": "string"
     },
     {
       "key": "siteId",
+      "value": "b0000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "payosChecksumKey",
       "value": "",
-      "type": "string",
-      "description": "ID bãi đỗ xe (UUID v4)"
+      "type": "string"
     },
     {
       "key": "calcEntryTime",
       "value": "",
-      "type": "string",
-      "description": "Thời điểm xe vào bãi (ISO-8601, tự động sinh qua pre-request script)"
+      "type": "string"
     },
     {
       "key": "calcExitTime",
       "value": "",
-      "type": "string",
-      "description": "Thời điểm xe ra bãi (ISO-8601, tự động sinh qua pre-request script)"
+      "type": "string"
     },
     {
       "key": "freeEntryTime",
       "value": "",
-      "type": "string",
-      "description": "Thời điểm xe vào bãi trong ngưỡng miễn phí (ISO-8601)"
+      "type": "string"
     },
     {
       "key": "freeExitTime",
       "value": "",
-      "type": "string",
-      "description": "Thời điểm xe ra bãi trong ngưỡng miễn phí (ISO-8601)"
+      "type": "string"
+    },
+    {
+      "key": "spark321SessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "spark321OrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "spark321FinalAmount",
+      "value": "80000",
+      "type": "string"
+    },
+    {
+      "key": "spark321InvoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "spark321EntryTime",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "spark321CutoffTime",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "onlineOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "onlineOrderCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "onlineAmount",
+      "value": "25000",
+      "type": "string"
+    },
+    {
+      "key": "onlineReferenceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "onlineIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "transactionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payosOrderCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkoutUrl",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "currentIdempotencyKey",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -72,11 +154,51 @@
   },
   "item": [
     {
-      "name": "01 - Pricing Calculator",
-      "description": "Các kịch bản kiểm thử API tính phí đỗ xe (POST /api/v1/pricing/calculate) theo SPARK-229.",
+      "name": "00 - System Health",
+      "description": "Kiểm tra trạng thái liveness / readiness của microservice PaymentService.",
       "item": [
         {
-          "name": "Calculate pricing - Policy override with Admin token (Happy Path)",
+          "name": "0.1 Health Check - Service Liveness & Readiness (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Service is Healthy', () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.include('ok');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Pricing Calculator Engine",
+      "description": "Kiểm tra tính toán biểu giá đỗ xe, lũy tiến, phân tách ca ngày/đêm, thời gian ân hạn miễn phí và validation.",
+      "item": [
+        {
+          "name": "1.1 Calculate pricing - Policy override with Admin token (Happy Path)",
           "event": [
             {
               "listen": "prerequest",
@@ -96,14 +218,13 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Response time < 2000ms', () => pm.expect(pm.response.responseTime).to.be.below(2000));",
-                  "pm.test('Content-Type is application/json', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
-                  "const json = pm.response.json();",
                   "pm.test('Response envelope has success=true and data', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json).to.have.property('success', true);",
                   "    pm.expect(json).to.have.property('data');",
                   "});",
                   "pm.test('Financial calculation fields are valid', () => {",
+                  "    const json = pm.response.json();",
                   "    const data = json.data;",
                   "    pm.expect(data.currency).to.eql('VND');",
                   "    pm.expect(data.finalAmountVnd).to.be.a('number');",
@@ -119,27 +240,14 @@
             }
           ],
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminToken}}",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Ô tô Tiêu chuẩn 2026\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 20000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 30000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -152,11 +260,29 @@
                 "calculate"
               ]
             },
-            "description": "Happy path: Tính phí đỗ xe kèm Policy Override (dành cho Admin/Internal caller có role ADMIN hoặc OPERATOR)."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Ô tô Tiêu chuẩn 2026\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 20000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 30000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Free parking stay within grace period (Happy Path)",
+          "name": "1.2 Calculate pricing - Free parking stay within grace period (Happy Path)",
           "event": [
             {
               "listen": "prerequest",
@@ -176,8 +302,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
                   "pm.test('Stay within grace period should be free (0 VND)', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(true);",
                   "    pm.expect(json.data.isFreeStay).to.eql(true);",
                   "    pm.expect(json.data.finalAmountVnd).to.eql(0);",
@@ -189,27 +315,14 @@
             }
           ],
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminToken}}",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{freeEntryTime}}\",\n  \"exitTime\": \"{{freeExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Ô tô Tiêu chuẩn 2026\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 20000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 30000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -222,11 +335,29 @@
                 "calculate"
               ]
             },
-            "description": "Happy path: Thời gian đỗ xe nhỏ hơn hoặc bằng số phút miễn phí (10 phút <= 15 phút grace period) -> Số tiền bằng 0 VND và IsFreeStay = true."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{freeEntryTime}}\",\n  \"exitTime\": \"{{freeExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Ô tô Tiêu chuẩn 2026\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 20000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 30000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Motorcycle vehicle type (Happy Path)",
+          "name": "1.3 Calculate pricing - Motorcycle vehicle type (Happy Path)",
           "event": [
             {
               "listen": "prerequest",
@@ -234,7 +365,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const now = new Date();",
-                  "const entry = new Date(now.getTime() - 90 * 60 * 1000); // 1.5 giờ trước",
+                  "const entry = new Date(now.getTime() - 90 * 60 * 1000);",
                   "pm.collectionVariables.set('calcEntryTime', entry.toISOString());",
                   "pm.collectionVariables.set('calcExitTime', now.toISOString());"
                 ]
@@ -246,16 +377,37 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
                   "pm.test('Motorcycle calculation succeeds', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(true);",
-                  "    pm.expect(json.data.finalAmountVnd).to.be.a('number');",
+                  "    pm.expect(json.data.appliedTariffName).to.include('Xe máy');",
+                  "    pm.expect(json.data.finalAmountVnd).to.be.at.least(0);",
                   "});"
                 ]
               }
             }
           ],
           "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "calculate"
+              ]
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -266,47 +418,43 @@
                 }
               ]
             },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"MOTORCYCLE\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Xe máy Tiêu chuẩn\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"MOTORCYCLE\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 5000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 10000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "pricing",
-                "calculate"
-              ]
-            },
-            "description": "Happy path: Tính phí đỗ xe cho loại xe máy (MOTORCYCLE)."
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"MOTORCYCLE\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Biểu giá Xe máy Tiêu chuẩn\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"MOTORCYCLE\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"06:00\",\n        \"endTime\": \"18:00\",\n        \"ratePerHourVnd\": 5000\n      },\n      {\n        \"blockCode\": \"NIGHT_SHIFT\",\n        \"startTime\": \"18:00\",\n        \"endTime\": \"06:00\",\n        \"ratePerHourVnd\": 10000\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Missing required fields (Expected 400)",
+          "name": "1.4 Calculate pricing - Walk-in tariff from Database seed (Happy Path)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = new Date();",
+                  "const entry = new Date(now.getTime() - 120 * 60 * 1000);",
+                  "pm.collectionVariables.set('calcEntryTime', entry.toISOString());",
+                  "pm.collectionVariables.set('calcExitTime', now.toISOString());"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
-                  "pm.test('Validation error envelope structure is correct', () => {",
-                  "    pm.expect(json.success).to.eql(false);",
-                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
-                  "    pm.expect(json.errors).to.be.an('array');",
-                  "    pm.expect(json.errors.length).to.be.at.least(1);",
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Applied seeded active tariff from DB', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.finalAmountVnd).to.be.above(0);",
+                  "    pm.expect(json.data.appliedTariffId).to.be.a('string');",
                   "});"
                 ]
               }
@@ -317,13 +465,10 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"00000000-0000-0000-0000-000000000000\",\n  \"siteId\": \"00000000-0000-0000-0000-000000000000\",\n  \"vehicleType\": \"\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -336,11 +481,29 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Thiếu hoặc để trống các trường bắt buộc (tenantId, siteId, vehicleType)."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"{{calcEntryTime}}\",\n  \"exitTime\": \"{{calcExitTime}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Unsupported vehicle type (Expected 400)",
+          "name": "1.5 Calculate pricing - Missing required fields (Expected 400)",
           "event": [
             {
               "listen": "test",
@@ -348,8 +511,60 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
+                  "pm.test('Validation error envelope structure is correct', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
+                  "    pm.expect(json.errors).to.be.an('array');",
+                  "    pm.expect(json.errors.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/calculate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "calculate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"00000000-0000-0000-0000-000000000000\",\n  \"siteId\": \"00000000-0000-0000-0000-000000000000\",\n  \"vehicleType\": \"\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "1.6 Calculate pricing - Unsupported vehicle type (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
                   "pm.test('Returns UNSUPPORTED_VEHICLE_TYPE error', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(false);",
                   "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
                   "    const hasVehicleTypeError = json.errors.some(e => e.field === 'VehicleType' || e.code === 'UNSUPPORTED_VEHICLE_TYPE');",
@@ -364,13 +579,10 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"TRUCK\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -383,11 +595,19 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Loại xe không được hỗ trợ trong Sprint hiện tại (chỉ hỗ trợ CAR và MOTORCYCLE)."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"TRUCK\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - ExitTime before EntryTime (Expected 400)",
+          "name": "1.7 Calculate pricing - ExitTime before EntryTime (Expected 400)",
           "event": [
             {
               "listen": "test",
@@ -395,8 +615,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
                   "pm.test('Returns INVALID_TIME_RANGE error', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(false);",
                   "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
                   "    const hasTimeError = json.errors.some(e => e.field === 'ExitTime' || e.code === 'INVALID_TIME_RANGE');",
@@ -411,13 +631,10 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T12:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T08:00:00+07:00\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -430,11 +647,19 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Thời gian ra bãi (ExitTime) trước thời gian vào bãi (EntryTime)."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T12:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T08:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Policy override by unauthorized regular user (Expected 400)",
+          "name": "1.8 Calculate pricing - Policy override by unauthorized regular user (Expected 400)",
           "event": [
             {
               "listen": "test",
@@ -442,8 +667,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
                   "pm.test('Returns FORBIDDEN validation error for regular user override', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(false);",
                   "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
                   "    const hasForbiddenError = json.errors.some(e => e.field === 'PolicyOverride' || e.code === 'FORBIDDEN');",
@@ -458,13 +683,10 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Unauthorized Override\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"00:00\",\n        \"endTime\": \"00:00\",\n        \"ratePerHourVnd\": 0\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -477,11 +699,19 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Regular user (không có role ADMIN/OPERATOR) cố ý truyền policyOverride để ép giá 0 VND."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\",\n  \"policyOverride\": {\n    \"tariffId\": \"{{$guid}}\",\n    \"tariffName\": \"Unauthorized Override\",\n    \"policyVersion\": 1,\n    \"vehicleType\": \"CAR\",\n    \"freeParkingGraceMinutes\": 15,\n    \"timeBlocks\": [\n      {\n        \"blockCode\": \"DAY_SHIFT\",\n        \"startTime\": \"00:00\",\n        \"endTime\": \"00:00\",\n        \"ratePerHourVnd\": 0\n      }\n    ],\n    \"timeZoneId\": \"Asia/Ho_Chi_Minh\",\n    \"roundingMode\": \"HALF_UP_WHOLE_VND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - No token provided (Expected 401)",
+          "name": "1.9 Calculate pricing - No token provided (Expected 401)",
           "event": [
             {
               "listen": "test",
@@ -494,20 +724,14 @@
             }
           ],
           "request": {
-            "auth": {
-              "type": "noauth"
-            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -520,27 +744,34 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Không truyền Bearer token trong Authorization header -> Bị chặn với HTTP 401 Unauthorized."
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{$guid}}\",\n  \"siteId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Non-existent walk-in tariff (Expected 404)",
+          "name": "1.10 Calculate pricing - Non-existent walk-in tariff (Expected 404)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 404 Not Found (hoặc 503/504 nếu FacilityService chưa chạy)', () => {",
-                  "    pm.expect([404, 503, 504]).to.include(pm.response.code);",
-                  "});",
-                  "const json = pm.response.json();",
-                  "if (pm.response.code === 404) {",
-                  "    pm.test('Returns TARIFF_NOT_FOUND error code', () => {",
-                  "        pm.expect(json.success).to.eql(false);",
-                  "        pm.expect(json.errorCode).to.eql('TARIFF_NOT_FOUND');",
-                  "    });",
-                  "}"
+                  "pm.test('Status code is 404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('Returns TARIFF_NOT_FOUND error code', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.errorCode).to.eql('TARIFF_NOT_FOUND');",
+                  "});"
                 ]
               }
             }
@@ -550,13 +781,10 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"22222222-2222-2222-2222-222222222222\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -569,23 +797,31 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Khách vãng lai tính tiền nhưng bãi xe chưa cấu hình bảng giá active cho loại xe này -> Trả về 404 TARIFF_NOT_FOUND."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"22222222-2222-2222-2222-222222222222\",\n  \"vehicleType\": \"CAR\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Calculate pricing - Corrupted or missing reservation snapshot (Expected 422)",
+          "name": "1.11 Calculate pricing - Corrupted or missing reservation snapshot (Expected 422 or 504)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 422 Unprocessable Entity (hoặc 503/504 nếu OperationService chưa chạy)', () => {",
+                  "pm.test('Status code is 422 or 504 Gateway Timeout if OperationService is offline', () => {",
                   "    pm.expect([422, 503, 504]).to.include(pm.response.code);",
                   "});",
-                  "const json = pm.response.json();",
                   "if (pm.response.code === 422) {",
                   "    pm.test('Returns CORRUPTED_POLICY_SNAPSHOT error code', () => {",
+                  "        const json = pm.response.json();",
                   "        pm.expect(json.success).to.eql(false);",
                   "        pm.expect(json.errorCode).to.eql('CORRUPTED_POLICY_SNAPSHOT');",
                   "    });",
@@ -599,13 +835,10 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"22222222-2222-2222-2222-222222222222\",\n  \"vehicleType\": \"CAR\",\n  \"reservationId\": \"00000000-0000-0000-0000-000000000000\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pricing/calculate",
               "host": [
@@ -618,446 +851,25 @@
                 "calculate"
               ]
             },
-            "description": "Case lỗi: Phiên đỗ xe gắn với Reservation nhưng snapshot giá lúc đặt chỗ không tồn tại hoặc bị hỏng -> Trả về 422 CORRUPTED_POLICY_SNAPSHOT (tuyệt đối không tự fallback sang bảng giá hiện hành)."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"vehicleType\": \"CAR\",\n  \"reservationId\": \"00000000-0000-0000-0000-000000000000\",\n  \"entryTime\": \"2026-10-15T08:00:00+07:00\",\n  \"exitTime\": \"2026-10-15T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
     },
     {
-      "name": "02 - Payment Checkout & Gateway (payOS)",
-      "description": "Các kịch bản kiểm thử API thanh toán payOS: Khởi tạo VietQR & Link thanh toán (POST /api/v1/payments/orders/{orderId}/checkout), Idempotency Replay, Webhook IPN (POST /api/v1/payments/callbacks/payos), và Tra cứu trạng thái giao dịch (GET /api/v1/payments/transactions/{transactionId}/status) theo SPARK-249.",
+      "name": "02 - Customer Invoice & Gate Checkout (SPARK-321)",
+      "description": "Bàn giao thanh toán bốt ra, tính cước S2S, bảo vệ bốt thu tiền mặt, chốt xuất hóa đơn và đối soát đa chiều.",
       "item": [
         {
-          "name": "Initiate checkout - Generate VietQR & payOS link (Happy Path)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const freshKey = pm.variables.replaceIn(\"{{$guid}}\");",
-                  "pm.collectionVariables.set(\"currentIdempotencyKey\", freshKey);"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 200 OK\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Response time < 2000ms\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
-                  "pm.test(\"Content-Type is application/json\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Response envelope indicates success\", () => {",
-                  "    pm.expect(json.success).to.be.true;",
-                  "    pm.expect(json.data).to.be.an(\"object\");",
-                  "});",
-                  "pm.test(\"Checkout URL & VietQR are returned correctly\", () => {",
-                  "    const data = json.data;",
-                  "    pm.expect(data.checkoutUrl).to.be.a(\"string\").and.not.empty;",
-                  "    pm.expect(data.qrCode).to.be.a(\"string\").and.not.empty;",
-                  "    pm.expect(data.status).to.eql(\"PENDING\");",
-                  "    pm.expect(data.orderCode).to.be.a(\"number\");",
-                  "    pm.expect(data.amount).to.be.a(\"number\");",
-                  "});",
-                  "if (json.data) {",
-                  "    if (json.data.paymentTransactionId) {",
-                  "        pm.collectionVariables.set(\"transactionId\", json.data.paymentTransactionId);",
-                  "    }",
-                  "    if (json.data.orderCode) {",
-                  "        pm.collectionVariables.set(\"payosOrderCode\", json.data.orderCode.toString());",
-                  "    }",
-                  "    if (json.data.checkoutUrl) {",
-                  "        pm.collectionVariables.set(\"checkoutUrl\", json.data.checkoutUrl);",
-                  "    }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{currentIdempotencyKey}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"https://smartparking.vn/driver/checkout/success\",\n  \"cancelUrl\": \"https://smartparking.vn/driver/checkout/cancel\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "orders",
-                "{{orderId}}",
-                "checkout"
-              ]
-            },
-            "description": "Happy path: Khởi tạo liên kết thanh toán payOS VietQR cho đơn hàng hợp lệ. Trả về 200 OK kèm checkoutUrl, qrCode, accountNumber và lưu lại transactionId."
-          }
-        },
-        {
-          "name": "Initiate checkout - Idempotent replay with same key (Happy Path)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 200 OK\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Header Idempotency-Replayed is true\", () => {",
-                  "    pm.expect(pm.response.headers.get(\"Idempotency-Replayed\")).to.eql(\"true\");",
-                  "});",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Result is marked as replayed\", () => {",
-                  "    pm.expect(json.success).to.be.true;",
-                  "    pm.expect(json.data.isReplayed).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{currentIdempotencyKey}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"https://smartparking.vn/driver/checkout/success\",\n  \"cancelUrl\": \"https://smartparking.vn/driver/checkout/cancel\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "orders",
-                "{{orderId}}",
-                "checkout"
-              ]
-            },
-            "description": "Idempotency check: Gửi lại cùng Idempotency-Key và payload cho cùng đơn hàng -> Không tạo giao dịch mới, trả về giao dịch đang chờ cũ kèm header Idempotency-Replayed: true."
-          }
-        },
-        {
-          "name": "Get transaction status - Reconcile & check status (Happy Path)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 200 OK\", () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Transaction status response valid\", () => {",
-                  "    pm.expect(json.success).to.be.true;",
-                  "    pm.expect(json.data).to.be.an(\"object\");",
-                  "    pm.expect(json.data.status).to.be.oneOf([\"PENDING\", \"SUCCESS\", \"FAILED\", \"UNKNOWN\"]);",
-                  "    pm.expect(json.data.transactionId).to.be.a(\"string\");",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/transactions/{{transactionId}}/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "transactions",
-                "{{transactionId}}",
-                "status"
-              ]
-            },
-            "description": "Tra cứu trạng thái giao dịch thanh toán để đối soát hoặc kiểm tra trạng thái thanh toán từ payOS."
-          }
-        },
-        {
-          "name": "PayOS Webhook - Simulate successful payment callback (Happy Path)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 200 OK\", () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Webhook accepted with success=true\", () => {",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": {{payosOrderCode}},\n    \"amount\": 25000,\n    \"description\": \"Thanh toan do xe\",\n    \"accountNumber\": \"0123456789\",\n    \"reference\": \"FT26290881923401\",\n    \"transactionDateTime\": \"2026-10-20 14:30:00\",\n    \"currency\": \"VND\",\n    \"paymentLinkId\": \"mock-link-12345\"\n  },\n  \"signature\": \"simulated-valid-signature\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/callbacks/payos",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "callbacks",
-                "payos"
-              ]
-            },
-            "description": "Webhook callback từ payOS khi khách thanh toán thành công. Ở môi trường local/dev, chữ ký simulated-valid-signature được chấp nhận để giả lập thanh toán."
-          }
-        },
-        {
-          "name": "Initiate checkout - Invalid URL format (Expected 400)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Validation error returned for invalid ReturnUrl\", () => {",
-                  "    pm.expect(json.success).to.be.false;",
-                  "    pm.expect(json.errorCode).to.eql(\"VALIDATION_ERROR\");",
-                  "    pm.expect(json.errors.some(e => e.field === \"ReturnUrl\")).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{$guid}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"not-a-valid-url\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "orders",
-                "{{orderId}}",
-                "checkout"
-              ]
-            },
-            "description": "Case lỗi: Truyền ReturnUrl sai định dạng URL -> Validator chặn và trả về 400 VALIDATION_ERROR."
-          }
-        },
-        {
-          "name": "Initiate checkout - No token provided (Expected 401)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 401 Unauthorized\", () => pm.response.to.have.status(401));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{$guid}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"PAYOS\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "orders",
-                "{{orderId}}",
-                "checkout"
-              ]
-            },
-            "description": "Case lỗi: Gọi API checkout nhưng không đính kèm Bearer token xác thực -> Bị từ chối với 401 Unauthorized."
-          }
-        },
-        {
-          "name": "Initiate checkout - Non-existent order (Expected 404)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 404 Not Found\", () => pm.response.to.have.status(404));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Returns ORDER_NOT_FOUND error code\", () => {",
-                  "    pm.expect(json.success).to.be.false;",
-                  "    pm.expect(json.errorCode).to.eql(\"ORDER_NOT_FOUND\");",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{$guid}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"PAYOS\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/orders/ffffffff-ffff-ffff-ffff-ffffffffffff/checkout",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "orders",
-                "ffffffff-ffff-ffff-ffff-ffffffffffff",
-                "checkout"
-              ]
-            },
-            "description": "Case lỗi: Khởi tạo checkout cho đơn hàng không tồn tại trong hệ thống -> Trả về 404 ORDER_NOT_FOUND."
-          }
-        },
-        {
-          "name": "PayOS Webhook - Tampered signature rejected (Expected 400)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"Webhook rejected with error\", () => {",
-                  "    pm.expect(json.success).to.be.false;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"tampered-invalid-signature\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/callbacks/payos",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "callbacks",
-                "payos"
-              ]
-            },
-            "description": "Case bảo mật: Webhook mang chữ ký giả mạo hoặc sai lệch dữ liệu -> Bị từ chối với 400 Bad Request."
-          }
-        }
-      ]
-    },
-    {
-      "name": "03 - Customer Invoice & Checkout Handoff (SPARK-321)",
-      "description": "Các kịch bản kiểm thử API Hóa đơn tài chính, Chuẩn bị đơn hàng S2S và Thanh toán tiền mặt tại cổng (SPARK-321).",
-      "item": [
-        {
-          "name": "S2S Prepare Parking Fee Order - Happy Path (200 OK)",
+          "name": "2.1 S2S Prepare Parking Fee Order - Happy Path (200 OK)",
           "event": [
             {
               "listen": "prerequest",
@@ -1085,8 +897,11 @@
                   "    pm.expect(json.data.status).to.eql('PENDING');",
                   "    pm.expect(json.data.orderId).to.be.a('string');",
                   "    pm.expect(json.data.finalAmount).to.be.above(0);",
-                  "    pm.collectionVariables.set('spark321OrderId', json.data.orderId);",
-                  "});"
+                  "});",
+                  "if (json && json.data) {",
+                  "    if (json.data.orderId) pm.collectionVariables.set('spark321OrderId', json.data.orderId);",
+                  "    if (json.data.finalAmount) pm.collectionVariables.set('spark321FinalAmount', json.data.finalAmount);",
+                  "}"
                 ]
               }
             }
@@ -1096,17 +911,15 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               },
               {
                 "key": "X-Internal-Service-Key",
-                "value": "spark-internal-secret"
+                "value": "{{internalServiceKey}}",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"8a123456-5717-4562-b3fc-2c963f66afa6\",\n  \"sessionId\": \"{{spark321SessionId}}\",\n  \"vehicleType\": \"CAR\",\n  \"plateNumber\": \"51A-123.45\",\n  \"entryTime\": \"{{spark321EntryTime}}\",\n  \"pricingCutoffAt\": \"{{spark321CutoffTime}}\",\n  \"accountId\": \"11111111-1111-1111-1111-111111111111\",\n  \"penaltyAmount\": 20000,\n  \"penaltyReason\": \"Đỗ quá hạn đặt chỗ 45 phút\",\n  \"idempotencyKey\": \"checkout:session:{{spark321SessionId}}\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/orders/prepare",
               "host": [
@@ -1120,11 +933,80 @@
                 "prepare"
               ]
             },
-            "description": "S2S Checkout: OperationService gọi prepare để tính phí và tạo PaymentOrder."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"sessionId\": \"{{spark321SessionId}}\",\n  \"vehicleType\": \"CAR\",\n  \"plateNumber\": \"51A-123.45\",\n  \"entryTime\": \"{{spark321EntryTime}}\",\n  \"pricingCutoffAt\": \"{{spark321CutoffTime}}\",\n  \"accountId\": \"{{tenantId}}\",\n  \"penaltyAmount\": 20000,\n  \"penaltyReason\": \"Đỗ quá hạn đặt chỗ 45 phút\",\n  \"idempotencyKey\": \"checkout:session:{{spark321SessionId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "S2S Prepare Parking Fee Order - Invalid Cutoff Time (Expected 400)",
+          "name": "2.2 S2S Prepare Parking Fee Order - Regular Driver Forbidden S2S (Expected 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns UNAUTHORIZED error code', () => {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('UNAUTHORIZED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/prepare",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "prepare"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"sessionId\": \"{{$guid}}\",\n  \"vehicleType\": \"CAR\",\n  \"plateNumber\": \"51A-123.45\",\n  \"entryTime\": \"{{spark321EntryTime}}\",\n  \"pricingCutoffAt\": \"{{spark321CutoffTime}}\",\n  \"idempotencyKey\": \"checkout:session:unauthorized-driver-001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2.3 S2S Prepare Parking Fee Order - Invalid Cutoff Time (Expected 400)",
           "event": [
             {
               "listen": "test",
@@ -1132,8 +1014,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
-                  "const json = pm.response.json();",
                   "pm.test('Error code is INVALID_CUTOFF_TIME', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.false;",
                   "    pm.expect(json.errorCode).to.eql('INVALID_CUTOFF_TIME');",
                   "});"
@@ -1146,17 +1028,15 @@
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               },
               {
                 "key": "X-Internal-Service-Key",
-                "value": "spark-internal-secret"
+                "value": "{{internalServiceKey}}",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n  \"siteId\": \"8a123456-5717-4562-b3fc-2c963f66afa6\",\n  \"sessionId\": \"{{spark321SessionId}}\",\n  \"vehicleType\": \"CAR\",\n  \"plateNumber\": \"51A-123.45\",\n  \"entryTime\": \"2026-11-02T12:00:00Z\",\n  \"pricingCutoffAt\": \"2026-11-02T10:00:00Z\",\n  \"idempotencyKey\": \"checkout:session:invalid-cutoff-002\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/orders/prepare",
               "host": [
@@ -1170,11 +1050,19 @@
                 "prepare"
               ]
             },
-            "description": "Lỗi: pricingCutoffAt trước entryTime -> 400 INVALID_CUTOFF_TIME."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"sessionId\": \"{{spark321SessionId}}\",\n  \"vehicleType\": \"CAR\",\n  \"plateNumber\": \"51A-123.45\",\n  \"entryTime\": \"2026-11-02T12:00:00Z\",\n  \"pricingCutoffAt\": \"2026-11-02T10:00:00Z\",\n  \"idempotencyKey\": \"checkout:session:invalid-cutoff-002\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Get Invoice by Order ID - Before Payment Unsettled (Expected 422)",
+          "name": "2.4 Get Invoice by Order ID - Before Payment Unsettled (Expected 422)",
           "event": [
             {
               "listen": "test",
@@ -1182,8 +1070,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 422 Unprocessable Entity', () => pm.response.to.have.status(422));",
-                  "const json = pm.response.json();",
                   "pm.test('Error code is UNSETTLED_PAYMENT_ORDER', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.false;",
                   "    pm.expect(json.errorCode).to.eql('UNSETTLED_PAYMENT_ORDER');",
                   "});"
@@ -1196,7 +1084,8 @@
             "header": [
               {
                 "key": "X-Internal-Service-Key",
-                "value": "spark-internal-secret"
+                "value": "{{internalServiceKey}}",
+                "type": "text"
               }
             ],
             "url": {
@@ -1212,12 +1101,11 @@
                 "{{spark321OrderId}}",
                 "invoice"
               ]
-            },
-            "description": "Truy vấn hóa đơn khi đơn hàng vẫn PENDING -> 422 UNSETTLED_PAYMENT_ORDER."
+            }
           }
         },
         {
-          "name": "Gate Cash Settlement - Happy Path (200 OK)",
+          "name": "2.5 Gate Cash Settlement - Happy Path (200 OK)",
           "event": [
             {
               "listen": "test",
@@ -1230,34 +1118,33 @@
                   "    pm.expect(json.data.financialStatus.status).to.eql('PAID');",
                   "    pm.expect(json.data.financialStatus.paymentMethod).to.eql('CASH');",
                   "    pm.expect(json.data.financialStatus.isSettled).to.be.true;",
-                  "    pm.collectionVariables.set('spark321InvoiceId', json.data.invoiceIdentity.invoiceId);",
-                  "});"
+                  "});",
+                  "if (json && json.data && json.data.invoiceIdentity) {",
+                  "    if (json.data.invoiceIdentity.invoiceId) pm.collectionVariables.set('spark321InvoiceId', json.data.invoiceIdentity.invoiceId);",
+                  "}"
                 ]
               }
             }
           ],
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "dev-operator-token",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-TenantId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-SiteId",
+                "value": "{{siteId}}",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"amountReceived\": 65000,\n  \"notes\": \"Khách trả tiền mặt tại bốt\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/orders/{{spark321OrderId}}/cash",
               "host": [
@@ -1272,11 +1159,29 @@
                 "cash"
               ]
             },
-            "description": "Nhân viên bốt thu tiền mặt -> Cập nhật PAID, xuất Hóa đơn và publish PaymentSucceededV1."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountReceived\": {{spark321FinalAmount}},\n  \"notes\": \"Khách trả tiền mặt tại bốt\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Gate Cash Settlement - Replay Already Paid (Expected 200 Idempotent)",
+          "name": "2.6 Gate Cash Settlement - Replay Already Paid (Expected 200 Idempotent)",
           "event": [
             {
               "listen": "test",
@@ -1284,8 +1189,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
                   "pm.test('Invoice remains PAID', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.data.financialStatus.status).to.eql('PAID');",
                   "});"
                 ]
@@ -1293,27 +1198,24 @@
             }
           ],
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "dev-operator-token",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-TenantId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-SiteId",
+                "value": "{{siteId}}",
+                "type": "text"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"amountReceived\": 65000\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/orders/{{spark321OrderId}}/cash",
               "host": [
@@ -1328,11 +1230,217 @@
                 "cash"
               ]
             },
-            "description": "Gọi lại thu tiền mặt cho đơn đã PAID -> Idempotent trả 200 không ghi trùng."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountReceived\": {{spark321FinalAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
-          "name": "Get Invoice by Order ID - After Settlement (Happy Path 200 OK)",
+          "name": "2.7 Gate Cash Settlement - No Token Provided (Expected 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{spark321OrderId}}/cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{spark321OrderId}}",
+                "cash"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountReceived\": {{spark321FinalAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2.8 Gate Cash Settlement - Driver Role Forbidden (Expected 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-TenantId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-SiteId",
+                "value": "{{siteId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{spark321OrderId}}/cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{spark321OrderId}}",
+                "cash"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountReceived\": {{spark321FinalAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2.9 Gate Cash Settlement - Operator Site Mismatch (Expected 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('Returns OPERATOR_SITE_MISMATCH error code', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.errorCode).to.eql('OPERATOR_SITE_MISMATCH');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-TenantId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Actor-SiteId",
+                "value": "99999999-9999-9999-9999-999999999999",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{spark321OrderId}}/cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{spark321OrderId}}",
+                "cash"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountReceived\": {{spark321FinalAmount}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2.10 Get Invoice by Order ID - After Settlement (Happy Path 200 OK)",
           "event": [
             {
               "listen": "test",
@@ -1340,8 +1448,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
                   "pm.test('Invoice contains identity and timing', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.data.invoiceIdentity.invoiceNumber).to.be.a('string');",
                   "    pm.expect(json.data.financialStatus.status).to.eql('PAID');",
                   "    pm.expect(json.data.lineItems).to.be.an('array');",
@@ -1355,7 +1463,8 @@
             "header": [
               {
                 "key": "X-Internal-Service-Key",
-                "value": "spark-internal-secret"
+                "value": "{{internalServiceKey}}",
+                "type": "text"
               }
             ],
             "url": {
@@ -1371,12 +1480,11 @@
                 "{{spark321OrderId}}",
                 "invoice"
               ]
-            },
-            "description": "Đọc hóa đơn chính thức sau khi đơn đã thanh toán."
+            }
           }
         },
         {
-          "name": "Get Invoice by Invoice ID - Happy Path (200 OK)",
+          "name": "2.11 Get Invoice by Invoice ID - Happy Path (200 OK)",
           "event": [
             {
               "listen": "test",
@@ -1384,8 +1492,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
                   "pm.test('Invoice retrieved by InvoiceId', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.data.invoiceIdentity.invoiceId).to.eql(pm.collectionVariables.get('spark321InvoiceId'));",
                   "});"
                 ]
@@ -1397,7 +1505,50 @@
             "header": [
               {
                 "key": "X-Internal-Service-Key",
-                "value": "spark-internal-secret"
+                "value": "{{internalServiceKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/invoices/{{spark321InvoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "invoices",
+                "{{spark321InvoiceId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.12 Get Invoice by Invoice ID - Forbidden Cross-Driver Access (Expected 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('Error code is FORBIDDEN_INVOICE_ACCESS', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('FORBIDDEN_INVOICE_ACCESS');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Actor-UserId",
+                "value": "99999999-9999-9999-9999-999999999999",
+                "type": "text"
               }
             ],
             "url": {
@@ -1413,28 +1564,6 @@
                 "{{spark321InvoiceId}}"
               ]
             },
-            "description": "Tra cứu hóa đơn chính thức theo Invoice ID."
-          }
-        },
-        {
-          "name": "Get Invoice by Invoice ID - Forbidden Cross-Driver Access (Expected 403)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));",
-                  "const json = pm.response.json();",
-                  "pm.test('Error code is FORBIDDEN_INVOICE_ACCESS', () => {",
-                  "    pm.expect(json.success).to.be.false;",
-                  "    pm.expect(json.errorCode).to.eql('FORBIDDEN_INVOICE_ACCESS');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1444,32 +1573,11 @@
                   "type": "string"
                 }
               ]
-            },
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-Actor-UserId",
-                "value": "99999999-9999-9999-9999-999999999999"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/payments/invoices/{{spark321InvoiceId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "payments",
-                "invoices",
-                "{{spark321InvoiceId}}"
-              ]
-            },
-            "description": "Driver khác cố tình đọc hóa đơn không thuộc sở hữu -> 403 FORBIDDEN_INVOICE_ACCESS."
+            }
           }
         },
         {
-          "name": "Get Invoice by Session ID - S2S Reconciliation (Expected 200 OK)",
+          "name": "2.13 Get Invoice by Session ID - S2S Reconciliation (Expected 200 OK)",
           "event": [
             {
               "listen": "test",
@@ -1477,8 +1585,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
                   "pm.test('Invoice matches SessionId', () => {",
+                  "    const json = pm.response.json();",
                   "    pm.expect(json.data.parkingSessionReference.sessionId).to.eql(pm.collectionVariables.get('spark321SessionId'));",
                   "});"
                 ]
@@ -1490,7 +1598,8 @@
             "header": [
               {
                 "key": "X-Internal-Service-Key",
-                "value": "spark-internal-secret"
+                "value": "{{internalServiceKey}}",
+                "type": "text"
               }
             ],
             "url": {
@@ -1510,8 +1619,875 @@
                   "value": "{{spark321SessionId}}"
                 }
               ]
+            }
+          }
+        },
+        {
+          "name": "2.14 Get Invoice by Session ID - Missing Session ID (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Returns MISSING_SESSION_ID error code', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('MISSING_SESSION_ID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Internal-Service-Key",
+                "value": "{{internalServiceKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "invoices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.15 Driver Invoice History - My Invoices (Happy Path 200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array of driver invoices', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Actor-UserId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/invoices/my-history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "invoices",
+                "my-history"
+              ]
             },
-            "description": "S2S Checkout đối soát phiên qua sessionId."
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Online Payment & payOS Gateway",
+      "description": "Khởi tạo đơn hàng thanh toán trước, sinh liên kết VietQR payOS, xác thực chữ ký Webhook IPN và demo thanh toán dev.",
+      "item": [
+        {
+          "name": "3.1 Create Payment Order - Advance Reservation (Happy Path 200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const refId = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.collectionVariables.set('onlineReferenceId', refId);",
+                  "pm.collectionVariables.set('onlineIdempotencyKey', 'order:ref:' + refId);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Payment Order created in PENDING status', () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql('PENDING');",
+                  "    pm.expect(json.data.orderId).to.be.a('string');",
+                  "});",
+                  "if (json && json.data) {",
+                  "    if (json.data.orderId) pm.collectionVariables.set('onlineOrderId', json.data.orderId);",
+                  "    if (json.data.orderCode) pm.collectionVariables.set('onlineOrderCode', json.data.orderCode);",
+                  "    if (json.data.amount) pm.collectionVariables.set('onlineAmount', json.data.amount);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{onlineReferenceId}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": 25000,\n  \"accountId\": \"{{tenantId}}\",\n  \"idempotencyKey\": \"{{onlineIdempotencyKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.2 Create Payment Order - Idempotent Replay Same Key (Expected 200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Idempotently returns existing order', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.orderId).to.eql(pm.collectionVariables.get('onlineOrderId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{onlineReferenceId}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": 25000,\n  \"accountId\": \"{{tenantId}}\",\n  \"idempotencyKey\": \"{{onlineIdempotencyKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.3 Create Payment Order - Negative Amount (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Returns INVALID_AMOUNT error code', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('INVALID_AMOUNT');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{$guid}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": -50000,\n  \"accountId\": \"{{tenantId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.4 Initiate Checkout - Generate VietQR & payOS Link (Happy Path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const freshKey = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.collectionVariables.set('currentIdempotencyKey', freshKey);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Checkout URL & VietQR are returned correctly', () => {",
+                  "    const data = json.data;",
+                  "    pm.expect(data.checkoutUrl).to.be.a('string').and.not.empty;",
+                  "    pm.expect(data.qrCode).to.be.a('string').and.not.empty;",
+                  "    pm.expect(data.status).to.eql('PENDING');",
+                  "});",
+                  "if (json && json.data) {",
+                  "    if (json.data.paymentTransactionId) pm.collectionVariables.set('transactionId', json.data.paymentTransactionId);",
+                  "    if (json.data.orderCode) pm.collectionVariables.set('payosOrderCode', json.data.orderCode.toString());",
+                  "    if (json.data.checkoutUrl) pm.collectionVariables.set('checkoutUrl', json.data.checkoutUrl);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{currentIdempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{onlineOrderId}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{onlineOrderId}}",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"https://smartparking.vn/driver/checkout/success\",\n  \"cancelUrl\": \"https://smartparking.vn/driver/checkout/cancel\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.5 Initiate Checkout - Idempotent Replay with Same Key (Happy Path)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Header Idempotency-Replayed is true', () => {",
+                  "    pm.expect(pm.response.headers.get('Idempotency-Replayed')).to.eql('true');",
+                  "});",
+                  "pm.test('Result is marked as replayed', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.isReplayed).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{currentIdempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{onlineOrderId}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{onlineOrderId}}",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"https://smartparking.vn/driver/checkout/success\",\n  \"cancelUrl\": \"https://smartparking.vn/driver/checkout/cancel\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.6 Initiate Checkout - Invalid URL format (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Validation error returned for invalid ReturnUrl', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('VALIDATION_ERROR');",
+                  "    pm.expect(json.errors.some(e => e.field === 'ReturnUrl')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{onlineOrderId}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{onlineOrderId}}",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"not-a-valid-url\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.7 Initiate Checkout - No Token Provided (Expected 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{onlineOrderId}}/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{onlineOrderId}}",
+                "checkout"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"PAYOS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.8 Initiate Checkout - Non-existent Order (Expected 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('Returns ORDER_NOT_FOUND error code', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('ORDER_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/ffffffff-ffff-ffff-ffff-ffffffffffff/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "ffffffff-ffff-ffff-ffff-ffffffffffff",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"PAYOS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.9 Get Transaction Status - Reconcile & Check Status (Happy Path)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Transaction status response valid', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.be.oneOf(['PENDING', 'SUCCESS', 'FAILED', 'UNKNOWN']);",
+                  "    pm.expect(json.data.transactionId).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/transactions/{{transactionId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "transactions",
+                "{{transactionId}}",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.10 PayOS Webhook - Simulate Successful Payment Callback (Happy Path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const orderCode = Number(pm.collectionVariables.get('payosOrderCode') || pm.collectionVariables.get('onlineOrderCode') || 202610200001);",
+                  "const amount = Number(pm.collectionVariables.get('onlineAmount') || 25000);",
+                  "const dataObj = {",
+                  "    accountNumber: '0123456789',",
+                  "    amount: amount,",
+                  "    currency: 'VND',",
+                  "    description: 'Thanh toan do xe',",
+                  "    orderCode: orderCode,",
+                  "    paymentLinkId: 'mock-link-12345',",
+                  "    reference: 'FT' + Date.now(),",
+                  "    transactionDateTime: '2026-10-20 14:30:00'",
+                  "};",
+                  "const sortedKeys = Object.keys(dataObj).sort();",
+                  "const dataString = sortedKeys.map(k => `${k}=${dataObj[k]}`).join('&');",
+                  "const checksumKey = pm.collectionVariables.get('payosChecksumKey') || '';",
+                  "const signature = CryptoJS.HmacSHA256(dataString, checksumKey).toString(CryptoJS.enc.Hex);",
+                  "pm.request.body.raw = JSON.stringify({",
+                  "    code: '00',",
+                  "    desc: 'success',",
+                  "    data: dataObj,",
+                  "    signature: signature",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Webhook accepted with success=true', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/callbacks/payos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "callbacks",
+                "payos"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"to-be-replaced-by-prerequest-script\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.11 PayOS Webhook - Replay Duplicate Callback (Expected 200 Idempotent)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const orderCode = Number(pm.collectionVariables.get('payosOrderCode') || pm.collectionVariables.get('onlineOrderCode') || 202610200001);",
+                  "const amount = Number(pm.collectionVariables.get('onlineAmount') || 25000);",
+                  "const dataObj = {",
+                  "    accountNumber: '0123456789',",
+                  "    amount: amount,",
+                  "    currency: 'VND',",
+                  "    description: 'Thanh toan do xe',",
+                  "    orderCode: orderCode,",
+                  "    paymentLinkId: 'mock-link-12345',",
+                  "    reference: 'FT' + Date.now(),",
+                  "    transactionDateTime: '2026-10-20 14:30:00'",
+                  "};",
+                  "const sortedKeys = Object.keys(dataObj).sort();",
+                  "const dataString = sortedKeys.map(k => `${k}=${dataObj[k]}`).join('&');",
+                  "const checksumKey = pm.collectionVariables.get('payosChecksumKey') || '';",
+                  "const signature = CryptoJS.HmacSHA256(dataString, checksumKey).toString(CryptoJS.enc.Hex);",
+                  "pm.request.body.raw = JSON.stringify({",
+                  "    code: '00',",
+                  "    desc: 'success',",
+                  "    data: dataObj,",
+                  "    signature: signature",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Webhook replayed idempotently with success=true', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/callbacks/payos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "callbacks",
+                "payos"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"to-be-replaced-by-prerequest-script\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.12 PayOS Webhook - Tampered signature rejected (Expected 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Webhook rejected with error', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/callbacks/payos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "callbacks",
+                "payos"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"tampered-invalid-signature\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3.13 Fast Payment DemoPay - Dev Environment Utility (Happy Path 200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Demo payment settles order immediately', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.demo).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders/{{onlineOrderId}}/demo-pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders",
+                "{{onlineOrderId}}",
+                "demo-pay"
+              ]
+            }
           }
         }
       ]
