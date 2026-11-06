@@ -136,6 +136,8 @@ test('late create response neither duplicates nor downgrades an Operator already
     './CreateOperatorForm': { CreateOperatorForm: 'create-form' },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
     '../../../lib/operatorLive': { watchOperators: () => () => {} },
+    '../../../lib/uiToast': { showUiToast() {} },
+    '../../../lib/formatStatus': { formatStatus: value => value },
   }).OperatorManagement;
   const render = () => { cursor = 0; return component({ selectedSiteId: 'all', onOperatorsChanged() {} }); };
   const form = () => nodes(render()).find(node => node.type === 'create-form');

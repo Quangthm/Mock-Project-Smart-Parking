@@ -8,6 +8,7 @@ Tài liệu onboarding chi tiết cho môi trường local. Happy path nằm ở
 # Mở terminal tại root checkout vừa clone
 git branch --show-current          # nhánh làm việc mặc định: develop
 .\setup.ps1                        # dựng DB + credential + SonarQube + restore
+# Cấu hình RSA/JWT ổn định theo mục 5.5 trước khi chạy shared JWT
 .\scripts\run-app-service.ps1 -Service All   # chạy 5 container BE + FE
 # Mở http://localhost:5173
 ```
@@ -99,8 +100,8 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 | Container | Host URL | Ghi chú |
 | --- | --- | --- |
 | `smartpark-app-user-service-1` | http://localhost:5035 | `/health`; seed admin/owner/operator khi start |
-| `smartpark-app-parking-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
-| `smartpark-app-reservation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
+| `smartpark-app-facility-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
+| `smartpark-app-operation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065 | `/health`; dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
@@ -221,7 +222,7 @@ docker run --rm --entrypoint python smartpark-ai:local -c "import cv2,numpy,scip
 - Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có; giá trị đã cấu hình được giữ nguyên, chỉ điền khi trống.
 - Điền `VITE_MAPTILER_API_KEY` trong root `.env` hoặc file Team, hoặc trực tiếp trong `FE/.env`.
 - Bật OTP email: điền `SMARTPARK_SMTP_HOST`, `SMARTPARK_SMTP_PORT`, `SMARTPARK_SMTP_USERNAME`, `SMARTPARK_SMTP_PASSWORD`, `SMARTPARK_SMTP_FROM` vào root `.env`, rồi khởi động lại UserService. Runner host và container app stack (`compose.app.yml`) đều chuyển các giá trị này sang cấu hình `Otp:Smtp`; với container, chạy lại `run-app-service.ps1 -Service User -NoBuild` để nạp env mới.
-- JWT signing key (tùy chọn): nếu điền `SMARTPARK_JWT_PRIVATE_KEY_PEM` trong root `.env`, runner host và container app stack đều chuyển sang `Jwt:PrivateKeyPem`; để trống thì môi trường Development dùng ephemeral key (token do container phát mất hiệu lực khi restart). Chạy lại `run-app-service.ps1 -Service User -NoBuild` sau khi đổi.
+- JWT dùng chung giữa các service cần RSA signing key ổn định. Cấu hình và giới hạn Development ở [mục 5.5](#55-jwt-ổn-định-và-jwks-spark-327).
 - Không tự điền credential SMTP hoặc MapTiler của người khác.
 
 ### 5.3 SonarQube
@@ -231,6 +232,85 @@ SonarQube được dựng tự động cùng setup; bỏ qua bằng `-SkipSonarQ
 ### 5.4 Credential Team và URL xuyên máy
 
 Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvPath <file>`, `-SkipUserSecrets`, URL service xuyên máy (`SMARTPARK_SERVICE_*_URL`) và MapTiler. Xem [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) để backup script local trước khi chuyển sang setup tracked. Setup **không thay password Admin đã có trong DB**.
+
+### 5.5 JWT ổn định và JWKS (SPARK-327)
+
+UserService là nơi duy nhất giữ RSA private key và phát access JWT **RS256, 900 giây**. Các service khác chỉ nhận issuer, audience và địa chỉ JWKS chứa public key. Consumer JWT middleware, cache/refetch và fail-closed validation sẽ được triển khai ở task riêng; cấu hình trust này chưa bật xác thực JWT cho các service đó.
+
+Thêm thủ công các khóa sau vào `.env` đã có, hoặc điền placeholder sau khi setup tạo `.env` mới:
+
+```dotenv
+SMARTPARK_JWT_ISSUER=SmartParking.UserService
+SMARTPARK_JWT_AUDIENCE=SmartParking
+SMARTPARK_JWT_KEY_ID=smartpark-local-01
+SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64=replace-with-base64-rsa-private-key
+SMARTPARK_JWT_JWKS_PATH=/.well-known/jwks.json
+```
+
+`replace-with-*` không phải private key. Setup không sinh RSA key, không tự merge key template mới vào `.env` hiện có và không thay signing key khi chọn Keep. Enter và `-NonInteractive` giữ `.env`; Overwrite vẫn backup thành `.env.bak` rồi tạo lại từ template, nên cần tự khôi phục signing key mong muốn trước khi chạy UserService. Bảo vệ cả `.env.bak` như secret. Không cần recreate database cho thay đổi JWT.
+
+**Tạo key local bằng OpenSSL đi kèm Git for Windows, từ PowerShell 5.1+:** ví dụ sau tạo RSA 3072 bit (tối thiểu được chấp nhận là 2048), ghi PEM và Base64 vào thư mục cá nhân ngoài checkout, không in private key ra console. Không chạy lại để thay key đang dùng.
+
+Cần cài Git for Windows tại `C:\Program Files\Git`; nếu cài ở nơi khác, sửa `$openssl` cho đúng đường dẫn. Dán và chạy toàn bộ block bên dưới cùng lúc. Script gọi executable trực tiếp nên không cần `openssl` trong PATH, dừng khi lỗi và mở file Base64 bằng Notepad khi thành công.
+
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    $openssl = 'C:\Program Files\Git\mingw64\bin\openssl.exe'
+    $keyDir = Join-Path $env:LOCALAPPDATA 'SmartPark\keys'
+    $pemFile = Join-Path $keyDir 'userservice-rs256.pem'
+    $base64File = Join-Path $keyDir 'userservice-rs256.base64.txt'
+
+    if ((Test-Path $pemFile) -or (Test-Path $base64File)) {
+        throw 'Key files already exist. Check them before generating another key.'
+    }
+
+    New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
+
+    & $openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out $pemFile
+    if ($LASTEXITCODE -ne 0) { throw 'Key generation failed.' }
+
+    [IO.File]::WriteAllText(
+        $base64File,
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes($pemFile)),
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    notepad $base64File
+}
+```
+
+Mở file `.base64.txt` bằng editor cá nhân và **tự dán** nguyên dòng vào `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` trong ignored `.env`. Đây là Base64 của **toàn bộ nội dung PEM**, không phải DER và **không phải mã hóa bảo mật**. Giữ quyền đọc file cho tài khoản cần sử dụng; không gửi file, key, `.env`, user-secrets hoặc ảnh màn hình chứa key lên Git/chat/log. Không thêm key vào `FE/.env`, build arguments hoặc cấu hình consumer.
+
+**Tương thích và lỗi cấu hình:** `SMARTPARK_JWT_PRIVATE_KEY_PEM` / `Jwt:PrivateKeyPem` cũ vẫn được hỗ trợ. Nên chuyển sang Base64 để tránh khác biệt xuống dòng giữa `.env`, PowerShell và Docker. Nếu điền cả hai, cả hai phải import được và đại diện **cùng RSA key**; giá trị khác nhau hoặc malformed khiến startup thất bại với lỗi không chứa key. Key đã cấu hình luôn được kiểm tra, không fallback sang key khác. Legacy stable PEM không có `KeyId` được gán `kid` ổn định từ public-key thumbprint.
+
+| Trường hợp | Hành vi |
+| --- | --- |
+| Development standalone, không key và không `Jwt:KeyId` | Cho phép ephemeral RSA; JWT cũ mất hiệu lực sau restart, không dùng cho shared JWT. |
+| Development shared, có `Jwt:KeyId` | Bắt buộc private key hợp lệ và ổn định. Missing/placeholder/malformed không được dùng ephemeral. Template mới khai báo KeyId nên cần điền key trước khi chạy. |
+| Ngoài Development | Bắt buộc key hợp lệ cùng issuer/audience hợp lệ; startup fail khi thiếu hoặc sai. |
+
+**Áp dụng cấu hình:** chạy `./setup.ps1 -SkipDatabase -SkipRestore` để bước `[5/7]` đồng bộ user-secrets qua stdin, rồi restart UserService khi chạy VS/direct `dotnet run`. Host runner `./scripts/run-schema-service.ps1 -Service User` đọc `.env` mỗi lần start. Docker: `./scripts/run-app-service.ps1 -Service User -NoBuild` recreate container với env mới; khi đổi issuer/audience/path, recreate các consumer nữa. Lần đầu sau thay đổi code phải build image bằng runner không có `-NoBuild`. Giữ nguyên key và kid qua restart thông thường. Không dùng `docker start` để nạp cấu hình mới.
+
+Thứ tự cấu hình ASP.NET mặc định: command line > environment > Development user-secrets > `appsettings.{Environment}.json` > `appsettings.json`. Runner chủ động ánh xạ `.env` vào environment; chạy VS trong terminal sạch để tránh biến cũ ghi đè user-secrets. Loader mặc định loại private JWT variables, kể cả alias ASP.NET và giá trị kế thừa từ shell; chỉ runner UserService nhận chúng và dọn khỏi môi trường runner khi kết thúc. Bảng ánh xạ đầy đủ ở [environment skill](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md#8-jwt-signing-and-public-trust-spark-327).
+
+**Kiểm tra public JWKS an toàn:** sau khi chạy UserService, dùng URL UserService đã cấu hình (mặc định dưới đây). Không cần bearer token:
+
+```powershell
+$jwksResponse = Invoke-WebRequest 'http://localhost:5035/.well-known/jwks.json' -UseBasicParsing
+$jwksResponse.StatusCode
+$jwksResponse.Headers['Content-Type']
+$jwksResponse.Headers['Cache-Control']
+$jwksResponse.Content | ConvertFrom-Json | Select-Object -ExpandProperty keys
+```
+
+Kết quả chỉ có `kty`, `kid`, `use`, `alg`, `n`, `e`; không có `d`, `p`, `q`, `dp`, `dq`, `qi` hoặc cấu hình secret. Content type là `application/jwk-set+json`, cache `public, max-age=300`. `kid` phải khớp JOSE header của JWT được UserService phát; việc decode JWT chỉ để quan sát không chứng minh chữ ký hợp lệ. Contract và kiểm thử ở [JWKS API design](docs/03-design/api/userservice-jwks-api-design.md).
+
+Consumer host nhận JWKS URI từ `SMARTPARK_SERVICE_USER_URL` + `SMARTPARK_JWT_JWKS_PATH` (mặc định `http://localhost:5035/.well-known/jwks.json`); Docker nhận `http://user-service:8080` + path. HTTP chỉ thuộc trust boundary Development local/Compose network được kiểm soát. Production phải dùng JWKS URI HTTPS đáng tin cậy hoặc transport có bảo vệ tương đương, cấu hình từ deployment; không tin URL `jku`/`x5u` do token cung cấp. Private key production cần secret store được bảo vệ, không dùng `.env` như giải pháp quản lý key production.
+
+**Vòng đời và rotation:** implementation hiện tại chỉ publish **một key đang ký**, chưa có old/new overlap hay seamless rotation. Mỗi lần đổi key phải dùng kid mới, không tái sử dụng kid cho key khác; hiện chưa có durable key-history registry phát hiện việc tái sử dụng kid qua các lần restart. Xem đây là trách nhiệm vận hành được ghi nhận, không phải bảo đảm tự động. Rotation hoàn chỉnh ở task sau phải: publish public key mới cùng key cũ → chờ cache nhận key mới → đổi signing key/kid → giữ public key cũ ít nhất 15 phút cộng clock skew và cache/refetch margin → retire key cũ. Với cache hiện tại 5 phút và skew UserService bằng 0, tối thiểu 20 phút sau lần ký cuối bằng key cũ, tăng thêm theo cache/skew của consumer. Trước khi có overlap, thay key làm JWT cũ không còn được endpoint hiện tại xác minh; lên kế hoạch cửa sổ bảo trì/re-login, không gọi đó là seamless rotation.
+
+JWT/JWKS không sửa technical debt đã được [ADR 2026-11-04](docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) chấp thuận: TOKEN có thể giữ claims/session stale đến hết thời hạn; REQUEST Account-current Saga, authorization-to-effect race và exact-session continuity là các giới hạn riêng. UserService vẫn kiểm tra session/Account/User/role hiện tại tại các điểm bảo mật hiện có; không bỏ MFA, refresh rotation hoặc revocation.
 
 ## 6. Troubleshooting
 
@@ -363,7 +443,7 @@ Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skill
 2. Thêm giá trị thật vào `.env` local — setup **không** tự copy key mới vào `.env` đã tồn tại.
 3. Wire theo consumer:
    - BE container: `environment:` trong `compose.app.yml` dạng `NewKey: ${NEW_KEY:?...}`.
-   - BE host runner: tên theo chuẩn ASP.NET `Section__Key` dùng được ngay (runner export toàn bộ `.env`); tên `SMARTPARK_*` cần thêm mapping trong `run-schema-service.ps1`.
+   - BE host runner: tên theo chuẩn ASP.NET `Section__Key` đi qua loader theo phạm vi service; private JWT settings chỉ tới UserService. Tên `SMARTPARK_*` cần thêm mapping trong `run-schema-service.ps1`.
    - VS/user-secrets: thêm vào `$desired` bước `[5/7]` của `setup.ps1`; key optional thêm cả vào `$removable`.
    - Sinh/validate tự động: bổ sung bước `[2/7]`/`[3/7]`.
    - FE host: `FE/.env.example` (+ bước `[6/7]` nếu muốn auto-fill); FE container: `environment:` service `frontend` trong compose.
@@ -381,6 +461,6 @@ Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skill
 
 ### OperationService (đổi tên từ ReservationService)
 
-Mã nguồn, project và namespace dùng tên OperationService. Chạy bằng -Service Operation; -Service Reservation vẫn là alias tương thích. Giữ UserSecretsId SmartParking.ReservationService.API.LocalDevelopment, các khóa ConnectionStrings:Reservation / Services:Reservation và biến SMARTPARK_*RESERVATION*. Compose vẫn dùng service/image reservation-service để tương thích môi trường hiện có; build arg là OperationService. Port API 5055, database smartpark_operations và các HTTP route giữ nguyên.
+Mã nguồn, project và namespace dùng tên OperationService. Chạy bằng -Service Operation; -Service Reservation vẫn là alias tương thích. Giữ UserSecretsId SmartParking.ReservationService.API.LocalDevelopment, các khóa ConnectionStrings:Reservation / Services:Reservation và biến SMARTPARK_*RESERVATION*. Compose dùng service/image operation-service; hostname reservation-service vẫn là network alias tương thích. Build arg là OperationService. Port API 5055, database smartpark_operations và các HTTP route giữ nguyên.
 
 Sau khi pull, chạy dotnet restore SmartParking.slnx và dotnet build SmartParking.slnx. Với Docker, chạy scripts/run-app-service.ps1 -Service Operation để build lại image; không dùng -NoBuild cho lần đầu sau đổi tên.

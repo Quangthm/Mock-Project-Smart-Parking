@@ -15,6 +15,7 @@ public class PaymentOrderConfiguration : IEntityTypeConfiguration<PaymentOrder>
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.SiteId).HasColumnName("site_id").IsRequired();
         builder.Property(x => x.AccountId).HasColumnName("account_id");
+        builder.Property(x => x.PlateNumber).HasColumnName("plate_number").HasMaxLength(50);
 
         builder.Property(x => x.OrderCode).HasColumnName("order_code").HasMaxLength(100).IsRequired();
         builder.HasIndex(x => x.OrderCode).IsUnique();

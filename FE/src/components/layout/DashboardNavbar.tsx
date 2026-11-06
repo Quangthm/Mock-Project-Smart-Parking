@@ -9,7 +9,6 @@ import { AccountSecurityPanel } from "../forms/AccountSecurityPanel"
 import { store } from "../../lib/store"
 import { scrollPageToTop } from "../../lib/scrollPageToTop"
 import { AccountSwitcher } from "../account/AccountSwitcher"
-import { PartnerContractDialog } from "../modals/PartnerContractDialog"
 import { listOwnerContractCopies } from "../../lib/partnerContract"
 import { showUiToast } from "../../lib/uiToast"
 import { authApi } from "../../lib/authApi"
@@ -74,7 +73,6 @@ export function DashboardNavbar() {
 
   const [panel, setPanel] = useState<"profile" | "search" | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const [contractCopyId, setContractCopyId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const profileTriggerRef = useRef<HTMLButtonElement>(null)
   const settingsDialogRef = useRef<HTMLDivElement>(null)
@@ -105,7 +103,7 @@ export function DashboardNavbar() {
 
   const settingsOpen = accountModalTab !== null
   useEffect(() => {
-    if (!settingsOpen || contractCopyId) return
+    if (!settingsOpen) return
     settingsCloseRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -125,10 +123,9 @@ export function DashboardNavbar() {
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [settingsOpen, securityDismissBlocked, contractCopyId])
+  }, [settingsOpen, securityDismissBlocked])
 
   const ownerContractCopies = user?.role === "owner" ? listOwnerContractCopies(user.email) : []
-  const contractCopy = ownerContractCopies.find(copy => copy.applicationId === contractCopyId)
 
   function closeSettings() {
     if (securityDismissBlocked) return
@@ -629,7 +626,7 @@ export function DashboardNavbar() {
                     <div className="settings-section-heading"><h3>Partnership agreements</h3><p>Review your locally saved agreement copies after both parties acknowledge them.</p></div>
                     {ownerContractCopies.length === 0 ? <p className="settings-contracts-empty">No completed agreement is saved in this browser yet.</p> : ownerContractCopies.map(({ applicationId, record }) => <article className="settings-contract-card" key={applicationId}>
                       <div><strong>{record.lotName || record.businessName || "SmartParking partnership"}</strong><span>{record.businessName || "Owner business"} · Signed {new Date(record.adminAcknowledgedAt!).toLocaleDateString("en-GB")}</span></div>
-                      <button type="button" className="btn-outline" onClick={() => setContractCopyId(applicationId)}>View agreement</button>
+                      <a className="btn-outline" href={`/owner/contract/${encodeURIComponent(applicationId)}`}>View agreement</a>
                     </article>)}
                     <p className="settings-helper">These draft acknowledgements are stored in this browser only. Download the Word draft for a separate copy.</p>
                   </div>
@@ -640,18 +637,6 @@ export function DashboardNavbar() {
           </div>,
           document.body,
         )}
-      {contractCopy && <PartnerContractDialog
-        applicationId={contractCopy.applicationId}
-        ownerName={contractCopy.record.ownerName}
-        businessName={contractCopy.record.businessName || "Owner business"}
-        lotName={contractCopy.record.lotName || "Parking lot"}
-        record={contractCopy.record}
-        signer="owner"
-        signerName={contractCopy.record.ownerName}
-        readOnly
-        onClose={() => setContractCopyId(null)}
-        onSign={() => {}}
-      />}
     </>
   )
 }

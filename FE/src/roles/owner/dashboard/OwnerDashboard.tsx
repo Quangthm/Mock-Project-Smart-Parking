@@ -10,6 +10,7 @@ import { LotManagement } from '../parking-lots/LotManagement';
 import { RevenueDashboard } from '../revenue/RevenueDashboard';
 import { ParkingStructure } from '../structure/ParkingStructure';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
+import { reconcileOwnerLotSetups } from '../../../lib/ownerLotSetup';
 
 type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy';
 
@@ -28,9 +29,11 @@ export function OwnerDashboard() {
     let current = true;
     setLoading(true); setSitesLoaded(false); setError('');
     Promise.allSettled([parkingApi.list(), operatorsApi.list()])
-      .then(([siteResult, operatorResult]) => {
+      .then(async ([siteResult, operatorResult]) => {
         if (!current) return;
         if (siteResult.status === 'fulfilled') {
+          await reconcileOwnerLotSetups(siteResult.value, user?.id ?? '').catch(() => {});
+          if (!current) return;
           setSites(siteResult.value);
           setSitesLoaded(true);
           setSelectedSiteId(current => current === setupSiteId || current === 'all' || siteResult.value.some(site => site.id === current) ? current : 'all');

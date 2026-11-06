@@ -50,17 +50,11 @@ mới không xóa bộ đếm. Request không nhập mã không tính là nhập
 credential được khóa trong transaction để mã dự phòng không thể dùng hai lần
 đồng thời. Thay đổi cấu hình bảo mật đóng các challenge đăng nhập còn mở.
 
-## Migration và kiểm tra
+## Schema và kiểm tra
 
-Áp dụng `scripts/database/05.13-Mfa-Lifecycle.sql` sau `05.8`. Database mới
-chạy migration qua compose; database có volume cũ chạy:
-
-```powershell
-.\scripts\apply-workflow-migrations.ps1 -Service User -SchemaRoot .
-```
-
-Script yêu cầu `.env` đã cấu hình theo `LOCAL-SETUP.md`. Migration có thể chạy
-lặp lại và không thay secret đang bật của người dùng hiện có.
+Các cột MFA và bảng recovery-code thuộc canonical UserDb base và được tạo bởi
+`.\setup.ps1`. Setup xác minh schema hiện hữu; database đã có dữ liệu nhưng thiếu
+các yêu cầu hiện tại cần migration riêng được review, không chạy lại base SQL.
 
 ```powershell
 npm.cmd --prefix FE run build

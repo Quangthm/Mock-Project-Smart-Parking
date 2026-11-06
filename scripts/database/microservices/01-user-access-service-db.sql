@@ -19,6 +19,7 @@ CREATE TABLE users (
     avatar_url TEXT,
     failed_login_attempts INT NOT NULL DEFAULT 0,
     locked_until TIMESTAMPTZ,
+    access_version BIGINT NOT NULL DEFAULT 0,
     email_verified_at TIMESTAMPTZ,
     phone_verified_at TIMESTAMPTZ,
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL', 'PENDING_VERIFICATION', 'REJECTED')),
@@ -76,7 +77,7 @@ CREATE TABLE accounts (
     site_id UUID,
 
     permissions TEXT[],
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL')),
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL', 'PENDING_VERIFICATION')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ
@@ -117,6 +118,7 @@ CREATE TABLE user_refresh_tokens (
     expires_at TIMESTAMPTZ NOT NULL,
     access_token_id UUID NOT NULL UNIQUE,
     access_expires_at TIMESTAMPTZ NOT NULL,
+    last_refreshed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_revoked BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -125,6 +127,16 @@ CREATE TABLE user_refresh_tokens (
 CREATE INDEX "IX_user_refresh_tokens_account_id_user_id" ON user_refresh_tokens(account_id, user_id);
 CREATE INDEX idx_user_refresh_tokens_user_id ON user_refresh_tokens (user_id);
 CREATE INDEX idx_user_refresh_tokens_expires_at ON user_refresh_tokens (expires_at);
+
+CREATE TABLE rotated_session_proofs (
+    access_token_id UUID PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES user_refresh_tokens(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) NOT NULL,
+    access_expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX idx_rotated_session_proofs_session ON rotated_session_proofs(session_id);
+CREATE INDEX idx_rotated_session_proofs_user ON rotated_session_proofs(user_id);
 
 -- 8. BẢNG ĐĂNG KÝ TÀI XẾ (DRIVER REGISTRATION OTP)
 CREATE TABLE driver_registrations (
@@ -170,6 +182,10 @@ CREATE TABLE owner_applications (
     tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
     site_id UUID, -- Logical ID của bãi xe ở trạng thái PENDING_APPROVAL trong FacilityDb
     draft_structure JSONB, -- Snapshot cấu hình bãi xe (Zone, Floor, Capacity) lúc đăng ký
+    lot_setup JSONB,
+    setup_token_hash TEXT,
+    setup_token_expires_at TIMESTAMPTZ,
+    approval_requested_by UUID REFERENCES users(id),
     
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     submitted_at TIMESTAMPTZ NOT NULL,
@@ -239,8 +255,20 @@ CREATE TABLE mfa_credentials (
     enabled BOOL NOT NULL DEFAULT FALSE,
     last_step BIGINT NOT NULL DEFAULT -1,
     attempts INT NOT NULL DEFAULT 0,
-    locked_until TIMESTAMPTZ
+    locked_until TIMESTAMPTZ,
+    pending_protected_secret TEXT,
+    pending_expires_at TIMESTAMPTZ
 );
+
+CREATE TABLE mfa_recovery_codes (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id),
+    code_hash TEXT NOT NULL,
+    used_at TIMESTAMPTZ,
+    UNIQUE (user_id, code_hash)
+);
+
+CREATE INDEX idx_mfa_recovery_codes_user ON mfa_recovery_codes(user_id);
 
 CREATE OR REPLACE FUNCTION protect_auth_session_account_binding() RETURNS trigger
 LANGUAGE plpgsql AS $$

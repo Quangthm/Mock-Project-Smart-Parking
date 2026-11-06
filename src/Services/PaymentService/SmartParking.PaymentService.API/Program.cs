@@ -1,11 +1,14 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
-using MassTransit;
-using SmartParking.PaymentService.Infrastructure.Messaging;
+using SmartParking.PaymentService.Persistence.Outbox;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,45 +38,56 @@ if (builder.Environment.IsDevelopment())
 }
 else
 {
-    builder.Services.AddAuthentication();
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+        {
+            var jwtSection = builder.Configuration.GetSection("Jwt");
+            var issuer = jwtSection["Issuer"] ?? "SmartParking.UserService";
+            var audience = jwtSection["Audience"] ?? "SmartParking";
+            var secretKey = jwtSection["SecretKey"] ?? "smartpark-default-insecure-dev-jwt-key-replace-in-production-min-32-chars";
+            var pemKey = jwtSection["PublicKeyPem"] ?? jwtSection["PrivateKeyPem"];
+
+            var signingKeys = new List<SecurityKey>();
+            if (!string.IsNullOrWhiteSpace(pemKey))
+            {
+                var rsa = RSA.Create();
+                rsa.ImportFromPem(pemKey);
+                signingKeys.Add(new RsaSecurityKey(rsa));
+            }
+            if (!string.IsNullOrWhiteSpace(secretKey))
+            {
+                signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)));
+            }
+
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = issuer,
+                ValidateAudience = true,
+                ValidAudience = audience,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(1),
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = signingKeys,
+                IssuerSigningKey = signingKeys.FirstOrDefault(),
+                RoleClaimType = "role",
+                NameClaimType = "sub"
+            };
+        });
 }
 
 builder.Services.AddAuthorization();
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
-builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
-if (builder.Configuration.GetValue<bool>("Messaging:Enabled"))
-{
-    builder.Services.AddMassTransit(registration =>
-    {
-        registration.AddEntityFrameworkOutbox<PaymentDbContext>(outbox =>
-        {
-            outbox.UsePostgres();
-            outbox.UseBusOutbox(busOutbox =>
-            {
-                if (!builder.Configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
-                    busOutbox.DisableDeliveryService();
-            });
-        });
-        registration.UsingRabbitMq((context, bus) =>
-        {
-            bus.Message<PaymentSucceededV1>(message =>
-                message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
-            bus.Host(
-                builder.Configuration["SMARTPARK_RABBITMQ_HOST"] ?? "127.0.0.1",
-                builder.Configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
-                builder.Configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark",
-                host =>
-                {
-                    host.Username(builder.Configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark");
-                    host.Password(builder.Configuration["SMARTPARK_RABBITMQ_PASSWORD"]
-                        ?? throw new InvalidOperationException("Configure SMARTPARK_RABBITMQ_PASSWORD."));
-                });
-        });
-    });
-}
+builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaymentOutbox(builder.Configuration));
 
 var app = builder.Build();
 

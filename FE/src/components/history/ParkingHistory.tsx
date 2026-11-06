@@ -28,6 +28,7 @@ interface ParkingHistoryProps {
   dateLabel: string
   emptyMessage: string
   loading?: boolean
+  quietLoading?: boolean
   error?: string
   onRetry?: () => void
   showVehicleFilter?: boolean
@@ -75,7 +76,7 @@ function normalizePlate(value: string) {
   return value.replace(/[^a-z0-9]/gi, "").toUpperCase()
 }
 
-export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emptyMessage, loading = false, error, onRetry, showVehicleFilter = false }: ParkingHistoryProps) {
+export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emptyMessage, loading = false, quietLoading = false, error, onRetry, showVehicleFilter = false }: ParkingHistoryProps) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [vehicle, setVehicle] = useState("all")
@@ -145,9 +146,9 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
     <div className="parking-history-header">
       <div>
         <h2>{title}</h2>
-        <p aria-live="polite">{scope} <span aria-hidden="true">·</span> {loading ? "Loading…" : `${filtered.length} ${filtered.length === 1 ? "record" : "records"}`}</p>
+        <p aria-live="polite">{scope}{(!loading || !quietLoading) && <> <span aria-hidden="true">·</span> {loading ? "Loading…" : `${filtered.length} ${filtered.length === 1 ? "record" : "records"}`}</>}</p>
       </div>
-      <span className="parking-history-total" aria-label={`${records.length} total records`}>{records.length} total</span>
+      {(!loading || !quietLoading) && <span className="parking-history-total" aria-label={`${records.length} total records`}>{records.length} total</span>}
     </div>
 
     <div className="parking-history-filters" aria-label="Filter parking history">
@@ -161,7 +162,7 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
     </div>
 
     {error && <div role="alert" className="parking-history-message is-error"><UntitledIcon name="alert" size={19} /><span>{error}</span>{onRetry && <button type="button" onClick={onRetry}>Retry</button>}</div>}
-    {loading ? <div role="status" className="parking-history-message"><UntitledIcon name="clock" size={19} /><span>Loading parking history…</span></div> : error ? null : visible.length === 0 ? <div role="status" className="parking-history-empty"><UntitledIcon name="parking" size={28} /><strong>{records.length ? "No matching records" : "No history yet"}</strong><p>{records.length ? "Try another plate, location, or filter." : emptyMessage}</p></div> : <>
+    {loading ? <div role="status" className={quietLoading ? "sr-only" : "parking-history-message"}>{!quietLoading && <UntitledIcon name="clock" size={19} />}<span>Loading parking history…</span></div> : error ? null : visible.length === 0 ? <div role="status" className="parking-history-empty"><UntitledIcon name="parking" size={28} /><strong>{records.length ? "No matching records" : "No history yet"}</strong><p>{records.length ? "Try another plate, location, or filter." : emptyMessage}</p></div> : <>
       <div className="parking-history-table-wrap">
         <table className="parking-history-table">
           <thead><tr><th scope="col">Vehicle</th><th scope="col">{dateLabel === "Entry" ? "Account / visit" : "Parking site"}</th><th scope="col">Space</th><th scope="col">{dateLabel}</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead>

@@ -163,3 +163,13 @@ CREATE TABLE structure_change_audit (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX ix_structure_change_history ON structure_change_audit(site_id, created_at);
+
+-- FacilityService owner-onboarding provisioning state.
+BEGIN;
+CREATE TABLE IF NOT EXISTS owner_onboarding_provisions (
+    application_id uuid PRIMARY KEY,
+    site_id uuid NOT NULL UNIQUE REFERENCES parking_sites(id),
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+COMMIT;

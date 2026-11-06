@@ -57,7 +57,6 @@ public sealed class AuthSessionService(IAccessTokenService tokens, IAuthSessionS
         {
             UserId = user.Id!.Value, FullName = user.FullName, Email = user.Email ?? string.Empty,
             Role = AccountRolePolicy.CurrentRole(account)!,
-            OnboardingComplete = user.OnboardingComplete,
         }
     };
 }

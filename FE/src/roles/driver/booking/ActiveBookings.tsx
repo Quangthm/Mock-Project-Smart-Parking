@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react"
 
 import { useApp } from "../../../context/AppContext"
-import type { Booking, DriverVehicle } from "../../../lib/types"
+import type { Booking } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { canonicalVietnamesePlate, vehiclesApi, type RegisteredVehicle } from "../../../lib/vehiclesApi"
 import { driverData as store } from "../data/data"
 import "../../../booking-support.css"
 
 const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
 const currency = new Intl.NumberFormat("vi-VN")
 
-function BookingRow({ booking, vehicle, address }: { booking: Booking; vehicle?: DriverVehicle; address?: string }) {
+function BookingRow({ booking, vehicleType, address }: { booking: Booking; vehicleType?: string; address?: string }) {
   const parked = booking.status === "checked-in"
   const status = parked ? "Parking now" : booking.status === "confirmed" ? "Confirmed" : "Pending"
 
@@ -22,7 +23,7 @@ function BookingRow({ booking, vehicle, address }: { booking: Booking; vehicle?:
     <div className="driver-booking-cell">
       <span className="driver-booking-cell-label">Vehicle</span>
       <strong className="driver-booking-plate" translate="no">{booking.licensePlate}</strong>
-      <span className="driver-booking-secondary">{vehicle?.type === "motorcycle" ? "Motorcycle" : vehicle?.type === "car" ? "Car" : "Vehicle"} · Space {booking.slotNumber}</span>
+      <span className="driver-booking-secondary">{vehicleType === "motorcycle" ? "Motorcycle" : vehicleType === "car" ? "Car" : "Vehicle"} · Space {booking.slotNumber}</span>
     </div>
     <div className="driver-booking-cell">
       <span className="driver-booking-cell-label">Parking time</span>
@@ -40,6 +41,7 @@ function BookingRow({ booking, vehicle, address }: { booking: Booking; vehicle?:
 export function ActiveBookings() {
   const { user } = useApp()
   const [bookings, setBookings] = useState<Booking[]>(() => user ? store.getBookingsByDriver(user.id) : [])
+  const [registeredVehicles, setRegisteredVehicles] = useState<RegisteredVehicle[]>([])
   const [, setDataRevision] = useState(0)
 
   useEffect(() => {
@@ -50,6 +52,16 @@ export function ActiveBookings() {
     refresh()
     window.addEventListener("sp-data-change", refresh)
     return () => window.removeEventListener("sp-data-change", refresh)
+  }, [user?.id])
+
+  useEffect(() => {
+    setRegisteredVehicles([])
+    if (!user) return
+    let active = true
+    vehiclesApi.list()
+      .then(items => { if (active) setRegisteredVehicles(items) })
+      .catch(() => { if (active) setRegisteredVehicles([]) })
+    return () => { active = false }
   }, [user?.id])
 
   const parking = bookings.filter((booking) => booking.status === "checked-in")
@@ -75,7 +87,8 @@ export function ActiveBookings() {
         {group.records.length ? group.records.map(booking => <BookingRow
           key={booking.id}
           booking={booking}
-          vehicle={vehicles.find(vehicle => vehicle.licensePlate === booking.licensePlate)}
+          vehicleType={registeredVehicles.find(vehicle => canonicalVietnamesePlate(vehicle.canonicalPlate) === canonicalVietnamesePlate(booking.licensePlate))?.vehicleType.toLowerCase()
+            ?? vehicles.find(vehicle => canonicalVietnamesePlate(vehicle.licensePlate) === canonicalVietnamesePlate(booking.licensePlate))?.type}
           address={lots.find(lot => lot.id === booking.lotId)?.address}
         />) : <div className="driver-booking-empty" role="status">
           <UntitledIcon name={group.icon} size={21} />

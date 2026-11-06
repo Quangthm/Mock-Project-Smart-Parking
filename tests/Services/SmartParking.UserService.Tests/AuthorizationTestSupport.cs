@@ -7,6 +7,7 @@ using SmartParking.UserService.Domain.Entities;
 using UserService.Application.Authorization;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 
@@ -19,7 +20,7 @@ internal static class TestAuthorization
     public static void AddServices(IServiceCollection services, AuthTestFixture fixture)
     {
         services.TryAddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
-        services.TryAddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        services.TryAddSingleton<IEventPublisher, RecordingEventPublisher>();
         services.TryAddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         services.TryAddSingleton<IAuthorizationScopeStore>(new MemoryScopes(fixture));
         services.TryAddSingleton<IParkingDirectory, TestParkingDirectory>();
@@ -53,7 +54,7 @@ internal static class TestAuthorization
             var now = clock.GetUtcNow();
             session = new AuthSession { Id = Guid.NewGuid(), UserId = userId, AccountId = account.Id,
                 AccessTokenId = Guid.NewGuid(), TokenHash = Guid.NewGuid().ToString("N"),
-                CreatedAt = now, AccessExpiresAt = now.AddHours(1), ExpiresAt = now.AddDays(7) };
+                CreatedAt = now, LastRefreshedAt = now, AccessExpiresAt = now.AddHours(1), ExpiresAt = now.AddDays(7) };
             db.AuthSessions.Add(session);
             await db.SaveChangesAsync();
         }

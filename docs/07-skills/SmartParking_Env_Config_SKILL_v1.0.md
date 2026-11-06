@@ -30,7 +30,7 @@ Goals:
 |---|---|---|
 | `setup.ps1` steps `[2/7]`/`[3/7]` | loads `.env` via `scripts/load-env.ps1`; reuses/generates known credentials and validates them | credential generation list, validation lists |
 | user-secrets (Visual Studio, direct `dotnet run`) | step `[5/7]` syncs the `$desired` map: writes missing keys, overwrites differing values, removes optional keys no longer in `.env` | `$desired` hashtable (+ `$removable` list for optional keys) |
-| Host runner `scripts/run-schema-service.ps1` | exports **all** `.env` keys to the process environment, then maps `SMARTPARK_*` keys to ASP.NET config (`ConnectionStrings__*`, `Services__*`, `DevelopmentAdmin/Owner/Operator__*`, `Otp__Smtp__*`, `Jwt__PrivateKeyPem`, `Workflow__KeyDirectory`) | add a mapping line in the runner, or name the key in ASP.NET convention (`Section__Key`) |
+| Host runner `scripts/run-schema-service.ps1` | exports non-signing `.env` keys by default; UserService alone receives signing keys to the process environment, then maps `SMARTPARK_*` keys to ASP.NET config (`ConnectionStrings__*`, `Services__*`, `DevelopmentAdmin/Owner/Operator__*`, `Otp__Smtp__*`, `Jwt__PrivateKeyPem`, `Workflow__KeyDirectory`) | add a mapping line in the runner, or name the key in ASP.NET convention (`Section__Key`) |
 | Docker app stack `compose.app.yml` | containers receive only what is listed under `environment:`, interpolated from `.env` (`${KEY}`) | add an `environment:` entry, then recreate containers |
 | DB / Sonar / AI Compose stacks | ports and passwords interpolated from `.env` at container creation | add interpolation in the matching compose file |
 | FE host (Vite) | `FE/.env` — setup copies the template when missing and fills MapTiler + AI URLs only when empty | `FE/.env.example` (+ optional fill logic in step `[6/7]`) |
@@ -66,7 +66,7 @@ Rules that always apply:
 
 ## 4.1 Template and local env
 
-1. Add the key (placeholder value + short comment) to `.env.example` — committed. Placeholder values matching `replace-with-*` are treated as "not configured" by setup.
+1. Add the key (placeholder value + short comment) to `.env.example` — committed. Signing placeholders matching `replace-with-*` are treated as "not configured" by setup.
 2. Add the real value to your local `.env`. Setup does **not** copy unknown keys into an existing `.env`; every developer must add them manually.
 3. Never commit real secrets; never print key values into logs or command arguments.
 
@@ -146,6 +146,23 @@ docker compose --project-name smartpark-app --env-file .env -f compose.app.yml c
 - [ ] No secret was committed, logged, or printed.
 
 ---
+
+# 8. JWT signing and public trust (SPARK-327)
+
+The loader now excludes private JWT names and clears inherited private aliases by default. Only the UserService runner opts into signing-secret export; it restores the prior signing environment afterward. `-NoExport` only parses and does not modify environment. Do not launch unrelated services from a shell where signing secrets were manually exported.
+
+| .env source | Setup user-secrets and host environment | Docker environment | Recipient |
+| --- | --- | --- | --- |
+| `SMARTPARK_JWT_ISSUER` | `Jwt:Issuer` / `Jwt__Issuer` | `Jwt__Issuer` | UserService |
+| `SMARTPARK_JWT_AUDIENCE` | `Jwt:Audience` / `Jwt__Audience` | `Jwt__Audience` | UserService |
+| `SMARTPARK_JWT_KEY_ID` | `Jwt:KeyId` / `Jwt__KeyId` | `Jwt__KeyId` | UserService |
+| `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` | `Jwt:PrivateKeyPemBase64` / `Jwt__PrivateKeyPemBase64` | `Jwt__PrivateKeyPemBase64` | UserService only |
+| `SMARTPARK_JWT_PRIVATE_KEY_PEM` (legacy) | `Jwt:PrivateKeyPem` / `Jwt__PrivateKeyPem` | `Jwt__PrivateKeyPem` | UserService only |
+| `SMARTPARK_JWT_JWKS_PATH` | `Jwt:JwksPath` / `Jwt__JwksPath` | `Jwt__JwksPath` | UserService |
+| issuer / audience above | `JwtValidation:Issuer`, `JwtValidation:Audience` (host uses `__`) | same `__` names | Facility, Operation, Payment |
+| UserService URL + JWKS path | `JwtValidation:JwksUri` / `JwtValidation__JwksUri` | `http://user-service:8080` + configured path | Facility, Operation, Payment |
+
+Setup skips `replace-with-*` signing placeholders; runtime rejects them as malformed if supplied directly. The template's configured KeyId requires a real stable key. Both PEM forms must represent the same key if populated. No key is generated or silently replaced. Keep does not merge new template fields. See LOCAL-SETUP §5.5 for manual RSA 3072 generation, Base64 encoding, reconfiguration and rotation limits. JWT changes require no database recreation. Consumer settings prepare a future middleware contract only.
 
 # 7. Related Documents
 

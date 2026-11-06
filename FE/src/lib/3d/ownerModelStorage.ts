@@ -48,6 +48,19 @@ export async function loadOwnerModelUrl(siteId: string): Promise<string | null> 
   return url
 }
 
+export async function copyOwnerModel(fromId: string, toId: string): Promise<string | null> {
+  const db = await openDatabase()
+  let file: File | undefined
+  try {
+    file = await new Promise<File | undefined>((resolve, reject) => {
+      const request = db.transaction(storeName, "readonly").objectStore(storeName).get(fromId)
+      request.onsuccess = () => resolve(request.result as File | undefined)
+      request.onerror = () => reject(request.error ?? new Error("Could not load the 3D model."))
+    })
+  } finally { db.close() }
+  return file ? saveOwnerModel(toId, file) : null
+}
+
 export async function deleteOwnerModel(siteId: string): Promise<void> {
   const db = await openDatabase()
   try {

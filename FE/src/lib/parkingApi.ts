@@ -99,7 +99,7 @@ async function call<T>(
 export const parkingApi = {
   list: () => call<Site[]>(""),
 
-  create: (body: { code: string; name: string; address: string }) =>
+  create: (body: { code: string; name: string; address: string; latitude?: number; longitude?: number }) =>
     call<Site>("", "POST", body),
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),
@@ -112,7 +112,10 @@ export const parkingApi = {
     opts?: OperationalLayoutOptions,
   ): Promise<OperationalLayoutProjection> {
     const fixture = await operationalLayoutFixture()
-    if (fixture) return fixture
+    if (fixture) {
+      if (fixture.siteId !== id) throw new Error("Fixture site ID does not match the requested parking lot.")
+      return fixture
+    }
 
     const query: string[] = []
     if (opts?.vehicleType) query.push(`vehicleType=${encodeURIComponent(opts.vehicleType)}`)
@@ -217,7 +220,7 @@ export const operatorsApi = {
     return request(`/${encodeURIComponent(id)}/invitation`, "POST", undefined, "/api/operators")
   },
   async assignments() {
-    return (
+    const assignments = (
       await request<Response<OperatorAssignment[]>>(
         "/me",
         "GET",
@@ -225,6 +228,12 @@ export const operatorsApi = {
         "/api/operators",
       )
     ).data
+    if (!Array.isArray(assignments) || assignments.some((assignment) =>
+      !assignment || typeof assignment.siteId !== "string" || typeof assignment.tenantId !== "string" ||
+      !Array.isArray(assignment.permissions))) {
+      throw new Error("The assignment service returned an invalid site list. Please try again.")
+    }
+    return assignments
   },
 
   async list() {

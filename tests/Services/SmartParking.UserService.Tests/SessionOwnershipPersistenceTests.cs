@@ -62,7 +62,7 @@ public sealed class SessionOwnershipPersistenceTests
         db.AuthSessions.Add(legacy);
         await db.SaveChangesAsync();
         await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(
-            ServiceSchema.FeaturePath("test/verify-user-access-schema.sql")));
+            ServiceSchema.ScriptPath("test/verify-user-access-schema.sql")));
         Assert.Null((await db.AuthSessions.AsNoTracking().SingleAsync(s => s.Id == legacy.Id)).AccountId);
         var store = new PostgresAuthSessionStore(db, clock);
         Assert.False(await store.IsActiveAsync(legacy.AccessTokenId, legacy.UserId, default));

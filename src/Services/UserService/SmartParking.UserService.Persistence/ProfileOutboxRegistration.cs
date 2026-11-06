@@ -11,8 +11,6 @@ public static class ProfileOutboxRegistration
         {
             outbox.UsePostgres();
             outbox.QueryDelay = TimeSpan.FromSeconds(1);
-            // UserService publishes only; no consumer/inbox cleanup worker is needed.
-            outbox.DisableInboxCleanupService();
             outbox.UseBusOutbox(busOutbox =>
             {
                 if (!bool.TryParse(configuration["Messaging:OutboxDeliveryEnabled"], out var enabled) || !enabled)

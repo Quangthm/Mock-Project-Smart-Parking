@@ -119,7 +119,7 @@ public sealed class PostgresAuthTests
                 Assert.True(passwords.Verify("Password@123", seeded.PasswordHash));
                 await new DataSeeder(db, passwords).SeedAsync();
                 Assert.Equal(seeded.PasswordHash, (await db.Users.AsNoTracking().SingleAsync()).PasswordHash);
-                await ServiceSchema.ApplyFeaturesAsync(db);
+                await ServiceSchema.VerifyCanonicalAsync(db);
 
             }
 

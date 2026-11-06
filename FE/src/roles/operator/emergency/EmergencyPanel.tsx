@@ -114,7 +114,7 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
       )}
 
       {loading && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+        <div role="status" className="sr-only">
           Loading facility incidents…
         </div>
       )}
@@ -172,7 +172,7 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
               </div>
             ))}
 
-            {openIncidents.length === 0 && (
+            {!loading && openIncidents.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--muted)]">
                 <UntitledIcon name="check-circle" size={24} />
                 <p className="mt-2 font-medium">No open incidents or security alarms.</p>

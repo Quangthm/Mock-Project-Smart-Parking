@@ -20,8 +20,6 @@ public record CreatePaymentOrderRequestDto(
     string? PlateNumber = null
 );
 
-public record CashPaymentRequestDto(string? IdempotencyKey = null);
-
 public record PaymentCheckoutResponseDto(
     Guid PaymentTransactionId,
     long OrderCode,

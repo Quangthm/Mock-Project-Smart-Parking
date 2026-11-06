@@ -16,4 +16,8 @@
     <ProjectReference Include="..\SmartParking.PaymentService.Domain\SmartParking.PaymentService.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.5.7" />
+  </ItemGroup>
+
 </Project>

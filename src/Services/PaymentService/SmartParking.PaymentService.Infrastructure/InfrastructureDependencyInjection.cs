@@ -1,22 +1,31 @@
+using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
-using SmartParking.PaymentService.Domain.Ports;
-using SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
-using SmartParking.PaymentService.Infrastructure.Options;
 using SmartParking.PaymentService.Application.Common.Interfaces.Services;
+using SmartParking.PaymentService.Infrastructure.Adapters;
+using SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
 using SmartParking.PaymentService.Infrastructure.Messaging;
+using SmartParking.PaymentService.Infrastructure.Options;
 
 namespace SmartParking.PaymentService.Infrastructure;
 
 public static class InfrastructureDependencyInjection
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructureServices(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<IBusRegistrationConfigurator>? configureOutbox = null)
     {
         var reservationServiceBaseUrl = configuration["Services:OperationService:BaseUrl"] ?? "http://localhost:5002/";
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
+        services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
         services.AddScoped<IPaymentSucceededPublisher, PaymentSucceededPublisher>();
+
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentActor, CurrentActorAdapter>();
 
         services.AddHttpClient<IReservationPricingSnapshotPort, ReservationSnapshotHttpAdapter>(client =>
         {
@@ -30,6 +39,47 @@ public static class InfrastructureDependencyInjection
             var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "https://api-merchant.payos.vn" : options.BaseUrl;
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = TimeSpan.FromSeconds(10);
+        });
+
+        var useInMemory = configuration.GetValue<bool>("RabbitMQ:UseInMemory");
+
+        services.AddMassTransit(x =>
+        {
+            configureOutbox?.Invoke(x);
+
+            if (useInMemory)
+            {
+                x.UsingInMemory((context, cfg) =>
+                {
+                    cfg.ConfigureEndpoints(context);
+                });
+            }
+            else
+            {
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    cfg.Message<SmartParking.PaymentService.Domain.Events.PaymentSucceededV1>(message =>
+                        message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
+                    cfg.Message<SmartParking.PaymentService.Infrastructure.Messaging.PaymentSucceededV1>(message =>
+                        message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
+                    var options = configuration.GetSection(RabbitMqOptions.SectionName).Get<RabbitMqOptions>()
+                                  ?? new RabbitMqOptions();
+
+                    cfg.Host(options.Host, options.Port, options.VirtualHost, h =>
+                    {
+                        h.Username(options.Username);
+                        h.Password(options.Password);
+                    });
+
+                    cfg.ConfigureEndpoints(context);
+                });
+            }
+        });
+
+        services.Configure<MassTransitHostOptions>(opt =>
+        {
+            opt.WaitUntilStarted = false;
+            opt.StopTimeout = TimeSpan.FromSeconds(5);
         });
 
         return services;

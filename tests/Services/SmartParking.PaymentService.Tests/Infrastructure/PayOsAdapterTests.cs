@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
 using SmartParking.PaymentService.Infrastructure.Options;
 using SmartParking.PaymentService.Infrastructure.Services;

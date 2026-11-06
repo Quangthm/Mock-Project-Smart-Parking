@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Persistence;
@@ -16,11 +16,16 @@ public class PaymentDbContext : DbContext
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<ProviderWebhook> ProviderWebhooks => Set<ProviderWebhook>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.AddTransactionalOutboxEntities();
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PaymentDbContext).Assembly);
+
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.AddOutboxStateEntity();
     }
 }

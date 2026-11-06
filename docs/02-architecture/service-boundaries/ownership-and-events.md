@@ -55,13 +55,19 @@ No interval means current-time availability and current tariff with billing unit
 
 ASP.NET Core/.NET target direction; API → Application → Domain with Persistence and Infrastructure implementing ports. API validates transport/authentication and maps errors; Application orchestrates use cases and authorization; Domain owns invariants; Persistence owns local transactions/repositories/migrations; Infrastructure owns provider/broker/media adapters. No Domain dependency on provider SDK, DbContext or HTTP. React/Tailwind/Material UI and three.js remain frontend directions; UI never becomes authority.
 
+## Account-current authorization coordination — approved 2026-11-04
+
+Use the [authorization ADR](../architecture-decisions/authorization-freshness-and-current-access.md). UserService owns current User/Account/role decisions; the business-service Saga owns durable admission/branch progress, accepted authorization attempts and finalization gates. Resource ownership and domain invariants remain with their service. Authorization requests are commands; allowed/denied replies are correlated outcomes, with both workflow and AuthorizationAttemptId. Trusted publishers/consumers, broker permissions, idempotency and safe logging are required; carrying actor IDs alone is not proof of trust. Raw user bearer credentials are forbidden in messages/state.
+
+The global numeric retry policy is approved in ADR §9; exact wire schemas and justified tested use-case overrides remain design work. Payment business attempts are a distinct policy. Service/device/provider flows use their own identities without a fabricated human actor. This does not create a Saga for self-contained UserService security checks.
+
 ## Command/event contract matrix
 
 Names are proposed stable technical labels, subject to schema review without changing business outcomes. Common envelope: event ID, schema version, aggregate ID/version, occurred/accepted time, correlation/causation/operation IDs, resource scope and minimal payload. No access token, provider secret, unnecessary plate/image/chat text in broadcast events. Publish originating fact with local outbox; consume with durable inbox/version checks.
 
 | Publisher / command outcome | Consumers | Required fact / pending recovery |
 |---|---|---|
-| User & Access: AccessChanged, OwnerApproved, OperatorGrantChanged | Resource services, authorized Admin projection | Current resource checks prevail over cached JWT; revoke subscriptions/private results |
+| User & Access: AccessChanged, OwnerApproved, OperatorGrantChanged | Resource services, authorized Admin projection | Local resource checks remain mandatory; apply TOKEN/REQUEST freshness and backend-targeted best-effort revocation notifications. No blanket instant JWT invalidation guarantee |
 | Facility: ChangeProposed, EmergencyRestrictionRecorded, ChangeCommitted | Operations, authorized visualization | Resource IDs/config version; planned acknowledgement vs immediate emergency reality |
 | Operations: ReservationCreated/Confirmed/Cancelled/Expired/NoShow | Payment, Notification/Audit | Accepted terms and referenced claim/result; never independent capacity authority in consumer |
 | Operations: AllocationChanged, ArrivalRecorded, VehicleEntered/Departed | Facility/3D projection, Notification/Audit | Scoped physical/claim versions; gate-open is not passage |
@@ -83,4 +89,4 @@ Unified React role-based routing, Tailwind CSS, Material UI and three.js remain 
 
 ## SEC-02 identity/support coordination
 
-General Support in Notification & Audit owns ACCOUNT_RECOVERY case intake/routing/review history and scoped references. User & Access authorizes and executes credential changes; no support database can directly update password/factor tables. Suggested outcomes: AccountRecoveryReviewed, RecoveryGrantIssued, PasswordResetCompleted, TotpResetRequired, TotpReplaced, SecuritySessionsRevoked; payloads contain operation/ticket/account/version references and minimal result, never secret/code/token. Use authenticated commands, local atomic writes/outbox and deduped projections. Timeout queries same operation; ticket approval is not proof of successful reset. Current security/session-version checks at resource services prevent revoked JWT use; do not rely on eventual notification delivery for revocation.
+General Support in Notification & Audit owns ACCOUNT_RECOVERY case intake/routing/review history and scoped references. User & Access authorizes and executes credential changes; no support database can directly update password/factor tables. Suggested outcomes: AccountRecoveryReviewed, RecoveryGrantIssued, PasswordResetCompleted, TotpResetRequired, TotpReplaced, SecuritySessionsRevoked; payloads contain operation/ticket/account/version references and minimal result, never secret/code/token. Use authenticated commands, local atomic writes/outbox and deduped projections. Timeout queries same operation; ticket approval is not proof of successful reset. UserService security/session-version checks remain authoritative locally. Resource enforcement follows the [freshness matrix](../../01-requirements/srs/authorization-operation-classification.md): TOKEN accepts the remaining stale window; REQUEST uses async Account-current authorization. SignalR notifications are best-effort UX, not enforcement.

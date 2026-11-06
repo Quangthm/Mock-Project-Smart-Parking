@@ -1,10 +1,11 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
-using SmartParking.PaymentService.Domain.Ports;
-using SmartParking.PaymentService.Application.Common.Interfaces.Services;
+using SmartParking.PaymentService.Domain.Events;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 
 namespace SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 
@@ -14,26 +15,29 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
     private readonly IProviderWebhookRepository _webhookRepository;
     private readonly IPaymentOrderRepository _orderRepository;
     private readonly IPaymentTransactionRepository _transactionRepository;
+    private readonly IInvoiceRepository _invoiceRepository;
+    private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ProcessPayOsWebhookCommandHandler> _logger;
-    private readonly IPaymentSucceededPublisher _publisher;
 
     public ProcessPayOsWebhookCommandHandler(
         IPaymentGatewayPort gatewayPort,
         IProviderWebhookRepository webhookRepository,
         IPaymentOrderRepository orderRepository,
         IPaymentTransactionRepository transactionRepository,
+        IInvoiceRepository invoiceRepository,
+        IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
-        ILogger<ProcessPayOsWebhookCommandHandler> logger,
-        IPaymentSucceededPublisher publisher)
+        ILogger<ProcessPayOsWebhookCommandHandler> logger)
     {
         _gatewayPort = gatewayPort;
         _webhookRepository = webhookRepository;
         _orderRepository = orderRepository;
         _transactionRepository = transactionRepository;
+        _invoiceRepository = invoiceRepository;
+        _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
         _logger = logger;
-        _publisher = publisher;
     }
 
     public async Task<ProcessPayOsWebhookResult> Handle(ProcessPayOsWebhookCommand request, CancellationToken cancellationToken)
@@ -95,6 +99,15 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         // 5. Update state on SUCCESS
         if (parseResult.PaymentStatus == "SUCCESS")
         {
+            // Idempotency: If order was already PAID, don't duplicate event or state changes
+            if (order.Status == PaymentOrderStatus.PAID)
+            {
+                _logger.LogInformation("OrderCode {OrderCode} is already marked as PAID. Replaying success response without duplicate outbox event.", order.OrderCode);
+                existingWebhook.MarkProcessed();
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                return new ProcessPayOsWebhookResult(true, "Webhook processed successfully (Idempotent replay).");
+            }
+
             var tx = order.Transactions.OrderByDescending(t => t.CreatedAt).FirstOrDefault();
             if (tx == null)
             {
@@ -117,25 +130,48 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             order.MarkPaid(parseResult.TransactionTime);
             existingWebhook.MarkProcessed();
 
-            await _publisher.PublishAsync(new(
-                order.Id,
-                tx.Id,
-                tx.PaymentMethod.ToString(),
-                tx.GatewayTransactionId,
-                order.TenantId,
-                order.SiteId,
-                order.ReferenceType.ToString(),
-                order.ReferenceId,
-                order.PlateNumber,
-                order.AccountId,
-                tx.Amount,
-                order.Amount,
-                null,
-                null,
-                "VND",
-                parseResult.TransactionTime), cancellationToken);
+            // Finalize invoice if exists
+            var invoice = await _invoiceRepository.GetByPaymentOrderIdAsync(order.Id, cancellationToken);
+            if (invoice != null)
+            {
+                invoice.PricingSnapshot.Status = "PAID";
+                invoice.PricingSnapshot.IsSettled = true;
+                invoice.PricingSnapshot.PaidAt = parseResult.TransactionTime;
+                invoice.PricingSnapshot.PaymentMethod = "PAYOS";
+                invoice.PricingSnapshot.TransactionReference = tx.Id.ToString();
+                invoice.PricingSnapshot.GatewayTransactionId = parseResult.GatewayTransactionId;
+                _invoiceRepository.Update(invoice);
+            }
+
+            // Stage Outbox Event PaymentSucceededV1 BEFORE SaveChangesAsync to guarantee atomic commit!
+            var outboxEvent = new PaymentSucceededV1
+            {
+                EventId = Guid.NewGuid(),
+                OccurredAt = parseResult.TransactionTime,
+                CorrelationId = order.OrderCode,
+                PaymentOrderId = order.Id,
+                PaymentTransactionId = tx.Id,
+                PaymentMethod = "PAYOS",
+                GatewayReference = parseResult.GatewayTransactionId,
+                TenantId = order.TenantId,
+                SiteId = order.SiteId,
+                ReferenceType = order.ReferenceType.ToString(),
+                ReferenceId = order.ReferenceId,
+                PlateNumber = invoice?.PricingSnapshot.PlateNumber,
+                AccountId = order.AccountId,
+                Amount = order.FinalAmount,
+                ParkingFee = invoice?.BaseParkingFee ?? order.FinalAmount,
+                PenaltyFee = invoice?.OverstayPenaltyFee,
+                PenaltyReason = invoice?.PricingSnapshot.LineItems.FirstOrDefault(l => l.ItemType == "PENALTY_OVERSTAY")?.Description,
+                Currency = invoice?.PricingSnapshot.Currency ?? "VND"
+            };
+
+            await _eventPublisher.PublishAsync(outboxEvent, cancellationToken);
+
+            // Atomic DB Commit: order + transaction + invoice + outboxMessage in one transaction
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Successfully processed payOS payment webhook for OrderCode {OrderCode}, TxId {TxId}.", order.OrderCode, tx.Id);
+
+            _logger.LogInformation("Successfully processed payOS payment webhook for OrderCode {OrderCode}, TxId {TxId}, staged PaymentSucceededV1 into outbox.", order.OrderCode, tx.Id);
         }
 
         return new ProcessPayOsWebhookResult(true, "Webhook processed successfully.");

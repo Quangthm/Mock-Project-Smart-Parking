@@ -2,7 +2,7 @@
 
 # Own-profile audit outbox — deployment and verification
 
-SPARK-248 / US-U01 · 25 October 2026 · implementation guide. API and event decisions were approved by the user on 24 October; see [feature API design](../../../03-design/api/own-profile-api-design.md). This change does not deploy schema or implement Notification & Audit.
+SPARK-248 / US-U01 · 25 October 2026 · implementation guide. API and event decisions were approved by the user on 24 October; see [feature API design](../../../03-design/api/own-profile-api-design.md). This change does not deploy schema or implement Notification & Audit. The later SPARK-319 reconciliation consolidated UserDb setup into base01 and enabled a separate access-event consumer; profile-event behavior and its durable Audit queue remain distinct.
 
 ## What success means
 
@@ -17,8 +17,8 @@ User & Access owns the versioned event; Notification & Audit owns the eventual p
 The repository uses reviewed SQL feature scripts; there is no existing EF migration/snapshot workflow to extend. `AppDbContext` calls MassTransit's `AddTransactionalOutboxEntities()`. The proposed SQL is generated from that exact model with **MassTransit 8.5.7, EF Core 10.0.12, and Npgsql EF Core 10.0.3**. The equality test detects incompatible table/index drift.
 
 1. Stop/restrict the old application version's writes during a coordinated deployment. Review and back up the explicitly selected User & Access database. Do not use a default connection or another service database.
-2. For a clean database, first run the canonical [01-user-access-service-db.sql](../../../../scripts/database/microservices/01-user-access-service-db.sql), then apply the separate `13-own-profile-session-account.sql` (historical, consolidated into base01) and `14-user-profile-outbox.sql` (historical, consolidated into base01) in that order through the team's normal manual deployment process. For an existing database, inspect its schema and review the applicable scripts first. Script 14 is a one-time, transactional create script; a second application is expected to fail rather than silently accept a different schema. The role simplification is represented directly in base01, with no role ALTER migration.
-3. Run the read-only [verify-user-access-schema.sql](../../../../scripts/database/test/verify-user-access-schema.sql) with `psql -v ON_ERROR_STOP=1` against that explicitly selected database. It verifies direct role constraints, session ownership and immutability, token uniqueness, and framework outbox columns/constraints/indexes. Only then deploy this application with `Messaging__OutboxDeliveryEnabled=false`. Legacy sessions without immutable AccountId must sign in again. No startup migration or schema fallback exists.
+2. For a clean database, use the repository setup to apply the canonical [01-user-access-service-db.sql](../../../../scripts/database/microservices/01-user-access-service-db.sql) and run its verifier. For an existing database, inspect its schema and review a migration before changing it; do not replay the fresh-install base.
+3. Run the read-only [verify-user-access-schema.sql](../../../../scripts/database/test/verify-user-access-schema.sql) with `psql -v ON_ERROR_STOP=1` against that explicitly selected database. It verifies direct role constraints, session ownership and immutability, token uniqueness, access/session/MFA/Owner fields, and framework outbox/inbox columns/constraints/indexes. Only then deploy this application with `Messaging__OutboxDeliveryEnabled=false` until delivery topology is verified. Legacy sessions without immutable AccountId must sign in again. No startup migration or schema fallback exists.
 4. Provision and verify the durable RabbitMQ topology independently of any consumer, as described below. Review queue policies and capacity.
 5. Set the broker configuration, then enable `Messaging__OutboxDeliveryEnabled=true` and restart/recreate the User Service through the documented runner. Verify pending records drain and messages accumulate in the durable audit queue while the consumer is absent.
 6. Deploy a future idempotent Audit consumer independently. It must consume this queue and persist deduplication and audit records atomically. It is not part of this task.
@@ -27,13 +27,13 @@ The repository uses reviewed SQL feature scripts; there is no existing EF migrat
 | --- | --- |
 | `OutboxState`, PK `OutboxId` | Batch ownership, delivery progress, and lock coordination. An index on `Created` lets the relay select pending batches. |
 | `OutboxMessage`, identity PK `SequenceNumber` | Serialized event and delivery metadata. Unique `(OutboxId,SequenceNumber)` orders producer batches; nullable Inbox keys and their unique sequence index support the framework's consumer path. Indexes on `EnqueueTime` and `ExpirationTime` are part of the exact framework model. |
-| `InboxState`, identity PK `Id`, unique `(MessageId,ConsumerId)` | Included because the supported `OutboxMessage` model has a foreign key to it. This producer does not create inbox records or run an inbox cleanup worker. The `Delivered` index is retained for model compatibility. It is not a custom audit table. |
+| `InboxState`, identity PK `Id`, unique `(MessageId,ConsumerId)` | MassTransit EF inbox state supports the separate `OperatorAccessChanged` consumer when access messaging is enabled. It is framework state, not a custom audit table or authorization projection. |
 
 The model also includes framework `LockId` and nullable byte-array `RowVersion` fields, all addresses/content fields, both OutboxMessage foreign keys, and the framework nullability. Do not replace it with a reduced two-table schema. `workflow_deliveries` remains the existing encrypted OTP/email workflow storage and is unrelated.
 
 Missing outbox tables cause the real endpoint to fail safely; there is no direct publish, dropped-event, or fake-success fallback. Missing session binding schema also prevents the new code from operating correctly. Deployment of both scripts is a prerequisite.
 
-The ordinary `compose.schema-integration.yml` User database initialization and `apply-workflow-migrations.ps1 -Service User` execute base01 only. Their base checks do not establish current UserService readiness: they do not apply scripts 13/14. The runner now makes that limitation explicit. A missing `user_refresh_tokens.account_id` therefore requires deployment reconciliation, not a fallback to User-only sessions. Script 13 binds `(account_id, user_id)` to the same Account owner and protects both identifiers from subsequent updates; nullable legacy bindings remain unchanged.
+The ordinary `compose.schema-integration.yml` User database initialization and `apply-workflow-migrations.ps1 -Service User` execute base01 only and run the complete read-only UserDb verifier. A missing `user_refresh_tokens.account_id` therefore requires deployment reconciliation, not a fallback to User-only sessions. Base01 binds `(account_id, user_id)` to the same Account owner and protects both identifiers from subsequent updates; nullable legacy bindings remain unchanged.
 
 Example verification using a locally configured libpq service (credentials stay out of the command):
 
@@ -67,13 +67,14 @@ $auditCredential = Get-Credential
 
 Use the approved broker address and secure credential transport for your deployment. The script declares and verifies the exchange, queue, and binding; it never starts a consumer, purges a queue, or deletes messages. Review policies separately: expiry, message TTL, overflow/drop, or later queue deletion can defeat retention. Set capacity alerts and avoid policies that discard pending audit facts. RabbitMQ publisher confirmation alone does not prove an unrouted publish was retained. Keep delivery disabled until this topology exists; creating a queue after an unrouted publish cannot recover it.
 
-The normal producer contains no receive endpoint. The framework may create its own temporary bus endpoint; that is not the durable audit queue and does not substitute for provisioning it.
+The profile Audit producer has no matching Audit receive endpoint. UserService may separately enable the access invalidation receive endpoint; it does not consume profile Audit events. The framework may create its own temporary bus endpoint; that is not the durable audit queue and does not substitute for provisioning it.
 
 ## Configuration, availability, and health
 
 | Setting | Default / meaning |
 | --- | --- |
 | `Messaging__OutboxDeliveryEnabled` | `false`: supported capture-only mode; scoped EF outbox remains active, its delivery hosted service is not registered |
+| `Messaging__Enabled` | `false`: enables the separate `OperatorAccessChanged` consumer and its EF inbox middleware; this does not create or consume the profile Audit queue |
 | `Messaging__RabbitMq__Host` / `Port` | `localhost` / `5672` for host execution; configure an address reachable from the User Service container |
 | `Messaging__RabbitMq__VirtualHost` | `/` |
 | `Messaging__RabbitMq__Username` / `Password` | Local development defaults only; use deployment credentials privately |
