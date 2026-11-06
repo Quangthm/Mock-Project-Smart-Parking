@@ -181,6 +181,34 @@ public sealed class IdentityAccessHardeningTests
         await using(var db=fixture.Open()) Assert.Equal(issued.AddHours(23),(await db.AuthSessions.SingleAsync()).LastRefreshedAt);
     }
 
+    [PostgresFact]
+    public async Task RefreshedAccessTokenImmediatelyOpensProtectedProfileWithPostgres()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        var clock = new TestClock();
+        var user = NewUser("refresh-profile@example.test", "DRIVER", clock);
+        await using (var db = fixture.Open()) { db.Users.Add(user); await db.SaveChangesAsync(); }
+        await using var host = await fixture.StartHostAsync(clock);
+        using var client = host.GetTestClient();
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email = user.Email, password = "Password@123" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        using var loginBody = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        var original = loginBody.RootElement.GetProperty("data");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", original.GetProperty("accessToken").GetString());
+        using var before = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, before.StatusCode);
+        clock.Now = clock.Now.AddSeconds(2);
+        using var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = original.GetProperty("refreshToken").GetString() });
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+        using var refreshBody = JsonDocument.Parse(await refresh.Content.ReadAsStringAsync());
+        client.DefaultRequestHeaders.Authorization = new("Bearer", refreshBody.RootElement.GetProperty("data").GetProperty("accessToken").GetString());
+        using var after = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", original.GetProperty("accessToken").GetString());
+        using var revoked = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
+    }
+
     private static User NewUser(string email,string role,TestClock clock)
     {
         var user=new User {Id=Guid.NewGuid(),Email=email,EmailVerifiedAt=clock.Now,FullName="Test User",Status=UserStatus.Active,

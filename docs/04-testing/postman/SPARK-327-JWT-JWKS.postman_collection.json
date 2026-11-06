@@ -1,0 +1,944 @@
+{
+  "info": {
+    "_postman_id": "97b1327a-7f62-4e4d-b5ec-d17730327002",
+    "name": "SmartPark SPARK-327 - JWT and JWKS checkpoints v2",
+    "description": "Revision 2: response tokens are chained through run-local variables; environment values persist checkpoints. Use sp_action=verify_refresh for a no-restart 00 → 09 → 10 diagnostic with an existing saved session. Local UserService verification with explicit manual restart, MFA and expiry checkpoints. Read SPARK-327-JWT-JWKS-guide.md beside this file. Import the blank example environment, enter credentials only as local values, enable Keep variable values, and run the entire collection with one iteration. PAUSED_* ends a run; change sp_action and start a new run to continue. Never supply the private signing key. This collection creates, refreshes and logs out its own test sessions. No registration, account changes, service restart or key rotation is performed. Metadata decoding is not independent cryptographic signature verification; use JwtJwksTests for that proof.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "sp_request_names",
+      "value": "{\"10\":\"10 New access token works\",\"11\":\"11 Old access token is rejected\",\"12\":\"12 Consumed refresh token is rejected\",\"13\":\"13 New session survives replay attempt\",\"14\":\"14 Logout baseline session\",\"15\":\"15 Logged-out access is rejected\",\"16\":\"16 Logged-out refresh is rejected\",\"17\":\"17 Login separate expiry session\",\"18\":\"18 Profile and pause until expiry\",\"19\":\"19 Compare JWKS after expiry wait\",\"20\":\"20 Naturally expired access is rejected\",\"21\":\"21 Refresh the expired access session\",\"22\":\"22 Profile works after expiry refresh\",\"23\":\"23 Logout expiry session and finish\",\"00\":\"00 Control - start or resume\",\"01\":\"01 Anonymous public JWKS\",\"02\":\"02 Login baseline session\",\"03\":\"03 Complete MFA challenge\",\"04\":\"04 Profile and pause for restart\",\"05\":\"05 Compare JWKS after restart\",\"06\":\"06 Original access survives restart\",\"07\":\"07 Tampered signature is rejected\",\"08\":\"08 Valid token still works after tamper\",\"09\":\"09 Refresh rotates both tokens\"}",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// All requests are driven by 00 Control; never run individual requests or folders.",
+          "pm.execution.setNextRequest(null); // Errors cannot accidentally advance to a write.",
+          "const env = pm.environment;",
+          "// Current-run tokens come directly from responses; environment values are checkpoints only.",
+          "function sessionValue(kind) { return pm.variables.get('sp_run_' + kind); }",
+          "",
+          "function block(message) {",
+          "    env.set('sp_status', 'FAILED'); env.set('sp_action', 'wait'); env.set('sp_step', '00');",
+          "    env.set('sp_resume_hint', message);",
+          "    pm.execution.skipRequest();",
+          "    throw new Error(message);",
+          "}",
+          "const base = env.get('sp_base_url') || '';",
+          "if (!/^http:\\/\\/(localhost|127\\.0\\.0\\.1):[0-9]+$/.test(base))",
+          "    block('Select the imported local environment; sp_base_url must be an HTTP loopback URL with port and no trailing slash.');",
+          "pm.variables.set('sp_base_url', base);",
+          "pm.variables.set('sp_jwks_path', env.get('sp_jwks_path'));",
+          "const configKeys = ['sp_base_url', 'sp_jwks_path', 'sp_issuer', 'sp_audience', 'sp_key_id', 'sp_email'];",
+          "const snapshot = JSON.stringify(configKeys.map(key => env.get(key) || ''));",
+          "const step = pm.info.requestName.slice(0, 2);",
+          "if (step === '00') {",
+          "    pm.variables.set('sp_run_access', env.get('sp_access_token') || '');",
+          "    pm.variables.set('sp_run_refresh', env.get('sp_refresh_token') || '');",
+          "    pm.variables.set('sp_run_access_source', 'checkpoint');",
+          "    pm.variables.set('sp_verify_refresh', false);",
+          "    env.set('sp_token_transport', '');",
+          "}",
+          "// Write the selected bearer directly; never reuse an interpolated bearer from an earlier request.",
+          "pm.request.headers.remove('Authorization');",
+          "function setBearer(token) {",
+          "    pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + token});",
+          "}",
+          "if (step !== '00') {",
+          "    if (env.get('sp_status') !== 'RUNNING' || env.get('sp_step') !== step)",
+          "        block('Run the whole collection from 00 Control. This request is not the expected step.');",
+          "    if (env.get('sp_config_snapshot') !== snapshot)",
+          "        block('Configuration changed during the test. Restore it, or explicitly start_over.');",
+          "}",
+          "if (['02', '17'].includes(step)) {",
+          "    if (!env.get('sp_email') || !env.get('sp_password')) block('Enter the test email and password locally, then run the whole collection.');",
+          "    pm.variables.set('sp_request_body', JSON.stringify({email: env.get('sp_email'), password: env.get('sp_password')}));",
+          "}",
+          "if (step === '03') {",
+          "    if (!/^[0-9]{6}$/.test(env.get('sp_mfa_code') || '')) block('Enter a fresh six-digit authenticator code locally.');",
+          "    const deadline = Date.parse(env.get('sp_mfa_expires_at'));",
+          "    if (!Number.isFinite(deadline) || Date.now() >= deadline) block('MFA challenge expired or missing. Use start_over for a new login.');",
+          "    pm.variables.set('sp_request_body', JSON.stringify({challengeId: env.get('sp_mfa_challenge_id'),",
+          "        challengeToken: env.get('sp_mfa_challenge_token'), totp: env.get('sp_mfa_code')}));",
+          "    env.set('sp_mfa_code', '');",
+          "}",
+          "const accessSteps = ['04', '06', '07', '08', '10', '11', '13', '14', '15', '18', '22', '23'];",
+          "if (accessSteps.includes(step)) {",
+          "    const buffer = require('buffer').Buffer;",
+          "    const token = ['06', '11'].includes(step) ? env.get('sp_original_access') : sessionValue('access');",
+          "    if (!token || token.split('.').length !== 3) block('Missing saved token. Enable Keep variable values in the Runner.');",
+          "    const payload = JSON.parse(buffer.from(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));",
+          "    if (payload.exp * 1000 <= Date.now() + 2000) block('Token is too close to expiry for a reliable restart/revocation test. Use start_over.');",
+          "    let bearer = token;",
+          "    if (step === '07') {",
+          "        const parts = token.split('.');",
+          "        parts[2] = (parts[2][0] === 'A' ? 'B' : 'A') + parts[2].slice(1);",
+          "        bearer = parts.join('.');",
+          "    }",
+          "    setBearer(bearer);",
+          "    if (step === '10') {",
+          "        if (pm.variables.get('sp_run_access_source') !== 'response') block('Request 10 requires the token returned by step 09 in this run.');",
+          "        env.set('sp_token_transport', JSON.stringify({version: 2, source: 'run-local-response',",
+          "            environmentMatchesSelected: env.get('sp_access_token') === bearer,",
+          "            preparedHeaderMatchesSelected: pm.request.headers.get('Authorization') === 'Bearer ' + bearer}));",
+          "    }",
+          "}",
+          "if (step === '20') {",
+          "    if (Date.now() < Number(env.get('sp_expiry_epoch')) * 1000 + 2000) block('Expiry time has not elapsed. Wait until sp_expiry_ready_at.');",
+          "    setBearer(env.get('sp_expiry_token'));",
+          "}",
+          "if (['09', '12', '14', '16', '21', '23'].includes(step)) {",
+          "    const token = step === '12' ? env.get('sp_original_refresh') :",
+          "        step === '21' ? env.get('sp_expiry_refresh') : sessionValue('refresh');",
+          "    if (!token) block('Missing saved refresh token. Enable Keep variable values in the Runner.');",
+          "    pm.variables.set('sp_request_body', JSON.stringify({refreshToken: token}));",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Shared assertions and explicit manual checkpoints; no private signing key is needed.",
+          "const env = pm.environment;",
+          "// Current-run tokens come directly from responses; environment values are checkpoints only.",
+          "function sessionValue(kind) { return pm.variables.get('sp_run_' + kind); }",
+          "",
+          "const step = pm.info.requestName.slice(0, 2);",
+          "const names = JSON.parse(pm.collectionVariables.get('sp_request_names'));",
+          "const stateKeys = ['sp_access_token','sp_refresh_token','sp_original_access','sp_original_refresh',",
+          "    'sp_expiry_token','sp_expiry_refresh','sp_mfa_challenge_id','sp_mfa_challenge_token','sp_mfa_expires_at','sp_mfa_code'];",
+          "function check(label, condition) {",
+          "    pm.test(label, () => { if (!condition) throw new Error(label); });",
+          "    if (!condition) throw new Error(label); // Stop workflow as well as failing the assertion.",
+          "}",
+          "function next(number) {",
+          "    env.set('sp_status', 'RUNNING'); env.set('sp_step', number);",
+          "    pm.execution.setNextRequest(names[number]);",
+          "}",
+          "function show() {",
+          "    pm.visualizer.set('<h2>{{status}}</h2><p>{{hint}}</p><p>Baseline: {{core}} | MFA: {{mfa}}</p>', {",
+          "        status: env.get('sp_status'), hint: env.get('sp_resume_hint'),",
+          "        core: env.get('sp_core_result') || 'PENDING', mfa: env.get('sp_mfa_result') || 'NOT_EXERCISED'});",
+          "}",
+          "function pause(status, hint) {",
+          "    env.set('sp_status', status); env.set('sp_action', 'wait'); env.set('sp_step', '00');",
+          "    env.set('sp_resume_hint', hint); pm.execution.setNextRequest(null);",
+          "    pm.test(status + ' — manual action required (not overall completion)', () => {});",
+          "    show();",
+          "}",
+          "function remember(label) {",
+          "    const results = JSON.parse(env.get('sp_results') || '[]');",
+          "    results.push({check: label, result: 'PASS', at: new Date().toISOString()});",
+          "    env.set('sp_results', JSON.stringify(results));",
+          "}",
+          "function success() {",
+          "    check('HTTP 200', pm.response.code === 200);",
+          "    const body = pm.response.json();",
+          "    check('Successful response envelope', body.success === true);",
+          "    return body;",
+          "}",
+          "function decode(token) {",
+          "    const buffer = require('buffer').Buffer;",
+          "    check('JWT has three Base64URL segments', typeof token === 'string' && /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(token));",
+          "    const parts = token.split('.');",
+          "    const json = value => JSON.parse(buffer.from(value.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));",
+          "    return {header: json(parts[0]), payload: json(parts[1])};",
+          "}",
+          "function jwks() {",
+          "    check('Anonymous JWKS HTTP 200', pm.response.code === 200);",
+          "    check('JWKS content type', /^application\\/jwk-set\\+json(?:;|$)/i.test(pm.response.headers.get('Content-Type') || ''));",
+          "    const cache = pm.response.headers.get('Cache-Control') || '';",
+          "    check('Public five-minute cache', /\\bpublic\\b/.test(cache) && /\\bmax-age=300\\b/.test(cache));",
+          "    const body = pm.response.json();",
+          "    check('Standard JWKS envelope', JSON.stringify(Object.keys(body).sort()) === '[\"keys\"]' && Array.isArray(body.keys) && body.keys.length === 1);",
+          "    const key = body.keys[0];",
+          "    check('Only public JWK members', JSON.stringify(Object.keys(key).sort()) === '[\"alg\",\"e\",\"kid\",\"kty\",\"n\",\"use\"]');",
+          "    check('RSA RS256 signing key', key.kty === 'RSA' && key.alg === 'RS256' && key.use === 'sig');",
+          "    check('Configured kid', key.kid === env.get('sp_key_id'));",
+          "    check('Base64URL public parameters', /^[A-Za-z0-9_-]+$/.test(key.n) && /^[A-Za-z0-9_-]+$/.test(key.e));",
+          "    check('RSA modulus at least 2048 bits', require('buffer').Buffer.from(key.n.replace(/-/g, '+').replace(/_/g, '/'), 'base64').length >= 256);",
+          "    return key;",
+          "}",
+          "function session(body, rotating) {",
+          "    const value = body.data;",
+          "    check('Token response present', value && typeof value.accessToken === 'string' && typeof value.refreshToken === 'string');",
+          "    const token = decode(value.accessToken), p = token.payload, h = token.header;",
+          "    check('RS256 and JWKS kid match', h.alg === 'RS256' && h.kid === JSON.parse(env.get('sp_jwk_before')).kid);",
+          "    check('Configured issuer and audience', p.iss === env.get('sp_issuer') &&",
+          "        (p.aud === env.get('sp_audience') || (Array.isArray(p.aud) && p.aud.includes(env.get('sp_audience')))));",
+          "    // Issuance and response sample the clock separately; whole-second truncation can lose one second.",
+          "    check('Access lifetime 900 seconds (one-second rounding tolerance)', Number.isInteger(p.exp) && Number.isInteger(p.nbf) &&",
+          "        p.exp - p.nbf >= 899 && p.exp - p.nbf <= 900 && Number.isInteger(value.expiresIn) && value.expiresIn >= 899 && value.expiresIn <= 900);",
+          "    check('Token is currently valid', p.exp > Date.now() / 1000 && p.nbf <= Date.now() / 1000 + 5);",
+          "    const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+          "    check('Identity claims present', guid.test(p.sub) && guid.test(p.account_id) && /^[0-9a-f]{32}$/i.test(p.jti) && typeof p.role === 'string' && p.role.length > 0);",
+          "    check('Claims match login identity', value.user && p.sub === value.user.userId && p.role === value.user.role && value.tokenType === 'Bearer');",
+          "    if (rotating) {",
+          "        const old = decode(sessionValue('access')).payload;",
+          "        check('Refresh rotates both tokens and jti', value.accessToken !== sessionValue('access') && value.refreshToken !== sessionValue('refresh') && p.jti !== old.jti);",
+          "        check('Refresh preserves bound identity', p.sub === old.sub && p.account_id === old.account_id && p.role === old.role);",
+          "    }",
+          "    pm.variables.set('sp_run_access', value.accessToken);",
+          "    pm.variables.set('sp_run_refresh', value.refreshToken);",
+          "    pm.variables.set('sp_run_access_source', 'response');",
+          "    env.set('sp_access_token', value.accessToken); env.set('sp_refresh_token', value.refreshToken);",
+          "    return token;",
+          "}",
+          "function login() {",
+          "    const body = success();",
+          "    if (body.mfaRequired === true) {",
+          "        check('MFA challenge has no normal tokens', body.data && !body.data.accessToken && !body.data.refreshToken && !!body.data.challengeId && !!body.data.challengeToken && Date.parse(body.data.expiresAt) > Date.now());",
+          "        env.set('sp_mfa_challenge_id', body.data.challengeId); env.set('sp_mfa_challenge_token', body.data.challengeToken);",
+          "        env.set('sp_mfa_expires_at', body.data.expiresAt);",
+          "        pause('PAUSED_MFA', 'Enter a fresh authenticator code in sp_mfa_code. Set sp_action=continue_mfa and run the whole collection again before the challenge expires.');",
+          "    } else { session(body, false); next(env.get('sp_flow') === 'expiry' ? '18' : '04'); }",
+          "}",
+          "function profile() {",
+          "    const body = success();",
+          "    const p = decode(sessionValue('access')).payload;",
+          "    check('Protected profile matches token identity', body.data && body.data.userId === p.sub && body.data.role === p.role);",
+          "}",
+          "function rejected() {",
+          "    check('HTTP 401 rejection', pm.response.code === 401);",
+          "    const body = pm.response.json();",
+          "    check('INVALID_TOKEN response', body.success === false && body.code === 'INVALID_TOKEN');",
+          "}",
+          "try {",
+          "    if (step === '00') {",
+          "        check('UserService health responds', pm.response.code === 200 && pm.response.json().status === 'ok');",
+          "        const action = env.get('sp_action') || 'start', status = env.get('sp_status') || 'NOT_STARTED';",
+          "        const configKeys = ['sp_base_url','sp_jwks_path','sp_issuer','sp_audience','sp_key_id','sp_email'];",
+          "        const snapshot = JSON.stringify(configKeys.map(key => env.get(key) || ''));",
+          "        if (action === 'start' || action === 'start_over') {",
+          "            if (action === 'start' && status !== 'NOT_STARTED') {",
+          "                pause(status, 'A test already exists. Follow the saved checkpoint or use start_over deliberately; start never replaces saved tokens.');",
+          "            } else {",
+          "                check('Configured public trust inputs', ['sp_issuer','sp_audience','sp_key_id'].every(key => !!env.get(key)));",
+          "                check('Local literal JWKS path', /^\\/[A-Za-z0-9_./-]+$/.test(env.get('sp_jwks_path') || '') && !env.get('sp_jwks_path').includes('..') && !env.get('sp_jwks_path').startsWith('//'));",
+          "                stateKeys.forEach(key => env.set(key, ''));",
+          "                pm.variables.set('sp_run_access', ''); pm.variables.set('sp_run_refresh', '');",
+          "                ['sp_expiry_epoch','sp_expiry_ready_at','sp_jwk_before','sp_restart_attestation'].forEach(key => env.set(key, ''));",
+          "                env.set('sp_results', '[]'); env.set('sp_core_result','PENDING'); env.set('sp_mfa_result','NOT_EXERCISED');",
+          "                env.set('sp_config_snapshot', snapshot); env.set('sp_flow','baseline'); next('01');",
+          "            }",
+          "        } else if (action === 'wait') { pm.execution.setNextRequest(null); show(); }",
+          "        else {",
+          "            check('Same environment and identity across checkpoints', env.get('sp_config_snapshot') === snapshot);",
+          "            if (action === 'verify_refresh') {",
+          "                decode(sessionValue('access'));",
+          "                check('Saved refresh token is a literal value', typeof sessionValue('refresh') === 'string' &&",
+          "                    sessionValue('refresh').length > 0 && !sessionValue('refresh').includes('{{'));",
+          "                check('Saved JWKS baseline is present', !!env.get('sp_jwk_before'));",
+          "                pm.variables.set('sp_verify_refresh', true);",
+          "                env.set('sp_core_result', 'PENDING'); next('09');",
+          "            } else if (action === 'continue_mfa') {",
+          "                check('Paused for MFA', status === 'PAUSED_MFA'); next('03');",
+          "            } else if (action === 'continue_restart') {",
+          "                check('Paused for restart', status === 'PAUSED_RESTART');",
+          "                check('Original token still has at least 60 seconds remaining', decode(env.get('sp_original_access')).payload.exp * 1000 > Date.now() + 60000);",
+          "                env.set('sp_restart_attestation', new Date().toISOString()); next('05');",
+          "            } else if (action === 'continue_expiry') {",
+          "                check('Paused for expiry', status === 'PAUSED_EXPIRY');",
+          "                if (Date.now() < Number(env.get('sp_expiry_epoch')) * 1000 + 2000)",
+          "                    pause('PAUSED_EXPIRY', 'Too early. Wait until ' + env.get('sp_expiry_ready_at') + ', then use continue_expiry again.');",
+          "                else next('19');",
+          "            } else check('Recognized manual action', false);",
+          "        }",
+          "    } else if (step === '01') { env.set('sp_jwk_before', JSON.stringify(jwks())); remember('Anonymous public-only JWKS'); next('02'); }",
+          "    else if (step === '02' || step === '17') { login(); }",
+          "    else if (step === '03') {",
+          "        session(success(), false); stateKeys.filter(k => k.startsWith('sp_mfa_')).forEach(k => env.set(k, ''));",
+          "        env.set('sp_mfa_result','PASS'); remember('MFA challenge completed before session issuance');",
+          "        next(env.get('sp_flow') === 'expiry' ? '18' : '04');",
+          "    } else if (step === '04') {",
+          "        profile(); env.set('sp_original_access', sessionValue('access')); env.set('sp_original_refresh', sessionValue('refresh'));",
+          "        remember('Login metadata and authorized profile');",
+          "        pause('PAUSED_RESTART', 'Restart only UserService, keeping the same key, kid and database. Within the token lifetime, set sp_action=continue_restart and run the whole collection again.');",
+          "    } else if (step === '05' || step === '19') {",
+          "        const key = jwks(), before = JSON.parse(env.get('sp_jwk_before'));",
+          "        check('Public key unchanged', ['kid','n','e','alg','kty','use'].every(field => key[field] === before[field]));",
+          "        next(step === '05' ? '06' : '20');",
+          "    } else if (step === '06') { profile(); remember('Original token accepted after user-confirmed restart; JWKS unchanged'); next('07'); }",
+          "    else if (step === '07') { rejected(); remember('Tampered signature rejected'); next('08'); }",
+          "    else if (step === '08') { profile(); next('09'); }",
+          "    else if (step === '09') { session(success(), true); next('10'); }",
+          "    else if (step === '10') {",
+          "        const report = JSON.parse(env.get('sp_token_transport'));",
+          "        report.httpStatus = pm.response.code;",
+          "        report.preparedHeaderMatchesSelected = pm.request.headers.get('Authorization') === 'Bearer ' + sessionValue('access');",
+          "        env.set('sp_token_transport', JSON.stringify(report));",
+          "        profile();",
+          "        if (pm.variables.get('sp_verify_refresh') === true)",
+          "            pause('DIAGNOSTIC_ONLY', 'Request 10 accepted the fresh token. Share sp_token_transport. This diagnostic rotated the saved session; use start_over for a full smoke run.');",
+          "        else next('11');",
+          "    }",
+          "    else if (step === '11') { rejected(); remember('Old access token rejected after refresh'); next('12'); }",
+          "    else if (step === '12') { rejected(); remember('Consumed refresh token replay rejected'); next('13'); }",
+          "    else if (step === '13') { profile(); remember('Rotated session remains usable after replay attempt'); next('14'); }",
+          "    else if (step === '14') { success(); next('15'); }",
+          "    else if (step === '15') { rejected(); next('16'); }",
+          "    else if (step === '16') {",
+          "        rejected(); remember('Logout revokes both access and refresh'); env.set('sp_core_result','PASS'); env.set('sp_flow','expiry'); next('17');",
+          "    } else if (step === '18') {",
+          "        profile(); const p = decode(sessionValue('access')).payload;",
+          "        env.set('sp_expiry_token',sessionValue('access')); env.set('sp_expiry_refresh',sessionValue('refresh'));",
+          "        env.set('sp_expiry_epoch',String(p.exp)); env.set('sp_expiry_ready_at',new Date(p.exp * 1000 + 2000).toISOString());",
+          "        pause('PAUSED_EXPIRY', 'Leave this Postman session untouched: no refresh, logout, key change or account change. Wait until ' + env.get('sp_expiry_ready_at') + ', then set sp_action=continue_expiry and run the whole collection again.');",
+          "    } else if (step === '20') { rejected(); remember('Untouched access token rejected after expiration; public key unchanged'); next('21'); }",
+          "    else if (step === '21') { session(success(), true); next('22'); }",
+          "    else if (step === '22') { profile(); remember('Refresh after access expiry restores the same identity'); next('23'); }",
+          "    else if (step === '23') {",
+          "        success(); remember('Expiry test session logged out'); stateKeys.forEach(key => env.set(key, '')); env.set('sp_password', '');",
+          "        ['sp_run_access','sp_run_refresh','sp_run_access_source','sp_verify_refresh'].forEach(key => pm.variables.unset(key));",
+          "        pm.variables.unset('sp_bearer'); pm.variables.unset('sp_request_body');",
+          "        env.set('sp_status','COMPLETE'); env.set('sp_action','wait'); env.set('sp_step','00');",
+          "        env.set('sp_resume_hint','Live JWT smoke checks passed and test sessions logged out. Share only sp_results and sp_mfa_result. COMPLETE does not mean the full repository test suite passed.');",
+          "        pm.execution.setNextRequest(null); show();",
+          "    } else check('Known workflow step', false);",
+          "} catch (error) {",
+          "    env.set('sp_status','FAILED'); env.set('sp_action','wait'); env.set('sp_step','00');",
+          "    env.set('sp_resume_hint','Stopped at ' + pm.info.requestName + '. Inspect failed test names and HTTP error code locally. Do not share tokens, passwords or full response bodies.');",
+          "    pm.execution.setNextRequest(null);",
+          "    pm.test('Workflow stopped on an assertion or script error', () => { throw new Error('See preceding failed test; if none, check the response shape and local runner support.'); });",
+          "    show();",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Control - start or resume",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/health",
+        "description": "Always run the entire collection with one iteration. This request reads sp_action and resumes the saved checkpoint."
+      },
+      "response": []
+    },
+    {
+      "name": "01 Anonymous public JWKS",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}{{sp_jwks_path}}",
+        "description": "Checks public-only RSA metadata, configured kid and cache headers. Saves the public key for restart comparison."
+      },
+      "response": []
+    },
+    {
+      "name": "02 Login baseline session",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/login",
+        "description": "Uses local sp_email/sp_password. If MFA is required, ends the run at PAUSED_MFA."
+      },
+      "response": []
+    },
+    {
+      "name": "03 Complete MFA challenge",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/mfa/login",
+        "description": "Only reached through continue_mfa. Requires a fresh local sp_mfa_code."
+      },
+      "response": []
+    },
+    {
+      "name": "04 Profile and pause for restart",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Saves original tokens; ends at PAUSED_RESTART. Restart only UserService with the same configuration before continuing."
+      },
+      "response": []
+    },
+    {
+      "name": "05 Compare JWKS after restart",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}{{sp_jwks_path}}",
+        "description": "Requires identical public key material and kid. Continuing attests that you actually restarted UserService."
+      },
+      "response": []
+    },
+    {
+      "name": "06 Original access survives restart",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Uses the original pre-restart access token without logging in again."
+      },
+      "response": []
+    },
+    {
+      "name": "07 Tampered signature is rejected",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Changes the first Base64URL character of the signature, retaining claims and header. Expects 401 INVALID_TOKEN."
+      },
+      "response": []
+    },
+    {
+      "name": "08 Valid token still works after tamper",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Control: the unchanged token must still work."
+      },
+      "response": []
+    },
+    {
+      "name": "09 Refresh rotates both tokens",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/refresh",
+        "description": "Rotates the baseline test session and checks identity, lifetime and jti."
+      },
+      "response": []
+    },
+    {
+      "name": "10 New access token works",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Checks the new access token returned by refresh."
+      },
+      "response": []
+    },
+    {
+      "name": "11 Old access token is rejected",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Uses the saved original token; expects 401 INVALID_TOKEN before natural expiry."
+      },
+      "response": []
+    },
+    {
+      "name": "12 Consumed refresh token is rejected",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/refresh",
+        "description": "Replays the original refresh token once; expects 401 INVALID_TOKEN."
+      },
+      "response": []
+    },
+    {
+      "name": "13 New session survives replay attempt",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Checks the current session remains usable under the existing refresh contract."
+      },
+      "response": []
+    },
+    {
+      "name": "14 Logout baseline session",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/logout",
+        "description": "Logs out only the session created by this collection."
+      },
+      "response": []
+    },
+    {
+      "name": "15 Logged-out access is rejected",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Expects 401 INVALID_TOKEN for the just-revoked access token."
+      },
+      "response": []
+    },
+    {
+      "name": "16 Logged-out refresh is rejected",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/refresh",
+        "description": "Expects 401 INVALID_TOKEN for the just-revoked refresh token."
+      },
+      "response": []
+    },
+    {
+      "name": "17 Login separate expiry session",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/login",
+        "description": "Creates a fresh session for an isolated expiration test. May pause for MFA again."
+      },
+      "response": []
+    },
+    {
+      "name": "18 Profile and pause until expiry",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Checks the fresh session, saves its untouched tokens, and ends at PAUSED_EXPIRY with a UTC deadline."
+      },
+      "response": []
+    },
+    {
+      "name": "19 Compare JWKS after expiry wait",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}{{sp_jwks_path}}",
+        "description": "Confirms no key change explains the upcoming rejection."
+      },
+      "response": []
+    },
+    {
+      "name": "20 Naturally expired access is rejected",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Uses the untouched expired token without auto-refresh; expects 401 INVALID_TOKEN."
+      },
+      "response": []
+    },
+    {
+      "name": "21 Refresh the expired access session",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/refresh",
+        "description": "The unconsumed refresh token should still work. Confirms account/session is usable after access expiry."
+      },
+      "response": []
+    },
+    {
+      "name": "22 Profile works after expiry refresh",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          }
+        ],
+        "url": "{{sp_base_url}}/api/auth/me",
+        "description": "Checks identity using the newly issued access token."
+      },
+      "response": []
+    },
+    {
+      "name": "23 Logout expiry session and finish",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, application/jwk-set+json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{sp_request_body}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{sp_base_url}}/api/auth/logout",
+        "description": "Logs out the second test session, clears saved credentials/tokens, and marks COMPLETE only after all stages pass."
+      },
+      "response": []
+    }
+  ]
+}

@@ -8,13 +8,16 @@ if ($Service -eq 'Facility') { $Service = 'Parking' }
 if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+$previousSigningEnvironment = Get-JwtSigningEnvironment
+try {
 
 if (!(Test-Path -LiteralPath $envFile -PathType Leaf)) {
     throw "Missing $envFile. Run setup.ps1 at the repository root first."
 }
 
-# Load .env through the shared parser; it exports every key to the process env.
-$null = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile
+# Only UserService may receive raw or mapped private signing material.
+$settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -IncludeUserServiceSigningSecrets:($Service -eq 'User')
 
 if ([string]::IsNullOrWhiteSpace($env:SMARTPARK_DEV_PASSWORD)) {
     throw 'SMARTPARK_DEV_PASSWORD is empty in .env. Run setup.ps1 first.'
@@ -39,6 +42,28 @@ $env:Services__Payment = 'http://localhost:5065/'
 foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
     $url = [Environment]::GetEnvironmentVariable('SMARTPARK_SERVICE_' + $remoteService.ToUpperInvariant() + '_URL')
     if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
+}
+
+$jwtIssuer = if ($env:SMARTPARK_JWT_ISSUER) { $env:SMARTPARK_JWT_ISSUER } else { 'SmartParking.UserService' }
+$jwtAudience = if ($env:SMARTPARK_JWT_AUDIENCE) { $env:SMARTPARK_JWT_AUDIENCE } else { 'SmartParking' }
+$jwtPath = if ($env:SMARTPARK_JWT_JWKS_PATH) { $env:SMARTPARK_JWT_JWKS_PATH } else { '/.well-known/jwks.json' }
+if ($Service -eq 'User') {
+    $env:Jwt__Issuer = $jwtIssuer
+    $env:Jwt__Audience = $jwtAudience
+    $env:Jwt__JwksPath = $jwtPath
+    # A blank environment value disappears on Windows PowerShell 5.1. A space
+    # explicitly overrides stale user-secrets while remaining unconfigured.
+    $env:Jwt__KeyId = if ($env:SMARTPARK_JWT_KEY_ID) { $env:SMARTPARK_JWT_KEY_ID } else { ' ' }
+    foreach ($field in @('PrivateKeyPem','PrivateKeyPemBase64')) {
+        $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
+        $value = [Environment]::GetEnvironmentVariable($sourceName, 'Process')
+        if (!(Test-JwtConfiguredValue $value)) { $value = ' ' }
+        [Environment]::SetEnvironmentVariable('Jwt__' + $field, $value, 'Process')
+    }
+} else {
+    $env:JwtValidation__Issuer = $jwtIssuer
+    $env:JwtValidation__Audience = $jwtAudience
+    $env:JwtValidation__JwksUri = ([Uri]::new([Uri]$env:Services__User, $jwtPath)).AbsoluteUri
 }
 
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
@@ -106,7 +131,6 @@ if ($Service -eq 'User') {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
     }
-    if ($env:SMARTPARK_JWT_PRIVATE_KEY_PEM) { $env:Jwt__PrivateKeyPem = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM }
     if ($env:SMARTPARK_WORKFLOW_KEY_DIRECTORY) {
         $keyDirectory = $env:SMARTPARK_WORKFLOW_KEY_DIRECTORY
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
@@ -117,3 +141,7 @@ $projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { '
 $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
 if ($LASTEXITCODE -ne 0) { throw "${projectService}Service exited with code $LASTEXITCODE" }
+} finally {
+    # Do not leave UserService .env signing secrets in the launching shell.
+    Restore-JwtSigningEnvironment $previousSigningEnvironment
+}
