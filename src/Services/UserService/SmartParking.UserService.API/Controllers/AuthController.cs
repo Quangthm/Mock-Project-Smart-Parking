@@ -19,7 +19,7 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
 {
     [AllowAnonymous]
     [HttpPost("register/owner")]
-    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("RegistrationRateLimit")]
     public async Task<IActionResult> RegisterOwner([FromBody] OwnerRegistrationDto body,
         [FromServices] IOwnerRegistrationService registrations, CancellationToken ct) =>
         StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
@@ -32,7 +32,7 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
 
     [AllowAnonymous]
     [HttpPost("register/driver")]
-    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("RegistrationRateLimit")]
     public async Task<IActionResult> RegisterDriver([FromBody] DriverRegistrationDto body,
         [FromServices] IDriverRegistrationService registrations, CancellationToken ct) =>
         StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
@@ -59,6 +59,7 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
 
     [AllowAnonymous]
     [HttpPost("login")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginRateLimit")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto, CancellationToken cancellationToken)
     {
         var result = await Mediator.Send(Mapper.Map<LoginCommand>(loginDto), cancellationToken);

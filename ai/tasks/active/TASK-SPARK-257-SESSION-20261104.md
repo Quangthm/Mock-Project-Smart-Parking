@@ -5,9 +5,9 @@
 - **Task:** SPARK-257 — [SEC-AUTH] Protect public authentication flows from automated abuse.
 - **Jira:** SPARK-257 (Story, 5 SP, backlog, no owner, not in Sprint 2). Related: SPARK-234 (Driver registration), SPARK-235 (Owner registration).
 - **Branch:** `docs/SPARK-257-bot-protection-api-design` (created from `develop`).
-- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phase 1 Implementation).
-- **Scope this session:** Phase 1 execution — Core backend abstraction for Cloudflare Turnstile bot verification (Port, Adapter, Error Mapping, DI, Startup Guard, and comprehensive Unit Tests).
-- **Decision status:** Phase 1 **COMPLETED & VALIDATED**; ready for Phase 2 (handler wiring & DTO additions).
+- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phase 1 & Phase 2 Implementation).
+- **Scope this session:** Phase 2 execution — Wiring verification into 3 public auth flows (Driver Registration, Owner Registration, Login), updating public DTOs & Command, configuring rate limiting policies, and comprehensive test suite.
+- **Decision status:** Phase 1 & Phase 2 **COMPLETED & VALIDATED**; ready for Phase 3 (environment / Docker configuration) and Phase 4 (frontend integration).
 
 ## 2. Objectives
 
@@ -21,6 +21,15 @@
    - Register 4 bot verification error codes in `ApiExceptionMapper.cs`.
    - Configure typed `HttpClient` with 5s timeout, auto-redirect disabled, singleton options, and Startup Guard in `Program.cs`.
    - Write comprehensive unit tests in `TurnstileVerifierTests.cs` and `ApiErrorHandlingTests.cs` covering all 13 required scenarios + startup guard + error mapper.
+5. Phase 2 Implementation:
+   - Add `TurnstileToken` field to public DTOs & Command: `DriverRegistrationDto`, `OwnerRegistrationDto`, `LoginDto`, `LoginCommand`.
+   - Ensure mapping in `LoginMapperProfile` from `LoginDto.TurnstileToken` to `LoginCommand.TurnstileToken`.
+   - Inject `IBotVerificationService` and call `VerifyAsync` at the very beginning of the 3 public flows before any DB transaction:
+     - `DriverRegistrationService.RegisterAsync` (action `"driver_register"`).
+     - `OwnerRegistrationService.RegisterAsync` (action `"owner_register"`).
+     - `LoginCommandHandler.Handle` (action `"password_login"`).
+   - Configure separate rate limiting policies `RegistrationRateLimit` and `LoginRateLimit` (10 req/min/IP) with `UseForwardedHeaders` in `Program.cs` and decorate `AuthController.cs`.
+   - Write unit and HTTP pipeline integration tests in `BotProtectionFlowTests.cs` covering all verification flows, bypass when disabled, failure before DB transactions, and HTTP pipeline integration.
 
 ## 3. Work Completed
 
@@ -50,6 +59,37 @@
     - Created `TurnstileVerifierTests.cs` (48 test variations) testing all 13 core scenarios + remoteip + case-insensitivity + IO/network errors + Startup Guard + error mapper.
     - Updated `ApiErrorHandlingTests.cs` verifying error envelopes for all 4 bot verification error codes.
     - Verified `LayerBoundaryTests` passes (0 layer boundary leaks).
+  - Committed Phase 1: `18472a5b feat(auth): implement bot verification port, adapter and error mapping [SPARK-257]`.
+- **Phase 2 Implementation Completed:**
+  - **Task 2.1 (DTOs & Command):**
+    - Added `public string? TurnstileToken { get; set; }` to `DriverRegistrationDto.cs`, `OwnerRegistrationDto.cs`, `LoginDto.cs`, and `LoginCommand.cs`.
+    - Updated `LoginMapperProfile.cs` to map `TurnstileToken` explicitly.
+  - **Task 2.2 (Driver Registration Service):**
+    - Injected `IBotVerificationService? botVerifier = null` into `DriverRegistrationService`.
+    - Placed `VerifyAsync(request.TurnstileToken, "driver_register", ct)` at line 1 of `RegisterAsync`, strictly before validation and `db.BeginTransactionAsync`.
+  - **Task 2.3 (Owner Registration Service):**
+    - Injected `IBotVerificationService? botVerifier = null` into `OwnerRegistrationService`.
+    - Placed `VerifyAsync(body.TurnstileToken, "owner_register", ct)` at line 1 of `RegisterAsync`, strictly before validation and `db.BeginTransactionAsync`.
+  - **Task 2.4 (Login Command Handler):**
+    - Injected `IBotVerificationService? botVerifier = null` into `LoginCommandHandler`.
+    - Placed `VerifyAsync(request.TurnstileToken, "password_login", cancellationToken)` at line 1 of `Handle`, strictly before `unitOfWork.BeginTransactionAsync`.
+  - **Task 2.5 (Rate Limiting & Forwarded Headers):**
+    - Registered `RegistrationRateLimit` and `LoginRateLimit` (10 req/min/IP, Status 429) in `Program.cs`.
+    - Added `app.UseForwardedHeaders()` before `app.UseRouting()`.
+    - Replaced `[EnableRateLimiting("DriverOtp")]` on `RegisterDriver` and `RegisterOwner` with `[EnableRateLimiting("RegistrationRateLimit")]` on `AuthController.cs`.
+    - Decorated `Login` with `[EnableRateLimiting("LoginRateLimit")]`.
+    - Updated `DriverRegistrationHttpTests.cs` and `OwnerRegistrationHttpTests.cs` test fixtures.
+  - **Task 2.6 (Comprehensive Unit & HTTP Tests):**
+    - Created `BotProtectionFlowTests.cs` (10 tests) covering:
+      - Driver registration missing token, invalid token, valid token.
+      - Owner registration missing token, invalid token, valid token.
+      - Login missing token, invalid token, valid token.
+      - Invariant test: verification failure throws BEFORE DB transaction begins.
+      - HTTP pipeline integration for missing token (returns 400 `BOT_VERIFICATION_REQUIRED` bypassing `SignInErrors.ForCode`).
+      - HTTP pipeline integration for valid token (returns 200 OK).
+      - Rate limiting quota isolation between registration and login.
+    - Verified `LayerBoundaryTests` passes (0 layer boundary leaks).
+    - Full test suite execution: 279 passed, 0 failed, 54 skipped.
 
 ## 4. Technical Decisions
 
@@ -71,57 +111,67 @@
 
 | File | Change | Reason |
 | --- | --- | --- |
-| `src/Services/UserService/SmartParking.UserService.Application/Common/Interfaces/Services/IBotVerificationService.cs` | Created | Application port for bot verification |
-| `src/Services/UserService/SmartParking.UserService.Infrastructure/Configurations/TurnstileOptions.cs` | Created | Infrastructure configuration options (`Turnstile`) |
-| `src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifyResponse.cs` | Created | Cloudflare siteverify JSON response DTO |
-| `src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifier.cs` | Created | Infrastructure adapter implementing `IBotVerificationService` |
-| `src/Services/UserService/SmartParking.UserService.API/Common/ApiExceptionMapper.cs` | Modified | Registered 4 bot verification error codes |
-| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Bound options, registered typed HttpClient (timeout 5s, no redirect), added Startup Guard |
-| `tests/Services/SmartParking.UserService.Tests/ApiErrorHandlingTests.cs` | Modified | Tested envelope mapping for 4 bot verification error codes |
-| `tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs` | Created | 48 unit tests verifying all adapter scenarios and startup guards |
-| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Updated progress snapshot and phase completion record |
+| `src/Services/UserService/SmartParking.UserService.Application/DTOs/DriverRegistrationDto.cs` | Modified | Added `TurnstileToken` property |
+| `src/Services/UserService/SmartParking.UserService.Application/DTOs/OwnerRegistrationDto.cs` | Modified | Added `TurnstileToken` property |
+| `src/Services/UserService/SmartParking.UserService.Application/DTOs/LoginDto.cs` | Modified | Added `TurnstileToken` property |
+| `src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommand.cs` | Modified | Added `TurnstileToken` property |
+| `src/Services/UserService/SmartParking.UserService.Application/Common/MapperProfile/LoginMapperProfile.cs` | Modified | Explicit mapping for `TurnstileToken` |
+| `src/Services/UserService/SmartParking.UserService.Application/Services/DriverRegistrationService.cs` | Modified | Injected `IBotVerificationService` and verified before DB transaction |
+| `src/Services/UserService/SmartParking.UserService.Application/Services/OwnerRegistrationService.cs` | Modified | Injected `IBotVerificationService` and verified before DB transaction |
+| `src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommandHandler.cs` | Modified | Injected `IBotVerificationService` and verified before DB transaction |
+| `src/Services/UserService/SmartParking.UserService.API/Program.cs` | Modified | Added rate limiting policies `RegistrationRateLimit` and `LoginRateLimit`, forwarded headers |
+| `src/Services/UserService/SmartParking.UserService.API/Controllers/AuthController.cs` | Modified | Applied `[EnableRateLimiting("RegistrationRateLimit")]` and `[EnableRateLimiting("LoginRateLimit")]` |
+| `tests/Services/SmartParking.UserService.Tests/DriverRegistrationHttpTests.cs` | Modified | Updated rate limit policies in test fixture |
+| `tests/Services/SmartParking.UserService.Tests/OwnerRegistrationHttpTests.cs` | Modified | Updated rate limit policies in test fixture |
+| `tests/Services/SmartParking.UserService.Tests/BotProtectionFlowTests.cs` | Created | Comprehensive unit & pipeline tests for 3 auth flows, invariants, and rate limiting |
+| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session log tracking Phase 1 & 2 completion |
 
 ## 6. Issues and Blockers
 
-- None. All Phase 1 deliverables completed with 0 errors and 0 warnings.
-- Next phase: Phase 2 (wire verification into registration services and login command handler, add `turnstileToken` to DTOs).
+- None. All Phase 2 deliverables completed and validated with 0 errors and 0 warnings.
+- Next phase: Phase 3 (Docker configuration, secrets management & environment parity) / Phase 4 (Frontend integration).
 
 ## 7. Validation Results
 
 - `dotnet build SmartParking.slnx -nr:false -m:1 --nologo`: **Build succeeded. 0 Warning(s), 0 Error(s)**.
-- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~TurnstileVerifierTests" --no-build --nologo`: **Passed! 48 passed, 0 failed**.
-- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~LayerBoundaryTests" --no-build --nologo`: **Passed! 12 passed, 0 failed**.
-- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~ApiErrorHandlingTests" --no-build --nologo`: **Passed! 46 passed, 0 failed**.
-- Full test suite: **Passed! 269 passed, 0 failed, 54 skipped (DB-container integration tests)**.
+- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~BotProtectionFlowTests|FullyQualifiedName~LayerBoundaryTests" --no-build --nologo`: **Passed! 22 passed, 0 failed**.
+- Full UserService test suite: **Passed! 279 passed, 0 failed, 54 skipped (DB-container integration tests)**.
 
 ## 8. Git Status
 
 ```text
 ## docs/SPARK-257-bot-protection-api-design
  M ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md
- M src/Services/UserService/SmartParking.UserService.API/Common/ApiExceptionMapper.cs
+ M src/Services/UserService/SmartParking.UserService.API/Controllers/AuthController.cs
  M src/Services/UserService/SmartParking.UserService.API/Program.cs
- M tests/Services/SmartParking.UserService.Tests/ApiErrorHandlingTests.cs
-?? src/Services/UserService/SmartParking.UserService.Application/Common/Interfaces/Services/IBotVerificationService.cs
-?? src/Services/UserService/SmartParking.UserService.Infrastructure/Configurations/
-?? src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifier.cs
-?? src/Services/UserService/SmartParking.UserService.Infrastructure/Services/TurnstileVerifyResponse.cs
-?? tests/Services/SmartParking.UserService.Tests/TurnstileVerifierTests.cs
+ M src/Services/UserService/SmartParking.UserService.Application/Common/MapperProfile/LoginMapperProfile.cs
+ M src/Services/UserService/SmartParking.UserService.Application/DTOs/DriverRegistrationDto.cs
+ M src/Services/UserService/SmartParking.UserService.Application/DTOs/LoginDto.cs
+ M src/Services/UserService/SmartParking.UserService.Application/DTOs/OwnerRegistrationDto.cs
+ M src/Services/UserService/SmartParking.UserService.Application/Services/DriverRegistrationService.cs
+ M src/Services/UserService/SmartParking.UserService.Application/Services/OwnerRegistrationService.cs
+ M src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommand.cs
+ M src/Services/UserService/SmartParking.UserService.Application/Usecase/Login/LoginCommandHandler.cs
+ M tests/Services/SmartParking.UserService.Tests/DriverRegistrationHttpTests.cs
+ M tests/Services/SmartParking.UserService.Tests/OwnerRegistrationHttpTests.cs
+?? tests/Services/SmartParking.UserService.Tests/BotProtectionFlowTests.cs
 ```
 
 ## 9. Handoff / Next Steps
 
-1. Commit Phase 1 changes:
+1. Commit Phase 2 changes:
    ```text
-   feat(auth): implement bot verification port, adapter and error mapping [SPARK-257]
+   feat(auth): wire bot verification into registration, login flows and rate limiting [SPARK-257]
    ```
-2. Proceed to Phase 2:
-   - Wire `IBotVerificationService.VerifyAsync` as first statement in `DriverRegistrationService.RegisterAsync`, `OwnerRegistrationService.RegisterAsync`, and `LoginCommandHandler.Handle`.
-   - Add `public string? TurnstileToken { get; set; }` to `DriverRegistrationDto`, `OwnerRegistrationDto`, `LoginDto`, and `LoginCommand`.
-   - Update mapping profiles (e.g. `LoginMapperProfile`).
-   - Add unit/integration tests for Phase 2 flows.
+2. Proceed to Phase 3 (Docker & environment configuration) and Phase 4 (Frontend Cloudflare Turnstile integration).
 
 ## 10. Context for Next Session
+
+- Turnstile tokens are single-use and short-lived; `timeout-or-duplicate` maps to expired/reused (`BOT_VERIFICATION_EXPIRED`, 400).
+- Verification runs first and fails closed; `503` is a retryable temporary failure, not a bypass.
+- Secret key is backend-only; the site key is the only `VITE_*` value.
+- `ApiExceptionMapper` uses an explicit whitelist; 4 bot protection codes are mapped to 400/503.
+- Registration DTOs validate manually; login uses FluentValidation. Do not introduce `[Required]` model-state errors on `turnstileToken`.
 
 - Turnstile tokens are single-use and short-lived; `timeout-or-duplicate` maps to expired/reused (`BOT_VERIFICATION_EXPIRED`, 400).
 - Verification runs first and fails closed; `503` is a retryable temporary failure, not a bypass.

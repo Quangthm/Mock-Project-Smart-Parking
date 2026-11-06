@@ -100,8 +100,14 @@ public static class UserHost
         builder.Services.AddHostedService<UserService.API.Services.WorkflowDeliveryWorker>();
         builder.Services.AddRateLimiter(options =>
         {
-            options.RejectionStatusCode = 429;
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddPolicy("DriverOtp", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
+                { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy("RegistrationRateLimit", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
+                { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy("LoginRateLimit", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
                 { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
@@ -157,6 +163,7 @@ public static class UserHost
             app.MapOpenApi();
         }
 
+        app.UseForwardedHeaders();
         app.UseRouting();
         app.UseApiErrorResponses();
 
