@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useApp } from "../../../context/AppContext"
 import { authData as store } from "../data/data"
 import { useNavigate } from "react-router-dom"
@@ -8,6 +8,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { PasswordVisibilityButton, PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { authApi, AuthApiError, type MfaLoginChallenge } from "../../../lib/authApi"
+import { TurnstileWidget, type TurnstileWidgetRef } from "../../../components/common/TurnstileWidget"
 import { resumePendingSignIn } from "../pendingRegistrationSignIn"
 import { pendingDriverKey } from "../Sign Up/DriverOtpForm"
 import { MfaCodeInput } from "../../../components/forms/MfaCodeInput"
@@ -54,6 +55,8 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
   const [fpSubmitting, setFpSubmitting] = useState(false)
 
   const [mfaChallenge, setMfaChallenge] = useState<MfaLoginChallenge | null>(null)
+  const [turnstileToken, setTurnstileToken] = useState("")
+  const turnstileRef = useRef<TurnstileWidgetRef>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,13 +84,17 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
         ? await authApi.loginOtp(challenge!.challengeId, code, totp, recoveryCode)
         : mfaChallenge
           ? await authApi.completeMfaLogin(mfaChallenge, totp, recoveryCode)
-          : await authApi.login(email, password)
+          : await authApi.login(email, password, turnstileToken || undefined)
 
       if ("mfaRequired" in result) {
+        turnstileRef.current?.reset()
+        setTurnstileToken("")
         setMfaChallenge(result.challenge)
         setPassword("")
         return
       }
+      turnstileRef.current?.reset()
+      setTurnstileToken("")
       const user = result
 
       const signedInUser = { ...user, lastLoginAt: new Date().toISOString() }
@@ -119,6 +126,12 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
       showUiToast("Signed in", `Welcome back, ${user.name}.`)
 
     } catch (error) {
+      const isRateLimited = error instanceof AuthApiError && error.status === 429
+      const isBotRequired = error instanceof AuthApiError && error.code === "BOT_VERIFICATION_REQUIRED"
+      if (!isRateLimited && !isBotRequired) {
+        turnstileRef.current?.reset()
+        setTurnstileToken("")
+      }
       try {
         const nextView = await resumePendingSignIn(error, email)
         if (nextView) {
@@ -512,6 +525,14 @@ export function SignIn({ flow = "password" }: { flow?: "password" | "email-otp" 
                 Back to password sign-in
               </button>
             </>
+          )}
+
+          {mode === "password" && !mfaChallenge && (
+            <TurnstileWidget
+              ref={turnstileRef}
+              action="password_login"
+              onTokenChange={setTurnstileToken}
+            />
           )}
 
           {error && (

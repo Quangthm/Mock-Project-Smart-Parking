@@ -4,6 +4,7 @@ using UserService.API.Services;
 using UserService.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Services;
+using UserService.Infrastructure.Configurations;
 using UserService.Infrastructure.Services;
 using UserService.Infrastructure.Messaging;
 using Microsoft.AspNetCore.DataProtection;
@@ -52,6 +53,41 @@ public static class UserHost
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
         builder.Services.AddHttpClient("Otp", client => client.Timeout = TimeSpan.FromSeconds(10));
+
+        var turnstileOptions = builder.Configuration.GetSection(TurnstileOptions.SectionName).Get<TurnstileOptions>() ?? new();
+        turnstileOptions.ExpectedHostnames = turnstileOptions.ExpectedHostnames
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .ToArray();
+        builder.Services.AddSingleton(turnstileOptions);
+        builder.Services.AddHttpClient<IBotVerificationService, TurnstileVerifier>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(5);
+        }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false
+        });
+
+        if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+        {
+            if (!turnstileOptions.Enabled || string.IsNullOrWhiteSpace(turnstileOptions.SecretKey) ||
+                turnstileOptions.ExpectedHostnames is not { Length: > 0 })
+            {
+                throw new InvalidOperationException(
+                    "Non-development environments (Production, Staging) require Turnstile to be enabled with a valid SecretKey and non-empty ExpectedHostnames.");
+            }
+            if (builder.Environment.IsProduction())
+            {
+                var forbiddenInProd = new[] { "localhost", "127.0.0.1", "::1", "staging" };
+                if (turnstileOptions.ExpectedHostnames.Any(h => string.IsNullOrWhiteSpace(h) ||
+                    forbiddenInProd.Any(f => h.Contains(f, StringComparison.OrdinalIgnoreCase)) ||
+                    h.Contains('/') || h.Contains(':') || h.Contains('*')))
+                {
+                    throw new InvalidOperationException(
+                        "Production ExpectedHostnames contains forbidden entries (localhost, 127.0.0.1, ::1, staging, ports, schemes, or wildcards).");
+                }
+            }
+        }
+
         var protection=builder.Services.AddDataProtection().SetApplicationName("SmartPark.UserService");
         var keyDirectory=builder.Configuration["Workflow:KeyDirectory"];
         if(!string.IsNullOrWhiteSpace(keyDirectory))
@@ -67,8 +103,14 @@ public static class UserHost
         builder.Services.AddHostedService<UserService.API.Services.WorkflowDeliveryWorker>();
         builder.Services.AddRateLimiter(options =>
         {
-            options.RejectionStatusCode = 429;
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddPolicy("DriverOtp", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
+                { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy("RegistrationRateLimit", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
+                { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy("LoginRateLimit", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new()
                 { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
@@ -124,8 +166,18 @@ public static class UserHost
             app.MapOpenApi();
         }
 
+        app.UseForwardedHeaders();
         app.UseRouting();
         app.UseApiErrorResponses();
+
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.ContentLength > 65536)
+            {
+                throw new BadHttpRequestException("Request body too large.", StatusCodes.Status413PayloadTooLarge);
+            }
+            await next();
+        });
 
         app.UseCors("Frontend");
         app.UseAuthentication();

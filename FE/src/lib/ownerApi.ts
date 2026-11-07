@@ -64,6 +64,7 @@ export const ownerApi = {
     password?: string
     lotType: LotType
     agreedToPolicy: boolean
+    turnstileToken?: string
   }): Promise<OwnerApplicationRecord> {
     const r = await request<Response<OwnerApplicationRecord>>(
       "/register/owner",

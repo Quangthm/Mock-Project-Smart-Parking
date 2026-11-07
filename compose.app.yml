@@ -63,7 +63,13 @@ services:
       SMARTPARK_RABBITMQ_PASSWORD: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
       SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
-      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-}
+      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443}
+      # Cloudflare Turnstile Bot Protection (SPARK-257)
+      Turnstile__Enabled: ${SMARTPARK_TURNSTILE_ENABLED:-true}
+      Turnstile__SecretKey: ${SMARTPARK_TURNSTILE_SECRET_KEY:-}
+      Turnstile__ExpectedHostnames__0: localhost
+      Turnstile__ExpectedHostnames__1: 127.0.0.1
+      Turnstile__ExpectedHostnames__2: ::1
     ports:
       - "127.0.0.1:5035:8080"
     volumes:
@@ -153,6 +159,7 @@ services:
       VITE_PAYMENT_API_BASE_URL: http://localhost:5065
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
+      VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "127.0.0.1:5173:5173"
