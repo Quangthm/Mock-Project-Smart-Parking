@@ -2,6 +2,8 @@
 
 Hướng dẫn onboarding cho dev mới. Làm theo thứ tự: **Prerequisites → First-time Setup → Run Application → Verify Setup**. Các phần **Optional Features**, **Troubleshooting**, **Advanced Options** có thể bỏ qua ở lần chạy đầu.
 
+> Đã có checkout cũ và vừa `git pull` về branch mới? Đọc [mục 8](#8-pull-branch-mới--cập-nhật-image-service-và-schema-db) trước khi test — Docker không tự cập nhật image và DB volume không tự nhận SQL mới.
+
 > Chạy PowerShell ngay tại root của checkout; mọi lệnh trong file không phụ thuộc đường dẫn máy cá nhân. `setup.ps1` được lưu trong Git — không cần xin script từ kênh nội bộ.
 
 ## TL;DR happy path
@@ -12,6 +14,12 @@ git branch --show-current          # xác nhận đang ở branch làm việc
 # Cấu hình RSA/JWT ổn định theo mục 2 bên dưới trước khi chạy shared JWT
 .\scripts\run-app-service.ps1 -Service All   # chạy 5 container app (BE + FE)
 # Mở http://localhost:5173
+```
+
+```powershell
+# Đã có checkout cũ, vừa pull branch mới về:
+.\setup.ps1 -SkipRestore                     # schema/overlay mới vào volume cũ (không mất dữ liệu)
+.\scripts\run-app-service.ps1 -Service All   # build lại image từ code vừa pull rồi recreate container
 ```
 
 Chi tiết từng bước và cách xử lý lỗi nằm ở các mục bên dưới.
@@ -106,7 +114,8 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 > **Lưu ý chuyển tiếp v1.1 / Fix2FA:** Mã nguồn trên branch `Fix2FA` đã dùng `FacilityService` tại `src/Services/FacilityService/` (dùng `facility-db` trên port 5442) theo SRS v1.1 (quyết định V11-09). `OperationService` tại `src/Services/OperationService/` dùng `operations-db` trên port 5443 và triển khai luồng Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
 
 - Lần đầu build 5 image (.NET 10 + Node 22) nên lâu; các lần sau dùng cache.
-- `-NoBuild` bỏ qua bước build khi image đã có; `-NoLogWindow` không mở cửa sổ CMD (dùng cho CI/automation).
+- Mặc định runner chạy `docker compose up -d --build`, nên mỗi lần start là **build lại image từ code hiện tại** — đây là cách đúng để lấy code mới sau khi pull (xem [mục 8](#8-pull-branch-mới--cập-nhật-image-service-và-schema-db)).
+- `-NoBuild` bỏ qua bước build khi image đã có (**không** dùng ngay sau khi pull code mới); `-NoLogWindow` không mở cửa sổ CMD (dùng cho CI/automation).
 - Có thể double-click `scripts\run-*-service.cmd` hoặc `scripts\run-all-apps.cmd`.
 - Dừng stack (giữ nguyên volume): `.\scripts\stop-app-service.ps1 -Service All`.
 - Log một service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
@@ -375,7 +384,7 @@ DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập �
 
 > **Ngoại lệ — password gắn với DB volume:** đổi `SMARTPARK_DEV_PASSWORD` (hoặc password tài khoản seed) khi volume đã init không áp dụng vào PostgreSQL — phải khôi phục giá trị gốc, `-RecreateDb` (mất dữ liệu), hoặc đổi trong DB. Container sẽ unhealthy; setup báo `authentication failed`.
 
-Luôn start container qua `run-app-service.ps1` (hoặc `.cmd`) — nút Start trong Docker Desktop / `docker start` chạy lại image và env cũ, không build/recreate.
+Luôn start container qua `run-app-service.ps1` (hoặc `.cmd`) — nút Start trong Docker Desktop / `docker start` chạy lại image và env cũ, không build/recreate. Khi pull code mới, xem thêm [mục 8](#8-pull-branch-mới--cập-nhật-image-service-và-schema-db).
 
 ### 7.6 Thêm key mới vào `.env.example` và `.env`
 
@@ -398,5 +407,101 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
 
+## 8. Pull branch mới — cập nhật image service và schema DB
+
+`git pull` **không** tự cập nhật Docker: container vẫn chạy image build từ code cũ, và PostgreSQL volume vẫn giữ schema cũ. Bỏ qua mục này bạn sẽ test nhầm bản cũ. Triệu chứng điển hình:
+
+- route mới trả `404` (middleware ghi `Request reached the end of the middleware pipeline without being handled`);
+- service log báo `Npgsql.PostgresException ... 42P01: relation "..." does not exist` hoặc `42703: column "..." does not exist`;
+- UI thiếu màn hình/panel mới dù file đã có trong `FE/src`;
+- Postman fail hàng loạt `404`/`405`/`500`/`503` dù code trong repo đúng.
+
+### 8.1 Sau khi pull, chạy đúng những gì
+
+| Branch mới thay đổi | Việc phải làm | Lệnh |
+| --- | --- | --- |
+| Code service BE (`.cs`, `Program.cs`, `docker/Dockerfile.backend`, `compose.app.yml`) | Build lại image + recreate container | `.\scripts\run-app-service.ps1 -Service All` (một service thì `-Service Parking` / `-Service User` / `-Service Operation` / `-Service Payment`) |
+| Schema SQL: `scripts/database/microservices/*.sql`, hoặc danh sách `$scripts` / `$required` trong `scripts/apply-workflow-migrations.ps1` | Áp migration lên volume hiện có; **không** cần build image | `.\setup.ps1 -SkipRestore` (cả 6 DB) hoặc `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .` (một DB) |
+| FE source (`FE/src/**`) | Không cần làm gì — container chạy Vite dev + HMR và bind mount trực tiếp `FE/` | Hard reload trang (`Ctrl+Shift+R`) |
+| FE dependency (`FE/package.json`, `FE/package-lock.json`) | Cài lại package trong container (volume `fe-node-modules` giữ cache cũ) | `docker exec -it smartpark-app-frontend-1 npm install` — chi tiết ở [mục 6.2](#62-lỗi-đã-biết--triệu-chứng--nguyên-nhân--cách-xử-lý) |
+| `.env` / `.env.example` | Xem [mục 7.5](#75-cập-nhật-env--chạy-lại-script-gì) và [mục 7.6](#76-thêm-key-mới-vào-envexample-và-env) | — |
+
+Thứ tự khuyến nghị khi không chắc branch đổi gì:
+
+```powershell
+git pull
+.\setup.ps1 -SkipRestore                    # đồng bộ schema/overlay mới vào volume cũ + user-secrets (không xóa dữ liệu)
+.\scripts\run-app-service.ps1 -Service All  # build lại image từ code vừa pull rồi recreate container
+```
+
+Lưu ý:
+
+- Migration cần 6 container DB đang chạy — kiểm tra bằng `docker compose --project-name smartpark-schema --env-file .env -f compose.schema-integration.yml ps`.
+- `apply-workflow-migrations.ps1` kiểm tra sentinel và áp các script canonical tương ứng trên **cả** DB trống và DB đã ở schema hiện tại, nên chạy lại là idempotent.
+- DB ở **schema legacy** (có bảng cũ nhưng thiếu sentinel) thì runner **dừng** và yêu cầu `-RecreateDb` — xem cảnh báo ở [mục 8.5](#85-không-được-làm-gì-khi-chưa-chấp-nhận-mất-dữ-liệu).
+- `.\setup.ps1` hỏi `[O]verwrite / [K]eep / [A]bort` khi `.env` đã tồn tại (**Enter = Keep** — không mất credential local).
+
+### 8.2 Những cách chạy **không** cập nhật image (nguồn của "vẫn là bản cũ")
+
+| Cách chạy | Vì sao vẫn là code cũ |
+| --- | --- |
+| Nút **Start** trong Docker Desktop | Chạy lại container/image sẵn có; không build, không recreate |
+| `docker start <container>` | Như trên |
+| `.\scripts\run-app-service.ps1 -Service X -NoBuild` | Cố ý bỏ build — chỉ dùng khi image đã được build từ đúng commit |
+| `docker compose ... up -d` (thiếu `--build`) | Compose dùng lại image `smartpark/*:local` đang có |
+
+`run-app-service.ps1` mặc định chạy `docker compose up -d --build`, nên **luôn start container qua script này** sau khi pull.
+
+### 8.3 Kiểm tra image/container có đúng bản vừa pull không
+
+```powershell
+git log -1 --format='%h %cI %s'                        # commit đang làm việc
+docker image inspect "smartpark/parking-service:local" --format "{{.Created}}"
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.CreatedAt}}"
+```
+
+Container có `CreatedAt` **cũ hơn** image `Created` ⇒ container vẫn là bản cũ; chạy lại `.\scripts\run-app-service.ps1 -Service <service>` để recreate. Đổi `parking-service` thành `user-service` / `reservation-service` / `payment-service` / `frontend` khi kiểm tra service khác.
+
+Cách nhanh để biết container có route mới chưa (không cần token — `404` = route thiếu, `401` = route tồn tại):
+
+```powershell
+$code = curl.exe -s -o NUL -w "%{http_code}" http://localhost:5045/api/parking-lots/00000000-0000-0000-0000-000000000000/maintenance-windows
+Write-Host "GET /maintenance-windows -> $code"
+```
+
+### 8.4 Kiểm tra DB đã có bảng mới chưa
+
+```powershell
+docker compose --env-file .env -f compose.schema-integration.yml exec -T facility-db psql -U smartpark_facility -d smartpark_facility -At -c "SELECT to_regclass('structure_maintenance_windows') IS NOT NULL;"
+docker compose --env-file .env -f compose.schema-integration.yml exec -T operations-db psql -U smartpark_operations -d smartpark_operations -At -c "SELECT to_regclass('structure_release_receipts') IS NOT NULL;"
+```
+
+`t` = bảng đã có; `f` = thiếu ⇒ chạy lại bước migration ở [mục 8.1](#81-sau-khi-pull-chạy-đúng-những-gì). Thay container/DB theo service khi cần.
+
+### 8.5 Không được làm gì khi chưa chấp nhận mất dữ liệu
+
+Các lệnh sau **xóa toàn bộ dữ liệu dev** trong 6 DB; chỉ dùng khi thật sự cần (ví dụ schema legacy) và đã backup:
+
+- `.\setup.ps1 -RecreateDb`
+- `docker compose ... down -v`
+- `docker volume prune` / `docker volume rm smartpark-schema_*`
+
+`.\scripts\stop-app-service.ps1 -Service All` chỉ dừng container và **giữ nguyên volume**.
+
+### 8.6 Nhiều checkout song song trên cùng một máy
+
+- `compose.app.yml` dùng project cố định `smartpark-app` và container name cố định (`smartpark-app-parking-service-1`, `smartpark-app-frontend-1`, …). Chạy app stack ở checkout thứ hai sẽ **recreate container của checkout thứ nhất**. Kiểm tra container đang phục vụ checkout nào:
+  ```powershell
+  docker inspect smartpark-app-frontend-1 --format "{{json .Mounts}}"
+  ```
+- `scripts/run-app-service.ps1` và `compose.schema-integration.yml` luôn dùng **container name cố định** cho DB (`facility-db-1`, `operations-db-1`, …). Nếu branch đổi schema nhiều và cần test song song với lane khác, giữ nguyên container/port và tạo **database khác tên** trong cùng container (migration script luôn trỏ vào tên DB canonical nên phải nạp thủ công):
+  ```powershell
+  docker exec facility-db-1 psql -w -U smartpark_facility -d smartpark_facility -c "CREATE DATABASE smartpark_facility_<task>"
+  docker cp scripts/database/microservices/02-facility-service-db.sql facility-db-1:/tmp/01.sql
+  docker exec facility-db-1 psql -w -U smartpark_facility -d smartpark_facility_<task> -v ON_ERROR_STOP=1 -f /tmp/01.sql
+  ```
+  Sau đó trỏ API/runner sang DB đó qua `ConnectionStrings__Parking` (port giữ nguyên, xem [mục 7.3](#73-ports)); xóa an toàn khi xong bằng `DROP DATABASE IF EXISTS smartpark_facility_<task>`. **Không** xóa/recreate container `facility-db-1` — lane khác đang dùng chung.
+
+### 8.7 Tài liệu triển khai liên quan
 
 Own-profile schema, shared RabbitMQ, configuration and safe database recreation: [SPARK-248 deployment guide](docs/04-testing/reports/SPARK-248/follow-up.md).

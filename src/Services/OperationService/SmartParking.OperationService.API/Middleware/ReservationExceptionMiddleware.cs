@@ -1,3 +1,4 @@
+using FluentValidation;
 using Npgsql;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Domain;
@@ -25,10 +26,21 @@ public sealed class ReservationExceptionMiddleware(RequestDelegate next)
                 message = "Reservation data is unavailable until database reconciliation is complete."
             });
         }
+        catch (ValidationException error)
+        {
+            await WriteErrorAsync(context, StatusCodes.Status400BadRequest, new
+            {
+                success = false,
+                code = "INVALID_STRUCTURE",
+                message = error.Message,
+                errors = error.Errors.Select(e => new { property = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
         catch (InvalidStructureEditException error)
         {
             await WriteErrorAsync(context, StatusCodes.Status400BadRequest, new
             {
+                success = false,
                 code = "INVALID_STRUCTURE",
                 message = error.Message
             });
@@ -44,7 +56,12 @@ public sealed class ReservationExceptionMiddleware(RequestDelegate next)
         }
         catch (HoldConflictException)
         {
-            await WriteErrorAsync(context, StatusCodes.Status409Conflict, new { code = "STRUCTURE_BUSY" });
+            await WriteErrorAsync(context, StatusCodes.Status409Conflict, new
+            {
+                success = false,
+                code = "STRUCTURE_BUSY",
+                message = "Another request is managing this site."
+            });
         }
     }
 

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
@@ -22,18 +22,10 @@ $scripts = @{
     )
     Parking = @(
         'microservices/02-facility-service-db.sql',
-        'microservices/03a-parking-structure-ops-service-db.sql',
-        'overlay/parking-tenants.sql',
-        'overlay/parking-structure-synchronizations.sql',
-        'overlay/parking-operator-tables.sql',
-        'overlay/parking-slot-constraints.sql'
+        'microservices/03a-parking-structure-ops-service-db.sql'
     )
     Reservation = @(
-        'microservices/03b-reservation-operations-service-db.sql',
-        'overlay/reservation-site-capacity-pools.sql',
-        'overlay/reservation-structure-safety.sql',
-        'overlay/reservation-structure-receipts.sql',
-        'overlay/reservation-confirmation-time.sql'
+        'microservices/03b-reservation-operations-service-db.sql'
     )
     Payment = @(
         'microservices/04-payment-pricing-service-db.sql'
@@ -49,7 +41,7 @@ $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation=
 $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
-    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions')
+    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows')
     Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts')
     Payment = @()
     Notification = @()
@@ -99,6 +91,7 @@ if ($state -eq 'empty') {
         if ($LASTEXITCODE -ne 0) { throw "Migration failed for $Service at $relative; its transaction was rolled back. Reconcile conflicting data before retrying." }
     }
 }
+
 
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.

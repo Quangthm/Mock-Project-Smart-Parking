@@ -1,13 +1,14 @@
-﻿-- ======================================================================================
+-- ======================================================================================
 -- MICROSERVICE: PARKING OPERATIONS SERVICE DATABASE (OperationsDb) - PART 03b
 -- Domain: Reservations, Sessions, Allocations, Access, Passes, Incidents, Search, Audit
--- Mounted into smartpark_reservation DB
+-- Mounted into smartpark_operations DB
 -- ======================================================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "btree_gist";
--- 1. Báº¢NG Cáº¤U HĂŒNH Äá»NH Má»¨C Sá»¨C CHá»¨A Váº¬N HĂ€NH (OPERATIONAL CAPACITY CONFIGS)
--- LÆ°u trá»¯ cáº¥u hĂ¬nh háº¡n má»©c nháº­n Ä‘áº·t chá»— vĂ  sá»©c chá»©a tá»‘i Ä‘a phá»¥c vá»¥ tĂ­nh toĂ¡n kháº£ dá»¥ng.
-CREATE TABLE operational_capacity_configs (
+
+-- 1. BẢNG CẤU HÌNH ĐỊNH MỨC SỨC CHỨA VẬN HÀNH (OPERATIONAL CAPACITY CONFIGS)
+-- Lưu trữ cấu hình hạn mức nhận đặt chỗ và sức chứa tối đa phục vụ tính toán khả dụng.
+CREATE TABLE IF NOT EXISTS operational_capacity_configs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -20,14 +21,14 @@ CREATE TABLE operational_capacity_configs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (site_id, spatial_unit_id, vehicle_type)
 );
-CREATE INDEX idx_op_capacity_site ON operational_capacity_configs(site_id, vehicle_type);
+CREATE INDEX IF NOT EXISTS idx_op_capacity_site ON operational_capacity_configs(site_id, vehicle_type);
 
--- 2. Báº¢NG CHĂNH SĂCH Váº¬N HĂ€NH (OPERATIONAL POLICIES)
--- Quáº£n lĂ½ cĂ¡c tham sá»‘ cá»­a sá»• thá»i gian (bounds) theo chuáº©n SRS v1.0
-CREATE TABLE operational_policies (
+-- 2. BẢNG CHÍNH SÁCH VẬN HÀNH (OPERATIONAL POLICIES)
+-- Quản lý các tham số cửa sổ thời gian (bounds) theo chuẩn SRS v1.0
+CREATE TABLE IF NOT EXISTS operational_policies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
-    site_id UUID NULL, -- NULL nghÄ©a lĂ  default Ă¡p dá»¥ng toĂ n há»‡ thá»‘ng
+    site_id UUID NULL, -- NULL nghĩa là default áp dụng toàn hệ thống
     arrival_late_tolerance_minutes INT NOT NULL DEFAULT 15,
     payment_hold_duration_minutes INT NOT NULL DEFAULT 15,
     min_reservation_duration_minutes INT NOT NULL DEFAULT 15,
@@ -40,12 +41,35 @@ CREATE TABLE operational_policies (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (tenant_id, site_id)
 );
-CREATE INDEX idx_operational_policies_site ON operational_policies(site_id);
+CREATE INDEX IF NOT EXISTS idx_operational_policies_site ON operational_policies(site_id);
 
+-- 3. BẢNG POOL SỨC CHỨA THEO BÃI/KHU VỰC (SITE CAPACITY POOLS)
+-- Quản lý quota và số lượng xe động phục vụ chống overbooking
+CREATE TABLE IF NOT EXISTS site_capacity_pools (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    -- Cross-domain References (Logical IDs)
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    spatial_unit_id UUID,
 
--- 4. Báº¢NG Äáº¶T CHá»– TRÆ¯á»C (RESERVATIONS)
--- Ăp dá»¥ng cÆ¡ cháº¿ Time-range overlap; khĂ´ng dĂ¹ng scalar counter pháº³ng
-CREATE TABLE reservations (
+    vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE')),
+    total_capacity INT NOT NULL,
+    max_reservation_quota INT NOT NULL,
+    current_reserved_count INT NOT NULL DEFAULT 0,
+    pending_payment_count INT NOT NULL DEFAULT 0,
+    occupied_count INT NOT NULL DEFAULT 0,
+    protected_count INT NOT NULL DEFAULT 0,
+    backup_count INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (id, tenant_id, site_id),
+    CHECK (current_reserved_count >= 0 AND current_reserved_count <= max_reservation_quota),
+    CHECK (max_reservation_quota <= total_capacity)
+);
+CREATE INDEX IF NOT EXISTS idx_site_capacity_pools_tenant_site ON site_capacity_pools(tenant_id, site_id);
+
+-- 4. BẢNG ĐẶT CHỖ TRƯỚC (RESERVATIONS)
+-- Áp dụng cơ chế Time-range overlap; không dùng scalar counter phẳng
+CREATE TABLE IF NOT EXISTS reservations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -76,13 +100,13 @@ CREATE TABLE reservations (
         tstzrange(expected_start_time, expected_end_time) WITH &&
     ) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))
 );
-CREATE INDEX idx_reservations_tenant_site ON reservations(tenant_id, site_id);
-CREATE INDEX idx_reservations_account ON reservations(account_id);
-CREATE INDEX idx_reservations_status_times ON reservations(status, expected_start_time, expected_end_time);
-CREATE INDEX idx_reservations_plate ON reservations(normalized_plate);
+CREATE INDEX IF NOT EXISTS idx_reservations_tenant_site ON reservations(tenant_id, site_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_account ON reservations(account_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_status_times ON reservations(status, expected_start_time, expected_end_time);
+CREATE INDEX IF NOT EXISTS idx_reservations_plate ON reservations(normalized_plate);
 
--- 5. Báº¢NG PHIĂN Äá»– XE THá»°C Táº¾ (PARKING SESSIONS)
-CREATE TABLE parking_sessions (
+-- 5. BẢNG PHIÊN ĐỖ XE THỰC TẾ (PARKING SESSIONS)
+CREATE TABLE IF NOT EXISTS parking_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL,
     
@@ -109,15 +133,15 @@ CREATE TABLE parking_sessions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (exit_time IS NULL OR exit_time > entry_time)
 );
-CREATE INDEX idx_parking_sessions_tenant_site ON parking_sessions(tenant_id, site_id);
-CREATE INDEX idx_parking_sessions_account ON parking_sessions(account_id);
-CREATE INDEX idx_parking_sessions_status ON parking_sessions(session_status);
-CREATE INDEX idx_parking_sessions_plate ON parking_sessions(normalized_plate);
-CREATE UNIQUE INDEX idx_parking_sessions_active_ticket ON parking_sessions(ticket_reference) WHERE session_status = 'ACTIVE' AND ticket_reference IS NOT NULL;
-CREATE UNIQUE INDEX idx_parking_sessions_active_access ON parking_sessions(access_item_id) WHERE session_status = 'ACTIVE' AND access_item_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_parking_sessions_tenant_site ON parking_sessions(tenant_id, site_id);
+CREATE INDEX IF NOT EXISTS idx_parking_sessions_account ON parking_sessions(account_id);
+CREATE INDEX IF NOT EXISTS idx_parking_sessions_status ON parking_sessions(session_status);
+CREATE INDEX IF NOT EXISTS idx_parking_sessions_plate ON parking_sessions(normalized_plate);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parking_sessions_active_ticket ON parking_sessions(ticket_reference) WHERE session_status = 'ACTIVE' AND ticket_reference IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parking_sessions_active_access ON parking_sessions(access_item_id) WHERE session_status = 'ACTIVE' AND access_item_id IS NOT NULL;
 
--- 6. Báº¢NG GĂN TĂ€I NGUYĂN Ă” Äá»– (SLOT ALLOCATIONS)
-CREATE TABLE slot_allocations (
+-- 6. BẢNG GÁN TÀI NGUYÊN Ô ĐỖ (SLOT ALLOCATIONS)
+CREATE TABLE IF NOT EXISTS slot_allocations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL,
     parking_session_id UUID REFERENCES parking_sessions(id) ON DELETE SET NULL,
@@ -136,18 +160,17 @@ CREATE TABLE slot_allocations (
         tstzrange(allocated_start_time, allocated_end_time) WITH &&
     ) WHERE (allocation_status IN ('RESERVED', 'OCCUPIED'))
 );
-CREATE INDEX idx_slot_allocations_tenant_site ON slot_allocations(tenant_id, site_id);
-CREATE INDEX idx_slot_allocations_times ON slot_allocations(allocated_start_time, allocated_end_time);
+CREATE INDEX IF NOT EXISTS idx_slot_allocations_tenant_site ON slot_allocations(tenant_id, site_id);
+CREATE INDEX IF NOT EXISTS idx_slot_allocations_times ON slot_allocations(allocated_start_time, allocated_end_time);
 
--- 7. Báº¢NG QUáº¢N LĂ Váº¬T PHáº¨M Äá»NH DANH (ACCESS ITEMS - THáºº Tá»ª / QR CODE)
--- Tiáº¿p nháº­n tá»« FacilityDb: Quáº£n lĂ½ vĂ²ng Ä‘á»i tháº» tá»« vĂ  phiĂªn sá»­ dá»¥ng
-CREATE TABLE access_items (
+-- 7. BẢNG QUẢN LÝ VẬT PHẨM ĐỊNH DANH (ACCESS ITEMS - THẺ TỪ / QR CODE)
+CREATE TABLE IF NOT EXISTS access_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
     item_type VARCHAR(50) NOT NULL CHECK (item_type IN ('CARD', 'QR', 'LICENSE_PLATE', 'RFID')),
     identifier_code VARCHAR(100) NOT NULL,
-    card_number VARCHAR(50), -- Sá»‘ tháº» in trĂªn máº·t tháº» váº­t lĂ½
+    card_number VARCHAR(50), -- Số thẻ in trên mặt thẻ vật lý
     status VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'IN_USE', 'LOST', 'DISABLED')),
     current_session_id UUID REFERENCES parking_sessions(id) ON DELETE SET NULL,
     issued_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -156,13 +179,13 @@ CREATE TABLE access_items (
     deleted_at TIMESTAMPTZ NULL,
     UNIQUE (tenant_id, identifier_code)
 );
-CREATE INDEX idx_access_items_site_id ON access_items(site_id);
-CREATE INDEX idx_access_items_identifier ON access_items(identifier_code);
-CREATE INDEX idx_access_items_status ON access_items(status);
+CREATE INDEX IF NOT EXISTS idx_access_items_site_id ON access_items(site_id);
+CREATE INDEX IF NOT EXISTS idx_access_items_identifier ON access_items(identifier_code);
+CREATE INDEX IF NOT EXISTS idx_access_items_status ON access_items(status);
 
--- 8. Báº¢NG VĂ‰ THĂNG (MONTHLY PASSES - WHEN_SPACE_AVAILABLE ONLY)
--- Chuáº©n hĂ³a v1.0: Loáº¡i bá» hoĂ n toĂ n GUARANTEED_CAPACITY_SLOT
-CREATE TABLE monthly_passes (
+-- 8. BẢNG VÉ THÁNG (MONTHLY PASSES - WHEN_SPACE_AVAILABLE ONLY)
+-- Chuẩn hóa v1.0: Loại bỏ hoàn toàn GUARANTEED_CAPACITY_SLOT
+CREATE TABLE IF NOT EXISTS monthly_passes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -189,12 +212,11 @@ CREATE TABLE monthly_passes (
         tstzrange(valid_from, valid_until) WITH &&
     ) WHERE (status = 'ACTIVE')
 );
-CREATE INDEX idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
-CREATE INDEX idx_monthly_passes_account ON monthly_passes(account_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_passes_account ON monthly_passes(account_id);
 
--- 9. Báº¢NG Sá»° Cá» Váº¬N HĂ€NH (OPERATIONAL INCIDENTS)
--- Tiáº¿p nháº­n tá»« FacilityDb: Xá»­ lĂ½ sá»± cá»‘ vĂ©, slot, ra vĂ o cá»•ng
-CREATE TABLE operational_incidents (
+-- 9. BẢNG SỰ CỐ VẬN HÀNH (OPERATIONAL INCIDENTS)
+CREATE TABLE IF NOT EXISTS operational_incidents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -214,12 +236,10 @@ CREATE TABLE operational_incidents (
         (status IN ('RESOLVED', 'CLOSED') AND resolved_at IS NOT NULL)
     )
 );
-CREATE INDEX idx_operational_incidents_site ON operational_incidents(site_id, status);
+CREATE INDEX IF NOT EXISTS idx_operational_incidents_site ON operational_incidents(site_id, status);
 
-
--- 10. Báº¢NG CHIáº¾U TĂŒM KIáº¾M BĂƒI XE (SEARCH & DISCOVERY PROJECTIONS)
--- Module Search & Discovery náº±m trong Parking Operations Service theo kiáº¿n trĂºc v1.0
-CREATE TABLE search_facility_projections (
+-- 10. BẢNG CHIẾU TÌM KIẾM BÃI XE (SEARCH & DISCOVERY PROJECTIONS)
+CREATE TABLE IF NOT EXISTS search_facility_projections (
     site_id UUID PRIMARY KEY,
     tenant_id UUID NOT NULL,
     site_code VARCHAR(50) NOT NULL,
@@ -233,11 +253,11 @@ CREATE TABLE search_facility_projections (
     cached_available_spaces INT NOT NULL DEFAULT 0,
     last_synced_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_search_facility_location ON search_facility_projections(latitude, longitude);
-CREATE INDEX idx_search_facility_status ON search_facility_projections(operational_status, is_open);
+CREATE INDEX IF NOT EXISTS idx_search_facility_location ON search_facility_projections(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_search_facility_status ON search_facility_projections(operational_status, is_open);
 
--- 11. Báº¢NG NHáº¬T KĂ KIá»‚M TOĂN Cá»”NG RA VĂ€O (GATE AUDIT LOGS - ZERO CASCADE)
-CREATE TABLE audit_logs (
+-- 11. BẢNG NHẬT KÝ KIỂM TOÁN CỔNG RA VÀO (GATE AUDIT LOGS - ZERO CASCADE)
+CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -249,5 +269,82 @@ CREATE TABLE audit_logs (
     reason TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_audit_logs_site_created ON audit_logs(site_id, created_at DESC);
-CREATE INDEX idx_audit_logs_actor ON audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_site_created ON audit_logs(site_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_id);
+
+-- 12. BẢO VỆ AN TOÀN CẤU TRÚC, KHÓA GIỮ VÀ BIÊN NHẬN (STRUCTURE SAFETY & EDIT HOLDS)
+-- Quản lý quá trình sửa đổi cấu trúc 3D với 2PC handshake
+CREATE TABLE IF NOT EXISTS structure_edit_holds (
+    site_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    token UUID NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS structure_site_state (
+    site_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    active BOOLEAN NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS structure_release_receipts (
+    token UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    outcome JSONB NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Trigger Function: guard_structure_edit()
+-- Ngăn các cam kết mới khi bãi đang trong phiên chỉnh sửa cấu trúc hoặc đã inactive
+CREATE OR REPLACE FUNCTION guard_structure_edit() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE live BOOLEAN;
+BEGIN
+    IF TG_OP='UPDATE' AND (NEW.site_id<>OLD.site_id OR NEW.tenant_id<>OLD.tenant_id) THEN
+        RAISE EXCEPTION 'Commitment scope cannot change' USING ERRCODE='23514';
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.site_id::text, 0));
+    IF EXISTS (SELECT 1 FROM structure_edit_holds WHERE site_id=NEW.site_id) THEN
+        RAISE EXCEPTION 'Structure edit is in progress; retry later' USING ERRCODE='55P03';
+    END IF;
+    IF TG_TABLE_NAME='reservations' THEN
+        live := NEW.status IN ('PENDING_PAYMENT','CONFIRMED','ALLOCATED','PARKING');
+    ELSIF TG_TABLE_NAME='parking_sessions' THEN
+        live := NEW.exit_time IS NULL;
+    ELSIF TG_TABLE_NAME='slot_allocations' THEN
+        live := NEW.allocation_status IN ('RESERVED','OCCUPIED');
+    ELSE
+        live := NEW.current_reserved_count>0 OR NEW.pending_payment_count>0
+            OR NEW.occupied_count>0 OR NEW.protected_count>0 OR NEW.backup_count>0;
+    END IF;
+    IF live AND EXISTS (
+        SELECT 1 FROM structure_site_state WHERE site_id=NEW.site_id AND (NOT active OR tenant_id<>NEW.tenant_id)
+    ) THEN RAISE EXCEPTION 'Resource is inactive' USING ERRCODE='23514'; END IF;
+    RETURN NEW;
+END $$;
+
+DROP TABLE IF EXISTS structure_removed_resources;
+DROP TRIGGER IF EXISTS guard_structure_edit ON reservations;
+CREATE TRIGGER guard_structure_edit BEFORE INSERT OR UPDATE ON reservations FOR EACH ROW EXECUTE FUNCTION guard_structure_edit();
+DROP TRIGGER IF EXISTS guard_structure_edit ON parking_sessions;
+CREATE TRIGGER guard_structure_edit BEFORE INSERT OR UPDATE ON parking_sessions FOR EACH ROW EXECUTE FUNCTION guard_structure_edit();
+DROP TRIGGER IF EXISTS guard_structure_edit ON slot_allocations;
+CREATE TRIGGER guard_structure_edit BEFORE INSERT OR UPDATE ON slot_allocations FOR EACH ROW EXECUTE FUNCTION guard_structure_edit();
+DROP TRIGGER IF EXISTS guard_structure_edit ON site_capacity_pools;
+CREATE TRIGGER guard_structure_edit BEFORE INSERT OR UPDATE ON site_capacity_pools FOR EACH ROW EXECUTE FUNCTION guard_structure_edit();
+
+-- 13. TRIGGER TỰ ĐỘNG GHI NHẬN THỜI ĐIỂM XÁC NHẬN ĐẶT CHỖ (RESERVATION CONFIRMATION TIME)
+CREATE OR REPLACE FUNCTION record_reservation_confirmation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status IN ('CONFIRMED','ALLOCATED','PARKING') AND NEW.confirmed_at IS NULL THEN
+  IF TG_OP='INSERT' THEN NEW.confirmed_at=clock_timestamp();
+  ELSIF OLD.status NOT IN ('CONFIRMED','ALLOCATED','PARKING') THEN NEW.confirmed_at=clock_timestamp();
+  END IF;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.confirmed_at IS NOT NULL THEN NEW.confirmed_at=OLD.confirmed_at; END IF;
+ RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS reservation_confirmation_time ON reservations;
+CREATE TRIGGER reservation_confirmation_time BEFORE INSERT OR UPDATE ON reservations
+ FOR EACH ROW EXECUTE FUNCTION record_reservation_confirmation();
