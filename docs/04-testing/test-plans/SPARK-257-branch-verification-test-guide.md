@@ -177,13 +177,35 @@ npx.cmd --yes --cache .cache/npm --package newman newman run `
 
 ---
 
-## 7. Known Limitations & Boundary Conditions
+## 7. Known Limitations & Boundary Conditions (QA / Tester Troubleshooting Guide)
 
-1. **Rate Limiting Window:** The rate limiting policy enforces 10 requests per minute per IP. When testing manually, avoid spamming submission buttons rapidly to prevent hitting unexpected 429 responses. If 429 occurs, wait 60 seconds for the window to reset.
-2. **Cloudflare Dummy Keys vs Live Site Keys:**
-   - Automated tests and Postman use Cloudflare test key `1x0000000000000000000000000000000AA` (which always validates successfully without real human challenge).
-   - Live browser testing requires valid network access to `challenges.cloudflare.com`.
-3. **Single-Use Token Enforcement:** Every token consumed by the server cannot be reused. Any retry after server response requires a newly generated token, which the UI handles automatically via `turnstile.reset()`.
+### 7.1. Cloudflare Live Secret Key vs. Dummy Test Tokens
+1. **Behavior with Real Cloudflare Keys:**
+   - In live browser testing, the client communicates with `challenges.cloudflare.com`, solves an interactive challenge, and generates a cryptographically signed token bound to `action` (`password_login`, `driver_register`, `owner_register`) and `hostname` (`localhost`). This token passes live verification 100%.
+   - In Newman / Postman, requests send the static dummy token `1x0000000000000000000000000000000AA`. When `user-service` is running with a **real Cloudflare Secret Key** (`0x4...`), Cloudflare's server strictly rejects the dummy token as `invalid-input-response`, returning `400 BOT_VERIFICATION_FAILED`.
+   - **Security Invariant:** This is intended security behavior. If backend accepted dummy tokens while running in live production mode with real keys, bots could bypass verification by simply sending dummy strings.
+2. **How to Run Postman Happy Path (1.1, 1.2, 1.3) Successfully:**
+   - **Option A (Manual Token Injection - Recommended for Demos):** Open browser at `http://localhost:5173/auth/login`, solve the captcha, open DevTools F12 Network tab, copy the generated `turnstileToken`, and paste it into Postman's `dummyPassToken` environment variable $\to$ Returns `200 OK` / `201 Created`.
+   - **Option B (Automated Testing Mode):** Set `SMARTPARK_TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA` in `.env` and restart `user-service`.
+   - **Option C (Functional Dev Bypass):** Set `SMARTPARK_TURNSTILE_ENABLED=false` in `.env` to bypass bot verification for pure business logic testing.
+
+### 7.2. Rate Limiting Cooldown & IP Window (10 req/min/IP)
+- The rate limiter enforces 10 requests per minute per IP on `/api/auth/login` and `/api/auth/register/*`.
+- **Folder 03 (3.1 Burst Consumption)** deliberately fires 10 rapid requests to verify that the 11th request is rejected with `429 Too Many Requests`.
+- **Side Effect:** Once Folder 03 executes, the IP `127.0.0.1` has exhausted its quota for the current 60-second window. Any subsequent Newman run or manual login test performed within 60 seconds will immediately receive `429 Too Many Requests`.
+- **Resolution for Testers:**
+  - Wait 60 seconds for the fixed window to expire.
+  - OR restart the container to reset in-memory rate limit counters immediately:
+    ```powershell
+    docker restart smartpark-app-user-service-1
+    ```
+
+### 7.3. DTO Schema Discipline (Unmapped Members Rejection)
+- Both `DriverRegistrationDto` and `OwnerRegistrationDto` are decorated with `[JsonUnmappedMemberHandling(Disallow)]`.
+- Submitting unknown properties (such as legacy fields `vehiclePlate`, `vehicleType`, `lotAddress`, `totalSpots`, etc.) causes ASP.NET Core model validation to reject the request with `400 VALIDATION_FAILED` before bot verification executes. All Postman request bodies must strictly follow the DTO properties defined in `src/Services/UserService/SmartParking.UserService.Application/DTOs/`.
+
+### 7.4. Single-Use Token Enforcement
+- Every token consumed by `VerifyAsync` is marked spent by Cloudflare. Any subsequent submission with the same token returns `400 BOT_VERIFICATION_EXPIRED` or `BOT_VERIFICATION_FAILED`. The frontend automatically resets the challenge widget upon server response via `turnstile.reset()`.
 
 ---
 

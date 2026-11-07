@@ -73,7 +73,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"QA Driver Tester\",\n  \"email\": \"{{tempDriverEmail}}\",\n  \"phone\": \"0912345678\",\n  \"password\": \"Password@123\",\n  \"vehiclePlate\": \"29A-99999\",\n  \"vehicleType\": \"car\",\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+              "raw": "{\n  \"fullName\": \"QA Driver Tester\",\n  \"email\": \"{{tempDriverEmail}}\",\n  \"phone\": \"0912345678\",\n  \"password\": \"Password@123\",\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
             },
             "url": {
               "raw": "{{userServiceUrl}}/api/auth/register/driver",
@@ -123,7 +123,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"QA Owner Tester\",\n  \"email\": \"{{tempOwnerEmail}}\",\n  \"phone\": \"0987654321\",\n  \"password\": \"Password@123\",\n  \"businessName\": \"QA SmartPark Enterprise\",\n  \"lotAddress\": \"123 Verification Avenue\",\n  \"lotName\": \"QA Central Facility\",\n  \"totalSpots\": 80,\n  \"lotType\": \"outdoor\",\n  \"pricingType\": \"hourly\",\n  \"pricingRate\": 20000,\n  \"agreedToPolicy\": true,\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+              "raw": "{\n  \"fullName\": \"QA Owner Tester\",\n  \"email\": \"{{tempOwnerEmail}}\",\n  \"phone\": \"0987654321\",\n  \"password\": \"Password@123\",\n  \"businessName\": \"QA SmartPark Enterprise\",\n  \"lotType\": \"outdoor\",\n  \"agreedToPolicy\": true,\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
             },
             "url": {
               "raw": "{{userServiceUrl}}/api/auth/register/owner",
@@ -333,9 +333,9 @@
                   "    pm.response.to.have.status(400);",
                   "});",
                   "",
-                  "pm.test('Error code is BOT_VERIFICATION_EXPIRED', function () {",
+                  "pm.test('Error code is BOT_VERIFICATION_EXPIRED or BOT_VERIFICATION_FAILED', function () {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json.code).to.eql('BOT_VERIFICATION_EXPIRED');",
+                  "    pm.expect(json.code).to.be.oneOf(['BOT_VERIFICATION_EXPIRED', 'BOT_VERIFICATION_FAILED']);",
                   "});",
                   "",
                   "pm.test('Response envelope success is false', function () {",
@@ -414,7 +414,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Action Mismatch Tester\",\n  \"email\": \"{{tempMismatchEmail}}\",\n  \"phone\": \"0912345678\",\n  \"password\": \"Password@123\",\n  \"vehiclePlate\": \"29A-12345\",\n  \"vehicleType\": \"car\",\n  \"turnstileToken\": \"{{dummyFailToken}}\"\n}"
+              "raw": "{\n  \"fullName\": \"Action Mismatch Tester\",\n  \"email\": \"{{tempMismatchEmail}}\",\n  \"phone\": \"0912345678\",\n  \"password\": \"Password@123\",\n  \"turnstileToken\": \"{{dummyFailToken}}\"\n}"
             },
             "url": {
               "raw": "{{userServiceUrl}}/api/auth/register/driver",

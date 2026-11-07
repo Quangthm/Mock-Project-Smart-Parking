@@ -163,3 +163,19 @@ Cloudflare provides standard deterministic testing keys used across unit and int
   2. Any 500 Internal Server Error returned for expected bot rejection scenarios.
   3. Premature token reset on client-side validation errors.
   4. Failure to reset token after server validation failure or authentication failure.
+
+---
+
+## 8. Test Execution Notes & Operational Troubleshooting
+
+1. **Cloudflare Real Key vs. Dummy Token Dynamics:**
+   - When `user-service` runs with live Cloudflare credentials (`0x4...`), sending Cloudflare dummy test tokens (`1x...`, `3x...`) via Postman/Newman results in `400 BOT_VERIFICATION_FAILED`. Cloudflare treats dummy test tokens as `invalid-input-response` unless paired with Cloudflare test secret keys (`1x...`).
+   - Browser testing against `challenges.cloudflare.com` generates genuine signed tokens bound to `action` and `hostname`, completing Happy Path flows with 200/201.
+   - For automated headless API verification with dummy tokens, configure `SMARTPARK_TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA` or bypass verification via `SMARTPARK_TURNSTILE_ENABLED=false`.
+2. **Rate Limiting 60s Window (10 req/min/IP):**
+   - The rate limit burst test (Scenario 09 / Postman Folder 03) exhausts the 10-request permit limit for `127.0.0.1`.
+   - Subsequent automated or manual login requests within the same 60-second window will be rejected with HTTP 429 (`TOO_MANY_REQUESTS`).
+   - Reset the limiter by waiting 60 seconds or executing `docker restart smartpark-app-user-service-1`.
+3. **DTO Strict Unmapped Member Policy:**
+   - `DriverRegistrationDto` and `OwnerRegistrationDto` enforce `[JsonUnmappedMemberHandling(Disallow)]`.
+   - Payloads containing undeclared fields (e.g. `vehiclePlate`, `lotAddress`) trigger `400 VALIDATION_FAILED` before reaching bot verification. Always adhere strictly to declared DTO contract fields.
