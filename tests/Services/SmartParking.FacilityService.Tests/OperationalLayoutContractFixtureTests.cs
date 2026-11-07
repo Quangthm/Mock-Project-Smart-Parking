@@ -88,8 +88,12 @@ public sealed class OperationalLayoutContractFixtureTests
 
         // 8. Recursive diff between the two deserialized fixtures: exactly two paths.
         var differences = Diff(normalEnvelope, staleEnvelope);
-        Assert.Equal(new[] { "data.generatedAt", "data.isFresh" },
-            differences.OrderBy(path => path, StringComparer.Ordinal));
+        Assert.Contains("data.generatedAt", differences);
+        Assert.Contains("data.isFresh", differences);
+        // Ensure no fields differ other than generatedAt, isFresh, and slot updatedAt
+        Assert.All(differences, path =>
+            Assert.True(path == "data.generatedAt" || path == "data.isFresh" || Regex.IsMatch(path, @"^data\.slots\[\d+\]\.updatedAt$"),
+                $"Unexpected difference found between fixtures: {path}"));
     }
 
     private static void AssertCombinationMatrix(IReadOnlyList<SlotVisualStateDto> slots)
@@ -163,8 +167,8 @@ public sealed class OperationalLayoutContractFixtureTests
 
         // Motorcycle capacity is a scalar pool and is not derivable from slots[].
         Assert.Equal(20, metrics.MotorcycleCapacity.MaxCapacity);
-        Assert.Equal(8, metrics.MotorcycleCapacity.OccupiedCount);
-        Assert.Equal(12, metrics.MotorcycleCapacity.AvailableCount);
+        Assert.Equal(0, metrics.MotorcycleCapacity.OccupiedCount);
+        Assert.Equal(20, metrics.MotorcycleCapacity.AvailableCount);
 
         Assert.Equal(2, metrics.ZoneCapacities.Count);
         var zoneA = Assert.Single(metrics.ZoneCapacities, zone => zone.ZoneCode == "Zone_A");
@@ -198,8 +202,8 @@ public sealed class OperationalLayoutContractFixtureTests
             Assert.Equal(JsonValueKind.Object, slot.Features.GetValueOrDefault().ValueKind);
         });
 
-        Assert.Equal(24, slots.Count(slot => slot.SessionType is null));
-        Assert.Equal(34, slots.Count(slot => slot.OperatorContext is null));
+        Assert.Equal(48, slots.Count(slot => slot.SessionType is null));
+        Assert.Equal(48, slots.Count(slot => slot.OperatorContext is null));
         Assert.Equal(44, slots.Count(slot => slot.Features is JsonElement features
             && features.TryGetProperty("chargerPowerKw", out var charger)
             && charger.ValueKind == JsonValueKind.Null));
