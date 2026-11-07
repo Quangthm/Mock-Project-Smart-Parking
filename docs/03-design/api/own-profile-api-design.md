@@ -1,3 +1,5 @@
+> Freshness amendment (2026-11-04): own-profile reads/ordinary edits are TOKEN in the [operation matrix](../../01-requirements/srs/authorization-operation-classification.md). The local UserService checks described below may remain; they are not a requirement for synchronous cross-service freshness checks or exact-session continuity in every business API. This update does not change the implementation.
+
 > Current approval: see [29 October follow-up](../../04-testing/reports/SPARK-248/follow-up.md). Name updates use fresh authorization, tracked mutation and one implicit save transaction; post-check invalidation may complete first. Earlier serialization and manual-overlay deployment text below is historical and superseded. Error envelopes include an opaque server-generated `traceId` in every environment.
 
 # Own normal profile — API Design

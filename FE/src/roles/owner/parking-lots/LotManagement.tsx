@@ -96,6 +96,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
           {searchTerm && (
             <button
               type="button"
+              aria-label="Clear parking lot search"
               className="text-[var(--muted)] hover:text-[var(--fg)]"
               onClick={() => setSearchTerm("")}
             >
@@ -140,23 +141,37 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
         </div>
       ) : filteredData.length > 0 ? (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
-          <table className="w-full text-left text-xs min-w-[840px]">
+          <table className="owner-lots-comparison-table w-full min-w-[1680px] table-fixed text-left text-xs">
+            <colgroup>
+              <col className="w-[260px]" />
+              <col className="w-[220px]" />
+              <col className="w-[95px]" />
+              <col className="w-[90px]" />
+              <col className="w-[175px]" />
+              <col className="w-[90px]" />
+              <col className="w-[90px]" />
+              <col className="w-[105px]" />
+              <col className="w-[80px]" />
+              <col className="w-[130px]" />
+              <col className="w-[345px]" />
+            </colgroup>
             <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3 font-semibold">Parking Facility</th>
+                <th className="px-4 py-3 font-semibold">Setup</th>
                 <th className="px-3 py-3 font-semibold text-center">Status</th>
                 <th className="px-3 py-3 font-semibold text-right">Capacity</th>
-                <th className="px-3 py-3 font-semibold text-right">Available / Capacity</th>
+                <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Available / Capacity</th>
                 <th className="px-3 py-3 font-semibold text-right">Occupied</th>
                 <th className="px-3 py-3 font-semibold text-right">Reserved</th>
-                <th className="px-3 py-3 font-semibold text-right">Pending Pay</th>
+                <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Pending Pay</th>
                 <th className="px-3 py-3 font-semibold text-right">Backup</th>
                 <th className="px-4 py-3 font-semibold text-right">Occupancy</th>
                 <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {filteredData.map(({ site, metrics, structure, structureError }) => {
+              {filteredData.map(({ site, setup, metrics, structure, structureError }) => {
                 const totalCap = metrics?.total || 1
                 const occupiedPercent = metrics ? Math.min(
                   100,
@@ -167,13 +182,17 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                   <tr key={site.id} className="hover:bg-[var(--bg)]/50 transition-colors">
                     {/* Facility Identification */}
                     <td className="px-4 py-3.5">
-                      <div className="font-semibold text-xs text-[var(--fg)]">
+                      <div className="font-semibold text-sm text-[var(--fg)] break-words">
                         {site.name}
                       </div>
-                      <div className="text-[11px] text-[var(--muted)] font-mono">
-                        {site.code} · {site.address}
+                      <div className="mt-1 text-xs leading-relaxed text-[var(--muted)] break-words">
+                        {site.address}
                       </div>
                       {structureError && <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-400" title={structureError}>Capacity unavailable · Refresh Data to retry</div>}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-xs text-[var(--fg)] break-words">
+                      {setup ? <><span className="block font-semibold capitalize">{setup.type.replace("-", " ")}</span><span className="block text-[var(--muted)]">{setup.modelFileName ?? "Model not recorded"}</span><span className="block tabular-nums">{setup.hourlyRate.toLocaleString("en-US")} VND/hour</span></> : <span className="text-[var(--muted)]">Setup details unavailable in this browser</span>}
                     </td>
 
                     {/* Operational Status */}
@@ -195,7 +214,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                     </td>
 
                     {/* Available Spots */}
-                    <td className="px-3 py-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                    <td className="px-3 py-3.5 text-right font-bold tabular-nums whitespace-nowrap text-emerald-600 dark:text-emerald-400">
                       {metrics ? `${metrics.available.toLocaleString()}/${metrics.total.toLocaleString()}` : "—"}
                     </td>
 
@@ -210,7 +229,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                     </td>
 
                     {/* Pending Payment */}
-                    <td className="px-3 py-3.5 text-right font-medium text-amber-600 dark:text-amber-400">
+                    <td className="px-3 py-3.5 text-right font-medium tabular-nums whitespace-nowrap text-amber-600 dark:text-amber-400">
                       {metrics?.pendingPayment ?? "—"}
                     </td>
 
@@ -246,7 +265,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
                         <button
                           type="button"
                           className="btn-outline text-[11px] py-1 px-2.5"
-                          onClick={() => setDetailSite({ site, metrics, structure, structureError })}
+                          onClick={() => setDetailSite({ site, setup, metrics, structure, structureError })}
                           title="View detailed floor and vehicle breakdown"
                         >
                           Breakdown

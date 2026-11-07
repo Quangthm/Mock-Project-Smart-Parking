@@ -57,11 +57,12 @@ public sealed class ParkingStructure
     public IReadOnlyList<SpatialUnit> Units => units.AsReadOnly();
     public IReadOnlyList<ParkingSlot> Slots => slots.AsReadOnly();
     public IReadOnlyList<AccessPath> Paths => paths.AsReadOnly();
-    // Soft-deleted rows are not part of a read: the current aggregate is serialized directly by the
-    // structure route until the typed read DTO lands, so they are excluded from the wire here.
-    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<ParkingSlot> ReleasedSlots => releasedSlots.AsReadOnly();
-    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<SpatialUnit> ReleasedUnits => releasedUnits.AsReadOnly();
-    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<AccessPath> ReleasedPaths => releasedPaths.AsReadOnly();
+    // Soft-deleted rows are read-only restore candidates: they are never part of a live read, and no
+    // response serializes the aggregate directly (the structure and operator-layout routes project
+    // their fields explicitly).
+    public IReadOnlyList<ParkingSlot> ReleasedSlots => releasedSlots.AsReadOnly();
+    public IReadOnlyList<SpatialUnit> ReleasedUnits => releasedUnits.AsReadOnly();
+    public IReadOnlyList<AccessPath> ReleasedPaths => releasedPaths.AsReadOnly();
     public IReadOnlyList<BackupPolicy> BackupPolicies => backupPolicies.AsReadOnly();
     public IReadOnlyList<CapacityView> CapacityViews => Views();
 
@@ -88,7 +89,7 @@ public sealed class ParkingStructure
     { if (!valid) throw new StructureException(code, message); }
     private static string Text(string value, int max)
     {
-        Require(!string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max, $"Text must contain 1Ă¢â‚¬â€œ{max} characters.");
+        Require(!string.IsNullOrWhiteSpace(value) && value.Trim().Length <= max, $"Text must contain 1-{max} characters.");
         return value.Trim();
     }
     private SpatialUnit Unit(Guid id) => units.SingleOrDefault(u => u.Id == id)
@@ -298,7 +299,7 @@ public sealed class ParkingStructure
     // no selected resource is ever partially applied.
     public void ApplyBatch(IReadOnlyList<StructureBatchItem> items)
     {
-        Require(items.Count is >= 1 and <= 50, "A batch must contain 1â€“50 items.");
+        Require(items.Count is >= 1 and <= 50, "A batch must contain 1-50 items.");
         var failures = new List<StructureBatchFailure>();
         foreach (var item in items)
             if (BatchFailure(item) is { } failure) failures.Add(failure);

@@ -3,9 +3,11 @@ services:
   rabbitmq:
     image: rabbitmq:4-alpine
     environment:
-      # Local test-only credentials used by IdentityMessagingTests.
-      RABBITMQ_DEFAULT_USER: identity_test
-      RABBITMQ_DEFAULT_PASS: local-disposable-identity-test
+      # Single source for test broker values; configure-test-settings.ps1 reads
+      # the rendered service configuration for all test consumers.
+      RABBITMQ_DEFAULT_USER: ${SMARTPARK_TEST_RABBITMQ_USER:-identity_test}
+      RABBITMQ_DEFAULT_PASS: ${SMARTPARK_TEST_RABBITMQ_PASSWORD:-local-disposable-identity-test}
+      RABBITMQ_DEFAULT_VHOST: ${SMARTPARK_TEST_RABBITMQ_VHOST:-/}
     ports:
       - "127.0.0.1:${SMARTPARK_RABBIT_TEST_PORT:-5679}:5672"
     healthcheck:

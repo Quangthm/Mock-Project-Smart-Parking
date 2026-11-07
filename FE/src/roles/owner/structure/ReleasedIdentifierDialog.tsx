@@ -59,7 +59,7 @@ export function ReleasedIdentifierDialog({
   return (
     <Modal title={`Released ${label}`} onClose={busy ? () => {} : onClose}>
       <div className="space-y-4 text-sm text-[var(--fg)]">
-        <p>
+        <p className="break-words">
           <strong className="font-semibold">{released.code}</strong> belongs to a{" "}
           {kind} that was released on {releasedAt}. Nothing has been created.
         </p>

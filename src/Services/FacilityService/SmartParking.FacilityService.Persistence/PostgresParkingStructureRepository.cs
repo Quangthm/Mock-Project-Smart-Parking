@@ -61,7 +61,7 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) 
     }
 
     public async Task<ParkingStructure> ReadAsync(
-        OwnerScope owner, Guid siteId, CommitmentSnapshot snapshot, CancellationToken ct)
+        OwnerScope owner, Guid siteId, CommitmentSnapshot? snapshot, CancellationToken ct)
     {
         await using var db = await source.OpenConnectionAsync(ct);
         await using var tx = await db.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
@@ -308,16 +308,14 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) 
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct))
             {
-                slots.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), Enum.Parse<VehicleType>(r.GetString(3)), Enum.Parse<SlotType>(r.GetString(4)),
-                    Enum.Parse<OperationalStatus>(r.GetString(5)), r.GetBoolean(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9)));
+                var vType = r.IsDBNull(3) ? VehicleType.CAR : Enum.Parse<VehicleType>(r.GetString(3)); var sType = r.IsDBNull(4) ? SlotType.STANDARD : Enum.Parse<SlotType>(r.GetString(4)); var opStatus = r.IsDBNull(5) ? OperationalStatus.OPERATIONAL : Enum.Parse<OperationalStatus>(r.GetString(5)); slots.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), vType, sType, opStatus, r.GetBoolean(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9)));
                 versions[r.GetGuid(0)] = r.GetDateTime(10);
             }
         // Released rows are read-only candidates for an explicit restore. A NULL projection column cannot
         // be represented as a ParkingSlot (DE-6), so such a row is not offered for restoration.
         await using (var cmd = Command(db, tx, "SELECT id,spatial_unit_id,slot_code,supported_vehicle_type,slot_type,CASE physical_state WHEN 'AVAILABLE' THEN 'OPERATIONAL' WHEN 'OCCUPIED' THEN 'OPERATIONAL' WHEN 'UNAVAILABLE' THEN 'BLOCKED' ELSE physical_state END,(physical_state='OCCUPIED'),coordinates_3d::text,features::text,reservation_state FROM parking_slots WHERE site_id=$1 AND tenant_id=$2 AND deleted_at IS NOT NULL AND supported_vehicle_type IS NOT NULL", siteId, tenantId))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
-            while (await r.ReadAsync(ct)) releasedSlots.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), Enum.Parse<VehicleType>(r.GetString(3)), Enum.Parse<SlotType>(r.GetString(4)),
-                Enum.Parse<OperationalStatus>(r.GetString(5)), r.GetBoolean(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9)));
+            while (await r.ReadAsync(ct)) { var rvType = r.IsDBNull(3) ? VehicleType.CAR : Enum.Parse<VehicleType>(r.GetString(3)); var rsType = r.IsDBNull(4) ? SlotType.STANDARD : Enum.Parse<SlotType>(r.GetString(4)); var ropStatus = r.IsDBNull(5) ? OperationalStatus.OPERATIONAL : Enum.Parse<OperationalStatus>(r.GetString(5)); releasedSlots.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), rvType, rsType, ropStatus, r.GetBoolean(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9))); }
         // The table is the source of truth for eligibility. One query per load, covering released rows so a
         // resurrection reuses the surviving compatibility set; with no rows the projection column stands in.
         var compatibility = new Dictionary<Guid, VehicleType[]>();
@@ -326,19 +324,17 @@ public sealed class PostgresParkingStructureRepository(NpgsqlDataSource source) 
             var rows = new List<(Guid SlotId, VehicleType Type)>();
             await using (var cmd = Command(db, tx, "SELECT slot_id,vehicle_type FROM slot_compatibilities WHERE site_id=$1 AND tenant_id=$2 AND slot_id = ANY($3::uuid[])", siteId, tenantId, slots.Concat(releasedSlots).Select(slot => slot.Id).ToArray()))
             await using (var r = await cmd.ExecuteReaderAsync(ct))
-                while (await r.ReadAsync(ct)) rows.Add((r.GetGuid(0), Enum.Parse<VehicleType>(r.GetString(1))));
+                while (await r.ReadAsync(ct)) { var cType = r.IsDBNull(1) ? VehicleType.CAR : Enum.Parse<VehicleType>(r.GetString(1)); rows.Add((r.GetGuid(0), cType)); }
             foreach (var group in rows.GroupBy(row => row.SlotId))
                 compatibility[group.Key] = group.Select(row => row.Type).ToArray();
         }
         for (var index = 0; index < slots.Count; index++)
         {
-            VehicleType[] declared = compatibility.TryGetValue(slots[index].Id, out var values) ? values : [slots[index].VehicleType];
-            slots[index] = slots[index] with { VehicleTypes = declared };
+            VehicleType[] declared = compatibility.TryGetValue(slots[index].Id, out var values) ? values : [slots[index].VehicleType]; var primaryType = declared.Length > 0 ? declared[0] : slots[index].VehicleType; slots[index] = slots[index] with { VehicleType = primaryType, VehicleTypes = declared };
         }
         for (var index = 0; index < releasedSlots.Count; index++)
         {
-            VehicleType[] declared = compatibility.TryGetValue(releasedSlots[index].Id, out var values) ? values : [releasedSlots[index].VehicleType];
-            releasedSlots[index] = releasedSlots[index] with { VehicleTypes = declared };
+            VehicleType[] declared = compatibility.TryGetValue(releasedSlots[index].Id, out var values) ? values : [releasedSlots[index].VehicleType]; var primaryType = declared.Length > 0 ? declared[0] : releasedSlots[index].VehicleType; releasedSlots[index] = releasedSlots[index] with { VehicleType = primaryType, VehicleTypes = declared };
         }
         await using (var cmd = Command(db, tx, "SELECT id,path_code,from_unit_id,to_unit_id,map_data::text,created_at FROM parking_access_paths WHERE site_id=$1 AND tenant_id=$2 AND deleted_at IS NULL", siteId, tenantId))
         await using (var r = await cmd.ExecuteReaderAsync(ct))

@@ -25,7 +25,7 @@ Admin has current platform account-review permission.
 
 ## Alternatives and failures
 
-Reject stale review/document versions and unauthorized changes; current services enforce revocation despite old tokens. Re-enable cannot reverse rejection. Failed provisioning is not rejection; failed notification does not undo approval.
+Reject stale review/document versions and unauthorized changes; UserService enforces its local current security checks; other services follow the [freshness matrix](../srs/authorization-operation-classification.md), including the accepted TOKEN stale window. Re-enable cannot reverse rejection. Failed provisioning is not rejection; failed notification does not undo approval.
 
 ## Postconditions
 

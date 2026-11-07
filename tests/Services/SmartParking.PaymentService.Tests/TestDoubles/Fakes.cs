@@ -1,6 +1,6 @@
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Domain.Entities;
-using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 
 namespace SmartParking.PaymentService.Tests.TestDoubles;
 
@@ -157,4 +157,147 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
         QueryTransactionCallCount++;
         return Task.FromResult(VerificationResult);
     }
+}
+
+public class FakeInvoiceRepository : IInvoiceRepository
+{
+    public readonly List<Invoice> Invoices = new();
+    private int _sequence = 0;
+
+    public Task<Invoice?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.Id == id));
+    }
+
+    public Task<Invoice?> GetByPaymentOrderIdAsync(Guid paymentOrderId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.PaymentOrderId == paymentOrderId));
+    }
+
+    public Task<Invoice?> GetBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.SessionId == sessionId || x.ReferenceId == sessionId));
+    }
+
+    public Task<Invoice?> GetByInvoiceNumberAsync(string invoiceNumber, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Invoices.FirstOrDefault(x => x.InvoiceNumber == invoiceNumber));
+    }
+
+    public Task AddAsync(Invoice invoice, CancellationToken cancellationToken = default)
+    {
+        Invoices.Add(invoice);
+        return Task.CompletedTask;
+    }
+
+    public void Update(Invoice invoice)
+    {
+        var idx = Invoices.FindIndex(x => x.Id == invoice.Id);
+        if (idx >= 0) Invoices[idx] = invoice;
+        else Invoices.Add(invoice);
+    }
+
+    public Task<string> GenerateInvoiceNumberAsync(CancellationToken cancellationToken = default)
+    {
+        _sequence++;
+        return Task.FromResult($"INV-{DateTimeOffset.UtcNow:yyyyMMdd}-{_sequence:D4}");
+    }
+    public Task<IReadOnlyList<Invoice>> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var list = Invoices
+            .Where(i => (i.PaymentOrder != null && i.PaymentOrder.AccountId == accountId) ||
+                        (i.PricingSnapshot != null && i.PricingSnapshot.AccountId == accountId))
+            .OrderByDescending(i => i.CreatedAt)
+            .ToList();
+        return Task.FromResult<IReadOnlyList<Invoice>>(list);
+    }
+}
+
+public class FakeCurrentActor : SmartParking.PaymentService.Application.Common.Interfaces.ICurrentActor
+{
+    public bool IsAuthenticated { get; set; } = true;
+    public Guid? UserId { get; set; }
+    public string? Role { get; set; } = "DRIVER";
+    public Guid? TenantId { get; set; }
+    public Guid? SiteId { get; set; }
+    public bool IsInternalService { get; set; } = false;
+}
+
+public class FakeEventPublisher : SmartParking.PaymentService.Application.Common.Interfaces.IEventPublisher
+{
+    public readonly List<object> PublishedEvents = new();
+
+    public Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : class
+    {
+        PublishedEvents.Add(@event);
+        return Task.CompletedTask;
+    }
+}
+
+
+public class FakePublishEndpoint : MassTransit.IPublishEndpoint
+{
+    public readonly List<object> PublishedMessages = new();
+
+    public Task Publish<T>(T message, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(T message, MassTransit.IPipe<MassTransit.PublishContext<T>> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(T message, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, Type messageType, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish(object message, Type messageType, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default)
+    {
+        PublishedMessages.Add(message);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(object values, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(values);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(object values, MassTransit.IPipe<MassTransit.PublishContext<T>> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(values);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<T>(object values, MassTransit.IPipe<MassTransit.PublishContext> publishPipe, CancellationToken cancellationToken = default) where T : class
+    {
+        PublishedMessages.Add(values);
+        return Task.CompletedTask;
+    }
+
+    public MassTransit.ConnectHandle ConnectPublishObserver(MassTransit.IPublishObserver observer) => throw new NotImplementedException();
 }

@@ -364,3 +364,16 @@ export function defaultExtensionEnd(endIso: string): string {
   if (Number.isNaN(end)) return ""
   return new Date(end + 60 * 60 * 1000).toISOString()
 }
+
+
+/** Resolves declared or fallback vehicle categories for a slot. */
+export function categoriesOfSlot(slot: { vehicleTypes?: string[]; primaryVehicleType?: string | null; vehicleType?: string }): string[] {
+  return slot.vehicleTypes && slot.vehicleTypes.length > 0
+    ? slot.vehicleTypes
+    : [slot.primaryVehicleType ?? slot.vehicleType].filter((v): v is string => Boolean(v))
+}
+
+/** Resolves the primary vehicle category for a slot. */
+export function primaryCategoryOfSlot(slot: { primaryVehicleType?: string | null; vehicleType?: string }): string | undefined {
+  return slot.primaryVehicleType ?? slot.vehicleType
+}

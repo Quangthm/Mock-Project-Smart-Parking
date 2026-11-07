@@ -1,0 +1,15 @@
+# Keep local credentials and signing keys out of every backend build context.
+.git
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12
+**/secrets.json
+**/*.runsettings
+**/*.base64.txt
+.cache
+**/bin
+**/obj
+**/node_modules

@@ -11,7 +11,6 @@ using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
 using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Application.Usecase.InitiateCheckout;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
-using SmartParking.PaymentService.Domain.Ports;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
@@ -30,7 +29,7 @@ public class DependencyInjectionTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Payment"] = "Host=localhost;Port=5444;Database=smartpark_payment;Username=postgres;Password=postgres",
-                ["Services:ReservationService:BaseUrl"] = "http://localhost:5002/"
+                ["Services:OperationService:BaseUrl"] = "http://localhost:5002/"
             })
             .Build();
 
@@ -54,12 +53,19 @@ public class DependencyInjectionTests
         Assert.NotNull(provider.GetService<IValidator<InitiatePaymentCheckoutCommand>>());
         Assert.NotNull(provider.GetService<IValidator<ProcessPayOsWebhookCommand>>());
         Assert.NotNull(provider.GetService<IValidator<GetPaymentStatusQuery>>());
+        Assert.NotNull(provider.GetService<IValidator<SmartParking.PaymentService.Application.Usecase.PrepareParkingFeeOrder.PrepareParkingFeeOrderCommand>>());
+        Assert.NotNull(provider.GetService<IValidator<SmartParking.PaymentService.Application.Usecase.CollectCashPayment.CollectCashPaymentCommand>>());
 
         // 4. CQRS Handlers
         Assert.NotNull(provider.GetService<IRequestHandler<CalculateParkingFeeQuery, PricingCalculationResult>>());
         Assert.NotNull(provider.GetService<IRequestHandler<InitiatePaymentCheckoutCommand, PaymentCheckoutResponseDto>>());
         Assert.NotNull(provider.GetService<IRequestHandler<ProcessPayOsWebhookCommand, ProcessPayOsWebhookResult>>());
         Assert.NotNull(provider.GetService<IRequestHandler<GetPaymentStatusQuery, PaymentTransactionStatusDto>>());
+        Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.PrepareParkingFeeOrder.PrepareParkingFeeOrderCommand, SmartParking.PaymentService.Application.DTOs.Invoices.PrepareParkingFeeOrderResponseDto>>());
+        Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.CollectCashPayment.CollectCashPaymentCommand, SmartParking.PaymentService.Application.DTOs.Invoices.CustomerInvoiceResponseDto>>());
+        Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.GetInvoice.GetInvoiceByIdQuery, SmartParking.PaymentService.Application.DTOs.Invoices.CustomerInvoiceResponseDto>>());
+        Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.GetInvoice.GetInvoiceByOrderIdQuery, SmartParking.PaymentService.Application.DTOs.Invoices.CustomerInvoiceResponseDto>>());
+        Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.GetInvoice.GetInvoiceBySessionIdQuery, SmartParking.PaymentService.Application.DTOs.Invoices.CustomerInvoiceResponseDto>>());
 
         // 5. Hexagonal Ports & Persistence Adapters
         var tariffPort = provider.GetService<IParkingTariffPort>();
@@ -71,6 +77,9 @@ public class DependencyInjectionTests
         Assert.NotNull(scope.ServiceProvider.GetService<IPaymentOrderRepository>());
         Assert.NotNull(scope.ServiceProvider.GetService<IPaymentTransactionRepository>());
         Assert.NotNull(scope.ServiceProvider.GetService<IProviderWebhookRepository>());
+        Assert.NotNull(scope.ServiceProvider.GetService<IInvoiceRepository>());
+        Assert.NotNull(scope.ServiceProvider.GetService<SmartParking.PaymentService.Application.Common.Interfaces.IEventPublisher>());
+        Assert.NotNull(scope.ServiceProvider.GetService<SmartParking.PaymentService.Application.Common.Interfaces.ICurrentActor>());
         Assert.NotNull(scope.ServiceProvider.GetService<IUnitOfWork>());
     }
 }

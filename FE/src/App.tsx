@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 
 import {
   BrowserRouter,
@@ -34,6 +35,7 @@ import { SignIn } from "./roles/authentications/Sign In/SignIn"
 
 import { SignUp } from "./roles/authentications/Sign Up/SignUp"
 import { BusinessLotSetupPage } from "./roles/owner/parking-lots/CreateParkingLotForOwner"
+import { OwnerContractPage } from "./roles/owner/parking-lots/OwnerContractPage"
 
 import { BootstrapPassword } from "./roles/authentications/BootstrapPassword"
 import { PaymentResultPage } from "./roles/driver/payments/PaymentResultPage"
@@ -45,6 +47,7 @@ import { OwnerDashboard } from "./roles/owner/dashboard/OwnerDashboard"
 import { OperatorDashboard } from "./roles/operator/dashboard/OperatorDashboard"
 
 import { AdminDashboard } from "./roles/admin/dashboard/AdminDashboard"
+import { AdminContractPage } from "./roles/admin/applications/AdminContractPage"
 
 import { TermsOfService } from "./public pages/policies/TermsOfService"
 
@@ -71,12 +74,14 @@ function AppContent() {
   const location = useLocation()
 
   const navigate = useNavigate()
+  const reduceMotion = useReducedMotion()
 
   const sessionExpired = authError === "Your session has expired. Please sign in again."
+  const accessRevoked = !user && view === "sign-in" && authError !== "" && !sessionExpired
 
   useEffect(() => {
-    if (sessionExpired && location.pathname !== "/") navigate("/", { replace: true })
-  }, [location.pathname, navigate, sessionExpired])
+    if ((sessionExpired || accessRevoked) && location.pathname !== "/") navigate("/", { replace: true })
+  }, [location.pathname, navigate, sessionExpired, accessRevoked])
 
   useLayoutEffect(() => {
     scrollPageToTop()
@@ -103,6 +108,9 @@ function AppContent() {
     "/pos",
   ].includes(location.pathname)
   const isEmailOtpPath = location.pathname === "/sign-in/email-otp"
+  const isOwnerContractPath = location.pathname.startsWith("/owner/contract/")
+  const isAdminContractPath = /^\/admin\/applications\/[^/]+\/contract$/.test(location.pathname)
+  const isContractPath = isOwnerContractPath || isAdminContractPath
 
   useEffect(() => {
     if (
@@ -115,7 +123,7 @@ function AppContent() {
     }
   }, [authReady, location.pathname, navigate, user, view])
 
-  const isDashboard = !isEmailOtpPath && (
+  const isDashboard = !isEmailOtpPath && !isContractPath && (
     (user && ["driver", "owner", "operator", "admin"].includes(view)) ||
     isOperatorPath
   )
@@ -123,7 +131,7 @@ function AppContent() {
   if (location.pathname === "/change-password") return <BootstrapPassword />
   if (location.pathname === "/payment/success" || location.pathname === "/payment/fail") return <PaymentResultPage />
 
-  const usesDashboardNavbar = !isEmailOtpPath && (
+  const usesDashboardNavbar = !isEmailOtpPath && !isContractPath && (
     ["driver", "owner", "operator", "admin"].includes(view) || isOperatorPath
   )
 
@@ -140,18 +148,24 @@ function AppContent() {
       }}
     >
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      {usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />}
+      {!isContractPath && (usesDashboardNavbar ? <DashboardNavbar /> : <Navbar />)}
       <main id="main-content" tabIndex={-1} style={{ flex: 1 }}>
         {!authReady && (
           <div className="p-8 text-center text-sm text-[var(--muted)]">
             Loading account…
           </div>
         )}
+        <AnimatePresence mode="wait" initial={false}>
         {authReady && (
-          <div key={`${location.pathname}-${view}`} className="animate-in">
+          <motion.div key={`${location.pathname}-${view}`} className="app-route-view"
+            initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.12 : 0.26, ease: "easeOut" } }}
+            exit={{ opacity: 0, y: reduceMotion ? 0 : -6, transition: { duration: 0.14, ease: "easeOut" } }}>
             <Routes>
               <Route path="/" element={<LegacyView view={view} />} />
               <Route path="/sign-in/email-otp" element={<SignIn flow="email-otp" />} />
+              <Route path="/owner/contract/:applicationId" element={<OwnerContractPage />} />
+              <Route path="/admin/applications/:applicationId/contract" element={<RoleRoute allowedRoles={["admin"]}><AdminContractPage /></RoleRoute>} />
               <Route
                 path="/dashboard/finance"
                 element={
@@ -178,13 +192,15 @@ function AppContent() {
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </main>
       {authReady && user && usesDashboardNavbar && view !== "driver" && (
         <FloatingChatbot key={user.id} role={user.role} />
       )}
-      {!isDashboard && <Footer />}
+      {authReady && !user && view === "landing" && <FloatingChatbot role="driver" />}
+      {!isDashboard && !isContractPath && <Footer />}
     </div>
   )
 }

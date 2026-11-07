@@ -151,6 +151,20 @@ export const ownerApi = {
     return r.data
   },
 
+  async get(id: string): Promise<OwnerApplicationRecord> {
+    const r = await request<Response<OwnerApplicationRecord>>(
+      `/${encodeURIComponent(id)}`,
+      "GET",
+      undefined,
+      "/api/owner-applications",
+    )
+
+    if (!r.success || r.data?.id !== id)
+      throw new Error("Invalid application response.")
+
+    return r.data
+  },
+
   async review(
     id: string,
     status: "approved" | "rejected",

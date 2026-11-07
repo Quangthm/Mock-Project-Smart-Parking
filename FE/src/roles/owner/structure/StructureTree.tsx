@@ -87,7 +87,7 @@ export function StructureTree({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Badge tone={unitTypeTone(unit.type)}>{unit.type}</Badge>
-                    <span className="truncate text-sm font-semibold text-[var(--fg)]">{unit.name}</span>
+                    <span className="min-w-0 truncate text-sm font-semibold text-[var(--fg)]" title={unit.name}>{unit.name}</span>
                     <span className="text-[11px] text-[var(--muted)]">
                       {unit.maxCapacity === 0 ? "No layout limit" : `Layout limit ${unit.maxCapacity}`}
                     </span>

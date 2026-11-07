@@ -47,7 +47,7 @@ public static class MaintenanceWindowRules
         Require(start >= now, "Maintenance window cannot start in the past.");
         // DE-3: unit/slot-scoped windows cannot be enforced today, so they must not be stored.
         Require(unitId is null && slotId is null, "Scoped maintenance windows cannot be enforced yet; a window must cover the whole site.");
-        Require(!string.IsNullOrWhiteSpace(reason) && reason.Trim().Length <= 2000, "Provide a reason (1â€“2000 characters).");
+        Require(!string.IsNullOrWhiteSpace(reason) && reason.Trim().Length <= 2000, "Provide a reason (1-2000 characters).");
     }
 
     // Extend-only while the window has not ended. Shortening or moving the start would shrink an

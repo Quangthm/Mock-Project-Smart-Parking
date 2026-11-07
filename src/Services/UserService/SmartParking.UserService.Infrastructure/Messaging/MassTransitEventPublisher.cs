@@ -1,6 +1,7 @@
 using MassTransit;
 using UserService.Application.Profiles.Events;
 using UserService.Application.Common.Interfaces.MessageBroker;
+using UserService.Application.Common.Interfaces.Services;
 
 namespace UserService.Infrastructure.Messaging;
 
@@ -18,6 +19,11 @@ public sealed class MassTransitEventPublisher(IPublishEndpoint publishEndpoint) 
             {
                 context.MessageId = profile.EventId;
                 context.Headers.Set("correlation-id", profile.CorrelationId);
+            }
+            else if (message is OperatorAccessChanged access)
+            {
+                context.MessageId = access.EventId;
+                context.CorrelationId = access.OperationId;
             }
         }, cancellationToken);
 

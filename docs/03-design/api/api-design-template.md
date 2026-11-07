@@ -30,7 +30,8 @@ Repeat this endpoint block for each operation; remove guidance and unused sectio
 | Method / URL | <METHOD> <path> |
 | Availability | Implemented at <SHA> / Proposed / Deferred |
 | Authentication | <anonymous, normal session, restricted purpose-bound credential, service identity> |
-| Permission / account state | <current permission and eligible state> |
+| Freshness / invocation origin | <TOKEN / REQUEST / PUBLIC / AUTH_FLOW / SERVICE; link operation matrix and any approved override> |
+| Permission / account state | <required role/policy; token-time or authoritative local/current check per classification> |
 | Resource scope | <own account, owned tenant/lot, assigned lot, platform> |
 | Content type | <request / response> |
 | Headers | <required headers; version or idempotency precondition only if applicable> |
@@ -63,6 +64,14 @@ Link the shared response contract if approved. Otherwise identify the current se
 
 Cover applicable authentication, authorization/current scope, malformed binding, validation, business conflict, dependency failure and unexpected-error paths. A global catch does not establish a uniform response for all paths. Define field errors and correlation IDs where supported. Avoid secrets and another account's information.
 
+### Authorization workflow — required when applicable
+
+Use the [operation matrix](../../01-requirements/srs/authorization-operation-classification.md) and [authorization ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md). The Freshness / invocation origin row records a documentation choice only; it does not require an interface, marker, attribute, property or registry entry in code. Classification does not grant product permissions. TOKEN has local JWT validation plus resource/domain checks and accepts remaining token-lifetime staleness. UserService security operations retain local authoritative checks; service/device/provider paths specify real origin authentication without a fabricated customer actor.
+
+For REQUEST link the owning Saga design and specify trusted actor/policy context, durable pending admission, request/workflow ID, pending HTTP response and client status-observation method. `202`/PendingAuthorization is the architecture default, not a finalized endpoint/envelope. Specify authorization-gated effects, any explicitly approved reversible speculation, combined branch join, denial during in-flight/unknown effects, attempt correlation/fencing, idempotency/status lookup, retry owner/budgets/deadlines, accepted post-ALLOW race, pivot, compensation/forward recovery and manual-review behavior. Preserve safety/obligation exceptions. Missing necessary details are OPEN design work, not implicit approval.
+
+Use the approved ADR §9 numeric defaults with justified tested overrides; payment business attempts and provider policies remain distinct. Do not invent DTO names, endpoints, speculative holds or an automatic runtime classification registry.
+
 ### Retry and state outcomes — if applicable
 
 | Case | Observable contract |
@@ -94,7 +103,9 @@ Use for a cross-service, asynchronous or security boundary. For .NET, show API �
 - [ ] Requirements and ownership linked; no copied FR/BR/UC narratives.
 - [ ] Routes, fields, nullability, examples and errors are consistent.
 - [ ] Implemented and proposed contracts clearly distinguished.
-- [ ] Current account state, permissions and resource scope are explicit.
+- [ ] Freshness/origin matches the approved matrix; permissions, local authority and resource scope are explicit.
+- [ ] REQUEST pending response, authorized finalization, branch/race/recovery design and client observation are specified or explicitly blocked by OPEN decisions.
+- [ ] TOKEN stale window, UserService local checks and service/provider trust are not conflated.
 - [ ] Examples match schemas; material boundary/negative examples included.
 - [ ] Retry, concurrency and time boundaries specified where applicable.
 - [ ] Required state/schema mappings linked rather than silently omitted.

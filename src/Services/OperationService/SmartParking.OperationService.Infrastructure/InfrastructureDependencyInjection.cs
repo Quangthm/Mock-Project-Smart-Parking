@@ -31,12 +31,20 @@ public static class InfrastructureDependencyInjection
             ?? throw new InvalidOperationException("Configure Services:Key.");
         services.AddHttpClient<ParkingGateSlotClient>(client =>
         {
-            client.BaseAddress = new(configuration["Services:Parking"] ?? "http://localhost:5045/");
+            client.BaseAddress = new(configuration["Services:Facility"] ?? "http://localhost:5045/");
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
         services.AddScoped<IOperatorGateSlotClaims>(provider =>
             provider.GetRequiredService<ParkingGateSlotClient>());
+
+        services.AddHttpClient<CheckoutPaymentClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddScoped<ICheckoutPaymentClient>(provider =>
+            provider.GetRequiredService<CheckoutPaymentClient>());
 
         AddOutboxPublisher(services, configuration);
 

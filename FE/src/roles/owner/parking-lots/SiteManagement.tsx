@@ -14,7 +14,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [createError, setCreateError] = useState("")
   const {
-    sites, operators, loading, error, message, reload, setReload,
+    sites, operators, loading, error, message, setMessage, reload, setReload,
     editingSite, setEditingSite, showFormModal, setShowFormModal,
     inspectSite, setInspectSite, assignModal, setAssignModal,
     assignBusy, assignError, searchTerm, setSearchTerm, statusFilter, setStatusFilter,

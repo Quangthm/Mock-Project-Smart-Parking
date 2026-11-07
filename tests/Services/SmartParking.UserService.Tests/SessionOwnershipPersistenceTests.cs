@@ -14,7 +14,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class SessionOwnershipPersistenceTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task DatabaseRejectsMismatchedOwnershipAndRetargeting()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -51,7 +51,7 @@ public sealed class SessionOwnershipPersistenceTests
         Assert.Equal(user.Id, persisted.UserId);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task VerificationPreservesLegacyNullBindingAndRefreshRejectsIt()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -62,7 +62,7 @@ public sealed class SessionOwnershipPersistenceTests
         db.AuthSessions.Add(legacy);
         await db.SaveChangesAsync();
         await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(
-            ServiceSchema.FeaturePath("test/verify-user-access-schema.sql")));
+            ServiceSchema.ScriptPath("test/verify-user-access-schema.sql")));
         Assert.Null((await db.AuthSessions.AsNoTracking().SingleAsync(s => s.Id == legacy.Id)).AccountId);
         var store = new PostgresAuthSessionStore(db, clock);
         Assert.False(await store.IsActiveAsync(legacy.AccessTokenId, legacy.UserId, default));
@@ -75,7 +75,7 @@ public sealed class SessionOwnershipPersistenceTests
         Assert.Equal(PostgresErrorCodes.CheckViolation, backfill.SqlState);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RefreshReadsCurrentAccountDespiteTrackedSnapshotAndPreservesBinding()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

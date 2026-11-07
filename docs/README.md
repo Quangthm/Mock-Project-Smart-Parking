@@ -117,3 +117,7 @@ Historical filenames may be preserved when renaming would weaken traceability. I
 This set is a **v1.1 documentation review candidate based on approved decisions**. It integrates V11-01–12 and D01–D12 while preserving prior domain, security and payOS amendments.
 
 Final documentation approval and implementation/acceptance evidence are separate gates. The development reset is future work after documentation approval and schema/seed alignment. No product acceptance, runtime test, deployment or reset is claimed here.
+
+## Authorization amendment — approved 4 November 2026
+
+The [authorization ADR](02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [operation classification matrix](01-requirements/srs/authorization-operation-classification.md) supersede older blanket resource-session freshness rules. CQRS and numeric Saga defaults were explicitly approved; per-use-case details remain delegated. [Acceptance obligations](04-testing/requirements-traceability/authorization-freshness-scenarios.md) are NOT RUN; this docs update does not deliver runtime adoption.

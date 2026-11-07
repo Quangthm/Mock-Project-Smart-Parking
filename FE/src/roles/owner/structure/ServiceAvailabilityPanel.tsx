@@ -79,7 +79,7 @@ function WindowRow({
     if (!confirm("Cancel this maintenance window? Reopening is refused if another live closure still covers now.")) return
     setError("")
     await run(
-      () => parkingApi.cancelMaintenanceWindow(window.id, window.id),
+      () => parkingApi.cancelMaintenanceWindow(siteId, window.id),
       "Maintenance window cancelled.",
     )
   }
@@ -87,7 +87,7 @@ function WindowRow({
   return (
     <li className="space-y-2 px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 break-words">
           <p className="text-sm font-semibold text-[var(--fg)]">
             {formatInstant(window.start)} <span className="text-[var(--muted)]">→</span> {formatInstant(window.end)}
           </p>

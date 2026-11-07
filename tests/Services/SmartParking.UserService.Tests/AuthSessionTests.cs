@@ -12,19 +12,20 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class AuthSessionTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task OwnerSessionsAndMeUsePersistedOnboardingState(bool complete)
+    [Fact]
+    public async Task OwnerSessionAndMeDoNotExposeGenericOnboardingState()
     {
         var fixture = new AuthTestFixture();
         fixture.User.Accounts.Single().RoleCode = "BUSINESS_OWNER";
-        fixture.User.OnboardingComplete = complete;
         var result = await fixture.SignIn();
         Assert.True(result.IsSuccess);
-        Assert.Equal(complete, result.Session!.User!.OnboardingComplete);
+        Assert.Equal("owner", result.Session!.User!.Role);
+        Assert.DoesNotContain("onboardingComplete", System.Text.Json.JsonSerializer.Serialize(result.Session,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
         var current = await new GetCurrentUserQueryHandler(fixture).Handle(new(fixture.User.Id!.Value), default);
-        Assert.Equal(complete, current!.OnboardingComplete);
+        Assert.Equal("owner", current!.Role);
+        Assert.DoesNotContain("onboardingComplete", System.Text.Json.JsonSerializer.Serialize(current,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
     }
 
     [Fact]

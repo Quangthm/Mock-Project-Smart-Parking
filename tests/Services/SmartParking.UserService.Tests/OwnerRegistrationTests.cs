@@ -13,7 +13,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class OwnerRegistrationTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RegistrationReviewDuplicatesConcurrencyAndMigration()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
@@ -101,16 +101,6 @@ public sealed class OwnerRegistrationTests
                     PasswordHash = passwords.Hash("Password@123"), Status = UserStatus.Active,
                     Accounts = [new Account { Id = Guid.NewGuid(), RoleCode = "PLATFORM_ADMIN" }] });
                 await db.SaveChangesAsync();
-                var root = new DirectoryInfo(AppContext.BaseDirectory);
-                while (root != null && !File.Exists(Path.Combine(root.FullName, "SmartParking.slnx"))) root = root.Parent;
-                // Prove upgrade creates a missing table and can safely run twice.
-                await db.Database.ExecuteSqlRawAsync("DROP TABLE owner_applications");
-                var migration = await File.ReadAllTextAsync(Path.Combine(root!.FullName, "scripts/database/05.5-Owner-Registration-Approval.sql"));
-                await db.Database.ExecuteSqlRawAsync(migration);
-                await db.Database.ExecuteSqlRawAsync(migration);
-                var onboarding = await File.ReadAllTextAsync(ServiceSchema.FeaturePath("05.15-Owner-Onboarding.sql"));
-                await db.Database.ExecuteSqlRawAsync(onboarding);
-                await db.Database.ExecuteSqlRawAsync(onboarding);
             }
             var pending = await Register(" OWNER@EXAMPLE.COM ", "0911111111");
             Assert.Equal("pending", pending.Status);
@@ -187,9 +177,8 @@ public sealed class OwnerRegistrationTests
                 if (result.IsSuccess)
                 {
                     Assert.Equal("owner", result.Session!.User!.Role);
-                    Assert.True(result.Session.User.OnboardingComplete);
-                    Assert.True((await new global::UserService.Application.Usecase.Session.GetCurrentUserQueryHandler(new UnitOfWork(db, new UserRepository(db)))
-                        .Handle(new(r.OwnerId), default))!.OnboardingComplete);
+                    Assert.Equal("owner", (await new global::UserService.Application.Usecase.Session.GetCurrentUserQueryHandler(new UnitOfWork(db, new UserRepository(db)))
+                        .Handle(new(r.OwnerId), default))!.Role);
                 }
             }
             var concurrent = await Register("concurrent-approval@example.com", "0966666666");

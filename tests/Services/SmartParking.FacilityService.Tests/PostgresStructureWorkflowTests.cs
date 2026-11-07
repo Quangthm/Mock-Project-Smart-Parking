@@ -1,3 +1,6 @@
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Persistence;
+using SmartParking.FacilityService.Application.Common.Security;
 using Npgsql;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +40,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.All(model.GetEntityTypes(), entity => Assert.NotNull(entity.FindPrimaryKey()));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task CommittedEditSurvivesLostResponseAndRecoversWithANewApplicationInstance()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -75,7 +78,7 @@ public sealed class PostgresStructureWorkflowTests
 
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReservationTriggerBlocksCapacityWritesUntilTheHoldCompletes()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -96,7 +99,7 @@ public sealed class PostgresStructureWorkflowTests
             """);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReceiptReplayCannotReleaseANewerHoldAndAbortedTokenCannotBeReused()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -117,7 +120,124 @@ public sealed class PostgresStructureWorkflowTests
                 new(true, [], [], []), CancellationToken.None));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task ConcurrentAcquireForTheSameSiteYieldsOneHoldAndACleanConflict()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var firstToken = Guid.NewGuid();
+        var secondToken = Guid.NewGuid();
+
+        // Two independent DbContexts, each with its own pre-opened PostgreSQL connection, so the
+        // two AcquireAsync calls really run against the same database at the same time.
+        await using var firstContext = fixture.CreateReservationContext();
+        await using var secondContext = fixture.CreateReservationContext();
+        await firstContext.Database.OpenConnectionAsync();
+        await secondContext.Database.OpenConnectionAsync();
+        var firstStore = new StructureSafetyStore(firstContext);
+        var secondStore = new StructureSafetyStore(secondContext);
+
+        using var barrier = new Barrier(2);
+        Task<(Guid Token, bool Won, Exception? Error)> Attempt(Guid token, StructureSafetyStore store) =>
+            Task.Run(async () =>
+            {
+                // Release both attempts together so they overlap inside serializable transactions.
+                barrier.SignalAndWait();
+                try
+                {
+                    await store.AcquireAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
+                    return (token, true, (Exception?)null);
+                }
+                catch (Exception error)
+                {
+                    return (token, false, error);
+                }
+            });
+
+        var results = await Task.WhenAll(Attempt(firstToken, firstStore), Attempt(secondToken, secondStore));
+
+        var winner = Assert.Single(results, result => result.Won);
+        var loser = Assert.Single(results, result => !result.Won);
+        // Exactly one physical hold row, owned by the winning token.
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}'"));
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}' AND token='{winner.Token}'"));
+        // The loser gets the existing clean conflict type, never a raw Npgsql provider exception.
+        Assert.IsType<OperationDomain.HoldConflictException>(loser.Error);
+        Assert.IsNotType<PostgresException>(loser.Error);
+    }
+
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task ReleaseRacingAcquireLeavesOneDeterministicHoldState()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var releasing = Guid.NewGuid();
+        var claiming = Guid.NewGuid();
+        // Seed a committed hold for `releasing` through the normal service path.
+        await fixture.ReservationService.PrepareAsync(
+            fixture.Owner.TenantId, fixture.SiteId, releasing, CancellationToken.None);
+
+        await using var releaseContext = fixture.CreateReservationContext();
+        await using var acquireContext = fixture.CreateReservationContext();
+        await releaseContext.Database.OpenConnectionAsync();
+        await acquireContext.Database.OpenConnectionAsync();
+        var releaseStore = new StructureSafetyStore(releaseContext);
+        var acquireStore = new StructureSafetyStore(acquireContext);
+
+        using var barrier = new Barrier(2);
+        Task<(bool Won, Exception? Error)> Release() => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            try
+            {
+                await releaseStore.ReleaseAsync(
+                    fixture.Owner.TenantId, fixture.SiteId, releasing, null, CancellationToken.None);
+                return (true, (Exception?)null);
+            }
+            catch (Exception error)
+            {
+                return (false, error);
+            }
+        });
+        Task<(bool Won, Exception? Error)> Acquire() => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            try
+            {
+                await acquireStore.AcquireAsync(
+                    fixture.Owner.TenantId, fixture.SiteId, claiming, CancellationToken.None);
+                return (true, (Exception?)null);
+            }
+            catch (Exception error)
+            {
+                return (false, error);
+            }
+        });
+
+        var results = await Task.WhenAll(Release(), Acquire());
+        var released = results[0];
+        var acquired = results[1];
+
+        // Releasing a live hold is always valid; the racing acquire either commits after the release
+        // or observes the older hold and must surface the clean conflict, never a provider exception.
+        Assert.True(released.Won);
+        Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+            $"SELECT count(*) FROM structure_release_receipts WHERE token='{releasing}'"));
+        if (acquired.Won)
+        {
+            Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
+                $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}' AND token='{claiming}'"));
+        }
+        else
+        {
+            Assert.IsType<OperationDomain.HoldConflictException>(acquired.Error);
+            Assert.IsNotType<PostgresException>(acquired.Error);
+            Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation,
+                $"SELECT count(*) FROM structure_edit_holds WHERE site_id='{fixture.SiteId}'"));
+        }
+    }
+
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task RecoveryFenceWaitsForUnacknowledgedPhysicalCommitAndReturnsReadyPayload()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -154,7 +274,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(0, durable.Outcome.Capacities.Single().Capacity);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task RecoveryWinningTheFenceForcesAllLatePhysicalWritesToRollBack()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -177,7 +297,7 @@ public sealed class PostgresStructureWorkflowTests
     }
 
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task GateConnectionsLeaveATwoConnectorQueryPoolAvailable()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -203,7 +323,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Null(rejected);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task CompletedOperationCannotBeRevertedByAForegroundErrorUpdate()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -220,7 +340,7 @@ public sealed class PostgresStructureWorkflowTests
             new(Guid.NewGuid(), fixture.Owner.TenantId), operation.Id, "pending", "Other actor", null, CancellationToken.None));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ProjectionFailureRollsBackReceiptProjectionAndHoldReleaseTogether()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -260,7 +380,7 @@ public sealed class PostgresStructureWorkflowTests
 
     // ---- SPARK-238 P4 acceptance coverage for the P2 facility-structure behaviour ----
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task MultiValueCompatibilityRoundTripsThroughTheCompatibilityTable()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -285,7 +405,7 @@ public sealed class PostgresStructureWorkflowTests
             $"SELECT count(*) FROM parking_slots WHERE id='{slotId}' AND supported_vehicle_type='CAR' AND deleted_at IS NULL"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task CompatibilityIsAPredicateNotStockForGateClaims()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -319,7 +439,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(structure.Site.TotalPhysicalCapacity, sitePools.Sum(view => view.Total));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task LegacyProjectionIsTheClaimFallbackAndANullProjectionNeverThrows()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -354,7 +474,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(string.Empty, any.VehicleType);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task OwnerGeometryAndFeaturesWritesAreRejectedAndStoredValuesSurvive()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -390,7 +510,7 @@ public sealed class PostgresStructureWorkflowTests
             """));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task ReleasedSlotCodesRequireAnExplicitRestore()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -435,7 +555,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(slotId, claimed.Id);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task StaleDeclaredCapacityIsReconciledInsteadOfBlockingTheEdit()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -456,7 +576,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(structure.Slots.Count, sitePools.Sum(view => view.Total));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task FutureMaintenanceWindowIsScheduledAndHalfOpenOverlapIsEnforced()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -490,7 +610,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(2L, await fixture.ScalarAsync(fixture.Parking, "SELECT count(*) FROM structure_maintenance_windows"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task MaintenanceWindowIsGrowOnlyAndCancellationCannotBypassAnotherClosure()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -547,7 +667,7 @@ public sealed class PostgresStructureWorkflowTests
             "SELECT count(*) FROM structure_maintenance_windows WHERE cancelled_at IS NULL"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task BatchWithOneFailedItemAppliesNothingAndRecordsTheFailure()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -579,7 +699,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(audits, await fixture.ScalarAsync(fixture.Parking, "SELECT count(*) FROM structure_change_audit"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task FullyValidBatchAppliesEveryItemOnce()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -606,7 +726,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(1, structure.Site.TotalPhysicalCapacity);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task StaleExpectedUpdatedAtRejectsTheWholeBatch()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -628,7 +748,7 @@ public sealed class PostgresStructureWorkflowTests
             $"SELECT count(*) FROM parking_slots WHERE id='{slot}' AND deleted_at IS NULL"));
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task BatchRejectsUnsupportedActionsAndItemCountsOutsideOneToFifty()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -643,10 +763,10 @@ public sealed class PostgresStructureWorkflowTests
         var empty = await operations.ExecuteAsync(fixture.Owner, fixture.SiteId, Guid.NewGuid(),
             new StructureEdit("batch", BatchItems: []), CancellationToken.None);
         Assert.Equal("failed", empty.Status);
-        Assert.Contains("1â€“50 items", empty.Reason);
+        Assert.Contains("1-50 items", empty.Reason);
     }
 
-    [StructurePostgresFact]
+    [StructurePostgresFact, Trait("Category", "Postgres")]
     public async Task OperationIdempotencyReplaysOneRecordAndRejectsADifferentPayload()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
@@ -673,17 +793,196 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal("DUPLICATE_IDENTIFIER", different.Code);
     }
 
-    private static MaintenanceWindowService MaintenanceWindows(DatabaseFixture fixture)
+    private static PostgresMaintenanceWindowTestFacade MaintenanceWindows(DatabaseFixture fixture)
         => new(new PostgresMaintenanceWindowStore(fixture.Parking), fixture);
 
-    private static StructureOperationService Operations(DatabaseFixture fixture)
-        => new(new StructureOperationStore(fixture.Parking, fixture.Gates), new ResolvedPlanner(), fixture.Service, fixture);
+    private sealed class PostgresMaintenanceWindowTestFacade(IMaintenanceWindowStore store, IOwnerAuthorizer owners)
+    {
+        public async Task<MaintenanceWindow> CreateAsync(
+            OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason,
+            Guid? unitId, Guid? slotId, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            (start, end) = (Utc(start), Utc(end));
+            MaintenanceWindowRules.ValidateCreate(unitId, slotId, reason, start, end, DateTime.UtcNow);
+            return await store.CreateAsync(owner, siteId, start, end, reason.Trim(), ct);
+        }
+
+        public async Task<ServiceState> StateAsync(
+            OwnerScope owner, Guid siteId, string siteStatus, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            var windows = await store.ListAsync(owner, siteId, ct);
+            var now = DateTime.UtcNow;
+            return new(MaintenanceWindowState.Derive(windows, siteStatus, now),
+                MaintenanceWindowState.ClosedUntil(windows, now), windows);
+        }
+
+        public async Task<MaintenanceWindow> ExtendAsync(
+            OwnerScope owner, Guid siteId, Guid windowId, DateTime? start, DateTime? end, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            var current = await store.GetByIdAsync(owner, siteId, windowId, ct)
+                ?? throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
+            var newEnd = MaintenanceWindowRules.Extend(
+                current.Start, current.End, start is { } from ? Utc(from) : null, end is { } to ? Utc(to) : null, DateTime.UtcNow);
+            return await store.ExtendAsync(owner, siteId, windowId, newEnd, ct);
+        }
+
+        public async Task CancelAsync(OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct)
+        {
+            if (!await owners.IsOwnerAsync(owner, ct))
+                throw new StructureException("FORBIDDEN", "Current parking management access is required.");
+            await store.CancelAsync(owner, siteId, windowId, ct);
+        }
+
+        private static DateTime Utc(DateTime value) => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+    }
+
+    private static PostgresStructureOperationTestFacade Operations(DatabaseFixture fixture)
+        => new(new StructureOperationStore(fixture.Parking, fixture.Gates), new ResolvedPlanner(), fixture.UnitOfWork, fixture);
+
+    private sealed class PostgresStructureOperationTestFacade(
+        IStructureOperationStore store,
+        IStructureImpactPlanner planner,
+        IStructureUnitOfWork unitOfWork,
+        IOwnerAuthorizer owners)
+    {
+        public async Task<StructureOperation> ReadAsync(
+            OwnerScope owner, Guid site, Guid id, CancellationToken cancellationToken)
+        {
+            if (!await owners.IsOwnerAsync(owner, cancellationToken))
+                throw new StructureException("FORBIDDEN", "Current Owner access is required.");
+            return await store.ReadAsync(owner, site, id, cancellationToken);
+        }
+
+        public async Task<StructureOperation> ExecuteAsync(
+            OwnerScope owner, Guid site, Guid key, StructureEdit edit, CancellationToken cancellationToken)
+        {
+            if (!await owners.IsOwnerAsync(owner, cancellationToken))
+                throw new StructureException("FORBIDDEN", "Current Owner access is required.");
+            if (key == Guid.Empty)
+                throw new StructureException("INVALID_STRUCTURE", "Provide an idempotency key.");
+            if (edit.Action is not ("removeSlot" or "removeUnit" or "capacity" or "active" or "moveSlot" or "configureSlot" or "batch"))
+                throw new StructureException("INVALID_STRUCTURE", "Unsupported impact operation.");
+
+            var operation = await store.BeginAsync(owner, site, key, edit, cancellationToken);
+            await using var gate = await store.LockAsync(operation.Id, cancellationToken);
+            operation = await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+            if (operation.Status == "completed") return operation;
+
+            await unitOfWork.RecoverAsync(owner, site, cancellationToken);
+            operation = await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+            if (operation.Status == "completed") return operation;
+
+            var plan = await planner.PlanAsync(owner, site, operation.Id, edit, cancellationToken);
+            if (plan.Status != "resolved")
+            {
+                return await store.UpdateAsync(
+                    owner, operation.Id, plan.Status == "failed" ? "failed" : "pending",
+                    plan.Reason, plan.Impact, cancellationToken);
+            }
+
+            await store.UpdateAsync(
+                owner, operation.Id, "pending",
+                "Impact resolved; awaiting physical commit and projection acknowledgement.",
+                plan.Impact, cancellationToken);
+
+            try
+            {
+                await using (var session = await unitOfWork.BeginEditAsync(
+                    owner, site, cancellationToken, operationId: operation.Id))
+                {
+                    StructureEditHandler.Apply(session.Structure, edit);
+                    await session.CommitAsync(cancellationToken);
+                }
+
+                return await store.ReadAsync(owner, site, operation.Id, cancellationToken);
+            }
+            catch (StructureBatchException error)
+            {
+                await store.UpdateAsync(owner, operation.Id, "failed", error.Message, plan.Impact, cancellationToken);
+                throw;
+            }
+            catch (StructureException error)
+            {
+                var status = error.Code is "STRUCTURE_IN_USE" or "STRUCTURE_BUSY" or "COMMITMENTS_UNAVAILABLE"
+                    ? "pending" : "failed";
+                return await store.UpdateAsync(
+                    owner, operation.Id, status, error.Message, plan.Impact, cancellationToken);
+            }
+        }
+    }
 
     private sealed class ResolvedPlanner : IStructureImpactPlanner
     {
         public Task<ReallocationPlan> PlanAsync(
             OwnerScope owner, Guid siteId, Guid operationId, StructureEdit edit, CancellationToken cancellationToken)
             => Task.FromResult(new ReallocationPlan("resolved", null, "{}"));
+    }
+
+    private sealed class PostgresStructureTestFacade(
+        IParkingStructureRepository repository,
+        IStructureUnitOfWork unitOfWork)
+    {
+        public async Task<SiteProfile> CreateAsync(
+            OwnerScope owner, string code, string name, string address,
+            decimal? latitude = null, decimal? longitude = null, CancellationToken ct = default)
+        {
+            var structure = new ParkingStructure(
+                new SiteProfile(Guid.NewGuid(), owner.TenantId, "", "", "", null, null, true, 0));
+            structure.UpdateProfile(code, name, address, latitude, longitude);
+            return await repository.CreateAsync(owner, structure.Site, ct);
+        }
+
+        public Task<ParkingStructure> GetAsync(OwnerScope owner, Guid siteId, CancellationToken ct = default)
+            => repository.ReadAsync(owner, siteId, null, ct);
+
+        public async Task<Guid> AddSlotAsync(
+            OwnerScope owner, Guid siteId, Guid unitId, string code, VehicleType? vehicle,
+            SlotType type = SlotType.STANDARD, IReadOnlyList<VehicleType>? vehicleTypes = null,
+            VehicleType? primaryVehicleType = null, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            var primary = SlotCompatibility.Primary(vehicle, primaryVehicleType, vehicleTypes);
+            var id = session.Structure.AddSlot(unitId, code, primary, type, vehicleTypes);
+            await session.CommitAsync(ct);
+            return id;
+        }
+
+        public async Task<Guid> AddUnitAsync(
+            OwnerScope owner, Guid siteId, UnitType type, string name,
+            Guid? parentId = null, int capacity = 0, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            var id = session.Structure.AddUnit(type, name, parentId, capacity);
+            await session.CommitAsync(ct);
+            return id;
+        }
+
+        public async Task ApplyAsync(
+            OwnerScope owner, Guid siteId, StructureEdit edit, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            StructureEditHandler.Apply(session.Structure, edit);
+            await session.CommitAsync(ct);
+        }
+
+        public async Task ChangeAsync(
+            OwnerScope owner, Guid siteId, Action<ParkingStructure> change, CancellationToken ct = default)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct);
+            change(session.Structure);
+            await session.CommitAsync(ct);
+        }
     }
 
     private sealed class DatabaseFixture : IAsyncDisposable, IOwnerAuthorizer, ISlotOperatorAuthorizer
@@ -694,6 +993,9 @@ public sealed class PostgresStructureWorkflowTests
         public NpgsqlDataSource Parking { get; }
         public NpgsqlDataSource Reservation { get; }
         private ReservationDbContext ReservationContext { get; }
+        // A fresh context on the fixture's reservation database, used for cross-connection tests.
+        public ReservationDbContext CreateReservationContext() =>
+            new(new DbContextOptionsBuilder<ReservationDbContext>().UseNpgsql(Reservation).Options);
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
         public Guid SiteId { get; private set; }
         public Guid UnitId { get; private set; }
@@ -701,7 +1003,9 @@ public sealed class PostgresStructureWorkflowTests
         public ParkingGateConnectionPool Gates { get; }
         public OperationApplication.StructureSafetyService ReservationService { get; }
         public ReservationBridge Transport { get; }
-        public ParkingStructureService Service { get; }
+        public IParkingStructureRepository Repository { get; }
+        public IStructureUnitOfWork UnitOfWork { get; }
+        public PostgresStructureTestFacade Service { get; }
 
         private DatabaseFixture(string admin, string parking, string reservation)
         {
@@ -720,7 +1024,9 @@ public sealed class PostgresStructureWorkflowTests
             ReservationService = new(new StructureSafetyStore(ReservationContext));
             Transport = new(ReservationService);
             var synchronization = new StructureSynchronizationService(Store, Transport);
-            Service = new(new PostgresParkingStructureRepository(Parking), this, this, Transport, Store, synchronization);
+            Repository = new PostgresParkingStructureRepository(Parking);
+            UnitOfWork = new StructureUnitOfWork(Repository, this, this, Transport, Store, synchronization);
+            Service = new PostgresStructureTestFacade(Repository, UnitOfWork);
         }
 
         public static async Task<DatabaseFixture> CreateAsync()
@@ -738,23 +1044,13 @@ public sealed class PostgresStructureWorkflowTests
             try
             {
                 var root = FindRepositoryRoot();
-                // Post-split facility schema (smartpark_parking). Overlay order follows each file's header.
+                // Post-split facility schema (smartpark_facility).
                 await fixture.ApplyAsync(fixture.Parking, root,
                     "scripts/database/microservices/02-facility-service-db.sql",
-                    "scripts/database/microservices/03a-parking-structure-ops-service-db.sql",
-                    "scripts/database/overlay/parking-tenants.sql",
-                    "scripts/database/overlay/parking-structure-synchronizations.sql",
-                    "scripts/database/overlay/parking-slot-constraints.sql",
-                    "scripts/database/overlay/parking-operator-tables.sql",
-                    "scripts/database/overlay/parking-structure-maintenance.sql");
-                // Post-split reservation schema (smartpark_reservation). Pools first, then the safety
-                // gates that trigger on site_capacity_pools, then receipts, then confirmation time.
+                    "scripts/database/microservices/03a-parking-structure-ops-service-db.sql");
+                // Post-split reservation schema (smartpark_operations).
                 await fixture.ApplyAsync(fixture.Reservation, root,
-                    "scripts/database/microservices/03b-reservation-operations-service-db.sql",
-                    "scripts/database/overlay/reservation-site-capacity-pools.sql",
-                    "scripts/database/overlay/reservation-structure-safety.sql",
-                    "scripts/database/overlay/reservation-structure-receipts.sql",
-                    "scripts/database/overlay/reservation-confirmation-time.sql");
+                    "scripts/database/microservices/03b-reservation-operations-service-db.sql");
                 await fixture.ExecuteAsync(fixture.Parking, $"""
                     INSERT INTO tenants(id,code,name,contact_email,contact_phone)
                     VALUES ('{fixture.Owner.TenantId}','TEST','Test','test@example.com','0000000000')

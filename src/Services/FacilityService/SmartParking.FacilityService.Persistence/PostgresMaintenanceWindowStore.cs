@@ -76,14 +76,25 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
         }
     }
 
+    public async Task<MaintenanceWindow?> GetByIdAsync(
+        OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct)
+    {
+        await using var db = await source.OpenConnectionAsync(ct);
+        await EnsureSiteAsync(db, null, owner, siteId, ct);
+        await using var command = Command(db, null,
+            $"SELECT {Columns} FROM structure_maintenance_windows WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL",
+            windowId, owner.TenantId, siteId);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? Window(reader) : null;
+    }
+
     public async Task<MaintenanceWindow> ExtendAsync(
-        OwnerScope owner, Guid siteId, Guid windowId, DateTime? start, DateTime? end, CancellationToken ct)
+        OwnerScope owner, Guid siteId, Guid windowId, DateTime newEnd, CancellationToken ct)
     {
         await using var db = await source.OpenConnectionAsync(ct);
         await using var tx = await db.BeginTransactionAsync(ct);
         await EnsureSiteAsync(db, tx, owner, siteId, ct);
-        var current = await LockAsync(db, tx, owner, siteId, windowId, ct);
-        var newEnd = MaintenanceWindowRules.Extend(current.Start, current.End, start, end, DateTime.UtcNow);
+        _ = await LockAsync(db, tx, owner, siteId, windowId, ct);
         try
         {
             MaintenanceWindow window;

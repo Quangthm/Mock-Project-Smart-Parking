@@ -5,7 +5,7 @@ using SmartParking.PaymentService.Application.DTOs.Payments;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Exceptions;
-using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Domain.Services;
 
 namespace SmartParking.PaymentService.Application.Usecase.InitiateCheckout;

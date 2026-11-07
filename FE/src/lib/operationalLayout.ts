@@ -195,7 +195,7 @@ export function isLayoutStale(
   now: number = Date.now(),
 ): boolean {
   if (!layout) return true
-  if (layout.isFresh === false) return true
+  if (layout.isFresh !== true) return true
 
   const threshold = layout.stalenessThresholdSeconds
   if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) return true
@@ -243,8 +243,12 @@ export interface SlotCodeMatchReport {
  * test harnesses transpile `parkingApi.ts` and cannot parse a second
  * `import.meta.env` reference there.
  */
+export function operationalFixtureMode(): boolean {
+  return import.meta.env.VITE_OPERATIONAL_LAYOUT_FIXTURE === 'true' && import.meta.env.DEV
+}
+
 export async function readOperationalLayoutFixture(): Promise<OperationalLayoutProjection | null> {
-  if (import.meta.env.VITE_OPERATIONAL_LAYOUT_FIXTURE !== 'true' || !import.meta.env.DEV) {
+  if (!operationalFixtureMode()) {
     return null
   }
 
@@ -252,7 +256,9 @@ export async function readOperationalLayoutFixture(): Promise<OperationalLayoutP
   const envelope = (module.default ?? module) as OperationalLayoutEnvelope
   if (envelope.success === false) throw new Error('Parking request failed.')
 
-  return envelope.data
+  // JSON fixtures keep deterministic identities and a fixed captured timestamp.
+  // Only the dev-only loaded snapshot gets a current observation time.
+  return { ...envelope.data, generatedAt: new Date().toISOString() }
 }
 
 /**

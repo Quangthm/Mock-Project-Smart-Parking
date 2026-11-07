@@ -14,6 +14,10 @@ if ($RebuildAi -and !$WithAiCamera) { throw '-RebuildAi requires -WithAiCamera.'
 # prepares credentials but starts no containers (it must stay Docker-free).
 $sonarEnabled = !$SkipSonarQube
 $taskRoot = $PSScriptRoot
+. (Join-Path $taskRoot 'scripts/jwt-environment.ps1')
+# Setup sends signing keys only to UserService user-secrets through stdin.
+# Clear inherited aliases before invoking any helper processes.
+Clear-JwtSigningEnvironment
 $composeFile = Join-Path $taskRoot 'compose.schema-integration.yml'
 $envFile = Join-Path $taskRoot '.env'
 $aiModelRoot = 'src/Services/IoTService/python-ai/models'
@@ -688,7 +692,18 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
         if ($url) { $desired["Services:$remoteService"] = $url }
     }
+    $jwtIssuer = if ($settings['SMARTPARK_JWT_ISSUER']) { $settings['SMARTPARK_JWT_ISSUER'] } else { 'SmartParking.UserService' }
+    $jwtAudience = if ($settings['SMARTPARK_JWT_AUDIENCE']) { $settings['SMARTPARK_JWT_AUDIENCE'] } else { 'SmartParking' }
+    $jwtPath = if ($settings['SMARTPARK_JWT_JWKS_PATH']) { $settings['SMARTPARK_JWT_JWKS_PATH'] } else { '/.well-known/jwks.json' }
     if ($service -eq 'User') {
+        $desired['Jwt:Issuer'] = $jwtIssuer
+        $desired['Jwt:Audience'] = $jwtAudience
+        $desired['Jwt:JwksPath'] = $jwtPath
+        if ($settings['SMARTPARK_JWT_KEY_ID']) { $desired['Jwt:KeyId'] = $settings['SMARTPARK_JWT_KEY_ID'] }
+        foreach ($field in @('PrivateKeyPem','PrivateKeyPemBase64')) {
+            $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
+            if (Test-JwtConfiguredValue $settings[$sourceName]) { $desired['Jwt:' + $field] = $settings[$sourceName] }
+        }
         $desired['DevelopmentAdmin:Email'] = $settings['SMARTPARK_ADMIN_EMAIL']
         $desired['DevelopmentAdmin:Password'] = $settings['SMARTPARK_ADMIN_PASSWORD']
         $desired['DevelopmentOwner:Email'] = $settings['SMARTPARK_OWNER_EMAIL']
@@ -711,7 +726,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
             $value = $settings["SMARTPARK_SMTP_$($field.ToUpperInvariant())"]
             if ($value) { $desired["Otp:Smtp:$field"] = $value }
         }
-        if ($settings['SMARTPARK_JWT_PRIVATE_KEY_PEM']) { $desired['Jwt:PrivateKeyPem'] = $settings['SMARTPARK_JWT_PRIVATE_KEY_PEM'] }
+    } else {
+        $desired['JwtValidation:Issuer'] = $jwtIssuer
+        $desired['JwtValidation:Audience'] = $jwtAudience
+        $desired['JwtValidation:JwksUri'] = ([Uri]::new([Uri]$desired['Services:User'], $jwtPath)).AbsoluteUri
     }
     if ($service -eq 'Payment') {
         # PaymentService resolves the reservation API through Services:ReservationService:BaseUrl.
@@ -732,7 +750,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     }
     # Optional keys (JWT PEM, SMTP fields) that are no longer configured in .env are removed.
     $removable = @()
-    foreach ($name in @('Jwt:PrivateKeyPem','Otp:Smtp:Host','Otp:Smtp:Port','Otp:Smtp:Username','Otp:Smtp:Password','Otp:Smtp:From')) {
+    $optionalNames = @('Jwt:PrivateKeyPem','Jwt:PrivateKeyPemBase64','Jwt:KeyId','Otp:Smtp:Host','Otp:Smtp:Port','Otp:Smtp:Username','Otp:Smtp:Password','Otp:Smtp:From')
+    # Remove any old private-signing aliases accidentally stored by other services.
+    if ($service -ne 'User') { $optionalNames += @($existingByService[$service].Keys | Where-Object { Test-JwtSigningSecretName $_ }) }
+    foreach ($name in ($optionalNames | Select-Object -Unique)) {
         if (!$desired.Contains($name) -and $existingByService[$service].ContainsKey($name)) { $removable += $name }
     }
     if ($service -eq 'User' -and $existingByService[$service].ContainsKey('DevelopmentAdmin:Password') -and $toSync.ContainsKey('DevelopmentAdmin:Password')) {
@@ -740,7 +761,15 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     }
     if ($toSync.Count) {
         # Secrets travel on stdin, never in process command-line arguments.
-        $toSync | ConvertTo-Json -Compress | & dotnet user-secrets set --project $projectByService[$service] | Out-Null
+        # Windows PowerShell 5.1 native pipe prepends a UTF-8 BOM which .NET 10 System.Text.Json rejects (0xEF invalid start of value).
+        # Redirect raw UTF-8 bytes without BOM through cmd.exe stdin redirection.
+        $tempSecretFile = [System.IO.Path]::GetTempFileName()
+        try {
+            [System.IO.File]::WriteAllText($tempSecretFile, ($toSync | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+            & cmd.exe /c "dotnet user-secrets set --project `"$($projectByService[$service])`" < `"$tempSecretFile`"" | Out-Null
+        } finally {
+            if (Test-Path -LiteralPath $tempSecretFile) { Remove-Item -LiteralPath $tempSecretFile -Force }
+        }
         if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service." }
     }
     foreach ($name in $removable) {

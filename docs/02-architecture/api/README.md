@@ -16,6 +16,8 @@ Start with [shared contracts and pending API work](v1.1-contracts.md). The follo
 | Additional lots, structure, deactivation | [Facility](../../03-design/api/parking-structure-api-design.md) |
 | Registered vehicles and soft removal | [Vehicles](../../03-design/api/vehicle-registration-api-design.md) |
 | Geographic discovery, products and booking handoff | [Shared integration contracts](v1.1-contracts.md#discovery-and-parking-products) |
+| Customer Invoice & Checkout Handoff (Payment & Pricing) | [Customer Invoice Contract (SPARK-321)](payment-service/03-customer-invoice-and-checkout-handoff.contract.md) |
+| Checkout, Payment Settlement & Invoice Notification | [Checkout, Payment & Notification Integration](../../03-design/api/checkout-payment-notification-integration-api-design.md) |
 
 The [all-API compatibility entry](SmartPark-All-API-Design.md) preserves the U01–U33/P01–P13/R01–R03/D01 navigation to the historical implementation inventory. [The dated workflow entry](workflows-2026-10-08.md) points to preserved history and current contracts. Neither snapshot approves legacy service ownership or superseded behavior.
 

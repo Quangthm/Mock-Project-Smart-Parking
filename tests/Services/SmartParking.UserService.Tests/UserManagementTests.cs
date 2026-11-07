@@ -61,7 +61,6 @@ public sealed class UserManagementTests
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
-        builder.Services.AddSingleton<IAccessEventStore, UnusedAccessEvents>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true);
         builder.Services.AddAuthorization();
@@ -120,7 +119,7 @@ public sealed class UserManagementTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users")).StatusCode);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RealDatabaseSearchTransitionsAndSessionRevocation()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;

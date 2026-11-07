@@ -43,10 +43,14 @@ public sealed class OperatorProvisioningHttpTests
         }
     }
 
-    private sealed class RecordedAccessEvents : UnusedAccessEvents
+    private sealed class RecordedAccessEvents : RecordingEventPublisher
     {
-        public List<OperatorAccessChanged> Messages { get; } = [];
-        public override void Stage(OperatorAccessChanged message) => Messages.Add(message);
+        public List<OperatorAccessChanged> AccessMessages { get; } = [];
+        public override Task PublishAsync<TMessage>(TMessage message, CancellationToken cancellationToken)
+        {
+            if (message is OperatorAccessChanged access) AccessMessages.Add(access);
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]
@@ -65,7 +69,7 @@ public sealed class OperatorProvisioningHttpTests
         var siteId = Guid.NewGuid();
         directory.Sites[siteId] = repository.TenantId;
         builder.Services.AddSingleton<IIdentityAccessRepository>(repository);
-        builder.Services.AddSingleton<IAccessEventStore>(events);
+        builder.Services.AddSingleton<IEventPublisher>(events);
         builder.Services.AddSingleton<IParkingDirectory>(directory);
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         builder.Services.AddJWTAuthentication(builder.Configuration, true); builder.Services.AddAuthorization();
@@ -73,7 +77,6 @@ public sealed class OperatorProvisioningHttpTests
         TestAuthorization.AddServices(builder.Services, fixture);
         builder.Services.AddSingleton<IUnitOfWork>(fixture);
         builder.Services.AddSingleton<ICurrentAccessStore>(fixture);
-        builder.Services.AddSingleton<IEventPublisher, RecordingProfilePublisher>();
         builder.Services.AddSingleton<IAuthSessionStore>(fixture.Sessions);
         builder.Services.AddSingleton<IPasswordService, BcryptPasswordService>();
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
@@ -123,13 +126,13 @@ public sealed class OperatorProvisioningHttpTests
         Assert.NotNull(repository.CreatedOperator);
         Assert.Empty(repository.CreatedOperator.PasswordHash);
         Assert.Equal(SmartParking.UserService.Domain.Enum.UserStatus.PendingVerification, repository.CreatedOperator.Status);
-        Assert.Equal("pending_verification", Assert.Single(events.Messages).Status);
+        Assert.Equal("pending_verification", Assert.Single(events.AccessMessages).Status);
         var json = await result.Content.ReadAsStringAsync();
         Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
         fixture.User.Status = SmartParking.UserService.Domain.Enum.UserStatus.Locked;
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/users", Body())).StatusCode);
-        Assert.Single(events.Messages);
+        Assert.Single(events.AccessMessages);
 
         CreateOperatorDto BodyWith(Action<CreateOperatorDto> change) { var b = Body(); change(b); return b; }
     }
