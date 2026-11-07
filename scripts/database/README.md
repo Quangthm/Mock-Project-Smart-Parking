@@ -6,6 +6,16 @@ will disagree in ways that look like application bugs.
 
 ## 1. Canonical (use this)
 
+### User image upgrade and rollback (SPARK-373)
+
+- Fresh UserDb base SQL includes media assets/holds and nullable avatar/vehicle asset FKs. For an initialized supported UserDb, use the reviewed `scripts/apply-workflow-migrations.ps1` path: existing session/outbox preflight, rerunnable the bounded media section of `microservices/01-user-access-service-db.sql`, then `test/verify-user-media-schema.sql` and existing verification. Do not use the media post-check to reject a pre-media database before applying its media section.
+- Preserve existing rows, IDs, bindings and legacy URL columns. No automatic backfill or external URL download occurs. Run `test/inventory-user-media.sql` only with authorization for the intended UserDb; its aggregate categories distinguish managed metadata, pending assets, external URLs, missing references and unresolved ownership without outputting personal/provider values. A ready row is not proof that remote bytes still exist. Real deployment counts have NOT RUN in this task.
+- Reconcile unknown outcomes by the persisted exact locator and verified hash/byte count. Existing pending rows survive restart. Absent bytes require authorized same-key resubmission; exhausted/ambiguous retries require owner-led investigation. Never manufacture ownership from an HTTPS string.
+- Rollback: disable `SMARTPARK_USER_MEDIA_ENABLED` and restart the affected User host through the approved operational process. Keep all metadata and legacy columns. This stops media operations but does **not** restore the removed HTTPS-string registration contract. A code rollback must restore its matching frontend/API together; newly managed images have no synthesized legacy provider URL and may require re-upload in old clients. Do not drop the additive schema or erase pending provider evidence. No application runtime/database rollback was executed here.
+- Automatic physical deletion is deferred as [USER-MEDIA-CLEANUP-01](../../docs/05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md). Expired reads are blocked now; byte removal, hold/delete serialization and provider original/derived/cache/backup proof remain pending. A later worker can query persisted deadlines; no process must have been counting down since admission.
+
+This image migration does not implement Partner PDF versions, terms replacement, Admin review transport or DB25. [User image API contract](../../docs/03-design/api/user-images-api-design.md).
+
 | Path | What it is |
 | :--- | :--- |
 | `microservices/01-user-access-service-db.sql` | user / auth / access schema |
@@ -15,7 +25,7 @@ will disagree in ways that look like application bugs.
 | `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
-| `overlay/` | 8 post-schema overlays, applied **after** the base scripts |
+| `overlay/` | Reviewed post-schema overlays, applied **after** the base scripts |
 | `seeds/` | demo data only, never schema |
 
 The database is created by `compose.schema-integration.yml` (six databases, one per

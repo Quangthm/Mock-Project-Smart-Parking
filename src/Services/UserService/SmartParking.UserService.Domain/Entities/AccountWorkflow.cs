@@ -55,6 +55,7 @@ public sealed class RegisteredVehicle
     public string CanonicalPlate { get; set; } = "";
     public string VehicleType { get; set; } = "";
     public string? ImageReference { get; set; }
+    public Guid? ImageAssetId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }

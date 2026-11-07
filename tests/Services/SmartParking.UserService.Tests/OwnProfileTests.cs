@@ -127,7 +127,7 @@ public sealed class OwnProfileTests
     }
 
     [Fact]
-    public async Task UnknownFieldsCannotMassAssignAndAvatarMutationHasNoRoute()
+    public async Task UnknownFieldsCannotMassAssignAndAvatarDeletionIsUnsupported()
     {
         await using var host = await ProfileHost.StartAsync();
         await host.AuthenticateAsync();
@@ -146,7 +146,7 @@ public sealed class OwnProfileTests
         Assert.Equal(UserStatus.Active, f.User.Status);
         Assert.Equal("DRIVER", f.User.Accounts.Single().RoleCode);
         Assert.Null(f.User.Accounts.Single().Permissions);
-        Assert.Equal(HttpStatusCode.NotFound, (await host.Client.DeleteAsync("/api/auth/me/avatar")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await host.Client.DeleteAsync("/api/auth/me/avatar")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync("/api/profile/me")).StatusCode);
     }
 

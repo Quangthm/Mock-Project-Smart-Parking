@@ -48,10 +48,22 @@ public sealed class VehicleRegistrationTests
         Assert.Equal("INVALID_PLATE", Assert.Throws<AuthException>(() => VehicleRegistrationService.NormalizePlate(raw, type)).Code);
     }
 
-    private static async Task<VehicleRegistrationService> Service(AppDbContext db, User driver) =>
-        new(new VehicleRepository(db), new UnitOfWork(db, new UserRepository(db)), TimeProvider.System,
+    private static async Task<VehicleFixtureService> Service(AppDbContext db, User driver) =>
+        new(db, driver, new(new VehicleRepository(db), new UnitOfWork(db, new UserRepository(db)), TimeProvider.System,
             await TestAuthorization.ForUserAsync(db, TimeProvider.System, driver.Id!.Value,
-                accountId: driver.Accounts.First(a => a.RoleCode == "DRIVER").Id));
+                accountId: driver.Accounts.First(a => a.RoleCode == "DRIVER").Id),
+            new global::UserService.Persistence.Media.MediaStore(db), new global::UserService.Application.Media.MediaSettings(true, MediaTestSupport.Environment)));
+
+    private sealed class VehicleFixtureService(AppDbContext db, User driver, VehicleRegistrationService service)
+    {
+        public Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid actor, CancellationToken ct) => service.ListAsync(actor, ct);
+        public async Task<RegisteredVehicle> SaveAsync(Guid actor, Guid? id, VehicleDto body, CancellationToken ct)
+        {
+            // Existing registration tests now require an explicitly prepared owned image.
+            await MediaTestSupport.SeedAsync(db, driver, body, id);
+            return await service.SaveAsync(actor, id, body, ct);
+        }
+    }
 
     private static User Driver(string email) => new()
     {
@@ -60,7 +72,7 @@ public sealed class VehicleRegistrationTests
         Accounts = [new Account { Id = Guid.NewGuid(), RoleCode = "DRIVER" }]
     };
     private static VehicleDto Vehicle(string plate = " 51a-123.45 ", string type = "CAR") => new()
-    { Plate = plate, VehicleType = type, ImageReference = "https://images.example.test/vehicle.jpg" };
+    { Plate = plate, VehicleType = type, ImageAssetId = Guid.NewGuid() };
 
     [PostgresFact, Trait("Category", "Postgres")]
     public async Task RejectedMutationsDoNotPersistAndServiceRechecksCurrentDriver()
@@ -74,7 +86,7 @@ public sealed class VehicleRegistrationTests
         }
         foreach (var invalid in new[] { Vehicle("invalid"), Vehicle("51A12345", "BICYCLE"),
             new VehicleDto { Plate = "51A12345", VehicleType = "CAR" },
-            new VehicleDto { Plate = "51A12345", VehicleType = "CAR", ImageReference = "http://images.example.test/car.jpg" } })
+            new VehicleDto { Plate = "51A12345", VehicleType = "CAR", ImageAssetId = Guid.Empty } })
         {
             await using var db = fixture.Open();
             var service = await Service(db, driver);
@@ -141,9 +153,8 @@ public sealed class VehicleRegistrationTests
             var stored = Assert.Single(list, v => v.Id == first);
             Assert.Equal(" 51a-123.45 ", stored.RawPlate); Assert.Equal("51A12345", stored.CanonicalPlate);
             Assert.Equal(a.Accounts.Single().Id, stored.AccountId);
-            Assert.Equal(Vehicle().ImageReference, stored.ImageReference);
+            Assert.NotNull(stored.ImageAssetId);
             var edit = Vehicle("59x2-543.21", "MOTORCYCLE");
-            edit.ImageReference = "https://images.example.test/updated-motorcycle.jpg";
             await service.SaveAsync(a.Id.Value, first, edit, default);
         }
         await using (var db = fixture.Open())
@@ -151,7 +162,8 @@ public sealed class VehicleRegistrationTests
             var updated = await db.RegisteredVehicles.SingleAsync(v => v.Id == first);
             Assert.Equal("59x2-543.21", updated.RawPlate); Assert.Equal("59X254321", updated.CanonicalPlate);
             Assert.Equal("MOTORCYCLE", updated.VehicleType);
-            Assert.Equal("https://images.example.test/updated-motorcycle.jpg", updated.ImageReference);
+            Assert.NotNull(updated.ImageAssetId);
+            Assert.Null(updated.ImageReference);
             Assert.Equal(a.Accounts.Single().Id, updated.AccountId);
             await db.RegisteredVehicles.Where(v => v.Id == first).ExecuteUpdateAsync(s => s.SetProperty(v => v.DeletedAt, DateTimeOffset.UtcNow));
             var service = await Service(db, a);
@@ -167,7 +179,7 @@ public sealed class VehicleRegistrationTests
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
         var a = Driver("http-a@example.test"); var b = Driver("http-b@example.test");
         await using (var db = fixture.Open()) { db.Users.AddRange(a, b); await db.SaveChangesAsync(); }
-        await using var app = await fixture.StartHostAsync();
+        await using var app = await fixture.StartHostAsync(configure: builder => MediaTestSupport.Configure(builder, new FakeMediaProvider()));
         using var client = app.GetTestClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/vehicles")).StatusCode);
         async Task Login(string email)
@@ -178,12 +190,16 @@ public sealed class VehicleRegistrationTests
             client.DefaultRequestHeaders.Authorization = new("Bearer", data.GetProperty("accessToken").GetString());
         }
         await Login(a.Email!);
-        var created = await client.PostAsJsonAsync("/api/vehicles", Vehicle());
+        var createBody = Vehicle();
+        await using (var db = fixture.Open()) await MediaTestSupport.SeedAsync(db, a, createBody);
+        var created = await client.PostAsJsonAsync("/api/vehicles", createBody);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var vehicle = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         var id = vehicle.GetProperty("id").GetGuid();
         Assert.Equal("51A12345", vehicle.GetProperty("canonicalPlate").GetString());
-        Assert.Equal(HttpStatusCode.OK, (await client.PatchAsJsonAsync($"/api/vehicles/{id}", Vehicle("51b-543.21"))).StatusCode);
+        var editBody = Vehicle("51b-543.21");
+        await using (var db = fixture.Open()) await MediaTestSupport.SeedAsync(db, a, editBody, id);
+        Assert.Equal(HttpStatusCode.OK, (await client.PatchAsJsonAsync($"/api/vehicles/{id}", editBody)).StatusCode);
         foreach (var invalid in new object[]
         {
             Vehicle("invalid"), Vehicle("51A12345", "BICYCLE"),

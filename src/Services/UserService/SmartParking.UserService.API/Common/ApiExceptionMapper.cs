@@ -76,6 +76,14 @@ public sealed class ApiExceptionMapper
         Add("VEHICLE_NOT_FOUND", "Vehicle was not found.", 404);
         Add("PROFILE_NOT_FOUND", "Profile was not found.", 404);
         Add("PLATE_EXISTS", "A vehicle with this plate is already registered.", 409);
+        Add("MEDIA_DISABLED", "Image uploads and reads are disabled.", 503);
+        Add("MEDIA_UNAVAILABLE", "Image storage is temporarily unavailable.", 503);
+        Add("MEDIA_NOT_FOUND", "Image was not found.", 404);
+        Add("MEDIA_INVALID_IMAGE", "Provide a valid JPEG, PNG or WebP within the image limits.", 400);
+        Add("MEDIA_EXPIRED", "Image has expired. Upload a new image.", 410);
+        Add("MEDIA_PENDING", "Image upload is pending. Check its status or retry the same upload.", 409);
+        Add("MEDIA_CONFLICT", "Image changed. Reload before retrying.", 409);
+        Add("MEDIA_IDEMPOTENCY_CONFLICT", "Idempotency key was already used for different input.", 409);
         // Preserve existing workflow outcomes while exposing only reviewed fixed text.
         // CONTACT_UNVERIFIED has two existing contexts: OTP sign-in and Owner approval.
         Add("CONTACT_UNVERIFIED", "Use a verified contact for OTP sign in.", 401);

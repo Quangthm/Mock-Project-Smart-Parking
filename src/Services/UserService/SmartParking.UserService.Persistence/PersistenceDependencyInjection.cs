@@ -28,6 +28,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
         services.AddScoped<IIdentityAccessRepository, IdentityAccessRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<UserService.Application.Media.IMediaStore, UserService.Persistence.Media.MediaStore>();
 
         return services;
     }

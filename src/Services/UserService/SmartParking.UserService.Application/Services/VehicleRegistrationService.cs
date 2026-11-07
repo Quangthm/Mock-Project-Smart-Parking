@@ -6,12 +6,13 @@ using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
+using UserService.Application.Media;
 
 namespace UserService.Application.Services;
 
 public sealed class VehicleRegistrationService(
     IVehicleRepository vehicles, IUnitOfWork unitOfWork, TimeProvider clock,
-    IAccountAuthorizationService authorization) : IVehicleRegistration
+    IAccountAuthorizationService authorization, IMediaStore media, MediaSettings mediaSettings) : IVehicleRegistration
 {
     public static string NormalizePlate(string raw, string type)
     {
@@ -22,7 +23,8 @@ public sealed class VehicleRegistrationService(
 
     private async Task<Guid[]> RequireDriverAsync(Guid actor, CancellationToken ct)
     {
-        return await authorization.DriverAccountsAsync(actor, ct);
+        var current = await authorization.RequireDriverAsync(actor, true, ct);
+        return [current.Account.Id!.Value];
     }
 
     public async Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid actor, CancellationToken ct)
@@ -40,9 +42,7 @@ public sealed class VehicleRegistrationService(
         if (!Validator.TryValidateObject(body, new ValidationContext(body), errors, true))
             throw new AuthException("VALIDATION_FAILED", string.Join(" ", errors.Select(e => e.ErrorMessage)), 400);
         var normalized = NormalizePlate(body.Plate, body.VehicleType);
-        if (body.ImageReference is not null &&
-            (!Uri.TryCreate(body.ImageReference, UriKind.Absolute, out var image) || image.Scheme != "https"))
-            throw new AuthException("VALIDATION_FAILED", "Image reference must be an HTTPS URL.", 400);
+        if (body.ImageAssetId == Guid.Empty) throw new AuthException("VALIDATION_FAILED", "Image asset is required.", 400);
 
         await using var transaction = await unitOfWork.BeginTransactionAsync(ct);
         var accounts = await RequireDriverAsync(actor, ct);
@@ -58,13 +58,39 @@ public sealed class VehicleRegistrationService(
             {
                 Id = Guid.NewGuid(), AccountId = accounts[0], CreatedAt = clock.GetUtcNow()
             };
+            // Persist the business row before its image points back to it. Both
+            // saves remain inside this transaction and roll back together.
+            vehicle.RawPlate = body.Plate;
+            vehicle.CanonicalPlate = normalized;
+            vehicle.VehicleType = body.VehicleType;
+            vehicle.UpdatedAt = clock.GetUtcNow();
             vehicles.Add(vehicle);
+        }
+
+        if (vehicle.ImageAssetId != body.ImageAssetId)
+        {
+            if (!mediaSettings.Enabled) throw new AuthException("MEDIA_DISABLED", "Media is disabled.", 503);
+            if (vehicle.ImageAssetId != body.ExpectedImageAssetId) throw new AuthException("MEDIA_CONFLICT", "Image changed.", 409);
+            var asset = await media.FindAsync(body.ImageAssetId!.Value, true, ct)
+                ?? throw new AuthException("MEDIA_NOT_FOUND", "Image was not found.", 404);
+            if (asset.UserId != actor || asset.CreatorAccountId != accounts[0] || asset.Purpose != "vehicle")
+                throw new AuthException("MEDIA_NOT_FOUND", "Image was not found.", 404);
+            if (asset.Expired(clock.GetUtcNow())) throw new AuthException("MEDIA_EXPIRED", "Image has expired.", 410);
+            if (asset.Environment != mediaSettings.Environment || !asset.CanAttach(clock.GetUtcNow(), vehicle.Id))
+                throw new AuthException("MEDIA_CONFLICT", "Image cannot be attached.", 409);
+            if (id is null)
+            {
+                try { await unitOfWork.SaveChangesAsync(ct); }
+                catch (Exception e) when (e.InnerException is DbException { SqlState: "23505" })
+                { throw new AuthException("PLATE_EXISTS", "A vehicle with this plate is already registered.", 409); }
+            }
+            asset.Attach(vehicle.Id, clock.GetUtcNow());
+            vehicle.ImageAssetId = asset.Id;
         }
 
         vehicle.RawPlate = body.Plate;
         vehicle.CanonicalPlate = normalized;
         vehicle.VehicleType = body.VehicleType;
-        vehicle.ImageReference = body.ImageReference;
         vehicle.UpdatedAt = clock.GetUtcNow();
         try { await unitOfWork.SaveChangesAsync(ct); }
         // Duplicate active plate hits uq_active_vehicle_plate; surface it as a 409 like the other registration flows.

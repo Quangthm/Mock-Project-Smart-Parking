@@ -33,11 +33,11 @@ public sealed class ChangeBootstrapPasswordDto
     [Required, StringLength(15, MinimumLength=8), RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$")]
     public string Password { get; set; } = "";
 }
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class VehicleDto
 {
     [Required, StringLength(30)] public string Plate { get; set; } = "";
     [Required, RegularExpression("^(CAR|MOTORCYCLE)$")] public string VehicleType { get; set; } = "";
-    [Required, StringLength(2048)] public string? ImageReference { get; set; }
+    [Required] public Guid? ImageAssetId { get; set; }
+    public Guid? ExpectedImageAssetId { get; set; }
 }
 public sealed record ChallengeResult(Guid ChallengeId, DateTimeOffset ExpiresAt, DateTimeOffset ResendAt, string DeliveryStatus="pending");

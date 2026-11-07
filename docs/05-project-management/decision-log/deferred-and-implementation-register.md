@@ -6,6 +6,14 @@
 
 ## Current disposition by original follow-up ID
 
+### User media foundation follow-up — 6 November 2026
+
+| Backlog ID | Status | Owner / next implementation |
+|---|---|---|
+| USER-MEDIA-CLEANUP-01 | **DEFERRED — automatic deletion not implemented; evidence NOT RUN.** User-approved scope change to SPARK-373; existing retention policy is not extended. | UserService: expiry selection, hold/deletion serialization, provider deletion/reconciliation, bounded recovery and verification. Unattached drafts have a 24-hour lifetime. See [decision, limitations and acceptance checklist](2026-11-06-user-media-cleanup-deferral.md). Timestamps and expired-read blocking are implemented and verified in the foundation; automatic deletion remains deferred. This is a repository backlog ID; no Jira issue has been created. |
+
+### Original follow-up dispositions
+
 | ID | Current disposition | Main destination |
 |---|---|---|
 | TESTER-DEF-01 | CONFIRMED CONTRACT; implementation/evidence pending | state-transitions / acceptance |
@@ -69,7 +77,7 @@ All V11-01–12 and D01–D12 business choices in the [approved register](2026-1
 
 | Work ID | Owner/action | Completion evidence |
 |---|---|---|
-| V11-DES-01 | User + media/backend security: agree agreement upload/download contracts, allowed formats/limits, protected references, retention classification, version binding and concurrency controls | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
+| V11-DES-01 | User + media/backend security: Partner policy APPROVED on 6 November 2026 (readable PDF, 10 MiB inclusive, two current required kinds and lifecycle retention); Partner wire details/runtime DEFERRED; provider verification PENDING. Complete protected upload/read/version-concurrency transport and implementation | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
 | V11-DES-02 | User + FE/security: specify the fake VNeID API returned GUID substitute and its persisted User binding, other mock fields, explicit consent, failure/completion evidence and retention | Every non-exempt role covered; Operator email activation; sole seeded Admin exemption; no real government assurance |
 | V11-DES-03 | User/security + FE: agree scoped setup/resend/verification credential expiry, storage, renewal, secure recovery and safe login error envelope | Application ID alone cannot authorize; no normal Owner login before review and successful provisioning; no token/profile overexposure |
 | V11-DES-04 | User/Facility/Operations/Payment architects: specify durable provisioning keys, outcome lookup, event versions, retries and readiness mapping | One tenant/site per accepted proposal; pending/failed/unknown outcome visible; approval and notification cannot imply opening |

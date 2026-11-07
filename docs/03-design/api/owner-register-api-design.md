@@ -1,5 +1,8 @@
 # Partner Registration and first-lot setup API design
 
+> SPARK-373 policy amendment, 6 November 2026: follow the [approved Partner document policy](../../05-project-management/decision-log/2026-11-06-cloudinary-foundation-and-partner-policy.md) and [canonical media SRS](../../01-requirements/srs/modules/09-file-media.md). Readable PDFs (including scans), 10 MiB inclusive each; incomplete drafts allowed, exactly one current agreement and policy required before submission; setup/evidence precedes email OTP and verified email precedes review. Admin replacement is initial-pending only with immutable versions and stale-review conflict. Retention anchors are recorded closure/rejection/withdrawal, never inactivity. Partner routes, review-version transport and runtime remain DEFERRED; provider PDF verification NOT RUN. Existing terms acceptance is separate from applicant evidence.
+
+
 SPARK-175 / SPARK-179 / SPARK-180 / SPARK-181 · updated by SPARK-296, 21 October 2026. **v1.1 documentation review candidate based on approved decisions**; API additions and implementation remain pending.
 
 Canonical behavior: [identity SRS](../../01-requirements/srs/modules/01-identity-access.md), [UC-AUTH-02](../../01-requirements/use-cases/uc-auth-02.md), [permissions](../../01-requirements/srs/permissions.md), [shared API/auth contracts](../../02-architecture/api/v1.1-contracts.md). Partner is the business process name; the existing **Owner** role remains. This concise contract replaces the competing `/owner-register` proposals and duplicated BR narratives.

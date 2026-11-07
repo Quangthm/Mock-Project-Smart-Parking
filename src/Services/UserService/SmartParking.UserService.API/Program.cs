@@ -39,6 +39,8 @@ public static class UserHost
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddIdentityWorkflowServices();
         builder.Services.AddPersistenceServices(builder.Configuration);
+        UserService.Infrastructure.Media.MediaRegistration.AddUserMedia(builder.Services, builder.Configuration);
+        builder.Services.AddHostedService<MediaRecoveryWorker>();
         builder.Services.AddProfileMessaging(builder.Configuration,
             registration => registration.AddProfileOutbox(builder.Configuration),
             (endpoint, context) => endpoint.UseEntityFrameworkOutbox<AppDbContext>(context));

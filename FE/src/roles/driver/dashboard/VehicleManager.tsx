@@ -1,6 +1,7 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 import { showUiToast } from "../../../lib/uiToast"
+import { VehicleImageInput } from "../../../components/VehicleImageInput"
 
 import {
   formatVietnamesePlate,
@@ -20,7 +21,7 @@ export function VehicleManager() {
   const [form, setForm] = useState<VehicleInput>({
     plate: "",
     vehicleType: "CAR",
-    imageReference: "",
+    imageAssetId: "",
   })
 
   useEffect(() => {
@@ -54,10 +55,11 @@ export function VehicleManager() {
       await vehiclesApi.save({
         plate: form.plate.trim().toUpperCase(),
         vehicleType: form.vehicleType,
-        imageReference: form.imageReference,
+        imageAssetId: form.imageAssetId,
+        expectedImageAssetId: form.expectedImageAssetId,
       }, id ?? undefined)
       setId(null)
-      setForm({ plate: "", vehicleType: "CAR", imageReference: "" })
+      setForm({ plate: "", vehicleType: "CAR", imageAssetId: "" })
       setReload((n) => n + 1)
       showUiToast("Vehicle saved", "Your vehicle details are ready to use.")
     } catch (e) {
@@ -90,7 +92,8 @@ export function VehicleManager() {
               setForm({
                 plate: v.rawPlate,
                 vehicleType: v.vehicleType,
-                imageReference: v.imageReference ?? "",
+                imageAssetId: v.imageAssetId ?? "",
+                expectedImageAssetId: v.imageAssetId,
               })
             }}
           >
@@ -125,20 +128,12 @@ export function VehicleManager() {
             <option>MOTORCYCLE</option>
           </RoundedSelect>
         </label>
-        <label className="label">
-          Vehicle image (HTTPS URL)
-          <input
-            className="input"
-            type="url"
-            required
-            maxLength={2048}
-            value={form.imageReference}
-            onChange={(e) =>
-              setForm({ ...form, imageReference: e.target.value })
-            }
-          />
-        </label>
-        <button className="btn-primary" disabled={busy}>
+        <div className="label">
+          Vehicle image
+          <VehicleImageInput key={id ?? `new-${reload}`} vehicleId={id ?? undefined}
+            onUploaded={assetId => setForm(current => ({ ...current, imageAssetId: assetId }))} />
+        </div>
+        <button className="btn-primary" disabled={busy || !form.imageAssetId}>
           {id ? "Save vehicle" : "Register vehicle"}
         </button>
       </form>

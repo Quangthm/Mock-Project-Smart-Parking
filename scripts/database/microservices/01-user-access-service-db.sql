@@ -359,3 +359,80 @@ CREATE INDEX "IX_OutboxState_Created" ON "OutboxState" ("Created");
 
 -- END FRAMEWORK DDL
 COMMIT;
+
+-- SPARK-373 additive, rerunnable UserDb upgrade. No URL fetching/backfill or deletion.
+BEGIN;
+CREATE TABLE IF NOT EXISTS media_assets (
+    id uuid PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES users(id),
+    creator_account_id uuid NOT NULL,
+    scope_id uuid NOT NULL,
+    purpose text NOT NULL CHECK (purpose IN ('avatar','vehicle')),
+    sensitivity text NOT NULL DEFAULT 'restricted' CHECK (sensitivity = 'restricted'),
+    vehicle_id uuid REFERENCES vehicles(id),
+    draft_intent_id uuid,
+    idempotency_key text NOT NULL CHECK (length(idempotency_key) BETWEEN 1 AND 128),
+    fingerprint text NOT NULL,
+    mime_type text NOT NULL CHECK (mime_type IN ('image/jpeg','image/png','image/webp')),
+    byte_count bigint NOT NULL CHECK (byte_count BETWEEN 1 AND 5242880),
+    sha256 text NOT NULL CHECK (length(sha256) = 64),
+    width integer NOT NULL CHECK (width BETWEEN 1 AND 8192),
+    height integer NOT NULL CHECK (height BETWEEN 1 AND 8192 AND width::bigint * height <= 25000000),
+    provider text NOT NULL,
+    environment text NOT NULL,
+    public_id text NOT NULL,
+    resource_type text NOT NULL CHECK (resource_type = 'image'),
+    delivery_type text NOT NULL CHECK (delivery_type = 'authenticated'),
+    provider_asset_id text,
+    provider_version text,
+    state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','ready')),
+    version bigint NOT NULL DEFAULT 0,
+    admitted_at timestamptz NOT NULL,
+    draft_expires_at timestamptz NOT NULL,
+    retention_class text NOT NULL CHECK (retention_class = 'image-30-days'),
+    retention_anchor timestamptz NOT NULL,
+    retain_until timestamptz NOT NULL,
+    ready_at timestamptz,
+    attached_at timestamptz,
+    lease_until timestamptz,
+    claim_id uuid,
+    attempts integer NOT NULL DEFAULT 0,
+    retry_at timestamptz,
+    recovery_code text,
+    CONSTRAINT fk_media_creator FOREIGN KEY (creator_account_id,user_id) REFERENCES accounts(id,user_id),
+    CONSTRAINT ck_media_scope CHECK (scope_id = creator_account_id),
+    CONSTRAINT ck_media_purpose_target CHECK ((purpose = 'avatar' AND vehicle_id IS NULL AND draft_intent_id IS NULL)
+        OR (purpose = 'vehicle' AND (vehicle_id IS NOT NULL OR draft_intent_id IS NOT NULL))),
+    CONSTRAINT ck_media_ready CHECK (state <> 'ready' OR (provider_asset_id IS NOT NULL AND provider_version IS NOT NULL AND ready_at IS NOT NULL)),
+    CONSTRAINT ck_media_deadline CHECK (retention_anchor = admitted_at AND retain_until = admitted_at + interval '30 days'
+        AND draft_expires_at = admitted_at + interval '24 hours')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_upload_key ON media_assets(scope_id,purpose,idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_provider_locator ON media_assets(provider,environment,public_id,resource_type,delivery_type);
+CREATE INDEX IF NOT EXISTS idx_media_pending ON media_assets(state,retry_at,lease_until);
+CREATE INDEX IF NOT EXISTS idx_media_due ON media_assets(retain_until);
+CREATE TABLE IF NOT EXISTS media_holds (
+    id uuid PRIMARY KEY,
+    asset_id uuid NOT NULL REFERENCES media_assets(id),
+    originating_hold_id text NOT NULL,
+    actor_account_id uuid NOT NULL REFERENCES accounts(id),
+    reason text NOT NULL,
+    reference text NOT NULL,
+    placed_at timestamptz NOT NULL,
+    acknowledged_at timestamptz,
+    review_at timestamptz,
+    released_at timestamptz,
+    UNIQUE (asset_id, originating_hold_id)
+);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_asset_id uuid;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS image_asset_id uuid;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='users'::regclass AND conname='fk_users_avatar_asset') THEN
+        ALTER TABLE users ADD CONSTRAINT fk_users_avatar_asset FOREIGN KEY (avatar_asset_id) REFERENCES media_assets(id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='vehicles'::regclass AND conname='fk_vehicles_image_asset') THEN
+        ALTER TABLE vehicles ADD CONSTRAINT fk_vehicles_image_asset FOREIGN KEY (image_asset_id) REFERENCES media_assets(id);
+    END IF;
+END $$;
+COMMIT;
+-- END SPARK-373 media schema

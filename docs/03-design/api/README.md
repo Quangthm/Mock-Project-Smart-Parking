@@ -11,6 +11,7 @@ All new API endpoint specifications and refactors must follow the standard templ
 
 | Domain / Capability | Document | Owning Service |
 |---|---|---|
+| Owned avatar and vehicle images | [user-images-api-design.md](user-images-api-design.md) | UserService |
 | Partner / Owner Registration & First Lot Setup | [owner-register-api-design.md](owner-register-api-design.md) | UserService |
 | Admin Review & Owner Approval | [admin-approve-owner-api-design.md](admin-approve-owner-api-design.md) | UserService |
 | Driver Registration & Verification | [driver-register-api-design.md](driver-register-api-design.md) | UserService |

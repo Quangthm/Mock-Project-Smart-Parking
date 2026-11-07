@@ -1,4 +1,5 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { VehicleImageInput } from "../../../components/VehicleImageInput"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -33,7 +34,7 @@ type BookingPaymentMethod = "qr" | "cash"
 type VehicleForm = {
   type: "motorcycle" | "car"
   plate: string
-  imageReference: string
+  imageAssetId: string
 }
 
 const slotTakenMessage =
@@ -92,7 +93,7 @@ export function BookingFlow({
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
     type: "motorcycle",
     plate: "",
-    imageReference: "",
+    imageAssetId: "",
   })
 
   const [startTime, setStartTime] = useState(
@@ -234,11 +235,11 @@ export function BookingFlow({
       const created = await vehiclesApi.save({
         plate: vehicleForm.plate.trim().toUpperCase(),
         vehicleType,
-        imageReference: vehicleForm.imageReference,
+        imageAssetId: vehicleForm.imageAssetId,
       })
       setVehicles((current) => [...current, created])
       setSelectedVehicleId(created.id)
-      setVehicleForm((current) => ({ ...current, plate: "", imageReference: "" }))
+      setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
       setMessage("")
       setAddVehicleOpen(false)
     } catch (error) {
@@ -756,25 +757,17 @@ export function BookingFlow({
                   maxLength={30}
                 />
               </label>
-              <label className="label" style={{ gridColumn: "1 / -1" }}>
-                Vehicle image (HTTPS URL)
-                <input
-                  className="input"
-                  type="url"
-                  required
-                  maxLength={2048}
-                  value={vehicleForm.imageReference}
-                  onChange={(event) => {
-                    setVehicleError("")
-                    setVehicleForm((current) => ({ ...current, imageReference: event.target.value }))
-                  }}
-                  placeholder="https://example.com/vehicle.jpg"
-                />
-              </label>
+              <div className="label" style={{ gridColumn: "1 / -1" }}>
+                Vehicle image
+                <VehicleImageInput onUploaded={assetId => {
+                  setVehicleError("")
+                  setVehicleForm(current => ({ ...current, imageAssetId: assetId }))
+                }} />
+              </div>
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={vehicleSaving}
+                disabled={vehicleSaving || !vehicleForm.imageAssetId}
                 style={{ gridColumn: "1 / -1", justifyContent: "center" }}
               >
                 {vehicleSaving ? "Saving…" : "Save Vehicle"}

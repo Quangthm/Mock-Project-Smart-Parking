@@ -6,12 +6,15 @@ export type RegisteredVehicle = {
   canonicalPlate: string
   vehicleType: "CAR" | "MOTORCYCLE"
   imageReference: string | null
+  imageAssetId: string | null
+  imageStatus: "managed" | "reupload-required"
 }
 
 export type VehicleInput = {
   plate: string
   vehicleType: RegisteredVehicle["vehicleType"]
-  imageReference: string
+  imageAssetId: string
+  expectedImageAssetId?: string | null
 }
 
 type ApiResponse<T> = { success: boolean; data: T }
@@ -66,12 +69,7 @@ export const vehiclesApi = {
   },
 
   async save(input: VehicleInput, id?: string): Promise<RegisteredVehicle> {
-    try {
-      if (new URL(input.imageReference).protocol !== "https:")
-        throw new Error("Invalid protocol")
-    } catch {
-      throw new Error("Vehicle image must be a valid HTTPS URL.")
-    }
+    if (!input.imageAssetId) throw new Error("Upload a vehicle image first.")
     const response = await request<ApiResponse<RegisteredVehicle>>(
       id ? `/${encodeURIComponent(id)}` : "",
       id ? "PATCH" : "POST",

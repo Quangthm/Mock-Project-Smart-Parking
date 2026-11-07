@@ -12,7 +12,7 @@ Current Driver account and record ownership are required. Server derives account
 |---|---|
 | `GET /api/vehicles` | Own active registered vehicles only; raw/canonical plate, category, authorized image reference and record metadata. Historical associations remain retained outside active listing. |
 | `POST /api/vehicles` | Existing `plate`, `vehicleType` and vehicle image requirement; validate raw/canonical form, own asset binding and conflicting active normalized binding. Return created own record. |
-| `PATCH /api/vehicles/{id}` | Validate own record and active dependencies before changing plate/category/image. Existing implementation expects the full field set; partial-update semantics and media-reference transport require V11-DES-10 agreement. |
+| `PATCH /api/vehicles/{id}` | Validate own record and active dependencies before changing plate/category/image. Existing implementation expects the full field set; partial-update semantics remain V11-DES-10 work; media transport is implemented below. |
 | `DELETE /api/vehicles/{id}` | Retained design route for **soft removal only**; current implementation coverage is not claimed. Guard active dependencies/history; final response/error contract V11-DES-10. |
 
 Retain record identity, raw input, canonical normalized plate, category, image reference, creation/update and nullable removal metadata. Raw plate preserves exact supplied text; normalization derives a separate value. Supported self-service plated categories remain CAR and MOTORCYCLE; non-plated visits use scoped operational session/ticket identity, not a fabricated permanent plate. No EV charging or new oversized self-service product is introduced.
@@ -21,19 +21,24 @@ Retain record identity, raw input, canonical normalized plate, category, image r
 
 Existing integration normalizes uppercase and strips whitespace, dots and hyphens. Preserve representative transformations `51a-123.45 → 51A12345` and `59-F1 987.65 → 59F198765`. The historical prototype regex supports CAR two digits + one letter + five digits, and MOTORCYCLE two digits + two series characters + five digits; its motorcycle pattern has nine characters, so the old eight-character accepted example contradicted it. Exact legal/special-series acceptance, underscore handling and shared FE/BE/LPR syntax remain technical format-review work under V11-DES-10. Do not claim a regex proves all legally valid Vietnamese plates or invent legal eligibility.
 
-Vehicle images are required by the canonical SRS: JPEG/PNG/WebP up to 5 MiB, validated through backend uploads. User owns the image lifecycle; use a stable opaque owning-service asset reference and authorized restricted delivery, not an arbitrary client HTTPS URL. The old `imageReference` URL/string shape requires V11-DES-10 compatibility agreement; HTTPS syntax alone is not asset authorization. Preserve media retention and acknowledged holds; do not extend retention merely because an image is referenced by a historical visit.
+Vehicle images are required by the canonical SRS: JPEG/PNG/WebP up to 5 MiB, validated through backend uploads. User owns the image lifecycle; use a stable opaque owning-service asset reference and authorized restricted delivery, not an arbitrary client HTTPS URL. The old `imageReference` URL/string input was removed by the approved SPARK-373 amendment below; HTTPS syntax alone is not asset authorization. Preserve media retention and acknowledged holds; do not extend retention merely because an image is referenced by a historical visit.
 
-Conceptual input, **not the finalized media wire schema**:
+SPARK-373 media amendment (7 November 2026): the approved [User image contract](user-images-api-design.md) now implements uploads, reads and attachment. Vehicle scope is the exact bound Driver Account. The old HTTPS-string writer is removed by explicit approval; legacy columns remain for reconciliation. Both existing frontend forms submit owned asset IDs. This amendment does not close the other binding/dispute/removal work in V11-DES-10.
+
+Implemented media input (full plate/type field set remains required):
 
 ```json
 {
   "plate": "51a-123.45",
   "vehicleType": "CAR",
-  "imageReference": {"ownerService":"user-access","assetId":"<authorized-asset-id>"}
+  "imageAssetId": "00000000-0000-4000-8000-000000000001",
+  "expectedImageAssetId": null
 }
 ```
 
 ## Binding and removal guards
+
+`expectedImageAssetId` is the current reference for replacement, null for first attachment. Identical attachment is a no-op; stale replacement returns 409. Responses add `imageAssetId` and `imageStatus`; `imageReference` is an application content route for managed images, otherwise null with `reupload-required`. Existing rows, IDs and bindings are retained. Upload accepts JPEG/PNG/WebP at most 5 MiB, 8,192 pixels per side and 25 megapixels, with no animation. Drafts expire after 24 hours; attached images after 30 days from admission. Protected reads/attachments block expiry; automatic deletion is deferred under USER-MEDIA-CLEANUP-01. See the image contract for errors, idempotency and authorized-fetch requirements.
 
 Reject conflicting active normalized binding without disclosing the existing account. [UC-VEH-02](../../01-requirements/use-cases/uc-veh-02.md) requires verified contact, relevant registration/transfer evidence, scoped Operator findings, existing-holder notification and a reasoned Admin decision. No transfer on silence, plate image or OTP alone; unresolved cases stay pending/escalated. User commits binding changes with version guard and retained association history. IoT recognition is an observation; Operations controls admission and never queries the User database directly or opens a gate solely from a plate match.
 

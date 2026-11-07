@@ -203,21 +203,22 @@ export async function request<T>(
   const token = sessionStorage.getItem(tokenKey)
 
   let response: Response
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData
 
   try {
     response = await fetch(serverUrl + apiPrefix + path, {
       method,
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(multipart ? 60_000 : 10_000),
 
       headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
 
         ...(token ? { Authorization: "Bearer " + token } : {}),
         ...extraHeaders,
       },
 
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
     throw new Error("Cannot reach the authentication server. Please try again.")

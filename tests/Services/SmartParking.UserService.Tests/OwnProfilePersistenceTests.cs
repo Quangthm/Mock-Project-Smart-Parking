@@ -156,7 +156,7 @@ public sealed class OwnProfilePersistenceTests
             db.AuthSessions.Add(new AuthSession
             {
                 Id = Guid.NewGuid(), UserId = userId, AccountId = account, AccessTokenId = token,
-                TokenHash = token.ToString("N"), CreatedAt = clock.Now,
+                TokenHash = token.ToString("N"), CreatedAt = clock.Now, LastRefreshedAt = clock.Now,
                 AccessExpiresAt = clock.Now.AddHours(1), ExpiresAt = clock.Now.AddDays(1)
             });
         await db.SaveChangesAsync();

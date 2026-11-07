@@ -400,3 +400,8 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 
 
 Own-profile schema, shared RabbitMQ, configuration and safe database recreation: [SPARK-248 deployment guide](docs/04-testing/reports/SPARK-248/follow-up.md).
+# Cloudinary media configuration (SPARK-373)
+
+Optional backend settings are `SMARTPARK_CLOUDINARY_CLOUD_NAME`, `SMARTPARK_CLOUDINARY_API_KEY`, and `SMARTPARK_CLOUDINARY_API_SECRET`; add them privately to an existing ignored `.env`. Setup never generates them. `SMARTPARK_USER_MEDIA_ENABLED=false` keeps User media disabled by default. Credentials reach four .NET backends and both Python processes, never the frontend. See the [consumer map and safe rotation/removal procedure](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md#cloudinary-development-media-settings-spark-373).
+
+For direct .NET launches, rerun `./setup.ps1 -SkipDatabase -SkipRestore`, then restart affected processes. For containers use the normal recreation procedure; credential changes require no database reset. [Automatic deletion is deferred](docs/05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md); timestamps and expired-read checks are in the foundation scope.
