@@ -27,7 +27,15 @@ public static class OperationHost
         var redis = builder.Configuration["Redis:ConnectionString"]
             ?? builder.Configuration.GetConnectionString("Redis");
         if (!string.IsNullOrWhiteSpace(redis))
-            signalR.AddStackExchangeRedis(redis);
+        {
+            var normalizedRedis = redis.StartsWith("redis://", StringComparison.OrdinalIgnoreCase)
+                ? redis["redis://".Length..]
+                : redis;
+            signalR.AddStackExchangeRedis(normalizedRedis, options =>
+            {
+                options.Configuration.AbortOnConnectFail = false;
+            });
+        }
         builder.Services.AddSingleton<IRealtimeLayoutBroadcaster, SignalRLayoutRealtimeBroadcaster>();
 
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy

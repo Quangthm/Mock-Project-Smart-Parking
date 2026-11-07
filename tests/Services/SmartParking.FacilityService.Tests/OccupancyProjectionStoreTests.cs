@@ -123,8 +123,7 @@ public sealed class OccupancyProjectionStoreTests
         private static readonly string[] DdlFiles =
         [
             "scripts/database/microservices/02-facility-service-db.sql",
-            "scripts/database/overlay/parking-tenants.sql",
-            "scripts/database/overlay/realtime-projection.sql"
+            "scripts/database/integration/realtime-projection.sql"
         ];
 
         private readonly string adminConnection;
