@@ -5,9 +5,9 @@
 - **Task:** SPARK-257 — [SEC-AUTH] Protect public authentication flows from automated abuse.
 - **Jira:** SPARK-257 (Story, 5 SP, backlog, no owner, not in Sprint 2). Related: SPARK-234 (Driver registration), SPARK-235 (Owner registration).
 - **Branch:** `docs/SPARK-257-bot-protection-api-design` (created from `develop`).
-- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phases 1–6 Implementation, Test Planning & Verification).
-- **Scope this session:** Phase 5 (Backend Integration Testing, Scenarios 1–18) & Phase 6 (Frontend Testing & Verification, Scenarios 19–27) for SPARK-257.
-- **Decision status:** Phases 1, 2, 3, 4, 5 & 6 **COMPLETED & VALIDATED**; SPARK-257 full automated test suite, test plan, and test report complete.
+- **Date:** 2026-11-04 (Design & Planning), 2026-11-06 (Phases 1–6 Implementation, Test Planning & Verification), 2026-11-07 (Branch Verification Guide & Postman Test Artifacts).
+- **Scope this session:** Postman test collection, environment, and Branch Verification Test Guide (`SPARK-257-branch-verification-test-guide.md`) for PM approval and merge sign-off.
+- **Decision status:** All deliverables (Phases 1–6, Test Plan, Test Report, Test Guide, and Postman Collection/Environment) **COMPLETED & VALIDATED**; ready for PM sign-off and merge into `develop`.
 
 ## 2. Objectives
 
@@ -49,6 +49,11 @@
    - Enforce Stage 2 defense: HTTP 413 `PAYLOAD_TOO_LARGE` for request bodies exceeding 64KB (`[RequestSizeLimit(65536)]` on `AuthController` and early pipeline middleware).
    - Implement Frontend Contract & Lifecycle Tests in `FE/tests/turnstile-auth-lifecycle.test.cjs` covering Scenarios 19–27 (widget render/action binding, payload attachment, pre-submit retention, 429 retention, 400/401/403/503 widget resets, expired callback, and tab switching isolation).
    - Generate detailed verification report at `docs/04-testing/reports/SPARK-257/bot-protection-test-report.md`.
+9. Handoff & QA Artifacts (Test Guide & Postman Suite):
+   - Create comprehensive Branch Verification Test Guide at `docs/04-testing/test-plans/SPARK-257-branch-verification-test-guide.md` following SPARK-228 standard (8 sections: metadata, prerequisites, automated commands, manual screen checklist, Newman runbook, AC matrix, limitations, sign-off block).
+   - Create Postman Collection `docs/04-testing/postman/SPARK-257-Turnstile-Bot-Protection.postman_collection.json` (12 requests, 33 assertions covering Happy Path, Rejections, Rate Limiting).
+   - Create sanitized Postman Environment `docs/04-testing/postman/SPARK-257.postman_environment.example.json`.
+   - Validate Newman automated run with 100% assertions passed.
 
 ## 3. Work Completed
 
@@ -173,6 +178,14 @@
     - Verified `FE` production build: `npm run build` completed with 0 errors.
   - **Task 6.3 (Comprehensive Test Report):**
     - Documented final outcomes in `docs/04-testing/reports/SPARK-257/bot-protection-test-report.md` confirming 100% test pass and AC1–AC6 compliance.
+- **Branch Verification Guide & Postman Test Artifacts Completed:**
+  - **Task 7.1 (Branch Verification Test Guide):**
+    - Created `docs/04-testing/test-plans/SPARK-257-branch-verification-test-guide.md` following SPARK-228 standard (8 sections: metadata, prerequisites, automated commands A1–A5, manual browser checklist for Login and Register screens, Newman runbook, AC1–AC6 sign-off matrix, known limitations, and sign-off block).
+  - **Task 7.2 (Postman Collection & Environment):**
+    - Created `docs/04-testing/postman/SPARK-257-Turnstile-Bot-Protection.postman_collection.json` (12 requests, 33 assertions organized into 3 folders: `01 - Happy Path`, `02 - Bot Verification Rejections`, `03 - Rate Limiting Protection`).
+    - Created `docs/04-testing/postman/SPARK-257.postman_environment.example.json` with sanitized dummy test keys (`1x...`, `2x...`, `3x...`) and demo credentials.
+  - **Task 7.3 (Automated Newman Run Verification):**
+    - Executed Newman automated run against mock/local harness: 12 collection requests + 10 burst requests executed, 33 assertions passed, 0 failed, exit code 0.
 
 ## 4. Technical Decisions
 
@@ -194,6 +207,9 @@
 
 | File | Change | Reason |
 | --- | --- | --- |
+| `docs/04-testing/test-plans/SPARK-257-branch-verification-test-guide.md` | Created | Branch verification test guide for PM sign-off (SPARK-228 standard, 8 sections) |
+| `docs/04-testing/postman/SPARK-257-Turnstile-Bot-Protection.postman_collection.json` | Created | Postman test collection (12 requests, 33 assertions covering Happy Path, Rejections, Rate Limiting) |
+| `docs/04-testing/postman/SPARK-257.postman_environment.example.json` | Created | Postman environment with sanitized test keys and demo credentials |
 | `docs/04-testing/test-plans/SPARK-257-bot-protection-test-plan.md` | Created | Test plan covering 30 acceptance scenarios and AC1–AC6 matrix |
 | `tests/Services/SmartParking.UserService.Tests/BotProtectionIntegrationTests.cs` | Created | 35 integration test cases covering Scenarios 1–18 (Pipeline, Cloudflare, Size Limit, Logging, Invariants) |
 | `FE/tests/turnstile-auth-lifecycle.test.cjs` | Created | 15 frontend test cases covering Scenarios 19–27 (Action binding, Retention, Reset, Lifecycle) |
@@ -204,46 +220,40 @@
 | `tests/frontend/sign-in.test.cjs` | Modified | Added TurnstileWidget and useRef mocks to prevent regression |
 | `FE/src/hooks/useTurnstile.ts` | Modified | Hardened window.turnstile script readiness check |
 | `compose.app.yml` | Modified | Forwarded `VITE_TURNSTILE_SITE_KEY` to frontend container |
-| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session tracking for Phase 5 & 6 completion |
+| `ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md` | Updated | Session tracking for Postman artifacts and Branch Verification Guide |
 
 ## 6. Issues and Blockers
 
-- None. All deliverables across Phases 1 through 6 are completed and validated with 0 errors and 0 warnings.
-- SPARK-257 automated test plan and test executions satisfy 100% of acceptance criteria (AC1–AC6).
+- None. All deliverables across Phases 1 through 6, Test Plan, Test Report, Test Guide, and Postman suite are completed and validated with 0 errors and 0 warnings.
+- SPARK-257 automated test plan, Postman collection, and test executions satisfy 100% of acceptance criteria (AC1–AC6).
 
 ## 7. Validation Results
 
 - `dotnet build SmartParking.slnx -nr:false -m:1 --nologo`: **Build succeeded. 0 Warning(s), 0 Error(s)**.
-- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~BotProtectionIntegrationTests" --nologo`: **Passed! 35 passed, 0 failed** (Duration: 16s).
+- `dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --filter "FullyQualifiedName~BotProtection" --nologo`: **Passed! 45 passed, 0 failed** (Duration: 27s).
 - Full UserService test suite: **Passed! 314 passed, 0 failed, 54 skipped (DB-container integration tests)**.
 - `node --test FE/tests/turnstile-auth-lifecycle.test.cjs`: **Passed! 15 passed, 0 failed** (Duration: 1.07s).
 - `node --test tests/frontend/sign-in.test.cjs`: **Passed! 28 passed, 0 failed** (Duration: 855ms).
 - `npm run build` in `FE`: **Built in 2.35s, 0 errors**.
+- Newman automated test run (`SPARK-257-Turnstile-Bot-Protection.postman_collection.json`): **12 collection requests, 33 assertions passed, 0 failed**.
 
 ## 8. Git Status
 
 ```text
 ## docs/SPARK-257-bot-protection-api-design
- M FE/src/hooks/useTurnstile.ts
- M compose.app.yml
- M src/Services/UserService/SmartParking.UserService.API/Common/ApiResponseFactory.cs
- M src/Services/UserService/SmartParking.UserService.API/Controllers/AuthController.cs
- M src/Services/UserService/SmartParking.UserService.API/Program.cs
- M tests/frontend/sign-in.test.cjs
  M ai/tasks/active/TASK-SPARK-257-SESSION-20261104.md
-?? FE/tests/turnstile-auth-lifecycle.test.cjs
-?? docs/04-testing/reports/SPARK-257/
-?? docs/04-testing/test-plans/SPARK-257-bot-protection-test-plan.md
-?? tests/Services/SmartParking.UserService.Tests/BotProtectionIntegrationTests.cs
+?? docs/04-testing/postman/SPARK-257-Turnstile-Bot-Protection.postman_collection.json
+?? docs/04-testing/postman/SPARK-257.postman_environment.example.json
+?? docs/04-testing/test-plans/SPARK-257-branch-verification-test-guide.md
 ```
 
 ## 9. Handoff / Next Steps
 
-1. Commit Phase 5 & 6 changes:
+1. Commit Postman collection, environment, and Branch Verification Test Guide:
    ```text
-   test(auth): add automated test plan, backend integration and frontend lifecycle tests [SPARK-257]
+   test(auth): add postman collection and branch verification test guide [SPARK-257]
    ```
-2. Prepare PR / review for SPARK-257 on branch `docs/SPARK-257-bot-protection-api-design`.
+2. Notify Tester & PM for branch verification and sign-off before merge into `develop`.
 
 ## 10. Context for Next Session
 
