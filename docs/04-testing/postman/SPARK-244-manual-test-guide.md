@@ -8,6 +8,8 @@ Manual verification run-book for the SPARK-244 operator realtime monitoring slic
 
 Route paths, request bodies, response fields and status codes come from the worktree source, not from the design summary. Where the design/OpenAPI disagrees with the code, the code is followed and the difference is listed in **section 6**.
 
+> **Bắt đầu từ đâu (tiếng Việt):** nếu bạn muốn *chạy test theo từng bước*, mở `../test-plans/SPARK-244-branch-verification-test-guide.md` — checklist C1–C10, mỗi case có **Điều kiện trước / Các bước / PASS / FAIL / BLOCKED** kèm lệnh PowerShell và SQL kiểm tra DB. Tài liệu tiếng Anh này là phần tham chiếu bổ sung: mapping case → acceptance (§5), bảng lệch code-vs-contract (§6), cách đọc một FAIL (§7), và những gì đã/chưa verify (§9, §10).
+
 > **Run status.** The four artifacts were authored first, then **executed live** against a stack built from this branch: **33/33 requests, 33/33 test-scripts, 101/101 assertions, 0 failures** (Newman 6.2.3). Passwords are never committed — they are supplied at run time from the repository `.env`. Section 9 records exactly what the live run proved and what is still unverified; section 10 lists the cases that remain BLOCKED.
 
 ## 1. Purpose and scope
@@ -47,45 +49,47 @@ Collection schema: `https://schema.getpostman.com/json/collection/v2.1.0/collect
 
 ## 3. Prerequisites
 
-- .NET SDK 10, Docker Desktop, PowerShell.
-- Repository root `.env` created by `./setup.ps1` (never commit it).
-- Schema containers (`user-db`, `facility-db`, `operations-db`) plus RabbitMQ. `compose.schema-integration.yml` runs `redis:7-alpine`, but the services do not use it unless a Redis connection string is configured.
-- Start the three services from the repository root:
-
-```powershell
-./scripts/run-schema-service.ps1 -Service User         # http://localhost:5035
-./scripts/run-schema-service.ps1 -Service Reservation  # http://localhost:5055 (OperationService)
-./scripts/run-schema-service.ps1 -Service Facility     # http://localhost:5045
-```
-
-- Seed the demo site after UserService has started once:
-
-```powershell
-./scripts/seed-demo-site.ps1
-```
-
-This creates `DEMO-HQ` (`b0000000-0000-4000-8000-000000000001`), tenant `a0000000-0000-4000-8000-000000000001`, Floor 1, Zone A and 48 AVAILABLE CAR/EV slots. It also assigns the demo operator to the site and grants `SLOT_OVERRIDE` (`scripts/database/seeds/demo/01-identity.sql`).
-
-- Apply the SPARK-244 overlays before running folders 02/03 (both are mounted by the worktree `compose.schema-integration.yml` for fresh containers; existing volumes need them applied manually):
+- Docker Desktop + PowerShell. Newman 6.2.3 is available through `npx --yes newman`, so no global install is required.
+- Worktree `.env` at the repository root (never commit it). It **must** define the UserService CORS origins — after the develop merge CORS is config-driven (`Program.cs:24-31` reads `Cors:AllowedOrigins`) and `compose.app.yml:54` maps it from `${SMARTPARK_USER_CORS_ORIGINS:-}`, i.e. **empty by default**:
 
 ```text
-scripts/database/overlay/realtime-outbox.sql        -> operations-db (outbox_events)
-scripts/database/overlay/realtime-projection.sql    -> facility-db (processed_events, slot_sequence_watermarks, occupancy_release_ledger)
+SMARTPARK_USER_CORS_ORIGINS="http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443"
 ```
 
-Without `outbox_events`, the walk-in routes return `503 PROTOTYPE_SCHEMA_NOT_READY`.
+Without it, preflight returns `204` with **no `Access-Control-Allow-Origin`**, the browser blocks the login `fetch`, and the FE reports "Cannot reach the authentication server. Please try again." while direct curl/Postman calls still succeed.
+
+- Run both stacks from the worktree. The app stack declares the schema network as external (`smartpark-schema_default`), so `rabbitmq` and `redis` already resolve by service name:
+
+```powershell
+docker compose --env-file .env -f compose.schema-integration.yml up -d   # 6 databases + redis + rabbitmq
+docker compose --env-file .env -f compose.app.yml build                  # user / parking / reservation / payment / frontend
+docker compose --env-file .env -f compose.app.yml up -d
+```
+
+Ports: UserService `5035`, FacilityService `5045`, OperationService `5055`, PaymentService `5065`, FE `5173`.
+
+- Fresh volumes apply the SPARK-244 overlays automatically through the init mounts (`08-realtime-projection.sql` on facility-db, `06-overlay-realtime-outbox.sql` on operations-db). For an **existing** volume apply them incrementally — the script is idempotent and also asserts the four required relations:
+
+```powershell
+./scripts/apply-workflow-migrations.ps1 -Service Parking   -SchemaRoot .
+./scripts/apply-workflow-migrations.ps1 -Service Operation -SchemaRoot .
+```
+
+Expected: `schema already current; applied incremental features and verified required relations`. Both `-Service` and `-SchemaRoot` are mandatory, and `-Service Operation` maps internally to the `Reservation` scripts/`operations-db`.
+
+- Seed **after** the user-service is up: `./scripts/seed-demo-site.ps1`, then run `./scripts/repair-demo-identity.ps1 -Apply` (the `DataSeeder` never adds `driver@gmail.com` once any user exists — see §9.1). The seed creates `DEMO-HQ` (`b0000000-0000-4000-8000-000000000001`), tenant `a0000000-0000-4000-8000-000000000001`, Floor 1, Zone A and the CAR/EV slots, and assigns the demo operator with `SLOT_OVERRIDE`.
 
 - Fill `serviceKey` in the environment from `.env` `SMARTPARK_SERVICE_KEY` (compose maps it to `Services:Key`). The key must be at least 32 characters. Every `/internal/**` route returns **401** on a missing or wrong `X-Service-Key`.
 
-### 3.1 Consumer and backplane are environment-gated
+### 3.1 Consumer and backplane are ON in the docker stack
 
-| Feature | Gate in source | Effect when absent |
+| Feature | Gate in source | Current value in this worktree |
 |---|---|---|
-| Facility occupancy consumer | `RabbitMq:ConnectionString` in `FacilityService/Program.cs:46-52` | `OccupancyProjectionWorker` is not registered; projection tables stay untouched |
-| SignalR Redis backplane | `Redis:ConnectionString` or `ConnectionStrings:Redis` in `OperationService/Program.cs:26-30` | Single-instance SignalR only |
-| Outbox publisher | `RabbitMq:ConnectionString` in `InfrastructureDependencyInjection.cs:46-65` | `DisabledOutboxEventPublisher`; events stay unpublished |
+| Facility occupancy consumer | `RabbitMq:ConnectionString` (`FacilityService/API/Program.cs`) | **ON** — `parking-service` has `RabbitMq__ConnectionString` from `compose.app.yml`; `OccupancyProjectionWorker` is registered |
+| Outbox publisher | `RabbitMq:ConnectionString` (`InfrastructureDependencyInjection.cs`) | **ON** — `reservation-service` has `RabbitMq__ConnectionString`; events are published and `published_at` is set |
+| SignalR Redis backplane | `Redis:ConnectionString` or `ConnectionStrings:Redis` (`OperationService/API/Program.cs`) | **ON** — `reservation-service` runs with `Redis__ConnectionString=${SMARTPARK_REDIS_CONNECTION:-}`, and `.env` sets `redis://redis:6379`; `smartpark-redis` is healthy |
 
-The worktree compose does not set `RabbitMq:ConnectionString` for the app, and the session log records that the consumer is off by default. Folder 02 therefore verifies the **write** side and documents the consumer checks as DB-only.
+If you start the services without those variables, the consumer and publisher silently fall back (projection tables untouched / `DisabledOutboxEventPublisher`) and folder 02 can only be checked from the **write** side.
 
 ## 4. Import and run
 
@@ -115,6 +119,19 @@ Folder 03 mutates one seeded slot (claim → OCCUPIED, release → AVAILABLE). F
 | 5.1 / 5.5 | Operator assigned to `seededSiteId` with `SLOT_OVERRIDE` |
 | 5.2 / 5.3 | `foreignSiteId` must not be assigned to the operator |
 | 6.x | Operator assigned; operations DB schema present |
+
+### 4.2 FE manual run-book (operator realtime — covers C10)
+
+Prerequisites: §3 is satisfied (CORS variable present), operator login works, seeded site selected. The FE hub client never patches slot state locally — it validates the envelope through `operatorRealtimeGuard` and then triggers a **REST snapshot refetch**, so every visual change must be traceable to an authoritative `GET .../operational-layout`.
+
+1. Log in as `operator@smartpark.local` at `http://localhost:5173` and open the dashboard.
+2. Select `DEMO-HQ`. In DevTools → Network expect (a) `GET /api/parking-lots/{siteId}/operational-layout` → `200`, (b) `POST http://localhost:5055/ws/parking-lots/{siteId}/layout/negotiate?negotiateVersion=1` → `200`, then the `ws://` upgrade → `101`. Console must be clean.
+3. On connect the hub sends `SnapshotRequired`; the client resets the guard and refetches. Confirm exactly one extra snapshot GET appears right after the upgrade.
+4. **Delta delivery:** with the dashboard open, run Postman folder `02` (walk-in check-in/check-out) or folder `03` (claim/release). Expect a new `operational-layout` GET within ~2 s, the affected slot/occupancy changing **without** a full page reload, and no flicker.
+5. **Reconnect:** `docker compose --env-file .env -f compose.app.yml stop reservation-service`, observe retry attempts (2 s after close, 10 s after a failed start), then `start reservation-service`. Expect the hub to reconnect and a fresh snapshot to replace the previous one (not merge).
+6. **Token lifecycle:** leave the tab idle until the access token nears expiry — the `authRefreshedEvent` path must keep the hub connected; then log out and confirm the hub stops with no reconnect loop in the console.
+7. **Negative scope:** log in as `driver` — the operator dashboard/hub must not be used, no hub connection to `/ws/parking-lots/...` should appear.
+8. Record per case: WS connect status, write→snapshot-refresh time, whether the snapshot was refetched (not patched), console errors, and any visual flicker. A failing step maps to C10/C11/C12 in the branch-verification guide.
 
 ## 5. Case → acceptance map
 
@@ -147,7 +164,7 @@ Folder 03 mutates one seeded slot (claim → OCCUPIED, release → AVAILABLE). F
 | 4.2 | same | `zoneOnlyReservedCount` equals the RESERVED slot count in that zone; `allocatedSlotCount` mirrors it | G4 reader semantics |
 | 5.1 | `GET /api/operators/site-scope?siteId={seededSiteId}` (operator) | 200, `{userId, tenantIds:[tenantId]}` | G6 |
 | 5.2 | `GET /api/parking-sessions?siteId={foreignSiteId}` (operator) | 403 `OPERATOR_LOT_UNASSIGNED` | G6 REST mapping |
-| 5.3 | `GET /api/operators/site-scope?siteId={foreignSiteId}` (operator) | 403 (bare body) | G6 identity layer |
+| 5.3 | `GET /api/operators/site-scope?siteId={foreignSiteId}` (operator) | 403 `FORBIDDEN` (generic envelope; `OPERATOR_LOT_UNASSIGNED` belongs to 5.2) | G6 identity layer |
 | 5.4 | same with driver token | 403 | G6 role gate |
 | 5.5 | `GET .../operational-layout` as assigned operator | 200 (not 403) | G6 positive |
 | 5.6 | `GET .../operator-layout` with driver token | 403 `FORBIDDEN` | SLOT_OVERRIDE gate |
@@ -225,7 +242,7 @@ Open the failed request → **Test Results** and read the assertion message. The
 | 4.2 fails the count relation | A reservation was created between the two reads, or the query hit a different zone. Re-run 4.1 then 4.2 immediately. |
 | 5.1 returns 403 | The operator is not assigned or lacks `SLOT_OVERRIDE` (site-scope needs assignment only; slot-scope needs the permission). |
 | 5.2 returns 200 | `foreignSiteId` accidentally matches an assignment, or the 403 mapping regressed in `OperatorIdentityClient.cs:41-42`. |
-| 5.3 returns a body with `code` | UserService behavior changed; it currently returns a bare `Forbid()` 403. |
+| 5.3 returns `code: OPERATOR_LOT_UNASSIGNED` | Wrong layer — that code is added by OperationService (5.2). 5.3 correctly returns the generic `FORBIDDEN` envelope. |
 | 5.6 returns 200 | The legacy operator-layout `SLOT_OVERRIDE` gate regressed (`FacilityService/Program.cs:269-275`). |
 | 6.1/6.3 exceed 2000 ms | Dev machine load. Q4 is a dev target, not an SLA; record the number instead of asserting a pass. |
 | DB SQL returns no `outbox_events` rows | Overlay not applied, publisher disabled, or the write hit a different database. |
@@ -272,9 +289,13 @@ FROM parking_slots
 WHERE id = '<claimedSlotId>';
 ```
 
-### 8.3 Optional direct projection replay
+### 8.3 Release-once / idempotency without Postman (covered by C4b)
 
-To prove G5 without a broker, insert the same `event_id` twice into `processed_events`; the second insert must raise a unique-violation / `ON CONFLICT DO NOTHING` must return zero rows. This mutates test data and must not be run against a shared database.
+The consumer's three protection layers — `processed_events`, `occupancy_release_ledger` and the `slot_sequence_watermarks` gate — live behind RabbitMQ and cannot be reached from Postman. They are covered by an **integration test** that calls `OccupancyProjectionStore.ApplyAsync` directly against a throwaway PostgreSQL database:
+
+`tests/Services/SmartParking.FacilityService.Tests/OccupancyProjectionStoreTests.cs` — 4 tests (duplicate `event_id`; a used release-ledger entry must **not** free a slot re-occupied by another session; a release with `slotId = null` is recorded but not projected; a stale sequence is ignored). Setup, command and expected results are in the branch-verification guide under case **C4b** (requires `SMARTPARK_STRUCTURE_TEST_CONNECTION`; without it the tests are skipped, not failed). Verified: `Passed: 4, Failed: 0`.
+
+The older manual alternative — inserting a duplicate `event_id` into `processed_events` by hand — is still possible for a quick look, but it mutates test data, only exercises layer 1, and must not be run against a shared database. Prefer C4b.
 
 ## 9. What was verified live (and what was not)
 
@@ -302,6 +323,13 @@ Live evidence collected after the run:
 | `SELECT count(*) FROM processed_events` (facility DB) | 16 (consumer applied every event exactly once) |
 | `SELECT count(*) FROM occupancy_release_ledger` / `slot_sequence_watermarks` | 0 / 0 — expected, walk-in events carry `slotId=null` |
 
+**Re-run after merging the latest SPARK-238 branch (merge `2e94684e`, 30 commits incl. the current `develop` with SPARK-248).** The entire schema stack was recreated from scratch (`down -v` on all schema volumes), the app images were rebuilt from the merged worktree, and the collection was executed again: **33/33 requests, 101/101 assertions, 0 failures, exit 0** (3.9 s, average 60 ms). DB evidence after that run: `outbox_events` 8 rows → 8 published / 0 pending, `processed_events` 8, `occupancy_release_ledger` 0 and `slot_sequence_watermarks` 0 (expected), 48/48 slots `AVAILABLE`.
+
+Two prerequisites are easy to miss on a freshly rebuilt database:
+
+1. `DataSeeder` creates admin/owner/operator but **not** `driver@gmail.com`, because `SeedAsync` returns immediately when any user row already exists (`DataSeeder.cs:26-29`) and the role bootstrap runs first. Run `scripts/repair-demo-identity.ps1 -Apply` after the user-service is up; without it `0.4 Login Driver` returns `401 AUTH_FAILED` and cases `5.4`/`5.6` fail as a cascade (7 assertion failures from one root cause in the first post-merge run).
+2. `scripts/seed-demo-site.ps1` must run **after** the user-service has created the demo accounts, otherwise it stops with “Owner/operator demo accounts were not found in UserDb”.
+
 ### 9.2 Authoring defect found only by running
 
 Eight test-scripts declared `const data = …`. `data` is a **Postman/Newman sandbox global**, so all eight threw `SyntaxError: Identifier 'data' has already been declared`. The identifier was renamed to `payload` in those scripts (string/comment-aware rename; `body.data` left intact) and the suite then passed. Static JS parsing cannot catch this — each script is valid JavaScript in isolation.
@@ -314,15 +342,15 @@ Eight test-scripts declared `const data = …`. `data` is a **Postman/Newman san
 4. **No true zone-only reservation.** The reader approximates `zoneOnlyReservedCount` from subtree RESERVED slots (OPEN D0-5).
 5. **No true p95.** 6.1/6.3 measure REST only (29–36 ms read, 179–204 ms write→read); the Operations → outbox → broker → consumer → SignalR leg is unmeasured.
 6. **No Redis multi-instance fan-out.** The backplane is configured and `smartpark-redis` is healthy, but only one OperationService instance is running.
-7. **No FE browser run.** `FE/src/lib/operatorLayoutLive.ts` is wired into `OperatorDashboard`, and `tsc --noEmit` / `vite build` are clean apart from the pre-existing 4 TypeScript errors, but no browser session exercised the guard.
+7. **No FE browser run yet.** `FE/src/lib/operatorLayoutLive.ts` is wired into `OperatorDashboard`, and `tsc --noEmit` / `vite build` are clean apart from the pre-existing 4 TypeScript errors, but no browser session has exercised the guard. Run §4.2 to close this one; it needs no new tooling.
 8. **G1 requested-vs-allocated is not implemented** (`operatorContext` is always null) — recorded as not-implemented, not as a regression.
 
 ## 10. BLOCKED cases (live-only)
 
 | # | Case | Exact reason | How to unblock |
 |---|---|---|---|
-| 03.7 | Consumer release-once ledger (G3/A8) | The consumer **is** running live (16/16 events applied), but every walk-in event carries `slotId=null`, so the ledger is never written; there is no reservation-creation REST route to produce a slot-bearing release | Seed a reservation with a slot, check it in/out through OperationService, then run the 8.2 ledger SQL |
-| 02.6 | Replayed / duplicate event (G5/A4) | Postman cannot publish to RabbitMQ or insert into PostgreSQL; the consumer's `processed_events` / watermark path is not exercised | Use a broker harness to publish the same envelope twice, then query `processed_events` and `slot_sequence_watermarks` |
+| 03.7 | Consumer release-once ledger (G3/A8) — **Postman only** | Postman cannot produce a slot-bearing release: every walk-in event carries `slotId=null` and there is no reservation-creation REST route, so the ledger is never written from the collection | Covered by the **C4b** integration test (`OccupancyProjectionStoreTests.cs`, 4/4 pass) — see §8.3. For a live end-to-end check instead: seed a reservation with a slot, check it in/out through OperationService, then run the §8.2 ledger SQL |
+| 02.6 | Replayed / duplicate event (G5/A4) — **Postman only** | Postman cannot publish to RabbitMQ or insert into PostgreSQL | Covered by the **C4b** integration test (duplicate `event_id` and stale-sequence cases) — see §8.3. For the full pipeline signal check, publish the same envelope twice with a broker harness, then query `processed_events` and `slot_sequence_watermarks` |
 | 04.3 | True zone-only reservation (G4/A6) | There is no zone-level allocation source or REST route; the reader approximates `zoneOnlyReservedCount` from subtree RESERVED slots (`PostgresOperationalLayoutReader:143-159`, OPEN D0-5) | Requires a product decision/schema change; until then only the contract shape can be verified |
 | 05.7 | Hub rejects an unassigned operator (G6/A5) | Postman cannot perform a SignalR/WebSocket handshake | Use a SignalR client: connect to `/ws/parking-lots/{foreignSiteId}/layout?access_token=<operator JWT>`; expect the connection to fail with `OPERATOR_LOT_UNASSIGNED` and no events |
 | 06.5 | Hub `SnapshotRequired` on connect/reconnect (A3/P4 4.1) | Same WebSocket limitation | Connect a SignalR client, expect `SnapshotRequired`; disconnect/reconnect and confirm the client refetches `GET /operational-layout` and replaces (not merges) the snapshot |

@@ -1071,7 +1071,7 @@
           }
         },
         {
-          "name": "5.3 Unassigned operator site-scope (raw 403, empty body)",
+          "name": "5.3 Unassigned operator site-scope (raw 403, FORBIDDEN envelope)",
           "event": [
             {
               "listen": "test",
@@ -1079,7 +1079,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
-                  "console.log('UserService returns Forbid() with an empty body here; the OPERATOR_LOT_UNASSIGNED code is added by OperationService at 5.2.');"
+                  "console.log('UserService returns the generic FORBIDDEN envelope here; the OPERATOR_LOT_UNASSIGNED code is added by OperationService at 5.2.');"
                 ]
               }
             }
@@ -1093,7 +1093,7 @@
               }
             ],
             "url": "{{userServiceUrl}}/api/operators/site-scope?siteId={{foreignSiteId}}",
-            "description": "OperatorsController.cs:42 returns Forbid() when no assignment matches siteId. ASP.NET emits a bare 403, so only the status can be asserted here."
+            "description": "OperatorsController.cs:42 returns Forbid() when no assignment matches siteId, so UserService answers 403 with the generic FORBIDDEN envelope. The OPERATOR_LOT_UNASSIGNED mapping is asserted through OperationService at 5.2."
           }
         },
         {

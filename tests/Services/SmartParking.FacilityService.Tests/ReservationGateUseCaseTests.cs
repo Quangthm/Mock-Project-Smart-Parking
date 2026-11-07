@@ -170,6 +170,15 @@ public sealed class ReservationGateUseCaseTests
             WasCalled = true;
             return Task.FromResult(scope);
         }
+
+        // SPARK-244 extended IOperatorIdentityClient with the bearer-token overload used by the
+        // parking layout hub. The ReservationGate handlers under test only call RequireSiteAsync,
+        // so this fake mirrors that behaviour to satisfy the interface.
+        public Task<OperatorSiteScope> AuthorizeSiteAsync(Guid siteId, string bearerToken, CancellationToken ct)
+        {
+            WasCalled = true;
+            return Task.FromResult(scope);
+        }
     }
 
     private sealed class FakeGateStore : IReservationGateStore

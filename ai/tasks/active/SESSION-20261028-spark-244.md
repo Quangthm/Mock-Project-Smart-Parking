@@ -85,6 +85,50 @@ Sprint 3 vertical slice: realtime operational view với backend-confirmed state
 - `OperatorDashboard.tsx` (+6 dòng): thêm `useEffect` theo `selectedLot?.id` gọi `watchOperatorLayout` → `setRefreshKey(v => v+1)` để refetch snapshot REST (nguồn sự thật).
 - Verify: `npx tsc --noEmit` 4 lỗi pre-existing (không tăng); `npx vite build` exit 0.
 
+### Merge SPARK-238 (30 commit mới) + dựng lại môi trường + chạy lại P4 — DONE (green)
+- Fetch: `origin/feat/SPARK-238-facility-structure-port` tip `3b47c98b`, merge-base với nhánh 244 là `afc76df5` → **30 commit / 316 file** mới, trong đó `e14557fb "chore(merge): merge develop into the SPARK-238 branch"` kéo theo develop mới (PR #40 repo-cleanup, PR #41 fe-v2.3, SPARK-248 role consolidation).
+- Pre-flight: `git merge-tree --write-tree` → merge sạch 0 conflict. Nhưng 4 file đang dirty trùng với 238 (`.env.example`, `FE/.../OperatorDashboard.tsx`, `compose.app.yml`, `scripts/apply-workflow-migrations.ps1`) → theo quyết định của user: commit checkpoint trước.
+- **Commit checkpoint `70739521`** (28 path: toàn bộ P2 consumer + FE hub + 4 artifact test + overlay + compose + script) rồi **merge `2e94684e`** (`--no-ff`, exit 0, không conflict).
+- Xác minh sau merge: 2 overlay vẫn wire (`apply-workflow-migrations.ps1` dòng 53/54 required + dòng 108/109 features, có cả `05.16-Parking-Owner-Onboarding.sql` + `overlay/parking-structure-maintenance.sql` của 238); `compose.app.yml` vẫn có `RabbitMq__ConnectionString` (parking + reservation) và `Redis__ConnectionString` (reservation); `compose.schema-integration.yml` vẫn mount 2 overlay realtime + service `redis`; `.env.example` vẫn có block Redis; `OperatorDashboard.tsx` vẫn import/gọi `watchOperatorLayout`. Tất cả file mới của SPARK-244 còn nguyên.
+- Build sau merge: **UserService.API 0 warning/0 error**, **FacilityService.API 0/0**, **OperationService.API 0 error + 2 NU1902 MessagePack (pre-existing)**. `docker compose config --quiet` cả 2 file = exit 0; mọi bind-mount nguồn đều tồn tại.
+- Dựng lại sạch: `compose.app.yml down` + `compose.schema-integration.yml down -v` (xoá toàn bộ volume 6 DB + rabbitmq + redis; giữ `workflow-keys`, `fe-node-modules`) → `up -d` → 8/8 container healthy; 4 bảng realtime (`outbox_events`, `processed_events`, `slot_sequence_watermarks`, `occupancy_release_ledger`) được tạo tự động từ init script của code đã merge; user-db có 21 bảng (schema SPARK-248 mới).
+- **Vấn đề môi trường phát hiện:** `seed-demo-site.ps1` fail ở bước resolve account vì DB user mới tinh chưa có owner/operator; chạy `user-service` (DataSeeder) thì chỉ ra admin/owner/operator — **KHÔNG có `driver@gmail.com`**, vì `DataSeeder.SeedAsync` return ngay khi `Users.Any()` (DataSeeder.cs:26-29) và bootstrap role user chạy trước. Fix theo đúng script của repo: `scripts/repair-demo-identity.ps1 -Apply` → tạo driver + refresh hash 3 account demo; verify 4/4 login OK (role driver/owner/operator/admin).
+- Build lại 5 image từ code đã merge + `up -d`; health 5035/5045/5055/5065/5173 = 200; env trong container xác nhận `RabbitMq__ConnectionString` (parking + reservation) và `Redis__ConnectionString=redis://redis:6379` (reservation).
+- **Chạy Newman lần 1 (sau merge): 33/33 request nhưng 7/101 assertion fail — TẤT CẢ từ 1 nguyên nhân gốc `0.4 Login Driver` = 401 AUTH_FAILED** (5.4 và 5.6 fail dây chuyền do không có `driverToken`). Sau `repair-demo-identity.ps1 -Apply`: **33/33 requests, 33/33 test-scripts, 101/101 assertions, 0 failed, exit 0** (3.9s, avg 60ms).
+- Bằng chứng DB sau run lại: `outbox_events` 8 dòng → 8 published, 0 pending; `processed_events` = 8 (đúng 1 lần/event); `occupancy_release_ledger` = 0, `slot_sequence_watermarks` = 0 (đúng thiết kế — walk-in không có slotId); 48/48 slot `AVAILABLE`.
+- Kết luận: contract mà SPARK-244 phụ thuộc **không bị phá** bởi SPARK-248 — `GET /api/operators/site-scope` vẫn tồn tại (`OperatorsController.cs:39`, `[Authorize(Roles="operator")]`) và login vẫn trả role lowercase (`owner`/`operator`/`admin`/`driver`).
+- **Bẫy môi trường #2 (phát hiện khi test FE localhost:5173):** FE báo *"Cannot reach the authentication server. Please try again."* dù `POST /api/auth/login` qua curl vẫn 200.
+  - Nguyên nhân: develop mới (từ SPARK-238) đổi CORS UserService sang **config-driven** — `Program.cs:24-31` đọc `Cors:AllowedOrigins`, `compose.app.yml:54` map từ `${SMARTPARK_USER_CORS_ORIGINS:-}` (mặc định **rỗng**), nhưng `.env` của worktree (copy từ repo chính, tạo trước biến này) **không có** `SMARTPARK_USER_CORS_ORIGINS` (chỉ `.env.example:89` có).
+  - Hệ quả: policy `Frontend` không có origin nào → preflight trả 204 **không có `Access-Control-Allow-Origin`** → browser chặn fetch → FE hiện lỗi "không tới được auth server".
+  - Fix: thêm `SMARTPARK_USER_CORS_ORIGINS="http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443"` vào `.env` (file git-ignored) rồi `up -d --force-recreate user-service`.
+  - Verify sau fix: preflight `:5035` → 204 + `ACAO=http://localhost:5173` + `ACAM=POST`; login thật kèm `Origin` → 200 + ACAO; preflight `:5045` và `:5055` cũng trả ACAO đúng (Facility/Operation vẫn hardcode/không đổi trong merge).
+
+- **Bẫy môi trường #3 (phát hiện khi test C3 — container AI không start được):** `smartpark-ai-ai-rest-1` và `smartpark-ai-ai-live-1` đều `Exited (143)`, không start lại được.
+  - Triệu chứng: `docker inspect` → `State.Error = failed to set up container networking: network e26aa3d311f491eb9... not found`.
+  - **KHÔNG phải mất image, KHÔNG phải mất volume:** image `smartpark-ai:local` vẫn còn (build 2 tuần trước); `compose.ai.yml` không khai báo volume nào.
+  - Nguyên nhân thật: 2 container được tạo từ trước, gắn vào `smartpark-schema_default` theo **network ID cũ** `e26aa3d3...`. Khi dựng lại sạch stack schema (`compose.schema-integration.yml down -v` rồi `up -d`), network bị xoá và tạo lại với **ID mới** `8cbee697...` → container giữ ID cũ nên Docker từ chối start. Đây là hệ quả của chính bước dựng lại môi trường ở trên, không phải lỗi SPARK-244.
+  - Fix (chạy trong worktree 244): `docker compose --env-file .env -f compose.ai.yml up -d --force-recreate` — `name: smartpark-ai` trùng project cũ nên compose nhận lại 2 container; **không build lại image**, không đổi code.
+  - Verify sau fix: cả 2 container `Up (healthy)`, `127.0.0.1:5001->5001` / `127.0.0.1:5002->5002`, network `smartpark-schema_default` (ID mới); probe 5001/5002 phản hồi HTTP (404 ở `/` là bình thường, healthcheck dùng socket). Quét toàn bộ `docker ps -a` → **0 container khác** còn `State.Error`.
+  - Không ảnh hưởng C3: đường đi C3 chỉ cần `operations-db-1`, `facility-db-1`, `smartpark-rabbitmq`, user/parking/reservation service — tất cả vẫn healthy (5035/5045/5055 = 200).
+  - Quy tắc phòng ngừa: sau **mỗi** lần `down -v` stack schema, mọi stack khai báo `external: true` với `smartpark-schema_default` (hiện có AI; sau này có thể thêm) phải `--force-recreate`. Kiểm tra nhanh:
+    ```powershell
+    docker ps -a --format "{{.Names}}" | ForEach-Object {
+      $j = docker inspect $_ | ConvertFrom-Json
+      if ($j.State.Error) { "$_ -> $($j.State.Error)" }
+    }
+    ```
+  - Không liên quan: 2 container Sonar (`smartpark-sonar-sonarqube-1`, `smartpark-sonar-sonar-db-1`) vẫn `Exited (255)` từ 3 ngày trước — để nguyên.
+
+- **Bẫy môi trường #4 (phát hiện khi test C3 — container user-service không khởi động được):** `smartpark-app-user-service-1` = `Exited (139)`, `health=unhealthy`, `State.Error` rỗng.
+  - Triệu chứng trong log: `Npgsql.PostgresException 42P01: relation "account_roles" does not exist` ném từ `DataSeeder.SeedRoleUserAsync` ← `SeedAdminAsync` ← `UserHost.BuildAsync` (seeding lúc khởi động) → container chết ngay sau ~8s.
+  - Nguyên nhân thật: 4 image backend đang chạy là **image CŨ (build 2026-10-29T17:07:3xZ, trước khi merge SPARK-248)** trong khi user-db đã theo schema **hậu SPARK-248** (bảng `account_roles` đã bị xoá — worktree test còn assert `to_regclass('public.account_roles') IS NULL`). Code cũ map `account_roles`, DB mới không có → 42P01. Bằng chứng độc lập: số dòng stack trace (`DataSeeder.cs:80`) không khớp source hiện tại (dòng 80 là `}`; query nằm ở 73–74), và source hiện tại dùng `Accounts` + `RoleCode`, không còn entity `AccountRole` (chỉ còn class `AccountRolePolicy`).
+  - **KHÔNG phải lỗi SPARK-244**, cũng không phải lỗi schema/seed: chỉ là container chạy image cũ (app stack bị dựng lại từ nguồn/cache khác).
+  - Fix: `docker compose --env-file .env -f compose.app.yml build user-service parking-service reservation-service payment-service` rồi `... up -d --force-recreate user-service parking-service reservation-service payment-service`. Sau build: user-service image `2026-11-02T14:09:52Z`, parking/reservation `2026-11-02T09:52:23Z` (cache-hit vì code không đổi sau merge), payment `2026-10-29T17:07:33Z`; frontend không cần đụng.
+  - Verify sau fix: 4 container `Up (healthy)`; log user-service sạch; health 5035/5045/5055/5065/5173 = **200**; login 4/4 OK (owner/operator/admin/driver, role chữ thường); Newman P4 chạy lại **33/33 request, 101/101 assertion, 0 fail**; `outbox_events` 22/22 published (0 pending) và `processed_events` 22 = khớp outbox.
+  - Quy tắc phòng ngừa: sau bất kỳ thao tác dựng lại stack, kiểm tra container ↔ image **thời điểm build** (`docker inspect <ct> --format '{{.Image}}'` rồi so `docker image inspect <id> --format '{{.Created}}'`) và đối chiếu image phải **mới hơn commit merge**. Triệu chứng kinh điển của image cũ: `42P01 relation "xxx" does not exist` khi seeding.
+
+- **Bẫy khi test bằng PowerShell + curl.exe (quan trọng cho P4):** `curl.exe -d $body` với `$body` là chuỗi JSON do PowerShell tạo sẽ bị **PS 5.1 cắt dấu `\"` bên trong** → server nhận JSON hỏng → trả `400 VALIDATION_FAILED` với `errors[].field = "$"` / `"loginDto"`, **rất dễ bị hiểu nhầm là lỗi đăng nhập/sai mật khẩu**. Cách đúng: ghi body ra file rồi `--data-binary "@$file"`, hoặc dùng `Invoke-RestMethod -Body $json -ContentType 'application/json'`. (Newman/Postman không bị vấn đề này; các login trong collection vẫn 200.)
+
 ## 3. Chưa làm
 - (không còn hạng mục bắt buộc). P4 đã chạy live và xanh; FE đã nối hub. Chỉ còn các case cần WS client/broker harness (liệt kê ở §7).
 
@@ -103,11 +147,35 @@ Sprint 3 vertical slice: realtime operational view với backend-confirmed state
 ## 6. Trạng thái hiện tại
 P0–P1–P2–P3–P5 done. P2.1 đã rà soát & chỉnh code theo coding rule/skill. P4 đã viết đủ artifact **và chạy live xanh** (33/33 requests, 101/101 assertions, 0 failed) trên stack build từ chính branch này; outbox 16 event → consumer xử lý đủ 16. FE đã nối hub `/ws/parking-lots/{siteId}/layout`. Còn BLOCKED: hub auth/reconnect/delta (cần WS client), replay trùng event, ledger cho event có slotId, zone-only thật, p95 thật, Redis 2 instance.
 
+Cập nhật: nhánh đã **merge 30 commit mới của SPARK-238** (kèm develop mới + SPARK-248). Sau merge: 3 service build xanh, dựng lại sạch toàn bộ schema stack + seed + build lại 5 image, và **Newman vẫn xanh 33/33 requests – 101/101 assertions – 0 failed**; outbox 8/8 published, consumer 8/8. Trạng thái BLOCKED không đổi.
+
 ## 7. Next step
+- (đã xong) Merge 30 commit mới của SPARK-238 vào nhánh 244: checkpoint `70739521` + merge `2e94684e`, 0 conflict; artifact SPARK-244 nguyên vẹn; 3 service build xanh.
+- (đã xong) Dựng lại sạch môi trường từ code đã merge (`down -v` toàn bộ schema volume → `up`, 8/8 healthy, 4 bảng realtime tự tạo) + `seed-demo-site.ps1` + `repair-demo-identity.ps1 -Apply` (fix thiếu driver) + build/up 5 image; Newman chạy lại xanh 101/101.
 - (đã xong) Chốt lệch doc↔code: đã gỡ eventId/sequenceNumber/siteId khỏi SlotVisualStateDto trong OpenAPI và sửa lỗi thụt lề block; `RealtimeEventEnvelope` vẫn giữ 3 field.
 - (đã xong) P4 live: dựng lại facility/operations DB từ overlay + redis, seed demo site, build/up 5 image từ worktree, chạy `apply-workflow-migrations.ps1 -Service Parking|Operation` (idempotent OK), chạy Newman → xanh 100%.
 - (đã xong) Merge checklist: 2 overlay realtime đã wire vào apply-workflow-migrations.ps1 (+ verify trong `$required`).
 - (đã xong) FE nối hub `/ws/parking-lots/{siteId}/layout` qua `operatorLayoutLive.ts` + `RealtimeIdempotencyGuard`, gọi lại snapshot REST khi có event.
 - (còn lại — cần harness) verify bằng SignalR client: `UNAUTHENTICATED` / `OPERATOR_LOT_UNASSIGNED` khi handshake (negotiate KHÔNG kiểm được), `SnapshotRequired` + reconnect, delta `SlotStateChanged` thật, p95 thật ≥20 mẫu.
-- (còn lại — cần harness) replay/duplicate event (publish 2 lần cùng eventId), release-once ledger với event có `slotId` (cần seed reservation), zone-only thật (OPEN D0-5), Redis fan-out 2 instance.
+- (đã xong — C4b) release-once **ledger** với event có `slotId`: phủ bằng integration test `tests/Services/SmartParking.FacilityService.Tests/OccupancyProjectionStoreTests.cs` (4/4 pass) — gọi thẳng `OccupancyProjectionStore.ApplyAsync` trên DB thật. Xem §8.
+- (còn lại — cần harness) replay/duplicate event qua broker thật (publish 2 lần cùng eventId) — tầng `ApplyAsync` đã phủ ở C4b; zone-only thật (OPEN D0-5), Redis fan-out 2 instance.
 - (rủi ro đã biết, defer) race cấp sequence producer: `Max(sequence_number)+1` theo site, index `(site_id, sequence_number)` không unique → check-in đồng thời cùng site có thể trùng số.
+
+## 8. C4b — phủ nhánh release-once ledger bằng integration test (DONE)
+Lý do: `occupancy_release_ledger` **chưa từng được ghi** trong mọi lần chạy (luôn 0 dòng) vì walk-in phát `OccupancyReleased { sessionId, slotId: null }` ⇒ consumer bỏ qua nhánh slot. Nhánh SQL đó là vùng mù, không thể chạm bằng Postman (Postman không publish RabbitMQ / không insert Postgres, và không có REST route tạo reservation).
+
+Đã làm:
+- Thêm `tests/Services/SmartParking.FacilityService.Tests/OccupancyProjectionStoreTests.cs` (4 test, `[StructurePostgresFact]`): (1) `DuplicateEventIdIsAppliedOnce`; (2) `SpentReleaseLedgerDoesNotFreeASlotReoccupiedByAnotherSession` — slot bị phiên B chiếm lại rồi replay release của phiên A, slot **phải vẫn** `OCCUPIED` và ledger của A vẫn 1 dòng (đây chính là bug ledger sinh ra để chặn); (3) `ReleaseWithoutSlotIsRecordedButNotProjected`; (4) `StaleSequenceIsIgnoredAfterTheWatermarkAdvances`.
+- Mỗi test tự `CREATE DATABASE occupancy_projection_test_<guid>`, nạp DDL thật (`02-facility-service-db.sql` + `parking-tenants.sql` + `realtime-projection.sql`), seed tenant/site/zone/slot, rồi `DROP DATABASE ... WITH (FORCE)`.
+- Lưu ý ngữ nghĩa: `ApplyAsync` trả `true` = "event có slotId và đã qua cửa kiểm tra", **không** phải "đã đổi dòng" ⇒ test assert trạng thái DB.
+- Sửa bắt buộc để build được: `ReservationGateUseCaseTests.cs` +9 dòng thêm `AuthorizeSiteAsync` cho `FakeOperatorIdentity` (commit `70739521` đổi interface mà không cập nhật fake ⇒ **CS0535**, cả assembly test không build).
+
+Kết quả chạy thật (PK từ `.env`, chỉ truyền qua biến môi trường, không in ra):
+- `dotnet test ... --filter "FullyQualifiedName~OccupancyProjectionStore"` → **Passed: 4, Failed: 0, Skipped: 0** (16 s).
+- `dotnet test ...` toàn project → **Passed: 173, Failed: 1, Skipped: 0**; test fail là `PostgresStructureWorkflowTests.GateConnectionsLeaveATwoConnectorQueryPoolAvailable` (timeout 5 s trong `NpgsqlConnection.OpenAsync`), **fail cả khi chạy một mình** ⇒ lỗi có sẵn của môi trường, không liên quan SPARK-244. `max_connections=100`, chỉ 7 connection đang dùng.
+- Yêu cầu môi trường: `SMARTPARK_STRUCTURE_TEST_CONNECTION='Host=localhost;Port=5442;Database=smartpark_facility;Username=smartpark_facility;Password=<SMARTPARK_DEV_PASSWORD>'`; không set thì test **skip** chứ không fail.
+
+Cập nhật tài liệu (đều chưa commit): branch guide thêm cột **Loại** vào §3 (Chức năng / Đường ống dữ liệu / Độ bền dữ liệu / Hợp đồng / Tài liệu), đổi tên C4 thành "Release-once ở **biên API**" kèm cảnh báo phạm vi, thêm mục **C4b** đầy đủ (bảng 3 lớp bảo vệ, lệnh, 4 kịch bản, PASS/FAIL, lưu ý 173/1 + CS0535); manual guide viết lại §8.3 (trỏ C4b) và cập nhật §10 hai dòng 03.7 / 02.6 (từ "BLOCKED" sang "Postman-only — đã phủ bởi C4b").
+
+## 9. Report/backlog ngoài repo
+- Tạo `D:\My file\FA26 - OJT FSoft\Report\future_improvement.md` — backlog sống ghi các điểm cải thiện (FI-01→FI-20) + 7 bẫy môi trường (EP-01→EP-07), mỗi mục có: bằng chứng (file/dòng, lệnh, kết quả thật), tác động, đề xuất, chi phí, quyết định — dùng làm bằng chứng khi PM hỏi lý do lựa chọn. Fi-20 đánh dấu RESOLVED. Kèm §4 "ưu tiên đề xuất" và §5 mẫu thêm mục mới, §6 nhật ký.
