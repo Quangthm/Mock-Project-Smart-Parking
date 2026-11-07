@@ -2,8 +2,9 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
-namespace SmartParking.UserService.Tests;
+namespace SmartParking.Architecture.Tests;
 
+[Trait("Category", "Architecture")]
 public sealed class LayerBoundaryTests
 {
     private static string Root

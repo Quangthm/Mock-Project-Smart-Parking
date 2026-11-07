@@ -119,7 +119,7 @@ public sealed class UserManagementTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users")).StatusCode);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RealDatabaseSearchTransitionsAndSessionRevocation()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;

@@ -3,7 +3,7 @@ using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Exceptions;
-using SmartParking.PaymentService.Domain.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Tests.TestDoubles;
 using Xunit;
 
@@ -13,6 +13,8 @@ public class GetPaymentStatusQueryHandlerTests
 {
     private readonly FakePaymentTransactionRepository _txRepo = new();
     private readonly FakePaymentOrderRepository _orderRepo = new();
+    private readonly FakeInvoiceRepository _invoiceRepo = new();
+    private readonly FakeEventPublisher _eventPublisher = new();
     private readonly FakeUnitOfWork _uow = new();
     private readonly FakePaymentGatewayPort _gatewayPort = new();
 
@@ -21,6 +23,8 @@ public class GetPaymentStatusQueryHandlerTests
         return new GetPaymentStatusQueryHandler(
             _txRepo,
             _orderRepo,
+            _invoiceRepo,
+            _eventPublisher,
             _uow,
             _gatewayPort,
             NullLogger<GetPaymentStatusQueryHandler>.Instance

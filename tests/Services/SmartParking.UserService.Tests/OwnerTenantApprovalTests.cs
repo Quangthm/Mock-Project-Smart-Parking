@@ -13,7 +13,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class OwnerTenantApprovalTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task DecisionSmtpFailureAndManualRetryPreserveApprovalAndSendOriginalMessage()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -68,7 +68,7 @@ public sealed class OwnerTenantApprovalTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task FailedFinalizeRollsBackTenantAndRetryActivatesExactlyOnce()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -110,7 +110,7 @@ public sealed class OwnerTenantApprovalTests
         Assert.Single(await final.WorkflowDeliveries.Where(d => d.Kind == "OWNER_DECISION").ToListAsync());
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ExistingTenantIsReusedOnlyWhenMatchingAndActive()
     {
         foreach (var scenario in new[] { "matching", "name", "email", "phone", "inactive", "suspended", "deleted", "code_collision" })
@@ -148,7 +148,7 @@ public sealed class OwnerTenantApprovalTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RejectionDoesNotCreateTenantOrProvisionSite()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

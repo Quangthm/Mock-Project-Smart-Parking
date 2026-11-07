@@ -1,0 +1,166 @@
+{
+  "info": {
+    "_postman_id": "d1600327-63a0-4b21-a315-51f675ae12a9",
+    "name": "SPARK-327 Refresh Probe v1 - NO RESTART",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Run all four requests once using the existing local SPARK-327 environment with Keep variable values enabled. Rotates the saved test session once, then compares direct Authorization and Postman Bearer helper with the same newly returned access token, including a delayed direct check. No login/password/private key/restart needed. Share only sp_refresh_probe_report. Does not log out the session so it remains available for diagnosis. Full smoke workflow must later use start_over; this is not a completion pass."
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "probe_names",
+      "value": "[\"P0 Refresh saved test session\",\"P1 Immediate explicit header\",\"P2 Immediate Bearer auth helper\",\"P3 Explicit header after two seconds\"]",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.execution.setNextRequest(null);",
+          "const base=pm.environment.get('sp_base_url')||'';",
+          "function stop(message){pm.environment.set('sp_refresh_probe_report',message);pm.execution.skipRequest();}",
+          "if(!/^http:\\/\\/(localhost|127\\.0\\.0\\.1):[0-9]+$/.test(base)){stop('STOPPED: select the local SPARK-327 environment.');}",
+          "else {",
+          "    pm.variables.set('probe_base',base);",
+          "    const step=Number(pm.info.requestName[1]);",
+          "    pm.request.headers.remove('Authorization');",
+          "    if(step===0){",
+          "        const refresh=pm.environment.get('sp_refresh_token');",
+          "        pm.variables.unset('probe_access');",
+          "        pm.variables.set('probe_stage','0');",
+          "        pm.environment.set('sp_refresh_probe_report','RUNNING');",
+          "        if(!refresh)stop('STOPPED: no saved refresh token. Report this message; do not restart the service.');",
+          "        else pm.variables.set('probe_body',JSON.stringify({refreshToken:refresh}));",
+          "    } else if(pm.variables.get('probe_stage')!==String(step)||!pm.variables.get('probe_access')) {",
+          "        stop('STOPPED: run this entire diagnostic collection from P0.');",
+          "    } else {",
+          "        if(step!==2)pm.request.headers.upsert({key:'Authorization',value:'Bearer '+pm.variables.get('probe_access')});",
+          "        if(step===3)setTimeout(()=>{},2000);",
+          "    }",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const step=Number(pm.info.requestName[1]);",
+          "const names=JSON.parse(pm.collectionVariables.get('probe_names'));",
+          "function errorCode(){try{const c=pm.response.json().code;return typeof c==='string'&&/^[A-Z_]{1,64}$/.test(c)?c:null;}catch{return null;}}",
+          "try {",
+          "    if(step===0){",
+          "        if(pm.response.code!==200)throw new Error('Refresh did not return 200');",
+          "        const b=pm.response.json();",
+          "        if(!b.success||!b.data?.accessToken||!b.data?.refreshToken)throw new Error('Missing refresh response tokens');",
+          "        pm.variables.set('probe_access',b.data.accessToken);",
+          "        pm.environment.set('sp_access_token',b.data.accessToken);",
+          "        pm.environment.set('sp_refresh_token',b.data.refreshToken);",
+          "        pm.environment.set('sp_status','DIAGNOSTIC_ONLY');",
+          "        pm.environment.set('sp_action','wait');",
+          "        pm.environment.set('sp_resume_hint','Diagnostic rotated the test session. Use start_over for the full smoke workflow.');",
+          "        pm.environment.set('sp_refresh_probe_report','[]');",
+          "        pm.test('Fresh token obtained for diagnostic',()=>{});",
+          "    } else {",
+          "        const token=pm.variables.get('probe_access');",
+          "        const p=JSON.parse(require('buffer').Buffer.from(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'),'base64').toString('utf8'));",
+          "        const row={step:pm.info.requestName,status:pm.response.code,code:errorCode(),secondsUntilExpiry:Math.floor(p.exp-Date.now()/1000),",
+          "            preparedHeaderMatches:step===2?null:pm.request.headers.get('Authorization')==='Bearer '+token,",
+          "            serverDate:pm.response.headers.get('Date')||null};",
+          "        const report=JSON.parse(pm.environment.get('sp_refresh_probe_report'));",
+          "        report.push(row);pm.environment.set('sp_refresh_probe_report',JSON.stringify(report));",
+          "        pm.test('Profile accepts freshly refreshed token',()=>{if(pm.response.code!==200)throw new Error('HTTP '+pm.response.code);});",
+          "        // A 401 is evidence: continue the remaining comparisons without refreshing again.",
+          "    }",
+          "    if(step<3){pm.variables.set('probe_stage',String(step+1));pm.execution.setNextRequest(names[step+1]);}",
+          "    else{pm.variables.unset('probe_access');pm.variables.unset('probe_body');pm.variables.unset('probe_stage');pm.execution.setNextRequest(null);}",
+          "}catch(e){",
+          "    pm.environment.set('sp_refresh_probe_report',JSON.stringify({stoppedAt:pm.info.requestName,status:pm.response.code,code:errorCode()}));",
+          "    pm.execution.setNextRequest(null);",
+          "    pm.test('Diagnostic could not complete',()=>{throw new Error('Share only sp_refresh_probe_report');});",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "P0 Refresh saved test session",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "method": "POST",
+        "url": "{{probe_base}}/api/auth/refresh",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{probe_body}}"
+        }
+      }
+    },
+    {
+      "name": "P1 Immediate explicit header",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "method": "GET",
+        "url": "{{probe_base}}/api/auth/me",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": []
+      }
+    },
+    {
+      "name": "P2 Immediate Bearer auth helper",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "method": "GET",
+        "url": "{{probe_base}}/api/auth/me",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{probe_access}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": []
+      }
+    },
+    {
+      "name": "P3 Explicit header after two seconds",
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      },
+      "request": {
+        "method": "GET",
+        "url": "{{probe_base}}/api/auth/me",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": []
+      }
+    }
+  ]
+}

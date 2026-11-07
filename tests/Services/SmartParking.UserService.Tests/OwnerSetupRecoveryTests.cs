@@ -33,7 +33,7 @@ public sealed class OwnerSetupRecoveryTests
         return JsonSerializer.Deserialize<WorkflowMessage>((protector ?? new TestWorkflowProtector()).Unprotect(delivery.ProtectedPayload))!.OtpCode!;
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task HttpRecoveryRequiresEmailProofRotatesTokenAndCannotVerifyOwnerOrReplay()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -68,7 +68,7 @@ public sealed class OwnerSetupRecoveryTests
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/auth/register/owner/setup-recovery/request", new { contact = Body().Email })).StatusCode);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RecoveryEnforcesExpiryCooldownAttemptBudgetAcrossResendAndSingleUseConcurrency()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -104,7 +104,7 @@ public sealed class OwnerSetupRecoveryTests
         Assert.Equal(1, (await Task.WhenAll(Race(), Race())).Count(value => value));
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task LegacyVerifiedIncompleteOwnerRecoversThenSavesAndRetriesWithoutDuplicateContactChallenge()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

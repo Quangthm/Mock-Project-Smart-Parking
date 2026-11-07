@@ -155,6 +155,39 @@ public interface ICurrentActor
 
 Actual names/types must match the real token contract. Do not infer that `sub` is AccountId or `jti` is a GUID session key. Fail closed on missing/malformed required actor claims. This adapter exposes token-time identity only: no automatic account/session fetch, JWT validation, UserService call or current-access authorization. Never trust body-selected actor IDs or spoofable headers. User data can be shared across Accounts; another active Account does not legitimize acting as the bound Account.
 
+### UserService public signing keys and startup order (SPARK-327)
+
+**Current implementation:** UserService issues RS256 access tokens and anonymously publishes its active public key at `GET /.well-known/jwks.json` (configurable `Jwt:JwksPath`). Only UserService receives the RSA private PEM/Base64. FacilityService, OperationService and PaymentService receive public trust configuration but **do not yet implement JWKS-backed JWT authentication**. Payment's Development authentication handler is not JWT validation. Do not interpret populated configuration or a healthy container as proof that consumer JWT protection exists. Consumer middleware remains a separate implementation task, as confirmed on 2026-11-06.
+
+Consumers obtain **public verification keys**, never the signing private key:
+
+| Consumer configuration | Local host process | Docker application network |
+| --- | --- | --- |
+| `JwtValidation:Issuer` | `SmartParking.UserService` | Same configured issuer |
+| `JwtValidation:Audience` | `SmartParking` | Same configured audience |
+| `JwtValidation:JwksUri` | `http://localhost:5035/.well-known/jwks.json` | `http://user-service:8080/.well-known/jwks.json` |
+
+These are example defaults; preserve environment overrides and the configured JWKS path. Docker uses service DNS and the internal port, not `localhost:5035` (which would refer to the consumer container itself). Host runners/setup supply the corresponding host URI. The endpoint needs neither a bearer token nor `X-Service-Key`.
+
+The response is the standard `{"keys":[...]}` document. Each active RSA JWK has `kid`, `kty=RSA`, `use=sig`, `alg=RS256`, `n` and `e`. Match the JWT header's `kid` to a trusted public key, then let authentication middleware validate the signature, issuer, audience, RS256, expiration/not-before and required actor claims. A matching `kid` or decoded payload alone is not validation. Trust only the configured JWKS URL; never follow JWT-supplied `jku`/`x5u` locations. Use HTTPS/protected transport outside the documented local Development network. See the [JWKS contract](../03-design/api/userservice-jwks-api-design.md) and [Microsoft JWT bearer guidance](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication?view=aspnetcore-10.0).
+
+UserService currently exposes a **JWKS endpoint, not an OpenID Connect discovery document**. Do not assign that JSON URL to `Authority`/OIDC `MetadataAddress` and assume automatic discovery will work. The future implementation must use an appropriate JWKS retriever/configuration manager integrated with authentication middleware, with inward-owned configuration and Infrastructure transport. Controllers and Domain must not perform key downloads or custom JWT validation.
+
+**Startup/concurrency requirements for that future implementation:**
+
+- Starting a consumer must not require a successful network request to UserService. Avoid synchronous key downloads in constructors, DI factories or host startup. A background warm-up must handle DNS failures, refused connections, timeouts and non-success responses without terminating the host.
+- Without a usable trusted key, protected requests fail closed with the approved authentication/dependency error contract. Never accept an unverified token, generate a replacement key, or fall back to a shared signing secret. Keep process liveness separate from authentication readiness; a key-service outage should not produce a restart loop.
+- Cache public keys and validate locally. The current publisher advertises `Cache-Control: public, max-age=300`. Bound cache freshness and any permitted stale-key grace explicitly in the consumer design; do not keep stale keys indefinitely or silently extend token expiration. Failed downloads must not replace a valid cached key set with an empty set.
+- Coordinate concurrent refreshes so many requests/unknown `kid` values do not each launch a download. Use a shared in-flight refresh per configured issuer, bounded timeout, retry backoff/jitter and throttling for unknown-key refreshes. Publish a fully validated key-set snapshot atomically. Request cancellation must not corrupt the shared snapshot or leave a refresh lock held.
+- Unknown `kid` remains untrusted until a bounded refresh obtains a matching valid key. Cached trusted keys may be used only within the approved cache policy. Recovery must work after UserService becomes available, without restarting consumers. Specify timeout/backoff/cache-grace values and error-envelope details in the consumer task before implementing them; this section does not claim a cache/refetch implementation already exists.
+- Keep key discovery separate from per-request Account/session freshness and REQUEST Sagas. Public-key caching is not an authorization-state cache and does not change the approved TOKEN/REQUEST rules below.
+
+Future consumer tests must cover cold start with UserService unavailable; eventual recovery; warm-cache outage; simultaneous cold/unknown-key requests; malformed/empty JWKS; an unknown key that remains unknown; wrong algorithm/issuer/audience/signature; key-set replacement; and continued process liveness. Current publication has one active key; overlapping rotation is still deferred.
+
+**Current Docker startup checks and limits:** current consumers do not fetch UserService/JWKS at startup. The reusable `node --test tests/startup/consumer-startup.test.cjs` check starts compiled Facility/Operation/Payment APIs with an unavailable UserService endpoint and dummy database settings, verifies `/health` remains 200, and asserts no startup request to UserService. Run after building the solution. This proves the present startup behavior; it does not prove future consumer authentication or business operations work during an outage.
+
+The schema and app Compose files are separate projects. An external Docker network supplies connectivity, not dependency ordering. Run setup's schema initialization/migration phase to completion before starting app services; setup already uses `compose up -d --wait` for infrastructure, then applies migrations. For an already initialized environment, wait for schema infrastructure health before the app runner. Starting both project groups simultaneously from Docker Desktop does not guarantee database readiness, and UserService's Development seeding still needs its database. Do not claim this JWT task fixes every database/migration startup race. Within a single Compose model, `depends_on: condition: service_healthy` can gate a dependency, but it does not replace recovery when that dependency later goes down ([Docker startup-order documentation](https://docs.docker.com/compose/how-tos/startup-order/)).
+
 ### TOKEN, REQUEST and non-user origins
 
 - `TOKEN` is the initial default for authenticated end-user business operations. Enforce endpoint policy, local ownership/scope and Domain invariants; do not contact UserService solely to refresh claims. Remaining token-lifetime staleness is accepted.

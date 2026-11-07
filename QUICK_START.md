@@ -11,6 +11,7 @@ Hướng dẫn onboarding cho dev mới. Làm theo thứ tự: **Prerequisites �
 ```powershell
 git branch --show-current          # xác nhận đang ở branch làm việc
 .\setup.ps1                        # dựng DB + cấu hình credential + SonarQube
+# Cấu hình RSA/JWT ổn định theo mục 2 bên dưới trước khi chạy shared JWT
 .\scripts\run-app-service.ps1 -Service All   # chạy 5 container app (BE + FE)
 # Mở http://localhost:5173
 ```
@@ -77,6 +78,12 @@ Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**E
 
 Không commit `.env`, file Team credential, user-secrets hoặc thư mục workflow keys.
 
+### Signing key ổn định trước khi chạy shared JWT
+
+Template mới khai báo `SMARTPARK_JWT_ISSUER`, `SMARTPARK_JWT_AUDIENCE`, `SMARTPARK_JWT_KEY_ID`, `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` và `SMARTPARK_JWT_JWKS_PATH`. Tạo RSA key riêng (3072 bit khuyến nghị), tự điền Base64 của toàn bộ PEM vào ignored `.env`, rồi đồng bộ bằng `./setup.ps1 -SkipDatabase -SkipRestore`. Hướng dẫn PowerShell không in key và migration PEM cũ ở [LOCAL-SETUP §5.5](LOCAL-SETUP.md#55-jwt-ổn-định-và-jwks-spark-327). Base64 không phải encryption. **Không cần recreate DB.**
+
+`.env` đã có không được tự merge key mới: tự thêm các dòng cần thiết. Có `KeyId` nhưng key thiếu/placeholder/sai khiến UserService fail startup, kể cả Development. Chỉ standalone Development không có cả key lẫn KeyId mới dùng ephemeral key; restart làm JWT cũ mất hiệu lực. Private key chỉ tới UserService; các consumer chỉ nhận issuer/audience/JWKS URI và chưa có JWT middleware trong SPARK-327.
+
 > Ghi chú: `setup.ps1` **không** tự chạy API/FE. Sau khi setup xong, chuyển sang [mục 3](#3-run-application).
 
 ## 3. Run Application
@@ -89,7 +96,7 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 
 ```powershell
 .\scripts\run-app-service.ps1 -Service User       # 1 service, mở CMD log riêng
-.\scripts\run-app-service.ps1 -Service Parking
+.\scripts\run-app-service.ps1 -Service Facility
 .\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Payment
 .\scripts\run-app-service.ps1 -Service Frontend
@@ -99,8 +106,8 @@ Không cần IDE hay cài .NET/Node trên host sau lần build đầu. Compose p
 | Container | URL | Ghi chú |
 | --- | --- | --- |
 | `smartpark-app-user-service-1` | http://localhost:5035/health | Seed admin/owner/operator khi start |
-| `smartpark-app-parking-service-1` | http://localhost:5045/health | Dùng `facility-db` |
-| `smartpark-app-reservation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
+| `smartpark-app-facility-service-1` | http://localhost:5045/health | Dùng `facility-db` |
+| `smartpark-app-operation-service-1` | http://localhost:5055/health | Dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065/health | Dùng `payment-db`; PayOS rỗng = sandbox emulation |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
@@ -120,7 +127,7 @@ Mở 4 terminal PowerShell tại repo root, mỗi terminal chạy một API:
 ```powershell
 .\scripts\run-schema-service.ps1 -Service User
 # Terminal khác:
-.\scripts\run-schema-service.ps1 -Service Parking
+.\scripts\run-schema-service.ps1 -Service Facility
 # Terminal khác:
 .\scripts\run-schema-service.ps1 -Service Operation
 # Terminal khác:
@@ -161,6 +168,7 @@ Checklist xác nhận môi trường chạy đúng:
   ```
 
 - [ ] **FE mở được** tại http://localhost:5173.
+- [ ] **JWKS public trả 200** tại `http://localhost:5035/.well-known/jwks.json` (đổi theo URL/path đã cấu hình). Không cần bearer token; chỉ trả public `kty/kid/use/alg/n/e`, không private key. Xem [cách kiểm tra](LOCAL-SETUP.md#55-jwt-ổn-định-và-jwks-spark-327).
 - [ ] **Đăng nhập được tài khoản demo** (email lấy từ `.env`, password ở các biến tương ứng):
 
   | Tài khoản | Email | Password |
@@ -366,7 +374,8 @@ DB đều bind loopback. Giao tiếp API xuyên máy cần URL host truy cập �
 | Đổi giá trị | Chạy lại |
 | --- | --- |
 | Giá trị container dùng (`SMARTPARK_SERVICE_KEY`, password admin/owner/operator) | `.\scripts\run-app-service.ps1 -Service All -NoBuild` — recreate container với env mới, không cần build image |
-| Giá trị runner host dùng (mọi key trong `.env`) | Restart `.\scripts\run-schema-service.ps1 -Service X` (runner đọc `.env` mỗi lần start) |
+| Giá trị runner host dùng theo phạm vi service | Restart `.\scripts\run-schema-service.ps1 -Service X` (private JWT settings chỉ tới UserService) |
+| Signing key / kid / issuer / audience / JWKS path | User-secrets: `./setup.ps1 -SkipDatabase -SkipRestore`, rồi restart UserService; container: `./scripts/run-app-service.ps1 -Service User -NoBuild`. Đổi trust settings thì recreate consumer liên quan. Giữ key qua restart thông thường; rotation có giới hạn ở LOCAL-SETUP §5.5. |
 | Chạy Visual Studio/`dotnet run` (user-secrets) | `.\setup.ps1 -SkipDatabase -SkipRestore` — bước `[5/7]` ghi đè user-secrets lệch |
 | `SMARTPARK_PAYOS_*` (PaymentService) | `.\scripts\run-app-service.ps1 -Service Payment -NoBuild` (container) hoặc rerun `.\setup.ps1 -SkipDatabase -SkipRestore` (user-secrets). Rỗng = sandbox emulation. |
 | Port DB `SMARTPARK_DB_*_PORT` | `.\setup.ps1 -SkipRestore` rồi restart runner |
@@ -382,7 +391,7 @@ Luôn start container qua `run-app-service.ps1` (hoặc `.cmd`) — nút Start t
 Thêm key vào `.env.example` chưa đủ — phải wire theo consumer và tự thêm giá trị vào `.env` local (setup không copy key lạ vào `.env` đã tồn tại):
 
 - BE container → thêm `environment:` trong `compose.app.yml` dạng `NewKey: ${NEW_KEY:?...}`.
-- BE host runner → key đặt tên `Section__Key` dùng được ngay; tên `SMARTPARK_*` cần thêm dòng mapping trong `run-schema-service.ps1`.
+- BE host runner → key đặt tên `Section__Key` qua loader theo phạm vi service; private JWT settings chỉ tới UserService. Tên `SMARTPARK_*` cần thêm dòng mapping trong `run-schema-service.ps1`.
 - VS/user-secrets → thêm vào `$desired` bước `[5/7]` của `setup.ps1` (optional key: thêm cả `$removable`).
 - Sinh/validate tự động → bổ sung bước `[2/7]`/`[3/7]`.
 - FE host → `FE/.env.example` (+ bước `[6/7]` nếu muốn auto-fill); FE container → `environment:` của service `frontend`.

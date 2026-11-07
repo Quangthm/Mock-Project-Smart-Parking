@@ -62,7 +62,7 @@ public sealed class VehicleRegistrationTests
     private static VehicleDto Vehicle(string plate = " 51a-123.45 ", string type = "CAR") => new()
     { Plate = plate, VehicleType = type, ImageReference = "https://images.example.test/vehicle.jpg" };
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RejectedMutationsDoNotPersistAndServiceRechecksCurrentDriver()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -104,7 +104,7 @@ public sealed class VehicleRegistrationTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task PersistenceOwnershipUpdatesAndDuplicatePlateConflict()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -161,7 +161,7 @@ public sealed class VehicleRegistrationTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RealHttpValidationCrossAccountAndCurrentAccountState()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -217,7 +217,7 @@ public sealed class VehicleRegistrationTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task CurrentDriverAccountScopeExcludesDeletedAndNonPlatedVehicles()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

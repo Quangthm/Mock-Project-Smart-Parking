@@ -27,7 +27,7 @@ public sealed class IdentityMessagingTests
                 Skip="Requires isolated local PostgreSQL and RabbitMQ fixtures.";
         }
     }
-    [RabbitPostgresFact]
+    [RabbitPostgresFact, Trait("Category", "PostgresRabbitMQ")]
     public async Task CommittedOutboxReachesRabbitInboxAndAuthorizedSignalRConnection()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
