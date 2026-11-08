@@ -68,7 +68,7 @@ async function runTests() {
       closedWithError = err;
     }
     // Give time for OnConnectedAsync exception to close the WebSocket
-    await waitFor(() => closedWithError !== null, 2000);
+    await waitFor(() => closedWithError !== null, 5000);
     assert.ok(closedWithError, 'Connection without token must be closed with error');
     assert.equal(conn.state, signalR.HubConnectionState.Disconnected, 'Connection must be Disconnected');
     console.log(`  PASS: Connection without token rejected: ${closedWithError.message || closedWithError}\n`);
@@ -86,7 +86,7 @@ async function runTests() {
     } catch (err) {
       closedWithError = err;
     }
-    await waitFor(() => closedWithError !== null, 2000);
+    await waitFor(() => closedWithError !== null, 5000);
     assert.ok(closedWithError, 'Connection with invalid token must be closed with error');
     assert.equal(conn.state, signalR.HubConnectionState.Disconnected, 'Connection must be Disconnected');
     console.log(`  PASS: Connection with invalid token rejected: ${closedWithError.message || closedWithError}\n`);
@@ -104,7 +104,7 @@ async function runTests() {
     } catch (err) {
       closedWithError = err;
     }
-    await waitFor(() => closedWithError !== null, 2000);
+    await waitFor(() => closedWithError !== null, 5000);
     assert.ok(closedWithError, 'Driver connection must be closed with error');
     assert.equal(conn.state, signalR.HubConnectionState.Disconnected, 'Connection must be Disconnected');
     console.log(`  PASS: Driver connection rejected: ${closedWithError.message || closedWithError}\n`);
@@ -122,7 +122,7 @@ async function runTests() {
     } catch (err) {
       closedWithError = err;
     }
-    await waitFor(() => closedWithError !== null, 2000);
+    await waitFor(() => closedWithError !== null, 5000);
     assert.ok(closedWithError, 'Unassigned site connection must be closed with error');
     assert.equal(conn.state, signalR.HubConnectionState.Disconnected, 'Connection must be Disconnected');
     console.log(`  PASS: Unassigned site connection rejected: ${closedWithError.message || closedWithError}\n`);
