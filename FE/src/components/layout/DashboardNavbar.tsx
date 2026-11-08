@@ -6,6 +6,7 @@ import { BrandLogo } from "../brand/BrandLogo"
 import { ThemeIcon } from "../icon/ThemeIcon"
 import { UntitledIcon } from "../icon/UntitledIcon"
 import { AccountSecurityPanel } from "../forms/AccountSecurityPanel"
+import { AssistantSettings } from "../../roles/admin/setting/AssistantSettings"
 import { store } from "../../lib/store"
 import { scrollPageToTop } from "../../lib/scrollPageToTop"
 import { AccountSwitcher } from "../account/AccountSwitcher"
@@ -79,7 +80,7 @@ export function DashboardNavbar() {
   const settingsCloseRef = useRef<HTMLButtonElement>(null)
 
   // Universal Account & Security Modal state
-  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | null>(null)
+  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | "assistant" | null>(null)
   const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
@@ -459,6 +460,7 @@ export function DashboardNavbar() {
                     ...(user?.role === "admin" ? [] : [["roles", "My Roles", "switch-account"] as const]),
                     ...(user?.role === "owner" ? [["contracts", "Agreements", "file"] as const] : []),
                     ["security", "Security", "shield"],
+                    ...(user?.role === "admin" ? [["assistant", "AI Chatbot", "sparkles"] as const] : []),
                   ] as const).map(([id, label, icon]) => (
                     <button
                       key={id}
@@ -621,6 +623,7 @@ export function DashboardNavbar() {
                     <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
                   </div>
                 )}
+                {accountModalTab === "assistant" && user?.role === "admin" && <AssistantSettings key={user.id} />}
                 {accountModalTab === "contracts" && user?.role === "owner" && (
                   <div className="settings-contracts">
                     <div className="settings-section-heading"><h3>Partnership agreements</h3><p>Review your locally saved agreement copies after both parties acknowledge them.</p></div>

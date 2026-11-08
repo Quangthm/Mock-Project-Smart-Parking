@@ -1,0 +1,30 @@
+.assistant-settings { display: flex; flex-direction: column; gap: 16px; min-width: 0; color: var(--fg); }
+.assistant-settings h3, .assistant-settings h4, .assistant-settings p { margin: 0; }
+.assistant-settings p, .assistant-test span { color: var(--muted); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.assistant-settings-row, .assistant-settings-actions, .assistant-test, .assistant-order { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.assistant-settings-row { justify-content: space-between; gap: 8px 16px; }
+.assistant-settings-row > div { min-width: 0; overflow-wrap: anywhere; }
+.assistant-settings h4 { font-size: 16px; font-weight: 600; }
+.assistant-settings-fields, .assistant-settings form, .assistant-settings-provider, .assistant-settings-key { display: grid; gap: 12px; min-width: 0; }
+.assistant-settings-fields { border: 0; padding: 0; margin: 0; gap: 18px; }
+.assistant-settings-provider { border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.assistant-settings-provider > button, .assistant-settings form button { justify-self: start; }
+.assistant-settings-key { border-top: 1px solid var(--border); padding-top: 12px; }
+.assistant-settings button, .assistant-settings summary { min-height: 44px; }
+.assistant-settings summary { cursor: pointer; align-content: center; }
+.assistant-settings label { display: grid; gap: 6px; font-size: 14px; }
+.assistant-settings .input { width: 100%; min-width: 0; }
+.assistant-settings label.assistant-settings-check { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.assistant-settings-check input { appearance: none; width: 34px; height: 20px; padding: 2px; border: 1px solid var(--muted); border-radius: 20px; background: var(--bg); }
+.assistant-settings-check input::before { display: block; content: ""; background: var(--muted); border-radius: 50%; width: 14px; height: 14px; }
+.assistant-settings-check input:checked { background: var(--primary, #176151); }
+.assistant-settings-check input:checked::before { transform: translateX(14px); background: var(--primary-fg); }
+.assistant-order button { min-width: 44px; }
+.assistant-order span { cursor: grab; padding: 8px; font-size: 20px; }
+.assistant-settings :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.assistant-settings .assistant-settings-error { color: var(--badge-danger-strong); }
+.assistant-settings > [role="status"]:empty, .assistant-editor [aria-live]:empty, .assistant-test:empty { display: none; }
+dialog.assistant-editor { margin: auto; padding: 24px; width: min(440px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+dialog.assistant-editor:not([open]) { display: none; }
+.assistant-editor::backdrop { background: rgb(0 0 0 / .38); }
+@media (max-width: 540px) { .assistant-settings-provider { padding: 12px; } .assistant-settings-row { align-items: start; } }

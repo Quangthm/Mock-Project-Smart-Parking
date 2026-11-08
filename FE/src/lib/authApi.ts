@@ -18,6 +18,16 @@ let refreshInFlight: Promise<void> | null = null
 let logoutInProgress = false
 // A refresh rotates credentials within a login; login/logout changes its identity.
 let sessionGeneration = 0
+const sessionListeners = new Set<() => void>()
+export const getAuthSessionGeneration = () => sessionGeneration
+export function subscribeAuthSession(listener: () => void) {
+  sessionListeners.add(listener)
+  return () => { sessionListeners.delete(listener) }
+}
+function advanceSessionGeneration() {
+  sessionGeneration++
+  sessionListeners.forEach(listener => listener())
+}
 
 function requireSessionGeneration(expected: number) {
   if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")
@@ -120,7 +130,7 @@ function toUser(account: ApiUser): User {
 }
 
 function clearSession() {
-  sessionGeneration++
+  advanceSessionGeneration()
   sessionStorage.removeItem(tokenKey)
 
   sessionStorage.removeItem(refreshKey)
@@ -134,7 +144,7 @@ function saveLoginSession(response: ApiResponse<LoginSession>, isRefresh = false
     throw new Error("Invalid sign-in response.")
 
   const user = toUser(response.data.user)
-  if (!isRefresh) sessionGeneration++
+  if (!isRefresh) advanceSessionGeneration()
   sessionStorage.setItem(tokenKey, response.data.accessToken)
   sessionStorage.setItem(refreshKey, response.data.refreshToken)
   sessionStorage.setItem(expiryKey, String(Date.now() + response.data.expiresIn * 1000))
@@ -194,6 +204,7 @@ export async function request<T>(
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
   extraHeaders?: Record<string, string>,
+  options: { expireSessionOnUnauthorized?: boolean; timeoutMs?: number; signal?: AbortSignal; redirect?: RequestRedirect; credentials?: RequestCredentials } = {},
 ): Promise<T> {
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
@@ -208,7 +219,11 @@ export async function request<T>(
     response = await fetch(serverUrl + apiPrefix + path, {
       method,
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 10_000)])
+        : AbortSignal.timeout(options.timeoutMs ?? 10_000),
+      ...(options.redirect ? { redirect: options.redirect } : {}),
+      ...(options.credentials ? { credentials: options.credentials } : {}),
 
       headers: {
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
@@ -220,6 +235,7 @@ export async function request<T>(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
   } catch {
+    if (options.signal?.aborted) throw new DOMException("Request cancelled.", "AbortError")
     throw new Error("Cannot reach the authentication server. Please try again.")
   }
 
@@ -235,6 +251,7 @@ export async function request<T>(
     const verificationFailed = isMfaManagement && ["AUTH_FAILED", "MFA_INVALID", "MFA_REQUIRED"].includes(payload?.code)
     if (
       response.status === 401 &&
+      options.expireSessionOnUnauthorized !== false &&
       token &&
       !anonymousPath(path, apiPrefix) && path !== "/logout" &&
       !verificationFailed &&
