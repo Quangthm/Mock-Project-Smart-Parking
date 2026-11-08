@@ -767,7 +767,15 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     }
     if ($toSync.Count) {
         # Secrets travel on stdin, never in process command-line arguments.
-        $toSync | ConvertTo-Json -Compress | & dotnet user-secrets set --project $projectByService[$service] | Out-Null
+        # Windows PowerShell 5.1 native pipe prepends a UTF-8 BOM which .NET 10 System.Text.Json rejects (0xEF invalid start of value).
+        # Redirect raw UTF-8 bytes without BOM through cmd.exe stdin redirection.
+        $tempSecretFile = [System.IO.Path]::GetTempFileName()
+        try {
+            [System.IO.File]::WriteAllText($tempSecretFile, ($toSync | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+            & cmd.exe /c "dotnet user-secrets set --project `"$($projectByService[$service])`" < `"$tempSecretFile`"" | Out-Null
+        } finally {
+            if (Test-Path -LiteralPath $tempSecretFile) { Remove-Item -LiteralPath $tempSecretFile -Force }
+        }
         if ($LASTEXITCODE -ne 0) { throw "Cannot configure user-secrets for $service." }
     }
     foreach ($name in $removable) {

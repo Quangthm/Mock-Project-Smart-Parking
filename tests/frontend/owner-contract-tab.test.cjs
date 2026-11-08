@@ -31,9 +31,10 @@ test('Owner agreement opens from shared browser storage, signs the current setup
     window: { close: () => { closeCount++ }, closed: true, setTimeout: () => {} },
     require(name) {
       if (name === 'react') return { useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}] }
-      if (name === 'react-router-dom') return { useParams: () => ({ applicationId }) }
+      if (name === 'react-router-dom') return { useParams: () => ({ applicationId }), useNavigate: () => () => {} }
       if (name.endsWith('/PartnerContractDialog')) return { PartnerContractDialog: 'dialog' }
       if (name.endsWith('/partnerContract')) return contract
+      if (name.endsWith('/AppContext')) return { useApp: () => ({ user: null }) }
       if (name === 'react/jsx-runtime') return { Fragment: 'fragment', jsx: (type, props) => { if (type === 'dialog') dialogProps = props; return { type, props } }, jsxs: (type, props) => { if (type === 'dialog') dialogProps = props; return { type, props } } }
       throw new Error(`Unexpected import: ${name}`)
     },

@@ -16,7 +16,8 @@ const stale = staleEnvelope.data;
  * to CommonJS, run it in a vm, and stub every import by name.
  */
 function load(file, imports, replacements = {}) {
-  let source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8');
+  let source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8')
+    .replace(/import\.meta\.env\.\w+/g, 'undefined');
   for (const [from, to] of Object.entries(replacements)) source = source.split(from).join(to);
   const js = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

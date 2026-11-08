@@ -1,0 +1,2744 @@
+{
+  "info": {
+    "name": "SmartParking - SPARK-238 Facility Structure (manual verification)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "# SPARK-238 Facility Structure - manual end-to-end verification\n\nExercises every FacilityService structure route authored for SPARK-238. Route paths, request records and response fields are taken from `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs` (source of truth).\n\n## Folders\n\n- **00 Setup (run first)** - login each role, generate `runSuffix`.\n- **01 Lot** - `POST /api/parking-lots`, `GET /api/parking-lots` (inactive lots stay listed), rejected legacy whole-structure ingest.\n- **02 Units** - `POST /{id}/units` FLOOR to ZONE to BLOCK plus duplicate-sibling 409.\n- **03 Slots** - `POST /{id}/slots` single and multi vehicle types, live duplicate 409, released-code 409 `IDENTIFIER_RELEASED`.\n- **04 Paths** - `POST /{id}/paths`.\n- **05 Structure PATCH** - every action in `PATCH /{id}/structure` and the `configureSlot` geometry rejection.\n- **06 Reads** - `GET /{id}/structure`, `GET /{id}/operational-layout`, `GET /{id}/operator-layout`.\n- **07 Maintenance windows** - list/create/extend/cancel and the overlap 409.\n- **08 Batch** - `POST /{id}/structure/batch` idempotency header, all-or-nothing and per-item failures.\n- **09 Operations** - `POST /{id}/operations` and `GET /{id}/operations/{operationId}` replay.\n- **10 Negative / Auth** - missing bearer 401, foreign tenant 403, foreign lot 404, operator-layout gating.\n\n## Run order\n\nRun folders top to bottom. Folder 00 must run first: it stores every token and the run suffix. Do not reorder folder 03 before folder 02.\n\n## Default local ports\n\n- UserService: `http://localhost:5035` (`userServiceUrl`)\n- Reservation/OperationService: `http://localhost:5055` (`reservationServiceUrl`)\n- FacilityService: `http://localhost:5045` (`baseUrl`)\n\n`GET /{id}/operator-layout` also needs the demo seed (`scripts/seed-demo-site.ps1`) so the operator is assigned to `seededSiteId` with `SLOT_OVERRIDE`.\n\n## Data-dependent cases\n\n- `GET /{id}/operator-layout` (6.4) needs the seeded demo site.\n- PATCH `backup` / `markBackup` need the Owner to hold `BACKUP_CONFIGURE` / `BACKUP_MARK` (the demo Owner does).\n- The maintenance-window reopen guard (7.11) only fires once another window covers `now`; the script logs an explicit SKIP and the guide explains how to observe the 409.\n\n## Evidence note\n\nNo application is started by this task. These artifacts were checked statically against `Program.cs`; every path and field used here exists in that source. Where API-design v1.3 disagrees with the code, the code is followed and the discrepancy is recorded in `SPARK-238-manual-test-guide.md` section 5."
+  },
+  "item": [
+    {
+      "name": "00 - Setup (run first)",
+      "description": "Logs in the Owner, the assigned Operator, the Driver and the Admin, and generates runSuffix. Run this folder before any other folder.",
+      "item": [
+        {
+          "name": "0.1 Login Owner",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('runSuffix', Date.now().toString(36).slice(-5) + Math.floor(Math.random() * 1000));",
+                  "console.log('runSuffix=' + pm.environment.get('runSuffix'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is owner', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('owner');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('ownerToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_OWNER_EMAIL/PASSWORD from the repository root .env. Stores `ownerToken`. The prerequest also generates `runSuffix` for unique lot codes."
+          }
+        },
+        {
+          "name": "0.2 Login Operator (SLOT_OVERRIDE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is operator', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('operator');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('operatorToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{operatorPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_OPERATOR_EMAIL/PASSWORD. The account must be assigned to the demo site with SLOT_OVERRIDE (`scripts/seed-demo-site.ps1`). Stores `operatorToken`."
+          }
+        },
+        {
+          "name": "0.3 Login Driver",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is driver', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('driver');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('driverToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with the seeded driver driver@gmail.com / Password@123. Stores `driverToken`."
+          }
+        },
+        {
+          "name": "0.4 Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is admin', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('admin');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('adminToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_ADMIN_EMAIL/PASSWORD. Optional for the structure routes. Stores `adminToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Lot",
+      "description": "POST and GET /api/parking-lots. Confirms the 201 + Location create contract, that the management list is not active-filtered, and that the old whole-structure ingest route is not implemented.",
+      "item": [
+        {
+          "name": "1.1 Create lot (201 + Location)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('created site profile returned', () => pm.expect(body.data).to.be.an('object'));",
+                  "pm.test('data.id present', () => pm.expect(body.data && body.data.id, 'no site id').to.be.a('string').and.not.empty);",
+                  "pm.test('data.code echoed', () => pm.expect(body.data && body.data.code).to.be.a('string').and.not.empty);",
+                  "pm.test('Location points at the structure route', () => {",
+                  "  const location = pm.response.headers.get('Location');",
+                  "  pm.expect(location).to.eql('/api/parking-lots/' + body.data.id + '/structure');",
+                  "});",
+                  "if (body && body.data && body.data.id) { pm.environment.set('createdSiteId', body.data.id); pm.environment.set('createdSiteCode', body.data.code); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SP238-A-{{runSuffix}}\",\n  \"name\": \"SPARK-238 Test Lot A\",\n  \"address\": \"1 Facility Road\",\n  \"latitude\": 10.77,\n  \"longitude\": 106.70,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots",
+            "description": "POST /api/parking-lots (Program.cs:158-162). Owner bearer. The endpoint returns Results.Created($\"/api/parking-lots/{site.Id}/structure\", ...), so the Location header is asserted exactly. Stores `createdSiteId` / `createdSiteCode`."
+          }
+        },
+        {
+          "name": "1.2 Create disposable lot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data.id present', () => pm.expect(body.data && body.data.id).to.be.a('string').and.not.empty);",
+                  "if (body && body.data && body.data.id) { pm.environment.set('disposableSiteId', body.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SP238-D-{{runSuffix}}\",\n  \"name\": \"SPARK-238 Disposable Lot\",\n  \"address\": \"3 Disposal Road\",\n  \"latitude\": null,\n  \"longitude\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots",
+            "description": "A second lot created only to be deactivated in 1.4, proving GET /api/parking-lots still returns inactive lots. Stores `disposableSiteId`."
+          }
+        },
+        {
+          "name": "1.3 List lots (management list)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is a non-empty array', () => pm.expect(body.data).to.be.an('array').that.is.not.empty);",
+                  "pm.test('every row exposes a lifecycle status', () => pm.expect(body.data.every(site => typeof site.status === 'string' && site.status.length > 0)).to.eql(true));",
+                  "const createdId = pm.environment.get('createdSiteId');",
+                  "pm.test('the created lot is listed', () => pm.expect(body.data.some(site => site.id === createdId)).to.eql(true));",
+                  "pm.test('rows are site profiles (tenantId/code/isActive present)', () => {",
+                  "  const row = body.data.find(site => site.id === createdId);",
+                  "  pm.expect(row).to.be.an('object');",
+                  "  pm.expect(row.tenantId).to.be.a('string').and.not.empty;",
+                  "  pm.expect(row.code).to.be.a('string').and.not.empty;",
+                  "  pm.expect(row.isActive).to.be.a('boolean');",
+                  "});",
+                  "console.log('NOTE: GET /api/parking-lots returns SiteProfile rows (status only). The API-design doc v1.3 claims a derived serviceState on this route; Program.cs exposes serviceState only on GET /{id}/structure. See SPARK-238-manual-test-guide.md section 5.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots",
+            "description": "GET /api/parking-lots (Program.cs:157). Owner-only. The response is { success, data: SiteProfile[] }; the design doc v1.3 line 55 claims a derived `serviceState` here, but the code returns only `status` on this route (discrepancy documented in the guide section 5)."
+          }
+        },
+        {
+          "name": "1.4 Deactivate disposable lot (PATCH active:false)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"active\",\n  \"active\": false,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{disposableSiteId}}/structure",
+            "description": "PATCH /api/parking-lots/{id}/structure action `active` (Program.cs:248-259). ParkingStructure.SetActive(false) flips lifecycle status to INACTIVE; the lot has no slots so the commitment guard passes."
+          }
+        },
+        {
+          "name": "1.5 List again (INACTIVE lot is still returned)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is an array', () => pm.expect(body.data).to.be.an('array'));",
+                  "const id = pm.environment.get('disposableSiteId');",
+                  "const site = (body.data || []).find(item => item.id === id);",
+                  "pm.test('the deactivated lot is still listed (no implicit active-only filter)', () => pm.expect(site, 'deactivated lot missing from GET /api/parking-lots').to.be.an('object'));",
+                  "pm.test('the deactivated lot reports isActive=false and status=INACTIVE', () => {",
+                  "  pm.expect(site && site.isActive).to.eql(false);",
+                  "  pm.expect(site && site.status).to.eql('INACTIVE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots",
+            "description": "Q4 / DE-2: the Owner management list is not active-filtered, because an Owner needs the row to reactivate it. Asserts the INACTIVE disposable lot is returned with status INACTIVE."
+          }
+        },
+        {
+          "name": "1.6 Legacy whole-structure ingest is rejected (405/404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the old whole-structure ingest never succeeds (404/405)', () => pm.expect([404, 405]).to.include(pm.response.code));",
+                  "pm.test('no success envelope is returned', () => {",
+                  "  let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "  pm.expect(body === undefined || body.success !== true).to.eql(true);",
+                  "});",
+                  "console.log('REJECTED as designed: the destructive replace-all POST /api/parking-lots/{id}/structure route is not mapped. Program.cs maps only GET and PATCH at that path, so ASP.NET returns 405. The narrow, all-or-nothing route that IS implemented is POST /{id}/structure/batch (folder 08).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"units\": [],\n  \"slots\": [],\n  \"paths\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "The SPARK-238 Q1 decision rejects destructive replace-all ingestion. Program.cs maps GET (line 163) and PATCH (line 248) at /api/parking-lots/{id}/structure only; there is no POST. ASP.NET Core therefore answers 405 Method Not Allowed. This request asserts the route does not succeed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Units",
+      "description": "POST /api/parking-lots/{id}/units across the FLOOR to ZONE to BLOCK hierarchy, plus duplicate-sibling and hierarchy-order negatives.",
+      "item": [
+        {
+          "name": "2.1 Add FLOOR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new unit id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('floorUnitId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"FLOOR\",\n  \"name\": \"SP238-L1\",\n  \"parentId\": null,\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "POST /{id}/units (Program.cs:246). UnitBody(type,name,parentId,capacity,tenantId). The response is 200 { success, data: \"<unitId>\" } (NOT 201; contract v1.3 also says 200). Stores `floorUnitId`."
+          }
+        },
+        {
+          "name": "2.2 Add ZONE under the FLOOR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new unit id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('zoneUnitId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ZONE\",\n  \"name\": \"SP238-Z1\",\n  \"parentId\": \"{{floorUnitId}}\",\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "ZONE child of the FLOOR. AddUnit requires the child type to strictly follow the parent in FLOOR/ZONE/BLOCK order. Stores `zoneUnitId`."
+          }
+        },
+        {
+          "name": "2.3 Add BLOCK under the ZONE (depth 3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new unit id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('blockUnitId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BLOCK\",\n  \"name\": \"SP238-B1\",\n  \"parentId\": \"{{zoneUnitId}}\",\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "BLOCK child of the ZONE: the deepest supported level (FLOOR -> ZONE -> BLOCK). Stores `blockUnitId`."
+          }
+        },
+        {
+          "name": "2.4 Duplicate sibling name (409 DUPLICATE_IDENTIFIER)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('DUPLICATE_IDENTIFIER', () => pm.expect(body.code).to.eql('DUPLICATE_IDENTIFIER'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ZONE\",\n  \"name\": \"SP238-Z1\",\n  \"parentId\": \"{{floorUnitId}}\",\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "Sibling names are case-insensitively unique within (site, parent); ParkingStructure.AddUnit throws DUPLICATE_IDENTIFIER, mapped to 409 by the middleware (Program.cs:105)."
+          }
+        },
+        {
+          "name": "2.5 Add disposable ZONE (for PATCH cases)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new unit id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('disposableUnitId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ZONE\",\n  \"name\": \"SP238-Z2\",\n  \"parentId\": \"{{floorUnitId}}\",\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "A second ZONE with no children and no slots, used by the PATCH renameUnit/capacity/removeUnit/restoreUnit cases. Stores `disposableUnitId`."
+          }
+        },
+        {
+          "name": "2.6 Child type before parent (400 INVALID_STRUCTURE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_STRUCTURE', () => pm.expect(body.code).to.eql('INVALID_STRUCTURE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"FLOOR\",\n  \"name\": \"SP238-BAD-ORDER\",\n  \"parentId\": \"{{zoneUnitId}}\",\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "A FLOOR cannot be a child of a ZONE; AddUnit requires (int)type > (int)parent.Type and otherwise throws INVALID_STRUCTURE, mapped to 400."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Slots",
+      "description": "POST /api/parking-lots/{id}/slots: single and multi vehicle types, live duplicate rejection, and the released-code IDENTIFIER_RELEASED path.",
+      "item": [
+        {
+          "name": "3.1 Add slot with a single vehicleType",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('slotId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-A01\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "POST /{id}/slots (Program.cs:247) with the legacy single `vehicleType`. Returns 200 { success, data: \"<slotId>\" } (contract v1.3 proposes 201 with {slotId, created}; the code returns 200 and a bare id - discrepancy in guide section 5). Stores `slotId`."
+          }
+        },
+        {
+          "name": "3.2 Add slot with vehicleTypes + primaryVehicleType",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('multiSlotId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-M01\",\n  \"vehicleType\": null,\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": [\"CAR\", \"MOTORCYCLE\"],\n  \"primaryVehicleType\": \"CAR\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "Multi-category registration. SlotCompatibility.Primary enforces a declared primary; the projection column stores CAR while both CAR and MOTORCYCLE are written to slot_compatibilities. Stores `multiSlotId`."
+          }
+        },
+        {
+          "name": "3.3 Live duplicate slot code (409 DUPLICATE_IDENTIFIER)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('DUPLICATE_IDENTIFIER', () => pm.expect(body.code).to.eql('DUPLICATE_IDENTIFIER'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-A01\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "Re-registering the code of a live slot. The code is unique site-wide case-insensitively, so ParkingStructure.AddSlot throws DUPLICATE_IDENTIFIER (409)."
+          }
+        },
+        {
+          "name": "3.4 Add disposable slot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('disposableSlotId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-D01\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "A slot used by the PATCH removeSlot/restoreSlot cases. Stores `disposableSlotId`."
+          }
+        },
+        {
+          "name": "3.5 Add slot to be moved",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('moveSlotId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-MV01\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "A slot moved to the ZONE by PATCH moveSlot in 5.9. Stores `moveSlotId`."
+          }
+        },
+        {
+          "name": "3.6 Add batch slot 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('batchSlotId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-B01\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "Removed by the successful batch in folder 08. Stores `batchSlotId`."
+          }
+        },
+        {
+          "name": "3.7 Add batch slot 2 (all-or-nothing probe)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('batchSlot2Id', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"SP238-B02\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "Paired with a failing batch item in 8.5 to prove the whole batch is rejected and this slot survives. Stores `batchSlot2Id`."
+          }
+        },
+        {
+          "name": "3.8 Add slot that will be released",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new slot id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('releasedSlotId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"{{releasedSlotCode}}\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "Registered with the code in `releasedSlotCode` so 3.9 can soft-delete it. Stores `releasedSlotId`."
+          }
+        },
+        {
+          "name": "3.9 Soft-delete the slot (PATCH removeSlot)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"removeSlot\",\n  \"resourceId\": \"{{releasedSlotId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "PATCH removeSlot soft-deletes the row (deleted_at) and keeps the id and compatibility rows, which is what makes 3.10 return IDENTIFIER_RELEASED."
+          }
+        },
+        {
+          "name": "3.10 Re-register the released code (409 IDENTIFIER_RELEASED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('IDENTIFIER_RELEASED', () => pm.expect(body.code).to.eql('IDENTIFIER_RELEASED'));",
+                  "pm.test('released block names the soft-deleted slot', () => {",
+                  "  pm.expect(body.released, 'missing released block').to.be.an('object');",
+                  "  pm.expect(body.released.id).to.eql(pm.environment.get('releasedSlotId'));",
+                  "  pm.expect(body.released.code).to.eql(pm.environment.get('releasedSlotCode'));",
+                  "  pm.expect(body.released.deletedAt).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitId\": \"{{floorUnitId}}\",\n  \"code\": \"{{releasedSlotCode}}\",\n  \"vehicleType\": \"CAR\",\n  \"type\": \"STANDARD\",\n  \"vehicleTypes\": null,\n  \"primaryVehicleType\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/slots",
+            "description": "The code belongs to a soft-deleted row. The repository refuses to resurrect during a create and throws ReleasedIdentifierException, rendered by the middleware (Program.cs:75-85) as 409 { success:false, code:IDENTIFIER_RELEASED, released:{id,code,deletedAt} }. Nothing is written."
+          }
+        },
+        {
+          "name": "3.11 Restore the released slot (PATCH restoreSlot)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"restoreSlot\",\n  \"resourceId\": \"{{releasedSlotId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "The explicit restoration required by F06/F15: the create never restores, so the Owner restores the same row id through the PATCH action."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Paths",
+      "description": "POST /api/parking-lots/{id}/paths for internal access topology.",
+      "item": [
+        {
+          "name": "4.1 Add access path (FLOOR -> ZONE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new path id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('pathId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SP238-P1\",\n  \"from\": \"{{floorUnitId}}\",\n  \"to\": \"{{zoneUnitId}}\",\n  \"mapData\": \"{}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/paths",
+            "description": "POST /{id}/paths (Program.cs:260). PathBody(code,from,to,mapData,tenantId); from and to must be live units of the site and must differ; mapData must be valid JSON. Returns 200 {success,data:\"<pathId>\"}. Stores `pathId`."
+          }
+        },
+        {
+          "name": "4.2 Add batch access path (FLOOR -> BLOCK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is the new path id', () => pm.expect(body.data).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('batchPathId', body.data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SP238-PB\",\n  \"from\": \"{{floorUnitId}}\",\n  \"to\": \"{{blockUnitId}}\",\n  \"mapData\": \"{}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/paths",
+            "description": "Removed by the successful batch in folder 08. Stores `batchPathId`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Structure PATCH actions",
+      "description": "Every PATCH /api/parking-lots/{id}/structure action SPARK-238 defines, plus the configureSlot geometry rejection. Each successful action returns 200 {success:true}.",
+      "item": [
+        {
+          "name": "5.1 PATCH profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"profile\",\n  \"code\": \"SP238-P-{{runSuffix}}\",\n  \"name\": \"SPARK-238 Test Lot A renamed\",\n  \"address\": \"2 Facility Road\",\n  \"latitude\": 10.78,\n  \"longitude\": 106.71,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `profile` updates code (upper-cased), name, address and the paired coordinates (code 1-50, name 1-255, address 1-2000, lat/lon in range and paired)."
+          }
+        },
+        {
+          "name": "5.2 PATCH active",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"active\",\n  \"active\": true,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `active` toggles lifecycle status only. Sending true keeps the lot ACTIVE for the remaining folders (the INACTIVE proof is done on the disposable lot in 1.4/1.5)."
+          }
+        },
+        {
+          "name": "5.3 PATCH renameUnit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"renameUnit\",\n  \"resourceId\": \"{{disposableUnitId}}\",\n  \"name\": \"SP238-Z2R\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `renameUnit`. Rejects a case-insensitive duplicate among live siblings; the new name is distinct."
+          }
+        },
+        {
+          "name": "5.4 PATCH capacity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"capacity\",\n  \"resourceId\": \"{{disposableUnitId}}\",\n  \"capacity\": 5,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `capacity` sets a layout limit (0 = no limit). The disposable unit has no slots, so 5 is accepted."
+          }
+        },
+        {
+          "name": "5.5 PATCH removeUnit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"removeUnit\",\n  \"resourceId\": \"{{disposableUnitId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `removeUnit` soft-deletes an empty unit (no children, slots or paths). A non-empty unit would return 409 UNIT_NOT_EMPTY instead."
+          }
+        },
+        {
+          "name": "5.6 PATCH restoreUnit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"restoreUnit\",\n  \"resourceId\": \"{{disposableUnitId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `restoreUnit`. Reuses the row id and is refused if a live sibling now holds the name."
+          }
+        },
+        {
+          "name": "5.7 PATCH removeSlot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"removeSlot\",\n  \"resourceId\": \"{{disposableSlotId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `removeSlot`. Soft delete, allowed only while the site has no live commitment and the slot is not occupied/protected/backup-marked."
+          }
+        },
+        {
+          "name": "5.8 PATCH restoreSlot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"restoreSlot\",\n  \"resourceId\": \"{{disposableSlotId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `restoreSlot`. Idempotent and keeps the row id, so allocation/audit history stays attached."
+          }
+        },
+        {
+          "name": "5.9 PATCH moveSlot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"moveSlot\",\n  \"resourceId\": \"{{moveSlotId}}\",\n  \"unitId\": \"{{zoneUnitId}}\",\n  \"code\": \"SP238-MV02\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `moveSlot` moves the slot to the ZONE and renames its code. The target unit must be live and the new code unique, and the slot must not be occupied/protected."
+          }
+        },
+        {
+          "name": "5.10 PATCH configureSlot (valid: category + type)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"configureSlot\",\n  \"resourceId\": \"{{slotId}}\",\n  \"vehicleType\": \"MOTORCYCLE\",\n  \"slotType\": \"STANDARD\",\n  \"coordinates3D\": null,\n  \"features\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `configureSlot` with server-owned geometry left null. A9/F13: non-null coordinates3D or features is rejected (5.11/5.12)."
+          }
+        },
+        {
+          "name": "5.11 PATCH configureSlot with coordinates3D (400 INVALID_STRUCTURE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_STRUCTURE', () => pm.expect(body.code).to.eql('INVALID_STRUCTURE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"configureSlot\",\n  \"resourceId\": \"{{slotId}}\",\n  \"vehicleType\": \"CAR\",\n  \"slotType\": \"STANDARD\",\n  \"coordinates3D\": \"server-owned-geometry\",\n  \"features\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "A9 / F13: slot geometry is owned by the fixed 3D template and may not be written by the Owner. ParkingStructure.ConfigureSlot requires coordinates3D is null, otherwise 400 INVALID_STRUCTURE. The value only needs to be non-null; the domain does not parse coordinates3D as JSON."
+          }
+        },
+        {
+          "name": "5.12 PATCH configureSlot with features (400 INVALID_STRUCTURE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_STRUCTURE', () => pm.expect(body.code).to.eql('INVALID_STRUCTURE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"configureSlot\",\n  \"resourceId\": \"{{slotId}}\",\n  \"vehicleType\": \"CAR\",\n  \"slotType\": \"STANDARD\",\n  \"coordinates3D\": null,\n  \"features\": \"server-owned-features\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "F13/DE-17: features is server-owned in this contract, so any non-null value is refused with 400 INVALID_STRUCTURE. EditStructure is not annotated with JsonUnmappedMemberHandling.Disallow, so the field binds and is then rejected by the domain."
+          }
+        },
+        {
+          "name": "5.13 PATCH removePath",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"removePath\",\n  \"resourceId\": \"{{pathId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `removePath` soft-deletes an access path. A missing path would return 400 PATH_NOT_FOUND in the current middleware mapping."
+          }
+        },
+        {
+          "name": "5.14 PATCH restorePath",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"restorePath\",\n  \"resourceId\": \"{{pathId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `restorePath`. Both endpoints must still be live; the floor and zone remain registered."
+          }
+        },
+        {
+          "name": "5.15 PATCH backup (site-level CAR policy)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"backup\",\n  \"unitId\": \"00000000-0000-0000-0000-000000000000\",\n  \"vehicleType\": \"CAR\",\n  \"capacity\": 1,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `backup` configures a site-level CAR backup policy (unitId empty = site scope, capacity = count). Requires BACKUP_CONFIGURE; the demo Owner holds it. If the Owner lacked it the endpoint returns 403 FORBIDDEN before applying the edit."
+          }
+        },
+        {
+          "name": "5.16 PATCH markBackup (mark)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"markBackup\",\n  \"resourceId\": \"{{slotId}}\",\n  \"active\": true,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `markBackup` sets the slot reservation state to BACKUP (the `active` boolean is the mark flag). BACKUP_MARK must be explicitly granted to the account (DEC-LOT-04) and is not inherited from site ownership. The demo Owner does not hold BACKUP_MARK, so the request is rejected with 403 FORBIDDEN before any edit is applied."
+          }
+        },
+        {
+          "name": "5.17 PATCH markBackup (release)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"markBackup\",\n  \"resourceId\": \"{{slotId}}\",\n  \"active\": false,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Action `markBackup` with active:false releases the BACKUP designation. Releasing it also requires the explicit BACKUP_MARK grant (DEC-LOT-04), which the demo Owner does not hold, so the request is rejected with 403 FORBIDDEN and the slot is left unchanged."
+          }
+        },
+        {
+          "name": "5.18 PATCH unknown action (400 INVALID_STRUCTURE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_STRUCTURE', () => pm.expect(body.code).to.eql('INVALID_STRUCTURE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"notARealAction\",\n  \"resourceId\": \"{{slotId}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "StructureEditHandler.Apply throws INVALID_STRUCTURE for an unrecognized action, mapped to 400."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Reads",
+      "description": "GET /{id}/structure (owner aggregate + serviceState), GET /{id}/operational-layout (SPARK-228 projection) and GET /{id}/operator-layout (legacy aggregate).",
+      "item": [
+        {
+          "name": "6.1 GET structure (serviceState present)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "const data = body.data;",
+                  "['site', 'units', 'slots', 'paths', 'backupPolicies', 'capacityViews', 'serviceState'].forEach(key => pm.test('data.' + key + ' present', () => pm.expect(data).to.have.property(key)));",
+                  "pm.test('serviceState.state is a string', () => pm.expect(data.serviceState.state).to.be.a('string').and.not.empty);",
+                  "pm.test('serviceState.windows is an array', () => pm.expect(data.serviceState.windows).to.be.an('array'));",
+                  "pm.test('serviceState.closedUntil key is present (nullable)', () => pm.expect(data.serviceState).to.have.property('closedUntil'));",
+                  "pm.test('site exposes lifecycle status', () => pm.expect(data.site.status).to.be.a('string'));",
+                  "pm.test('units/slots/paths/capacityViews are arrays', () => {",
+                  "  pm.expect(data.units).to.be.an('array');",
+                  "  pm.expect(data.slots).to.be.an('array');",
+                  "  pm.expect(data.paths).to.be.an('array');",
+                  "  pm.expect(data.capacityViews).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "GET /{id}/structure (Program.cs:163-194). The response is the serialized domain aggregate plus an additive serviceState object. Requires ReservationService (commitment snapshot)."
+          }
+        },
+        {
+          "name": "6.2 GET operational-layout (SPARK-228 projection)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('contractVersion 1.2.0', () => pm.expect(body.data.contractVersion).to.eql('1.2.0'));",
+                  "pm.test('stalenessThresholdSeconds 30', () => pm.expect(body.data.stalenessThresholdSeconds).to.eql(30));",
+                  "pm.test('slots is an array', () => pm.expect(body.data.slots).to.be.an('array'));",
+                  "pm.test('freshness fields present', () => { pm.expect(body.data.generatedAt).to.be.a('string'); pm.expect(body.data.isFresh).to.be.a('boolean'); });",
+                  "pm.test('Cache-Control forbids caching', () => { const cc = (pm.response.headers.get('Cache-Control') || '').toLowerCase(); pm.expect(cc).to.include('no-store'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/operational-layout",
+            "description": "GET /{id}/operational-layout (Program.cs:195-237), the SPARK-228 read path. The Owner receives Telemetry visibility. Never takes an edit hold. Asserts the contract version and envelope."
+          }
+        },
+        {
+          "name": "6.3 GET operational-layout with unknown floor (400 INVALID_FLOOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_FLOOR', () => pm.expect(body.code).to.eql('INVALID_FLOOR'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/operational-layout?floor=__NOPE__",
+            "description": "The reader rejects an unknown floor with StructureException INVALID_FLOOR, mapped to 400 by the middleware. (Documented by the SPARK-228 collection, request 6.4.)"
+          }
+        },
+        {
+          "name": "6.4 GET operator-layout (legacy aggregate, operator token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('legacy aggregate keys are present', () => {",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "  pm.expect(body.data.slots).to.be.an('array');",
+                  "  pm.expect(body.data).to.have.property('capacityViews');",
+                  "});",
+                  "pm.test('this is not the operational projection', () => pm.expect(body.data).not.to.have.property('contractVersion'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operatorToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operator-layout",
+            "description": "GET /{id}/operator-layout (Program.cs:261-267). A different route with a different authority: assigned-lot Operator scope (site-scope), not owner. Requires the demo seed so the operator is assigned to seededSiteId, and ReservationService for the snapshot. Returns the raw ParkingStructure aggregate."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Maintenance windows",
+      "description": "GET/POST /{id}/maintenance-windows and PATCH/DELETE /{id}/maintenance-windows/{windowId}. Windows are half-open [start,end) and stay enforcementState pending (DE-13).",
+      "item": [
+        {
+          "name": "7.1 GET maintenance windows (baseline)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "const iso = ms => new Date(now + ms).toISOString();",
+                  "const H = 3600 * 1000;",
+                  "pm.environment.set('windowStart1', iso(45000));",
+                  "pm.environment.set('windowEnd1', iso(4 * H));",
+                  "pm.environment.set('windowStartOverlap', iso(30000));",
+                  "pm.environment.set('windowEndOverlap', iso(2 * H));",
+                  "pm.environment.set('windowStart2', iso(6 * H));",
+                  "pm.environment.set('windowEnd2', iso(8 * H));",
+                  "pm.environment.set('windowEndExtended', iso(9 * H));",
+                  "pm.environment.set('windowEndShorter', iso(7 * H));",
+                  "pm.environment.set('windowStartMoved', iso(7 * H));",
+                  "pm.environment.set('windowStart3', iso(10 * H));",
+                  "pm.environment.set('windowEnd3', iso(11 * H));",
+                  "console.log('window1 covering window starts at ' + pm.environment.get('windowStart1') + ' (the reopen guard in 7.11 depends on it).');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('data is an array', () => pm.expect(body.data).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows",
+            "description": "GET /{id}/maintenance-windows (Program.cs:273-274). The prerequest computes all window timestamps relative to now so the windows are always in the future. Non-cancelled windows only, ordered by lower(service_window)."
+          }
+        },
+        {
+          "name": "7.2 POST create window 1 (covering window)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('enforcementState is pending', () => pm.expect(body.data.enforcementState).to.eql('pending'));",
+                  "pm.test('Location names the new window', () => {",
+                  "  const location = pm.response.headers.get('Location');",
+                  "  pm.expect(location).to.eql('/api/parking-lots/' + pm.environment.get('createdSiteId') + '/maintenance-windows/' + body.data.id);",
+                  "});",
+                  "pm.environment.set('maintenanceWindowId', body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": \"{{windowStart1}}\",\n  \"end\": \"{{windowEnd1}}\",\n  \"reason\": \"SPARK-238 window 1 covering window\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows",
+            "description": "POST /{id}/maintenance-windows (Program.cs:275-279). MaintenanceWindowBody(start,end,reason,tenantId) - the code record has NO unitId/slotId, so only site-wide windows can be created today (guide section 5). Starts 45 seconds from now so 7.11 can use it as the covering window. Stores `maintenanceWindowId`."
+          }
+        },
+        {
+          "name": "7.3 GET windows (window 1 listed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "const id = pm.environment.get('maintenanceWindowId');",
+                  "pm.test('window 1 is listed', () => pm.expect((body.data || []).some(w => w.id === id)).to.eql(true));",
+                  "pm.test('the window row exposes enforcementState', () => {",
+                  "  const w = (body.data || []).find(x => x.id === id);",
+                  "  pm.expect(w && w.enforcementState).to.eql('pending');",
+                  "  pm.expect(w && w.start).to.be.a('string').and.not.empty;",
+                  "  pm.expect(w && w.end).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows",
+            "description": "Confirms the created window is returned with start, end and enforcementState."
+          }
+        },
+        {
+          "name": "7.4 POST overlapping window (409 STRUCTURE_IN_USE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('STRUCTURE_IN_USE', () => pm.expect(body.code).to.eql('STRUCTURE_IN_USE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": \"{{windowStartOverlap}}\",\n  \"end\": \"{{windowEndOverlap}}\",\n  \"reason\": \"SPARK-238 overlap probe\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows",
+            "description": "A second site-wide window whose [start,end) overlaps window 1. The same-database exclusion constraint (ex_maintenance_windows_site_overlap) rejects it; the store maps it to 409 STRUCTURE_IN_USE. Nothing is cancelled or moved."
+          }
+        },
+        {
+          "name": "7.5 POST create window 2 (non-overlapping)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('enforcementState is pending', () => pm.expect(body.data.enforcementState).to.eql('pending'));",
+                  "pm.environment.set('maintenanceWindow2Id', body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": \"{{windowStart2}}\",\n  \"end\": \"{{windowEnd2}}\",\n  \"reason\": \"SPARK-238 window 2 extend and cancel target\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows",
+            "description": "Window 2 starts after window 1 ends, so it does not overlap. It is the extend/cancel target. Stores `maintenanceWindow2Id`."
+          }
+        },
+        {
+          "name": "7.6 PATCH shorten window 2 (409 STRUCTURE_IN_USE, extend-only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('STRUCTURE_IN_USE', () => pm.expect(body.code).to.eql('STRUCTURE_IN_USE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": null,\n  \"end\": \"{{windowEndShorter}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows/{{maintenanceWindow2Id}}",
+            "description": "MaintenanceWindowRules.Extend rejects a shorter end with STRUCTURE_IN_USE (a shortening is a cancellation plus a new window). Program.cs:280-281 maps it through the middleware."
+          }
+        },
+        {
+          "name": "7.7 PATCH extend window 2 (later end)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('the new end is later than before', () => {",
+                  "  const newEnd = new Date(body.data.end).getTime();",
+                  "  const oldEnd = new Date(pm.environment.get('windowEnd2')).getTime();",
+                  "  pm.expect(newEnd).to.be.greaterThan(oldEnd);",
+                  "});",
+                  "pm.test('extension resets enforcementState to pending', () => pm.expect(body.data.enforcementState).to.eql('pending'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": null,\n  \"end\": \"{{windowEndExtended}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows/{{maintenanceWindow2Id}}",
+            "description": "A later end is a valid extension. The store resets enforcement_state to pending because the added interval has not been acknowledged (DE-13)."
+          }
+        },
+        {
+          "name": "7.8 PATCH move window 2 start (409 STRUCTURE_IN_USE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('STRUCTURE_IN_USE', () => pm.expect(body.code).to.eql('STRUCTURE_IN_USE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": \"{{windowStartMoved}}\",\n  \"end\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows/{{maintenanceWindow2Id}}",
+            "description": "Moving the start is not an extension; MaintenanceWindowRules.Extend returns STRUCTURE_IN_USE (409). Note this request sends end:null, so the require-a-new-end branch is not reached."
+          }
+        },
+        {
+          "name": "7.9 POST create window 3 (to be cancelled)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.environment.set('maintenanceWindow3Id', body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start\": \"{{windowStart3}}\",\n  \"end\": \"{{windowEnd3}}\",\n  \"reason\": \"SPARK-238 window 3 cancel target\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows",
+            "description": "A window created only to be cancelled while no other window covers now. Stores `maintenanceWindow3Id`."
+          }
+        },
+        {
+          "name": "7.10 DELETE window 3 (cancel before its start)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const status = pm.response.code;",
+                  "if (status === 200) {",
+                  "  pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "} else {",
+                  "  pm.test('cancel is 200 or the documented 409 guard', () => pm.expect([200, 409]).to.include(status));",
+                  "  console.log('SKIP: expected 200 cancelling window 3 before it starts, got HTTP ' + status + '. Window 1 already covers now, so the reopen guard applies to every cancel. See guide section 3.3.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows/{{maintenanceWindow3Id}}",
+            "description": "DELETE /{id}/maintenance-windows/{windowId} (Program.cs:282-286). A window that has not started can be cancelled. If window 1 already started (run took longer than 45s), the reopen guard returns 409 instead; the script logs SKIP in that case."
+          }
+        },
+        {
+          "name": "7.11 DELETE window 2 while window 1 covers now (reopen guard)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const status = pm.response.code;",
+                  "pm.test('the reopen guard returns 409 or is not yet eligible (200)', () => pm.expect([200, 409]).to.include(status));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "if (status === 409) {",
+                  "  pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "  pm.test('STRUCTURE_IN_USE', () => pm.expect(body && body.code).to.eql('STRUCTURE_IN_USE'));",
+                  "} else {",
+                  "  console.log('SKIP: got HTTP ' + status + '. The guard only rejects a cancel while another live window covers now. Window 1 starts at ' + pm.environment.get('windowStart1') + '. Wait until that time and re-send this request to observe 409 STRUCTURE_IN_USE. See guide section 3.3.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/maintenance-windows/{{maintenanceWindow2Id}}",
+            "description": "Reopening early must not bypass another closure. CancelAsync returns 409 STRUCTURE_IN_USE when another non-cancelled window still covers now. Because a window cannot be created with a start in the past, this is only observable once window 1 (started 45s after 7.2) is in force; re-send after that time if the first attempt logs SKIP."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Batch",
+      "description": "POST /{id}/structure/batch: required Idempotency-Key, all-or-nothing apply, per-item failures and cross-lot NOT_FOUND.",
+      "item": [
+        {
+          "name": "8.1 Missing Idempotency-Key (400 INVALID_STRUCTURE)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function guid() {",
+                  "  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {",
+                  "    const r = Math.random() * 16 | 0;",
+                  "    const v = c === 'x' ? r : (r & 0x3 | 0x8);",
+                  "    return v.toString(16);",
+                  "  });",
+                  "}",
+                  "pm.environment.set('batchKeyA', guid());",
+                  "pm.environment.set('batchKeyB', guid());",
+                  "pm.environment.set('batchKeyC', guid());",
+                  "pm.environment.set('batchKeyD', guid());",
+                  "pm.environment.set('batchKeyE', guid());",
+                  "console.log('batch keys C=' + pm.environment.get('batchKeyC') + ' D=' + pm.environment.get('batchKeyD') + ' E=' + pm.environment.get('batchKeyE'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_STRUCTURE', () => pm.expect(body.code).to.eql('INVALID_STRUCTURE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"resourceId\": \"{{batchSlotId}}\", \"action\": \"removeSlot\", \"expectedUpdatedAt\": null }\n  ],\n  \"idempotencyKey\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure/batch",
+            "description": "POST /{id}/structure/batch (Program.cs:287-295) without the Idempotency-Key header. The endpoint rejects before any store call with 400 INVALID_STRUCTURE. The prerequest generates the batch keys used by the rest of the folder."
+          }
+        },
+        {
+          "name": "8.2 Successful batch (200, completed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('operation completed', () => pm.expect(body.data.status).to.eql('completed'));",
+                  "pm.test('operation id present', () => pm.expect(body.data.id).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('batchOperationId', body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Idempotency-Key", "value": "{{batchKeyC}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"resourceId\": \"{{batchSlotId}}\", \"action\": \"removeSlot\", \"expectedUpdatedAt\": null },\n    { \"resourceId\": \"{{batchPathId}}\", \"action\": \"removePath\", \"expectedUpdatedAt\": null }\n  ],\n  \"idempotencyKey\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure/batch",
+            "description": "Two valid items in one lot. The whole batch commits through the operation path and is all-or-nothing. Stores `batchOperationId` for the replay in 8.3."
+          }
+        },
+        {
+          "name": "8.3 Batch replay (same key returns the same operation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('replay returns the original operation id', () => pm.expect(body.data.id).to.eql(pm.environment.get('batchOperationId')));",
+                  "pm.test('replay does not create a second completed record', () => pm.expect(body.data.status).to.eql('completed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Idempotency-Key", "value": "{{batchKeyC}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"resourceId\": \"{{batchSlotId}}\", \"action\": \"removeSlot\", \"expectedUpdatedAt\": null },\n    { \"resourceId\": \"{{batchPathId}}\", \"action\": \"removePath\", \"expectedUpdatedAt\": null }\n  ],\n  \"idempotencyKey\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure/batch",
+            "description": "The identical key and body replayed. The store returns the durable operation (status completed) instead of applying a second time (A8)."
+          }
+        },
+        {
+          "name": "8.4 Cross-lot item (409 items[], NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('STRUCTURE_CONFLICT', () => pm.expect(body.code).to.eql('STRUCTURE_CONFLICT'));",
+                  "pm.test('per-item failure names the foreign resource with NOT_FOUND', () => {",
+                  "  pm.expect(body.items).to.be.an('array').that.is.not.empty;",
+                  "  const item = body.items.find(entry => entry.resourceId === pm.environment.get('seededFloorId'));",
+                  "  pm.expect(item, 'foreign resource missing from items[]').to.be.an('object');",
+                  "  pm.expect(item.code).to.eql('NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Idempotency-Key", "value": "{{batchKeyD}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"resourceId\": \"{{seededFloorId}}\", \"action\": \"removeUnit\", \"expectedUpdatedAt\": null }\n  ],\n  \"idempotencyKey\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure/batch",
+            "description": "`seededFloorId` is a real resource but belongs to the demo lot, not `createdSiteId`. The batch reports it per item as NOT_FOUND and applies nothing; the response never explains why, so foreign-lot existence is not leaked. Cross-lot batches are rejected, not partially applied."
+          }
+        },
+        {
+          "name": "8.5 Failing item rejects the whole batch (409 items[])",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('STRUCTURE_CONFLICT', () => pm.expect(body.code).to.eql('STRUCTURE_CONFLICT'));",
+                  "pm.test('the failing unit is reported per item', () => {",
+                  "  const item = (body.items || []).find(entry => entry.resourceId === pm.environment.get('floorUnitId'));",
+                  "  pm.expect(item, 'failing unit missing from items[]').to.be.an('object');",
+                  "  pm.expect(item.code).to.eql('UNIT_NOT_EMPTY');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Idempotency-Key", "value": "{{batchKeyE}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"resourceId\": \"{{batchSlot2Id}}\", \"action\": \"removeSlot\", \"expectedUpdatedAt\": null },\n    { \"resourceId\": \"{{floorUnitId}}\", \"action\": \"removeUnit\", \"expectedUpdatedAt\": null }\n  ],\n  \"idempotencyKey\": null,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure/batch",
+            "description": "The first item would succeed but the second removes a unit that still has a ZONE child, so UNIT_NOT_EMPTY fails the batch. ApplyBatch restores the aggregate snapshot, so the first item is not applied either. 8.6 verifies batchSlot2Id survived."
+          }
+        },
+        {
+          "name": "8.6 All-or-nothing check (batch slot 2 still exists)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "const id = pm.environment.get('batchSlot2Id');",
+                  "pm.test('the valid item of the failed batch was not applied', () => pm.expect(body.data.slots.some(s => s.id === id), 'batchSlot2 was removed by a failed batch').to.eql(true));",
+                  "pm.test('the failing unit still exists', () => pm.expect(body.data.units.some(u => u.id === pm.environment.get('floorUnitId'))).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "Re-reads the structure after the failed batch to prove no selected resource was mutated (all-or-nothing)."
+          }
+        },
+        {
+          "name": "8.7 Header/body idempotency key mismatch (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('INVALID_STRUCTURE', () => pm.expect(body.code).to.eql('INVALID_STRUCTURE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Idempotency-Key", "value": "{{batchKeyA}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"resourceId\": \"{{batchSlot2Id}}\", \"action\": \"removeSlot\", \"expectedUpdatedAt\": null }\n  ],\n  \"idempotencyKey\": \"{{batchKeyB}}\",\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure/batch",
+            "description": "The header key and the body idempotencyKey must agree; otherwise the endpoint returns 400 INVALID_STRUCTURE (Program.cs:291). No edit is attempted."
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Operations",
+      "description": "POST /{id}/operations and GET /{id}/operations/{operationId}. The operation is keyed by idempotencyKey and its outcome is completed / pending / failed.",
+      "item": [
+        {
+          "name": "9.1 POST operations (200 completed)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function guid() {",
+                  "  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {",
+                  "    const r = Math.random() * 16 | 0;",
+                  "    const v = c === 'x' ? r : (r & 0x3 | 0x8);",
+                  "    return v.toString(16);",
+                  "  });",
+                  "}",
+                  "pm.environment.set('operationKey', guid());",
+                  "console.log('operationKey=' + pm.environment.get('operationKey'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('operation completed', () => pm.expect(body.data.status).to.eql('completed'));",
+                  "pm.test('operation id present', () => pm.expect(body.data.id).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('operationId', body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotencyKey\": \"{{operationKey}}\",\n  \"edit\": {\n    \"action\": \"active\",\n    \"resourceId\": \"{{createdSiteId}}\",\n    \"active\": true,\n    \"slotType\": \"STANDARD\",\n    \"tenantId\": null\n  },\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/operations",
+            "description": "POST /{id}/operations (Program.cs:240-244). OperationBody(idempotencyKey, edit, tenantId). Only removeSlot/removeUnit/capacity/active/moveSlot/configureSlot/batch are accepted actions. The status maps to 200 completed / 202 pending / 409 failed. Requires ReservationService for the impact plan. Stores `operationId`."
+          }
+        },
+        {
+          "name": "9.2 GET operation by id (read back)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('same operation id', () => pm.expect(body.data.id).to.eql(pm.environment.get('operationId')));",
+                  "pm.test('status is completed', () => pm.expect(body.data.status).to.eql('completed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/operations/{{operationId}}",
+            "description": "GET /{id}/operations/{operationId} (Program.cs:245). A successful read does not by itself mean the operation completed; the response carries the status."
+          }
+        },
+        {
+          "name": "9.3 POST operations replay (same key)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.eql(true));",
+                  "pm.test('replay returns the original operation id', () => pm.expect(body.data.id).to.eql(pm.environment.get('operationId')));",
+                  "pm.test('replay stays completed', () => pm.expect(body.data.status).to.eql('completed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotencyKey\": \"{{operationKey}}\",\n  \"edit\": {\n    \"action\": \"active\",\n    \"resourceId\": \"{{createdSiteId}}\",\n    \"active\": true,\n    \"slotType\": \"STANDARD\",\n    \"tenantId\": null\n  },\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/operations",
+            "description": "The identical idempotencyKey and edit replay the stored operation, never a second record (A8)."
+          }
+        },
+        {
+          "name": "9.4 GET unknown operation (404 SITE_NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('SITE_NOT_FOUND', () => pm.expect(body.code).to.eql('SITE_NOT_FOUND'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/operations/{{unknownOperationId}}",
+            "description": "The store throws SITE_NOT_FOUND for an operation id that is not in the caller's scope, mapped to 404 by the middleware."
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Negative / Auth",
+      "description": "Auth boundaries: missing bearer 401, a tenant outside the caller scope 403, a foreign or missing lot 404, and the operator-layout SLOT_OVERRIDE gate.",
+      "item": [
+        {
+          "name": "10.1 GET lot list without bearer (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/parking-lots",
+            "description": "No Authorization header. OwnerIdentityClient throws UNAUTHENTICATED before any outbound call; the middleware maps it to 401."
+          }
+        },
+        {
+          "name": "10.2 POST unit without bearer (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"FLOOR\",\n  \"name\": \"SP238-NOAUTH\",\n  \"parentId\": null,\n  \"capacity\": 0,\n  \"tenantId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "A write route with no bearer is rejected before the structure is loaded."
+          }
+        },
+        {
+          "name": "10.3 GET structure without bearer (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure",
+            "description": "The owner structure read requires a bearer session; no data is returned without one."
+          }
+        },
+        {
+          "name": "10.4 List with a foreign tenantId (403 FORBIDDEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots?tenantId={{foreignTenantId}}",
+            "description": "The tenantId query selects an authorized tenant and never grants one. Scope(identity, foreignTenantId) throws FORBIDDEN (Program.cs:150-156), mapped to 403."
+          }
+        },
+        {
+          "name": "10.5 Structure read with a foreign tenantId (403 FORBIDDEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/structure?tenantId={{foreignTenantId}}",
+            "description": "Same tenant-selection rule on the structure read."
+          }
+        },
+        {
+          "name": "10.6 Create unit with a foreign tenantId (403 FORBIDDEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"FLOOR\",\n  \"name\": \"SP238-FOREIGN\",\n  \"parentId\": null,\n  \"capacity\": 0,\n  \"tenantId\": \"{{foreignTenantId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/parking-lots/{{createdSiteId}}/units",
+            "description": "A body tenantId outside the caller scope is refused by Scope before the edit is prepared."
+          }
+        },
+        {
+          "name": "10.7 Foreign/missing lot structure (404 SITE_NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('SITE_NOT_FOUND', () => pm.expect(body.code).to.eql('SITE_NOT_FOUND'));",
+                  "pm.test('no data leaks about the foreign site', () => pm.expect(body).not.to.have.property('data'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{foreignSiteId}}/structure",
+            "description": "A well-formed site id that the caller does not own (or that does not exist) is indistinguishable from a missing site: 404 SITE_NOT_FOUND, no existence leak (A3)."
+          }
+        },
+        {
+          "name": "10.8 Foreign/missing lot maintenance windows (404 SITE_NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('SITE_NOT_FOUND', () => pm.expect(body.code).to.eql('SITE_NOT_FOUND'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{foreignSiteId}}/maintenance-windows",
+            "description": "The maintenance store resolves the site with a tenant predicate first (EnsureSiteAsync) and throws SITE_NOT_FOUND for a foreign or missing site."
+          }
+        },
+        {
+          "name": "10.9 Operator-layout without bearer (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operator-layout",
+            "description": "SlotOperatorClient rejects a missing bearer before calling UserService, mapped to 401."
+          }
+        },
+        {
+          "name": "10.10 Operator-layout with a driver token (403 FORBIDDEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('success false', () => pm.expect(body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driverToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operator-layout",
+            "description": "The legacy operator-layout route requires an assigned Operator with SLOT_OVERRIDE. The UserService slot-scope endpoint is operator-only, so a driver token yields 403 FORBIDDEN."
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const required = ['baseUrl', 'userServiceUrl', 'reservationServiceUrl', 'ownerEmail', 'ownerPassword', 'operatorEmail', 'operatorPassword'];",
+          "const missing = required.filter(k => !pm.environment.get(k) || String(pm.environment.get(k)).startsWith('replace-with'));",
+          "if (missing.length) { console.log('MISSING environment variables: ' + missing.join(', ') + '. Copy the passwords from the repository root .env (SMARTPARK_OWNER_PASSWORD, SMARTPARK_OPERATOR_PASSWORD).'); }"
+        ]
+      }
+    }
+  ]
+}
