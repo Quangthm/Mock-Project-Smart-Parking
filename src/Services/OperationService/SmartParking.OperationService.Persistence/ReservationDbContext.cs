@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.OperationService.Domain.Entities;
+using SmartParking.OperationService.Persistence.Entities;
 
 namespace SmartParking.OperationService.Persistence;
 
@@ -13,9 +14,6 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<StructureSiteStateRow> StructureSiteStates => Set<StructureSiteStateRow>();
     public DbSet<StructureReleaseReceiptRow> StructureReleaseReceipts => Set<StructureReleaseReceiptRow>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
-    public DbSet<ProcessedEventRow> ProcessedEvents => Set<ProcessedEventRow>();
-    public DbSet<OccupancyReleaseLedgerRow> OccupancyReleaseLedger => Set<OccupancyReleaseLedgerRow>();
-    public DbSet<SlotSequenceWatermarkRow> SlotSequenceWatermarks => Set<SlotSequenceWatermarkRow>();
     public DbSet<AuditLogRow> AuditLogs => Set<AuditLogRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -28,14 +26,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<StructureSiteStateRow>(modelBuilder, "structure_site_state");
         Map<StructureReleaseReceiptRow>(modelBuilder, "structure_release_receipts");
         Map<OutboxEventRow>(modelBuilder, "outbox_events");
-        Map<ProcessedEventRow>(modelBuilder, "processed_events");
-        Map<OccupancyReleaseLedgerRow>(modelBuilder, "occupancy_release_ledger");
-        Map<SlotSequenceWatermarkRow>(modelBuilder, "slot_sequence_watermarks");
         Map<AuditLogRow>(modelBuilder, "audit_logs");
-        modelBuilder.Entity<ProcessedEventRow>().HasKey(x => x.EventId);
-        modelBuilder.Entity<OccupancyReleaseLedgerRow>().HasKey(x => x.EventId);
-        modelBuilder.Entity<OccupancyReleaseLedgerRow>().HasIndex(x => x.SessionId).IsUnique();
-        modelBuilder.Entity<SlotSequenceWatermarkRow>().HasKey(x => x.SlotId);
         modelBuilder.Entity<StructureEditHoldRow>().HasKey(x => x.SiteId);
         modelBuilder.Entity<StructureEditHoldRow>().HasIndex(x => x.Token).IsUnique();
         modelBuilder.Entity<StructureSiteStateRow>().HasKey(x => x.SiteId);

@@ -31,9 +31,16 @@ public sealed class ReservationExceptionMiddleware(RequestDelegate next)
             await WriteErrorAsync(context, StatusCodes.Status400BadRequest, new
             {
                 success = false,
-                code = "INVALID_STRUCTURE",
-                message = error.Message,
-                errors = error.Errors.Select(e => new { property = e.PropertyName, message = e.ErrorMessage })
+                code = "VALIDATION_FAILED",
+                message = "One or more validation errors occurred.",
+                errors = error.Errors
+                    .GroupBy(e => e.PropertyName)
+                    .Select(group => new
+                    {
+                        property = group.Key,
+                        message = string.Join(" ", group.Select(e => e.ErrorMessage))
+                    }),
+                traceId = context.TraceIdentifier
             });
         }
         catch (InvalidStructureEditException error)

@@ -4,7 +4,7 @@ using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.DTOs;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
-namespace SmartParking.FacilityService.Tests;
+namespace SmartParking.OperationService.Tests;
 
 public sealed class ReservationGateUseCaseTests
 {

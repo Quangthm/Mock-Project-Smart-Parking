@@ -38,8 +38,12 @@ public static class OperationHost
         }
         builder.Services.AddSingleton<IRealtimeLayoutBroadcaster, SignalRLayoutRealtimeBroadcaster>();
 
+        var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"];
+        var allowedOrigins = !string.IsNullOrWhiteSpace(configuredOrigins)
+            ? configuredOrigins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()));
         var app = builder.Build();

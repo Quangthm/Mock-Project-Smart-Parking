@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
+using SmartParking.OperationService.Application.DTOs.Checkout;
 using SmartParking.OperationService.Application.Usecase.Checkout;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
@@ -63,14 +64,4 @@ public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(m
     [HttpGet("transactions/{transactionId:guid}/status")]
     public async Task<IActionResult> Status(Guid transactionId, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(new GetCheckoutStatusQuery(transactionId), ct) });
-
-    public sealed record CheckoutRequest(string? PlateNumber);
-    public sealed record PricingRequest(
-        Guid SiteId,
-        Guid ReferenceId,
-        string ReferenceType,
-        string VehicleType,
-        DateTimeOffset EntryTime,
-        DateTimeOffset ExitTime);
-    public sealed record IdempotencyRequest(string IdempotencyKey);
 }

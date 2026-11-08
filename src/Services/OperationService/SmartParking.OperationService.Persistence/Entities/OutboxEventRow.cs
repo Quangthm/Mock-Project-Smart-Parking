@@ -1,6 +1,6 @@
 using System;
 
-namespace SmartParking.OperationService.Domain.Entities;
+namespace SmartParking.OperationService.Persistence.Entities;
 
 public sealed class OutboxEventRow
 {

@@ -6,11 +6,3 @@ public interface IOutboxEventPublisher
 
     Task PublishAsync(OutboxMessage message, CancellationToken cancellationToken);
 }
-
-public sealed record OutboxMessage(
-    Guid EventId,
-    string EventType,
-    DateTimeOffset OccurredAt,
-    long SequenceNumber,
-    Guid SiteId,
-    string Payload);

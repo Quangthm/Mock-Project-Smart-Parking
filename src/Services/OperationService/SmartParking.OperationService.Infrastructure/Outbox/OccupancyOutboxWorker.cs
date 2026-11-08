@@ -1,9 +1,8 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
-using SmartParking.OperationService.Persistence;
 
 namespace SmartParking.OperationService.Infrastructure.Outbox;
 
@@ -13,6 +12,7 @@ public sealed class OccupancyOutboxWorker(
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
     private const int BatchSize = 100;
 
     private TimeSpan _backoff = TimeSpan.Zero;
@@ -54,23 +54,19 @@ public sealed class OccupancyOutboxWorker(
     private async Task<int> PublishBatchAsync(CancellationToken stoppingToken)
     {
         using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var store = scope.ServiceProvider.GetRequiredService<IOccupancyOutboxStore>();
         var publisher = scope.ServiceProvider.GetRequiredService<IOutboxEventPublisher>();
         var broadcaster = scope.ServiceProvider.GetService<IRealtimeLayoutBroadcaster>();
 
-        // The FOR UPDATE lock is meaningful only inside a transaction; keep it open for the batch.
-        await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
-        var batch = await db.OutboxEvents
-            .FromSqlRaw(
-                "SELECT * FROM outbox_events WHERE published_at IS NULL ORDER BY occurred_at, sequence_number LIMIT {0} FOR UPDATE SKIP LOCKED",
-                BatchSize)
-            .AsAsyncEnumerable()
-            .ToListAsync(stoppingToken);
+        // Claim is a single short statement; no DB transaction/lock spans the network calls below.
+        var batch = await store.ClaimBatchAsync(BatchSize, LeaseDuration, stoppingToken);
         if (batch.Count == 0) return 0;
 
-        foreach (var row in batch)
+        var publishedIds = new List<Guid>(batch.Count);
+        foreach (var message in batch)
         {
-            var message = new OutboxMessage(row.EventId, row.EventType, row.OccurredAt, row.SequenceNumber, row.SiteId, row.Payload);
+            // A publisher failure propagates and leaves the message unconfirmed; the lease
+            // expires so the row becomes claimable again for retry (at-least-once delivery).
             await publisher.PublishAsync(message, stoppingToken);
             if (broadcaster is not null)
             {
@@ -82,14 +78,14 @@ public sealed class OccupancyOutboxWorker(
                 {
                     // A failed broadcast must not block the outbox: the broker message is
                     // already published and clients recover via SnapshotRequired on reconnect.
-                    logger.LogWarning(ex, "Realtime broadcast failed for event {EventId}.", row.EventId);
+                    logger.LogWarning(ex, "Realtime broadcast failed for event {EventId}.", message.EventId);
                 }
             }
-            row.PublishedAt = DateTimeOffset.UtcNow;
+            publishedIds.Add(message.EventId);
         }
 
-        await db.SaveChangesAsync(stoppingToken);
-        await transaction.CommitAsync(stoppingToken);
+        // Confirm in a second short statement, after all network I/O has completed.
+        await store.MarkPublishedAsync(publishedIds, stoppingToken);
         return batch.Count;
     }
 }

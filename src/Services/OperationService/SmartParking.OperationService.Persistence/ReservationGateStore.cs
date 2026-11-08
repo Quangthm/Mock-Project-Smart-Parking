@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.DTOs;
 using SmartParking.OperationService.Domain.Entities;
+using SmartParking.OperationService.Persistence.Entities;
 using System.Text.Json;
 
 namespace SmartParking.OperationService.Persistence;
@@ -305,10 +307,22 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
 
     private async Task<long> NextSequenceAsync(Guid siteId, CancellationToken ct)
     {
-        var max = await db.OutboxEvents
-            .Where(e => e.SiteId == siteId)
-            .MaxAsync(e => (long?)e.SequenceNumber, ct);
-        return (max ?? 0) + 1;
+        var connection = db.Database.GetDbConnection();
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+        cmd.CommandText = """
+            INSERT INTO site_event_sequences (site_id, last_sequence, updated_at)
+            VALUES ($1, 1, now())
+            ON CONFLICT (site_id) DO UPDATE
+            SET last_sequence = site_event_sequences.last_sequence + 1,
+                updated_at = now()
+            RETURNING last_sequence;
+            """;
+        var param = cmd.CreateParameter();
+        param.Value = siteId;
+        cmd.Parameters.Add(param);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt64(result);
     }
     private static void VerifyPlate(string expected, string? recognized)
     {

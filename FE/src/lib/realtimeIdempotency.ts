@@ -27,9 +27,19 @@ export interface IdempotencyDecision {
   reason: 'new' | 'duplicate_event' | 'stale_sequence' | 'duplicate_sequence'
 }
 
+const DEFAULT_MAX_PROCESSED_EVENTS = 1000
+
 export class RealtimeIdempotencyGuard {
   private processedEventIds = new Set<string>()
   private slotWatermark = new Map<string, number>()
+  private readonly maxProcessedEvents: number
+
+  constructor(maxProcessedEvents = DEFAULT_MAX_PROCESSED_EVENTS) {
+    this.maxProcessedEvents =
+      Number.isFinite(maxProcessedEvents) && maxProcessedEvents >= 1
+        ? Math.floor(maxProcessedEvents)
+        : DEFAULT_MAX_PROCESSED_EVENTS
+  }
 
   /** Decide whether an event should be applied. Does not mutate state. */
   decide(event: RealtimeEventEnvelope, slotId?: string): IdempotencyDecision {
@@ -50,9 +60,22 @@ export class RealtimeIdempotencyGuard {
     return { apply: true, reason: 'new' }
   }
 
+  /**
+   * Retain an eventId, evicting the oldest entries once the cap is exceeded.
+   * Set preserves insertion order, so the first value is the oldest eventId.
+   */
+  private rememberEventId(eventId: string): void {
+    this.processedEventIds.add(eventId)
+    while (this.processedEventIds.size > this.maxProcessedEvents) {
+      const oldest = this.processedEventIds.values().next().value
+      if (oldest === undefined) break
+      this.processedEventIds.delete(oldest)
+    }
+  }
+
   /** Mark an event as applied; update watermark. Call only after successful apply. */
   commit(event: RealtimeEventEnvelope, slotId?: string): void {
-    this.processedEventIds.add(event.eventId)
+    this.rememberEventId(event.eventId)
     if (slotId && typeof event.sequenceNumber === 'number') {
       const last = this.slotWatermark.get(slotId)
       if (typeof last !== 'number' || event.sequenceNumber > last) {

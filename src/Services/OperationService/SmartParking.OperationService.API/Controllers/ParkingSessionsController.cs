@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
 using SmartParking.OperationService.Application;
+using SmartParking.OperationService.Application.DTOs.Gate;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.OperationService.API.Controllers;
@@ -50,5 +51,3 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
         return Ok(new { success = true, data = session });
     }
 }
-
-public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null);

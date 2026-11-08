@@ -1,4 +1,6 @@
 using System.Text.Json;
+using FluentValidation;
+using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -6,6 +8,7 @@ using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Usecases.Occupancy.Commands.ApplyOccupancyProjection;
 
 namespace SmartParking.FacilityService.Infrastructure;
 
@@ -69,14 +72,26 @@ public sealed class OccupancyProjectionWorker(
             {
                 var projection = Parse(delivery.Body);
                 using var scope = scopeFactory.CreateScope();
-                var store = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionStore>();
-                var applied = await store.ApplyAsync(projection, stoppingToken);
+                var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                var applied = await mediator.Send(new ApplyOccupancyProjectionCommand(projection), stoppingToken);
                 if (!applied) logger.LogDebug("Occupancy event was already applied; acknowledging without projection.");
                 await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 // Shutting down: leave the delivery unacked so the broker redelivers it.
+            }
+            catch (JsonException error)
+            {
+                // Malformed JSON can never succeed on redelivery; discard the poison pill.
+                logger.LogError(error, "Occupancy event could not be parsed; discarding delivery.");
+                await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false, stoppingToken);
+            }
+            catch (ValidationException error)
+            {
+                // A structurally invalid event is permanently malformed; do not requeue it.
+                logger.LogError(error, "Occupancy event failed validation; discarding delivery.");
+                await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false, stoppingToken);
             }
             catch (Exception error)
             {
