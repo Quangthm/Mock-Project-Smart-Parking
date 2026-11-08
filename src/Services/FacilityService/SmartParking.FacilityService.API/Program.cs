@@ -16,6 +16,7 @@ public static class FacilityHost
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
+        builder.AddDiscoveryCatalogue();
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddDbContext<ParkingDbContext>(options =>
@@ -75,6 +76,12 @@ public static class FacilityHost
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
             try { await next(context); }
+            catch (BadHttpRequestException e) when (DiscoveryCatalogueEndpoints.IsDiscoveryPath(context.Request.Path))
+            {
+                context.Response.StatusCode = e.StatusCode;
+                await context.Response.WriteAsJsonAsync(new { success=false, code="VALIDATION_FAILED",
+                    message="Discovery request could not complete.", errors=Array.Empty<string>(), traceId=context.TraceIdentifier });
+            }
             catch (PostgresException error) when (
                 context.Request.Path.StartsWithSegments("/api/operator") &&
                 (error.SqlState is PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn))
@@ -97,6 +104,7 @@ public static class FacilityHost
             }
         });
         app.MapControllers();
+        app.MapDiscoveryCatalogue();
         return app;
     }
 }
