@@ -14,6 +14,8 @@ git branch --show-current          # nhánh làm việc mặc định: develop
 
 ## 1. Prerequisites
 
+Chatbot API demo độc lập: xem [hướng dẫn chạy và phạm vi dữ liệu mẫu](docs/03-design/ai/chatbot-scaffold.md#demo-api--hướng-dẫn-chạy-và-phạm-vi). Chạy opt-in bằng tham số lệnh, không thuộc `setup.ps1`/Compose; chưa kết nối tài khoản, DB hay dịch vụ AI.
+
 Checklist trước khi setup:
 
 - [ ] **Windows PowerShell 5.1+**, **.NET SDK 10** (`dotnet --version` trả major 10).
@@ -48,11 +50,69 @@ Checklist trước khi setup:
 3. Probe authentication từng DB và áp workflow migration đúng trạng thái schema.
 4. Đồng bộ user-secrets cho User/Facility/Operation/Payment theo `.env` ở `[5/7]`.
 5. Dựng SonarQube (mặc định) và restore solution ở `[7/7]`.
-6. **Không tự chạy API hoặc frontend** — sau setup mới chuyển sang [mục 3](#3-run-application).
+6. Setup mặc định để các API và frontend khởi động riêng theo [mục 3](#3-run-application). Tùy chọn `-WithAssistant` dựng thêm container chatbot.
+
+### AI Chatbot bằng Docker
+
+Trên máy mới, sao chép `.env.example` thành `.env`. Chuẩn bị các đầu vào local sau trước khi chạy với `-WithAssistant`.
+
+| Cấu hình | Giá trị dùng ở máy dev |
+| --- | --- |
+| `SMARTPARK_JWT_PRIVATE_KEY_FILE` | Khóa RSA riêng của UserService dev. Giữ file ngoài Git và chỉ cấp cho UserService. Có thể giữ cấu hình khóa User đang dùng. |
+| `Assistant__Jwt__PublicKeyFile`, `Assistant__Jwt__Issuer`, `Assistant__Jwt__Audience` | Public key tương ứng và issuer/audience của UserService. Với UserService Docker Development mặc định, dùng `SmartParking.UserService.Demo` và `SmartParking.Postman.Demo`. |
+| `Assistant__Management__KeyDirectory` | Thư mục keyring tuyệt đối, ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
+| `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
+| `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). |
+| `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
+
+Nếu chưa có bộ khóa dev, có thể tạo bằng PowerShell 7 trong **một thư mục mới ngoài repo**. Cặp JWT này dành riêng cho UserService local. PFX dùng một khóa RSA khác. Đặt đường dẫn tuyệt đối của các file vào bảng cấu hình trên.
+
+```powershell
+$devKeys = Join-Path $env:LOCALAPPDATA ('SmartPark-Assistant-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $devKeys | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $devKeys 'keyring') | Out-Null
+$jwt = [Security.Cryptography.RSA]::Create(2048)
+$protection = [Security.Cryptography.RSA]::Create(2048)
+$cert = $null
+try {
+    [IO.File]::WriteAllText((Join-Path $devKeys 'user-private.pem'), $jwt.ExportPkcs8PrivateKeyPem())
+    [IO.File]::WriteAllText((Join-Path $devKeys 'user-public.pem'), $jwt.ExportSubjectPublicKeyInfoPem())
+    $password = (Get-Credential -UserName 'assistant-keyring' -Message 'Choose a password for the local PFX').GetNetworkCredential().Password
+    $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=SmartPark Assistant local',
+        $protection, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+    $now = [DateTimeOffset]::UtcNow
+    $cert = $request.CreateSelfSigned($now.AddMinutes(-5), $now.AddYears(1))
+    [IO.File]::WriteAllBytes((Join-Path $devKeys 'assistant.pfx'),
+        $cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $password))
+} finally {
+    if ($cert) { $cert.Dispose() }
+    $jwt.Dispose()
+    $protection.Dispose()
+    Remove-Variable password -ErrorAction SilentlyContinue
+}
+Write-Host "Local setup files: $devKeys"
+```
+
+Chọn thư mục con `keyring` cho `Assistant__Management__KeyDirectory` và một thư mục knowledge riêng. Giữ khóa JWT riêng, `.env` và các file cá nhân ngoài hai thư mục này.
+
+```powershell
+# Máy mới, sau khi đã điền cấu hình và mở Docker Desktop
+.\setup.ps1 -WithAssistant -SkipSonarQube
+.\scripts\run-app-service.ps1 -Service All
+
+# Máy đã chạy stack DB, chỉ bổ sung hoặc cập nhật Assistant
+.\scripts\setup-assistant-docker.ps1
+# Khi chỉ đổi cấu hình và đã có image Assistant
+.\scripts\setup-assistant-docker.ps1 -NoBuild
+```
+
+Assistant chạy ở `http://localhost:5076` mặc định. Script thêm URL vào `FE/.env` nếu URL Assistant đang trống. Nếu FE đang chạy, khởi động lại FE để đọc cấu hình. `/health/live` kiểm container sống. Admin vào Settings để nhập provider key, chọn model, bật provider và cấu hình, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-assistant-assistant-1`.
+
+Setup Docker áp ba migration Assistant vào schema IoT local còn trống phần chatbot. Chạy lại với schema đầy đủ chỉ kiểm schema. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Schema dở dang hoặc lịch sử cũ cần chuyển đổi sẽ làm script dừng để review. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Tìm bãi theo owner, xác nhận đặt chỗ và thanh toán có bước tích hợp riêng. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
 
 ### Cảnh báo ghi đè và mất dữ liệu
 
-Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**Enter = Keep**).
+Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**Enter = Keep**). Với `-WithAssistant`, setup giữ file đã qua preflight và bỏ câu hỏi ghi đè.
 
 > **CẢNH BÁO — ghi đè cấu hình:** chọn `O` sẽ backup `.env` hiện tại ra `.env.bak` rồi sinh lại `.env` từ `.env.example`. Password/key đang dùng có thể bị thay; chỉ chọn `O` khi chấp nhận cấu hình lại. `-NonInteractive` tự động Keep.
 

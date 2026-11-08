@@ -2,12 +2,37 @@
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
+    [switch]$PlanAssistant,
     [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$ProjectName = 'smartpark-schema'
 )
 $ErrorActionPreference = 'Stop'
 # Existing schema maps retain Reservation as their compatibility key.
 if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $codeRoot = Split-Path $PSScriptRoot -Parent
+# Approval artifact only. No env import, Docker/DB connection, SQL application,
+# or assertion that migrations are pending/already applied to a live database.
+if ($PlanAssistant) {
+    if ($Service -notin @('Iot','Parking')) { throw '-PlanAssistant supports only Iot or Parking (Facility DB).' }
+    $files = if ($Service -eq 'Iot') {
+        @('20261103_iot_assistant_management.sql','20261105_iot_assistant_s02.sql','20261105_iot_assistant_s05.sql')
+    } else { @('20261106_facility_discovery_publication.sql') }
+    $target = if ($Service -eq 'Iot') { 'smartpark_iot' } else { 'smartpark_facility' }
+    $order = 0
+    foreach ($file in $files) {
+        $path = Join-Path $codeRoot "scripts/database/migrations/$file"
+        if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing migration source: $file" }
+        $order++
+        [pscustomobject]@{
+            Order = $order
+            Database = $target
+            File = "scripts/database/migrations/$file"
+            Sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            State = 'UNVERIFIED'
+            Approval = 'Required; inspect actual datasource/schema/legacy state and backup first.'
+        }
+    }
+    return
+}
 $composeFile = Join-Path $SchemaRoot 'compose.schema-integration.yml'
 if (!(Test-Path -LiteralPath $composeFile -PathType Leaf)) { throw 'SchemaRoot must contain the canonical schema compose file.' }
 if (!$EnvPath) { $EnvPath = Join-Path $SchemaRoot '.env' }

@@ -15,6 +15,8 @@ git branch --show-current          # xác nhận đang ở branch làm việc
 
 Chi tiết từng bước và cách xử lý lỗi nằm ở các mục bên dưới.
 
+Để chạy thêm **AI Chatbot**, chuẩn bị public key JWT, certificate cho keyring và bộ knowledge đã duyệt theo [hướng dẫn Assistant Docker](LOCAL-SETUP.md#ai-chatbot-bằng-docker), rồi dùng `.\setup.ps1 -WithAssistant -SkipSonarQube` ở bước setup. Sau đó chạy app stack như lệnh trên. Assistant dùng cổng `5076` mặc định, Admin quản lý provider key trong Settings.
+
 ## 1. Prerequisites
 
 Checklist trước khi setup:

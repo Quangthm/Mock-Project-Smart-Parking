@@ -1,0 +1,51 @@
+# Opt-in overlay: use AFTER compose.app.yml in the same smartpark-app project.
+# Start/clean up only the named services; see docs/03-design/ai/chatbot-scaffold.md.
+services:
+  assistant-demo:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        SERVICE: IoTService
+    image: smartpark/assistant-demo:local
+    # Browser calls the published port; no access to the team's service network needed.
+    network_mode: bridge
+    environment:
+      ASPNETCORE_ENVIRONMENT: Demo
+      ASPNETCORE_URLS: http://+:8080
+      Assistant__Demo__Enabled: "true"
+      Assistant__Demo__AllowedOrigins__0: http://localhost:5173
+      Assistant__Demo__Mode: ${ASSISTANT_DEMO_MODE:-mock}
+      Assistant__Demo__Provider: ${ASSISTANT_DEMO_PROVIDER:-gemini}
+      Assistant__Demo__Model: ${ASSISTANT_DEMO_MODEL:-gemini-3.8-flash}
+      Assistant__Demo__ApiKey: ${ASSISTANT_DEMO_API_KEY:-}
+      Assistant__Demo__KnowledgeDirectory: /app/demo-knowledge
+      Assistant__Management__Enabled: ${ASSISTANT_MANAGEMENT_ENABLED:-false}
+      ConnectionStrings__IoT: ${ASSISTANT_MANAGEMENT_CONNECTION:-}
+      Assistant__Jwt__Issuer: ${ASSISTANT_JWT_ISSUER:-}
+      Assistant__Jwt__Audience: ${ASSISTANT_JWT_AUDIENCE:-}
+      Assistant__Jwt__PublicKeyPem: ${ASSISTANT_JWT_PUBLIC_KEY_PEM:-}
+      Assistant__Management__KeyDirectory: /app/management-keys
+      Assistant__Management__KeyEncryptionCertificatePath: /app/management-keys/admin.pfx
+      Assistant__Management__KeyEncryptionCertificatePassword: ${ASSISTANT_MANAGEMENT_CERT_PASSWORD:-}
+    volumes:
+      - ./docs/03-design/ai/p1/knowledge:/app/demo-knowledge:ro
+      - assistant-management-keys:/app/management-keys
+    ports:
+      - "127.0.0.1:5095:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: "no"
+
+  frontend:
+    environment:
+      VITE_ASSISTANT_DEMO_ENABLED: "true"
+      VITE_ASSISTANT_DEMO_API_BASE_URL: http://localhost:5095
+      VITE_ASSISTANT_API_BASE_URL: ${SMARTPARK_ASSISTANT_URL:-http://localhost:5095}
+
+volumes:
+  assistant-management-keys:

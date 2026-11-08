@@ -84,7 +84,26 @@ function Show-AppLogs {
 $upArgs = @('up','-d')
 if ($NoBuild) { $upArgs += '--no-build' } else { $upArgs += '--build' }
 $upArgs += $targets
-$upExit = Invoke-Docker -Arguments ($composeArgs + $upArgs)
+$originalSigningKey = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM
+try {
+    if ($targets -contains 'user-service') {
+        $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
+        $signingKeyFile = $env:SMARTPARK_JWT_PRIVATE_KEY_FILE
+        if (!$signingKeyFile) { $signingKeyFile = $settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] }
+        if ($signingKeyFile) {
+            $absolute = $signingKeyFile -match '^[A-Za-z]:[\\/]' -or $signingKeyFile -match '^\\\\[^\\/]+[\\/][^\\/]+'
+            if (!$absolute -or !(Test-Path -LiteralPath $signingKeyFile -PathType Leaf)) {
+                throw 'User signing-key file must exist and be absolute.'
+            }
+            $signingKey = [IO.File]::ReadAllText($signingKeyFile)
+            if ([string]::IsNullOrWhiteSpace($signingKey)) { throw 'User signing-key file is empty.' }
+            $env:SMARTPARK_JWT_PRIVATE_KEY_PEM = $signingKey
+        }
+    }
+    $upExit = Invoke-Docker -Arguments ($composeArgs + $upArgs)
+} finally {
+    $env:SMARTPARK_JWT_PRIVATE_KEY_PEM = $originalSigningKey
+}
 if ($upExit -ne 0) { throw 'docker compose up failed.' }
 
 # Wait for backend health checks; frontend has no healthcheck.

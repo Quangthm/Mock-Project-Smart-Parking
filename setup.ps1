@@ -3,12 +3,28 @@
     [ValidateSet('Local','Team')][string]$CredentialMode = 'Local',
     [string]$TeamEnvPath, [switch]$SkipSonarQube, [switch]$NonInteractive,
     [switch]$WithAiCamera, [switch]$RebuildAi,
+    [switch]$AssistantCheck, [string]$AssistantEnvPath, [switch]$WithAssistant,
     # Deprecated: SonarQube now starts by default; kept so older commands still parse.
     [switch]$WithSonarQube
 )
 # -RecreateDb: DROP schema volumes and re-initialize all 6 DBs from SQL init scripts. Destructive — wipes dev data. Required when DB schema layout changes (e.g., SRS v1.0 hybrid migration).
 $ErrorActionPreference = 'Stop'
+# Read-only Assistant inspection must return before credential generation, secrets
+# synchronization, Docker, restore or any database operation in normal setup.
+if ($AssistantCheck) {
+    if ($RecreateDb -or $WithAiCamera -or $RebuildAi -or $WithSonarQube -or $WithAssistant -or $TeamEnvPath -or $CredentialMode -ne 'Local') {
+        throw '-AssistantCheck cannot be combined with provisioning options.'
+    }
+    if (!$AssistantEnvPath) { $AssistantEnvPath = Join-Path $PSScriptRoot '.env' }
+    & (Join-Path $PSScriptRoot 'scripts/check-assistant-setup.ps1') -EnvPath $AssistantEnvPath
+    return
+}
+if ($AssistantEnvPath) { throw '-AssistantEnvPath requires -AssistantCheck.' }
 if ($RebuildAi -and !$WithAiCamera) { throw '-RebuildAi requires -WithAiCamera.' }
+if ($WithAssistant) {
+    if ($SkipDatabase -or $RecreateDb) { throw '-WithAssistant cannot be combined with -SkipDatabase or -RecreateDb.' }
+    & (Join-Path $PSScriptRoot 'scripts/setup-assistant-docker.ps1') -ValidateOnly
+}
 # SonarQube credentials are always prepared (like the database passwords); the
 # stack starts on a full run. -SkipSonarQube disables both; -SkipDatabase still
 # prepares credentials but starts no containers (it must stay Docker-free).
@@ -475,7 +491,7 @@ if (!(Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'Install .NET S
 $sdk = & dotnet --version
 if ($LASTEXITCODE -ne 0 -or $sdk -notmatch '^10\.') { throw 'Setup requires .NET SDK 10.' }
 $envExists = Test-Path -LiteralPath $envFile -PathType Leaf
-if ($envExists -and -not $NonInteractive -and -not [Console]::IsInputRedirected) {
+if ($envExists -and -not $WithAssistant -and -not $NonInteractive -and -not [Console]::IsInputRedirected) {
     Write-Host "  .env already exists: $envFile" -ForegroundColor Yellow
     $answer = Read-Host '  [O]verwrite / [K]eep / [A]bort (Enter = Keep)'
     if ($answer -match '^\s*[Aa]') { Write-Host 'Aborted by user.' -ForegroundColor Red; exit 1 }
@@ -812,6 +828,9 @@ Write-Host '[7/7] Restoring .NET dependencies...' -ForegroundColor Cyan
 if (!$SkipRestore) {
     & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
+}
+if ($WithAssistant) {
+    & (Join-Path $taskRoot 'scripts/setup-assistant-docker.ps1') -EnvPath $envFile
 }
 $setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Facility, Operation and Payment.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }

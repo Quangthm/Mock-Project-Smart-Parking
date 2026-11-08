@@ -90,7 +90,7 @@ $teamFile = Join-Path $testRoot 'team-private.env'
 $teamA = New-Fixture 'team-a'
 Invoke-Fixture $teamA @{CredentialMode='Team'; TeamEnvPath=$teamFile}
 $teamKey = $global:setupTestSecretMaps['User']['Services:Key']
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
 $previousKey = $env:SMARTPARK_SERVICE_KEY
 $env:SMARTPARK_SERVICE_KEY = 'no-export-sentinel'
 $null = & (Join-Path $teamA 'scripts/load-env.ps1') -EnvPath $teamFile -NoExport
@@ -109,9 +109,9 @@ $global:setupTestSecretMaps['Parking']['Services:Key'] = 'different-service-key-
 Invoke-Fixture $teamB
 Assert-Setup ($global:setupTestSecretMaps['Parking']['Services:Key'] -ceq $teamKey) 'Services:Key was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true}
-$global:setupTestSecretMaps['User']['Services:Facility'] = 'http://old-parking.example.test/'
+$global:setupTestSecretMaps['User']['Services:Parking'] = 'http://old-parking.example.test/'
 Invoke-Fixture $teamB
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -ceq 'http://parking.example.test:5045/') 'Services:Facility URL was not synced from .env.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -ceq 'http://parking.example.test:5045/') 'Services:Parking URL was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true; SkipSonarQube=$true}
 $global:setupTestSecretMaps['User']['DevelopmentAdmin:Password'] = 'Different@Admin1'
 $global:setupTestSecretMaps['User']['Jwt:PrivateKeyPem'] = 'stale-jwt-key-material'
@@ -133,5 +133,43 @@ $global:setupTestOldVolume = $true
 $freshVolume = New-Fixture 'old-volume'
 Expect-Failure { & (Join-Path $freshVolume 'setup.ps1') -SkipRestore -NonInteractive } 'Existing database volumes found'
 Assert-Setup (!(Test-Path -LiteralPath (Join-Path $freshVolume '.env'))) 'Old-volume failure wrote .env.'
+$global:setupTestOldVolume = $false
+$assistantFixture = New-Fixture 'assistant-integration'
+Copy-Item -LiteralPath (Join-Path $local '.env') -Destination (Join-Path $assistantFixture '.env')
+$assistantBefore = [IO.File]::ReadAllText((Join-Path $assistantFixture '.env'))
+New-Item -ItemType Directory -Force -Path (Join-Path $assistantFixture 'scripts/messaging') | Out-Null
+[IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/messaging/provision-profile-audit-topology.ps1'), @'
+param($ManagementUri, $Credential, $VirtualHost)
+$global:setupTestAssistantSteps += 'broker'
+'@)
+[IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/apply-workflow-migrations.ps1'), @'
+param($Service, $SchemaRoot, $EnvPath)
+$global:setupTestAssistantSteps += "schema-$Service"
+'@)
+[IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/setup-assistant-docker.ps1'), @'
+param($EnvPath, [switch]$ValidateOnly)
+if ($ValidateOnly) {
+    $global:setupTestAssistantSteps += 'preflight'
+    if ($global:setupTestAssistantReject) { throw 'Fixture Assistant preflight rejected.' }
+} else {
+    $global:setupTestAssistantSteps += 'assistant'
+    if (!$EnvPath -or !(Test-Path -LiteralPath $EnvPath)) { throw 'Missing setup environment path.' }
+}
+'@)
+$global:setupTestAssistantSteps = @()
+$global:setupTestAssistantReject = $true
+$dockerBefore = $global:setupTestDockerCalls.Count
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive } 'Fixture Assistant preflight rejected'
+Assert-Setup ($global:setupTestDockerCalls.Count -eq $dockerBefore) 'Assistant preflight failed after Docker provisioning.'
+Assert-Setup ([IO.File]::ReadAllText((Join-Path $assistantFixture '.env')) -ceq $assistantBefore) 'Failed Assistant preflight changed configuration.'
+$global:setupTestAssistantReject = $false
+$global:setupTestAssistantSteps = @()
+& (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive
+$expectedSteps = @('preflight','broker','schema-User','schema-Parking','schema-Reservation','schema-Payment','schema-Notification','schema-Iot','assistant')
+Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -join '|')) 'Assistant setup must preflight before provisioning and start after schema verification.'
+Assert-Setup ([IO.File]::ReadAllText((Join-Path $assistantFixture '.env')) -ceq $assistantBefore) 'Assistant setup replaced an existing .env.'
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipDatabase } 'cannot be combined'
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -RecreateDb } 'cannot be combined'
 Write-Output 'PASS: local reuse, idempotence, shared Team baseline, remote URL, MapTiler import, secrets sync/overwrite/removal, skip-secrets and old-volume protection.'
+Write-Output 'PASS: opt-in Assistant preflight order, default schema flow, final dispatch, env preservation and incompatible-option guards.'
 Write-Output "Scratch evidence retained at $testRoot"
