@@ -37,6 +37,8 @@
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />
   </Folder>
   <Folder Name="/src/Services/IoTService/">
+    <Project Path="src/Services/IoTService/SmartParking.IoTService.Persistence/SmartParking.IoTService.Persistence.csproj" />
+    <Project Path="src/Services/IoTService/SmartParking.IoTService.API/SmartParking.IoTService.API.csproj" />
     <Project Path="src/Services/IoTService/SmartParking.IoTService.Application/SmartParking.IoTService.Application.csproj" />
     <Project Path="src/Services/IoTService/SmartParking.IoTService.Infrastructure/SmartParking.IoTService.Infrastructure.csproj" />
   </Folder>

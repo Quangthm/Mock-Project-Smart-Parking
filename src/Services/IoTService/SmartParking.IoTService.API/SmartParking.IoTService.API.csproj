@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <ProjectReference Include="../SmartParking.IoTService.Application/SmartParking.IoTService.Application.csproj" />
+    <ProjectReference Include="../SmartParking.IoTService.Infrastructure/SmartParking.IoTService.Infrastructure.csproj" />
+  <ProjectReference Include="../SmartParking.IoTService.Persistence/SmartParking.IoTService.Persistence.csproj" /></ItemGroup>
+</Project>
