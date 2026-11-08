@@ -20,6 +20,7 @@ internal static class TestAuthorization
     public static void AddServices(IServiceCollection services, AuthTestFixture fixture)
     {
         services.TryAddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        services.TryAddSingleton<IIdentityWorkflowStore>(UnsupportedFeature.Create<IIdentityWorkflowStore>());
         services.TryAddSingleton<IEventPublisher, RecordingEventPublisher>();
         services.TryAddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         services.TryAddSingleton<IAuthorizationScopeStore>(new MemoryScopes(fixture));

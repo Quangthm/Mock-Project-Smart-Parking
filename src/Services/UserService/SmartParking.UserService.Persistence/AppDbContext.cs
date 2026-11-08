@@ -40,6 +40,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.TokenHash).HasColumnName("token_hash");
                 entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
                 entity.HasOne<AuthSession>().WithMany().HasForeignKey(e => e.SessionId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             });
             MapWorkflow<AuthChallenge>(modelBuilder, "auth_challenges", "Id");
             MapWorkflow<WorkflowDelivery>(modelBuilder, "workflow_deliveries", "Id");
