@@ -3,14 +3,19 @@ using UserService.Application.Common.Interfaces.Persistence;
 
 namespace SmartParking.UserService.Tests;
 
-// Non-vehicle HTTP fixtures have no database. Fail explicitly if a vehicle route is accidentally used.
-// Vehicle endpoints are covered by VehicleRegistrationTests using the production PostgreSQL adapter.
-internal sealed class UnsupportedVehicleRepository : IVehicleRepository
+// Nonvehicle HTTP fixtures fail explicitly if a vehicle persistence operation is used.
+internal sealed class UnsupportedVehicleRepository : IVehicleRepository, IRegistrationClaimRepository
 {
-    public Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid[] accountIds, CancellationToken ct) =>
-        throw new NotSupportedException("Use the PostgreSQL vehicle fixture.");
-    public Task<RegisteredVehicle?> FindForUpdateAsync(Guid id, Guid[] accountIds, CancellationToken ct) =>
-        throw new NotSupportedException("Use the PostgreSQL vehicle fixture.");
-    public void Add(RegisteredVehicle vehicle) =>
-        throw new NotSupportedException("Use the PostgreSQL vehicle fixture.");
+    public Task<IReadOnlyList<RegisteredVehicle>> ListAsync(Guid accountId, CancellationToken ct) => throw new NotSupportedException();
+    public Task<RegisteredVehicle?> FindForUpdateAsync(Guid id, Guid accountId, CancellationToken ct) => throw new NotSupportedException();
+    public Task<RegisteredVehicle?> FindOwnedAsync(Guid id, Guid accountId, bool forUpdate, CancellationToken ct) => throw new NotSupportedException();
+    public Task LockPlateAsync(string plate, CancellationToken ct) => throw new NotSupportedException();
+    public Task<RegisteredVehicle?> FindActiveAsync(string plate, CancellationToken ct) => throw new NotSupportedException();
+    public Task<bool> HasHistoryAsync(string plate, CancellationToken ct) => throw new NotSupportedException();
+    public Task<bool> TryAddAsync(RegisteredVehicle vehicle, CancellationToken ct) => throw new NotSupportedException();
+    public Task<VehicleBinding?> ResolveBindingAsync(Guid accountId, Guid vehicleId, CancellationToken ct) => throw new NotSupportedException();
+    public Task<VehicleRegistrationClaim?> FindPendingAsync(Guid accountId, string plate, CancellationToken ct) => throw new NotSupportedException();
+    public Task<IReadOnlyList<VehicleRegistrationClaim>> ListPendingAsync(Guid accountId, CancellationToken ct) => throw new NotSupportedException();
+    public Task<bool> OwnsImageAsync(Guid accountId, Guid claimId, Guid assetId, CancellationToken ct) => throw new NotSupportedException();
+    public void Add(VehicleRegistrationClaim claim) => throw new NotSupportedException();
 }

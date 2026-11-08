@@ -1,3 +1,5 @@
+import { useApp } from "../../../context/AppContext"
+import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState } from "react"
 import { showUiToast } from "../../../lib/uiToast"
@@ -9,10 +11,15 @@ import {
   isSupportedVietnamesePlate,
   vehiclesApi,
   type RegisteredVehicle,
+  type RegistrationClaim,
+  pendingRegistrationMessage,
+  canonicalVietnamesePlate,
   type VehicleInput,
 } from "../../../lib/vehiclesApi"
 
 export function VehicleManager() {
+  const { user } = useApp()
+  const [claims, setClaims] = useState<RegistrationClaim[]>([])
   const [vehicles, setVehicles] = useState<RegisteredVehicle[]>([])
   const [reload, setReload] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -28,9 +35,11 @@ export function VehicleManager() {
     let active = true
     setBusy(true)
     setError("")
-    vehiclesApi.list()
-      .then((items) => {
-        if (active) setVehicles(items)
+    setVehicles([])
+    setClaims([])
+    Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+      .then(([items, pending]) => {
+        if (active) { setVehicles(items); setClaims(pending) }
       })
       .catch((e) => {
         if (active) setError(e.message)
@@ -41,10 +50,13 @@ export function VehicleManager() {
     return () => {
       active = false
     }
-  }, [reload])
+  }, [reload, user])
+
+  useEffect(() => { setId(null); setForm({ plate: "", vehicleType: "CAR", imageAssetId: "" }) }, [user])
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
+    const generation = getSessionGeneration()
     if (!isSupportedVietnamesePlate(form.plate, form.vehicleType)) {
       setError("Use a supported Vietnamese plate: 51A-123.45 for cars or 59-B1 123.45 for motorcycles.")
       return
@@ -53,21 +65,31 @@ export function VehicleManager() {
     setError("")
     try {
       await vehiclesApi.save({
-        plate: form.plate.trim().toUpperCase(),
+        plate: form.plate,
         vehicleType: form.vehicleType,
         imageAssetId: form.imageAssetId,
         expectedImageAssetId: form.expectedImageAssetId,
       }, id ?? undefined)
+      if (getSessionGeneration() !== generation) return
       setId(null)
       setForm({ plate: "", vehicleType: "CAR", imageAssetId: "" })
       setReload((n) => n + 1)
-      showUiToast("Vehicle saved", "Your vehicle details are ready to use.")
+      showUiToast("Vehicle saved", "Your registered vehicle is saved.")
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Cannot save vehicle."
-      setError(message)
-      showUiToast("Vehicle not saved", message, "error")
+      if (getSessionGeneration() !== generation) return
+      if (e instanceof AuthApiError && e.code === "PLATE_EXISTS") {
+        try {
+          const [items, pending] = await Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+          if (getSessionGeneration() !== generation) return
+          setVehicles(items); setClaims(pending)
+          setError(pending.some(c => c.canonicalPlate === canonicalVietnamesePlate(form.plate))
+            ? pendingRegistrationMessage : "This plate is already registered. Your current vehicles are shown above.")
+        } catch { if (getSessionGeneration() === generation) setError("Could not confirm registration status. Please refresh.") }
+      } else {
+        setError(e instanceof Error ? e.message : "Cannot save vehicle.")
+      }
     } finally {
-      setBusy(false)
+      if (getSessionGeneration() === generation) setBusy(false)
     }
   }
 
@@ -101,6 +123,14 @@ export function VehicleManager() {
           </button>
         </div>
       ))}
+      {claims.length > 0 && <section aria-label="Pending registrations">
+        <h4>Pending registrations</h4>
+        {claims.map(claim => <div className="card" key={claim.id}>
+          <strong>{claim.rawPlate}</strong><p>{claim.vehicleType}</p>
+          <p>{pendingRegistrationMessage}</p>
+        </div>)}
+      </section>}
+      <button type="button" className="btn-outline" disabled={busy} onClick={() => setReload(n => n + 1)}>Refresh registrations</button>
       <form onSubmit={save}>
         <label className="label">
           Plate
@@ -110,13 +140,10 @@ export function VehicleManager() {
             maxLength={30}
             value={form.plate}
             onChange={(e) => setForm({ ...form, plate: e.target.value })}
-            onBlur={() => setForm((current) => ({
-              ...current,
-              plate: formatVietnamesePlateValue(current.plate, current.vehicleType),
-            }))}
             placeholder={form.vehicleType === "CAR" ? "51A-123.45" : "59-B1 123.45"}
           />
         </label>
+        <p>Plate preview: {formatVietnamesePlateValue(form.plate, form.vehicleType)}</p>
         <label className="label">
           Vehicle type
           <RoundedSelect
@@ -130,7 +157,7 @@ export function VehicleManager() {
         </label>
         <div className="label">
           Vehicle image
-          <VehicleImageInput key={id ?? `new-${reload}`} vehicleId={id ?? undefined}
+          <VehicleImageInput key={`${getSessionGeneration()}-${id ?? `new-${reload}`}`} vehicleId={id ?? undefined}
             onUploaded={assetId => setForm(current => ({ ...current, imageAssetId: assetId }))} />
         </div>
         <button className="btn-primary" disabled={busy || !form.imageAssetId}>

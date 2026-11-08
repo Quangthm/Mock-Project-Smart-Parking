@@ -41,6 +41,12 @@ Preserve §14.4 upload limits, backend content validation, restricted proxy deli
 
 **User image rollout status — 6 November 2026:** automatic avatar/vehicle image deletion is explicitly deferred to [USER-MEDIA-CLEANUP-01](../../../05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md). Unattached User image drafts have a 24-hour lifetime. Persist timestamps and block expired ordinary reads in the foundation; attachment/retry does not reset the admission timestamp. This deferral does not extend the existing 30-day maximum or establish physical-retention enforcement. No runtime evidence is claimed by these requirements.
 
+## Vehicle registration claim images — approved 7 November 2026
+
+Associate the submitted owned vehicle photo with the pending registration claim, separately from active vehicle identity. The claimant may read their own submission; explicitly authorized reviewers receive scoped evidence access when UC-VEH-02 adjudication is implemented. No blanket role access or binding/booking right follows from the image. Use the existing attached-image deadline of admission + 30 days without resetting age; preserve independently acknowledged holds, but claim creation alone grants no hold. Claim and binding metadata remain independent of image availability; expiry does not resolve a dispute or transfer ownership.
+
+Claim-specific preservation beyond the normal deadline is **DEFERRED** under [VEH-CLAIM-HOLD-01](../../../05-project-management/decision-log/2026-11-07-vehicle-claim-images.md#backlog-veh-claim-hold-01). Define explicit authorized preservation, acknowledgement, review/release and deletion coordination before claiming extended preservation. Association implementation and review access are not claimed by this documentation amendment. Automatic deletion remains separately deferred.
+
 ## Initial Partner agreement lifecycle
 
 User owns application/document metadata and the original plus each replacement version, with actor, reason, time and stable owning-service asset references. Scoped applicants upload/read only their application evidence; authorized Admin review/replacement uses protected authenticated delivery. A public URL or application ID alone grants nothing. Admin replacement is allowed only for uploaded agreement/policy documents in the initial pending application, never other fields or additional-lot applications. Approved/rejected applications are immutable.

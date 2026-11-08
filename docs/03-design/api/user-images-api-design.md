@@ -100,13 +100,18 @@ Errors use existing `success:false`, `code`, `message`, optional `errors` and `t
 
 `POST/PATCH /api/vehicles` now requires UUID `imageAssetId`; `expectedImageAssetId` protects replacements. New registration uses a ready owned draft asset. HTTPS `imageReference` input is removed; an arbitrary string cannot satisfy the required field. Existing DTO fields still carry plate/type; existing IDs/bindings persist. Responses include `imageAssetId`, application `imageReference` when managed, and `imageStatus` (`managed` or `reupload-required`). Legacy vehicle URLs remain stored for reconciliation/rollback but are not fetched or displayed as verified images. Legacy avatars preserve the profile response shape; managed `avatarUrl` points at the application content route. Ordinary profile PATCH remains name-only.
 
-Both existing vehicle forms now upload files and submit asset IDs. SPARK-243 still owns full CAR/MOTORCYCLE registration acceptance, dispute workflow and new-registration end-to-end evidence. Foundation tests use existing synthetic drivers/vehicles and clearly distinguish real PostgreSQL from fake storage. No transfer/dispute capability is implied by an image attachment.
+Both existing vehicle forms now upload files and submit asset IDs. SPARK-243 still owns full CAR/MOTORCYCLE registration acceptance, private claim intake and new-registration end-to-end evidence. Dispute adjudication remains deferred to UC-VEH-02. Foundation tests use existing synthetic drivers/vehicles and clearly distinguish real PostgreSQL from fake storage. No transfer or adjudication capability is implied by an image attachment.
+
+### Approved pending-claim extension — SPARK-243
+
+The [7 November decision](../../05-project-management/decision-log/2026-11-07-vehicle-claim-images.md) approves associating the uploaded vehicle image with a pending registration claim rather than fabricating an active vehicle target. This extension is **implemented in the SPARK-243 working tree** using a separate `registration_claim_id` target; the upload recovery lease `claim_id` retains its original meaning. Claim association and claimant reads passed isolated PostgreSQL/HTTP checks before the architecture rewrite; rerun is required for the current repository/handler version. Live storage/browser acceptance remains pending by user decision (8 November). Claimant reads remain Account-scoped; explicitly authorized reviewer access is added with later UC-VEH-02 adjudication. Preserve the original photo reference on submission retries, the existing admission + 30-day attached-image deadline and independent acknowledged holds. A pending claim never automatically extends retention or grants booking/transfer rights. Claim-specific preservation beyond the deadline is deferred under VEH-CLAIM-HOLD-01.
 
 ## Open questions and deferred items
 
 | Item | Status / owner |
 |---|---|
 | USER-MEDIA-CLEANUP-01 | Automatic deletion, provider deletion proof, deletion scheduling/hold-race operational integration DEFERRED; UserService |
+| VEH-CLAIM-HOLD-01 | Claim-specific preservation beyond normal image expiry DEFERRED; explicit authority, acknowledgement, review/release and deletion coordination required; UserService / UC-VEH-02 |
 | Q01 / DB25 | Partner policy approved; Partner routes/version transport/tables/Admin integration DEFERRED; User/API/media |
 | Live provider capabilities | NOT RUN until explicitly evidenced; no cross-service isolation claim under a shared key |
 | Existing real data | Owner-led inventory/re-upload needed; no arbitrary URL download/backfill |
@@ -118,3 +123,7 @@ Both existing vehicle forms now upload files and submit asset IDs. SPARK-243 sti
 - [x] No provider URLs or secrets in the public contract.
 - [x] Deletion and Partner rollout separated from current implementation.
 - [x] [Evidence and handoff](../../04-testing/reports/SPARK-373/media-foundation-verification.md) records the base SHA and uncommitted implementation; no commit made by agent.
+
+### Current persistence/schema correction — 8 November
+
+The shared media persistence port is now `IMediaAssetRepository`; vehicle and User queries use their respective repositories, and media writes continue through IUnitOfWork. The original UserDb script declares the complete media columns and claims table. Its only ALTER statements resolve circular media foreign keys. There is no task-added upgrade/overlay. Previous SPARK-373 migration instructions describe historical delivery, not an upgrade path for this consolidated schema. See the [current database boundary](../../02-architecture/database/microservices/01-user-access-service-db-docs.md#spark-243-canonical-schema-and-persistence-boundary).

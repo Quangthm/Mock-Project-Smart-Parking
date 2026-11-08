@@ -51,6 +51,7 @@ public sealed class OwnerRegistrationHttpTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();

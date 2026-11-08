@@ -33,7 +33,7 @@ public sealed class ProfileOutboxTests
             .Select(match => match.Value).ToArray();
         Assert.Equal(9, statements.Length);
         var script = File.ReadAllText(ServiceSchema.ScriptPath("microservices/01-user-access-service-db.sql"));
-        var reviewed = script.Split("-- BEGIN FRAMEWORK DDL")[1].Split("-- END FRAMEWORK DDL")[0];
+        var reviewed = script.Split("-- BEGIN FRAMEWORK DDL")[1].Split("-- END FRAMEWORK DDL")[0].Replace("IF NOT EXISTS ", "");
         Assert.Equal(Normalize(string.Join("\n", statements)), Normalize(reviewed));
     }
 

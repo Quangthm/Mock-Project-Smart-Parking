@@ -43,7 +43,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         }
     }
 
-    public static async Task<UserServiceDatabaseFixture> CreateAsync(bool preMedia = false)
+    public static async Task<UserServiceDatabaseFixture> CreateAsync()
     {
         var fixture = new UserServiceDatabaseFixture(Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")
             ?? throw new InvalidOperationException("Configure the isolated PostgreSQL test server."));
@@ -53,14 +53,7 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
         try
         {
             await using var db = fixture.Open();
-            if (preMedia)
-            {
-                var baseSql = await File.ReadAllTextAsync(ServiceSchema.ScriptPath("microservices/01-user-access-service-db.sql"));
-                var marker = baseSql.IndexOf("-- SPARK-373 additive", StringComparison.Ordinal);
-                if (marker < 0) throw new InvalidOperationException("Pre-media fixture boundary missing.");
-                await db.Database.ExecuteSqlRawAsync(baseSql[..marker]);
-            }
-            else await ServiceSchema.InitializeAsync(db);
+            await ServiceSchema.InitializeAsync(db);
             return fixture;
         }
         catch { await fixture.DisposeAsync(); throw; }

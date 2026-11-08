@@ -1,3 +1,4 @@
+import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { VehicleImageInput } from "../../../components/VehicleImageInput"
 import { useEffect, useState, type FormEvent } from "react"
@@ -26,6 +27,9 @@ import {
   isSupportedVietnamesePlate,
   vehiclesApi,
   type RegisteredVehicle,
+  type RegistrationClaim,
+  canonicalVietnamesePlate,
+  pendingRegistrationMessage,
 } from "../../../lib/vehiclesApi"
 
 type Step = "slot" | "details" | "payment" | "qr" | "cash"
@@ -82,6 +86,7 @@ export function BookingFlow({
       : null,
   )
 
+  const [registrationClaims, setRegistrationClaims] = useState<RegistrationClaim[]>([])
   const [vehicles, setVehicles] = useState<RegisteredVehicle[]>([])
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [addVehicleOpen, setAddVehicleOpen] = useState(false)
@@ -91,7 +96,7 @@ export function BookingFlow({
   const [vehicleReload, setVehicleReload] = useState(0)
 
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
-    type: "motorcycle",
+    type: "car",
     plate: "",
     imageAssetId: "",
   })
@@ -116,11 +121,16 @@ export function BookingFlow({
   useEffect(() => {
     if (!user || resumeBooking) return
     let active = true
+    setVehicles([])
+    setSelectedVehicleId("")
     setVehicleLoading(true)
     setVehicleError("")
-    vehiclesApi.list()
-      .then((items) => {
+    setRegistrationClaims([])
+    Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+      .then(([allItems, claims]) => {
+        const items = allItems.filter(item => item.vehicleType === "CAR")
         if (!active) return
+        setRegistrationClaims(claims)
         setVehicles(items)
         setSelectedVehicleId((current) =>
           items.some((item) => item.id === current) ? current : items[0]?.id ?? "",
@@ -135,7 +145,7 @@ export function BookingFlow({
         if (active) setVehicleLoading(false)
       })
     return () => { active = false }
-  }, [user?.id, resumeBooking?.id, vehicleReload])
+  }, [user, resumeBooking?.id, vehicleReload])
 
   useEffect(() => {
     function refreshLots(event: StorageEvent) {
@@ -221,8 +231,14 @@ export function BookingFlow({
     setStep("details")
   }
 
+  useEffect(() => {
+    setVehicleForm({ type: "car", plate: "", imageAssetId: "" })
+    setVehicleSaving(false)
+  }, [user])
+
   async function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const generation = getSessionGeneration()
     if (vehicleSaving || !user) return
     const vehicleType = vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE"
     if (!isSupportedVietnamesePlate(vehicleForm.plate, vehicleType)) {
@@ -233,19 +249,32 @@ export function BookingFlow({
     setVehicleError("")
     try {
       const created = await vehiclesApi.save({
-        plate: vehicleForm.plate.trim().toUpperCase(),
+        plate: vehicleForm.plate,
         vehicleType,
         imageAssetId: vehicleForm.imageAssetId,
       })
-      setVehicles((current) => [...current, created])
-      setSelectedVehicleId(created.id)
+      if (getSessionGeneration() !== generation) return
+      if (created.vehicleType === "CAR") {
+        setVehicles((current) => [...current, created])
+        setSelectedVehicleId(created.id)
+      } else setVehicleError("Motorcycle registered. Specific Slot booking requires a car.")
       setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
       setMessage("")
       setAddVehicleOpen(false)
     } catch (error) {
-      setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
+      if (getSessionGeneration() !== generation) return
+      if (error instanceof AuthApiError && error.code === "PLATE_EXISTS") {
+        try {
+          const [items, claims] = await Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+          if (getSessionGeneration() !== generation) return
+          setRegistrationClaims(claims)
+          setVehicles(items.filter(item => item.vehicleType === "CAR"))
+          setVehicleError(claims.some(c => c.canonicalPlate === canonicalVietnamesePlate(vehicleForm.plate))
+            ? pendingRegistrationMessage : "This plate is already registered. Choose an active car.")
+        } catch { if (getSessionGeneration() === generation) setVehicleError("Could not confirm registration status. Please refresh.") }
+      } else setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
     } finally {
-      setVehicleSaving(false)
+      if (getSessionGeneration() === generation) setVehicleSaving(false)
     }
   }
 
@@ -675,6 +704,7 @@ export function BookingFlow({
               )}
             </div>
           )}
+          {registrationClaims.map(claim => <p key={claim.id} role="status">{claim.rawPlate}: {pendingRegistrationMessage}</p>)}
           {!vehicleLoading && !vehicleError && vehicles.length === 0 && (
             <p
               style={{
@@ -745,21 +775,16 @@ export function BookingFlow({
                       plate: event.target.value,
                     }))
                   }}
-                  onBlur={() => setVehicleForm((current) => ({
-                    ...current,
-                    plate: formatVietnamesePlateValue(
-                      current.plate,
-                      current.type === "car" ? "CAR" : "MOTORCYCLE",
-                    ),
-                  }))}
+                  aria-description={`Plate preview: ${formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}`}
                   placeholder={vehicleForm.type === "car" ? "e.g. 51A-123.45" : "e.g. 59-B1 123.45"}
                   required
                   maxLength={30}
                 />
+                <span>Plate preview: {formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}</span>
               </label>
               <div className="label" style={{ gridColumn: "1 / -1" }}>
                 Vehicle image
-                <VehicleImageInput onUploaded={assetId => {
+                <VehicleImageInput key={`${getSessionGeneration()}-${vehicleReload}`} onUploaded={assetId => {
                   setVehicleError("")
                   setVehicleForm(current => ({ ...current, imageAssetId: assetId }))
                 }} />

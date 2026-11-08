@@ -192,16 +192,34 @@ Technical design-pending values are prerequisites to execution, not invented fix
 [AF-001–AF-014](authorization-freshness-scenarios.md) are additional acceptance specifications, all NOT RUN. AC-009 and AC-062 above are revised unexecuted expectations; historical executed reports are unchanged.
 
 
-## SPARK-373 media verification amendment — 7 November 2026
+## User media scenarios
 
-[User image contract](../../03-design/api/user-images-api-design.md) and [evidence/handoff](../reports/SPARK-373/media-foundation-verification.md) distinguish implemented image/configuration checks from future Partner runtime. AC-079 remains the stale reviewed-version guard specification, NOT RUN for Partner runtime.
+The [user image contract](../../03-design/api/user-images-api-design.md) defines intake, ownership and retention behavior. Execution results and task history belong in the [test reports](../reports/). AC-079 remains the stale reviewed-version guard specification for Partner review.
 
-| Case | Input / action | Expected / evidence boundary |
+| Case | Input / action | Expected result |
 |---|---|---|
-| MEDIA-USER-01 | JPEG/PNG/WebP; disguised filename/MIME; malformed/truncated bytes; 5 MiB and +1; dimensions >8192, >25 MP; animated PNG | Real decoding and bounded intake; only valid images admitted. HTTP/domain evidence recorded separately. |
-| MEDIA-USER-02 | Same key same/different bytes/intent; lost provider response; restart; provider succeeds then DB finalization fails | Same logical asset or 409; durable pending row, fenced recovery and no duplicate fake-provider upload. Real PostgreSQL, simulated provider. |
+| MEDIA-USER-01 | JPEG/PNG/WebP; disguised filename/MIME; malformed/truncated bytes; 5 MiB and +1; dimensions >8192, >25 MP; animated PNG | Real decoding and bounded intake; only valid images admitted. Validate through the public HTTP boundary and Domain rules. |
+| MEDIA-USER-02 | Same key same/different bytes/intent; lost provider response; restart; provider succeeds then DB finalization fails | Same logical asset or 409; durable pending row, fenced recovery and no duplicate logical upload. |
 | MEDIA-USER-03 | Foreign User; second Driver Account of same User; wrong purpose; concurrent stale replacement; identical replay | Denied foreign access, no implicit union of accounts; one winner/409; identical attach no-op. |
 | MEDIA-USER-04 | Unattached at 24h; attached at 30d; read/attach retry; independent holds | Expired ordinary reads blocked, timestamps never reset; vehicle identity retained. Automatic deletion/operational hold-delete race is DEFERRED, not a passing runtime claim. |
-| MEDIA-CONFIG-01 | Fresh/Keep/Team, rerun, rotation/blank/removal; four .NET hosts/two Python services | Optional credentials mapped without synthetic-secret output; User-only opt-in; private JWT signing remains User-only. Setup/Compose evidence. |
+| MEDIA-CONFIG-01 | Fresh/Keep/Team, rerun, rotation/blank/removal; four .NET hosts/two Python services | Optional credentials mapped without synthetic-secret output; User-only opt-in; private JWT signing remains User-only. Verify configured values without exposing credentials. |
 | MEDIA-PARTNER-01 | Both PDF kinds; exactly 10 MiB and +1; malformed, unreadable or password-protected PDF; readable scan | Future admission accepts readable unlocked PDF including scans, inclusive limit; invalid files rejected. Specification only, NOT RUN. |
 | MEDIA-PARTNER-02 | Replacement races approval; reject/withdraw/close events; holds and due deletion | AC-079/111 exact version and lifecycle rules. Partner runtime and provider PDF capability/deletion verification NOT RUN. |
+
+
+## Vehicle registration scenarios
+
+These scenarios supplement the existing acceptance identifiers. Execution results, task identifiers and implementation history belong in the [test reports](../reports/); this section defines expected product behavior.
+
+| Scenario | Required result |
+|---|---|
+| Active registration, raw text and CAR/MOTORCYCLE | Stable owned vehicle; preserve original plate input and derive canonical plate server-side; forged Account/status fields cannot assign ownership |
+| Different claimant submits incumbent plate | 409 after one durable private claim; incumbent ID/rights unchanged; owned photo attached to the claim |
+| Concurrent/repeated equivalent plates | One active binding; deduplicated claimant submission; retry preserves original claim/photo and never promotes it after incumbent removal |
+| Two Driver Accounts belonging to one User | Lists, writes, claim reads and vehicle photos stay scoped to the exact authenticated Account |
+| Binding revision and stale updates | Account/plate/category/removal changes advance revision through the supported write path; raw-format/image changes do not; a stale binding revision cannot authorize continued use |
+| Missing/wrong service credentials, foreign/removed/pending IDs | Reject unauthenticated callers; return a common scoped ineligible result; expose only active binding details and real category |
+| Storage failure | Roll back claim/image effects; an unrelated constraint failure is not reported as a saved pending claim or plate conflict |
+| UI/network/account switch and live storage | Both forms reload authoritative pending status; pending/motorcycle entries stay out of Specific Slot selection; no cross-Account photo or claim leak; uncertain saves are not confirmed |
+| Existing reservation/gate/payment state | A competing claim does not mutate the incumbent's accepted workflow |
+| AC-098 removal and UC-VEH-02 adjudication | Enforce dependency/history safeguards and explicitly authorized review/transfer; acceptance is separate from private claim intake |

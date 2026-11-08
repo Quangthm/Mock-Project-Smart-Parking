@@ -233,6 +233,7 @@ public sealed class OwnProfileTests
             builder.Services.AddApplicationServices(new global::UserService.Application.Common.Models.JwT.AuthenticationPolicy());
             builder.Services.AddApiCurrentActor();
             builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
             builder.Services.AddJWTAuthentication(builder.Configuration, true);
             builder.Services.AddAuthorization();
             var f = new AuthTestFixture();

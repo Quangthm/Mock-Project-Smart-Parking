@@ -4,7 +4,23 @@
 
 **Status separation:** IMPLEMENTATION PENDING = confirmed MVP behavior needs code/schema/tests. POST-v1.0 DETAIL = confirmed AI/LPR direction retained, detailed integration/evaluation intentionally later. FUTURE = feature outside selected MVP. Historical alternatives in the source tables are not active requirements.
 
+## SPARK-243 claim-image follow-up — 7 November 2026
+
+| Work ID | Status / owner | Required outcome |
+|---|---|---|
+| VEH-CLAIM-HOLD-01 | DEFERRED design and implementation; UserService / UC-VEH-02 | Define explicit preservation when review needs claim photos beyond their normal deadline, including authorized scope, owner acknowledgement, review/release and deletion-race coordination. A pending claim never creates unlimited retention. See the [approved decision and acceptance criteria](2026-11-07-vehicle-claim-images.md#backlog-veh-claim-hold-01). |
+
+This is a repository backlog item, not a created Jira issue. Claim-photo association is approved for SPARK-243; reviewer access is implemented with later adjudication. Existing acknowledged holds and USER-MEDIA-CLEANUP-01 remain governed by their approved policies. No service-authentication alternative is approved by this entry.
+
 ## Current disposition by original follow-up ID
+
+### Service identity future direction — 7 November 2026
+
+| Backlog ID | Status | Owner / next implementation |
+|---|---|---|
+| SERVICE-AUTH-01 | **FUTURE / refactoring direction; implementation DEFERRED.** User approved backlogging option 2 outside current SPARK-243 work. | Architecture/security, infrastructure and service owners: established-provider OAuth service tokens, destination/permission restrictions, lifecycle/outage rules, tested pilot and gradual migration. Provider and detailed policy are unselected. See [decision, acceptance and current options](2026-11-07-service-authentication-deferral.md). No Jira issue created. |
+
+SPARK-243 subsequently approved the existing shared service key for temporary binding-lookup enforcement. All key holders share access; per-service identity/permission isolation and migration remain in SERVICE-AUTH-01. No unprotected endpoint or removal of human security controls is authorized.
 
 ### User media foundation follow-up — 6 November 2026
 

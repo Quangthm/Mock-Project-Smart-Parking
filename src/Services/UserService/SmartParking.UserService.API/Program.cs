@@ -75,6 +75,7 @@ public static class UserHost
                 { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         builder.Services.AddAuthorization();
+        builder.Services.AddScoped<Controllers.VehicleBindingKeyFilter>();
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<UserService.API.Hubs.AccessConnections>();
         builder.Services.AddScoped<IAccessChangeNotifier, UserService.API.Hubs.AccessChangeNotifier>();

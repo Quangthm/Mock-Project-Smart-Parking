@@ -10,6 +10,7 @@ public sealed class MediaAsset
     public string Purpose { get; set; } = "";
     public string Sensitivity { get; set; } = "restricted";
     public Guid? VehicleId { get; set; }
+    public Guid? RegistrationClaimId { get; private set; }
     public Guid? DraftIntentId { get; set; }
     public string IdempotencyKey { get; set; } = "";
     public string Fingerprint { get; set; } = "";
@@ -41,7 +42,7 @@ public sealed class MediaAsset
     public string? RecoveryCode { get; private set; }
 
     public bool Expired(DateTimeOffset now) => now >= RetainUntil || AttachedAt is null && now >= DraftExpiresAt;
-    public bool CanAttach(DateTimeOffset now, Guid? vehicleId) => State == "ready" && !Expired(now)
+    public bool CanAttach(DateTimeOffset now, Guid? vehicleId) => State == "ready" && !Expired(now) && RegistrationClaimId is null
         && (Purpose == "avatar" && vehicleId is null || Purpose == "vehicle" && vehicleId is not null
             && (VehicleId is null || VehicleId == vehicleId));
 
@@ -85,6 +86,16 @@ public sealed class MediaAsset
         if (!CanAttach(now, vehicleId)) throw new InvalidOperationException("Asset cannot be attached.");
         VehicleId = vehicleId;
         AttachedAt ??= now;
+        Version++;
+    }
+
+    public void AttachToRegistrationClaim(Guid claimId, DateTimeOffset now)
+    {
+        if (claimId == Guid.Empty || Purpose != "vehicle" || VehicleId is not null
+            || RegistrationClaimId is not null || AttachedAt is not null || State != "ready" || Expired(now))
+            throw new InvalidOperationException("Asset cannot be attached to a registration claim.");
+        RegistrationClaimId = claimId;
+        AttachedAt = now;
         Version++;
     }
 }

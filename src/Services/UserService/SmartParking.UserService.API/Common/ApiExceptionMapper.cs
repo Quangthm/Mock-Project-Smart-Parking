@@ -75,6 +75,9 @@ public sealed class ApiExceptionMapper
         Add("VALIDATION_FAILED", "Validation failed.", 400);
         Add("VEHICLE_NOT_FOUND", "Vehicle was not found.", 404);
         Add("PROFILE_NOT_FOUND", "Profile was not found.", 404);
+        Add("VEHICLE_DEPENDENCY_UNAVAILABLE", "Vehicle identity changes are unavailable until active dependencies can be checked.", 503);
+        Add("VEHICLE_RECONCILIATION_REQUIRED", "Vehicle binding requires reconciliation.", 409);
+        Add("VEHICLE_BINDING_STALE", "Vehicle binding changed; revalidate before continuing.", 409);
         Add("PLATE_EXISTS", "A vehicle with this plate is already registered.", 409);
         Add("MEDIA_DISABLED", "Image uploads and reads are disabled.", 503);
         Add("MEDIA_UNAVAILABLE", "Image storage is temporarily unavailable.", 503);

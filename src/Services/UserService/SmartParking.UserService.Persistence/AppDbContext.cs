@@ -29,6 +29,7 @@ namespace UserService.Persistence
         {
             base.OnModelCreating(modelBuilder);
             ConfigureMedia(modelBuilder);
+            ConfigureVehicleClaims(modelBuilder);
             // Keep framework entities/mappings exact; the reviewed SQL script is generated from this model.
             modelBuilder.AddTransactionalOutboxEntities();
             modelBuilder.Entity<RotatedSessionProof>(entity =>

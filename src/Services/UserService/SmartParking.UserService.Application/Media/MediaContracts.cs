@@ -15,15 +15,6 @@ public interface IMediaProvider
     Task<ProviderImage> UploadAsync(MediaAsset asset, byte[] content, CancellationToken ct);
     Task<Stream> OpenAsync(MediaAsset asset, CancellationToken ct);
 }
-public interface IMediaStore
-{
-    Task<MediaAsset?> FindByKeyAsync(Guid scopeId, string purpose, string key, CancellationToken ct);
-    Task<MediaAsset?> FindAsync(Guid id, bool forUpdate, CancellationToken ct);
-    void Add(MediaAsset asset);
-    Task<RegisteredVehicle?> VehicleAsync(Guid id, Guid accountId, bool forUpdate, CancellationToken ct);
-    Task<User?> UserAsync(Guid id, bool forUpdate, CancellationToken ct);
-    Task<Guid[]> PendingAsync(DateTimeOffset now, int take, CancellationToken ct);
-}
 public sealed record UploadImageCommand(string Purpose, byte[] Content, string IdempotencyKey,
     Guid? VehicleId, Guid? DraftIntentId) : IRequest<MediaAssetResponse>;
 public sealed record GetImageQuery(Guid AssetId) : IRequest<MediaContent>;

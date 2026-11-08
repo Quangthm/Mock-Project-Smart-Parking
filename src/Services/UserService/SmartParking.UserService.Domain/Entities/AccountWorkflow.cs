@@ -47,16 +47,3 @@ public sealed class MfaRecoveryCode
     public string CodeHash { get; set; } = "";
     public DateTimeOffset? UsedAt { get; set; }
 }
-public sealed class RegisteredVehicle
-{
-    public Guid Id { get; set; }
-    public Guid? AccountId { get; set; }
-    public string RawPlate { get; set; } = "";
-    public string CanonicalPlate { get; set; } = "";
-    public string VehicleType { get; set; } = "";
-    public string? ImageReference { get; set; }
-    public Guid? ImageAssetId { get; set; }
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset UpdatedAt { get; set; }
-    public DateTimeOffset? DeletedAt { get; set; }
-}

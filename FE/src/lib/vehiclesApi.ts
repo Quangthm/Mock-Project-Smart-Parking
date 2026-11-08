@@ -55,7 +55,23 @@ export function formatVietnamesePlate(vehicle: RegisteredVehicle) {
   )
 }
 
+export type RegistrationClaim = {
+  id: string
+  rawPlate: string
+  canonicalPlate: string
+  vehicleType: RegisteredVehicle["vehicleType"]
+  status: "PENDING_DISPUTE"
+  createdAt: string
+}
+
+export const pendingRegistrationMessage = "Registration pending dispute review. This vehicle can’t be used for booking."
+
 export const vehiclesApi = {
+  async claims(): Promise<RegistrationClaim[]> {
+    const response = await request<ApiResponse<RegistrationClaim[]>>("/registration-claims", "GET", undefined, "/api/vehicles")
+    if (!response.success || !Array.isArray(response.data)) throw new Error("Could not confirm registration status. Please refresh.")
+    return response.data
+  },
   async list(): Promise<RegisteredVehicle[]> {
     const response = await request<ApiResponse<RegisteredVehicle[]>>(
       "",

@@ -63,17 +63,3 @@ public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSe
     [Authorize,HttpPost("deliveries/{id:guid}/retry")]
     public async Task<IActionResult> Retry(Guid id,CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new RetryWorkflowDeliveryCommand(id),ct)});
 }
-[ApiController,Authorize,Route("api/vehicles"),ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class VehiclesController(IMediator mediator):ControllerBase
-{
-    private static object ImageResponse(SmartParking.UserService.Domain.Entities.RegisteredVehicle vehicle) => new
-    {
-        vehicle.Id, vehicle.RawPlate, vehicle.CanonicalPlate, vehicle.VehicleType, vehicle.ImageAssetId,
-        imageReference = vehicle.ImageAssetId is { } asset ? $"/api/media/images/{asset}/content" : null,
-        imageStatus = vehicle.ImageAssetId is null ? "reupload-required" : "managed",
-        vehicle.CreatedAt, vehicle.UpdatedAt
-    };
-    [HttpGet] public async Task<IActionResult> List(CancellationToken ct)=>Ok(new{success=true,data=(await mediator.Send(new ListOwnVehiclesQuery(),ct)).Select(ImageResponse)});
-    [HttpPost] public async Task<IActionResult> Create(VehicleDto body,CancellationToken ct){var v=await mediator.Send(new SaveOwnVehicleCommand(null,body),ct);return StatusCode(201,new{success=true,data=ImageResponse(v)});}
-    [HttpPatch("{id:guid}")] public async Task<IActionResult> Update(Guid id,VehicleDto body,CancellationToken ct)=>Ok(new{success=true,data=ImageResponse(await mediator.Send(new SaveOwnVehicleCommand(id,body),ct))});
-}

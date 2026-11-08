@@ -18,6 +18,7 @@ let refreshInFlight: Promise<void> | null = null
 let logoutInProgress = false
 // A refresh rotates credentials within a login; login/logout changes its identity.
 let sessionGeneration = 0
+export const getSessionGeneration = () => sessionGeneration
 
 function requireSessionGeneration(expected: number) {
   if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")

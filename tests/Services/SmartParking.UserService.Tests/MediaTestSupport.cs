@@ -1,3 +1,4 @@
+using UserService.Application.Usecase.Vehicles;
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,7 +41,7 @@ internal static class MediaTestSupport
             RetentionAnchor = now, RetainUntil = now.AddDays(30), DraftExpiresAt = now.AddHours(24)
         };
     }
-    public static async Task SeedAsync(AppDbContext db, User user, VehicleDto body, Guid? vehicleId = null)
+    public static async Task SeedAsync(AppDbContext db, User user, SaveVehicleRequest body, Guid? vehicleId = null)
     {
         if (body.ImageAssetId is null || body.ImageAssetId == Guid.Empty || await db.MediaAssets.AnyAsync(a => a.Id == body.ImageAssetId)) return;
         var asset = Asset(user, body.ImageAssetId);

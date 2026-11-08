@@ -9,8 +9,8 @@ using UserService.Application.Common.Models.Exceptions;
 
 namespace UserService.Application.Media;
 
-public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentAccessService access,
-    IImageInspector inspector, IMediaProvider provider, MediaSettings settings, TimeProvider clock)
+public sealed class MediaUseCases(IMediaAssetRepository media, IUnitOfWork work, ICurrentAccessService access,
+    IImageInspector inspector, IMediaProvider provider, MediaSettings settings, TimeProvider clock, IRegistrationClaimRepository claims, IVehicleRepository vehicles, IUserRepository users)
     : IRequestHandler<UploadImageCommand, MediaAssetResponse>, IRequestHandler<GetImageQuery, MediaContent>,
       IRequestHandler<GetImageStatusQuery, MediaAssetResponse>, IRequestHandler<AttachImageCommand, MediaAssetResponse>
 {
@@ -52,9 +52,9 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
         {
             current = await access.LockAsync(ct);
             RequirePurpose(current, request.Purpose);
-            if (request.VehicleId is { } target && await store.VehicleAsync(target, current.Account.Id!.Value, true, ct) is null)
+            if (request.VehicleId is { } target && await vehicles.FindOwnedAsync(target, current.Account.Id!.Value, true, ct) is null)
                 throw Missing();
-            var existing = await store.FindByKeyAsync(current.Account.Id!.Value, request.Purpose, request.IdempotencyKey, ct);
+            var existing = await media.FindByKeyAsync(current.Account.Id!.Value, request.Purpose, request.IdempotencyKey, ct);
             if (existing is not null)
             {
                 asset = existing;
@@ -75,7 +75,7 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
                     Environment = settings.Environment, PublicId = $"smartpark/user-access/{id:N}", AdmittedAt = now,
                     DraftExpiresAt = now.AddHours(24), RetentionAnchor = now, RetainUntil = now.AddDays(30)
                 };
-                store.Add(asset);
+                media.Add(asset);
             }
             claimed = asset.TryClaim(clock.GetUtcNow(), claim);
             await work.SaveChangesAsync(ct);
@@ -97,7 +97,7 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
                 await DeferAsync(asset.Id, claim, "PROVIDER_OUTCOME_PENDING", ct);
             }
         }
-        return MediaAssetResponse.From((await store.FindAsync(asset.Id, false, ct))!);
+        return MediaAssetResponse.From((await media.FindAsync(asset.Id, false, ct))!);
     }
 
     internal static void Verify(MediaAsset asset, ProviderImage result)
@@ -111,14 +111,14 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
     private async Task FinalizeAsync(Guid id, Guid claim, ProviderImage image, CancellationToken ct)
     {
         await using var transaction = await work.BeginTransactionAsync(ct);
-        var asset = await store.FindAsync(id, true, ct) ?? throw Missing();
+        var asset = await media.FindAsync(id, true, ct) ?? throw Missing();
         if (asset.Complete(claim, image.AssetId, image.Version, clock.GetUtcNow())) await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
     }
     private async Task DeferAsync(Guid id, Guid claim, string code, CancellationToken ct)
     {
         await using var transaction = await work.BeginTransactionAsync(ct);
-        var asset = await store.FindAsync(id, true, ct) ?? throw Missing();
+        var asset = await media.FindAsync(id, true, ct) ?? throw Missing();
         asset.Defer(claim, clock.GetUtcNow(), code);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -128,17 +128,22 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
     {
         Enabled();
         var current = await access.RequireAsync(ct);
-        var asset = await store.FindAsync(id, false, ct) ?? throw Missing();
+        var asset = await media.FindAsync(id, false, ct) ?? throw Missing();
         RequireOwner(asset, current);
         RequireUnexpired(asset);
         if (asset.AttachedAt is not null)
         {
+            if (asset.RegistrationClaimId is { } claimId)
+            {
+                if (!await claims.OwnsImageAsync(current.Account.Id!.Value, claimId, asset.Id, ct)) throw Missing();
+                return asset;
+            }
             var reference = asset.Purpose == "avatar"
-                ? (await store.UserAsync(asset.UserId, false, ct))?.AvatarAssetId
-                : (await store.VehicleAsync(asset.VehicleId!.Value, current.Account.Id!.Value, false, ct))?.ImageAssetId;
+                ? (await users.GetByIdWithRolesAsync(asset.UserId, ct))?.AvatarAssetId
+                : (await vehicles.FindOwnedAsync(asset.VehicleId!.Value, current.Account.Id!.Value, false, ct))?.ImageAssetId;
             if (reference != asset.Id) throw Missing();
         }
-        else if (asset.VehicleId is { } vehicle && await store.VehicleAsync(vehicle, current.Account.Id!.Value, false, ct) is null)
+        else if (asset.VehicleId is { } vehicle && await vehicles.FindOwnedAsync(vehicle, current.Account.Id!.Value, false, ct) is null)
             throw Missing();
         return asset;
     }
@@ -163,9 +168,9 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
         User? user = null;
         if (request.Purpose == "vehicle")
             vehicle = request.VehicleId is { } vehicleId
-                ? await store.VehicleAsync(vehicleId, current.Account.Id!.Value, true, ct) ?? throw Missing() : throw Missing();
-        else user = await store.UserAsync(current.User.Id!.Value, true, ct) ?? throw Missing();
-        var asset = await store.FindAsync(request.AssetId, true, ct) ?? throw Missing();
+                ? await vehicles.FindOwnedAsync(vehicleId, current.Account.Id!.Value, true, ct) ?? throw Missing() : throw Missing();
+        else user = await users.GetByIdForUpdateAsync(current.User.Id!.Value, ct) ?? throw Missing();
+        var asset = await media.FindAsync(request.AssetId, true, ct) ?? throw Missing();
         RequireOwner(asset, current);
         RequireUnexpired(asset);
         if (asset.Purpose != request.Purpose || !asset.CanAttach(clock.GetUtcNow(), request.VehicleId)) throw Conflict();
@@ -175,7 +180,7 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
             if (previous != request.ExpectedAssetId) throw Conflict();
             asset.Attach(request.VehicleId, clock.GetUtcNow());
             if (vehicle is null) user!.AvatarAssetId = asset.Id;
-            else { vehicle.ImageAssetId = asset.Id; vehicle.UpdatedAt = clock.GetUtcNow(); }
+            else vehicle.AttachImage(asset.Id, clock.GetUtcNow());
             await work.SaveChangesAsync(ct);
         }
         await transaction.CommitAsync(ct);
@@ -187,13 +192,13 @@ public sealed class MediaUseCases(IMediaStore store, IUnitOfWork work, ICurrentA
     public async Task RecoverAsync(CancellationToken ct)
     {
         if (!settings.Enabled) return;
-        foreach (var id in await store.PendingAsync(clock.GetUtcNow(), 10, ct))
+        foreach (var id in await media.PendingAsync(clock.GetUtcNow(), 10, ct))
         {
             var claim = Guid.NewGuid();
             MediaAsset asset;
             await using (var transaction = await work.BeginTransactionAsync(ct))
             {
-                asset = (await store.FindAsync(id, true, ct))!;
+                asset = (await media.FindAsync(id, true, ct))!;
                 if (asset is null || asset.Environment != settings.Environment || !asset.TryClaim(clock.GetUtcNow(), claim)) continue;
                 await work.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);

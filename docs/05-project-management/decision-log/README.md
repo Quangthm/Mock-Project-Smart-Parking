@@ -11,6 +11,8 @@ Approved decisions must be integrated into canonical requirements, rather than l
 - [Design and implementation backlog](deferred-and-implementation-register.md).
 - [6 November Cloudinary foundation and Partner policy](2026-11-06-cloudinary-foundation-and-partner-policy.md): approved PDF formats/counts, lifecycle/retention/holds, shared development provider permissions and User-only rollout boundary; Partner runtime remains deferred.
 - [6 November User media cleanup deferral](2026-11-06-user-media-cleanup-deferral.md): bounded SkiaSharp decoding, 24-hour drafts, timestamps and expired-read checks in the foundation; automatic deletion deferred under USER-MEDIA-CLEANUP-01. Physical retention is not implemented.
+- [7 November vehicle claim images](2026-11-07-vehicle-claim-images.md): approved claim-photo association, authorized reviewer access with later adjudication, unchanged admission-anchored expiry, and deferred claim-specific preservation under VEH-CLAIM-HOLD-01; implementation pending and service authentication undecided.
+- [7 November service-authentication deferral](2026-11-07-service-authentication-deferral.md): option 2 retained as future/refactoring direction under SERVICE-AUTH-01; the existing shared service key is subsequently approved for the temporary binding lookup, with caller isolation deferred.
 - [Release review and ownership actions](pm-release-actions.md).
 
 Earlier dated decision/review records remain historical sources. v1.0 was an unsigned review candidate. The current package is a **v1.1 documentation review candidate based on approved decisions**; requirements approval does not prove API approval, implementation or product acceptance.
