@@ -1,0 +1,42 @@
+.assistant-demo { --bg: #f5f7f5; --fg: #152422; --card: #fcfdfc; --border: #d8dfda; --muted: #526360; --primary: #146b61; color-scheme: light; background: var(--bg); color: var(--fg); min-height: 100dvh; padding: 28px max(20px, calc((100% - 820px) / 2)); font-family: 'Be Vietnam Pro', sans-serif; }
+.assistant-demo button { min-height: 44px; cursor: pointer; border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; font: inherit; font-size: 14px; background: var(--card); color: var(--fg); }
+.assistant-demo button:hover:not(:disabled) { background: #e9efeb; }
+.assistant-demo button:disabled { opacity: .55; cursor: not-allowed; }
+.assistant-demo :is(button,textarea):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.demo-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
+.demo-brand { font-size: 14px; color: var(--primary); font-weight: 700; }
+.demo-header h1 { font-size: 24px; font-weight: 600; margin: 4px 0 0; line-height: 1.4; }
+.demo-notice { border-block: 1px solid var(--border); padding: 16px 0; font-size: 13px; line-height: 1.65; }
+.demo-notice strong { font-weight: 600; }
+.demo-notice p { color: var(--muted); margin: 4px 0 0; }
+.demo-conversation { min-height: 280px; padding: 24px 0; }
+.demo-empty { padding: 20px 0; }
+.demo-empty h2 { font-size: 21px; font-weight: 500; margin: 0 0 8px; }
+.demo-empty > p { font-size: 14px; color: var(--muted); line-height: 1.65; margin: 0 0 24px; }
+.demo-suggestions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.demo-suggestions button { display: flex; width: min(100%, 420px); justify-content: space-between; gap: 20px; text-align: left; }
+.demo-turn { margin-bottom: 24px; font-size: 15px; line-height: 1.75; }
+.demo-user { margin-left: auto; width: fit-content; max-width: 90%; background: #e9efeb; padding: 12px 16px; border-radius: 8px; }
+.demo-turn span { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.demo-turn p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.demo-reply { padding: 20px 0 0; }
+.demo-reply small { overflow-wrap: anywhere; display: block; color: var(--muted); margin-top: 10px; font-size: 12px; }
+.demo-sources { margin-top: 16px; border-top: 1px solid var(--border); font-size: 13px; overflow-wrap: anywhere; }
+.demo-sources summary { cursor: pointer; padding: 12px 0; min-height: 44px; font-weight: 500; }
+.demo-sources summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.demo-sources ol { padding-left: 22px; margin: 0; }
+.demo-sources li { padding: 0 0 16px 4px; }
+.demo-sources small { margin-top: 3px; }
+.demo-sources p { margin-top: 6px; }
+.demo-error { margin-top: 12px; border-left: 2px solid #8d3540; padding-left: 12px; }
+.demo-error button { margin-top: 8px; }
+.demo-pending { color: var(--muted); font-size: 14px; }
+.demo-composer { border-top: 1px solid var(--border); padding-top: 18px; padding-bottom: 16px; }
+.demo-composer label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+.demo-composer textarea { width: 100%; resize: vertical; min-height: 88px; max-height: 260px; background: var(--card); color: var(--fg); border: 1px solid #71827c; border-radius: 6px; padding: 12px; font: inherit; font-size: 15px; line-height: 1.6; }
+.demo-composer textarea::placeholder { color: var(--muted); }
+.demo-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.demo-composer-footer > span { font-size: 12px; color: var(--muted); }
+.assistant-demo .demo-send { background: var(--primary); color: #fcfdfc; border-color: var(--primary); flex-shrink: 0; }
+.assistant-demo .demo-send:hover:not(:disabled) { background: #10594f; }
+@media (max-width: 540px) { .assistant-demo { padding: 20px 16px; } .demo-header { align-items: flex-start; } .demo-header h1 { font-size: 20px; } .demo-header button { max-width: 118px; } .demo-conversation { min-height: 240px; } .demo-composer-footer { align-items: flex-end; } .demo-composer-footer > span { max-width: 150px; } }
