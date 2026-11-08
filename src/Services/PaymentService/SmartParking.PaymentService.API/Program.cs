@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using SmartParking.PaymentService.API.Middleware;
+using SmartParking.PaymentService.API;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
@@ -37,6 +38,7 @@ else
 }
 
 builder.Services.AddAuthorization();
+builder.Services.AddDiscoveryPriceReads();
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
@@ -54,9 +56,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseDiscoveryPriceReads();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapDiscoveryPriceReads();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
