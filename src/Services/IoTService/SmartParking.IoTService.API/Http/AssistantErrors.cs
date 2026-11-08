@@ -46,6 +46,8 @@ public sealed class AssistantExceptionHandler(ILogger<AssistantExceptionHandler>
     private static readonly IReadOnlyDictionary<Type, Func<Exception, AssistantError>> Mappings =
         new Dictionary<Type, Func<Exception, AssistantError>>
         {
+            [typeof(SmartParking.IoTService.Application.Assistant.Guest.GuestFailure)] = ex => new(((SmartParking.IoTService.Application.Assistant.Guest.GuestFailure)ex).Status, ((SmartParking.IoTService.Application.Assistant.Guest.GuestFailure)ex).Code, "The assistant request could not be completed."),
+            [typeof(SmartParking.IoTService.Application.Assistant.Chat.ChatFailure)] = ex => new(((SmartParking.IoTService.Application.Assistant.Chat.ChatFailure)ex).Status, ((SmartParking.IoTService.Application.Assistant.Chat.ChatFailure)ex).Code, "The assistant request could not be completed."),
             [typeof(ClientUpgradeRequiredException)] = _ => new(409, "CLIENT_UPGRADE_REQUIRED", "Upgrade the settings client before changing models."),
             [typeof(ProviderDiagnosticsException)] = ex => new(((ProviderDiagnosticsException)ex).Status, ((ProviderDiagnosticsException)ex).Code, "The provider operation could not be completed."),
             [typeof(ManagementValidationException)] = _ => AssistantErrors.ForStatus(400),

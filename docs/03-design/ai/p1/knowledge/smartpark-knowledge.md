@@ -1,7 +1,7 @@
 ---
-version: 0.2.0
+version: 0.3.1
 locale: vi
-audience: [driver]
+audience: [public, driver]
 scope: global
 publication_state: draft
 review_status: pending
@@ -24,10 +24,40 @@ Cách cập nhật:
 - Mỗi mục bắt đầu bằng “## [mã-nguồn] Tiêu đề”, có một dòng “Từ khóa:” ngăn cách bằng dấu chấm phẩy và một phần “### Nội dung”. Dùng đoạn văn hoặc heading cấp 4 trở xuống trong nội dung.
 - Backend mới đọc lại file ở mỗi câu hỏi; lưu hoàn chỉnh rồi gửi câu mới. File thiếu/sai định dạng sẽ báo lỗi thay vì trả nội dung chính sách cũ.
 - Với Docker đang dùng, cần cập nhật image Assistant một lần để nhận bộ đọc mới. Sau đó chỉ sửa file này trong thư mục đã được mount, không rebuild vì sửa nội dung.
+- Host FAQ thật dùng cùng file này; không duy trì bản nội dung JSON hoặc bản dịch tiếng Anh riêng. Model có thể diễn đạt tiếng Anh từ nguồn Việt; fallback phải ghi rõ trích dẫn gốc tiếng Việt.
+- Công bố cho host thật vẫn cần metadata `publication_state: published`, `review_status: approved` và manifest `publication.json` chỉ chứa version/hash/biên bản duyệt trong thư mục triển khai. Sửa file làm lệch hash sẽ tạm ngừng FAQ cho đến khi được duyệt lại; trạng thái draft của bản này chưa bật phục vụ.
+
+## [vehicle-guide] Loại xe được SmartPark phục vụ
+
+Từ khóa: loại xe; ô tô; xe máy; vehicle; vehicles; vehicle types; car; motorcycle; motorbike; bike; bicycle; park a motorcycle
+
+### Nội dung
+
+Thiết kế SmartPark phân biệt ô tô và xe máy. Mỗi bãi cần cấu hình loại xe tương thích; sức chứa ô tô và xe máy không thay thế nhau. Loại xe khác với loại bãi ngoài trời, tầng hầm hoặc nhiều tầng. Không suy ra hỗ trợ xe tải, xe buýt hoặc sạc xe điện khi chưa có nguồn xác nhận. Việc bãi cụ thể có nhận xe và còn chỗ cần dữ liệu hiện hành của backend; hướng dẫn này không xác nhận chỗ trống.
+
+Trong câu hỏi tiếng Anh, “bike” có thể chỉ xe máy hoặc xe đạp. Tài liệu này xác nhận xe máy thuộc loại xe được thiết kế hỗ trợ, tùy cấu hình từng bãi. Tài liệu chưa xác nhận việc hỗ trợ xe đạp.
+
+### Đối chiếu — không gửi đến AI
+
+- Nội dung hợp nhất từ chủ đề vehicle-guide của S04; bản nháp chưa công bố.
+- [SRS discovery](../../../../01-requirements/srs/modules/03-discovery-visualization.md)
+
+## [assistant-limits] Giới hạn của trợ lý SmartPark
+
+Từ khóa: giới hạn trợ lý; assistant limitations; what can the assistant do
+
+### Nội dung
+
+Trợ lý khách chỉ hướng dẫn thông tin công khai; việc đọc xe hoặc lịch đặt của tài khoản cần đăng nhập và khả năng tra cứu đang được bật. Kết quả tra cứu phải do backend kiểm tra đúng tài khoản. Trợ lý không tự tạo booking, giữ chỗ, thanh toán, hoàn tiền hoặc điều khiển cổng. Tin nhắn “đồng ý” không thay xác nhận trên form. Khi chưa có nguồn chỗ trống đáng tin cậy, kết quả là chưa xác định. Hướng dẫn từ tài liệu được ghi rõ, không giả làm câu trả lời model hoặc kết quả giao dịch thật. Không gửi mật khẩu, OTP hoặc dữ liệu bí mật vào chat.
+
+### Đối chiếu — không gửi đến AI
+
+- Nội dung hợp nhất từ chủ đề assistant-limits của S04, phân biệt guest FAQ với tra cứu có đăng nhập; chưa công bố.
+- [SRS AI](../../../../01-requirements/srs/modules/10-ai-assistance.md)
 
 ## [account-security-guide] Tài khoản, xe và bảo mật
 
-Từ khóa: tài khoản; bảo mật; mật khẩu; đăng nhập; phương tiện; xe của tôi; account; security; password; login; sign in; vehicle; vehicles; my car; mfa; totp; otp; authentication
+Từ khóa: tài khoản; bảo mật; mật khẩu; đăng nhập; phương tiện đã lưu; xe của tôi; account; security; password; login; sign in; saved vehicle; registered vehicle; manage my vehicles; my car; mfa; totp; otp; authentication
 
 ### Nội dung
 
@@ -203,7 +233,7 @@ Từ khóa: smartpark; smartparking; trợ lý; assistant; chatbot; tổng quan;
 
 ### Nội dung
 
-SmartPark hỗ trợ người lái tìm hiểu bãi đỗ, đặt chỗ, theo dõi lượt đỗ và các giao dịch liên quan theo tính năng đang được cung cấp. Trợ lý AI có thể giải thích hướng dẫn bằng tiếng Việt hoặc diễn đạt bằng tiếng Anh theo câu hỏi. Bản FAQ local hiện xử lý riêng từng câu hỏi, chưa sử dụng lịch sử các lượt trước.
+SmartPark hỗ trợ người lái tìm hiểu bãi đỗ, đặt chỗ, theo dõi lượt đỗ và các giao dịch liên quan theo tính năng đang được cung cấp. Trợ lý AI có thể giải thích hướng dẫn bằng tiếng Việt hoặc diễn đạt bằng tiếng Anh theo câu hỏi. Ở chế độ khách chưa đăng nhập, mỗi câu FAQ được xử lý riêng. Hội thoại đăng nhập có lưu lịch sử khi khả năng tương ứng được bật; không tự nhập lịch sử khách vào tài khoản.
 
 Ở chế độ hỏi đáp hướng dẫn, trợ lý giải thích quy trình chung; việc tìm bãi còn chỗ, xem booking, giá, thanh toán hoặc hoàn tiền của bạn cần khả năng tra cứu tương ứng đang được bật và dữ liệu đã xác minh. Trợ lý sẽ nói rõ khi chưa tra cứu được.
 
