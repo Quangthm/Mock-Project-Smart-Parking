@@ -29,7 +29,14 @@ internal static class DemoKnowledgeCorpus
             if (bytes.Length + count > MaxFileBytes) throw new DemoGroundedUnavailableException();
             bytes.Write(buffer, 0, count);
         }
-        var text = new UTF8Encoding(false, true).GetString(bytes.ToArray()).TrimStart('\uFEFF').Replace("\r\n", "\n");
+        return Parse(bytes.ToArray());
+    }
+
+    // Parse the same bounded snapshot used by publication hashing; no second file read.
+    internal static DemoArticle[] Parse(byte[] bytes)
+    {
+        if (bytes.Length > MaxFileBytes) throw new DemoGroundedUnavailableException();
+        var text = new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF').Replace("\r\n", "\n");
         var document = text.Split("\n---\n", 2);
         if (!text.StartsWith("---\n") || document.Length != 2) throw new DemoGroundedUnavailableException();
         string Metadata(string name)

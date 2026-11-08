@@ -17,7 +17,8 @@ public sealed record ManagedFailoverOptions
 
 // Application owns selection, budgets and current-settings checks. Adapters own HTTP/doc I/O.
 public sealed class ManagedDemoGenerator(IAssistantManagementStore store, IAssistantSecretProtector secrets,
-    IManagedAnswerProvider provider, TimeProvider clock, ILogger<ManagedDemoGenerator> logger, ManagedFailoverOptions? options = null)
+    IManagedAnswerProvider provider, TimeProvider clock, ILogger<ManagedDemoGenerator> logger, ManagedFailoverOptions? options = null,
+    AssistantStageMetrics? metrics = null)
     : IDemoGroundedGenerator, IAssistantManagedRuntime
 {
     private readonly ManagedFailoverOptions policy = Validate(options ?? new());
@@ -32,8 +33,11 @@ public sealed class ManagedDemoGenerator(IAssistantManagementStore store, IAssis
         return Task.CompletedTask;
     }
 
-    public async Task<GroundedReply> GenerateAsync(string message, CancellationToken ct)
+    public Task<GroundedReply> GenerateAsync(string message, CancellationToken ct) => GenerateAsync(message, provider, ct);
+
+    public async Task<GroundedReply> GenerateAsync(string message, IManagedAnswerProvider answerProvider, CancellationToken ct)
     {
+        using var measurement = metrics?.Start("provider_failover");
         ct.ThrowIfCancellationRequested();
         if (!store.IsConfigured || !secrets.IsConfigured) throw new ManagementUnavailableException();
         using var total = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -53,7 +57,7 @@ public sealed class ManagedDemoGenerator(IAssistantManagementStore store, IAssis
                 ct.ThrowIfCancellationRequested();
                 if (attempts >= policy.MaximumAttempts || ai.IsCancellationRequested) break;
                 await RequireCurrent(state, total.Token);
-                if (Cooling(state.Revision, chosen.Id, key.Id)) continue;
+                if (Cooling(state.Revision, chosen.Id + ":" + chosen.Model, key.CredentialVersion)) continue;
                 var encrypted = await store.CredentialAsync(key.Id, key.CredentialVersion, total.Token).WaitAsync(total.Token);
                 if (encrypted is null) throw new ManagementUnavailableException();
                 var secret = secrets.Unprotect(key.CredentialVersion, encrypted);
@@ -64,26 +68,27 @@ public sealed class ManagedDemoGenerator(IAssistantManagementStore store, IAssis
                 attempts++;
                 try
                 {
-                    var answer = await provider.GenerateAsync(chosen.Id, chosen.Model, secret, message, attempt.Token).WaitAsync(attempt.Token);
+                    var answer = await answerProvider.GenerateAsync(chosen.Id, chosen.Model, secret, message, attempt.Token).WaitAsync(attempt.Token);
                     attempt.Token.ThrowIfCancellationRequested();
+                    await RequireCurrent(state, total.Token);
                     return answer; // Valid answer (including no-answer) stops failover.
                 }
                 catch (DemoGroundedUnavailableException failure) when (Recoverable(failure))
                 {
                     LogFailure(chosen, failure);
                     if (failure.Failure == DemoGroundedFailure.Busy) break;
-                    Cool(state.Revision, chosen.Id, key.Id, failure);
+                    Cool(state.Revision, chosen.Id + ":" + chosen.Model, key.CredentialVersion, failure);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
                     var failure = new DemoGroundedUnavailableException(DemoGroundedFailure.Timeout);
                     LogFailure(chosen, failure);
-                    Cool(state.Revision, chosen.Id, key.Id, failure);
+                    Cool(state.Revision, chosen.Id + ":" + chosen.Model, key.CredentialVersion, failure);
                 }
             }
             ct.ThrowIfCancellationRequested();
             await RequireCurrent(state, total.Token);
-            return await provider.KnowledgeAsync(message, total.Token).WaitAsync(total.Token);
+            return await answerProvider.KnowledgeAsync(message, total.Token).WaitAsync(total.Token);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new DemoGroundedUnavailableException(DemoGroundedFailure.Timeout); }

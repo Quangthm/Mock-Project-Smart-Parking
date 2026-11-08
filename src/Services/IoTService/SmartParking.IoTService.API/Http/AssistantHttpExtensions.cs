@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.IoTService.Application.Assistant;
+using SmartParking.IoTService.Infrastructure.Assistant.Knowledge;
 
 namespace SmartParking.IoTService.API.Http;
 
@@ -6,6 +8,7 @@ public static class AssistantHttpExtensions
 {
     public static IServiceCollection AddAssistantHttp(this IServiceCollection services)
     {
+        services.AddSingleton<AssistantStageMetrics>();
         services.AddLogging(logging =>
         {
             // Framework request/auth diagnostics may include raw URLs, token details or exception messages.
@@ -22,6 +25,13 @@ public static class AssistantHttpExtensions
                     AssistantErrors.Envelope(context.HttpContext, AssistantErrors.ForStatus(400)));
             });
         return services;
+    }
+
+    public static void AddAssistantProviderTransport(this IServiceCollection services)
+    {
+        services.AddHttpClient(ProviderTransport.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+            .RemoveAllLoggers();
     }
 
     public static IApplicationBuilder UseAssistantHttp(this IApplicationBuilder app)

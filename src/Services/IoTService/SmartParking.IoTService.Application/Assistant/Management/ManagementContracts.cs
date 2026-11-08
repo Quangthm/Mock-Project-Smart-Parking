@@ -4,7 +4,7 @@ namespace SmartParking.IoTService.Application.Assistant.Management;
 
 public sealed record ManagedProvider(string Id, string Model, bool Enabled, int Priority);
 public sealed record ManagedKey(Guid Id, string Provider, string Label, bool Enabled, int Priority,
-    Guid CredentialVersion, DateTimeOffset CreatedAt, DateTimeOffset? RevokedAt);
+    Guid CredentialVersion, DateTimeOffset CreatedAt, DateTimeOffset? RevokedAt, string? Model = null);
 public sealed record ManagedKeyView(Guid Id, string Provider, string Label, bool Enabled, int Priority,
     DateTimeOffset CreatedAt, DateTimeOffset? RevokedAt);
 public sealed record ManagementState(long Revision, bool Enabled, string MaintenanceMessage,
@@ -14,11 +14,14 @@ public sealed record ManagementState(long Revision, bool Enabled, string Mainten
         [new("gemini", "gemini-3.8-flash", false, 1), new("openai", "gpt-5.4-mini-2026-03-17", false, 2)], []);
 }
 public sealed record ManagementSettings(long Revision, bool Enabled, string MaintenanceMessage,
-    ManagedProvider[] Providers, ManagedKeyView[] Keys);
+    ManagedProvider[] Providers, ManagedKeyView[] Keys, int ContractVersion = 2, ManagedKey[]? Configurations = null);
 public sealed record ManagementView(ManagementSettings Settings, bool SecretsConfigured, bool RuntimeReleaseApproved);
-public sealed record AdminMutation(Guid MutationId, long ExpectedRevision, string Action,
+public sealed record AdminMutation(Guid MutationId, [property: System.Text.Json.Serialization.JsonRequired] long ExpectedRevision, string Action,
     ManagedProvider[]? Providers = null, bool? Enabled = null, string? MaintenanceMessage = null,
-    Guid? KeyId = null, string? Provider = null, string? Label = null, string? Secret = null, int? Priority = null)
+    Guid? KeyId = null, string? Provider = null, string? Label = null, string? Secret = null, int? Priority = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Model = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string[]? ProviderIds = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid[]? ConfigurationIds = null)
 {
     public override string ToString() => "[ADMIN MUTATION REDACTED]";
 }
@@ -61,3 +64,5 @@ public sealed record ChangeAssistantManagement(AdminMutation Input) : IRequest<M
 {
     public override string ToString() => "[ADMIN COMMAND REDACTED]";
 }
+
+public sealed class ClientUpgradeRequiredException : Exception;

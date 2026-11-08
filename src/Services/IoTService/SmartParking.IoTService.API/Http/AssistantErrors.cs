@@ -46,6 +46,8 @@ public sealed class AssistantExceptionHandler(ILogger<AssistantExceptionHandler>
     private static readonly IReadOnlyDictionary<Type, Func<Exception, AssistantError>> Mappings =
         new Dictionary<Type, Func<Exception, AssistantError>>
         {
+            [typeof(ClientUpgradeRequiredException)] = _ => new(409, "CLIENT_UPGRADE_REQUIRED", "Upgrade the settings client before changing models."),
+            [typeof(ProviderDiagnosticsException)] = ex => new(((ProviderDiagnosticsException)ex).Status, ((ProviderDiagnosticsException)ex).Code, "The provider operation could not be completed."),
             [typeof(ManagementValidationException)] = _ => AssistantErrors.ForStatus(400),
             [typeof(ManagementConflictException)] = ex => new(409, ((ManagementConflictException)ex).Idempotency ? "IDEMPOTENCY_CONFLICT" : "REVISION_CONFLICT", "Reload settings before making another change."),
             [typeof(ManagementUnavailableException)] = _ => new(503, "MANAGEMENT_UNAVAILABLE", "Assistant management is not configured or unavailable."),
@@ -83,6 +85,7 @@ public sealed class AssistantExceptionHandler(ILogger<AssistantExceptionHandler>
         if (exception is DemoGroundedUnavailableException modelFailure)
             logger.LogWarning("Assistant model unavailable. Failure: {Failure}; ProviderStatus: {ProviderStatus}; TraceId: {TraceId}",
                 modelFailure.Failure, modelFailure.ProviderStatus, context.TraceIdentifier);
+        if (error.Status == 429) context.Response.Headers.RetryAfter = "60";
         await AssistantErrors.WriteAsync(context, error);
         return true;
     }

@@ -5,11 +5,11 @@ using Npgsql;
 using SmartParking.IoTService.Application.Assistant.Management;
 namespace SmartParking.IoTService.Persistence;
 
-public sealed class AssistantManagementStore(NpgsqlDataSource source) : IAssistantManagementStore
+public sealed partial class AssistantManagementStore(NpgsqlDataSource source) : IAssistantManagementStore, IConnectionTestStore
 {
     public bool IsConfigured => true;
     private static string Json<T>(T value) => JsonSerializer.Serialize(value);
-    private static ManagementState State(string json) => JsonSerializer.Deserialize<ManagementState>(json) ?? throw new ManagementUnavailableException();
+    private static ManagementState State(string json) => ManagementRules.Upgrade(JsonSerializer.Deserialize<ManagementState>(json) ?? throw new ManagementUnavailableException());
     public async Task<ManagementState> ReadAsync(CancellationToken ct)
     {
         try { await using var cmd = source.CreateCommand("SELECT state::text FROM assistant_management_state WHERE id=1");

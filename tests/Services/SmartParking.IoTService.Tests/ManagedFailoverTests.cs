@@ -241,6 +241,17 @@ public sealed class ManagedFailoverTests
     }
 
     private static DemoGroundedUnavailableException Rejected(int status) => new(DemoGroundedFailure.ProviderRejected, status);
+    [Fact]
+    public async Task ModelFailureDoesNotSkipDifferentModelInSameProvider()
+    {
+        var f = Fixture();
+        f.Store.State = f.Store.State with { Keys = f.Store.State.Keys.Select((k, i) => k with { Model = i == 0 ? "model-one" : "model-two" }).ToArray() };
+        f.Provider.Respond = (call, _) => call.Model == "model-one" ? Task.FromException<GroundedReply>(Rejected(503)) : Task.FromResult(Answer);
+        Assert.Equal(Answer, await f.Generator.GenerateAsync("booking", default));
+        Assert.Equal(["model-one", "model-two"], f.Provider.Calls.Select(c => c.Model));
+        Assert.All(f.Provider.Calls, call => Assert.Equal("gemini", call.Provider));
+    }
+
     private static (ManagedDemoGenerator Generator, Store Store, Protector Protector, Provider Provider, Clock Clock) Fixture(ManagedFailoverOptions? policy = null)
     {
         var clock = new Clock(); var store = new Store(); var protector = new Protector(); var provider = new Provider();

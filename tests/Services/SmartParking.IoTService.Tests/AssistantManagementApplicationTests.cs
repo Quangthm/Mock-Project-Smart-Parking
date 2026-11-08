@@ -35,6 +35,7 @@ public sealed class AssistantManagementApplicationTests
         builder.Services.AddSingleton<IAssistantManagementStore>(store);
         builder.Services.AddSingleton<IAssistantSecretProtector>(new Protector());
         builder.Services.AddSingleton<IAssistantManagedRuntime>(new Runtime());
+        builder.Services.AddSingleton<IProviderDiagnostics>(new Catalog());
         await using var app = builder.Build();
         app.UseAssistantHttp(); app.UseRouting(); app.UseAuthentication(); app.UseAuthorization(); app.MapManagement();
         await app.StartAsync();
@@ -102,7 +103,7 @@ public sealed class AssistantManagementApplicationTests
         store.State = write.State;
         var view = await Handler(store, "admin").Handle(new GetAssistantManagement(), default);
         var json = JsonSerializer.Serialize(view);
-        Assert.DoesNotContain("CredentialVersion", json);
+        Assert.Contains("CredentialVersion", json); // v2 Admin configuration metadata, never credential material.
         Assert.DoesNotContain("synthetic-secret", json);
         Assert.DoesNotContain("synthetic-secret", input.ToString());
         Assert.DoesNotContain("ciphertext", write.Credential!.ToString());
@@ -138,9 +139,37 @@ public sealed class AssistantManagementApplicationTests
         Assert.Null(ManagementRules.Select(state with { Enabled = false }));
     }
 
+    [Theory]
+    [InlineData("gemini-3.9-flash", true)]
+    [InlineData("gemini-3.8-flash", false)]
+    public async Task AddingGeminiModelRequiresCatalogMembership(string model, bool available)
+    {
+        var store = new Store();
+        var handler = Handler(store, "admin");
+        var request = new ChangeAssistantManagement(new(Guid.NewGuid(), 0, "add-configuration",
+            Provider: "gemini", Label: "Catalog test", Model: model, Secret: "synthetic-secret", Priority: 1));
+        if (available)
+        {
+            await handler.Handle(request, default);
+            Assert.Equal(model, Assert.Single(store.State.Keys).Model);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<ProviderDiagnosticsException>(() => handler.Handle(request, default));
+            Assert.Equal("MODEL_NOT_AVAILABLE", error.Code);
+            Assert.Empty(store.State.Keys);
+        }
+    }
+
     private static ManagementHandlers Handler(Store store, string? role, DateTimeOffset? expires = null) =>
         new(store, new Protector(), new Runtime(), new ActorSource(role is null ? null :
-            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), role, expires ?? DateTimeOffset.UtcNow.AddHours(1))), TimeProvider.System);
+            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), role, expires ?? DateTimeOffset.UtcNow.AddHours(1))), TimeProvider.System, new Catalog());
+    private sealed class Catalog : IProviderDiagnostics
+    {
+        public Task<ProviderModel[]> DiscoverAsync(string provider, string secret, CancellationToken ct) =>
+            Task.FromResult<ProviderModel[]>([new("gemini-3.9-flash", "Gemini Flash")]);
+        public Task TestAsync(string provider, string model, string secret, CancellationToken ct) => throw new NotSupportedException();
+    }
     private sealed class ActorSource(CurrentActor? actor) : ICurrentActor { public CurrentActor? Actor => actor; }
     private sealed class Protector : IAssistantSecretProtector
     {
