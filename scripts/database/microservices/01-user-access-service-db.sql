@@ -367,6 +367,7 @@ CREATE INDEX IF NOT EXISTS "IX_OutboxState_Created" ON "OutboxState" ("Created")
 
 
 -- END FRAMEWORK DDL
+-- SPARK-373 additive
 -- Media schema: declarations only, no appended upgrade/column alteration.
 CREATE TABLE IF NOT EXISTS media_assets (
     id uuid PRIMARY KEY,
@@ -446,7 +447,12 @@ CREATE TABLE IF NOT EXISTS vehicle_registration_claims (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_vehicle_claim
     ON vehicle_registration_claims(account_id,normalized_plate) WHERE status='PENDING_DISPUTE';
+-- Ensure existing pre-media databases have the nullable media references.
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS avatar_asset_id UUID;
 
+ALTER TABLE vehicles
+    ADD COLUMN IF NOT EXISTS image_asset_id UUID;
 -- Circular dependencies only: users/vehicles/claims select their current photo,
 -- while media owns its creator and target references. These FKs must be added after
 -- both tables exist. Catalog guards make repeated execution idempotent.
@@ -462,4 +468,5 @@ DO $$ BEGIN
             REFERENCES vehicle_registration_claims(id) ON DELETE RESTRICT;
     END IF;
 END $$;
+-- END SPARK-373 media schema
 COMMIT;
