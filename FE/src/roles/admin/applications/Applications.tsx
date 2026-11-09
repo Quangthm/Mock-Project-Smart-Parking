@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { useApp } from "../../../context/AppContext"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
 import { contractDraftStorageKey, loadContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
@@ -421,7 +422,7 @@ export function Applications() {
               event.target.value = ""
             }} /></label>
             {reviewFileName && <p>Previewing local file: {reviewFileName}</p>}
-            {modelLoading ? <p role="status">Loading 3D model…</p> : contractDrafts[modelApp.id]?.modelFileName && !modelUrl && !reviewFileUrl ? <p>The imported model is stored only in the Owner's browser. Ask the Owner for the GLB file to review it on this device.</p> : <Parking3DViewer modelUrl={reviewFileUrl || modelUrl || ALLOWED_PARKING_MODELS[modelApp.lotType].path} lotType={modelApp.lotType} interactive={false} showLegend={false} showControls={true} height={340} />}
+            {modelLoading ? <p role="status">Loading 3D model…</p> : contractDrafts[modelApp.id]?.modelFileName && !modelUrl && !reviewFileUrl ? <p>The imported model is stored only in the Owner's browser. Ask the Owner for the GLB file to review it on this device.</p> : <ErrorBoundary name="Parking 3D viewer"><Parking3DViewer modelUrl={reviewFileUrl || modelUrl || ALLOWED_PARKING_MODELS[modelApp.lotType].path} lotType={modelApp.lotType} interactive={false} showLegend={false} showControls={true} height={340} /></ErrorBoundary>}
           </div>
         </section>
       </div>, document.body)}
