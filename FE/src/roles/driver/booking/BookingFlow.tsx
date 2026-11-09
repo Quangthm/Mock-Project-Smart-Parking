@@ -2,6 +2,7 @@ import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
+import { VehicleImageUpload } from "../../../components/forms/VehicleImageUpload"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
@@ -23,6 +24,7 @@ import {
   formatVietnamesePlate,
   formatVietnamesePlateValue,
   isSupportedVietnamesePlate,
+  vehicleAccountKey,
   vehiclesApi,
   type RegisteredVehicle,
 } from "../../../lib/vehiclesApi"
@@ -33,7 +35,10 @@ type BookingPaymentMethod = "qr" | "cash"
 type VehicleForm = {
   type: "motorcycle" | "car"
   plate: string
-  imageReference: string
+}
+
+function isBookingVehicle(vehicle: RegisteredVehicle) {
+  return vehicle.vehicleType === "CAR" && vehicle.status === "ACTIVE"
 }
 
 const slotTakenMessage =
@@ -56,17 +61,19 @@ function formatDuration(hours: number) {
     .filter(Boolean).join(" ")
 }
 
-export function BookingFlow({
-  lot,
-  onDone,
-  resumeBooking,
-}: {
+type BookingFlowProps = {
   lot: ParkingLot
   onDone: () => void
   resumeBooking?: Booking
-}) {
-  const { user } = useApp()
+}
 
+export function BookingFlow(props: BookingFlowProps) {
+  const { user } = useApp()
+  const accountKey = user ? vehicleAccountKey() : ""
+  return user ? <AccountBookingFlow key={accountKey} {...props} accountKey={accountKey} /> : null
+}
+
+function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingFlowProps & { accountKey: string }) {
   const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
 
   const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
@@ -85,14 +92,15 @@ export function BookingFlow({
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [addVehicleOpen, setAddVehicleOpen] = useState(false)
   const [vehicleLoading, setVehicleLoading] = useState(false)
-  const [vehicleSaving, setVehicleSaving] = useState(false)
+  const [vehicleImage, setVehicleImage] = useState<string | null>(null)
+  const [vehicleNotice, setVehicleNotice] = useState("")
+  const [vehicleListFailed, setVehicleListFailed] = useState(false)
   const [vehicleError, setVehicleError] = useState("")
   const [vehicleReload, setVehicleReload] = useState(0)
 
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
-    type: "motorcycle",
+    type: "car",
     plate: "",
-    imageReference: "",
   })
 
   const [startTime, setStartTime] = useState(
@@ -113,28 +121,32 @@ export function BookingFlow({
   const [showPolicyModal, setShowPolicyModal] = useState(false)
 
   useEffect(() => {
-    if (!user || resumeBooking) return
+    if (!accountKey || resumeBooking) return
     let active = true
     setVehicleLoading(true)
     setVehicleError("")
-    vehiclesApi.list()
+    setVehicleListFailed(false)
+    vehiclesApi.listForRegistration(accountKey)
       .then((items) => {
-        if (!active) return
+        if (!active || accountKey !== vehicleAccountKey()) return
         setVehicles(items)
+        const cars = items.filter(isBookingVehicle)
         setSelectedVehicleId((current) =>
-          items.some((item) => item.id === current) ? current : items[0]?.id ?? "",
+          cars.some(item => item.id === current) ? current : cars[0]?.id ?? "",
         )
-        setAddVehicleOpen(items.length === 0)
+        setAddVehicleOpen(cars.length === 0)
       })
       .catch((error) => {
-        if (active)
+        if (active && accountKey === vehicleAccountKey()) {
           setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
+          setVehicleListFailed(true)
+        }
       })
       .finally(() => {
         if (active) setVehicleLoading(false)
       })
     return () => { active = false }
-  }, [user?.id, resumeBooking?.id, vehicleReload])
+  }, [accountKey, resumeBooking?.id, vehicleReload])
 
   useEffect(() => {
     function refreshLots(event: StorageEvent) {
@@ -166,7 +178,8 @@ export function BookingFlow({
 
   const amount = Math.ceil(hours) * lot.hourlyRate
 
-  const selectedVehicle = vehicles.find(
+  const bookingVehicles = vehicles.filter(isBookingVehicle)
+  const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
   )
 
@@ -220,36 +233,40 @@ export function BookingFlow({
     setStep("details")
   }
 
-  async function addVehicle(event: FormEvent<HTMLFormElement>) {
+  function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (vehicleSaving || !user) return
+    if (vehicleLoading || vehicleListFailed || !vehicleImage) return
     const vehicleType = vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE"
     if (!isSupportedVietnamesePlate(vehicleForm.plate, vehicleType)) {
       setVehicleError("Use a supported Vietnamese plate: 51A-123.45 for cars or 59-B1 123.45 for motorcycles.")
       return
     }
-    setVehicleSaving(true)
     setVehicleError("")
+    setVehicleNotice("")
     try {
-      const created = await vehiclesApi.save({
-        plate: vehicleForm.plate.trim().toUpperCase(),
+      const result = vehiclesApi.save(accountKey, {
+        plate: vehicleForm.plate,
         vehicleType,
-        imageReference: vehicleForm.imageReference,
-      })
-      setVehicles((current) => [...current, created])
-      setSelectedVehicleId(created.id)
-      setVehicleForm((current) => ({ ...current, plate: "", imageReference: "" }))
-      setMessage("")
+        imageAssetId: vehicleImage,
+      }, vehicles)
+      if (result.status === "PENDING_DISPUTE") {
+        setVehicleNotice("Registration pending dispute review. This vehicle can’t be used for booking.")
+      } else {
+        setVehicles(current => [...current, result])
+        if (isBookingVehicle(result)) setSelectedVehicleId(result.id)
+        else setVehicleNotice("Chỗ đỗ này chỉ dành cho Ô tô (CAR). Xe máy vừa đăng ký đã được lưu vào hồ sơ của bạn.")
+      }
+      setVehicleForm({ type: "car", plate: "" })
+      setVehicleImage(null)
       setAddVehicleOpen(false)
     } catch (error) {
       setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
-    } finally {
-      setVehicleSaving(false)
     }
   }
 
   function continueToPaymentStep() {
-    if (!selectedSlot || !selectedVehicle || !validTimeWindow) return
+    if (!selectedSlot || !selectedVehicle || !validTimeWindow || vehicleLoading || vehicleListFailed) return
+    setVehicleImage(null)
     setMessage("")
     setStep("payment")
   }
@@ -649,13 +666,13 @@ export function BookingFlow({
             <label className="label">
               Vehicle
               {vehicleLoading && <span className="text-sm text-[var(--muted)]">Loading vehicles…</span>}
-              {!vehicleLoading && vehicles.length > 0 && (
+              {!vehicleLoading && bookingVehicles.length > 0 && (
                 <RoundedSelect
                   className="input"
                   value={selectedVehicleId}
                   onChange={(event) => setSelectedVehicleId(event.target.value)}
                 >
-                  {vehicles.map((vehicle) => (
+                  {bookingVehicles.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
                       {vehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} ·{" "}
                       {formatVietnamesePlate(vehicle)}
@@ -667,14 +684,14 @@ export function BookingFlow({
           {vehicleError && (
             <div role="alert" className="mb-3 text-sm text-red-600">
               {vehicleError}{" "}
-              {!vehicles.length && !vehicleLoading && !addVehicleOpen && (
+              {vehicleListFailed && !vehicleLoading && (
                 <button type="button" className="underline" onClick={() => setVehicleReload((n) => n + 1)}>
                   Retry
                 </button>
               )}
             </div>
           )}
-          {!vehicleLoading && !vehicleError && vehicles.length === 0 && (
+          {!vehicleLoading && !vehicleError && bookingVehicles.length === 0 && (
             <p
               style={{
                 margin: "0 0 0.75rem",
@@ -682,14 +699,16 @@ export function BookingFlow({
                 fontSize: "0.82rem",
               }}
             >
-              You have not saved a vehicle yet. Add one to continue.
+              No active cars available. Register a car to book this slot.
             </p>
           )}
-          {!vehicleLoading && (
+          {vehicleNotice && <p className="mb-3 rounded-lg bg-[var(--bg)] p-3 text-sm" role="status">{vehicleNotice}</p>}
+          {!vehicleLoading && !vehicleListFailed && (
             <button
               className="btn-outline"
               type="button"
               onClick={() => {
+                setVehicleImage(null)
                 setAddVehicleOpen((open) => !open)
                 setMessage("")
               }}
@@ -702,7 +721,7 @@ export function BookingFlow({
               {addVehicleOpen ? "Cancel Add Vehicle" : "+ Add New Vehicle"}
             </button>
           )}
-          {addVehicleOpen && !vehicleLoading && (
+          {addVehicleOpen && !vehicleLoading && !vehicleListFailed && (
             <form
               onSubmit={addVehicle}
               style={{
@@ -744,40 +763,21 @@ export function BookingFlow({
                       plate: event.target.value,
                     }))
                   }}
-                  onBlur={() => setVehicleForm((current) => ({
-                    ...current,
-                    plate: formatVietnamesePlateValue(
-                      current.plate,
-                      current.type === "car" ? "CAR" : "MOTORCYCLE",
-                    ),
-                  }))}
                   placeholder={vehicleForm.type === "car" ? "e.g. 51A-123.45" : "e.g. 59-B1 123.45"}
                   required
                   maxLength={30}
                 />
+                {isSupportedVietnamesePlate(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE") &&
+                  <small className="block">Plate preview: {formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}</small>}
               </label>
-              <label className="label" style={{ gridColumn: "1 / -1" }}>
-                Vehicle image (HTTPS URL)
-                <input
-                  className="input"
-                  type="url"
-                  required
-                  maxLength={2048}
-                  value={vehicleForm.imageReference}
-                  onChange={(event) => {
-                    setVehicleError("")
-                    setVehicleForm((current) => ({ ...current, imageReference: event.target.value }))
-                  }}
-                  placeholder="https://example.com/vehicle.jpg"
-                />
-              </label>
+              <VehicleImageUpload onReady={setVehicleImage} />
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={vehicleSaving}
+                disabled={!vehicleImage || vehicleListFailed}
                 style={{ gridColumn: "1 / -1", justifyContent: "center" }}
               >
-                {vehicleSaving ? "Saving…" : "Save Vehicle"}
+                Save Vehicle
               </button>
             </form>
           )}
@@ -807,7 +807,10 @@ export function BookingFlow({
             <button
               type="button"
               className="btn-outline"
-              onClick={() => setStep("slot")}
+              onClick={() => {
+                setVehicleImage(null)
+                setStep("slot")
+              }}
             >
               Back
             </button>
@@ -816,7 +819,7 @@ export function BookingFlow({
               className="btn-primary"
               disabled={
                 vehicleLoading ||
-                vehicleSaving ||
+                vehicleListFailed ||
                 !selectedVehicle ||
                 !validTimeWindow
               }
