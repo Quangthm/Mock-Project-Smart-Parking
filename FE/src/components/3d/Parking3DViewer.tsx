@@ -26,6 +26,7 @@ import {
   ALLOWED_PARKING_MODELS,
   SLOT_VISUAL_STATE_HEX,
   SLOT_VISUAL_STATE_LABELS,
+  inferLotType,
 } from "../../lib/3d/parking3DConfig"
 import {
   describeBindingDiagnostics,
@@ -245,6 +246,14 @@ export function Parking3DViewer({
 
   activeFloor = null,
 }: Parking3DViewerProps) {
+  const resolvedLotType = useMemo(() => {
+    if (lotType && lotType !== "outdoor") return lotType
+    return inferLotType({
+      floors: layout?.floors.length,
+      slots: slots.map((s) => ({ slotCode: s.number })),
+    })
+  }, [lotType, layout, slots])
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -357,10 +366,11 @@ export function Parking3DViewer({
 
   // Determine target model file URL
 
-  const targetUrl = modelUrl || ALLOWED_PARKING_MODELS[lotType]?.path
+  const targetUrl = modelUrl || ALLOWED_PARKING_MODELS[resolvedLotType]?.path
 
   const expectedFileName =
-    ALLOWED_PARKING_MODELS[lotType]?.fileName || "outdoor_parking_lot.glb"
+    ALLOWED_PARKING_MODELS[resolvedLotType]?.fileName ||
+    "outdoor_parking_lot.glb"
 
   // Apply slot statuses & highlights
 
@@ -827,7 +837,7 @@ export function Parking3DViewer({
           )
 
           const proceduralLot = generateProceduralParkingLot(
-            lotType,
+            resolvedLotType,
             slotsRef.current,
             1,
           )
@@ -836,14 +846,14 @@ export function Parking3DViewer({
         })
     } else {
       const proceduralLot = generateProceduralParkingLot(
-        lotType,
+        resolvedLotType,
         slotsRef.current,
         1,
       )
 
       applySceneContent(proceduralLot, false, expectedFileName)
     }
-  }, [targetUrl, lotType, expectedFileName, reportCensus])
+  }, [targetUrl, resolvedLotType, expectedFileName, reportCensus])
 
   // Sync slot data when slots array updates without reloading the 3D model
 
