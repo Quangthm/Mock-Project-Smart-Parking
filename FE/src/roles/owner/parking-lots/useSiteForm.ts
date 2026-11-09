@@ -62,6 +62,8 @@ type SiteDraft = {
 }
 
 export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => void, onCancel: () => void) {
+  const savedProfileRequest = useRef("")
+  const confirmedSiteActive = useRef(site?.isActive)
   const { user } = useApp()
   const savedLot = site ? store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === site.id) : undefined
   const formId = useId()
@@ -122,26 +124,14 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     }))
   }
 
-  // Auto-calculate capacity based on active floors
-  useEffect(() => {
-    if (site && !modelChoiceChangedRef.current) return
-    const floorsCount = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
-    if (modelFloors.length > 0) {
-      const activeFloors = modelFloors.slice(0, Math.min(floorsCount, modelFloors.length))
-      const sumCapacity = activeFloors.reduce((sum, f) => sum + f.capacity, 0)
-      if (sumCapacity > 0) {
-        setForm((cur) => ({
-          ...cur,
-          totalSlots: String(sumCapacity),
-        }))
-      }
-    }
-  }, [lotType, form.floors, modelFloors, site])
-
   function uploadModel(file: File | undefined) {
-    if (!file) return
+    if (!file) return false
+    if (file.size === 0 || file.size > 30 * 1024 * 1024) {
+      setModelError("Choose a non-empty GLB file up to 30 MB.")
+      return false
+    }
     const result = validateModelUpload(file.name, lotType)
-    if (!result.isValid && !file.name.toLowerCase().endsWith(".glb")) { setModelError("Choose a GLB parking model."); return }
+    if (!result.isValid && !file.name.toLowerCase().endsWith(".glb")) { setModelError("Choose a GLB parking model."); return false }
     modelChoiceChangedRef.current = true
     setModelError("")
     if (result.modelDef && result.modelDef.lotType !== lotType) setLotType(result.modelDef.lotType)
@@ -149,6 +139,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     setCustomModelFileName(file.name)
     setCustomModelFile(file)
     setModelStorageReady(true)
+    return true
   }
 
   // Address Parsing
@@ -195,16 +186,38 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     ...draft?.form,
   })
 
+  // Auto-calculate capacity based on active floors
+  useEffect(() => {
+    if (site && !modelChoiceChangedRef.current) return
+    const floorsCount = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
+    if (modelFloors.length > 0) {
+      const activeFloors = modelFloors.slice(0, Math.min(floorsCount, modelFloors.length))
+      const sumCapacity = activeFloors.reduce((sum, f) => sum + f.capacity, 0)
+      if (sumCapacity > 0) {
+        setForm((cur) => ({
+          ...cur,
+          totalSlots: String(sumCapacity),
+        }))
+      }
+    }
+  }, [lotType, form.floors, modelFloors, site])
+
   const [devices, setDevices] = useState<Record<string, boolean>>({
-    camera: true,
-    barrier: true,
-    sensor: true,
+    camera: !site,
+    barrier: !site,
+    sensor: !site,
     rfid: false,
     "ev-charger": false,
     ...Object.fromEntries(savedLot?.devices.map(device => [device.type, device.enabled]) ?? []),
     ...draft?.devices,
   })
 
+  const setupSnapshot = JSON.stringify([
+    lotType, form.totalSlots, form.floors, form.hourlyRate, form.dailyRate, form.nightRate,
+    form.gracePeriodMinutes, form.subscriptionMonthly, form.subscriptionYearly, devices,
+  ])
+  const initialSetupSnapshot = useRef(setupSnapshot)
+  const initialCapacity = useRef([form.totalSlots, form.floors])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
@@ -280,16 +293,20 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     const totalSlotsNum = parseInt(form.totalSlots, 10)
     const floorsNum = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
 
-    if (site && savedLot && savedLot.modelFileName !== ALLOWED_PARKING_MODELS[lotType].fileName && !customModelUrl) {
+    const setupChanged = setupSnapshot !== initialSetupSnapshot.current || modelChoiceChangedRef.current
+    const capacityChanged = modelChoiceChangedRef.current || form.totalSlots !== initialCapacity.current[0] ||
+      form.floors !== initialCapacity.current[1]
+    if (site && capacityChanged && savedLot && !modelChoiceChangedRef.current &&
+        savedLot.modelFileName !== ALLOWED_PARKING_MODELS[lotType].fileName && !customModelUrl) {
       setError(modelStorageReady ? "The saved Owner model is unavailable in this browser. Upload it again before changing setup details." : "Loading the saved Owner model. Please wait.")
       return
     }
 
-    if ((!site || savedLot) && modelCapacity.capacity === null) {
+    if ((!site || capacityChanged) && modelCapacity.capacity === null) {
       setError(modelCapacity.error || "Checking the 3D model's car bay capacity. Please wait.")
       return
     }
-    if ((!site || savedLot) && (!Number.isInteger(totalSlotsNum) || totalSlotsNum < 1 || totalSlotsNum > modelCapacity.capacity!)) {
+    if ((!site || capacityChanged) && (!Number.isInteger(totalSlotsNum) || totalSlotsNum < 1 || totalSlotsNum > modelCapacity.capacity!)) {
       setError(`Planned car spaces must be between 1 and ${modelCapacity.capacity}, the number of bays in this 3D model.`)
       return
     }
@@ -301,21 +318,37 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       const activeModelDef = ALLOWED_PARKING_MODELS[lotType]
 
       if (site) {
-        // Edit existing site
-        await parkingApi.edit(site.id, {
+        const profile = {
           action: "profile",
           code: siteCode,
           name: siteName,
           address: finalAddress,
           latitude: form.latitude,
           longitude: form.longitude,
-        })
+        }
+        const profileRequest = JSON.stringify([site.id, profile])
+        if (savedProfileRequest.current !== profileRequest) {
+          await parkingApi.edit(site.id, profile)
+          savedProfileRequest.current = profileRequest
+        }
+
+        const activeChanged = form.isActive !== site.isActive
+        if (form.isActive !== confirmedSiteActive.current) {
+          try {
+            await parkingApi.edit(site.id, { action: "active", resourceId: site.id, active: form.isActive })
+            confirmedSiteActive.current = form.isActive
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : "Please try again."
+            setError(`Site details were saved, but the status change could not be confirmed. ${reason}`)
+            return
+          }
+        }
 
         // Also sync local store lot
-        if (savedLot) try {
+        if (savedLot || setupChanged) try {
           const cachedLot = store.getLotsByOwner(user?.id ?? "owner-001").find((lot) => lot.id === site.id)
           if (!customModelFile && cachedLot?.type && cachedLot.type !== lotType) await deleteOwnerModel(site.id).catch(() => {})
-          const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
+          const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile) : null
           store.saveLot({
             // Local UI cache timestamp; this is not the backend site creation time.
             createdAt: cachedLot?.createdAt ?? new Date().toISOString(),
@@ -345,7 +378,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             lng: form.longitude,
           })
         } catch {
-          // ignore local store sync failures
+          setError("Site details were saved, but the browser could not save the local setup. Check your browser storage and try again.")
+          return
         }
 
         onSaved({
@@ -355,8 +389,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           address: finalAddress,
           latitude: form.latitude,
           longitude: form.longitude,
-          totalPhysicalCapacity: savedLot ? totalSlotsNum : site.totalPhysicalCapacity,
           isActive: form.isActive,
+          status: activeChanged ? (form.isActive ? "ACTIVE" : "INACTIVE") : site.status,
         })
       } else {
         // Create new site via API

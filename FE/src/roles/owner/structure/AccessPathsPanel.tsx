@@ -158,7 +158,7 @@ export function AccessPathsPanel({
               </div>
               <button
                 type="button"
-                className="btn-ghost px-2 py-1 text-[11px] text-[var(--occupied)]"
+                className="btn-danger min-h-11 text-xs"
                 onClick={() => removePath(path)}
                 disabled={busy}
                 aria-label={`Delete access path ${path.code}`}

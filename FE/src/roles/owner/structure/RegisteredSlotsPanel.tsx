@@ -92,7 +92,7 @@ export function RegisteredSlotsPanel({
           </label>
           <button
             type="button"
-            className="btn-outline px-2.5 py-1.5 text-xs text-[var(--occupied)]"
+            className="btn-danger min-h-11 text-xs"
             onClick={() => void removeSlots(moved)}
             disabled={busy || moved.length === 0}
           >
@@ -180,7 +180,7 @@ export function RegisteredSlotsPanel({
                   </button>
                   <button
                     type="button"
-                    className="btn-ghost px-2 py-1 text-[11px] text-[var(--occupied)]"
+                    className="btn-danger min-h-11 text-xs"
                     onClick={() => void removeSlots([slot.id])}
                     disabled={busy}
                     aria-label={`Remove slot ${slot.code}`}

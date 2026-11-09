@@ -4,7 +4,6 @@ import { VehicleImageInput } from "../../../components/VehicleImageInput"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
-import { VehicleImageUpload } from "../../../components/forms/VehicleImageUpload"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
@@ -26,7 +25,6 @@ import {
   formatVietnamesePlate,
   formatVietnamesePlateValue,
   isSupportedVietnamesePlate,
-  vehicleAccountKey,
   vehiclesApi,
   type RegisteredVehicle,
   type RegistrationClaim,
@@ -71,11 +69,11 @@ type BookingFlowProps = {
 
 export function BookingFlow(props: BookingFlowProps) {
   const { user } = useApp()
-  const accountKey = user ? vehicleAccountKey() : ""
-  return user ? <AccountBookingFlow key={accountKey} {...props} accountKey={accountKey} /> : null
+  return user ? <AccountBookingFlow key={getSessionGeneration()} {...props} /> : null
 }
 
-function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingFlowProps & { accountKey: string }) {
+function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
+  const { user } = useApp()
   const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
 
   const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
@@ -95,7 +93,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [addVehicleOpen, setAddVehicleOpen] = useState(false)
   const [vehicleLoading, setVehicleLoading] = useState(false)
-  const [vehicleImage, setVehicleImage] = useState<string | null>(null)
+  const [vehicleSaving, setVehicleSaving] = useState(false)
   const [vehicleNotice, setVehicleNotice] = useState("")
   const [vehicleListFailed, setVehicleListFailed] = useState(false)
   const [vehicleError, setVehicleError] = useState("")
@@ -125,11 +123,12 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
   const [showPolicyModal, setShowPolicyModal] = useState(false)
 
   useEffect(() => {
-    if (!accountKey || resumeBooking) return
+    if (!user || resumeBooking) return
     let active = true
     setVehicles([])
     setSelectedVehicleId("")
     setVehicleLoading(true)
+    setVehicleListFailed(false)
     setVehicleError("")
     setRegistrationClaims([])
     Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
@@ -138,14 +137,13 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
         if (!active) return
         setRegistrationClaims(claims)
         setVehicles(items)
-        const cars = items.filter(isBookingVehicle)
         setSelectedVehicleId((current) =>
-          cars.some(item => item.id === current) ? current : cars[0]?.id ?? "",
+          items.some(item => item.id === current) ? current : items[0]?.id ?? "",
         )
-        setAddVehicleOpen(cars.length === 0)
+        setAddVehicleOpen(items.length === 0)
       })
       .catch((error) => {
-        if (active && accountKey === vehicleAccountKey()) {
+        if (active) {
           setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
           setVehicleListFailed(true)
         }
@@ -186,7 +184,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
 
   const amount = Math.ceil(hours) * lot.hourlyRate
 
-  const bookingVehicles = vehicles.filter(isBookingVehicle)
+  const bookingVehicles = vehicles.filter(vehicle => vehicle.vehicleType === "CAR")
   const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
   )
@@ -249,7 +247,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
   async function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const generation = getSessionGeneration()
-    if (vehicleSaving || !user) return
+    if (vehicleSaving || !user || !vehicleForm.imageAssetId) return
     const vehicleType = vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE"
     if (!isSupportedVietnamesePlate(vehicleForm.plate, vehicleType)) {
       setVehicleError("Use a supported Vietnamese plate: 51A-123.45 for cars or 59-B1 123.45 for motorcycles.")
@@ -257,6 +255,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
     }
     setVehicleError("")
     setVehicleNotice("")
+    setVehicleSaving(true)
     try {
       const created = await vehiclesApi.save({
         plate: vehicleForm.plate,
@@ -267,7 +266,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
       if (created.vehicleType === "CAR") {
         setVehicles((current) => [...current, created])
         setSelectedVehicleId(created.id)
-      } else setVehicleError("Motorcycle registered. Specific Slot booking requires a car.")
+      } else setVehicleNotice("Motorcycle registered. Specific Slot booking requires a car.")
       setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
       setMessage("")
       setAddVehicleOpen(false)
@@ -290,7 +289,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
 
   function continueToPaymentStep() {
     if (!selectedSlot || !selectedVehicle || !validTimeWindow || vehicleLoading || vehicleListFailed) return
-    setVehicleImage(null)
     setMessage("")
     setStep("payment")
   }
@@ -733,7 +731,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
               className="btn-outline"
               type="button"
               onClick={() => {
-                setVehicleImage(null)
                 setAddVehicleOpen((open) => !open)
                 setMessage("")
               }}
@@ -808,7 +805,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
                 disabled={vehicleSaving || !vehicleForm.imageAssetId}
                 style={{ gridColumn: "1 / -1", justifyContent: "center" }}
               >
-                Save Vehicle
+                {vehicleSaving ? "Saving…" : "Save Vehicle"}
               </button>
             </form>
           )}
@@ -839,7 +836,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
               type="button"
               className="btn-outline"
               onClick={() => {
-                setVehicleImage(null)
                 setStep("slot")
               }}
             >
@@ -851,6 +847,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
               disabled={
                 vehicleLoading ||
                 vehicleListFailed ||
+                vehicleSaving ||
                 !selectedVehicle ||
                 !validTimeWindow
               }

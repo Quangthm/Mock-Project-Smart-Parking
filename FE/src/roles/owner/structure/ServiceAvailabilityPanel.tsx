@@ -1,3 +1,4 @@
+import { ParkingDateField } from "../../../components/forms/ParkingDateField"
 import { useEffect, useState, type FormEvent } from "react"
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import { parkingApi, type MaintenanceWindow, type Structure } from "../../../lib/parkingApi"
@@ -97,21 +98,10 @@ function WindowRow({
         <Badge tone={enforcement.tone}>{enforcement.label}</Badge>
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="min-w-52 flex-1 space-y-1 text-[11px] font-medium text-[var(--muted)]">
-          <span>New end (earlier ends are refused)</span>
-          <input
-            className={inputClass}
-            type="datetime-local"
-            value={end}
-            min={isoToLocalInput(window.end)}
-            step="60"
-            onChange={(event) => {
-              setEnd(event.target.value)
-              setError("")
-            }}
-            aria-label={`New end for the window starting ${formatInstant(window.start)}`}
-          />
-        </label>
+        <div className="min-w-0 flex-[1_1_16rem]">
+          <ParkingDateField label="New end" withTime value={end} min={isoToLocalInput(window.end)}
+            disabled={busy} onChange={value => { setEnd(value); setError("") }} />
+        </div>
         <button type="button" className="btn-outline px-2.5 py-1.5 text-xs" onClick={extend} disabled={busy}>
           Extend
         </button>
@@ -176,35 +166,10 @@ function WindowComposer({
   return (
     <form onSubmit={submit} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className={labelClass}>
-          <span>Start</span>
-          <input
-            className={inputClass}
-            type="datetime-local"
-            value={start}
-            step="60"
-            onChange={(event) => {
-              setStart(event.target.value)
-              setError("")
-            }}
-            required
-          />
-        </label>
-        <label className={labelClass}>
-          <span>End</span>
-          <input
-            className={inputClass}
-            type="datetime-local"
-            value={end}
-            min={start}
-            step="60"
-            onChange={(event) => {
-              setEnd(event.target.value)
-              setError("")
-            }}
-            required
-          />
-        </label>
+        <ParkingDateField label="Start" withTime value={start} disabled={busy}
+          onChange={value => { setStart(value); setError("") }} />
+        <ParkingDateField label="End" withTime value={end} min={start} disabled={busy}
+          onChange={value => { setEnd(value); setError("") }} />
       </div>
       <p className="text-[11px] text-[var(--muted)]">
         Half-open <strong>[start, end)</strong>: the lot stops accepting new commitments at the start and serves again at
@@ -229,8 +194,8 @@ function WindowComposer({
           {error}
         </p>
       )}
-      <div className="flex justify-end">
-        <button type="submit" className="btn-primary px-3 py-1.5 text-xs" disabled={busy}>
+      <div className="flex justify-end pt-3">
+        <button type="submit" className="btn-primary min-h-11" disabled={busy}>
           {busy ? "Recording…" : "Schedule closure"}
         </button>
       </div>
