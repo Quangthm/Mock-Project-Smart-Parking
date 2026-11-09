@@ -8,6 +8,7 @@ import {
   type Unit,
 } from "./parkingApi"
 import { isSlotBookable } from "./operationalLayout"
+import { ALLOWED_PARKING_MODELS, inferLotType } from "./3d/parking3DConfig"
 import type {
   OperationalLayoutProjection,
   PhysicalState,
@@ -17,6 +18,7 @@ import type {
   AppNotification,
   Booking,
   BookingStatus,
+  LotType,
   PaymentMethod,
   PaymentStatus,
   ParkingSlot,
@@ -151,6 +153,7 @@ export interface OperatorSite {
   } | null
   modelUrl?: string
   modelFileName?: string
+  lotType?: LotType
   slots: OperatorSlot[]
   units: Structure["units"]
 }
@@ -325,6 +328,13 @@ function siteFromOperationalLayout(
     })
   }
 
+  const inferredType = inferLotType({
+    name: projection.siteName,
+    floors: projection.floors.length,
+    slots: projection.slots.map((s) => ({ slotCode: s.slotCode })),
+    units,
+  })
+
   return {
     id: projection.siteId,
     tenantId,
@@ -344,6 +354,9 @@ function siteFromOperationalLayout(
       isFresh: projection.isFresh,
       stalenessThresholdSeconds: projection.stalenessThresholdSeconds,
     },
+    lotType: inferredType,
+    modelUrl: ALLOWED_PARKING_MODELS[inferredType]?.path,
+    modelFileName: ALLOWED_PARKING_MODELS[inferredType]?.fileName,
     units,
     slots: projection.slots.map((slot) => {
       const floor = floorById.get(slot.floorId)

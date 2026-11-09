@@ -186,6 +186,30 @@ export function getModelDefByLotType(lotType: LotType): Parking3DModelDef {
   return ALLOWED_PARKING_MODELS[lotType] || ALLOWED_PARKING_MODELS.outdoor
 }
 
+export function inferLotType(params: {
+  name?: string
+  floors?: number
+  slots?: Array<{ number?: string; slotCode?: string }>
+  units?: Array<{ name?: string }>
+}): LotType {
+  const name = (params.name || "").toLowerCase()
+  if (name.includes("hầm") || name.includes("basement") || name.includes("underground")) return "basement"
+  if (name.includes("tầng") || name.includes("storey") || name.includes("indoor") || name.includes("multi")) return "multi-storey"
+  const slotCodes = (params.slots || []).map((s) => s.slotCode || s.number || "")
+  if (slotCodes.some((c) => /^B\d+/i.test(c))) return "basement"
+  if (slotCodes.some((c) => /^(?:L\d+|PARKING_L\d+)/i.test(c))) return "multi-storey"
+  const unitNames = (params.units || []).map((u) => (u.name || "").toLowerCase())
+  if (unitNames.some((n) => n.includes("b1") || n.includes("b2") || n.includes("hầm"))) return "basement"
+  if (unitNames.some((n) => n.includes("l1") || n.includes("l2") || /(?:^|[\s_-]|tầng\s*)g(?:$|[\s_-])/i.test(n) || n.includes("tầng"))) return "multi-storey"
+  if ((params.floors ?? 1) === 2) return "basement"
+  if ((params.floors ?? 1) >= 3) return "multi-storey"
+  return "outdoor"
+}
+
+export function inferModelUrl(lotType: LotType): string {
+  return ALLOWED_PARKING_MODELS[lotType]?.path || ALLOWED_PARKING_MODELS.outdoor.path
+}
+
 export function validateModelUpload(
   fileName: string,
   expectedLotType?: LotType,
