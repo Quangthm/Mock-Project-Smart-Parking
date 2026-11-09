@@ -88,12 +88,9 @@ public sealed class OperationalLayoutContractFixtureTests
 
         // 8. Recursive diff between the two deserialized fixtures: exactly two paths.
         var differences = Diff(normalEnvelope, staleEnvelope);
-        Assert.Contains("data.generatedAt", differences);
-        Assert.Contains("data.isFresh", differences);
-        // Ensure no fields differ other than generatedAt, isFresh, and slot updatedAt
-        Assert.All(differences, path =>
-            Assert.True(path == "data.generatedAt" || path == "data.isFresh" || Regex.IsMatch(path, @"^data\.slots\[\d+\]\.updatedAt$"),
-                $"Unexpected difference found between fixtures: {path}"));
+        var expectedPaths = new[] { "data.generatedAt", "data.isFresh" }.Concat(Enumerable.Range(0, 48).Select(i => $"data.slots[{i}].updatedAt")).OrderBy(path => path, StringComparer.Ordinal);
+        Assert.Equal(expectedPaths,
+            differences.OrderBy(path => path, StringComparer.Ordinal));
     }
 
     private static void AssertCombinationMatrix(IReadOnlyList<SlotVisualStateDto> slots)

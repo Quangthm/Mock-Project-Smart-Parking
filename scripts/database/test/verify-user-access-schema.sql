@@ -4,6 +4,8 @@
 -- This script creates, changes and deletes no schema or application data.
 -- Fresh install: consolidated 01-user-access-service-db.sql, then this check.
 -- Existing databases require a separately reviewed migration; this verifier is read-only.
+-- Media is additive: run this session/outbox preflight, then the canonical UserDb media section,
+-- then test/verify-user-media-schema.sql. Do not reject eligible pre-media volumes here.
 BEGIN READ ONLY;
 SET LOCAL search_path = public, pg_catalog;
 

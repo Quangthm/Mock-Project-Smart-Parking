@@ -73,6 +73,93 @@ export const ALLOWED_MODEL_FILE_NAMES = [
 
 export type AllowedModelFileName = typeof ALLOWED_MODEL_FILE_NAMES[number]
 
+export interface ModelFloorMetadata {
+  floorKey: string
+  displayName: string
+  capacity: number
+  nodeName: string
+}
+
+export interface ModelStaticMetadata {
+  fileName: AllowedModelFileName
+  totalCapacity: number
+  floors: ModelFloorMetadata[]
+}
+
+export const STATIC_PARKING_MODEL_METADATA: Record<string, ModelStaticMetadata> = {
+  "outdoor_parking_lot.glb": {
+    fileName: "outdoor_parking_lot.glb",
+    totalCapacity: 48,
+    floors: [
+      {
+        floorKey: "Ground",
+        displayName: "Khu vực ngoài trời",
+        capacity: 48,
+        nodeName: "OutdoorParking",
+      },
+    ],
+  },
+  "underground_parking_lot.glb": {
+    fileName: "underground_parking_lot.glb",
+    totalCapacity: 48,
+    floors: [
+      {
+        floorKey: "B1",
+        displayName: "Tầng B1",
+        capacity: 24,
+        nodeName: "Floor_B1",
+      },
+      {
+        floorKey: "B2",
+        displayName: "Tầng B2",
+        capacity: 24,
+        nodeName: "Floor_B2",
+      },
+    ],
+  },
+  "indoor_parking_lot.glb": {
+    fileName: "indoor_parking_lot.glb",
+    totalCapacity: 64,
+    floors: [
+      {
+        floorKey: "G",
+        displayName: "Tầng G",
+        capacity: 20,
+        nodeName: "Floor_G",
+      },
+      {
+        floorKey: "L1",
+        displayName: "Tầng L1",
+        capacity: 18,
+        nodeName: "Floor_L1",
+      },
+      {
+        floorKey: "L2",
+        displayName: "Tầng L2",
+        capacity: 26,
+        nodeName: "Floor_L2",
+      },
+    ],
+  },
+}
+
+export function getStaticModelMetadata(
+  urlOrFileName: string,
+): ModelStaticMetadata | null {
+  if (!urlOrFileName) return null
+  const clean = urlOrFileName.trim().toLowerCase()
+  if (clean.includes("outdoor_parking_lot")) {
+    return STATIC_PARKING_MODEL_METADATA["outdoor_parking_lot.glb"]
+  }
+  if (clean.includes("underground_parking_lot")) {
+    return STATIC_PARKING_MODEL_METADATA["underground_parking_lot.glb"]
+  }
+  if (clean.includes("indoor_parking_lot")) {
+    return STATIC_PARKING_MODEL_METADATA["indoor_parking_lot.glb"]
+  }
+  return null
+}
+
 export function isAllowedModelFileName(
   fileName: string,
 ): fileName is AllowedModelFileName {

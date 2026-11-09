@@ -1108,6 +1108,8 @@ The final implementation must define:
 
 Exact service-authentication/infrastructure mechanics remain an implementation/design item unless already established by the canonical architecture baseline.
 
+**7 November 2026 follow-up:** the user approved retaining identity-provider-issued OAuth service tokens as a **future/refactoring direction**, with implementation deferred under [SERVICE-AUTH-01](../../05-project-management/decision-log/2026-11-07-service-authentication-deferral.md). Provider, detailed policy and migration remain unselected. This does not change the approved human TOKEN/REQUEST model or broker trust requirements. For SPARK-243, subsequent explicit approval selects the existing shared `Services:Key` as temporary binding-lookup enforcement. All holders share that capability; caller-specific isolation remains deferred. See the linked decision for the accepted limitation. No unauthenticated lookup is approved.
+
 ---
 
 # 19. Operation classification rule

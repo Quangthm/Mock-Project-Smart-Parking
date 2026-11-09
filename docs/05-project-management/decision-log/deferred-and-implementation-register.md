@@ -4,7 +4,37 @@
 
 **Status separation:** IMPLEMENTATION PENDING = confirmed MVP behavior needs code/schema/tests. POST-v1.0 DETAIL = confirmed AI/LPR direction retained, detailed integration/evaluation intentionally later. FUTURE = feature outside selected MVP. Historical alternatives in the source tables are not active requirements.
 
+## UserService repository refactoring — 9 November 2026
+
+| Backlog ID | Status / owner | Required outcome |
+|---|---|---|
+| USER-UOW-01 | **DEFERRED — refactoring not implemented**; UserService / backend tests | Remove the redundant direct user-repository dependency from `MediaUseCases` through existing `IUnitOfWork.UserRepository`; reassess fixture registrations and inspect similar cases without expanding the unit-of-work contract. Preserve production repository DI and transaction semantics. See [scope, constraints and acceptance](2026-11-09-unit-of-work-repository-refactoring.md). No Jira issue created. |
+
+## SPARK-243 claim-image follow-up — 7 November 2026
+
+| Work ID | Status / owner | Required outcome |
+|---|---|---|
+| VEH-CLAIM-HOLD-01 | DEFERRED design and implementation; UserService / UC-VEH-02 | Define explicit preservation when review needs claim photos beyond their normal deadline, including authorized scope, owner acknowledgement, review/release and deletion-race coordination. A pending claim never creates unlimited retention. See the [approved decision and acceptance criteria](2026-11-07-vehicle-claim-images.md#backlog-veh-claim-hold-01). |
+
+This is a repository backlog item, not a created Jira issue. Claim-photo association is approved for SPARK-243; reviewer access is implemented with later adjudication. Existing acknowledged holds and USER-MEDIA-CLEANUP-01 remain governed by their approved policies. No service-authentication alternative is approved by this entry.
+
 ## Current disposition by original follow-up ID
+
+### Service identity future direction — 7 November 2026
+
+| Backlog ID | Status | Owner / next implementation |
+|---|---|---|
+| SERVICE-AUTH-01 | **FUTURE / refactoring direction; implementation DEFERRED.** User approved backlogging option 2 outside current SPARK-243 work. | Architecture/security, infrastructure and service owners: established-provider OAuth service tokens, destination/permission restrictions, lifecycle/outage rules, tested pilot and gradual migration. Provider and detailed policy are unselected. See [decision, acceptance and current options](2026-11-07-service-authentication-deferral.md). No Jira issue created. |
+
+SPARK-243 subsequently approved the existing shared service key for temporary binding-lookup enforcement. All key holders share access; per-service identity/permission isolation and migration remain in SERVICE-AUTH-01. No unprotected endpoint or removal of human security controls is authorized.
+
+### User media foundation follow-up — 6 November 2026
+
+| Backlog ID | Status | Owner / next implementation |
+|---|---|---|
+| USER-MEDIA-CLEANUP-01 | **DEFERRED — automatic deletion not implemented; evidence NOT RUN.** User-approved scope change to SPARK-373; existing retention policy is not extended. | UserService: expiry selection, hold/deletion serialization, provider deletion/reconciliation, bounded recovery and verification. Unattached drafts have a 24-hour lifetime. See [decision, limitations and acceptance checklist](2026-11-06-user-media-cleanup-deferral.md). Timestamps and expired-read blocking are implemented and verified in the foundation; automatic deletion remains deferred. This is a repository backlog ID; no Jira issue has been created. |
+
+### Original follow-up dispositions
 
 | ID | Current disposition | Main destination |
 |---|---|---|
@@ -69,7 +99,7 @@ All V11-01–12 and D01–D12 business choices in the [approved register](2026-1
 
 | Work ID | Owner/action | Completion evidence |
 |---|---|---|
-| V11-DES-01 | User + media/backend security: agree agreement upload/download contracts, allowed formats/limits, protected references, retention classification, version binding and concurrency controls | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
+| V11-DES-01 | User + media/backend security: Partner policy APPROVED on 6 November 2026 (readable PDF, 10 MiB inclusive, two current required kinds and lifecycle retention); Partner wire details/runtime DEFERRED; provider verification PENDING. Complete protected upload/read/version-concurrency transport and implementation | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
 | V11-DES-02 | User + FE/security: specify the fake VNeID API returned GUID substitute and its persisted User binding, other mock fields, explicit consent, failure/completion evidence and retention | Every non-exempt role covered; Operator email activation; sole seeded Admin exemption; no real government assurance |
 | V11-DES-03 | User/security + FE: agree scoped setup/resend/verification credential expiry, storage, renewal, secure recovery and safe login error envelope | Application ID alone cannot authorize; no normal Owner login before review and successful provisioning; no token/profile overexposure |
 | V11-DES-04 | User/Facility/Operations/Payment architects: specify durable provisioning keys, outcome lookup, event versions, retries and readiness mapping | One tenant/site per accepted proposal; pending/failed/unknown outcome visible; approval and notification cannot imply opening |

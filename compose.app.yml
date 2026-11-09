@@ -7,6 +7,9 @@ x-backend-env: &backend-env
   Services__User: http://user-service:8080/
   Services__Parking: http://facility-service:8080/
   Services__Reservation: http://operation-service:8080/
+  MediaStorage__Cloudinary__CloudName: ${SMARTPARK_CLOUDINARY_CLOUD_NAME:-}
+  MediaStorage__Cloudinary__ApiKey: ${SMARTPARK_CLOUDINARY_API_KEY:-}
+  MediaStorage__Cloudinary__ApiSecret: ${SMARTPARK_CLOUDINARY_API_SECRET:-}
 
 # Future consumer authentication contract only; middleware is a later task.
 # HTTP here is confined to the local-development Docker network.
@@ -32,6 +35,7 @@ services:
     image: smartpark/user-service:local
     environment:
       <<: *backend-env
+      MediaStorage__Enabled: ${SMARTPARK_USER_MEDIA_ENABLED:-false}
       ConnectionStrings__User: "Host=user-db;Port=5432;Database=smartpark_user;Username=smartpark_user;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       DevelopmentAdmin__Email: ${SMARTPARK_ADMIN_EMAIL:-admin@smartpark.local}
       DevelopmentAdmin__Password: ${SMARTPARK_ADMIN_PASSWORD:?Set SMARTPARK_ADMIN_PASSWORD}

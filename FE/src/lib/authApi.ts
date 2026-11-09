@@ -18,6 +18,7 @@ let refreshInFlight: Promise<void> | null = null
 let logoutInProgress = false
 // A refresh rotates credentials within a login; login/logout changes its identity.
 let sessionGeneration = 0
+export const getSessionGeneration = () => sessionGeneration
 
 function requireSessionGeneration(expected: number) {
   if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")
@@ -88,6 +89,10 @@ export class AuthApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    // Raw failure envelope. Callers that understand a specific contract (for example the
+    // structure API's `released`/`commitments`/`items` members) can read it without
+    // inventing a second HTTP client.
+    public payload?: unknown,
   ) {
     super(message)
   }
@@ -203,21 +208,23 @@ export async function request<T>(
   const token = sessionStorage.getItem(tokenKey)
 
   let response: Response
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData
 
   try {
     response = await fetch(serverUrl + apiPrefix + path, {
       method,
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(multipart ? 60_000 : 10_000),
 
       headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
 
         ...(token ? { Authorization: "Bearer " + token } : {}),
-        ...extraHeaders,
+
+        ...(extraHeaders ?? {}),
       },
 
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
     throw new Error("Cannot reach the authentication server. Please try again.")
@@ -260,7 +267,7 @@ export async function request<T>(
         ? "Your session has expired. Please sign in again."
         : "Authentication request failed.")
 
-    throw new AuthApiError(message, response.status, payload?.code)
+    throw new AuthApiError(message, response.status, payload?.code, payload)
   }
 
   return payload as T

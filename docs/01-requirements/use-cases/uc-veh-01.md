@@ -38,3 +38,7 @@ Persist the accepted outcome and history once; failed/unknown work is shown hone
 ## Remaining work
 
 Implementation and acceptance evidence pending; use the policy, permission and transition contracts without inventing business defaults.
+
+## SPARK-243 registration delivery boundary — 8 November 2026
+
+Approved registration categories are CAR and MOTORCYCLE, with multiple distinct vehicles per Account. CAR-only applies to Specific Slot reservation eligibility, not UserService registration. An equivalent plate bound to another Account creates only the claimant's private PENDING_DISPUTE submission; the incumbent keeps the same vehicle ID, binding and existing rights. Intake does not execute full adjudication, notification or transfer. FR-VEH-02 remains confirmed, with UC-VEH-02 adjudication deferred. No automatic promotion on retry, silence, removal or image expiry. External M5 CAR-only registration wording is flagged for its document owner; external source material was not edited.
