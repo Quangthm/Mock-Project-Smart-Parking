@@ -120,6 +120,10 @@ public sealed class ApiExceptionMapper
         Add("ADMIN_ACCOUNT_PROTECTED", "Admin accounts cannot be changed through user management.", 409);
         Add("INVALID_STATUS_TRANSITION", "Verification or owner approval must complete before managing access.", 409);
         Add("PARKING_UNAVAILABLE", "Parking service is unavailable. Please retry.", 503);
+        Add("BOT_VERIFICATION_REQUIRED", "Bot verification token is required.", 400);
+        Add("BOT_VERIFICATION_FAILED", "Bot verification failed.", 400);
+        Add("BOT_VERIFICATION_EXPIRED", "Bot verification token has expired or was already used. Please try again.", 400);
+        Add("BOT_VERIFICATION_UNAVAILABLE", "Bot verification service is temporarily unavailable. Please retry.", 503);
         return errors.ToFrozenDictionary();
 
         void Add(string code, string message, int status) =>

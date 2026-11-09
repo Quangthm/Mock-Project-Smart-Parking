@@ -18,6 +18,7 @@ import { qrLogo } from "../data/paymentOptions"
 import { PaymentCheckout } from "../payments/PaymentCheckout"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { BookingDateTimePicker } from "./BookingDateTimePicker"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
@@ -77,6 +78,8 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
 
   const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
+
+  const [activeFloor3D, setActiveFloor3D] = useState<number | "all">("all")
 
   const [lotSnapshot, setLotSnapshot] = useState(
     () => store.getLots().find((item) => item.id === lot.id) ?? lot,
@@ -305,6 +308,17 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
     setStep(paymentMethod)
   }
 
+  const activeFloorKey: string =
+    activeFloor3D === "all"
+      ? "all"
+      : lotSnapshot.type === "basement"
+        ? `B${activeFloor3D}`
+        : lotSnapshot.type === "multi-storey"
+          ? activeFloor3D === 1
+            ? "G"
+            : `L${activeFloor3D - 1}`
+          : "all"
+
   return (
     <div className="driver-booking-flow" style={{ maxWidth: 1440, margin: "0 auto" }}>
       <div className="booking-flow-header">
@@ -476,15 +490,68 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
           {/* 3D Mode */}
           {viewMode === "3d" && (
             <div style={{ marginBottom: "1rem" }}>
-              <Parking3DViewer
-                lotType={lotSnapshot.type}
-                modelUrl={lotSnapshot.modelUrl}
-                slots={lotSnapshot.slots}
-                selectedSlotId={selectedSlot?.id}
-                onSelectSlot={step === "slot" ? chooseSlot : undefined}
-                height="min(70vh, 700px)"
-                interactive={step === "slot"}
-              />
+              {lotSnapshot.floors > 1 && (
+                <div
+                  role="group"
+                  aria-label="Filter 3D view by floor"
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    marginBottom: "0.6rem",
+                  }}
+                >
+                  {(
+                    [
+                      "all",
+                      ...Array.from(
+                        { length: lotSnapshot.floors },
+                        (_, index) => index + 1,
+                      ),
+                    ] as (number | "all")[]
+                  ).map((floor) => {
+                    const isActive = activeFloor3D === floor
+                    const label = floor === "all" ? "All" : `Floor ${floor}`
+                    return (
+                      <button
+                        key={floor}
+                        type="button"
+                        onClick={() => setActiveFloor3D(floor)}
+                        aria-pressed={isActive}
+                        style={{
+                          padding: "0.3rem 0.7rem",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          borderRadius: "calc(var(--radius) - 2px)",
+                          border: `1px solid ${
+                            isActive ? "var(--primary)" : "var(--border)"
+                          }`,
+                          background: isActive ? "var(--primary)" : "var(--card)",
+                          color: isActive ? "var(--primary-fg)" : "var(--muted)",
+                          cursor: "pointer",
+                          transition:
+                            "background-color 0.2s, color 0.2s, border-color 0.2s",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <ErrorBoundary name="Parking 3D viewer">
+                <Parking3DViewer
+                  lotType={lotSnapshot.type}
+                  modelUrl={lotSnapshot.modelUrl}
+                  slots={lotSnapshot.slots}
+                  selectedSlotId={selectedSlot?.id}
+                  onSelectSlot={step === "slot" ? chooseSlot : undefined}
+                  activeFloor={activeFloorKey}
+                  height="min(70vh, 700px)"
+                  interactive={step === "slot"}
+                />
+              </ErrorBoundary>
             </div>
           )}
 
