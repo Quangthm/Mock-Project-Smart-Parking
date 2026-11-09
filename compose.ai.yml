@@ -4,9 +4,15 @@ x-ai-service: &ai-service
   build: ./src/Services/IoTService/python-ai
   image: smartpark-ai:local
 
+x-media-env: &media-env
+  SMARTPARK_CLOUDINARY_CLOUD_NAME: ${SMARTPARK_CLOUDINARY_CLOUD_NAME:-}
+  SMARTPARK_CLOUDINARY_API_KEY: ${SMARTPARK_CLOUDINARY_API_KEY:-}
+  SMARTPARK_CLOUDINARY_API_SECRET: ${SMARTPARK_CLOUDINARY_API_SECRET:-}
+
 services:
   ai-rest:
     <<: *ai-service
+    environment: *media-env
     command: ["python","main.py","--port","5001","--device","cpu"]
     ports: ["127.0.0.1:5001:5001"]
     healthcheck:
@@ -21,6 +27,7 @@ services:
     command: ["python","main_live.py","--port","5002","--device","cpu"]
     ports: ["127.0.0.1:5002:5002"]
     environment:
+      <<: *media-env
       IOT_DATABASE_HOST: iot-db
       SMARTPARK_DB_IOT_PORT: "5432"
       IOT_DATABASE_NAME: smartpark_iot

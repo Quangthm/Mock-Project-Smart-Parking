@@ -39,6 +39,8 @@ public static class UserHost
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddIdentityWorkflowServices();
         builder.Services.AddPersistenceServices(builder.Configuration);
+        UserService.Infrastructure.Media.MediaRegistration.AddUserMedia(builder.Services, builder.Configuration);
+        builder.Services.AddHostedService<MediaRecoveryWorker>();
         builder.Services.AddProfileMessaging(builder.Configuration,
             registration => registration.AddProfileOutbox(builder.Configuration),
             (endpoint, context) => endpoint.UseEntityFrameworkOutbox<AppDbContext>(context));
@@ -73,6 +75,7 @@ public static class UserHost
                 { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         builder.Services.AddAuthorization();
+        builder.Services.AddScoped<Controllers.VehicleBindingKeyFilter>();
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<UserService.API.Hubs.AccessConnections>();
         builder.Services.AddScoped<IAccessChangeNotifier, UserService.API.Hubs.AccessChangeNotifier>();
@@ -87,6 +90,7 @@ public static class UserHost
         var app = builder.Build();
         // Fail early when the signing key is missing or invalid.
         _ = app.Services.GetRequiredService<JwtKeyProvider>();
+        app.MapUserServiceJwks();
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
         if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("SeedDemoUser"))

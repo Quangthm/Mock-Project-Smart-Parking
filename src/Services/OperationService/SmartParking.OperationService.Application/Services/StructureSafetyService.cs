@@ -32,7 +32,7 @@ public sealed class StructureSafetyService(IStructureSafetyStore store)
         return store.ForceReleaseAsync(tenantId, siteId, ct);
     }
 
-    public Task<object> ImpactAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+    public Task<StructureImpactResponse> ImpactAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
         if (tenantId == Guid.Empty || siteId == Guid.Empty)
             throw new InvalidStructureEditException("Tenant and site must be non-empty.");

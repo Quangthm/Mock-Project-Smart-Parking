@@ -13,7 +13,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class AuthorizationPersistenceTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ProvisioningAssignsOneRolePerSiteAndScopeReadsRespectCurrentMembershipsAndGrants()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

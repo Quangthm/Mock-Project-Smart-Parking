@@ -26,6 +26,7 @@ public class PaymentOrder
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public ICollection<PaymentTransaction> Transactions { get; set; } = new List<PaymentTransaction>();
+    public Invoice? Invoice { get; set; }
 
     public bool IsExpired(DateTimeOffset now) => ExpiresAt.HasValue && ExpiresAt.Value < now;
 

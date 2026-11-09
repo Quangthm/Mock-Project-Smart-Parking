@@ -22,7 +22,7 @@ import {
   ALLOWED_PARKING_MODELS,
   validateModelUpload,
 } from "../../../lib/3d/parking3DConfig"
-import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { useModelCarCapacity, useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
 import { contractDraftStorageKey, loadContractDraft, saveOwnerContractHandoff, type ContractDraftRecord } from "../../../lib/partnerContract"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
@@ -131,7 +131,6 @@ export function OnboardingWizard({
   const [lotConfig, setLotConfig] = useState({
     name: "",
     address: "",
-    totalSlots: "",
     floors: "",
   })
   const [provinceCode, setProvinceCode] = useState<string>(CITIES[0].code)
@@ -225,6 +224,8 @@ export function OnboardingWizard({
 
   useEffect(() => () => { if (customModelUrl) URL.revokeObjectURL(customModelUrl) }, [customModelUrl])
   const modelCapacity = useModelCarCapacity(activeModelUrl)
+  const modelStructure = useModelStructure(activeModelUrl)
+  const modelFloors = modelStructure.analysis?.floors ?? []
 
   function handleLotTypeSelect(type: LotType) {
     setLotType(type)
@@ -235,6 +236,8 @@ export function OnboardingWizard({
     setCustomModelFile(null)
 
     setModelUploadError(null)
+    const defaultFloors = type === "basement" ? "2" : type === "multi-storey" ? "3" : "1"
+    setLotConfig((cur) => ({ ...cur, floors: defaultFloors }))
   }
 
   function handleModelFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -300,18 +303,16 @@ export function OnboardingWizard({
         throw new Error("Confirm the parking entrance on the map before continuing.")
       }
 
-      const totalSlots = Number(lotConfig.totalSlots)
+      // Capacity is derived from the slots the Owner registers, not from this form.
+      // The 3D model's bay count is shown read-only, so it must never gate submission.
+      const totalSlots = modelCapacity.capacity ?? 0
 
       const floors = LOT_TYPE_INFO[lotType].hasFloors
         ? Number(lotConfig.floors)
         : 1
 
-      if (modelCapacity.capacity === null) {
-        throw new Error(modelCapacity.error || "Checking the selected 3D model's car bay capacity. Please wait.")
-      }
-      if (!Number.isInteger(totalSlots) || totalSlots < 1 || totalSlots > modelCapacity.capacity ||
-          !Number.isInteger(floors) || floors < 1 || floors > 20) {
-        throw new Error(`Enter 1–${modelCapacity.capacity} car spaces, matching the selected 3D model, and a valid floor count.`)
+      if (!Number.isInteger(floors) || floors < 1 || floors > 20) {
+        throw new Error("Enter a valid floor count between 1 and 20.")
       }
 
       const numericPricing = {
@@ -388,6 +389,21 @@ export function OnboardingWizard({
       })
       if (!site || typeof site.id !== "string" || !site.id.trim()) {
         throw new Error("The server did not return a valid site ID. Please try again.")
+      }
+
+      // Auto-create FLOOR units based on active floors
+      const targetFloors = modelFloors.slice(0, Math.min(floors, modelFloors.length))
+      for (const fl of targetFloors) {
+        try {
+          await parkingApi.unit(site.id, {
+            type: "FLOOR",
+            name: fl.displayName,
+            parentId: null,
+            capacity: fl.capacity,
+          })
+        } catch (unitErr) {
+          console.warn("Could not auto-create floor unit:", unitErr)
+        }
       }
 
       const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
@@ -995,23 +1011,21 @@ export function OnboardingWizard({
                 }}
               >
                 <div>
-                  <label className="label">Planned Car Spaces *</label>
+                  <label className="label">Planned Car Spaces</label>
                   <input
                     className="input"
                     type="number"
-                    min={1}
-                    max={modelCapacity.capacity ?? undefined}
-                    value={lotConfig.totalSlots}
-                    placeholder="e.g. 50"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) =>
-                      setLotConfig((c) => ({
-                        ...c,
-                        totalSlots: e.target.value,
-                      }))
-                    }
+                    value={modelCapacity.capacity ?? ""}
+                    placeholder="—"
+                    readOnly
+                    aria-readonly="true"
                   />
-                  <p className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error || (modelCapacity.capacity === null ? "Checking car bays in the selected 3D model…" : `Maximum ${modelCapacity.capacity} car spaces in this model.`)}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Capacity is counted from the slots you register. Set per-area limits in Parking Structure.
+                  </p>
+                  {modelCapacity.error && (
+                    <p role="status" className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error}</p>
+                  )}
                 </div>
                 {LOT_TYPE_INFO[lotType].hasFloors && (
                   <div>
@@ -1028,7 +1042,7 @@ export function OnboardingWizard({
                         setLotConfig((c) => ({ ...c, floors: e.target.value }))
                       }
                     />
-                    {lotConfig.totalSlots &&
+                    {modelCapacity.capacity !== null &&
                       lotConfig.floors &&
                       parseInt(String(lotConfig.floors)) > 0 && (
                         <p
@@ -1040,7 +1054,7 @@ export function OnboardingWizard({
                         >
                           ~
                           {Math.ceil(
-                            parseInt(String(lotConfig.totalSlots)) /
+                            modelCapacity.capacity /
                               parseInt(String(lotConfig.floors)),
                           )}{" "}
                           slots per floor
@@ -1059,8 +1073,7 @@ export function OnboardingWizard({
                 onClick={() => setStep(3)}
                 disabled={
                   !lotConfig.name ||
-                  !lotConfig.address || !ward.trim() || !validParkingCoordinates(selectedLocation) ||
-                  !lotConfig.totalSlots ||
+                  !lotConfig.address || !district.trim() || !validParkingCoordinates(selectedLocation) ||
                   (LOT_TYPE_INFO[lotType].hasFloors && !lotConfig.floors)
                 }
               >
@@ -1374,7 +1387,7 @@ export function OnboardingWizard({
               <Row label="Address" value={address} />
               <Row
                 label="Total Slots"
-                value={String(parseInt(String(lotConfig.totalSlots)) || 0)}
+                value={modelCapacity.capacity !== null ? String(modelCapacity.capacity) : "—"}
               />
               {LOT_TYPE_INFO[lotType].hasFloors && (
                 <Row

@@ -28,6 +28,8 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
         services.AddScoped<IIdentityAccessRepository, IdentityAccessRepository>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<IRegistrationClaimRepository, RegistrationClaimRepository>();
+        services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
 
         return services;
     }

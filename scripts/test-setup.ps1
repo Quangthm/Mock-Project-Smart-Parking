@@ -1,4 +1,4 @@
-﻿# Run in Windows PowerShell 5.1. All writes go to a scratch checkout; CLI/secrets are doubles.
+# Run in Windows PowerShell 5.1. All writes go to a scratch checkout; CLI/secrets are doubles.
 param()
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path $PSScriptRoot -Parent
@@ -21,6 +21,17 @@ function Get-Content {
     Microsoft.PowerShell.Management\Get-Content @PSBoundParameters
 }
 function dotnet {
+    if ($args[0] -eq 'run') {
+        $global:runnerEnvironment = @{}
+        foreach ($entry in [Environment]::GetEnvironmentVariables('Process').GetEnumerator()) { $global:runnerEnvironment[$entry.Key] = $entry.Value }
+        if (($args -join ' ') -notmatch 'UserService.API') {
+            $childScript = '@([Environment]::GetEnvironmentVariables().Keys | Where-Object { $_ -match "(?i)JWT.*(PRIVATE|SIGNING|SECRET)" }).Count'
+            $childCount = & 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe' -NoProfile -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript)))
+            Assert-Setup ($childCount -eq 0) 'A real consumer child inherited signing variables.'
+        }
+        $global:LASTEXITCODE = 0
+        return
+    }
     if ($args[0] -eq '--version') { $global:LASTEXITCODE = 0; return '10.0.302' }
     if ($args[0] -eq 'user-secrets') {
         $project = $args[[Array]::IndexOf($args, '--project') + 1]
@@ -47,7 +58,7 @@ function docker {
 function New-Fixture($name) {
     $fixture = Join-Path $testRoot $name
     foreach ($directory in @('scripts','FE')) { New-Item -ItemType Directory -Force -Path (Join-Path $fixture $directory) | Out-Null }
-    foreach ($file in @('setup.ps1','.env.example','scripts/load-env.ps1')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $fixture $file) }
+    foreach ($file in @('setup.ps1','.env.example','scripts/load-env.ps1','scripts/jwt-environment.ps1','scripts/run-schema-service.ps1')) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $fixture $file) }
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'FE/.env.example') -Destination (Join-Path $fixture 'FE/.env.example')
     foreach ($service in @('User','Parking','Reservation','Payment')) {
         $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
@@ -58,8 +69,8 @@ function New-Fixture($name) {
     return $fixture
 }
 function Invoke-Fixture($fixture, $extra = @{}) {
-    $log = (& (Join-Path $fixture 'setup.ps1') -SkipDatabase -SkipRestore -NonInteractive @extra | Out-String)
-    Assert-Setup ($log -notmatch 'review-team-password|review-team-service-key|Review@123') 'Credential leaked into setup output.'
+    $log = (& (Join-Path $fixture 'setup.ps1') -SkipDatabase -SkipRestore -NonInteractive @extra *>&1 | Out-String)
+    Assert-Setup ($log -notmatch 'review-team-password|review-team-service-key|Review@123|synthetic-cloud-') 'Credential leaked into setup output.'
 }
 function Expect-Failure($action, $pattern) {
     $failed = $false
@@ -90,7 +101,7 @@ $teamFile = Join-Path $testRoot 'team-private.env'
 $teamA = New-Fixture 'team-a'
 Invoke-Fixture $teamA @{CredentialMode='Team'; TeamEnvPath=$teamFile}
 $teamKey = $global:setupTestSecretMaps['User']['Services:Key']
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -eq 'http://parking.example.test:5045/') 'Team URL not mapped.'
 $previousKey = $env:SMARTPARK_SERVICE_KEY
 $env:SMARTPARK_SERVICE_KEY = 'no-export-sentinel'
 $null = & (Join-Path $teamA 'scripts/load-env.ps1') -EnvPath $teamFile -NoExport
@@ -109,9 +120,9 @@ $global:setupTestSecretMaps['Parking']['Services:Key'] = 'different-service-key-
 Invoke-Fixture $teamB
 Assert-Setup ($global:setupTestSecretMaps['Parking']['Services:Key'] -ceq $teamKey) 'Services:Key was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true}
-$global:setupTestSecretMaps['User']['Services:Facility'] = 'http://old-parking.example.test/'
+$global:setupTestSecretMaps['User']['Services:Parking'] = 'http://old-parking.example.test/'
 Invoke-Fixture $teamB
-Assert-Setup ($global:setupTestSecretMaps['User']['Services:Facility'] -ceq 'http://parking.example.test:5045/') 'Services:Facility URL was not synced from .env.'
+Assert-Setup ($global:setupTestSecretMaps['User']['Services:Parking'] -ceq 'http://parking.example.test:5045/') 'Services:Parking URL was not synced from .env.'
 Invoke-Fixture $teamB @{SkipUserSecrets=$true; SkipSonarQube=$true}
 $global:setupTestSecretMaps['User']['DevelopmentAdmin:Password'] = 'Different@Admin1'
 $global:setupTestSecretMaps['User']['Jwt:PrivateKeyPem'] = 'stale-jwt-key-material'
@@ -134,4 +145,110 @@ $freshVolume = New-Fixture 'old-volume'
 Expect-Failure { & (Join-Path $freshVolume 'setup.ps1') -SkipRestore -NonInteractive } 'Existing database volumes found'
 Assert-Setup (!(Test-Path -LiteralPath (Join-Path $freshVolume '.env'))) 'Old-volume failure wrote .env.'
 Write-Output 'PASS: local reuse, idempotence, shared Team baseline, remote URL, MapTiler import, secrets sync/overwrite/removal, skip-secrets and old-volume protection.'
+. (Join-Path $sourceRoot 'scripts/jwt-environment.ps1')
+$global:setupTestOldVolume = $false
+$jwtFixture = New-Fixture 'jwt'
+Invoke-Fixture $jwtFixture
+Assert-Setup (!$global:setupTestSecretMaps['User'].ContainsKey('Jwt:PrivateKeyPemBase64')) 'Placeholder synchronized as a private key.'
+$jwtEnv = Join-Path $jwtFixture '.env'
+[IO.File]::AppendAllText($jwtEnv, "`nSMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64=synthetic-signing-sentinel`nSMARTPARK_SERVICE_USER_URL=http://localhost:6035/`n")
+Invoke-Fixture $jwtFixture
+Assert-Setup ($global:setupTestSecretMaps['User']['Jwt:PrivateKeyPemBase64'] -eq 'synthetic-signing-sentinel') 'Issuer secret mapping missing.'
+foreach ($consumer in @('Parking','Reservation','Payment')) {
+    Assert-Setup (@($global:setupTestSecretMaps[$consumer].Keys | Where-Object { Test-JwtSigningSecretName $_ }).Count -eq 0) 'Consumer user-secrets contain signing material.'
+    Assert-Setup ($global:setupTestSecretMaps[$consumer]['JwtValidation:JwksUri'] -eq 'http://localhost:6035/.well-known/jwks.json') 'Consumer trust URL incorrect.'
+}
+foreach ($service in @('Facility','Parking','Operation','Reservation','Payment','User')) {
+    $env:ASPNETCORE_Jwt__PrivateKeyPem = 'inherited-sentinel'
+    $env:DOTNET_Jwt__PrivateKeyPemBase64 = 'inherited-sentinel'
+    $env:Jwt__PrivateKeyPem = 'inherited-sentinel'
+    & (Join-Path $jwtFixture 'scripts/run-schema-service.ps1') -Service $service
+    if ($service -eq 'User') {
+        Assert-Setup ($global:runnerEnvironment['Jwt__PrivateKeyPemBase64'] -eq 'synthetic-signing-sentinel') 'User runner signing mapping missing.'
+    } else {
+        Assert-Setup (@($global:runnerEnvironment.Keys | Where-Object { Test-JwtSigningSecretName $_ }).Count -eq 0) 'Consumer inherited signing material.'
+        Assert-Setup ($global:runnerEnvironment['JwtValidation__JwksUri'] -eq 'http://localhost:6035/.well-known/jwks.json') 'Host trust URL incorrect.'
+    }
+    Clear-JwtSigningEnvironment
+}
+$env:Jwt__PrivateKeyPem = 'inherited-sentinel'
+$null = & (Join-Path $jwtFixture 'scripts/load-env.ps1') -EnvPath $jwtEnv
+Assert-Setup ((Get-JwtSigningEnvironment).Count -eq 0) 'Default loader retained private settings.'
+# Exercise the interactive branch in a scratch copy even when CI stdin is redirected.
+$fixtureSetup = Join-Path $jwtFixture 'setup.ps1'
+$fixtureSource = [IO.File]::ReadAllText($fixtureSetup).Replace('-and -not [Console]::IsInputRedirected', '')
+[IO.File]::WriteAllText($fixtureSetup, $fixtureSource, [Text.UTF8Encoding]::new($true))
+function Read-Host { return $global:fixtureChoice }
+foreach ($choice in @('', 'K', 'A', 'O')) {
+    $global:fixtureChoice = $choice
+    $beforeChoice = [IO.File]::ReadAllText($jwtEnv)
+    try { & $fixtureSetup -SkipDatabase -SkipRestore | Out-Null } catch { if ($choice -ne 'A') { throw } }
+    if ($choice -eq 'O') {
+        Assert-Setup ([IO.File]::ReadAllText((Join-Path $jwtFixture '.env.bak')) -ceq $beforeChoice) 'Overwrite backup incorrect.'
+        Assert-Setup ([IO.File]::ReadAllText($jwtEnv) -notmatch 'synthetic-signing-sentinel') 'Overwrite did not regenerate template.'
+    } else { Assert-Setup ([IO.File]::ReadAllText($jwtEnv) -ceq $beforeChoice) 'Keep/Abort altered environment file.' }
+}
+Write-Output 'PASS: JWT placeholder, scoped secrets, inherited aliases, host service aliases, public trust, Keep/Enter/Abort/Overwrite backup.'
+
+$global:setupTestSecretMaps = @{}
+$mediaFixture = New-Fixture 'media'
+Invoke-Fixture $mediaFixture
+$mediaEnv = Join-Path $mediaFixture '.env'
+$mediaFields = @{'CloudName'='CLOUD_NAME'; 'ApiKey'='API_KEY'; 'ApiSecret'='API_SECRET'}
+Assert-Setup ($global:setupTestSecretMaps['User']['MediaStorage:Enabled'] -eq 'false') 'Media must default off.'
+foreach ($service in @('User','Parking','Reservation','Payment')) {
+    foreach ($field in $mediaFields.Keys) { Assert-Setup (!$global:setupTestSecretMaps[$service].ContainsKey('MediaStorage:Cloudinary:' + $field)) 'Setup generated provider credentials.' }
+}
+$mediaTeamFile = Join-Path $testRoot 'media-team.env'
+$mediaTeamInput = & (Join-Path $mediaFixture 'scripts/load-env.ps1') -EnvPath $mediaEnv -NoExport
+$mediaTeamLines = @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD') | ForEach-Object { $_ + '=' + $mediaTeamInput[$_] }
+foreach ($field in $mediaFields.GetEnumerator()) { $mediaTeamLines += 'SMARTPARK_CLOUDINARY_' + $field.Value + '=synthetic-cloud-' + $field.Key }
+[IO.File]::WriteAllLines($mediaTeamFile, $mediaTeamLines)
+Invoke-Fixture $mediaFixture @{CredentialMode='Team'; TeamEnvPath=$mediaTeamFile}
+foreach ($service in @('User','Parking','Reservation','Payment')) {
+    foreach ($field in $mediaFields.Keys) { Assert-Setup ($global:setupTestSecretMaps[$service]['MediaStorage:Cloudinary:' + $field] -ceq ('synthetic-cloud-' + $field)) 'Shared media credential import failed.' }
+    if ($service -ne 'User') { Assert-Setup (!$global:setupTestSecretMaps[$service].ContainsKey('MediaStorage:Enabled')) 'Media switch leaked to another service.' }
+}
+$mediaWrites = $global:setupTestSecretWrites
+Invoke-Fixture $mediaFixture @{CredentialMode='Team'; TeamEnvPath=$mediaTeamFile}
+Assert-Setup ($global:setupTestSecretWrites -eq $mediaWrites) 'Media rerun was not idempotent.'
+$mediaBeforeConflict = [IO.File]::ReadAllText($mediaEnv)
+[IO.File]::AppendAllText($mediaTeamFile, "`nSMARTPARK_CLOUDINARY_API_SECRET=synthetic-cloud-conflict`n")
+Expect-Failure { Invoke-Fixture $mediaFixture @{CredentialMode='Team'; TeamEnvPath=$mediaTeamFile} } 'Team/local conflict for SMARTPARK_CLOUDINARY_API_SECRET'
+Assert-Setup ([IO.File]::ReadAllText($mediaEnv) -ceq $mediaBeforeConflict) 'Media conflict changed local input.'
+[IO.File]::AppendAllText($mediaEnv, "`nSMARTPARK_CLOUDINARY_API_SECRET=synthetic-cloud-rotated`nSMARTPARK_USER_MEDIA_ENABLED=true`n")
+Invoke-Fixture $mediaFixture
+foreach ($service in @('User','Parking','Reservation','Payment')) {
+    Assert-Setup ($global:setupTestSecretMaps[$service]['MediaStorage:Cloudinary:ApiSecret'] -ceq 'synthetic-cloud-rotated') 'Rotation failed.'
+}
+foreach ($service in @('Facility','Parking','Operation','Reservation','Payment','User')) {
+    & (Join-Path $mediaFixture 'scripts/run-schema-service.ps1') -Service $service
+    Assert-Setup ($global:runnerEnvironment['MediaStorage__Cloudinary__ApiSecret'] -ceq 'synthetic-cloud-rotated') 'Host media mapping failed.'
+    foreach ($field in @('CloudName','ApiKey')) { Assert-Setup ($global:runnerEnvironment['MediaStorage__Cloudinary__' + $field] -ceq ('synthetic-cloud-' + $field)) 'Host media field missing.' }
+    if ($service -eq 'User') { Assert-Setup ($global:runnerEnvironment['MediaStorage__Enabled'] -eq 'true') 'User media opt-in missing.' }
+    else { Assert-Setup (!$global:runnerEnvironment.ContainsKey('MediaStorage__Enabled') -and !$global:runnerEnvironment.ContainsKey('SMARTPARK_USER_MEDIA_ENABLED')) 'Media switch reached a non-owner host.' }
+}
+# Removed and blank input must both erase stale mapped and raw credentials.
+foreach ($removalMode in @('missing','blank')) {
+    $mediaLines = @([IO.File]::ReadAllLines($mediaEnv) | Where-Object { $_ -notmatch '^SMARTPARK_(CLOUDINARY_|USER_MEDIA_ENABLED)' })
+    if ($removalMode -eq 'blank') { foreach ($field in $mediaFields.Values) { $mediaLines += 'SMARTPARK_CLOUDINARY_' + $field + '=' } }
+    [IO.File]::WriteAllLines($mediaEnv, $mediaLines)
+    Invoke-Fixture $mediaFixture
+    Assert-Setup ($global:setupTestSecretMaps['User']['MediaStorage:Enabled'] -eq 'false') 'Removed switch did not disable media.'
+    foreach ($service in @('User','Parking','Reservation','Payment')) {
+        foreach ($field in $mediaFields.Keys) { Assert-Setup (!$global:setupTestSecretMaps[$service].ContainsKey('MediaStorage:Cloudinary:' + $field)) 'Removed media secret retained.' }
+    }
+    foreach ($service in @('User','Facility','Parking','Operation','Reservation','Payment')) {
+        $env:SMARTPARK_CLOUDINARY_API_SECRET = 'synthetic-cloud-stale'
+        $env:MediaStorage__Cloudinary__ApiSecret = 'synthetic-cloud-stale'
+        & (Join-Path $mediaFixture 'scripts/run-schema-service.ps1') -Service $service
+        Assert-Setup ([string]::IsNullOrWhiteSpace($global:runnerEnvironment['MediaStorage__Cloudinary__ApiSecret'])) 'Removed mapped media credential inherited.'
+        Assert-Setup ([string]::IsNullOrWhiteSpace($global:runnerEnvironment['SMARTPARK_CLOUDINARY_API_SECRET'])) 'Removed raw media credential inherited.'
+        Assert-Setup ($env:MediaStorage__Cloudinary__ApiSecret -ceq 'synthetic-cloud-stale') 'Runner did not restore caller environment.'
+    }
+}
+Remove-Item Env:SMARTPARK_CLOUDINARY_API_SECRET, Env:MediaStorage__Cloudinary__ApiSecret
+Assert-Setup ([IO.File]::ReadAllText((Join-Path $mediaFixture 'FE/.env')) -notmatch 'CLOUDINARY|synthetic-cloud-') 'Provider configuration reached frontend.'
+Write-Output 'PASS: optional media imports, rotation, removal, idempotence, host aliases, feature isolation and frontend/log secret isolation.'
 Write-Output "Scratch evidence retained at $testRoot"
+Write-Output ('PowerShell version: ' + $PSVersionTable.PSVersion.ToString())

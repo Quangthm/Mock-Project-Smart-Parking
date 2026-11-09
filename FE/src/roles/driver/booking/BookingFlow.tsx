@@ -1,4 +1,6 @@
+import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { VehicleImageInput } from "../../../components/VehicleImageInput"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -27,6 +29,9 @@ import {
   vehicleAccountKey,
   vehiclesApi,
   type RegisteredVehicle,
+  type RegistrationClaim,
+  canonicalVietnamesePlate,
+  pendingRegistrationMessage,
 } from "../../../lib/vehiclesApi"
 
 type Step = "slot" | "details" | "payment" | "qr" | "cash"
@@ -35,10 +40,7 @@ type BookingPaymentMethod = "qr" | "cash"
 type VehicleForm = {
   type: "motorcycle" | "car"
   plate: string
-}
-
-function isBookingVehicle(vehicle: RegisteredVehicle) {
-  return vehicle.vehicleType === "CAR" && vehicle.status === "ACTIVE"
+  imageAssetId: string
 }
 
 const slotTakenMessage =
@@ -88,6 +90,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
       : null,
   )
 
+  const [registrationClaims, setRegistrationClaims] = useState<RegistrationClaim[]>([])
   const [vehicles, setVehicles] = useState<RegisteredVehicle[]>([])
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [addVehicleOpen, setAddVehicleOpen] = useState(false)
@@ -101,6 +104,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
     type: "car",
     plate: "",
+    imageAssetId: "",
   })
 
   const [startTime, setStartTime] = useState(
@@ -123,12 +127,16 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
   useEffect(() => {
     if (!accountKey || resumeBooking) return
     let active = true
+    setVehicles([])
+    setSelectedVehicleId("")
     setVehicleLoading(true)
     setVehicleError("")
-    setVehicleListFailed(false)
-    vehiclesApi.listForRegistration(accountKey)
-      .then((items) => {
-        if (!active || accountKey !== vehicleAccountKey()) return
+    setRegistrationClaims([])
+    Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+      .then(([allItems, claims]) => {
+        const items = allItems.filter(item => item.vehicleType === "CAR")
+        if (!active) return
+        setRegistrationClaims(claims)
         setVehicles(items)
         const cars = items.filter(isBookingVehicle)
         setSelectedVehicleId((current) =>
@@ -146,7 +154,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
         if (active) setVehicleLoading(false)
       })
     return () => { active = false }
-  }, [accountKey, resumeBooking?.id, vehicleReload])
+  }, [user, resumeBooking?.id, vehicleReload])
 
   useEffect(() => {
     function refreshLots(event: StorageEvent) {
@@ -233,9 +241,15 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
     setStep("details")
   }
 
-  function addVehicle(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    setVehicleForm({ type: "car", plate: "", imageAssetId: "" })
+    setVehicleSaving(false)
+  }, [user])
+
+  async function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (vehicleLoading || vehicleListFailed || !vehicleImage) return
+    const generation = getSessionGeneration()
+    if (vehicleSaving || !user) return
     const vehicleType = vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE"
     if (!isSupportedVietnamesePlate(vehicleForm.plate, vehicleType)) {
       setVehicleError("Use a supported Vietnamese plate: 51A-123.45 for cars or 59-B1 123.45 for motorcycles.")
@@ -244,23 +258,33 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
     setVehicleError("")
     setVehicleNotice("")
     try {
-      const result = vehiclesApi.save(accountKey, {
+      const created = await vehiclesApi.save({
         plate: vehicleForm.plate,
         vehicleType,
-        imageAssetId: vehicleImage,
-      }, vehicles)
-      if (result.status === "PENDING_DISPUTE") {
-        setVehicleNotice("Registration pending dispute review. This vehicle can’t be used for booking.")
-      } else {
-        setVehicles(current => [...current, result])
-        if (isBookingVehicle(result)) setSelectedVehicleId(result.id)
-        else setVehicleNotice("Chỗ đỗ này chỉ dành cho Ô tô (CAR). Xe máy vừa đăng ký đã được lưu vào hồ sơ của bạn.")
-      }
-      setVehicleForm({ type: "car", plate: "" })
-      setVehicleImage(null)
+        imageAssetId: vehicleForm.imageAssetId,
+      })
+      if (getSessionGeneration() !== generation) return
+      if (created.vehicleType === "CAR") {
+        setVehicles((current) => [...current, created])
+        setSelectedVehicleId(created.id)
+      } else setVehicleError("Motorcycle registered. Specific Slot booking requires a car.")
+      setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
+      setMessage("")
       setAddVehicleOpen(false)
     } catch (error) {
-      setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
+      if (getSessionGeneration() !== generation) return
+      if (error instanceof AuthApiError && error.code === "PLATE_EXISTS") {
+        try {
+          const [items, claims] = await Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+          if (getSessionGeneration() !== generation) return
+          setRegistrationClaims(claims)
+          setVehicles(items.filter(item => item.vehicleType === "CAR"))
+          setVehicleError(claims.some(c => c.canonicalPlate === canonicalVietnamesePlate(vehicleForm.plate))
+            ? pendingRegistrationMessage : "This plate is already registered. Choose an active car.")
+        } catch { if (getSessionGeneration() === generation) setVehicleError("Could not confirm registration status. Please refresh.") }
+      } else setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
+    } finally {
+      if (getSessionGeneration() === generation) setVehicleSaving(false)
     }
   }
 
@@ -691,7 +715,8 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
               )}
             </div>
           )}
-          {!vehicleLoading && !vehicleError && bookingVehicles.length === 0 && (
+          {registrationClaims.map(claim => <p key={claim.id} role="status">{claim.rawPlate}: {pendingRegistrationMessage}</p>)}
+          {!vehicleLoading && !vehicleError && vehicles.length === 0 && (
             <p
               style={{
                 margin: "0 0 0.75rem",
@@ -763,18 +788,24 @@ function AccountBookingFlow({ lot, onDone, resumeBooking, accountKey }: BookingF
                       plate: event.target.value,
                     }))
                   }}
+                  aria-description={`Plate preview: ${formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}`}
                   placeholder={vehicleForm.type === "car" ? "e.g. 51A-123.45" : "e.g. 59-B1 123.45"}
                   required
                   maxLength={30}
                 />
-                {isSupportedVietnamesePlate(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE") &&
-                  <small className="block">Plate preview: {formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}</small>}
+                <span>Plate preview: {formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}</span>
               </label>
-              <VehicleImageUpload onReady={setVehicleImage} />
+              <div className="label" style={{ gridColumn: "1 / -1" }}>
+                Vehicle image
+                <VehicleImageInput key={`${getSessionGeneration()}-${vehicleReload}`} onUploaded={assetId => {
+                  setVehicleError("")
+                  setVehicleForm(current => ({ ...current, imageAssetId: assetId }))
+                }} />
+              </div>
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={!vehicleImage || vehicleListFailed}
+                disabled={vehicleSaving || !vehicleForm.imageAssetId}
                 style={{ gridColumn: "1 / -1", justifyContent: "center" }}
               >
                 Save Vehicle

@@ -7,7 +7,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class IdentitySchemaTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task CanonicalSchemaPersistsActiveAndPendingOperatorStates()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

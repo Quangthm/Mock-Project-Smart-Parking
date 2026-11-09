@@ -1,5 +1,5 @@
-using SmartParking.FacilityService.Application;
 using Npgsql;
+using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Persistence;
@@ -24,7 +24,16 @@ public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGa
                 WHERE tenant_id = $1 AND site_id = $2 AND deleted_at IS NULL
                   AND physical_state = 'AVAILABLE'
                   AND (reservation_state IS NULL OR ($6 AND reservation_state = 'RESERVED'))
-                  AND ($3 = 'ANY' OR supported_vehicle_type = $3)
+                  AND ($3 = 'ANY'
+                       OR EXISTS (
+                           SELECT 1 FROM slot_compatibilities compatibility
+                           WHERE compatibility.slot_id = parking_slots.id AND compatibility.vehicle_type = $3
+                       )
+                       OR (supported_vehicle_type = $3
+                           AND NOT EXISTS (
+                               SELECT 1 FROM slot_compatibilities compatibility
+                               WHERE compatibility.slot_id = parking_slots.id
+                           )))
                   AND ($4::uuid IS NULL OR id = $4)
                   AND ($5::uuid IS NULL OR EXISTS (
                       SELECT 1
@@ -62,7 +71,8 @@ public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGa
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
             throw new StructureException("NO_AVAILABLE_SLOT", "No eligible parking slot is available for a walk-in vehicle.");
-        var slot = new OperatorGateSlot(reader.GetGuid(0), reader.GetString(1), reader.GetString(2));
+        var slot = new OperatorGateSlot(reader.GetGuid(0), reader.GetString(1),
+            reader.IsDBNull(2) ? string.Empty : reader.GetString(2));
         await reader.CloseAsync();
         await tx.CommitAsync(ct);
         return slot;

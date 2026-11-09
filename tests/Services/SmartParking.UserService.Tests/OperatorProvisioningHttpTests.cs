@@ -63,6 +63,7 @@ public sealed class OperatorProvisioningHttpTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         var repository = new OperatorRepository();
         var events = new RecordedAccessEvents();
         var directory = new TestParkingDirectory();

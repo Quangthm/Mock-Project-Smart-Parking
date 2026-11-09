@@ -47,6 +47,9 @@ internal static class ServiceSchema
         await using var cmd = new NpgsqlCommand(await File.ReadAllTextAsync(ScriptPath("test/verify-user-access-schema.sql")),
             (NpgsqlConnection)db.Database.GetDbConnection());
         await cmd.ExecuteNonQueryAsync();
+        await using var mediaCmd = new NpgsqlCommand(await File.ReadAllTextAsync(ScriptPath("test/verify-user-media-schema.sql")),
+            (NpgsqlConnection)db.Database.GetDbConnection());
+        await mediaCmd.ExecuteNonQueryAsync();
         await db.Database.CloseConnectionAsync();
     }
     public static string ScriptPath(string file)

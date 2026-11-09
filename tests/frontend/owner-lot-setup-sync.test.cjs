@@ -21,7 +21,7 @@ function renderWithCache(lots) {
   const module = { exports: {} }
   vm.runInNewContext(code, { module, exports: module.exports, Error, Map, Promise, require(name) {
     if (name === 'react') return react
-    if (name.endsWith('/AppContext')) return { useApp: () => ({ user: { id: 'owner-1' } }) }
+    if (name.endsWith('/AppContext')) return { useApp: () => ({ user: { id: 'owner-1' }, authReady: true }) }
     if (name.endsWith('/parkingApi')) return { parkingApi: { list: async () => [site], structure: async () => ({ capacityViews: [{ unitId: null, total: 8, available: 8, occupied: 0, protected: 0, pendingPayment: 0, effectiveBackup: 0, unavailable: 0 }] }) } }
     if (name.endsWith('/data/data')) return { ownerData: { getLotsByOwner: id => id === 'owner-1' ? lots : [] } }
     if (name.endsWith('/ownerLotSetup')) return { reconcileOwnerLotSetups: async () => {} }

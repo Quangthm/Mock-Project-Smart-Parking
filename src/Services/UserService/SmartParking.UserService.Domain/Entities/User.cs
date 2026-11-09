@@ -26,6 +26,7 @@ public class User : BaseEntity
     /// Profile input cannot assign or remove this value. Media mutation is a separate slice.
     /// </remarks>
     public string? AvatarUrl { get; set; }
+    public Guid? AvatarAssetId { get; set; }
 
     public UserStatus Status { get; set; }
 

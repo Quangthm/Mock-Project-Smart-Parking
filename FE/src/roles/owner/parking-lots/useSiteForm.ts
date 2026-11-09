@@ -5,7 +5,7 @@ import { ownerData as store } from "../data/data"
 import { useApp } from "../../../context/AppContext"
 import type { LotType } from "../../../lib/types"
 import { ALLOWED_PARKING_MODELS, validateModelUpload } from "../../../lib/3d/parking3DConfig"
-import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { useModelCarCapacity, useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { deleteOwnerModel, loadOwnerModelUrl, saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
 import { CITIES } from "../../../lib/vietnamAdministrativeUnits"
 import { validParkingCoordinates, type ParkingCoordinates } from "../../../components/ui/ParkingLocationPicker"
@@ -90,6 +90,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   const [modelError, setModelError] = useState("")
   const activeModelUrl = customModelUrl ?? ALLOWED_PARKING_MODELS[lotType].path
   const modelCapacity = useModelCarCapacity(activeModelUrl)
+  const modelStructure = useModelStructure(activeModelUrl)
+  const modelFloors = modelStructure.analysis?.floors ?? []
 
   useEffect(() => {
     if (!site?.id) return
@@ -111,7 +113,30 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     setCustomModelFile(null)
     setModelStorageReady(true)
     setModelError("")
+    const defaultFloors = type === "basement" ? "2" : type === "multi-storey" ? "3" : "1"
+    const defaultSlots = type === "basement" ? "48" : type === "multi-storey" ? "64" : "48"
+    setForm((cur) => ({
+      ...cur,
+      floors: defaultFloors,
+      totalSlots: defaultSlots,
+    }))
   }
+
+  // Auto-calculate capacity based on active floors
+  useEffect(() => {
+    if (site && !modelChoiceChangedRef.current) return
+    const floorsCount = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
+    if (modelFloors.length > 0) {
+      const activeFloors = modelFloors.slice(0, Math.min(floorsCount, modelFloors.length))
+      const sumCapacity = activeFloors.reduce((sum, f) => sum + f.capacity, 0)
+      if (sumCapacity > 0) {
+        setForm((cur) => ({
+          ...cur,
+          totalSlots: String(sumCapacity),
+        }))
+      }
+    }
+  }, [lotType, form.floors, modelFloors, site])
 
   function uploadModel(file: File | undefined) {
     if (!file) return
@@ -344,6 +369,21 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
         })
         if (!createdSite || typeof createdSite.id !== "string" || !createdSite.id.trim()) {
           throw new Error("The server did not return a valid site ID. Please try again.")
+        }
+
+        // Auto-create FLOOR units based on active floors
+        const targetFloors = modelFloors.slice(0, Math.min(floorsNum, modelFloors.length))
+        for (const fl of targetFloors) {
+          try {
+            await parkingApi.unit(createdSite.id, {
+              type: "FLOOR",
+              name: fl.displayName,
+              parentId: null,
+              capacity: fl.capacity,
+            })
+          } catch (unitErr) {
+            console.warn("Could not auto-create floor unit:", unitErr)
+          }
         }
 
         // Also persist to owner store for visual lot manager

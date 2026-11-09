@@ -29,6 +29,7 @@ public static class ApiResponseFactory
             [404] = Error("NOT_FOUND", "The requested resource was not found.", 404),
             [405] = Error("METHOD_NOT_ALLOWED", "The request method is not allowed for this resource.", 405),
             [415] = Error("UNSUPPORTED_MEDIA_TYPE", "The request content type is not supported.", 415),
+            [413] = Error("PAYLOAD_TOO_LARGE", "The uploaded image exceeds the request limit.", 413),
             [429] = Error("TOO_MANY_REQUESTS", "Too many requests. Please try again later.", 429)
         }.ToFrozenDictionary();
 

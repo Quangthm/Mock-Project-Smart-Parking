@@ -21,8 +21,8 @@ This document is the **hub** for the 3D Digital Twin contract. It stays normativ
 | Document | Scope | Status |
 | :--- | :--- | :--- |
 | `3d-digital-twin-api-design.md` (this file) | Hub - shared state model (3.2), slot identity (3.3), error catalogue (7), full register | Normative baseline |
-| [`3d-digital-twin-spark-228-api-design.md`](3d-digital-twin-spark-228-api-design.md) | SPARK-228 - Sprint 2 read-path + Three.js state binding | Ready with conditions (pending PM sign-off) |
-| [`3d-digital-twin-spark-244-api-design.md`](3d-digital-twin-spark-244-api-design.md) | SPARK-244 - Sprint 3 operator monitoring (US-O03) | Requires delta design pass |
+| [`3d-digital-twin-spark-228-api-design.md`](../../archive/api/3d-digital-twin-spark-228-api-design.md) | SPARK-228 - Sprint 2 read-path + Three.js state binding | Ready with conditions (pending PM sign-off) |
+| [`3d-digital-twin-spark-244-api-design.md`](../../archive/api/3d-digital-twin-spark-244-api-design.md) | SPARK-244 - Sprint 3 operator monitoring (US-O03) | Requires delta design pass |
 
 Section 6 (batch structure ingestion) and Test Suite 2 describe work **deferred to a dedicated backlog epic**; it is not part of Sprint 2 or Sprint 3 scope.
 
