@@ -84,7 +84,7 @@ export function StructureTree({
           return (
             <li key={unit.id}>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="grid gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Badge tone={unitTypeTone(unit.type)}>{unit.type}</Badge>
                     <span className="min-w-0 truncate text-sm font-semibold text-[var(--fg)]" title={unit.name}>{unit.name}</span>
@@ -97,11 +97,11 @@ export function StructureTree({
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {childType && (
                       <button
                         type="button"
-                        className="btn-ghost px-2 py-1 text-[11px]"
+                        className="btn-ghost w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8!"
                         onClick={() => setDialog({ mode: "create", type: childType, parentId: unit.id })}
                         aria-label={`Add ${childType.toLowerCase()} under ${unit.name}`}
                       >
@@ -110,21 +110,21 @@ export function StructureTree({
                     )}
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-1 text-[11px]"
+                      className="btn-ghost w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8!"
                       onClick={() => setDialog({ mode: "rename", unit })}
                     >
                       Rename
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-1 text-[11px]"
+                      className="btn-ghost w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8!"
                       onClick={() => setDialog({ mode: "capacity", unit })}
                     >
                       Capacity
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-1 text-[11px] text-[var(--occupied)]"
+                      className={`btn-danger w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8! ${childType ? "" : "col-start-2"}`}
                       onClick={() => removeUnit(unit)}
                       disabled={busy}
                       aria-describedby={reasons.length > 0 ? `unit-${unit.id}-blockers` : undefined}

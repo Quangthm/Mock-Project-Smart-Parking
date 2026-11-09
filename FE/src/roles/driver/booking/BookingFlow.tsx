@@ -62,17 +62,19 @@ function formatDuration(hours: number) {
     .filter(Boolean).join(" ")
 }
 
-export function BookingFlow({
-  lot,
-  onDone,
-  resumeBooking,
-}: {
+type BookingFlowProps = {
   lot: ParkingLot
   onDone: () => void
   resumeBooking?: Booking
-}) {
-  const { user } = useApp()
+}
 
+export function BookingFlow(props: BookingFlowProps) {
+  const { user } = useApp()
+  return user ? <AccountBookingFlow key={getSessionGeneration()} {...props} /> : null
+}
+
+function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
+  const { user } = useApp()
   const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
 
   const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
@@ -95,6 +97,8 @@ export function BookingFlow({
   const [addVehicleOpen, setAddVehicleOpen] = useState(false)
   const [vehicleLoading, setVehicleLoading] = useState(false)
   const [vehicleSaving, setVehicleSaving] = useState(false)
+  const [vehicleNotice, setVehicleNotice] = useState("")
+  const [vehicleListFailed, setVehicleListFailed] = useState(false)
   const [vehicleError, setVehicleError] = useState("")
   const [vehicleReload, setVehicleReload] = useState(0)
 
@@ -127,6 +131,7 @@ export function BookingFlow({
     setVehicles([])
     setSelectedVehicleId("")
     setVehicleLoading(true)
+    setVehicleListFailed(false)
     setVehicleError("")
     setRegistrationClaims([])
     Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
@@ -136,13 +141,15 @@ export function BookingFlow({
         setRegistrationClaims(claims)
         setVehicles(items)
         setSelectedVehicleId((current) =>
-          items.some((item) => item.id === current) ? current : items[0]?.id ?? "",
+          items.some(item => item.id === current) ? current : items[0]?.id ?? "",
         )
         setAddVehicleOpen(items.length === 0)
       })
       .catch((error) => {
-        if (active)
+        if (active) {
           setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
+          setVehicleListFailed(true)
+        }
       })
       .finally(() => {
         if (active) setVehicleLoading(false)
@@ -180,7 +187,8 @@ export function BookingFlow({
 
   const amount = Math.ceil(hours) * lot.hourlyRate
 
-  const selectedVehicle = vehicles.find(
+  const bookingVehicles = vehicles.filter(vehicle => vehicle.vehicleType === "CAR")
+  const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
   )
 
@@ -242,14 +250,15 @@ export function BookingFlow({
   async function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const generation = getSessionGeneration()
-    if (vehicleSaving || !user) return
+    if (vehicleSaving || !user || !vehicleForm.imageAssetId) return
     const vehicleType = vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE"
     if (!isSupportedVietnamesePlate(vehicleForm.plate, vehicleType)) {
       setVehicleError("Use a supported Vietnamese plate: 51A-123.45 for cars or 59-B1 123.45 for motorcycles.")
       return
     }
-    setVehicleSaving(true)
     setVehicleError("")
+    setVehicleNotice("")
+    setVehicleSaving(true)
     try {
       const created = await vehiclesApi.save({
         plate: vehicleForm.plate,
@@ -260,7 +269,7 @@ export function BookingFlow({
       if (created.vehicleType === "CAR") {
         setVehicles((current) => [...current, created])
         setSelectedVehicleId(created.id)
-      } else setVehicleError("Motorcycle registered. Specific Slot booking requires a car.")
+      } else setVehicleNotice("Motorcycle registered. Specific Slot booking requires a car.")
       setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
       setMessage("")
       setAddVehicleOpen(false)
@@ -282,7 +291,7 @@ export function BookingFlow({
   }
 
   function continueToPaymentStep() {
-    if (!selectedSlot || !selectedVehicle || !validTimeWindow) return
+    if (!selectedSlot || !selectedVehicle || !validTimeWindow || vehicleLoading || vehicleListFailed) return
     setMessage("")
     setStep("payment")
   }
@@ -746,13 +755,13 @@ export function BookingFlow({
             <label className="label">
               Vehicle
               {vehicleLoading && <span className="text-sm text-[var(--muted)]">Loading vehicles…</span>}
-              {!vehicleLoading && vehicles.length > 0 && (
+              {!vehicleLoading && bookingVehicles.length > 0 && (
                 <RoundedSelect
                   className="input"
                   value={selectedVehicleId}
                   onChange={(event) => setSelectedVehicleId(event.target.value)}
                 >
-                  {vehicles.map((vehicle) => (
+                  {bookingVehicles.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
                       {vehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} ·{" "}
                       {formatVietnamesePlate(vehicle)}
@@ -764,7 +773,7 @@ export function BookingFlow({
           {vehicleError && (
             <div role="alert" className="mb-3 text-sm text-red-600">
               {vehicleError}{" "}
-              {!vehicles.length && !vehicleLoading && !addVehicleOpen && (
+              {vehicleListFailed && !vehicleLoading && (
                 <button type="button" className="underline" onClick={() => setVehicleReload((n) => n + 1)}>
                   Retry
                 </button>
@@ -780,10 +789,11 @@ export function BookingFlow({
                 fontSize: "0.82rem",
               }}
             >
-              You have not saved a vehicle yet. Add one to continue.
+              No active cars available. Register a car to book this slot.
             </p>
           )}
-          {!vehicleLoading && (
+          {vehicleNotice && <p className="mb-3 rounded-lg bg-[var(--bg)] p-3 text-sm" role="status">{vehicleNotice}</p>}
+          {!vehicleLoading && !vehicleListFailed && (
             <button
               className="btn-outline"
               type="button"
@@ -800,7 +810,7 @@ export function BookingFlow({
               {addVehicleOpen ? "Cancel Add Vehicle" : "+ Add New Vehicle"}
             </button>
           )}
-          {addVehicleOpen && !vehicleLoading && (
+          {addVehicleOpen && !vehicleLoading && !vehicleListFailed && (
             <form
               onSubmit={addVehicle}
               style={{
@@ -892,7 +902,9 @@ export function BookingFlow({
             <button
               type="button"
               className="btn-outline"
-              onClick={() => setStep("slot")}
+              onClick={() => {
+                setStep("slot")
+              }}
             >
               Back
             </button>
@@ -901,6 +913,7 @@ export function BookingFlow({
               className="btn-primary"
               disabled={
                 vehicleLoading ||
+                vehicleListFailed ||
                 vehicleSaving ||
                 !selectedVehicle ||
                 !validTimeWindow

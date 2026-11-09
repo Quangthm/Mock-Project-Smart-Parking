@@ -67,6 +67,10 @@ export type RegistrationClaim = {
 export const pendingRegistrationMessage = "Registration pending dispute review. This vehicle can’t be used for booking."
 
 export const vehiclesApi = {
+  image(assetId: string) {
+    return request<Blob>(`/${encodeURIComponent(assetId)}/content`, "GET", undefined,
+      "/api/media/images", undefined, undefined, "blob")
+  },
   async claims(): Promise<RegistrationClaim[]> {
     const response = await request<ApiResponse<RegistrationClaim[]>>("/registration-claims", "GET", undefined, "/api/vehicles")
     if (!response.success || !Array.isArray(response.data)) throw new Error("Could not confirm registration status. Please refresh.")

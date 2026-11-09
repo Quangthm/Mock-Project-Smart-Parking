@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from "motion/react"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -395,13 +396,14 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
     }
   }
 
+  const reduceMotion = useReducedMotion()
+
   return (
-    <section className="space-y-5 text-[var(--fg)]">
+    <section className="min-w-0 space-y-6 text-[var(--fg)]">
       <PageHeader
         title="Parking Structure"
         variant="compact"
-        divider
-        description="Configure the spatial tree, register template bays, compatibility, access paths and service availability."
+        description="Inspect your site model, manage parking bays, and control access and availability."
         actions={
           <label className="min-w-0 space-y-1 text-xs font-medium text-[var(--muted)] sm:min-w-56">
             <span>Site</span>
@@ -426,8 +428,13 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
         <Fragment key={siteId}>
           {loading && <p role="status" className="text-xs text-[var(--muted)]">Refreshing the structure after the last change…</p>}
 
-          <ServiceAvailabilityPanel siteId={siteId} structure={structure} onChanged={refresh} />
-          <CapacitySummary structure={structure} />
+          <section className="space-y-3" aria-label="Site capacity">
+            <div className="min-w-0">
+              <h2 className="break-words text-lg font-semibold">{structure.site.name}</h2>
+              <p className="break-words text-sm text-[var(--muted)]">{structure.site.address}</p>
+            </div>
+            <CapacitySummary structure={structure} />
+          </section>
 
           {!slots.length && (
             <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
@@ -436,27 +443,25 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
             </p>
           )}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
-            <StructureTree siteId={siteId} units={units} slots={slots} paths={paths} modelUrl={modelUrl} onChanged={refresh} />
-
-            <div className="space-y-4">
-              <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Owner parking 3D model">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
+            <div className="min-w-0 space-y-4">
+              <section className="min-w-0 overflow-hidden rounded-2xl bg-[var(--card)] p-4 sm:p-5" aria-label="Owner parking 3D model">
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <h2 className="text-base font-semibold">Site 3D model</h2>
+                    <h2 className="text-lg font-semibold">Site 3D Model</h2>
                     <p className="mt-1 text-sm text-[var(--muted)]">
                       {registerMode
                         ? "Registration mode: click unregistered template bays to add them to the selection."
                         : "Registered bays are interactive. Unregistered template bays stay inert."}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={registerMode ? "warning" : "muted"}>
                       {registerMode ? "Selecting meshes" : "Live slots only"}
                     </Badge>
                     <button
                       type="button"
-                      className="btn-outline px-2.5 py-1.5 text-xs"
+                      className="btn-outline min-h-11 text-sm"
                       aria-controls="owner-parking-model"
                       aria-expanded={showModel}
                       onClick={() => setShowModel((value) => !value)}
@@ -465,100 +470,100 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                     </button>
                   </div>
                 </div>
-                <div id="owner-parking-model" hidden={!showModel}>
-                {floors.length > 1 && (
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--raised)] px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-[var(--muted)]">Tầng / Khu vực:</span>
-                      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Chọn tầng 3D">
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={activeFloor === "all"}
-                          onClick={() => setActiveFloor("all")}
-                          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                            activeFloor === "all"
-                              ? "bg-[var(--primary)] text-white shadow-xs"
-                              : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
-                          }`}
-                        >
-                          <span>Toàn bộ model</span>
-                          <span
-                            className={`rounded px-1.5 py-0.2 text-[10px] font-mono ${
-                              activeFloor === "all" ? "bg-white/20 text-white" : "bg-[var(--raised)] text-[var(--muted)]"
+                <motion.div id="owner-parking-model" hidden={!showModel} initial={false}
+                  animate={{ opacity: showModel ? 1 : 0 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.23, 1, 0.32, 1] }}>
+                  {floors.length > 1 && (
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--raised)] px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-[var(--muted)]">Floor or area</span>
+                        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Model floor">
+                          <button
+                            type="button"
+                            aria-pressed={activeFloor === "all"}
+                            onClick={() => setActiveFloor("all")}
+                            className={`flex items-center gap-1.5 min-h-11 rounded-lg px-3 text-sm font-medium transition-colors cursor-pointer ${
+                              activeFloor === "all"
+                                ? "bg-[var(--primary)] text-[var(--primary-fg)]"
+                                : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
                             }`}
                           >
-                            {floors.reduce((sum, f) => sum + f.capacity, 0)} slots
-                          </span>
-                        </button>
-                        {floors.map((floor) => {
-                          const isActive = activeFloor === floor.floorKey
-                          return (
-                            <button
-                              key={floor.floorKey}
-                              type="button"
-                              role="tab"
-                              aria-selected={isActive}
-                              onClick={() => setActiveFloor(floor.floorKey)}
-                              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                                isActive
-                                  ? "bg-[var(--primary)] text-white shadow-xs"
-                                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
+                            <span>All floors</span>
+                            <span
+                              className={`rounded px-1.5 py-0.2 text-xs tabular-nums ${
+                                activeFloor === "all" ? "text-[var(--primary-fg)]" : "bg-[var(--raised)] text-[var(--muted)]"
                               }`}
                             >
-                              <span>{floor.displayName}</span>
-                              <span
-                                className={`rounded px-1.5 py-0.2 text-[10px] font-mono ${
-                                  isActive ? "bg-white/20 text-white" : "bg-[var(--raised)] text-[var(--muted)]"
+                              {floors.reduce((sum, f) => sum + f.capacity, 0)} slots
+                            </span>
+                          </button>
+                          {floors.map((floor) => {
+                            const isActive = activeFloor === floor.floorKey
+                            return (
+                              <button
+                                key={floor.floorKey}
+                                type="button"
+                                aria-pressed={isActive}
+                                onClick={() => setActiveFloor(floor.floorKey)}
+                                className={`flex items-center gap-1.5 min-h-11 rounded-lg px-3 text-sm font-medium transition-colors cursor-pointer ${
+                                  isActive
+                                    ? "bg-[var(--primary)] text-[var(--primary-fg)]"
+                                    : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
                                 }`}
                               >
-                                {floor.capacity} slots
-                              </span>
-                            </button>
-                          )
-                        })}
+                                <span>{floor.displayName.replace(/^Tầng\s+/u, "Floor ").replace(/^Khu vực ngoài trời$/u, "Outdoor area")}</span>
+                                <span
+                                  className={`rounded px-1.5 py-0.2 text-xs tabular-nums ${
+                                    isActive ? "text-[var(--primary-fg)]" : "bg-[var(--raised)] text-[var(--muted)]"
+                                  }`}
+                                >
+                                  {floor.capacity} slots
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
+                      <span className="text-[11px] text-[var(--muted)]">
+                        {activeFloor === "all"
+                          ? "Showing the full model."
+                          : "Showing the selected floor only."}
+                      </span>
                     </div>
-                    <span className="text-[11px] text-[var(--muted)]">
-                      {activeFloor === "all"
-                        ? "Đang hiển thị toàn bộ mô hình (tất cả các tầng)"
-                        : "Cô lập tầng: Chỉ render đối tượng tầng đang chọn"}
-                    </span>
-                  </div>
-                )}
-                {!modelStorageReady ? (
-                  <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
-                ) : (
-                  <ErrorBoundary name="Site 3D Viewer">
-                    <Parking3DViewer
-                      key={siteId}
-                      modelUrl={modelUrl}
-                      lotType={safeLotType}
-                      slots={modelSlots}
-                      selectedSlotId={registerMode ? null : selectedSlotId}
-                      onSelectSlot={(slot) => setSelectedSlotId(slot.id)}
-                      registerMode={registerMode}
-                      selectedMeshKeys={selectedMeshKeys}
-                      onToggleMesh={toggleMesh}
-                      onMeshCensus={applyCensus}
-                      height={380}
-                      activeFloor={activeFloor}
-                    />
-                  </ErrorBoundary>
-                )}
-                {!ownerLot && modelStorageReady && (
-                  <p className="mt-2 text-[11px] text-[var(--muted)]">
-                    No lot-specific model is bound to this site, so the default outdoor template is shown. The template
-                    is a fixed deployment asset: its extra bays are unregistered and inert until you register them.
-                  </p>
-                )}
-                </div>
+                  )}
+                  {!modelStorageReady ? (
+                    <p role="status" className="rounded-xl border border-dashed border-[var(--border)] p-8 text-sm text-[var(--muted)]">Loading the saved Owner model…</p>
+                  ) : (
+                    <ErrorBoundary name="Site 3D Viewer">
+                      <Parking3DViewer
+                        key={siteId}
+                        modelUrl={modelUrl}
+                        lotType={safeLotType}
+                        slots={modelSlots}
+                        selectedSlotId={registerMode ? null : selectedSlotId}
+                        onSelectSlot={(slot) => setSelectedSlotId(slot.id)}
+                        registerMode={registerMode}
+                        selectedMeshKeys={selectedMeshKeys}
+                        onToggleMesh={toggleMesh}
+                        onMeshCensus={applyCensus}
+                        height={380}
+                        activeFloor={activeFloor}
+                      />
+                    </ErrorBoundary>
+                  )}
+                  {!ownerLot && modelStorageReady && (
+                    <p className="mt-2 text-[11px] text-[var(--muted)]">
+                      No lot-specific model is bound to this site, so the default outdoor template is shown. The template
+                      is a fixed deployment asset: its extra bays are unregistered and inert until you register them.
+                    </p>
+                  )}
+                </motion.div>
 
                 {selectedSlot && !registerMode && (
                   <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 break-words">
-                        <p className="font-mono text-sm font-semibold">{selectedSlot.code}</p>
+                        <p className="text-sm font-semibold tabular-nums">{selectedSlot.code}</p>
                         <p className="mt-0.5 text-xs text-[var(--muted)]">{location(selectedSlot.unitId)}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1">
                           {categoriesOf(selectedSlot).map((category) => (
@@ -574,18 +579,18 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        <button type="button" className="btn-outline px-2.5 py-1.5 text-xs" onClick={() => setCompatibilitySlotId(selectedSlot.id)}>
+                        <button type="button" className="btn-outline min-h-11 text-sm" onClick={() => setCompatibilitySlotId(selectedSlot.id)}>
                           Edit compatibility
                         </button>
                         <button
                           type="button"
-                          className="btn-outline px-2.5 py-1.5 text-xs"
+                          className="btn-outline min-h-11 text-sm"
                           disabled={backupBusy || selectedSlot.isPhysicallyOccupied || !ACTIVE_OPERATIONAL_SET.has(selectedSlot.operationalStatus) || Boolean(selectedSlot.reservationState && !["NONE", "BACKUP"].includes(selectedSlot.reservationState))}
                           onClick={() => void changeSelectedSlotBackup(selectedSlot)}
                         >
                           {selectedSlot.reservationState === "BACKUP" ? "Release backup" : "Mark as backup"}
                         </button>
-                        <button type="button" className="btn-ghost px-2.5 py-1.5 text-xs" onClick={() => setSelectedSlotId(null)}>
+                        <button type="button" className="btn-ghost min-h-11 text-sm" onClick={() => setSelectedSlotId(null)}>
                           Clear
                         </button>
                       </div>
@@ -594,20 +599,24 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                 )}
               </section>
 
-              <SlotRegistrationPanel
-                siteId={siteId}
-                units={units}
-                registeredSlots={slots}
-                registerMode={registerMode}
-                onRegisterModeChange={setRegisterMode}
-                selection={registrationSelection}
-                onSelectionChange={setRegistrationSelection}
-                census={census}
-                onChanged={refresh}
-                activeFloor={activeFloor}
-              />
             </div>
+            <aside className="min-w-0" aria-label="Site structure tree">
+              <StructureTree siteId={siteId} units={units} slots={slots} paths={paths} modelUrl={modelUrl} onChanged={refresh} />
+            </aside>
           </div>
+
+          <SlotRegistrationPanel
+            siteId={siteId}
+            units={units}
+            registeredSlots={slots}
+            registerMode={registerMode}
+            onRegisterModeChange={setRegisterMode}
+            selection={registrationSelection}
+            onSelectionChange={setRegistrationSelection}
+            census={census}
+            onChanged={refresh}
+            activeFloor={activeFloor}
+          />
 
           <RegisteredSlotsPanel
             siteId={siteId}
@@ -619,30 +628,35 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
             onChanged={refresh}
           />
 
-          <AccessPathsPanel siteId={siteId} units={units} paths={paths} onChanged={refresh} />
+          <section className="min-w-0 space-y-4" aria-label="Access and service settings">
+            <h2 className="text-lg font-semibold">Access and Service</h2>
+            <ServiceAvailabilityPanel siteId={siteId} structure={structure} onChanged={refresh} />
+            <AccessPathsPanel siteId={siteId} units={units} paths={paths} onChanged={refresh} />
 
-          <details className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-[var(--raised)]">
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--status-maintenance-bg)] text-[var(--maintenance)]">
-                  <UntitledIcon name="shield" size={17} />
+            <details className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden hover:bg-[var(--raised)]">
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--status-maintenance-bg)] text-[var(--maintenance)]">
+                    <UntitledIcon name="shield" size={17} />
+                  </span>
+                  <span>
+                    <strong className="block text-base">Capacity and backup settings</strong>
+                    <span className="mt-0.5 block text-sm text-[var(--muted)]">Configure backup capacity; occupancy stays Operations-owned.</span>
+                  </span>
                 </span>
-                <span>
-                  <strong className="block text-base">Capacity and backup settings</strong>
-                  <span className="mt-0.5 block text-sm text-[var(--muted)]">Configure backup capacity; occupancy stays Operations-owned.</span>
-                </span>
-              </span>
-              <UntitledIcon name="chevron-down" size={16} className="shrink-0 text-[var(--muted)] transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-[var(--border)] p-4">
-              <BackupCapacityPanel structure={structure} onChanged={refresh} />
-            </div>
-          </details>
+                <UntitledIcon name="chevron-down" size={16} className="shrink-0 text-[var(--muted)] transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+              </summary>
+              <div className="bg-[var(--bg)] p-4">
+                <BackupCapacityPanel structure={structure} onChanged={refresh} />
+              </div>
+            </details>
+          </section>
         </Fragment>
       )}
 
       {compatibilitySlot && (
         <SlotCompatibilityDialog
+          key={compatibilitySlot.id}
           siteId={siteId}
           slot={compatibilitySlot}
           onClose={() => setCompatibilitySlotId(null)}
