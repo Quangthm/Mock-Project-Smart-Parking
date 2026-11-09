@@ -4,6 +4,12 @@
 
 **Status separation:** IMPLEMENTATION PENDING = confirmed MVP behavior needs code/schema/tests. POST-v1.0 DETAIL = confirmed AI/LPR direction retained, detailed integration/evaluation intentionally later. FUTURE = feature outside selected MVP. Historical alternatives in the source tables are not active requirements.
 
+## UserService repository refactoring — 9 November 2026
+
+| Backlog ID | Status / owner | Required outcome |
+|---|---|---|
+| USER-UOW-01 | **DEFERRED — refactoring not implemented**; UserService / backend tests | Remove the redundant direct user-repository dependency from `MediaUseCases` through existing `IUnitOfWork.UserRepository`; reassess fixture registrations and inspect similar cases without expanding the unit-of-work contract. Preserve production repository DI and transaction semantics. See [scope, constraints and acceptance](2026-11-09-unit-of-work-repository-refactoring.md). No Jira issue created. |
+
 ## SPARK-243 claim-image follow-up — 7 November 2026
 
 | Work ID | Status / owner | Required outcome |
