@@ -304,6 +304,7 @@ export const authApi = {
     email?: string
     phone?: string
     password?: string
+    turnstileToken?: string
   }): Promise<DriverRegistration> {
     const response = await request<ApiResponse<DriverRegistration>>(
       "/register/driver",
@@ -357,11 +358,11 @@ export const authApi = {
 
   expiresAt: () => Number(sessionStorage.getItem(expiryKey) ?? 0),
 
-  async login(email: string, password: string): Promise<PasswordLoginResult> {
+  async login(email: string, password: string, turnstileToken?: string): Promise<PasswordLoginResult> {
     const response = await request<ApiResponse<LoginSession | MfaLoginChallenge> & { mfaRequired?: boolean }>(
       "/login",
       "POST",
-      { email: email.trim(), password },
+      { email: email.trim(), password, turnstileToken },
     )
 
     if (response.mfaRequired && response.success) {
