@@ -511,7 +511,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
                                     : "border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:bg-[var(--bg)]"
                                 }`}
                               >
-                                <span>{floor.displayName}</span>
+                                <span>{floor.displayName.replace(/^Tầng\s+/u, "Floor ").replace(/^Khu vực ngoài trời$/u, "Outdoor area")}</span>
                                 <span
                                   className={`rounded px-1.5 py-0.2 text-xs tabular-nums ${
                                     isActive ? "text-[var(--primary-fg)]" : "bg-[var(--raised)] text-[var(--muted)]"
