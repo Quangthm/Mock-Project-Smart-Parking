@@ -21,7 +21,15 @@ public class UnitOfWork : IUnitOfWork
     public IUserRepository UserRepository => this.userRepository;
 
     public async Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken cancellationToken) =>
-        new Transaction(await dbContext.Database.BeginTransactionAsync(cancellationToken));
+        dbContext.Database.CurrentTransaction is not null ? new JoinedTransaction() :
+            new Transaction(await dbContext.Database.BeginTransactionAsync(cancellationToken));
+
+    // Consumer inbox/outbox owns an existing outer transaction; handlers join without committing it.
+    private sealed class JoinedTransaction : IUnitOfWorkTransaction
+    {
+        public Task CommitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 
     private sealed class Transaction(IDbContextTransaction transaction) : IUnitOfWorkTransaction
     {

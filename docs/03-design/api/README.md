@@ -11,6 +11,7 @@ All new API endpoint specifications and refactors must follow the standard templ
 
 | Domain / Capability | Document | Owning Service |
 |---|---|---|
+| Reservation admission and first-slice contracts | [reservation-first-slice-api-design.md](reservation-first-slice-api-design.md) | Operations / UserService; finalization gated |
 | Owned avatar and vehicle images | [user-images-api-design.md](user-images-api-design.md) | UserService |
 | Partner / Owner Registration & First Lot Setup | [owner-register-api-design.md](owner-register-api-design.md) | UserService |
 | Admin Review & Owner Approval | [admin-approve-owner-api-design.md](admin-approve-owner-api-design.md) | UserService |

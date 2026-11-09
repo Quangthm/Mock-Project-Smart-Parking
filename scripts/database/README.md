@@ -1,5 +1,12 @@
 # Database scripts - read this before using anything here
 
+## Reservation first-slice declarations and defaults
+
+Use original `microservices/03b-reservation-operations-service-db.sql` and the Account-current declarations in original `microservices/01-user-access-service-db.sql`. No new schema overlay is supplied. After an isolated aligned Operations schema is ready, manually apply `seeds/03b-reservation-policy-defaults.sql`; this explicitly authorized seed never overwrites defaults/history on replay. Choose late tolerance per site explicitly. The full policy catalogue is a separate owner task.
+
+These CREATE declarations do not upgrade existing tables or remove deployed triggers. Do not run automatic migration/reset as a substitute for an existing-volume transition decision. [Deployment checklist](../../docs/04-testing/reports/SPARK-273-deployment-checklist.md) distinguishes offline tests, PostgreSQL/broker checks and blocked booking acceptance.
+
+
 This directory contains **two generations** of schema scripts. Only one of them is
 current. Evaluated against the wrong one, the design docs and the running database
 will disagree in ways that look like application bugs.
@@ -21,11 +28,11 @@ This image migration does not implement Partner PDF versions, terms replacement,
 | `microservices/01-user-access-service-db.sql` | user / auth / access schema |
 | `microservices/02-facility-service-db.sql` | parking lots, spatial units, slots, paths, operations, structure sync, maintenance windows, operator tables |
 | `microservices/03a-parking-structure-ops-service-db.sql` | structure-ops schema |
-| `microservices/03b-reservation-operations-service-db.sql` | reservations, `slot_allocations`, sessions, capacity pools, structure safety holds, receipts, confirmation triggers |
+| `microservices/03b-reservation-operations-service-db.sql` | reservations, `slot_allocations`, sessions, capacity pools, structure safety holds, receipts, versioned reservation policies and transactional outbox (application guards; no Operations triggers) |
 | `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
-| `seeds/` | demo data only, never schema |
+| `seeds/` | demo data plus explicitly approved reservation policy defaults; never schema |
 
 The database is created by `compose.schema-integration.yml` (six databases, one per
 service, canonical base scripts mounted as init scripts) and driven by `setup.ps1`.

@@ -235,7 +235,7 @@ Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvP
 
 ### 5.5 JWT ổn định và JWKS (SPARK-327)
 
-UserService là nơi duy nhất giữ RSA private key và phát access JWT **RS256, 900 giây**. Các service khác chỉ nhận issuer, audience và địa chỉ JWKS chứa public key. Consumer JWT middleware, cache/refetch và fail-closed validation sẽ được triển khai ở task riêng; cấu hình trust này chưa bật xác thực JWT cho các service đó.
+UserService là nơi duy nhất giữ RSA private key và phát access JWT **RS256, 900 giây**. Các service khác chỉ nhận issuer, audience và địa chỉ JWKS chứa public key. Reservation first slice bổ sung JWT/JWKS middleware riêng trong Operations; xem mục 5.6 để bật HTTP JWKS cho local. Không suy ra Facility/Payment đã có middleware tương đương chỉ từ cấu hình trust. Build/runtime của reservation slice vẫn cần kiểm chứng theo checklist bên dưới.
 
 Thêm thủ công các khóa sau vào `.env` đã có, hoặc điền placeholder sau khi setup tạo `.env` mới:
 
@@ -311,6 +311,81 @@ Consumer host nhận JWKS URI từ `SMARTPARK_SERVICE_USER_URL` + `SMARTPARK_JWT
 **Vòng đời và rotation:** implementation hiện tại chỉ publish **một key đang ký**, chưa có old/new overlap hay seamless rotation. Mỗi lần đổi key phải dùng kid mới, không tái sử dụng kid cho key khác; hiện chưa có durable key-history registry phát hiện việc tái sử dụng kid qua các lần restart. Xem đây là trách nhiệm vận hành được ghi nhận, không phải bảo đảm tự động. Rotation hoàn chỉnh ở task sau phải: publish public key mới cùng key cũ → chờ cache nhận key mới → đổi signing key/kid → giữ public key cũ ít nhất 15 phút cộng clock skew và cache/refetch margin → retire key cũ. Với cache hiện tại 5 phút và skew UserService bằng 0, tối thiểu 20 phút sau lần ký cuối bằng key cũ, tăng thêm theo cache/skew của consumer. Trước khi có overlap, thay key làm JWT cũ không còn được endpoint hiện tại xác minh; lên kế hoạch cửa sổ bảo trì/re-login, không gọi đó là seamless rotation.
 
 JWT/JWKS không sửa technical debt đã được [ADR 2026-11-04](docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) chấp thuận: TOKEN có thể giữ claims/session stale đến hết thời hạn; REQUEST Account-current Saga, authorization-to-effect race và exact-session continuity là các giới hạn riêng. UserService vẫn kiểm tra session/Account/User/role hiện tại tại các điểm bảo mật hiện có; không bỏ MFA, refresh rotation hoặc revocation.
+
+### 5.6 Reservation admission và Gate audit (SPARK-273)
+
+**Phạm vi hiện tại:** chỉ tiếp nhận yêu cầu đặt chỗ bền vững và kiểm tra Account qua UserService. Chưa thể hoàn tất thanh toán/xác nhận booking, kể cả với Driver, xe và slot hợp lệ. Account được phép sẽ kết thúc ở `FAILED_DEPENDENCY / RESERVATION_FINALIZATION_NOT_READY`; đây là gate chủ động, không phải lỗi cấu hình RabbitMQ. Frontend chưa tích hợp luồng này; kiểm tra admission bằng API/Postman theo [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md) và [API design](docs/03-design/api/reservation-first-slice-api-design.md).
+
+#### Chuẩn bị và điền `.env`
+
+Thêm thủ công các key còn thiếu từ `.env.example` vào **`.env` ở root repository**. Setup không tự merge key mới vào `.env` đã tồn tại. Không đưa broker credentials vào `FE/.env`, `VITE_*`, Git hoặc log. Giữ các flag `false` và credentials trống nếu chưa thử tính năng.
+
+Trước khi chạy, thực hiện compile/focused tests và kiểm tra schema theo deployment checklist. Schema User/Operations phải có các bảng decision, admission và outbox đúng phiên bản. `CREATE IF NOT EXISTS` không nâng cấp bảng cũ; thay đổi `.env` không sửa schema. Không dùng các bước dưới đây để reset/upgrade volume đang có dữ liệu. Policy defaults có seed riêng trong checklist; arrival late tolerance cần lựa chọn rõ ràng của site.
+
+| Key | Ý nghĩa | Giá trị khi thử local |
+|---|---|---|
+| `SMARTPARK_RESERVATION_ADMISSION_ENABLED` | Bật admission ở Operations và consumer Account-current ở UserService. | `true` |
+| `SMARTPARK_OPERATION_AUDIT_ENABLED` | Capture Gate audit event cùng transaction vào Operations outbox. | `false` nếu chỉ thử admission; xem phần Gate audit trước khi bật. |
+| `SMARTPARK_RESERVATION_USER_BROKER_USER` | Username RabbitMQ cho UserService khi bật admission. | Username broker đã provision. |
+| `SMARTPARK_RESERVATION_USER_BROKER_PASSWORD` | Password của broker account trên. | Password tương ứng. |
+| `SMARTPARK_RESERVATION_OPERATION_BROKER_USER` | Username RabbitMQ cho Operations khi bật admission hoặc audit. | Username broker đã provision. |
+| `SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD` | Password của broker account trên. | Password tương ứng. |
+| `SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS` | Cho phép Operations tải public verification keys qua HTTP; vẫn kiểm tra chữ ký, issuer, audience và lifetime JWT. | `true` với HTTP local/protected Compose; `false` với HTTPS production. |
+| `Messaging__OutboxDeliveryEnabled` | Cho phép relay message đã lưu trong outbox của UserService và Operations. | `true` sau khi topology sẵn sàng. `false` giữ message chờ, admission có thể timeout. |
+
+**Personal development cô lập:** có thể dùng lại giá trị thực của `SMARTPARK_RABBITMQ_USER` và `SMARTPARK_RABBITMQ_PASSWORD` cho cả hai cặp credentials mới, nếu account đó có quyền trên vhost/queues tương ứng. Đây là tài khoản RabbitMQ, không phải tài khoản Driver. Các biến chỉ chọn credentials để kết nối, **không tạo broker user**; setup không tự provision hai service account này.
+
+Ví dụ cho admission-only trên máy cá nhân; thay toàn bộ placeholder trước khi chạy. Nếu key đã tồn tại, sửa dòng đó, không thêm dòng trùng:
+
+```dotenv
+SMARTPARK_RESERVATION_ADMISSION_ENABLED=true
+SMARTPARK_OPERATION_AUDIT_ENABLED=false
+SMARTPARK_RESERVATION_USER_BROKER_USER=<existing-broker-username>
+SMARTPARK_RESERVATION_USER_BROKER_PASSWORD=<existing-broker-password>
+SMARTPARK_RESERVATION_OPERATION_BROKER_USER=<existing-broker-username>
+SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD=<existing-broker-password>
+SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS=true
+Messaging__OutboxDeliveryEnabled=true
+```
+
+Điền **giá trị thực**, không viết `${SMARTPARK_RABBITMQ_PASSWORD}` hay tham chiếu biến khác: `scripts/load-env.ps1` không expand chúng. Broker host/port/vhost vẫn dùng cấu hình `SMARTPARK_RABBITMQ_*` hiện có. JWKS local mặc định là `http://localhost:5035/.well-known/jwks.json` trên host và `http://user-service:8080/.well-known/jwks.json` trong Compose; chỉ UserService giữ signing private key như mục 5.5.
+
+**Môi trường dùng chung/deployment:** dùng credentials riêng và permissions giới hạn theo service như deployment checklist. Dùng chung một account local không chứng minh service isolation. Khi admission bật, credentials mới của UserService áp dụng cho **toàn bộ bus hiện có**, nên cần giữ quyền cho profile/access messaging, không chỉ reservation. `Messaging__OutboxDeliveryEnabled` cũng bật relay cho các event UserService đang chờ; kiểm tra topology profile audit hiện có trước khi bật.
+
+#### Topology và Gate audit
+
+Kiểm tra topology sẵn sàng trước khi gửi request và bật relay:
+
+| Destination | Vai trò |
+|---|---|
+| `user-account-access-v1` | Operations gửi yêu cầu; UserService nhận. |
+| `operations-account-access-results-v1` | UserService gửi kết quả; Operations nhận. |
+| `smartpark.operations.gate-audit.v1` | Durable fanout exchange cho Gate audit. |
+| `smartpark.notification-audit.operations-gate.v1` | Durable queue do audit owner provision và bind vào exchange trên. |
+
+MassTransit khai báo receive endpoints khi service kết nối với đủ quyền; shared/deployed topology và ACLs phải được owner kiểm tra, gồm exchanges/bindings/error/skipped queues. Xem deployment checklist để kiểm chứng quyền gửi/nhận.
+
+Audit owner phải tạo/bind queue **trước khi publish/relay Gate audit**, dù consumer chưa chạy. Exchange durable không giữ event cho queue được tạo sau. Script `scripts/messaging/provision-profile-audit-topology.ps1` hiện chỉ provision **profile audit**, không tạo Gate audit queue này.
+
+Sau khi topology Gate audit sẵn sàng, đặt `SMARTPARK_OPERATION_AUDIT_ENABLED=true`, điền Operations broker credentials và restart/recreate Operations. Audit có thể bật độc lập với admission. Khi audit tắt, Gate writes có thay đổi trạng thái trả `503 / AUDIT_PUBLISHING_UNAVAILABLE`; reads và completed replay không tạo hiệu ứng vẫn có thể dùng. Broker outage sau startup giữ event đã capture trong outbox để gửi lại; audit service khác sở hữu consumption/deduplication/retention. Outbox không thay thế audit log lâu dài.
+
+#### Áp dụng cấu hình và kiểm tra
+
+Chọn cách chạy đang sử dụng; không cần reset database chỉ để áp dụng các giá trị `.env`:
+
+- **Host runner:** dừng/restart User và Operations trong hai terminal; runner đọc lại `.env` mỗi lần chạy:
+
+  ```powershell
+  .\scripts\run-schema-service.ps1 -Service User
+  .\scripts\run-schema-service.ps1 -Service Operation
+  ```
+
+- **Visual Studio / direct `dotnet run`:** chạy `.\setup.ps1 -SkipDatabase -SkipRestore` để sync user-secrets, rồi restart hai service. Plain `dotnet run` không tự đọc root `.env`.
+- **Docker:** nếu image đã build từ source hiện tại, chạy `.\scripts\run-app-service.ps1 -Service User -NoBuild` và `.\scripts\run-app-service.ps1 -Service Operation -NoBuild` để recreate với env mới. Bỏ `-NoBuild` khi source/image chưa cập nhật. Docker Desktop Start / `docker start` không cập nhật env của container cũ.
+
+Với Driver JWT hợp lệ, request body hợp lệ và `Idempotency-Key` mới, `POST /api/reservation-requests` dự kiến trả `202` sau khi lưu receipt/outbox; dùng cùng Account để `GET` Location trả về. Timely Allowed kết thúc tại gate finalization nói trên, không tạo booking/payment. Admission tắt trả `503 / RESERVATION_ADMISSION_DISABLED`; broker credentials trống khi bắt buộc gây lỗi startup; queue/quyền/relay thiếu có thể khiến authorization timeout. Kiểm tra schema, broker connection và public JWKS nếu chưa đạt bước này; không chia sẻ credentials/JWT trong báo cáo lỗi.
+
+**Trạng thái kiểm chứng:** hướng dẫn dựa trên wiring hiện tại; build và PostgreSQL/RabbitMQ/runtime của slice vẫn **UNVERIFIED**. Chạy và ghi kết quả theo [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md); không coi service healthy hoặc response `202` là booking confirmed.
 
 ## 6. Troubleshooting
 

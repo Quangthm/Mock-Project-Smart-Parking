@@ -599,6 +599,9 @@ MassTransit delayed redelivery for RabbitMQ may require the delayed-exchange plu
 
 ### Profile B — Saga-owned asynchronous Account-current authorization
 
+> **Reservation-specific user amendment, 9 November 2026:** the reservation first slice performs one durable evaluation per workflow. Its later delivery attempts replay the original persisted result, including the original DecidedAt; they do not re-evaluate current Account access. The 5-second delivery windows, 10/30-second waits, three-delivery budget and original 90-second deadline remain. Attempt IDs fence delivery envelopes; WorkflowId identifies the single decision. This explicitly overrides Profile B's fresh-evaluation rationale below for this slice only. No post-Allowed check is introduced. See [the reservation implementation decision](reservation-first-slice-implementation-proposal.md#one-evaluation-per-reservation-workflow--user-amendment-9-november).
+
+
 ```text
 Check #1 → await outcome up to 5 s
   transient fault / timeout

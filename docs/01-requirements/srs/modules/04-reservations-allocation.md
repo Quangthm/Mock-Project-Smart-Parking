@@ -52,11 +52,25 @@ The 30-minute value is illustrative only; it does not establish a new approved b
 `OCCUPIED` does not identify the reservation holder. `OCCUPIED + RESERVED` may represent the reservation-linked Driver after accepted entry, or an unrelated current occupant while a reservation association exists. Authoritative session/allocation/reservation linkage establishes fulfillment.
 
 
-Positive-price reservation uses the effective `PAYMENT_HOLD_DURATION` (default 5 minutes) and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
+Positive-price reservation uses the effective `PAYMENT_HOLD_DURATION` (default 5 minutes) and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking compatible capacity, verified-vehicle exclusivity and restrictions. H is capped by T; confirmation must commit strictly before T.
 
 Unpaid hold expiry is EXPIRED, distinct from NO_SHOW. Late tolerance is optional: enabled default 15 minutes with Owner range 15–30; disabled retains entitlement until reservation end. Arrival at/before applicable deadline is timely; no-show requires strictly later decision and no authoritative timely evidence.
 
-Ordinary hold payment/expiry is serialized at Operations: a verified result that commits while the hold is active converts it once; once expiry wins, reacquire a compatible claim or reconcile/refund. This is deliberately distinct from strict monthly A<H. Offer acceptance requires authoritative time < expiry; equality is expired and underlying entitlement is resolved independently.
+Ordinary hold payment/expiry is serialized at Operations: a verified result that commits while the hold is active converts it once; once expiry wins, reacquire a compatible claim only strictly before T or reconcile/refund. At/after T no unconfirmed entitlement may be granted, regardless of provider timestamp or timer delay. This is deliberately distinct from strict monthly A<H. Offer acceptance requires authoritative time < expiry; equality is expired and underlying entitlement is resolved independently.
+
+## First-slice boundaries — approved 5 November
+
+[D1–D4c](../../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md) supersede optional Account caps and the October 27 fixed T−15→T−5 recovery schedule. Product approval is separate from implementation evidence.
+
+- D1: return a durable pending receipt and evaluate Account-current asynchronously. Read-only preparation only before Allowed; no reservation, capacity claim or payment-order intent.
+- A = T − effective allocation lead (default 1 hour). Use compatible backup inside the allocation window and retry on relevant changes plus durable periodic work. No T−5 milestone. Preserve protected preferences, stable allocations, real occupancy and distinct-resource accounting.
+- F = T − effective facility-failure lead (default 15 minutes). An unused confirmed booking without a usable compatible assignment earns full applicable refund eligibility at F. First confirmation/loss after F and before T tries immediate recovery, then earns eligibility if still unfulfilled. Recovery never removes an earned right.
+- The Driver can exercise the right until actual accepted PARKING or unused closure. Gate arrival alone leaves it exercisable. Eligibility alone creates no payout; zero collected means no payout. Exclude facility-failure exercise from voluntary abuse counts.
+- At T, confirmed but unfulfilled (including unusable ALLOCATED) cancels for facility failure with one applicable refund intent/notification and unused-claim release. Usable and PARKING bookings survive. Ordinary no-show/expiry applies when a usable slot is supplied and no Driver action follows.
+- H = min(hold creation + effective payment hold, T), ordinary default 5 minutes. Operations confirmation must commit strictly before T. Pre-T expired holds may reacquire only if compatible. At/after T unconfirmed bookings expire; late money reconciles/refunds without a booking. Do not substitute provider, handler or row-write timestamps for commit evidence.
+- Retain timestamped usability/assignment history and process F/T before later recovery after downtime. Missing history requires reconciliation, never backdated availability.
+
+Examples: T=10:00, F=09:45, recovery=09:47 preserves the earned right. A 09:59:58 debit first verified at 10:00:02 leaves an unconfirmed booking expired. Snapshot effective policies without inventing override bounds.
 
 ## Functional requirements
 
@@ -138,7 +152,7 @@ Retain Admin-audited recognition configuration direction. Exact recognizer, scor
 **Actors:** Driver  
 **Stories:** US-D01
 
-Authenticated Driver reviews bound vehicle, location, interval and enabled Specific Slot/Zone/Capacity mode. Specific Slot protects a preference on a best-effort basis, not an exact-slot guarantee. Backend validates accepted terms, current access, booking restrictions and compatible claims before acceptance.
+For this slice, an authenticated Driver reviews their verified CAR, location, interval and Specific Slot mode. Reject unsupported category/mode before claims or payment effects; Zone/Capacity/motorcycle creation and Driver offer/reschedule endpoints are deferred. Preserve legacy data and compatible reads. Specific Slot protects a preference on a best-effort basis, not an exact-slot guarantee. Backend validates accepted terms, current access, booking restrictions and compatible claims before acceptance.
 
 ### FR-RES-02
 
@@ -146,7 +160,7 @@ Authenticated Driver reviews bound vehicle, location, interval and enabled Speci
 **Actors:** Driver  
 **Stories:** US-D01
 
-Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies. Confirmed defaults are 15 minutes, 24 hours, 7 days and 0 respectively. Resolve Admin default/bounds → authorized Owner/lot override → accepted context; no numeric bounds are invented by RA-06. No active-booking cap by default. Owner may enable a positive lot-scoped cap per account counting PENDING_PAYMENT, CONFIRMED and ALLOCATED only. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
+Reservation minimum duration, maximum duration, advance horizon and inter-booking buffer are configurable policies. Confirmed defaults are 15 minutes, 24 hours, 7 days and 0 respectively. Resolve Admin default/bounds → authorized Owner/lot override → accepted context; no numeric bounds are invented by RA-06. No per-lot/per-Account active-booking cap. Enforce stable verified-vehicle interval exclusivity across all lots, including live PENDING_PAYMENT holds and actual occupancy; count a booking, allocation and its own linked visit once. Two eligible vehicles on one Account may book concurrently. Reject incompatible same-vehicle overlap; enforce global cancellation-abuse restrictions for new creations without disabling login or existing rights.
 
 ### FR-RES-03
 
@@ -154,7 +168,7 @@ Reservation minimum duration, maximum duration, advance horizon and inter-bookin
 **Actors:** Driver, Owner, Operator  
 **Stories:** US-D01
 
-Apply the baseline allocation/protection behavior together with the Specific Slot / Zone / Capacity reservation modes and Allocation Lead Time. These reservation modes are distinct from the underlying allocation and protection behavior.
+Apply the baseline allocation/protection behavior with Specific Slot and Allocation Lead Time in this slice; Zone and Capacity creation are deferred. These reservation modes are distinct from the underlying allocation and protection behavior.
 
 ### FR-RES-04
 
@@ -162,7 +176,7 @@ Apply the baseline allocation/protection behavior together with the Specific Slo
 **Actors:** Driver, Payment Provider  
 **Stories:** US-D01
 
-Positive-price reservation uses the effective `PAYMENT_HOLD_DURATION` (default 5 minutes) and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking capacity and cap.
+Positive-price reservation uses the effective `PAYMENT_HOLD_DURATION` (default 5 minutes) and Owner prepayment FULL (default), PERCENTAGE >0–100%, or FIXED >0 with no policy upper cap, even above booked charge. Round payable money once; a positive-price deposit rounded to zero requires validation. Apply valid monthly/yearly coverage before the booked minimum; genuinely zero-price reservations confirm explicitly without provider payment, even under FIXED mode, while atomically checking compatible capacity, verified-vehicle exclusivity and restrictions. H is capped by T; confirmation must commit strictly before T.
 
 ### FR-RES-05
 
@@ -202,7 +216,7 @@ Validate voluntary cancellation against current lifecycle and accepted terms; do
 **Actors:** Operator, Owner  
 **Stories:** US-D10, US-O05
 
-Recover lost capacity using conforming alternatives and established priority without displacing occupied/unaffected users. Refusal of a usable conforming alternative follows voluntary-cancellation terms; no feasible conforming alternative invokes facility-failure handling. Owner handles escalations; assigned Operator executes scoped recovery.
+Recover lost capacity using conforming alternatives and established priority without displacing occupied/unaffected users. An earned facility-failure refund right survives a usable conforming recovery. Without that earned right, refusal follows voluntary-cancellation terms; unresolved fulfillment follows the F/T boundaries below. Owner handles escalations; assigned Operator executes scoped recovery.
 
 ### FR-RES-10
 
@@ -258,7 +272,7 @@ Allocation begins at `reservation_start - effective ALLOCATION_LEAD_TIME`. The c
 **Actors:** Driver, Operator  
 **Stories:** US-D17
 
-Driver may submit accepted reallocation requests up to the effective `DRIVER_REALLOCATION_REQUEST_LIMIT` (default 2). Transport retries and invalid submissions do not count; system recovery does not consume the allowance. No refund solely because a conforming reallocation was accepted; independent fee/refund grounds remain.
+Driver-initiated switching is deferred in this slice. Its future policy permits accepted reallocation requests up to the effective `DRIVER_REALLOCATION_REQUEST_LIMIT` (default 2). Transport retries and invalid submissions do not count; system recovery does not consume the allowance. No refund solely because a conforming reallocation was accepted; independent fee/refund grounds remain.
 
 ### FR-BAS-04
 

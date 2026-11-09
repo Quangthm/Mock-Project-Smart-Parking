@@ -1,4 +1,6 @@
 using MediatR;
+using SmartParking.OperationService.Domain;
+using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
@@ -60,7 +62,7 @@ public sealed class CalculateCheckoutPricingQueryHandler(
 
 public sealed class PrepareReservationCheckoutCommandHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store,
+    IReservationRepository repository,
     ICheckoutPaymentClient payment) : IRequestHandler<PrepareReservationCheckoutCommand, CheckoutPaymentPreparation>
 {
     public async Task<CheckoutPaymentPreparation> Handle(
@@ -68,7 +70,7 @@ public sealed class PrepareReservationCheckoutCommandHandler(
         CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        var reservation = await store.FindAsync(scope.TenantId, request.SiteId, request.ReservationId.ToString(), ct)
+        var reservation = await repository.FindAsync(scope.TenantId, request.SiteId, request.ReservationId.ToString(), ct)
             ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
         if (reservation.Id != request.ReservationId)
             throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
@@ -89,7 +91,7 @@ public sealed class PrepareReservationCheckoutCommandHandler(
 
 public sealed class PrepareSessionCheckoutCommandHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store,
+    IParkingSessionRepository repository,
     ICheckoutPaymentClient payment) : IRequestHandler<PrepareSessionCheckoutCommand, CheckoutPaymentPreparation>
 {
     public async Task<CheckoutPaymentPreparation> Handle(
@@ -97,7 +99,7 @@ public sealed class PrepareSessionCheckoutCommandHandler(
         CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        var session = await store.FindActiveWalkInAsync(
+        var session = await repository.FindActiveWalkInAsync(
             scope.TenantId,
             request.SiteId,
             request.PlateNumber ?? string.Empty,
@@ -121,29 +123,29 @@ public sealed class PrepareSessionCheckoutCommandHandler(
 
 public sealed class ListReservationsQueryHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<ListReservationsQuery, IReadOnlyList<ReservationGateEntry>>
+    IReservationRepository repository) : IRequestHandler<ListReservationsQuery, IReadOnlyList<ReservationGateEntry>>
 {
     public async Task<IReadOnlyList<ReservationGateEntry>> Handle(ListReservationsQuery request, CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.ListAsync(scope.TenantId, request.SiteId, ct);
+        return await repository.ListAsync(scope.TenantId, request.SiteId, ct);
     }
 }
 
 public sealed class ListParkingSessionsQueryHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<ListParkingSessionsQuery, IReadOnlyList<ParkingSessionHistoryEntry>>
+    IParkingSessionRepository repository) : IRequestHandler<ListParkingSessionsQuery, IReadOnlyList<ParkingSessionHistoryEntry>>
 {
     public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> Handle(ListParkingSessionsQuery request, CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.ListSessionsAsync(scope.TenantId, request.SiteId, ct);
+        return await repository.ListSessionsAsync(scope.TenantId, request.SiteId, ct);
     }
 }
 
 public sealed class FindReservationQueryHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<FindReservationQuery, ReservationGateEntry>
+    IReservationRepository repository) : IRequestHandler<FindReservationQuery, ReservationGateEntry>
 {
     public async Task<ReservationGateEntry> Handle(FindReservationQuery request, CancellationToken ct)
     {
@@ -151,113 +153,19 @@ public sealed class FindReservationQueryHandler(
             throw new ReservationGateException(400, "INVALID_QUERY", "Enter a reservation ID or plate.");
 
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.FindAsync(scope.TenantId, request.SiteId, request.Query.Trim(), ct)
+        return await repository.FindAsync(scope.TenantId, request.SiteId, request.Query.Trim(), ct)
             ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "No matching reservation was found.");
     }
 }
 
 public sealed class FindWalkInSessionQueryHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<FindWalkInSessionQuery, WalkInParkingSession>
+    IParkingSessionRepository repository) : IRequestHandler<FindWalkInSessionQuery, WalkInParkingSession>
 {
     public async Task<WalkInParkingSession> Handle(FindWalkInSessionQuery request, CancellationToken ct)
     {
-        GateRequestValidation.ValidatePlate(request.Plate, "Enter a valid vehicle plate.");
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.FindActiveWalkInAsync(scope.TenantId, request.SiteId, request.Plate, ct)
+        return await repository.FindActiveWalkInAsync(scope.TenantId, request.SiteId, request.Plate, ct)
             ?? throw new ReservationGateException(404, "WALK_IN_SESSION_NOT_FOUND", "No active walk-in session was found for this plate.");
-    }
-}
-
-public sealed class CheckInWalkInCommandHandler(
-    IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<CheckInWalkInCommand, WalkInParkingSession>
-{
-    public async Task<WalkInParkingSession> Handle(CheckInWalkInCommand request, CancellationToken ct)
-    {
-        GateRequestValidation.ValidatePlate(request.PlateNumber, "Enter a valid vehicle plate.");
-        GateRequestValidation.ValidateImageData(request.ImageData);
-        var vehicleType = GateRequestValidation.NormalizeVehicleType(request.VehicleType);
-        if (vehicleType is null)
-            throw new ReservationGateException(400, "INVALID_VEHICLE_TYPE", "Vehicle type must be CAR or MOTORCYCLE.");
-
-        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.CreateWalkInAsync(
-            scope.TenantId, request.SiteId, Guid.NewGuid(), vehicleType, request.PlateNumber, request.ImageData, ct);
-    }
-}
-
-public sealed class CheckOutWalkInCommandHandler(
-    IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<CheckOutWalkInCommand, WalkInParkingSession>
-{
-    public async Task<WalkInParkingSession> Handle(CheckOutWalkInCommand request, CancellationToken ct)
-    {
-        GateRequestValidation.ValidatePlate(request.PlateNumber, "Enter a valid vehicle plate.");
-        GateRequestValidation.ValidateImageData(request.ImageData);
-        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.CheckOutWalkInAsync(
-            scope.TenantId, request.SiteId, request.SessionId, request.PlateNumber, request.ImageData, ct);
-    }
-}
-
-public sealed class CheckInReservationCommandHandler(
-    IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<CheckInReservationCommand, ReservationGateEntry>
-{
-    public async Task<ReservationGateEntry> Handle(CheckInReservationCommand request, CancellationToken ct)
-    {
-        GateRequestValidation.ValidateReservationAction(request.PlateNumber, request.ImageData);
-        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.CheckInAsync(
-            scope.TenantId, request.SiteId, scope.UserId, request.ReservationId, request.PlateNumber, request.ImageData, ct);
-    }
-}
-
-public sealed class CheckOutReservationCommandHandler(
-    IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<CheckOutReservationCommand, ReservationGateEntry>
-{
-    public async Task<ReservationGateEntry> Handle(CheckOutReservationCommand request, CancellationToken ct)
-    {
-        GateRequestValidation.ValidateReservationAction(request.PlateNumber, request.ImageData);
-        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.CheckOutAsync(
-            scope.TenantId, request.SiteId, scope.UserId, request.ReservationId, request.PlateNumber, request.ImageData, ct);
-    }
-}
-
-internal static class GateRequestValidation
-{
-    public static string? NormalizeVehicleType(string? value) =>
-        value?.Trim().ToUpperInvariant() switch
-        {
-            null or "" => "CAR",
-            "MOTORCYCLE" or "MOTORBIKE" => "MOTORCYCLE",
-            "CAR" => "CAR",
-            _ => null
-        };
-
-    public static void ValidatePlate(string? plate, string message)
-    {
-        if (string.IsNullOrWhiteSpace(plate) || plate.Length > 50)
-            throw new ReservationGateException(400, "INVALID_PLATE", message);
-    }
-
-    public static void ValidateImageData(string? imageData)
-    {
-        if (imageData is not null &&
-            (imageData.Length > 14 * 1024 * 1024 ||
-             !(imageData.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase) ||
-               imageData.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase) ||
-               imageData.StartsWith("data:image/webp;base64,", StringComparison.OrdinalIgnoreCase))))
-            throw new ReservationGateException(400, "INVALID_IMAGE", "Gate image must be a JPEG, PNG, or WebP data URL no larger than 14 MB.");
-    }
-
-    public static void ValidateReservationAction(string? plate, string? imageData)
-    {
-        if (plate is { Length: > 50 })
-            throw new ReservationGateException(400, "INVALID_PLATE", "Plate number is too long.");
-        ValidateImageData(imageData);
     }
 }

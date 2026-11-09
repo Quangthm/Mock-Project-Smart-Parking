@@ -747,6 +747,21 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         if ($settings['SMARTPARK_PAYOS_CHECKSUM_KEY']) { $desired['PayOs:ChecksumKey'] = $settings['SMARTPARK_PAYOS_CHECKSUM_KEY'] }
         if ($settings['SMARTPARK_PAYOS_BASE_URL']) { $desired['PayOs:BaseUrl'] = $settings['SMARTPARK_PAYOS_BASE_URL'] }
     }
+    if ($service -in @('User', 'Reservation')) {
+        $desired['ReservationAdmission:Enabled'] = if ($settings['SMARTPARK_RESERVATION_ADMISSION_ENABLED']) { $settings['SMARTPARK_RESERVATION_ADMISSION_ENABLED'] } else { 'false' }
+        $brokerPrefix = if ($service -eq 'User') { 'SMARTPARK_RESERVATION_USER' } else { 'SMARTPARK_RESERVATION_OPERATION' }
+        $desired['ReservationAdmission:BrokerUser'] = if ($settings[$brokerPrefix + '_BROKER_USER']) { $settings[$brokerPrefix + '_BROKER_USER'] } else { '' }
+        $desired['ReservationAdmission:BrokerPassword'] = if ($settings[$brokerPrefix + '_BROKER_PASSWORD']) { $settings[$brokerPrefix + '_BROKER_PASSWORD'] } else { '' }
+        if ($service -eq 'Reservation') {
+            $desired['JwtValidation:AllowInsecureTransport'] = if ($settings['SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS']) { $settings['SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS'] } else { 'false' }
+            $desired['Cors:AllowedOrigins'] = $settings['SMARTPARK_OPERATION_CORS_ORIGINS']
+            $desired['Messaging:AuditEnabled'] = if ($settings['SMARTPARK_OPERATION_AUDIT_ENABLED']) { $settings['SMARTPARK_OPERATION_AUDIT_ENABLED'] } else { 'false' }
+            $desired['Messaging:OutboxDeliveryEnabled'] = if ($settings['Messaging__OutboxDeliveryEnabled']) { $settings['Messaging__OutboxDeliveryEnabled'] } else { 'false' }
+            $desired['SMARTPARK_RABBITMQ_HOST'] = '127.0.0.1'
+            $desired['SMARTPARK_RABBITMQ_PORT'] = $settings['SMARTPARK_RABBITMQ_PORT']
+            $desired['SMARTPARK_RABBITMQ_VHOST'] = $settings['SMARTPARK_RABBITMQ_VHOST']
+        }
+    }
     $toSync = @{}
     foreach ($name in $desired.Keys) {
         if (!$existingByService[$service].ContainsKey($name) -or $existingByService[$service][$name] -cne $desired[$name]) {

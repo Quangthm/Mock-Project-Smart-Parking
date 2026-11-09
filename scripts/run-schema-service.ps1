@@ -87,6 +87,23 @@ if ($Service -eq 'User') {
     $env:JwtValidation__JwksUri = ([Uri]::new([Uri]$env:Services__User, $jwtPath)).AbsoluteUri
 }
 
+# Task-scoped reservation admission configuration; credentials remain service-specific.
+if ($Service -in @('User', 'Reservation')) {
+    $env:ReservationAdmission__Enabled = if ($env:SMARTPARK_RESERVATION_ADMISSION_ENABLED) { $env:SMARTPARK_RESERVATION_ADMISSION_ENABLED } else { 'false' }
+    $brokerPrefix = if ($Service -eq 'User') { 'SMARTPARK_RESERVATION_USER' } else { 'SMARTPARK_RESERVATION_OPERATION' }
+    $env:ReservationAdmission__BrokerUser = [Environment]::GetEnvironmentVariable($brokerPrefix + '_BROKER_USER')
+    $env:ReservationAdmission__BrokerPassword = [Environment]::GetEnvironmentVariable($brokerPrefix + '_BROKER_PASSWORD')
+    if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerUser)) { $env:ReservationAdmission__BrokerUser = ' ' }
+    if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerPassword)) { $env:ReservationAdmission__BrokerPassword = ' ' }
+    if ($Service -eq 'Reservation') {
+        $env:SMARTPARK_RABBITMQ_HOST = '127.0.0.1'
+        $env:JwtValidation__AllowInsecureTransport = if ($env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS) { $env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS } else { 'false' }
+        $env:Cors__AllowedOrigins = $env:SMARTPARK_OPERATION_CORS_ORIGINS
+        $env:Messaging__AuditEnabled = if ($env:SMARTPARK_OPERATION_AUDIT_ENABLED) { $env:SMARTPARK_OPERATION_AUDIT_ENABLED } else { 'false' }
+        if (!$env:Messaging__OutboxDeliveryEnabled) { $env:Messaging__OutboxDeliveryEnabled = 'false' }
+    }
+}
+
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
 $defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444' }
 $apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065' }

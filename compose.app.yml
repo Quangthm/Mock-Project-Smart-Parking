@@ -61,6 +61,9 @@ services:
       Jwt__PrivateKeyPemBase64: ${SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
       Messaging__Enabled: ${SMARTPARK_MESSAGING_ENABLED:-false}
+      ReservationAdmission__Enabled: ${SMARTPARK_RESERVATION_ADMISSION_ENABLED:-false}
+      ReservationAdmission__BrokerUser: ${SMARTPARK_RESERVATION_USER_BROKER_USER:-}
+      ReservationAdmission__BrokerPassword: ${SMARTPARK_RESERVATION_USER_BROKER_PASSWORD:-}
       SMARTPARK_RABBITMQ_HOST: rabbitmq
       SMARTPARK_RABBITMQ_PORT: "5672"
       SMARTPARK_RABBITMQ_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
@@ -112,6 +115,16 @@ services:
     environment:
       <<: [*backend-env, *jwt-validation]
       Services__Payment: http://payment-service:8080/
+      Cors__AllowedOrigins: ${SMARTPARK_OPERATION_CORS_ORIGINS:-}
+      Messaging__AuditEnabled: ${SMARTPARK_OPERATION_AUDIT_ENABLED:-false}
+      JwtValidation__AllowInsecureTransport: ${SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS:-false}
+      ReservationAdmission__Enabled: ${SMARTPARK_RESERVATION_ADMISSION_ENABLED:-false}
+      ReservationAdmission__BrokerUser: ${SMARTPARK_RESERVATION_OPERATION_BROKER_USER:-}
+      ReservationAdmission__BrokerPassword: ${SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD:-}
+      Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
+      SMARTPARK_RABBITMQ_HOST: rabbitmq
+      SMARTPARK_RABBITMQ_PORT: "5672"
+      SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5055:8080"

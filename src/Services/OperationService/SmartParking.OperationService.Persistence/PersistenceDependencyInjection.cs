@@ -20,9 +20,13 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IReservationRepository, ReservationRepository>();
         services.AddScoped<IParkingSessionRepository, ParkingSessionRepository>();
         services.AddScoped<ISlotAllocationRepository, SlotAllocationRepository>();
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.TryAddScoped<IStructureSafetyStore, StructureSafetyStore>();
-        services.AddScoped<IReservationGateStore, ReservationGateStore>();
+        services.TryAddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<Application.Reservations.IReservationRequestRepository, ReservationRequestRepository>();
+        services.AddScoped<Application.Reservations.IReservationPolicyRepository, ReservationPolicyRepository>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<IStructureRepository, StructureRepository>();
+        services.AddScoped<OperationsConcurrency>();
+        services.TryAddScoped<IOperationsConcurrency>(provider => provider.GetRequiredService<OperationsConcurrency>());
         return services;
     }
 }
