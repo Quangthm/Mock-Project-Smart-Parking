@@ -331,6 +331,7 @@ public sealed class BotProtectionFlowTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(new AuthenticationPolicy());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
@@ -388,6 +389,7 @@ public sealed class BotProtectionFlowTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(new AuthenticationPolicy());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
@@ -447,6 +449,7 @@ public sealed class BotProtectionFlowTests
         builder.Services.AddApplicationServices(new AuthenticationPolicy());
         var fixture = new AuthTestFixture();
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
