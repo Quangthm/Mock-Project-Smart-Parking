@@ -12,6 +12,16 @@ The [21 October V11-06 clarification](../../../05-project-management/decision-lo
 
 ## 0. Deployment profile
 
+### SPARK-373 User image amendment — 7 November 2026
+
+UserDb now owns `media_assets` and `media_holds`, plus nullable local FKs `users.avatar_asset_id` and `vehicles.image_asset_id`. Avatar ownership is User-scoped; vehicle ownership is the exact creator Driver Account and owned target/draft. The composite creator FK preserves User/Account ownership. Unique scoped upload keys and provider locators, concurrency versions, pending-work and retention indexes support reconciliation. Provider credentials and signed URLs are never stored in these rows.
+
+Admission records immutable byte hash/type/size/dimensions, provider identity and policy timestamps. Unattached drafts expire after 24 hours; attached images after 30 days from admission. Holds retain independent origin, actor, reason/reference and acknowledgement/review/release metadata. Automatic deletion and operational hold-versus-delete integration remain [USER-MEDIA-CLEANUP-01](../../../05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md); timestamps and expired-read checks are implemented now.
+
+Fresh SQL includes the additive media schema. For initialized supported databases, `scripts/apply-workflow-migrations.ps1` performs the existing session/outbox preflight, applies the bounded media section of `microservices/01-user-access-service-db.sql` even when the old base is current, then runs `test/verify-user-media-schema.sql` alongside existing verification. The canonical media section is transactional and rerunnable; it does not reset volumes, auto-run at API startup, drop old columns or fetch/backfill URLs. Review [database rollout instructions](../../../../scripts/database/README.md#user-image-upgrade-and-rollback-spark-373).
+
+`avatar_url`/`image_url` remain for reconciliation/rollback. Existing terms (`system_terms_and_conditions.document_url`), accepted `terms_id`, `lot_setup` and `draft_structure` are separate from uploaded applicant evidence. No terms or Partner-version table migration is included; DB25 stays deferred under the approved Partner PDF policy.
+
 | Hạng mục | Giá trị |
 |---|---|
 | Database vật lý | `smartpark_user` (PostgreSQL 16, port `5441`) |
@@ -866,3 +876,17 @@ MassTransit framework persistence:
 | Extension | Lý do sử dụng |
 |---|---|
 | `uuid-ossp` | Cung cấp hàm `uuid_generate_v4()` để sinh UUID v4 làm primary key |
+
+## SPARK-243 canonical schema and persistence boundary
+
+The only SQL file changed for this feature is `scripts/database/microservices/01-user-access-service-db.sql`. It declares the final columns, tables, checks and indexes with `CREATE ... IF NOT EXISTS`. There is no vehicle upgrade script, overlay, `ADD COLUMN`, database vehicle function or revision trigger. Replaying on an already aligned schema is idempotent; `IF NOT EXISTS` does **not** reshape an older table or prove its definition matches. No existing/shared database is automatically updated, reset or repaired.
+
+Explicit user-approved exceptions are limited to: (1) the three circular media foreign keys added after both tables exist, guarded by the constraint catalogue; (2) the pre-existing `protect_auth_session_account_binding` function/trigger, preventing a persisted session from being moved to another User or Account even by non-EF writers; and (3) the idempotent fixed role catalogue seed. The Account ownership alternate key and all noncircular constraints are declared inside their CREATE TABLE statements.
+
+`vehicles.id` remains stable. `vehicle_registration_claims` is UserService-owned, with Account and media FKs and one open row per `(account_id, normalized_plate)`. `media_assets.registration_claim_id` is distinct from the upload-worker lease `claim_id` and `vehicle_id`. Pending images cannot become active vehicle attachments. Reads validate the exact claimant Account and asset reference.
+
+Vehicle binding revision is a mapped optimistic concurrency property. `UnitOfWork.SaveChangesAsync` advances it when tracked Account/normalized plate/category/removal fields change, preserving it for image/raw-format changes. All future binding writers must use repositories and this UoW; direct SQL/ExecuteUpdate bypasses revision maintenance and is not a supported binding-write path. Driver identity-changing edits remain disabled until Operations dependency coordination exists. No distributed booking lock is implied by the revision.
+
+Registration handlers coordinate the active-plate invariant through the vehicle repository and a short UoW transaction. The repository owns parameterized PostgreSQL locking/targeted INSERT; it never commits. Claims and photo association commit atomically before the API returns a conflict. Domain owns supported identity and narrow metadata mutations. The schema retains global active-plate uniqueness, including live null-owner rows; historical-only ownership remains blocked for reconciliation.
+
+For deployment use a newly provisioned or independently confirmed aligned schema, and follow the [checklist](../../../04-testing/reports/SPARK-243-deployment-checklist.md). Do not apply archival `05.8` or the now-removed prototype overlay. Existing installations with older columns or the prototype vehicle trigger require an explicitly reviewed owner-led transition; this task does not provide or authorize that transition.

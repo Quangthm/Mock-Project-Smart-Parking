@@ -63,3 +63,8 @@ Trước khi pull/merge, copy script riêng cũ ra ngoài repo hoặc vào `.cac
 Không log password/key; JSON credential chỉ gửi qua stdin cho `dotnet user-secrets set`. Chỉ thêm key trong `.env.example`, mapping setup/runner và cập nhật hướng dẫn khi thêm cấu hình. Thiết lập Sonar thật phụ thuộc tài nguyên Docker/kernel và version image; compose render không chứng minh Sonar đã operational.
 
 Project migration mặc định là `smartpark-schema`. Mọi lệnh Compose truyền `--project-name` tường minh; test upgrade truyền UUID riêng kể cả cleanup, nên `COMPOSE_PROJECT_NAME` trong terminal không thể đổi target. Chạy test upgrade bằng `powershell -NoProfile -File scripts/test-workflow-upgrade.ps1`; chỉ script test này dọn các volume UUID do chính nó tạo.
+# Cloudinary configuration maintenance (SPARK-373)
+
+The three optional `SMARTPARK_CLOUDINARY_*` fields are imported in Team mode, mapped in setup step 5 for all four .NET projects, and removed from user-secrets when cleared. They are never generated. The User-only `SMARTPARK_USER_MEDIA_ENABLED` switch defaults false and is deliberately not imported as a Team credential. The direct host runner reads parsed values to avoid inheriting removed credentials. Compose maps media fields only to four .NET backends and `ai-rest`/`ai-live`; preserve the latter's database environment during YAML merges.
+
+Maintain the [environment map and rotation/removal instructions](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md#cloudinary-development-media-settings-spark-373), the synthetic `scripts/test-setup.ps1` fixtures, and `scripts/test-media-compose.ps1` together. Do not print rendered credential-bearing configuration or write provider values to frontend settings. Database resets are not part of credential rotation.

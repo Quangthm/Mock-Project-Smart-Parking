@@ -1,5 +1,8 @@
 # Partner Registration and first-lot setup API design
 
+> SPARK-373 policy amendment, 6 November 2026: follow the [approved Partner document policy](../../05-project-management/decision-log/2026-11-06-cloudinary-foundation-and-partner-policy.md) and [canonical media SRS](../../01-requirements/srs/modules/09-file-media.md). Readable PDFs (including scans), 10 MiB inclusive each; incomplete drafts allowed, exactly one current agreement and policy required before submission; setup/evidence precedes email OTP and verified email precedes review. Admin replacement is initial-pending only with immutable versions and stale-review conflict. Retention anchors are recorded closure/rejection/withdrawal, never inactivity. Partner routes, review-version transport and runtime remain DEFERRED; provider PDF verification NOT RUN. Existing terms acceptance is separate from applicant evidence.
+
+
 SPARK-175 / SPARK-179 / SPARK-180 / SPARK-181 · updated by SPARK-296, 21 October 2026. **v1.1 documentation review candidate based on approved decisions**; API additions and implementation remain pending.
 
 Canonical behavior: [identity SRS](../../01-requirements/srs/modules/01-identity-access.md), [UC-AUTH-02](../../01-requirements/use-cases/uc-auth-02.md), [permissions](../../01-requirements/srs/permissions.md), [shared API/auth contracts](../../02-architecture/api/v1.1-contracts.md). Partner is the business process name; the existing **Owner** role remains. This concise contract replaces the competing `/owner-register` proposals and duplicated BR narratives.
@@ -8,7 +11,7 @@ Canonical behavior: [identity SRS](../../01-requirements/srs/modules/01-identity
 
 | Operation | Method/path and actor | Request, result and validation |
 |---|---|---|
-| Register | `POST /api/auth/register/owner`, public registration context | Retain `fullName`, `businessName`, `email`, `phone`, `lotType`, `agreedToPolicy`, optional `password`. Server creates one pending identity/account/application immediately; no normal Owner tokens and no email OTP yet. |
+| Register | `POST /api/auth/register/owner`, public registration context | Retain `fullName`, `businessName`, `email`, `phone`, `lotType`, `agreedToPolicy`, optional `password`, and `turnstileToken` when bot verification is enabled. Server creates one pending identity/account/application immediately; no normal Owner tokens and no email OTP yet. |
 | Simulated identity step | Registration context, route/schema pending V11-DES-02 | Explicit sharing consent and successful mandatory simulated VNeID completion. Fake API returns a GUID substitute tied to the user; User & Access persists the binding. This is not government verification or a login credential. |
 | Save first-lot setup | Proposed `POST /api/auth/register/owner/lot-setup`, scoped application credential; final path/schema pending V11-DES-03 | Save the first-lot proposal into the same initial application; return setup result, then issue/queue email OTP. A retry cannot create another application/site. |
 | Verify email | `POST /api/auth/register/owner/verify`, scoped verification context | Retain `challengeId`, six-digit `code`; server rejects verification before saved setup and required simulation. No normal session is issued. |
@@ -35,6 +38,10 @@ The complete lot proposal includes facility capacity/layout/device/model selecti
 
 Registration response requirements: stable application identity, safe setup progress and a scoped credential delivered only to its authorized registering context; no OTP before setup. Setup response requirements: same application identity, persisted proposal/version, setup-complete evidence and queued email challenge metadata. Exact property additions/envelopes are V11-DES-03. Admin views never contain setup secrets. A `201`/queued result is not email-delivery confirmation.
 
+## Bot verification (SPARK-257)
+
+The public register call carries a Cloudflare Turnstile token as the additive body field `turnstileToken` (single-use, provider-issued, roughly five-minute validity). UserService validates it server-side through the Application bot-verification port **before** creating any identity, account, application, challenge or OTP delivery; verification never holds a database lock during the outbound provider call. The token is required when `Turnstile:Enabled=true` (production default) and omitted only under explicit non-production disablement. Outcomes are fail-closed: `BOT_VERIFICATION_REQUIRED` (missing), `BOT_VERIFICATION_FAILED` (malformed/invalid) and `BOT_VERIFICATION_EXPIRED` (expired/reused) are `400`; `BOT_VERIFICATION_UNAVAILABLE` (provider/network/misconfiguration) is `503`. The frontend must reset the widget on any `BOT_VERIFICATION_*` failure so the user can obtain a new token. Bot verification is additive and never replaces rate limiting or OTP lockout. See the [cross-cutting bot-protection design](bot-protection-spark-257-api-design.md).
+
 ## State and access gates
 
 The [21 October V11-06 clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md) settles the fake API's GUID substitute and persisted user binding. Its path/property name, other fields and repeated-call GUID behavior remain design-pending V11-DES-02; the mock identifier does not authorize setup, login or review.
@@ -57,7 +64,7 @@ Contact verification, account restrictions, application decision, provisioning a
 
 ## Errors, retries and review handoff
 
-Preserve safe validation, duplicate contact, invalid/expired scoped credential, prerequisite, OTP-invalid/expired/locked/cooldown and closed-application errors. Existing names include `VALIDATION_FAILED`, `CONTACT_EXISTS`, `OTP_INVALID`, `OTP_EXPIRED`, `OTP_LOCKED`, `OTP_COOLDOWN`; exact new prerequisite/error schema is V11-DES-03. OTP policy is five minutes, three failures/fifteen-minute lock and sixty-second resend. Retrying setup/OTP delivery reuses the authorized business identity; lost acknowledgement must be resolved before creating another record. Delivery failure never removes the created identity/application (D10).
+Preserve safe validation, duplicate contact, invalid/expired scoped credential, prerequisite, OTP-invalid/expired/locked/cooldown and closed-application errors. Existing names include `VALIDATION_FAILED`, `CONTACT_EXISTS`, `OTP_INVALID`, `OTP_EXPIRED`, `OTP_LOCKED`, `OTP_COOLDOWN`; exact new prerequisite/error schema is V11-DES-03. OTP policy is five minutes, three failures/fifteen-minute lock and sixty-second resend. Retrying setup/OTP delivery reuses the authorized business identity; lost acknowledgement must be resolved before creating another record. Delivery failure never removes the created identity/application (D10). SPARK-257 adds fail-closed `BOT_VERIFICATION_REQUIRED`, `BOT_VERIFICATION_FAILED` and `BOT_VERIFICATION_EXPIRED` (400) plus `BOT_VERIFICATION_UNAVAILABLE` (503) to the register call, evaluated before the existing registration errors and before any identity/application/OTP side effect.
 
 [Admin review](admin-approve-owner-api-design.md) binds the combined application and exact agreement versions, then coordinates durable provisioning. Initial pending/failed provisioning blocks normal login with a safe reason; no restricted normal Owner session and no repeated first-lot creation after sign-in. No duplicate applicant status endpoint or in-app corrections/re-acceptance workflow is required.
 

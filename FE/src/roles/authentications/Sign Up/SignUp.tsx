@@ -14,7 +14,8 @@ import { PasswordVisibilityButton, PasswordVisibilityIcon } from "../../../compo
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
-import { authApi, type DriverRegistration } from "../../../lib/authApi"
+import { authApi, AuthApiError, type DriverRegistration } from "../../../lib/authApi"
+import { TurnstileWidget, type TurnstileWidgetRef } from "../../../components/common/TurnstileWidget"
 
 import {
   DriverOtpForm,
@@ -345,6 +346,10 @@ export function SignUp() {
   const [showTnC, setShowTnC] = useState(false)
 
   const [registering, setRegistering] = useState(false)
+  const [driverTurnstileToken, setDriverTurnstileToken] = useState("")
+  const driverTurnstileRef = useRef<TurnstileWidgetRef>(null)
+  const [ownerTurnstileToken, setOwnerTurnstileToken] = useState("")
+  const ownerTurnstileRef = useRef<TurnstileWidgetRef>(null)
 
   const [registration, setRegistration] = useState<PendingDriverRegistration | null>(
     restoreDriverRegistration,
@@ -444,12 +449,21 @@ export function SignUp() {
           email: driverForm.email.trim() || undefined,
           phone: driverForm.phone.trim() || undefined,
           password: driverForm.password || undefined,
+          turnstileToken: driverTurnstileToken || undefined,
         }),
         driverForm.email.trim() || driverForm.phone.trim(),
       )
 
+      driverTurnstileRef.current?.reset()
+      setDriverTurnstileToken("")
       setDriverForm((f) => ({ ...f, password: "", confirmPassword: "" }))
     } catch (e) {
+      const isRateLimited = e instanceof AuthApiError && e.status === 429
+      const isBotRequired = e instanceof AuthApiError && e.code === "BOT_VERIFICATION_REQUIRED"
+      if (!isRateLimited && !isBotRequired) {
+        driverTurnstileRef.current?.reset()
+        setDriverTurnstileToken("")
+      }
       try {
         saveRegistration(
           await authApi.recoverDriver(
@@ -511,13 +525,22 @@ export function SignUp() {
 
         lotType: ownerForm.lotType,
         agreedToPolicy: ownerForm.agreedToPolicy,
+        turnstileToken: ownerTurnstileToken || undefined,
       })
 
+      ownerTurnstileRef.current?.reset()
+      setOwnerTurnstileToken("")
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
       saveOwnerRegistration({ ...application, lotSetupComplete: false })
       setView("parking-lot-setup")
     } catch (e) {
+      const isRateLimited = e instanceof AuthApiError && e.status === 429
+      const isBotRequired = e instanceof AuthApiError && e.code === "BOT_VERIFICATION_REQUIRED"
+      if (!isRateLimited && !isBotRequired) {
+        ownerTurnstileRef.current?.reset()
+        setOwnerTurnstileToken("")
+      }
       try {
         const recovered = await ownerApi.recover(ownerForm.email.trim())
         saveOwnerRegistration(recovered)
@@ -580,12 +603,12 @@ export function SignUp() {
               marginBottom: "1.5rem",
             }}
           >
-            <button style={tabStyle("driver")} onClick={() => setTab("driver")}>
+            <button style={tabStyle("driver")} onClick={() => { setError(""); setTab("driver") }}>
               <UntitledIcon name="car" size={16} /> Driver
             </button>
             <button
               style={tabStyle("business")}
-              onClick={() => setTab("business")}
+              onClick={() => { setError(""); setTab("business") }}
             >
               <UntitledIcon name="building" size={16} /> Business
             </button>
@@ -756,6 +779,11 @@ export function SignUp() {
                 <PasswordVisibilityButton visible={showDriverConfirmPassword} onToggle={() => setShowDriverConfirmPassword((value) => !value)} />
               </div>
             </Field>
+            <TurnstileWidget
+              ref={driverTurnstileRef}
+              action="driver_register"
+              onTokenChange={setDriverTurnstileToken}
+            />
             {error && <Err>{error}</Err>}
             <button
               type="submit"
@@ -1005,6 +1033,11 @@ export function SignUp() {
               </label>
             </div>
 
+            <TurnstileWidget
+              ref={ownerTurnstileRef}
+              action="owner_register"
+              onTokenChange={setOwnerTurnstileToken}
+            />
             {error && <Err>{error}</Err>}
             <button
               type="submit"

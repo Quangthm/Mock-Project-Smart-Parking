@@ -33,7 +33,3 @@ public sealed class ReviewOwnerApplicationCommandValidator : AbstractValidator<R
 {
     public ReviewOwnerApplicationCommandValidator() => RuleFor(q => q.Body).Custom((body, context) => ManagementBodyValidation.Validate(body, context));
 }
-public sealed class SaveOwnVehicleCommandValidator : AbstractValidator<SaveOwnVehicleCommand>
-{
-    public SaveOwnVehicleCommandValidator() => RuleFor(q => q.Body).Custom((body, context) => ManagementBodyValidation.Validate(body, context));
-}

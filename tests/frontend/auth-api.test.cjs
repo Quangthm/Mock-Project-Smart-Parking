@@ -18,7 +18,7 @@ function fixture(respond) {
   ]);
   const calls = [], events = [];
   const context = {
-    exports: {}, AbortSignal, Event,
+    exports: {}, AbortSignal, Event, FormData,
     require: name => {
       if (name === './store') return { store: { findUserById: () => undefined } };
       throw new Error(`Unexpected import: ${name}`);
@@ -42,6 +42,17 @@ const response = (status, payload = { success: false, code: 'INVALID_TOKEN', mes
 
 const apiUser = { userId: 'driver-id', fullName: 'Driver', email: 'driver@example.com', role: 'driver' };
 const refreshedSession = { success: true, data: { accessToken: 'access-rotated', refreshToken: 'refresh-rotated', expiresIn: 900, user: apiUser } };
+
+test('image upload preserves multipart bytes, browser boundary and current bearer', async () => {
+  const f = fixture(() => response(200, { success: true, data: { state: 'ready' } }));
+  const body = new FormData();
+  body.append('file', new Blob(['synthetic bytes']), 'image.png');
+  await f.request('/images', 'POST', body, '/api/vehicles', undefined, { 'Idempotency-Key': 'upload-1' });
+  assert.equal(f.calls[0].options.body, body);
+  assert.equal(f.calls[0].options.headers['Content-Type'], undefined);
+  assert.equal(f.calls[0].options.headers.Authorization, 'Bearer access-a');
+  assert.equal(f.calls[0].options.headers['Idempotency-Key'], 'upload-1');
+});
 
 test('concurrent protected requests rotate an expired access token once before using the new bearer', async () => {
   const f = fixture(url => url.endsWith('/refresh') ? response(200, refreshedSession) : response(200, { success: true, data: apiUser }));

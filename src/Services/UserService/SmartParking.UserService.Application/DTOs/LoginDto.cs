@@ -1,4 +1,4 @@
-﻿namespace UserService.Application.DTOs
+namespace UserService.Application.DTOs
 {
     /// <summary>
     /// Login data transfer object.
@@ -8,5 +8,7 @@
         public string Email { get; set; } = string.Empty;
 
         public string Password { get; set; } = string.Empty;
+
+        public string? TurnstileToken { get; set; }
     }
 }

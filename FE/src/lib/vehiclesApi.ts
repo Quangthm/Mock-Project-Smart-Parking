@@ -6,12 +6,15 @@ export type RegisteredVehicle = {
   canonicalPlate: string
   vehicleType: "CAR" | "MOTORCYCLE"
   imageReference: string | null
+  imageAssetId: string | null
+  imageStatus: "managed" | "reupload-required"
 }
 
 export type VehicleInput = {
   plate: string
   vehicleType: RegisteredVehicle["vehicleType"]
-  imageReference: string
+  imageAssetId: string
+  expectedImageAssetId?: string | null
 }
 
 type ApiResponse<T> = { success: boolean; data: T }
@@ -52,7 +55,23 @@ export function formatVietnamesePlate(vehicle: RegisteredVehicle) {
   )
 }
 
+export type RegistrationClaim = {
+  id: string
+  rawPlate: string
+  canonicalPlate: string
+  vehicleType: RegisteredVehicle["vehicleType"]
+  status: "PENDING_DISPUTE"
+  createdAt: string
+}
+
+export const pendingRegistrationMessage = "Registration pending dispute review. This vehicle can’t be used for booking."
+
 export const vehiclesApi = {
+  async claims(): Promise<RegistrationClaim[]> {
+    const response = await request<ApiResponse<RegistrationClaim[]>>("/registration-claims", "GET", undefined, "/api/vehicles")
+    if (!response.success || !Array.isArray(response.data)) throw new Error("Could not confirm registration status. Please refresh.")
+    return response.data
+  },
   async list(): Promise<RegisteredVehicle[]> {
     const response = await request<ApiResponse<RegisteredVehicle[]>>(
       "",
@@ -66,12 +85,7 @@ export const vehiclesApi = {
   },
 
   async save(input: VehicleInput, id?: string): Promise<RegisteredVehicle> {
-    try {
-      if (new URL(input.imageReference).protocol !== "https:")
-        throw new Error("Invalid protocol")
-    } catch {
-      throw new Error("Vehicle image must be a valid HTTPS URL.")
-    }
+    if (!input.imageAssetId) throw new Error("Upload a vehicle image first.")
     const response = await request<ApiResponse<RegisteredVehicle>>(
       id ? `/${encodeURIComponent(id)}` : "",
       id ? "PATCH" : "POST",
