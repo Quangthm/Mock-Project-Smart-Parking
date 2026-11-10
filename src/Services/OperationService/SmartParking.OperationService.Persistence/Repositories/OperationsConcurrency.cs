@@ -6,6 +6,7 @@ namespace SmartParking.OperationService.Persistence.Repositories;
 public sealed class OperationsConcurrency(ReservationDbContext db) : IOperationsConcurrency
 {
     private readonly HashSet<(Guid Transaction, Guid Site)> sites = [];
+    private readonly HashSet<(Guid Transaction, string Plate)> plates = [];
     public async Task LockSiteAsync(Guid siteId, CancellationToken ct)
     {
         var transaction = db.Database.CurrentTransaction ?? throw new InvalidOperationException("Site guard requires a UoW transaction.");
@@ -16,9 +17,13 @@ public sealed class OperationsConcurrency(ReservationDbContext db) : IOperations
     }
     public async Task LockVehicleAsync(string identity, CancellationToken ct)
     {
-        if (db.Database.CurrentTransaction is null) throw new InvalidOperationException("Vehicle guard requires a UoW transaction.");
+        var transaction = db.Database.CurrentTransaction ?? throw new InvalidOperationException("Vehicle guard requires a UoW transaction.");
+        if (string.IsNullOrWhiteSpace(identity) || Domain.GateRules.NormalizePlate(identity) != identity)
+            throw new InvalidOperationException("Vehicle guard requires the canonical plate.");
         var key = "vehicle-use:" + identity;
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", ct);
+        plates.Add((transaction.TransactionId, identity));
     }
     public bool HoldsSite(Guid siteId) => db.Database.CurrentTransaction is { } transaction && sites.Contains((transaction.TransactionId, siteId));
+    public bool HoldsPlate(string? plate) => plate is not null && db.Database.CurrentTransaction is { } transaction && plates.Contains((transaction.TransactionId, plate));
 }

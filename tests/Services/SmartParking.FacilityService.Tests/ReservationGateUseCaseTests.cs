@@ -33,7 +33,7 @@ public sealed class ReservationGateUseCaseTests
         var result = await services.GetRequiredService<IMediator>().Send(new CheckInWalkInCommand(data.Site, "29A-12345", null, "CAR"));
         Assert.Equal("29A12345", data.Session!.NormalizedPlate);
         Assert.Equal(data.Session.Id, result.Id);
-        Assert.Equal(new[] { "identity", "begin", "guard", "active-read", "add-session", "audit", "save", "commit" }, data.Calls);
+        Assert.Equal(new[] { "identity", "begin", "plate-guard", "guard", "active-read", "add-session", "audit", "save", "commit" }, data.Calls);
     }
 
     [Fact]
@@ -131,7 +131,13 @@ public sealed class ReservationGateUseCaseTests
         public bool FailAudit;
         public Task<OperatorSiteScope> RequireSiteAsync(Guid site, CancellationToken ct) { Calls.Add("identity"); return Task.FromResult(new OperatorSiteScope(Guid.NewGuid(), Tenant, Site)); }
         public Task LockSiteAsync(Guid site, CancellationToken ct) { Calls.Add("guard"); return Task.CompletedTask; }
-        public Task LockVehicleAsync(string id, CancellationToken ct) => Task.CompletedTask;
+        public Task LockVehicleAsync(string id, CancellationToken ct)
+        {
+            Assert.Equal(GateRules.NormalizePlate(id), id);
+            Assert.True(Calls.LastIndexOf("guard") < Calls.LastIndexOf("begin"));
+            Calls.Add("plate-guard");
+            return Task.CompletedTask;
+        }
         public Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct) { Calls.Add("begin"); return Task.FromResult<IUnitOfWorkTransaction>(this); }
         public Task<int> SaveChangesAsync(CancellationToken ct = default) { Calls.Add("save"); return Task.FromResult(1); }
         public Task CommitAsync(CancellationToken ct) { Calls.Add("commit"); return Task.CompletedTask; }

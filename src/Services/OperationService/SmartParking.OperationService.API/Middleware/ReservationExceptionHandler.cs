@@ -38,7 +38,11 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         }
         else if (exception is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn }
             && (context.Request.Path.StartsWithSegments("/api/reservations") ||
-                context.Request.Path.StartsWithSegments("/api/reservation-requests") || context.Request.Path.StartsWithSegments("/api/parking-sessions")))
+                context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
+                context.Request.Path.StartsWithSegments("/api/me/reservations") ||
+                context.Request.Path.StartsWithSegments("/api/parking-sessions")))
             result = (503, "PROTOTYPE_SCHEMA_NOT_READY", "Reservation data is unavailable until database reconciliation is complete.");
         else if (Known.TryGetValue(exception.GetType(), out var map)) result = map(exception);
         else logger.LogError("Operations request failed ({FailureType}); trace {TraceId}.", exception.GetType().Name, context.TraceIdentifier);

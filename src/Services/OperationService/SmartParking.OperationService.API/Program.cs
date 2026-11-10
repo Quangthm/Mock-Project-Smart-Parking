@@ -47,7 +47,10 @@ public static class OperationHost
         app.Use(async (context, next) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            if (!admissionEnabled && context.Request.Path.StartsWithSegments("/api/reservation-requests"))
+            if (!admissionEnabled && (context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
+                context.Request.Path.StartsWithSegments("/api/me/reservations")))
             {
                 context.Response.StatusCode = 503;
                 if (!HttpMethods.IsHead(context.Request.Method))

@@ -1,17 +1,17 @@
 # Reservation first slice — frontend handoff and readiness
 
-Reviewed 9 November 2026 in the local SPARK-273 checkout. Source inspection only: no frontend changes, frontend build, application startup, live API test or Docker publish verification was performed. Backend compilation after the refactor remains unverified. This is a backlog for frontend/backend teammates, not a claim that bookings work.
+Reviewed 9 November 2026 in the local SPARK-273 checkout. Source inspection only: no frontend changes, frontend build, application startup, live API test or Docker publish verification was performed by the agent. The user subsequently reported a successful first-slice backend build and deferred tests until the booking workflow is ready. The resumed scope is booking through confirmed reservation, with producer implementations retained by teammates. This is a backlog for frontend/backend teammates, not a claim that bookings work. See the [continuation design and unresolved decisions](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#booking-through-confirmation-continuation-review--9-november).
 
 ## What can be tested now
 
-After the current backend passes build/tests and is deployed with aligned schemas, credentials and messaging, Postman or another HTTP client can exercise **admission and receipt**, not a valid confirmed booking:
+Once deployed with aligned schemas, credentials and messaging, Postman or another HTTP client can exercise the existing **admission and receipt**, not a valid confirmed booking. The user has chosen to defer this testing until the next phase is implemented:
 
 1. Sign in as a real active Driver and obtain its JWT.
 2. POST `/api/reservation-requests` with a UUID `Idempotency-Key` and the documented intent body.
 3. GET the returned receipt Location using the same Account.
-4. Observe pending authorization, denial, timeout or the deliberate `FAILED_DEPENDENCY / RESERVATION_FINALIZATION_NOT_READY` result after Allowed. There must be no booking, capacity claim, payment order or refund effect.
+4. Observe pending authorization, denial or timeout. Allowed now proceeds to `PREPARING` in the source draft and persists the one-time vehicle binding. Missing owner integration keeps valid booking progression gated; expired/invalid terms can reject the request. The old `RESERVATION_FINALIZATION_NOT_READY` terminal behavior is superseded.
 
-Required IDs and terms fields currently undergo shape checks; admission does not prove vehicle ownership, site/slot validity, quote issuance or commercial acceptance. Fabricated terms IDs may exercise the gated admission contract in an isolated diagnostic test, but must never be presented as a valid reviewed booking. No live terms endpoint exists yet.
+Admission alone does not prove site/slot capacity, quote issuance or commercial acceptance. Preview and review routes now exist in source but return unavailable with the default missing producer adapters. Do not fabricate terms to present a valid booking. Current source has not passed a fresh build or deployment verification. See the [producer handoff and remaining Operations work](2026-11-09-reservation-producer-handoff.md).
 
 The current frontend does not submit/poll these requests. Postman is a convenient diagnostic client, not an architectural prerequisite. Once backend behavior and frontend integration are implemented, the same flow can be tested in the browser. Changing test client cannot bypass the finalization gate.
 
@@ -32,13 +32,13 @@ See [API implementation/proposal status](../../03-design/api/reservation-first-s
 
 | Priority / owner | Work | Completion condition / dependency |
 |---|---|---|
-| P0 / Operations + Facility + User | Wire authoritative verified own-CAR binding, actual site/slot eligibility, database policies, concurrency-safe vehicle/resource/quota acceptance | Real site/slot/vehicle facts are validated, including same stable vehicle across lots and live holds. Local browser state never decides capacity. |
+| P0 / Operations + Facility + User | Complete site/slot eligibility and guarded plate/resource/quota acceptance; binding lookup now returns canonical plate | Cross-site plate identity includes guest visits. Binding is persisted once per workflow; local browser state never decides capacity. |
 | P0 / Payment + coverage owners | Implement the published versioned quote and coordinated coverage producer contracts | Review/acceptance uses real versions and financial terms; no missing-price-to-zero fallback. |
-| P0 / Operations + architecture owner | Complete reviewed strict commit-before-start evidence and finalization path | D4c is demonstrated; zero-price bookings also stay gated until then. Do not quietly change cutoff semantics. |
-| P0 / Operations | Complete booking lifecycle, allocation/recovery, F/T handling, refund intents and cancellation orchestration needed by the first slice | Rules are integrated into durable workflows; pure Domain tests alone are insufficient. |
-| P0 / API owners + frontend | Finalize own-booking list/detail/cancellation routes and response fields | Proposed Driver `/api/reservations` list conflicts with the existing Operator route; resolve before implementing a client. Do not treat proposed routes as deployed. |
+| P0 / Operations + QA | Verify final guarded evaluation checkpoint and atomic confirmation | Evaluation must be before T; commit may finish later. Both paid and zero-price paths require durable commit before exposure. This explicitly approved rule replaces commit-time evidence. |
+| P0 / Operations | Complete booking-through-confirmation, hold expiry and late/additional collection reconciliation | Allocation/recovery, scan, cancellation and checkout are next phase. Unavailable adapters and an incomplete capacity evaluator still block live booking. |
+| P0 / API owners + frontend | Integrate current own reads at `/api/me/reservations` and `/{id}` | These avoid the Operator route. Current summary fields/pagination are in API design; cancellation remains proposed. |
 | P1 / frontend | Add an Operations API adapter for request admission and own receipt reads using existing auth conventions and configured base URL | Stable per-intent idempotency key, same-key retry after ambiguous network outcome, receipt resumption after refresh, Account-scoped isolation. No bearer/key secrets persisted in ordinary UI state. |
-| P1 / frontend | Separate request progress from booking lifecycle | 202 means request received, not reserved. Display pending/denied/unavailable honestly. `RESERVATION_FINALIZATION_NOT_READY` shows service unavailable, not confirmed or paid. No automatic creation loop after terminal failure. |
+| P1 / frontend | Separate request progress from booking lifecycle | 202 means received; `BOOKING` is not confirmed. Display pending/denied/unavailable honestly; do not create a new intent automatically after an ambiguous result. |
 | P1 / frontend, after producer readiness | Add terms review and stale-terms recovery | Display server-issued versioned quote, policy values and deadlines. Changed terms require renewed review. No business defaults/horizon/hold expiry invented in browser. |
 | P1 / frontend, after booking/order readiness | Pass the actual accepted order into Payment flow | Handle payment pending/unknown/late collection separately from reservation confirmation. No cash or QR shortcut creates entitlement. |
 | P1 / frontend, after own-read readiness | Replace local booking sources in ActiveBookings/history/detail | Pending receipts may exist without bookings. Display requested vs assigned/observed resource; payment/refund, arrival, parking and departure remain distinct. |
@@ -64,4 +64,26 @@ Recorded after the user requested stopping at the first-slice Git summary so the
 
 Future design must preserve once-per-workflow actor authorization, idempotency, producer-verified payment outcomes, server-issued terms, capacity safety and strict D4c. The second browser call/redirect alone is not trusted proof of payment. Receipt polling/recovery may be needed while asynchronous work completes; the user's two interaction points are not a ban on loading lots, checking availability or observing status.
 
-Before implementing dependent behavior, resolve: the exact post-payment endpoint semantics and provider verification/reconciliation; cash/deferred payment and zero-price/coverage paths; authoritative terms disclosure if returned terms differ from what was shown; allocation/hold policy when inputs are not complete; and D4c evidence. Do not silently choose these while preparing this commit. Keep full booking implementation paused until the user resumes after committing.
+The user resumed implementation and approved the flow below and final evaluation-checkpoint cutoff. Producer readiness, method support and capacity correctness remain release gates; do not interpret the earlier pause-at-commit instruction as still active.
+
+## Approved client flow and examples
+
+1. As site/slot/time change, call `POST /api/reservation-price-previews`. Display the server-calculated amount on the form, before proceeding with the selected method. Vehicle/method may be absent for this preview. Keep any existing browser calculation responsive, but refresh from authoritative pricing and discard responses for an older form selection. Never submit a browser amount as authority.
+2. After vehicle, interval and method are complete, call `POST /api/reservation-terms`. Show the returned commercial and operational terms. If an updated amount differs from the earlier display, require acceptance of the updated terms. No layout change is required merely to reorder the inputs.
+3. On acceptance, POST `/api/reservation-requests` with the reviewed terms ID/version, exact selection, `mode=SPECIFIC_SLOT`, paymentMethod and a stable UUID Idempotency-Key. Preserve that key through retries of the same intent.
+4. Poll the returned receipt. Once it has a reservation ID, read `/api/me/reservations/{id}`. When an actual orderId exists, invoke the Payment owner's protected checkout for that order. Display the exact returned H; the browser must not extend it. Genuine zero-price terms use no Payment order.
+5. After the payment redirect/interaction, GET the same receipt/booking again. Continue pending display while owner verification and durable commit are unresolved. Closing the browser must not stop the backend. Show success/redirect to confirmed details only when the backend state is confirmed; provider success alone is insufficient.
+
+Example: Driver selects A3 for 11:00–15:00. Preview shows 4,000 VND; after a 50% prepayment method/terms selection, review shows 2,000 VND due now. These are example owner terms, not a universal deposit default. Submission at 10:30 with an effective five-minute hold shows H=10:35. Payment verified while the hold is live may progress; a redirect at 10:34 does not itself confirm. If confirmation evaluation time is 10:59:59 and durable commit completes at 11:00:02, the approved checkpoint rule can qualify. A debit before 11:00 first verified after 11:00 cannot create a new qualifying confirmation.
+
+Example: the user refreshes after submitting. Resume the same receipt/key; do not create another booking/order. If the form is edited after review, get new terms and a new intent key. If payment is UNKNOWN, display pending reconciliation rather than offering a fresh charge. Actual Payment QR/bank fields must come from the provider response, never local placeholders.
+
+## Next-phase scan, reallocation and checkout handoff
+
+The user explicitly excludes these from the current through-confirmation deliverable. Preserve the [approved rules and remaining questions](../decision-log/2026-11-09-reservation-confirmation-and-arrival.md):
+
+- Allow walk-in despite the plate's future reservation. Correlate by canonical plate and authoritative check-in/scan/assignment evidence.
+- Early entry before T on the intended slot adds early-time charges. If observed elsewhere, recover/reallocate and release unused original protection once, while preserving actual occupancy and recovering affected future claimants within allocation lead.
+- Four booked hours at 1,000 VND/hour, 2,000 already collected, and one early + one booked hour used means **3,000 VND** due at checkout. The full booked price remains due; credit money once, no refund solely for unused booked time.
+- Wrong parking adds a separate fee. Admin defines default/bounds, Owner may override per lot. Unusable assigned slot or Operator/system-authorized relocation waives it. Exact-T arrival is on time; enabled late tolerance has the existing minimum 15 minutes. Amount/formula and complete evidence predicates remain for next-phase design; do not invent UI or backend defaults.
+- Show requested slot, assigned slot and observed slot distinctly. Audit history is produced through durable events and consumed by its owning service.

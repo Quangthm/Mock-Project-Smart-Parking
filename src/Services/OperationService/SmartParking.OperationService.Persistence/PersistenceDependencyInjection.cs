@@ -17,11 +17,16 @@ public static class PersistenceDependencyInjection
             ?? throw new InvalidOperationException("Configure ConnectionStrings:Reservation.");
 
         services.AddDbContext<ReservationDbContext>(options => options.UseNpgsql(connectionString));
-        services.AddScoped<IReservationRepository, ReservationRepository>();
+        services.AddScoped<ReservationRepository>();
+        services.AddScoped<IReservationRepository>(provider => provider.GetRequiredService<ReservationRepository>());
+        services.AddScoped<Application.Reservations.IReservationBookingRepository>(provider => provider.GetRequiredService<ReservationRepository>());
+        services.AddScoped<Application.Reservations.IReservationTermsRepository, ReservationTermsRepository>();
+        services.AddScoped<Application.Reservations.IReservationFacilityDependencyRepository, ReservationFacilityDependencyRepository>();
         services.AddScoped<IParkingSessionRepository, ParkingSessionRepository>();
         services.AddScoped<ISlotAllocationRepository, SlotAllocationRepository>();
         services.TryAddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<Application.Reservations.IReservationRequestRepository, ReservationRequestRepository>();
+        services.AddScoped<Application.Reservations.IReservationWorkflowConcurrency, ReservationWorkflowConcurrency>();
         services.AddScoped<Application.Reservations.IReservationPolicyRepository, ReservationPolicyRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped<IStructureRepository, StructureRepository>();

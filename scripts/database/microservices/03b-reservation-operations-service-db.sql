@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     operation TEXT NOT NULL CHECK (operation = 'CREATE_RESERVATION'),
     intent_json JSONB NOT NULL,
     fingerprint TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'DENIED', 'FAILED_DEPENDENCY')),
+    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'BOOKING', 'COMPLETED', 'EXPIRED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,
     overall_deadline TIMESTAMPTZ NOT NULL,
@@ -27,12 +27,59 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     decision_id UUID,
     decided_at TIMESTAMPTZ,
     awaiting_reply BOOLEAN NOT NULL,
+    reservation_id UUID,
+    vehicle_binding_state TEXT CHECK (vehicle_binding_state IN ('ACTIVE', 'INELIGIBLE')),
+    vehicle_binding_revision BIGINT CHECK (vehicle_binding_revision > 0),
+    vehicle_binding_checked_at TIMESTAMPTZ,
+    vehicle_plate TEXT,
     UNIQUE (account_id, operation, idempotency_key),
     CHECK (attempt_started_at < attempt_deadline AND attempt_deadline <= overall_deadline),
     CHECK (admitted_at < overall_deadline)
 );
 CREATE INDEX IF NOT EXISTS ix_reservation_requests_due ON reservation_requests(next_action_at, id)
-    WHERE state = 'PENDING_AUTHORIZATION';
+    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'BOOKING');
+
+-- Review snapshots are immutable; acceptance binds each review to one workflow.
+CREATE TABLE IF NOT EXISTS reservation_terms (
+    id UUID PRIMARY KEY,
+    account_id UUID NOT NULL,
+    intent_fingerprint TEXT NOT NULL,
+    version TEXT NOT NULL,
+    valid_until TIMESTAMPTZ NOT NULL,
+    snapshot_json JSONB NOT NULL CHECK (jsonb_typeof(snapshot_json) = 'object'),
+    accepted_request_id UUID UNIQUE REFERENCES reservation_requests(id)
+);
+
+-- Reverse Facility handshake: per-workflow evidence, not a mirrored structure catalogue or audit log.
+CREATE TABLE IF NOT EXISTS reservation_facility_dependencies (
+    id UUID PRIMARY KEY,
+    workflow_id UUID NOT NULL REFERENCES reservation_requests(id),
+    purpose TEXT NOT NULL CHECK (purpose IN ('ADMISSION', 'CONFIRMATION')),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    slot_id UUID NOT NULL,
+    intent_fingerprint TEXT NOT NULL,
+    deadline TIMESTAMPTZ NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('PREPARING', 'HELD', 'READY', 'ABORTING', 'COMPLETED')),
+    snapshot_json JSONB,
+    snapshot_fingerprint TEXT,
+    outcome_json JSONB,
+    abort_reason TEXT,
+    resolution TEXT CHECK (resolution IN ('COMMITTED', 'ABORTED')),
+    version INTEGER NOT NULL CHECK (version > 0),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    next_action_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    UNIQUE (workflow_id, purpose),
+    CHECK (created_at < deadline),
+    CHECK (state NOT IN ('HELD', 'READY') OR (snapshot_json IS NOT NULL AND snapshot_fingerprint IS NOT NULL)),
+    CHECK (state <> 'READY' OR outcome_json IS NOT NULL),
+    CHECK (state <> 'ABORTING' OR abort_reason IS NOT NULL),
+    CHECK ((state = 'COMPLETED') = (completed_at IS NOT NULL AND resolution IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS ix_reservation_facility_dependencies_due
+    ON reservation_facility_dependencies(next_action_at, id) WHERE state <> 'COMPLETED';
 
 -- MassTransit 8.5.7 EF inbox/outbox mapping, same owning ReservationDbContext.
 CREATE TABLE IF NOT EXISTS "InboxState" (
@@ -210,6 +257,19 @@ CREATE INDEX IF NOT EXISTS idx_site_capacity_pools_tenant_site ON site_capacity_
 -- Áp dụng cơ chế Time-range overlap; không dùng scalar counter phẳng
 CREATE TABLE IF NOT EXISTS reservations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID UNIQUE REFERENCES reservation_requests(id),
+    vehicle_id UUID,
+    terms_id UUID REFERENCES reservation_terms(id),
+    terms_version TEXT,
+    selected_payment_method TEXT,
+    booked_amount NUMERIC(18,2) CHECK (booked_amount >= 0),
+    deposit_amount NUMERIC(18,2) CHECK (deposit_amount >= 0),
+    currency TEXT,
+    payment_order_id UUID UNIQUE,
+    collection_id UUID UNIQUE,
+    confirmation_effect_id UUID UNIQUE,
+    confirmation_evaluated_at TIMESTAMPTZ,
+    claim_end_time TIMESTAMPTZ,
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
     account_id UUID NOT NULL, 
@@ -233,6 +293,13 @@ CREATE TABLE IF NOT EXISTS reservations (
     version INT NOT NULL DEFAULT 1, -- Optimistic Concurrency Control
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (expected_end_time > expected_start_time),
+    CHECK (claim_end_time IS NULL OR claim_end_time >= expected_end_time),
+    CHECK (request_id IS NULL OR (vehicle_id IS NOT NULL AND normalized_plate IS NOT NULL AND
+        terms_id IS NOT NULL AND terms_version IS NOT NULL AND booked_amount IS NOT NULL AND
+        deposit_amount IS NOT NULL AND currency IS NOT NULL AND currency = 'VND' AND accepted_pricing_snapshot IS NOT NULL AND
+        accepted_operational_policy_snapshot IS NOT NULL)),
+    CHECK (request_id IS NULL OR status NOT IN ('CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED') OR
+        (confirmation_evaluated_at IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_at = confirmation_evaluated_at AND confirmed_at < expected_start_time AND confirmation_effect_id IS NOT NULL)),
     CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL)),
     CONSTRAINT no_overlapping_reservations_per_vehicle EXCLUDE USING gist (
         tenant_id WITH =,

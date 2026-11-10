@@ -6,8 +6,8 @@ using SmartParking.OperationService.Domain;
 
 namespace SmartParking.OperationService.Persistence.Repositories;
 
-public sealed class ReservationRepository(ReservationDbContext db)
-    : GenericRepository<ReservationRow>(db), IReservationRepository
+public sealed partial class ReservationRepository(ReservationDbContext db)
+    : GenericRepository<ReservationRow>(db), Application.Reservations.IReservationBookingRepository
 {
     public async Task<ReservationRow?> FindForUpdateAsync(
         Guid tenantId, Guid siteId, Guid reservationId, CancellationToken cancellationToken)

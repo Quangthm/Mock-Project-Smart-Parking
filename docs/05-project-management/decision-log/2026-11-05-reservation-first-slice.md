@@ -28,7 +28,9 @@ Use Operations authoritative time, UTC storage and accepted effective policy ver
 
 **D4/D4a/D4b examples:** for T=10:00 and F=09:45, unfulfilled at 09:45 earns the right. Recovery at 09:47 preserves it. Gate arrival alone does not remove it; accepted actual entry does. At 10:00 an unused confirmed booking still lacking a usable assignment takes facility-failure cancellation, not voluntary cancellation or unpaid expiry.
 
-## D4c — payment and confirmation cutoff
+## D4c — payment and confirmation cutoff (amended 10 November)
+
+The [final guarded evaluation-checkpoint rule](2026-11-10-reservation-evaluation-checkpoint.md) supersedes the historical commit cutoff below. Other D1–D4 decisions remain.
 
 Approved Option A: `H = min(hold creation + effective PAYMENT_HOLD_DURATION, T)`; ordinary default 5 minutes. Disclose H before payment, pass it to Payment and enforce it server-side. Operations confirmation must **commit strictly before T**. Equality is late. Provider timestamps and browser redirects cannot backdate confirmation.
 
@@ -48,7 +50,7 @@ The user's 8 November implementation instructions supersede source proposals to 
 
 ## Implementation gates
 
-- Actual commit-time evidence for D4c is OPEN; pre-commit timestamps do not establish it. Do not enable confirmation based on an unproved surrogate boundary.
+- D4c now uses the explicitly approved final evaluation timestamp. Commit-metadata proof is removed; deployment verification of guarded evaluation and atomic persistence remains required.
 - Current-access message trust, versioned quote/coverage acceptance and cross-owner resource handshakes need explicit contracts. A remote snapshot alone cannot make concurrent owner changes atomic.
 - Package approval, runtime wiring, schema consolidation, competing-writer coordination and fresh acceptance evidence remain pending. No API is declared implemented by this decision.
 

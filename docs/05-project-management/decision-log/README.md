@@ -4,6 +4,7 @@ Record significant project decisions, their status, source, and affected documen
 Approved decisions must be integrated into canonical requirements, rather than left only in this log.
 
 - [5 November reservation first slice](2026-11-05-reservation-first-slice.md): D1–D4c, CAR/Specific Slot, cross-lot vehicle exclusivity, earned facility-failure rights, recovery through start and strict pre-start confirmation. Supersedes the optional Account cap and October 27 T−5 milestones; implementation/acceptance pending.
+- [9 November reservation confirmation and arrival amendments](2026-11-09-reservation-confirmation-and-arrival.md): approved PostgreSQL-recorded cutoff, plate identity, one-time binding, live form amount, walk-in/early-arrival rules and full booked minimum; wrong-parking policy and next-phase boundary.
 
 - [Approved v1.1 change register, revision 0.2](2026-10-20-approved-v1.1-changes.md): project-lead decisions dated 20 October 2026 (Asia/Saigon), wording preserved from the handoff, with Markdown trailing whitespace normalized for diff checks. Its completion statements describe preparation of that register, not SPARK-296 execution.
 - [21 October VNeID GUID clarification](2026-10-21-vneid-simulation-guid.md): the fake API returns a GUID substitute persisted against the user; implements the lead clarification under V11-06.
@@ -19,3 +20,5 @@ Approved decisions must be integrated into canonical requirements, rather than l
 - [Release review and ownership actions](pm-release-actions.md).
 
 Earlier dated decision/review records remain historical sources. v1.0 was an unsigned review candidate. The current package is a **v1.1 documentation review candidate based on approved decisions**; requirements approval does not prove API approval, implementation or product acceptance.
+
+- [10 November confirmation evaluation checkpoint](2026-11-10-reservation-evaluation-checkpoint.md): replaces commit-time cutoff and candidate proof with one guarded database evaluation timestamp; durable commit still required for exposure.

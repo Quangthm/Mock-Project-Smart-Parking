@@ -16,8 +16,9 @@ public sealed class CheckInWalkInCommandHandler(IOperatorIdentityClient identity
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
         await using var transaction = await work.BeginTransactionAsync(ct);
-        await guards.LockSiteAsync(request.SiteId, ct);
         var plate = GateRules.NormalizePlate(request.PlateNumber);
+        await guards.LockVehicleAsync(plate, ct);
+        await guards.LockSiteAsync(request.SiteId, ct);
         if (await sessions.HasActivePlateAsync(scope.TenantId, request.SiteId, plate, ct))
             throw new ReservationGateException(409, "VEHICLE_ALREADY_INSIDE", "An active parking session already exists for this plate.");
         var now = clock.GetUtcNow();
@@ -43,6 +44,7 @@ public sealed class CheckOutWalkInCommandHandler(IOperatorIdentityClient identit
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
         await using var transaction = await work.BeginTransactionAsync(ct);
+        await guards.LockVehicleAsync(GateRules.NormalizePlate(request.PlateNumber), ct);
         await guards.LockSiteAsync(request.SiteId, ct);
         var session = await sessions.FindForUpdateAsync(scope.TenantId, request.SiteId, request.SessionId, ct);
         if (session is null || session.ReservationId is not null)
@@ -69,7 +71,10 @@ public sealed class CheckInReservationCommandHandler(IOperatorIdentityClient ide
     public async Task<ReservationGateEntry> Handle(CheckInReservationCommand request, CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
+        var observed = await reservations.FindByIdAsync(scope.TenantId, request.SiteId, request.ReservationId, ct)
+            ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");
         await using var transaction = await work.BeginTransactionAsync(ct);
+        await guards.LockVehicleAsync(GateRules.NormalizePlate(observed.LicensePlate), ct);
         await guards.LockSiteAsync(request.SiteId, ct);
         var reservation = await reservations.FindForUpdateAsync(scope.TenantId, request.SiteId, request.ReservationId, ct)
             ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");
@@ -107,7 +112,10 @@ public sealed class CheckOutReservationCommandHandler(IOperatorIdentityClient id
     public async Task<ReservationGateEntry> Handle(CheckOutReservationCommand request, CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
+        var observed = await reservations.FindByIdAsync(scope.TenantId, request.SiteId, request.ReservationId, ct)
+            ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");
         await using var transaction = await work.BeginTransactionAsync(ct);
+        await guards.LockVehicleAsync(GateRules.NormalizePlate(observed.LicensePlate), ct);
         await guards.LockSiteAsync(request.SiteId, ct);
         var reservation = await reservations.FindForUpdateAsync(scope.TenantId, request.SiteId, request.ReservationId, ct)
             ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found at this site.");

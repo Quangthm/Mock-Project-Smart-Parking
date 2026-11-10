@@ -1,14 +1,16 @@
 # Reservation first slice — deployment verification
 
-Status on 9 November 2026: **UNVERIFIED after the current refactor.** No application, database or broker was started by the agent. The last requested build did not execute because automatic approval review hit its usage limit. Earlier compilation and unrelated vehicle tests are not evidence for this checkout. Run the inexpensive compile/offline checks first, then use an isolated deployment for database/broker checks.
+Status update on 9 November 2026: **First-slice build success reported by the user; test execution explicitly deferred by the user until booking-through-confirmation is ready for frontend/Postman verification.** The observed committed baseline is `0a2383bdfedf34058c4a2bae99c1ae9087162da0`. Build command/output was not supplied; the agent has not independently run it. Earlier agent build attempts and approval-system failures are historical. Database/broker/runtime checks below remain unverified and are instructions for the later deployment acceptance, not tasks to run now. A later source change requires fresh build evidence.
 
 ## Current scope and gates
 
-Implemented source: Operations-local JWT validation; durable reservation admission/own receipt; bounded Account-current attempts and UserService durable decisions; database-backed policy resolution; direct Gate/structure handlers with repositories/UoW; durable Gate audit events.
+Implemented/draft source: Operations-local JWT validation; admission/receipt and Account-current replay; database policy revisions; direct Gate/structure handlers and durable audit; preview/review/own-booking routes; one-time canonical-plate binding; plate-before-site Gate guards; booking hold/evaluation-checkpoint progression. These additions have **not** passed a fresh build. The latest attempted Operations `dotnet build --no-restore --nologo` returned exit 1, zero warnings/errors and no diagnostic. The user's prior successful build covers only the committed first slice.
 
-Not implemented or not enabled as a complete booking workflow: authoritative vehicle/Facility acceptance; versioned quote/coverage producers; cancellation workflow; allocation/recovery/F/T scheduling; cross-site stable-vehicle conflict enforcement; durable refund intents; actual confirmation commit evidence. Pure rule tests do not establish these integrations. A timely Allowed decision deliberately ends `FAILED_DEPENDENCY / RESERVATION_FINALIZATION_NOT_READY` with no booking, claim or payment effect. Zero-price confirmation is also gated. Do not enable a booking-finalization path until D4c and owner integrations are reviewed.
+Live booking remains unavailable: commercial/Facility adapters and capacity acceptance fail closed. Operations still needs complete capacity/restriction enforcement, external-call staging outside guarded transactions, and post-terminal financial notification/reconciliation. See [producer handoff](../../05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md). Allowed now enters PREPARING rather than the old deliberate FINALIZATION_NOT_READY result. No paid or zero-price booking is ready for end-to-end acceptance. Scan/reallocation/cancellation/checkout are next phase by user choice; do not invent fee defaults to enable them.
 
 ## 1. Compile and focused tests
+
+**Do not execute this checklist yet solely to exercise placeholder integrations.** The user deferred tests until the through-confirmation workflow is complete. First resolve the producer/capacity gates above. Keep the task active and distinguish source preparation from acceptance.
 
 From the repository root on a machine with .NET SDK 10 and restored package access:
 
@@ -18,6 +20,25 @@ dotnet build SmartParking.slnx --no-restore --nologo
 dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-build --nologo --filter 'FullyQualifiedName~ReservationFirstSliceRuleTests|FullyQualifiedName~ReservationAdmissionRuleTests|FullyQualifiedName~ReservationPolicyTests|FullyQualifiedName~ConsumerJwksCacheTests|FullyQualifiedName~ReservationGateUseCaseTests|FullyQualifiedName~ReservationEfModelMapsExistingOperationsTablesAndKeys'
 dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj --no-build --nologo --filter 'FullyQualifiedName~AccountCurrentAuthorityTests|FullyQualifiedName~AccountCurrentWorkflowTests|FullyQualifiedName~ServiceLocalAccountAccessContractTests|FullyQualifiedName~StructureHttpContractTests'
 ```
+
+Add `FullyQualifiedName~ReservationEvaluationCheckpointTests` to the focused Operations/Facility test filter for the new checkpoint rules. Run the updated Gate handler tests too: they now expect plate guard before site guard. These tests are authored/updated but NOT RUN; pure Domain tests cannot establish guarded checkpoint/commit recovery or cross-process locking.
+
+Also include `FullyQualifiedName~ReservationFacilityDependencyTests`. The Operations reverse handshake draft has Domain state, repository/UoW, MediatR continuation and recovery independent of receipt completion. See [Facility dependency checkpoint](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md#operations-implementation-checkpoint--10-november). Joint deployment must verify exact-token abort fencing, lost replies, deletion races and no reciprocal hold deadlock. Dedicated Operations credential is approved; its producer transport is not yet delivered/configured.
+
+### Through-confirmation deployment acceptance additions
+
+Use an isolated, aligned database and actual restricted application role. Preserve existing-volume data; applying the original CREATE declarations does not upgrade old tables, remove deployed triggers or repair previous test fixtures. No reset or overlay is authorized. The deployment owner must first reconcile the schema inventory and original-script diff.
+
+1. No commit-timestamp tracking or special metadata privileges are required. Use the normal Operations database role and confirm durable transaction behavior (`synchronous_commit=on`). Check final schema contains confirmation_evaluated_at and stable effect ID, with no candidate lifecycle. Inventory/reconcile any previously installed candidate schema/rows; CREATE declarations do not migrate them.
+2. Verify accepted reservation policy rows/default seed and explicit site late-tolerance choice. Read-only form review must return actual policy values/versions; missing rows must return unavailable. Change effective policy/quote between review and acceptance and require renewed terms. No in-memory fallback or fabricated quote.
+3. Log in as a real Driver. Preview a valid CAR slot/time before selecting method; complete the form, review, submit exact terms with one key, and poll receipt/own booking. Use the real resulting Payment order. Verify paid confirmation and a genuine owner-issued zero-price case. Do not use demo-pay, fake QR values or fabricated terms as evidence.
+4. For T=11:00, pause after successful guarded evaluation at 10:59:59 and commit at 11:00:02: confirmation must succeed and remain invisible until commit. Separately hold a competing lock until T so evaluation starts at/after T: reject. Verify exact equality and microsecond boundaries. No second deadline check or commit metadata lookup may be needed.
+5. Roll back a pre-T evaluation and retry after T: reject using a fresh timestamp. Lose the successful commit acknowledgement and restart after T: recover the same committed receipt/effect, with one outgoing fact and no extra charge. Verify booking, receipt, Facility READY and outbox rollback/commit atomically.
+6. Test paid and genuine zero-price paths with commit tracking off. Gate/read APIs must not expose uncommitted confirmation. After successful commit, expiry must preserve the confirmed booking. Test database outage and ambiguous commit recovery; never retry a new effect solely because the original response was lost.
+7. Race two sites for the same canonical plate, two holds, an existing guest visit, structure changes and physical entry. Verify guard order and database/UoW paths; a future reservation by itself must **not** reject walk-in. Validate capacity by distinct resource identities and half-open interval segments once R-ARCH-05 is resolved, not just aggregate counters.
+8. Exercise created/unknown/definitively-no-order outcomes at H; exact-payload replay; contradictory collection payload; additional collection after receipt completion; late collection at/after T; producer outage during reconciliation. The current terminal-notification gap must be closed before this check can pass. Reconciliation acceptance is not refund payout evidence.
+
+Record Git SHA plus uncommitted diff identity, commands, pass/fail/skip counts, actual producer versions, server settings and redacted evidence. Raw SQL, bulk updates, direct DbContext saves, cascades and uncoordinated writers can bypass C# guard/history checks; include every supported writer, and disclose any unverified bypass. Frontend is not modified by this task; [frontend handoff](../../05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md) is the client backlog.
 
 Stop on any build/test failure; report the first error and test summary without secrets. These tests verify pure rules, middleware adapters where present, and in-process handler behavior. They do not prove PostgreSQL transactions, broker delivery or live JWT challenge handling. Do not interpret skipped tests as passes.
 
@@ -87,7 +108,7 @@ Use a real Driver JWT and future booking instants. The API design contains the c
 | Valid intent | 202 only after receipt and authorization-request outbox commit |
 | Same Account/key/body, including concurrent replay | Same receipt; one initial attempt; changed body under same key is 409 |
 | Other Account reads receipt | Same 404 as an absent ID |
-| Timely current Allowed | Terminal `FAILED_DEPENDENCY / RESERVATION_FINALIZATION_NOT_READY`; zero reservation/session/claim/order/refund effects |
+| Timely current Allowed | PREPARING, then one persisted binding result; missing/invalid/expired terms or owner dependencies cannot produce booking/claim/order effects with current unavailable integrations |
 | Timely current Denied | `DENIED / CURRENT_ACCESS_DENIED`; no business effects |
 | Timeout/late or old attempt/wrong correlation response | No late progression; at most 3 distinct attempts, 5-second reply windows, 10/30-second waits, original 90-second deadline |
 | Restart after receipt commit/before delivery | Receipt survives; outbox and due work resume without duplicate booking effects |
@@ -117,7 +138,7 @@ Deployment checks that still require real PostgreSQL/RabbitMQ:
 
 Direct SQL, bulk EF updates, direct DbContext saves, cascades and any future writer that does not use the guarded UoW bypass the C# replacements. Database checks/FKs/uniqueness still apply, but these bypasses do not acquire the site guard, protect first-confirmation/snapshot history, or emit audit events. Restrict service write access and audit competing writers; no claim of database-wide enforcement is made.
 
-`confirmed_at` is historical state-write observation, **not commit evidence**. Before lifting D4c, the reviewed design must handle a transaction held across T, acknowledgement loss, crash/restart, time precision/skew and failover/metadata availability. A pre-commit check cannot establish strict commit-before-T. Do not use a passing pure deadline test as release approval.
+`confirmed_at` and `confirmation_evaluated_at` record the same guarded decision time for new workflow bookings; neither claims the actual commit time. The old candidate/metadata design is removed. Verify post-checkpoint delayed commit, lock-wait crossing T, rollback/retry and lost acknowledgement; pure Domain tests alone do not establish transactional behavior.
 
 Record checkout SHA plus dirty diff, test summaries, deployment versions and scenario outcomes in a report. Do not include credentials, JWTs, plates, images or raw provider errors.
 

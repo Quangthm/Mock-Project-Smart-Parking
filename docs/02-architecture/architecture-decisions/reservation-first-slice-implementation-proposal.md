@@ -1,8 +1,28 @@
 # Reservation first slice — implementation choices for review
 
-**Current status: the user superseded shared-project packaging on 9 November in favor of service-local implementations. Approved authentication settings, once-per-workflow authorization, and broker trust remain. R-ARCH-03 producer integration is delegated; R-ARCH-04 remains OPEN.** Prepared against local HEAD 7c47755d on 8–9 November 2026. [D1–D4c](../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md) remain unchanged. The user approved JWT bearer 10.0.12, AutoMapper 16.2.0, MassTransit RabbitMQ/EF 8.5.7 dependency additions, but explicitly requires confirmation to remain gated pending commit-evidence design.
+**Current status: WORK IN PROGRESS, not ready for live bookings.** The user approved the final database evaluation checkpoint on 10 November; see [current cutoff](../../05-project-management/decision-log/2026-11-10-reservation-evaluation-checkpoint.md). This replaces the candidate/commit-metadata design. Service-local code, once-per-workflow binding, durable Facility dependency and producer ownership remain. [Remaining tasks](../../05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md) distinguish unfinished Operations work from teammate producers.
 
 ## Established implementation direction
+
+### R-ARCH-05 — capacity resource facts, PROPOSED / approval required
+
+**Latest user steering:** reuse Facility's durable slot-management path for Operations dependencies on Facility, with an explicitly approved dedicated Operations credential restricted to the new endpoints. The earlier full-projection proposal below was not approved. Source inspection and the reverse prepare/commit/release contract are in [the durable Facility dependency handoff](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md). It reuses persisted tokens, atomic ready outcomes and fenced recovery, while requiring complete resource facts from a Facility-owned producer; it does not assume a full mirrored catalogue or an existing reverse API. Operations-side implementation may proceed; producer delivery and exact transport remain required for enablement.
+
+Inspection of the current draft found that `FacilityBookingFacts` carries slot eligibility/version but no complete resource inventory. Operations `site_capacity_pools` has aggregate counts, not identities for the occupied/protected/backup union. The current structure-site state only carries tenant/site/active. Implementing a capacity calculator from these counters would violate the approved distinct-resource rule. This is an Operations design dependency, not something a Payment quote can repair.
+
+**Proposed direction:** extend the existing Facility prepare/complete structure handshake to deliver a complete versioned resource snapshot for each affected site. Operations retains a read-only projection of Facility-owned facts: tenant/site, structure revision, resource ID, zone/pool/category compatibility, active/reachable status and fixed/dynamic backup configuration needed by this slice. Facility remains authority for structure; Operations remains authority for claims, occupancy, quota and allocation. Do not create a second structure-management API or allow Operations to edit Facility facts independently.
+
+During a prepared structure edit, keep the existing Operations hold blocking commitment mutations. Complete/release installs the snapshot and revision under the site guard in the same local transaction that resolves the hold; reject stale/mismatched/incomplete completion, and replay the same completed token. All Facility closure, slot retirement, backup and compatibility writers must participate. Initial bootstrap must use the same versioned protocol before bookings become ready. Owner implementation and authenticated wire details remain the Facility teammate's responsibility.
+
+Operations Domain projection entities and pure interval/capacity rules would consume these facts; an existing structure repository owns persistence, Application MediatR handlers coordinate and IUnitOfWork commits. Add final idempotent declarations only to the original Operations schema. Resource snapshots are configuration facts, not audit logs; publish audit facts through the outbox. Do not infer backup membership from a count or invent site defaults. Business policy revisions/default seed remain separate.
+
+The acceptance handler can then load the local snapshot under the guard, evaluate every interval boundary, union resource IDs, deduplicate a linked reservation/allocation/visit, enforce quota and plate exclusion, and reject an unavailable configuration. This also lets C# validate slot retirement/eligibility after removing database triggers. It does not solve Account restriction enforcement or late-money reconciliation by itself.
+
+**Alternative:** Facility supplies a durable reservation-specific resource lease/acceptance API rather than a local snapshot. This avoids storing the projection but adds remote lease expiry, replay and recovery to every capacity acceptance. A plain HTTP read cannot replace either coordinated protocol. The snapshot reuses the existing structure handshake and keeps guarded Operations decisions local; it requires a compatible owner rollout and stale-projection detection.
+
+This proposal is not approved merely by appearing here. The [coding guide's architecture gate](../../07-skills/SmartPark-Coding-Skill-v1.0.md#architecturedirection-approval-gate) requires approval before introducing this persisted cross-service projection. Existing broad approval to publish producer contracts does not silently decide this missing resource-data mechanism. No projection table or schema default has been added for it yet; capacity remains fail closed.
+
+For the resumed booking-through-confirmation scope and remaining decisions, see [the continuation review below](#booking-through-confirmation-continuation-review--9-november). Historical proposals and approvals remain recorded; the continuation does not silently approve new owner APIs or change D4c.
 
 Use the five existing Operations projects. API binds/maps/dispatches; direct MediatR handlers own use cases; aggregate repositories and UoW own reads/commits. Domain owns pure interval/state rules. Move existing gate/structure workflows out of stores and delete the forwarding StructureSafetyService; retain pure Domain policy. Shared authorization and external adapters remain legitimate ports.
 
@@ -34,16 +54,9 @@ Within Operations: proposed lock order is Account restriction → stable vehicle
 
 Cross-owner facts cannot be made atomic merely by local version comparisons. Needed decisions: who issues/binds/consumes a quote, when it expires, how coverage cancellation serializes with dependent booking acceptance, and how binding removal/transfer prevents a stale accepted CAR. Missing producer/handshake means the affected sale/finalization stays gated, not a guessed default. No temporary fake/free quote in a live path.
 
-## R-ARCH-04 — D4c commit evidence, explicitly unresolved
+## R-ARCH-04 — final evaluation checkpoint, approved 10 November
 
-The approved business boundary is Operations confirmation **commit strictly before T**, not provider time, C# clock check, row update, or BEFORE trigger timestamp. A transaction can pause after all these checks and commit after T. Removing the existing confirmation trigger must preserve immutable first-confirmation evidence in C#; that alone does not prove D4c.
-
-Two directions merit a separate focused design/proof:
-
-1. A durable candidate confirmation plus a post-commit observation/fence protocol. Keep the candidate inadmissible and do not publish confirmation/order-entitlement effects until authoritative evidence proves its qualifying commit. A read of the committed candidate observed before T can provide conservative positive evidence under a defined clock model. Lost acknowledgement or recovery after T without retained evidence remains unknown, not proof of failure or permission to backdate. Must specify the logical confirmation point, effect gating, recovery, claim release and false-negative behavior before approval.
-2. PostgreSQL commit metadata plus a durable evidence capture protocol. PostgreSQL documents `track_commit_timestamp` and `pg_xact_commit_timestamp`, with data available only for transactions after tracking is enabled and subject to cleanup. This adds deployment configuration/retention/failover obligations and still needs verification of whether the timestamp represents the exact approved boundary (including a pause during commit/WAL flush). It is **not** a demonstrated solution. See [PostgreSQL committed transaction information](https://www.postgresql.org/docs/17/functions-info.html#FUNCTIONS-COMMIT-TIMESTAMP).
-
-Changing D4c to a guarded row-write cutoff would simplify implementation but changes product meaning and is **not approved**. Do not do it. No database configuration is changed by this proposal. Confirmation (including zero-price final confirmation) remains gated pending review; pure time arithmetic and preconditions must not be mistaken for proof.
+Use one database evaluation timestamp under the required guards, strictly before T, then persist confirmed state/receipt/dependency outcome/outbox together. Expose only after durable commit; no second deadline check at commit. Read committed state to recover lost acknowledgement. Rollback requires a fresh evaluation. The [dated decision](../../05-project-management/decision-log/2026-11-10-reservation-evaluation-checkpoint.md) supersedes the former recorded-commit proof and candidate designs; their implementation has been removed.
 
 ## Rollout and bypass disclosure
 
@@ -53,11 +66,11 @@ CREATE IF NOT EXISTS neither upgrades old definitions nor removes installed trig
 
 ## Work that can proceed independently
 
-Approved requirements/traceability, pure interval/deadline/eligibility rules and their unit tests, source audit, reviewable interfaces and deployment test instructions can proceed. Shared JWT parameters/component, new message trust/contracts and owner acceptance handshakes wait for approval. D4c remains an explicit separate gate even after those choices are approved.
+Approved requirements/traceability, pure interval/deadline/eligibility rules and their unit tests, source audit, reviewable interfaces and deployment test instructions can proceed. Shared JWT parameters/component, new message trust/contracts and owner acceptance handshakes wait for approval. The current evaluation checkpoint is approved; remaining capacity/producer gates still block live booking.
 
 ## Subsequent user decisions — 9 November
 
-Implement the approved shared authentication and Account-current foundations. Publish commercial producer contracts for their owners; do not implement fake quote/coverage providers. Keep confirmation gated under unchanged D4c. Persist this task’s configurable business policies with a separate idempotent default seed; do not build the teammate-owned full catalogue. Policy table extension was presented for approval separately.
+Implement the approved shared authentication and Account-current foundations. Publish commercial producer contracts for their owners; do not implement fake quote/coverage providers. Historical cutoff gating was replaced by the 10 November evaluation-checkpoint decision. Persist this task’s configurable business policies with a separate idempotent default seed; do not build the teammate-owned full catalogue. Policy table extension was presented for approval separately.
 
 ## Scope clarification and subsequent corrections — 9 November
 
@@ -91,3 +104,48 @@ Operations Application owns local `Contracts/AccountAccess/AccountAccessV1.cs` a
 Each service compiles its own types and communicates through the existing RabbitMQ queues/events. The cross-service test harness checks wire identity/JSON compatibility and uses an assembly alias to distinguish identically named local types. This test-only reference arrangement does not couple production builds. The audit consumer owner implements its own compatible wire type; no dependency on Operations Application is required.
 
 The solution removes the shared project entries. Docker restore/publish copies only the selected service source; all its project references stay under that service directory. No package feed, schema generator, new shared replacement project or Facility adoption is introduced. Independently maintained DTO definitions now require compatibility checks when changing message contracts. Live broker compatibility and isolated publish still require deployment verification.
+
+## Booking-through-confirmation continuation review — 9 November
+
+Status: **PROPOSED implementation details; approval/owner contracts required before dependent code.** The user resumed after committing `0a2383bdfedf34058c4a2bae99c1ae9087162da0`, reported a successful build, and deferred test execution. The user selected booking through confirmed reservation for this phase and retained producer implementations with teammates. This section narrows delivery scope, not product requirements. No new frontend changes are authorized.
+
+### Delivery boundary and current dependencies
+
+Operations can own review/admission, immutable accepted terms, guarded vehicle/resource claims, pending payment, hold expiry, consumption of verified money, confirmation and own receipt/detail. Cross-service I/O belongs in Infrastructure adapters; commands and workers dispatch direct MediatR handlers using repositories/UoW. All stateful business types belong in Domain. PostgreSQL owns persisted policy revisions/snapshots, claims and workflow progress; existing original Operations schema plus the approved separate defaults seed are the only schema/seed locations. No in-memory business-policy fallback, extra SQL overlay, new trigger/function or shared source project is proposed. Audit evidence uses the outbox and owner-consumed events, not an Operations audit repository.
+
+The earlier full cancellation, allocation/recovery, facility-failure and no-show lifecycle is outside this next delivery's user-selected scope. Payment hold expiration and handling verified money that cannot produce entitlement remain necessary here; cancellation/refund producer execution still belongs to its owner. A confirmed record alone is not proof that gate entry, parking allocation or the later lifecycle is delivered.
+
+| Needed owner contract | Current source evidence / missing guarantee | Operations integration boundary |
+|---|---|---|
+| User verified own-CAR binding | `POST /internal/vehicle-bindings/resolve` exists with the specifically approved service-key trust. A lookup is not a lease against concurrent binding removal/transfer. | Reuse exact contract; establish which competing binding writers exist and how acceptance is fenced before claiming atomic ownership checks. |
+| Facility eligibility/configuration | Structure prepare/complete coordination exists. Public layout and gate immediate-claim APIs do not by themselves establish a reservation-specific versioned eligibility snapshot or participation by every closure writer. | Owner supplies authoritative site/slot/type/status/version and coordinates changes through the Operations guard. Never reserve by calling the physical gate claim API. |
+| Payment quote/coverage acceptance | Pricing calculation exists; no delivered versioned reservation quote/acceptance contract found. Coverage dependencies need coordinated cancellation. | Retain published quote/coverage proposal; implement only an agreed owner interface, with unavailable/error distinct from valid zero price or explicit no coverage. |
+| Reservation deposit order | Generic `CreatePaymentOrderCommandHandler` accepts the request amount and uses `now + 15 minutes`, not supplied H; current idempotent replay does not compare the requested payload. | Owner must bind order to accepted quote/terms, reservation, Account/tenant/site, method, amount/currency and exact H; mismatched replay conflicts. Do not adapt these missing guarantees away in Operations. |
+| Verified collection/reconciliation | Existing `PaymentSucceededV1` has transaction/order, amount and scope but no accepted terms version. Status lookup is by transaction ID; unknown order creation needs lookup by durable operation ID. | Agree versioned event and lookup, identity/ACLs, deduplication and recovery. Browser redirect/demo-pay cannot supply authoritative evidence. |
+| Late or non-entitling money | Requires stable financial effect IDs and owner reconciliation/refund acceptance. | Persist one disposition/intent per distinct verified collection; never invent paid/refunded status. Missing owner blocks live collection enablement. |
+
+No cross-owner database reads or producer implementation is authorized. If owners have newer contracts on another branch/document, inspect them before designing adapters. If not, the achievable independent deliverable is the Operations workflow with explicit integration gates and a producer handoff; a real confirmed paid booking cannot be claimed until those producers are available.
+
+### Proposed browser/payment interaction
+
+1. Before proceeding to payment, obtain server-issued terms for the complete vehicle/time/slot/method intent. Loading terms/availability is compatible with the user's two principal submission points. A displayed browser estimate is not accepted pricing. Changed money, material terms or selected inputs require renewed review/acceptance.
+2. The first submission uses the existing durable request endpoint and stable idempotency key, including accepted terms and selected payment method. Exactly one persisted actor authorization result governs this workflow; delivery retries do not re-evaluate it. No claim/order before Allowed.
+3. After guarded acceptance, return pending progress plus the real owner-issued order/checkout information when ready. Do not keep an HTTP request open across the authorization Saga or label 202 as a reservation confirmation. Receipt polling/resume handles refresh and ambiguous network responses.
+4. After the payment interaction, the browser reads the same own receipt/status. Payment's verified event or trusted server reconciliation advances Operations independently of that browser call; closing the tab cannot strand an otherwise valid paid workflow. A redirect's success flag is ignored as payment proof. If payment/commit evidence is still pending, return pending and poll; redirect/show confirmed only on authoritative confirmation.
+5. Genuine owner-issued zero-price terms skip collection but still require resource acceptance and D4c. A positive deposit requires verified collection, regardless of method name. Cash collection is not inferred from selecting CASH; a teammate-owned, authenticated collection contract must support it before it is offered. No deferred-payment bypass is introduced.
+
+This proposal keeps the existing form input order. Frontend teammates will receive the exact endpoint/payload/status handoff after backend contracts are fixed. Own booking routes must avoid the existing Operator `/api/reservations` route; proposed own routes are `/api/me/reservations` and `/api/me/reservations/{id}` with Account filtering, while current receipt routes remain unchanged.
+
+### Confirmation persistence and recovery — current
+
+The final checkpoint time decides viability; successful durable commit decides visibility. No candidate transaction, commit metadata or post-commit activation worker is required. Persist the timestamp and stable effect once; after unknown acknowledgement resolve the same workflow before attempting again. Database/worker fault injection must prove rollback, lost-response and concurrent expiry behavior.
+
+### Implementation sequence after decisions
+
+1. Agree owner contracts and service authentication; document actual endpoints/events and readiness. No HTTP shared-key exception beyond the existing vehicle lookup is inferred.
+2. Extend only the original Operations schema for persisted accepted terms, claims and workflow/effect evidence; map business entities in Domain and repositories in Persistence. Retain existing task policy revisions/default seed and explicit site late-tolerance choice. No full policy-management catalogue.
+3. Implement review and guarded admission progression, all competing claim writers, resumable order creation, own receipt/detail and expiry with known-vs-unknown outcomes. Missing producer is explicit unavailable, never fake success.
+4. Consume trusted financial outcomes idempotently and implement the approved D4c evaluation-checkpoint path. Reconciliation cannot create a second charge or refund. Existing Gate/structure guards must respect committed and uncertain outcomes.
+5. Update API/Postman examples, frontend handoff and deployment checklist; no frontend implementation. Test execution stays deferred as requested. Record a fresh build for subsequent code; the user's first-slice build does not validate new code.
+
+Later deployment acceptance must include a successful real paid and genuine zero-price booking; duplicate/unknown order effects; transaction held across T; lost commit acknowledgement and restart; atomic confirmation/outbox write failure; same vehicle across sites and competing holds; authority-version changes; provider success after H/T; and late verified money without entitlement. Frontend/Postman can drive the flow, but database/worker/broker fault injection is needed to establish cutoff and concurrency guarantees. Document these checks for the user rather than launching local services now.

@@ -73,16 +73,16 @@ The claim ID is not a vehicle ID. Image access is restricted to the claimant Acc
 Account and vehicle UUIDs must be nonempty. `expectedRevision` is optional/null or a positive integer. Operations supplies the Account bound to its trusted workflow; this request does not authenticate an end-user. A service credential must not come from the browser.
 
 ```json
-{"success":true,"data":{"state":"ACTIVE","vehicleId":"00000000-0000-4000-8000-000000000002","accountId":"00000000-0000-4000-8000-000000000005","vehicleType":"CAR","revision":1}}
+{"success":true,"data":{"state":"ACTIVE","vehicleId":"00000000-0000-4000-8000-000000000002","accountId":"00000000-0000-4000-8000-000000000005","vehicleType":"CAR","revision":1,"canonicalPlate":"51A12345"}}
 ```
 
 Foreign, missing, removed, unbound and claim IDs return the common result:
 
 ```json
-{"success":true,"data":{"state":"INELIGIBLE","vehicleId":null,"accountId":null,"vehicleType":null,"revision":null}}
+{"success":true,"data":{"state":"INELIGIBLE","vehicleId":null,"accountId":null,"vehicleType":null,"revision":null,"canonicalPlate":null}}
 ```
 
-MOTORCYCLE can resolve ACTIVE with its real category; Operations must reject it for Specific Slot. No plate, image, claimant or other-holder detail is returned. Revision advances through the owning IUnitOfWork when tracked Account, canonical plate, category or removal state changes, not for image/raw-format edits. Raw SQL/bulk updates bypass that mechanism and are not supported binding writers. A successful lookup is a current observation, not a reservation lock. Identity-changing Driver edits remain disabled pending the Operations-side coordination contract.
+MOTORCYCLE can resolve ACTIVE with its real category; Operations must reject it for Specific Slot. The user-approved 9 November extension returns the stored canonical plate only for the eligible Account/vehicle pair, so Operations can compare registered reservations with unregistered guest visits. No image, claimant or other-holder detail is returned. Revision advances through the owning IUnitOfWork when tracked Account, canonical plate, category or removal state changes, not for image/raw-format edits. Raw SQL/bulk updates bypass that mechanism and are not supported binding writers. Operations persists one accepted binding result per workflow; concurrent changes afterward may compromise accepted state, explicitly acknowledged by the user. A crash before the first result commits can repeat the lookup. Identity-changing Driver edits remain disabled; this amendment does not enable them.
 
 **Temporary trust exception:** reuse existing `Services:Key`, at least 32 characters, via exactly one `X-Service-Key` header. Missing/wrong keys return 401 `INVALID_SERVICE_KEY`; missing configuration denies access (the host already rejects missing service-key setup). Every shared-key holder has this capability; Operations-specific identity is not established. [Explicit approval and SERVICE-AUTH-01](../../05-project-management/decision-log/2026-11-07-service-authentication-deferral.md) defer the replacement. Use protected transport outside isolated development; never log the key.
 

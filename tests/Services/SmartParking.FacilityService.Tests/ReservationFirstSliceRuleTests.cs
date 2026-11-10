@@ -63,7 +63,7 @@ public sealed class ReservationFirstSliceRuleTests
         Assert.True(deadlines.PaymentHoldHasExpired(Start.AddMinutes(-4)));
         Assert.True(deadlines.MayAttemptConfirmation(Start.AddMinutes(-4)));
         Assert.False(deadlines.MayAttemptConfirmation(Start));
-        // This precondition deliberately proves neither capacity nor commit-before-T.
+        // This time precondition alone does not establish capacity or successful persistence.
     }
 
     [Fact]

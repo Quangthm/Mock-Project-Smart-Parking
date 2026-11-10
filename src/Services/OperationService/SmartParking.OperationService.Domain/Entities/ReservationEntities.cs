@@ -1,6 +1,6 @@
 namespace SmartParking.OperationService.Domain.Entities;
 
-public sealed class ReservationRow
+public sealed partial class ReservationRow
 {
     public void EnterParking()
     {

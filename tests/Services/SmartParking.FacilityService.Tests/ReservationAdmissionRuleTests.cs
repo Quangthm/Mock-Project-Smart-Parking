@@ -65,12 +65,16 @@ public sealed class ReservationAdmissionRuleTests
     }
 
     [Fact]
-    public void AllowedCannotBypassUnimplementedFinalization()
+    public void AllowedRequiresPersistedBindingAndCannotReevaluateIt()
     {
         var request = Request();
         Assert.True(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), true, Now.AddSeconds(2)));
-        request.BlockUnavailableFinalization();
-        Assert.Equal("RESERVATION_FINALIZATION_NOT_READY", request.Code);
+        Assert.Throws<InvalidOperationException>(() => request.AttachBooking(Guid.NewGuid()));
+        request.RecordVehicleBinding(true, 7, "51A12345", Now.AddSeconds(3));
+        Assert.Throws<InvalidOperationException>(() => request.RecordVehicleBinding(false, null, null, Now.AddSeconds(4)));
+        Assert.Equal("51A12345", request.VehiclePlate);
+        Assert.Equal(7L, request.VehicleBindingRevision);
+        Assert.Null(request.ReservationId);
         Assert.False(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), true, Now.AddSeconds(3)));
     }
 

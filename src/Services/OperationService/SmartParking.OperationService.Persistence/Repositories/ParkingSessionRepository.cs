@@ -64,7 +64,8 @@ public sealed class ParkingSessionRepository(ReservationDbContext db)
     }
 
     public Task<bool> HasActivePlateAsync(Guid tenantId, Guid siteId, string plate, CancellationToken ct) =>
-        Set.AnyAsync(s => s.TenantId == tenantId && s.SiteId == siteId && s.NormalizedPlate == plate && s.ExitTime == null, ct);
+        // Identity exclusion is global, including unregistered guests. Never disclose the other site.
+        Set.AnyAsync(s => s.NormalizedPlate == plate && s.ExitTime == null, ct);
     public async Task<ParkingSessionRow?> FindByReservationAsync(Guid tenantId, Guid siteId, Guid reservationId, bool active, CancellationToken ct)
     {
         var row = await Set.Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ReservationId == reservationId &&

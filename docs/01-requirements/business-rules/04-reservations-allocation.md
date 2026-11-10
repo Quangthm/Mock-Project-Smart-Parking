@@ -4,6 +4,8 @@
 
 ## First-slice boundaries — approved 5 November
 
+**Current amendments:** canonical plate identity, once-per-workflow binding and walk-in permission remain as recorded on 9 November. The [10 November checkpoint decision](../../05-project-management/decision-log/2026-11-10-reservation-evaluation-checkpoint.md) replaces the recorded commit cutoff with the final guarded evaluation timestamp. Early/wrong-slot rules remain next-phase work.
+
 [D1–D4c](../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md) supersede optional Account caps and the October 27 fixed T−15→T−5 recovery schedule. Product approval is separate from implementation evidence.
 
 - D1: return a durable pending receipt and evaluate Account-current asynchronously. Read-only preparation only before Allowed; no reservation, capacity claim or payment-order intent.
@@ -11,7 +13,7 @@
 - F = T − effective facility-failure lead (default 15 minutes). An unused confirmed booking without a usable compatible assignment earns full applicable refund eligibility at F. First confirmation/loss after F and before T tries immediate recovery, then earns eligibility if still unfulfilled. Recovery never removes an earned right.
 - The Driver can exercise the right until actual accepted PARKING or unused closure. Gate arrival alone leaves it exercisable. Eligibility alone creates no payout; zero collected means no payout. Exclude facility-failure exercise from voluntary abuse counts.
 - At T, confirmed but unfulfilled (including unusable ALLOCATED) cancels for facility failure with one applicable refund intent/notification and unused-claim release. Usable and PARKING bookings survive. Ordinary no-show/expiry applies when a usable slot is supplied and no Driver action follows.
-- H = min(hold creation + effective payment hold, T), ordinary default 5 minutes. Operations confirmation must commit strictly before T. Pre-T expired holds may reacquire only if compatible. At/after T unconfirmed bookings expire; late money reconciles/refunds without a booking. Do not substitute provider, handler or row-write timestamps for commit evidence.
+- H = min(hold creation + effective payment hold, T), ordinary default 5 minutes. Operations confirmation eligibility must be evaluated strictly before T under the required guards; expose the result only after durable commit (10 November amendment). Pre-T expired holds may reacquire only if compatible. At/after T unconfirmed bookings expire; late money reconciles/refunds without a booking. Use one database evaluation timestamp at the final guarded checkpoint; no provider/browser timestamp or commit-time deadline recheck.
 - Retain timestamped usability/assignment history and process F/T before later recovery after downtime. Missing history requires reconciliation, never backdated availability.
 
 Examples: T=10:00, F=09:45, recovery=09:47 preserves the earned right. A 09:59:58 debit first verified at 10:00:02 leaves an unconfirmed booking expired. Snapshot effective policies without inventing override bounds.

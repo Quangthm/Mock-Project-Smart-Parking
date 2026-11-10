@@ -15,7 +15,7 @@ public sealed class AdmissionMapperProfile : Profile
 {
     public AdmissionMapperProfile() => CreateMap<ReservationRequest, ReservationReceipt>()
         .ForCtorParam(nameof(ReservationReceipt.RequestId), opt => opt.MapFrom(x => x.Id))
-        .ForCtorParam(nameof(ReservationReceipt.ReservationId), opt => opt.MapFrom(_ => (Guid?)null));
+        .ForCtorParam(nameof(ReservationReceipt.ReservationId), opt => opt.MapFrom(x => x.ReservationId));
 }
 
 public sealed class AdmitReservationValidator : AbstractValidator<AdmitReservationCommand>
@@ -32,6 +32,7 @@ public sealed class AdmitReservationValidator : AbstractValidator<AdmitReservati
             RuleFor(x => x.Intent.TermsId).NotEmpty();
             RuleFor(x => x.Intent.TermsVersion).NotEmpty().MaximumLength(256);
             RuleFor(x => x.Intent.Mode).Equal("SPECIFIC_SLOT");
+            RuleFor(x => x.Intent.PaymentMethod).NotEmpty().MaximumLength(32);
             RuleFor(x => x.Intent.End).GreaterThan(x => x.Intent.Start);
         });
     }
@@ -105,9 +106,8 @@ public sealed class RecordAccountAccessDecisionHandler(IReservationRequestReposi
         var request = await requests.LockAsync(decision.WorkflowId, ct);
         if (request is null || request.UserId != decision.UserId || request.AccountId != decision.AccountId ||
             decision.Role != "driver" || request.Operation != decision.Operation) return;
-        if (request.AcceptDecision(decision.AttemptId, decision.AttemptNumber, decision.DecisionId,
-            decision.DecidedAt, decision.Allowed, clock.GetUtcNow()) && decision.Allowed)
-            request.BlockUnavailableFinalization();
+        request.AcceptDecision(decision.AttemptId, decision.AttemptNumber, decision.DecisionId,
+            decision.DecidedAt, decision.Allowed, clock.GetUtcNow());
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
     }

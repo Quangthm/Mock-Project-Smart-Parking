@@ -1,7 +1,7 @@
 namespace SmartParking.OperationService.Domain.Reservations;
 
 /// <summary>
-/// Arithmetic on accepted effective policies, not a default/override resolver or commit-time proof.
+/// Arithmetic on accepted effective policies, not a default/override resolver or complete eligibility check.
 /// </summary>
 public sealed record ReservationDeadlines
 {
@@ -31,7 +31,7 @@ public sealed record ReservationDeadlines
     public bool AllocationIsDue(DateTimeOffset now) => now >= AllocationAt;
     public bool PaymentHoldHasExpired(DateTimeOffset now) => now >= PaymentDueAt;
 
-    // A true result is only a necessary precondition. It must never authorize confirmation:
-    // the transaction may still cross Start before commit (D4c).
+    // Time precondition only; final eligibility also requires payment/capacity/guard checks.
+    // The approved checkpoint time, not commit completion time, must precede Start.
     public bool MayAttemptConfirmation(DateTimeOffset now) => now < Start;
 }

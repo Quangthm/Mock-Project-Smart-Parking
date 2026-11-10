@@ -23,6 +23,47 @@ public sealed class ReservationRequest
     public Guid? DecisionId { get; private set; }
     public DateTimeOffset? DecidedAt { get; private set; }
     public bool AwaitingReply { get; private set; }
+    public Guid? ReservationId { get; private set; }
+    public string? VehicleBindingState { get; private set; }
+    public long? VehicleBindingRevision { get; private set; }
+    public DateTimeOffset? VehicleBindingCheckedAt { get; private set; }
+    public string? VehiclePlate { get; private set; }
+
+    public void RecordVehicleBinding(bool eligible, long? revision, string? canonicalPlate, DateTimeOffset now)
+    {
+        if (State != "PREPARING" || VehicleBindingState is not null)
+            throw new InvalidOperationException("Binding is recorded once after authorization.");
+        VehicleBindingState = eligible ? "ACTIVE" : "INELIGIBLE";
+        VehicleBindingRevision = eligible ? revision ?? throw new ArgumentException("Binding revision required.") : null;
+        VehiclePlate = eligible ? canonicalPlate ?? throw new ArgumentException("Authoritative plate required.") : null;
+        VehicleBindingCheckedAt = now;
+        if (!eligible) { State = "REJECTED"; Code = "VEHICLE_INELIGIBLE"; }
+    }
+
+    public void AttachBooking(Guid reservationId)
+    {
+        if (State != "PREPARING" || VehicleBindingState != "ACTIVE" || reservationId == Guid.Empty)
+            throw new InvalidOperationException("Booking requires the accepted workflow checks.");
+        ReservationId = reservationId;
+        State = "BOOKING";
+        Code = null;
+    }
+
+    public void FinishBooking(string state, string? code)
+    {
+        if (State != "BOOKING" || state is not ("COMPLETED" or "EXPIRED"))
+            throw new InvalidOperationException("A booking can finish only with an explicit terminal outcome.");
+        State = state;
+        Code = code;
+    }
+
+    public void Defer(DateTimeOffset nextActionAt, string code)
+    {
+        NextActionAt = nextActionAt;
+        Code = code;
+    }
+
+    public void Reject(string code) { State = "REJECTED"; Code = code; }
 
     public static ReservationRequest Admit(Guid userId, Guid accountId, Guid key,
         string intentJson, string fingerprint, DateTimeOffset now)
@@ -75,13 +116,6 @@ public sealed class ReservationRequest
         State = allowed ? "PREPARING" : "DENIED";
         Code = allowed ? null : "CURRENT_ACCESS_DENIED";
         return true;
-    }
-
-    public void BlockUnavailableFinalization()
-    {
-        if (State != "PREPARING") throw new InvalidOperationException("A current Allowed decision is required.");
-        // Explicit deployment gate: no quote/coverage producer or D4c commit proof is supplied yet.
-        FailDependency("RESERVATION_FINALIZATION_NOT_READY");
     }
 
     private void StartAttempt(DateTimeOffset now)

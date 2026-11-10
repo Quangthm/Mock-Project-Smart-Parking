@@ -54,8 +54,21 @@ public sealed class UnitOfWork(
                 throw new InvalidStructureEditException("Resource is inactive or belongs to another tenant.");
             if (entry.Entity is ReservationRow reservation)
             {
+                if (reservation.RequestId is not null && !guards.HoldsPlate(reservation.NormalizedPlate))
+                    throw new InvalidOperationException("Acquire the canonical plate guard before booking changes.");
+                if (reservation.RequestId is not null && reservation.Status is ("CONFIRMED" or "ALLOCATED" or "PARKING" or "COMPLETED") &&
+                    (reservation.ConfirmationEvaluatedAt is null || reservation.ConfirmedAt is null || reservation.ConfirmedAt >= reservation.ExpectedStartTime || reservation.ConfirmedAt != reservation.ConfirmationEvaluatedAt || reservation.ConfirmationEffectId is null))
+                    throw new InvalidOperationException("A pre-start eligibility checkpoint is required.");
+                if (entry.State == EntityState.Modified && entry.Property("NormalizedPlate").OriginalValue is string priorPlate && reservation.NormalizedPlate != priorPlate)
+                    throw new InvalidOperationException("Accepted plate identity is immutable.");
+                if (entry.State == EntityState.Modified && entry.Property("AcceptedPricingSnapshot").OriginalValue is string pricing && reservation.AcceptedPricingSnapshot != pricing)
+                    throw new InvalidOperationException("Accepted pricing is immutable.");
                 if (entry.State == EntityState.Modified && entry.Property("ConfirmedAt").OriginalValue is DateTimeOffset confirmed && reservation.ConfirmedAt != confirmed)
                     throw new InvalidOperationException("First confirmation history is immutable.");
+                if (entry.State == EntityState.Modified && entry.Property("ConfirmationEvaluatedAt").OriginalValue is DateTimeOffset evaluated && reservation.ConfirmationEvaluatedAt != evaluated)
+                    throw new InvalidOperationException("First confirmation evaluation is immutable.");
+                if (entry.State == EntityState.Modified && entry.Property("ConfirmationEffectId").OriginalValue is Guid effect && reservation.ConfirmationEffectId != effect)
+                    throw new InvalidOperationException("Confirmation effect identity is immutable.");
                 if (entry.State == EntityState.Modified && entry.Property("AcceptedOperationalPolicySnapshot").OriginalValue is string accepted &&
                     reservation.AcceptedOperationalPolicySnapshot != accepted)
                     throw new InvalidOperationException("Accepted operational policies are immutable.");
@@ -63,8 +76,16 @@ public sealed class UnitOfWork(
                 if (entry.State == EntityState.Modified)
                     reservation.Version = checked((int)entry.Property("Version").OriginalValue! + 1);
             }
-            if (entry.Entity is ParkingSessionRow session && entry.State == EntityState.Modified)
-                session.Version = checked((int)entry.Property("Version").OriginalValue! + 1);
+            if (entry.Entity is ParkingSessionRow session)
+            {
+                if (!guards.HoldsPlate(session.NormalizedPlate)) throw new InvalidOperationException("Acquire the plate guard before physical session writes.");
+                if (entry.State == EntityState.Modified)
+                {
+                    if (!Equals(entry.Property("NormalizedPlate").OriginalValue, session.NormalizedPlate))
+                        throw new InvalidOperationException("Physical session plate is immutable.");
+                    session.Version = checked((int)entry.Property("Version").OriginalValue! + 1);
+                }
+            }
         }
         return await db.SaveChangesAsync(cancellationToken);
     }
