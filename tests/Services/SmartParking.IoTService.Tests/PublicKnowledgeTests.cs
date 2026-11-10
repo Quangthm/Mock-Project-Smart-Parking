@@ -318,12 +318,94 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
                 .Select(result => $"{result.Question}: expected {result.Expected}, got {result.Actual}").ToArray();
             Assert.True(mismatches.Length == 0, string.Join(Environment.NewLine, mismatches));
 
+            var paraphrases = new (string Question, string Expected)[] {
+                ("Không đặt trước có gửi xe được không?", "walk-in-and-entry-guide"),
+                ("khong dat truoc co gui xe duoc khong", "walk-in-and-entry-guide"),
+                ("Cứ chạy thẳng tới bãi gửi xe được không?", "walk-in-and-entry-guide"),
+                ("Can I park without a reservation?", "walk-in-and-entry-guide"),
+                ("Có phải book trước mới được vào bãi không?", "walk-in-and-entry-guide"),
+                ("Tới trễ thì sao?", "arrival-and-no-show-guide|late-arrival"),
+                ("Đến bãi trễ thì sao?", "arrival-and-no-show-guide|late-arrival"),
+                ("Lỡ tới bãi sau giờ hẹn thì sao?", "arrival-and-no-show-guide|late-arrival"),
+                ("What happens if I arrive late?", "arrival-and-no-show-guide|late-arrival"),
+                ("toi tre thi sao", "arrival-and-no-show-guide|late-arrival"),
+                ("Lấy xe muộn thì tính phí thế nào?", "payment-guide|parking-overstay"),
+                ("Nếu đỗ lâu hơn giờ đã đặt thì sao?", "payment-guide|parking-overstay"),
+                ("Lỡ để xe qua giờ hẹn có bị phạt không?", "payment-guide|parking-overstay"),
+                ("What happens if I stay past my reservation?", "payment-guide|parking-overstay"),
+                ("Đỗ xe quá giờ thì sao?", "payment-guide|parking-overstay"),
+                ("Hoàn tiền gói tháng", "pass-cancellation-guide"),
+                ("huy goi thang", "pass-cancellation-guide"),
+                ("Còn nửa kỳ mà thôi dùng vé tháng thì có được trả lại tiền không?", "pass-cancellation-guide"),
+                ("Can I get a refund if I cancel a monthly pass?", "pass-cancellation-guide"),
+                ("Bãi đóng cửa khi còn gói", "pass-cancellation-guide"),
+                ("Hủy đặt chỗ thì có được hoàn tiền không?", "cancellation-refund-guide"),
+                ("Hủy trước 30 phút có được hoàn tiền không?", "cancellation-refund-guide"),
+                ("What is a no-show?", "cancellation-refund-guide"),
+                ("Bỏ chỗ đã đặt thì có lấy lại tiền không?", "cancellation-refund-guide"),
+                ("Cách đặt chỗ?", "booking-guide"),
+                ("Đặt chỗ trước tối đa mấy ngày?", "booking-guide"),
+                ("Đặt chỗ trước tối đa bao nhiêu ngày?", "booking-guide"),
+                ("Đặt chỗ tối thiểu 15 phút đúng không?", "booking-guide"),
+                ("Toi muon giu mot cho gui xe thi lam sao", "booking-guide"),
+                ("Cổng không mở", "checkout-and-departure-guide"),
+                ("Đã trả tiền mà thanh chắn không nhấc thì làm gì?", "checkout-and-departure-guide"),
+                ("What if the exit gate doesn't open?", "checkout-and-departure-guide"),
+                ("Không nhận được thông báo phải làm sao?", "notification-guide"),
+                ("Điện thoại im re, làm sao biết hệ thống đã nhận đơn?", "notification-guide"),
+                ("Bãi gần đây còn chỗ không?", "dynamic"),
+                ("Cho xem booking của tôi", "private"),
+                ("SmartPark có dự báo thời tiết không?", "unknown"),
+                ("Gửi xe muộn thì sao?", "parking-time-clarification")
+            };
             var store = new GuestFaqTests.Store();
             var answers = new GuestAnswerFactory();
             var corpus = new GuestFaqTests.Corpus { Value = knowledge };
             var generator = new ManagedDemoGenerator(store, new GuestFaqTests.Protector(),
                 new GuestFaqTests.Answers(), TimeProvider.System, NullLogger<ManagedDemoGenerator>.Instance);
             var handler = new GuestHandlers(store, corpus, generator, answers, new GuestOptions(true));
+            foreach (var (question, expected) in paraphrases)
+            {
+                var reply = await handler.Handle(new GuestMessage(Guid.NewGuid(), question, "auto"), default);
+                var intent = GuestIntents.Classify(question, knowledge.Articles);
+                var source = reply.Sources.SingleOrDefault()?.ArticleId;
+                var accepted = expected.Split('|');
+                Assert.True(source is null ? accepted.Contains(intent) : accepted.Contains(source),
+                    $"{question}: expected {expected}, got {intent} ({source ?? "no source"})");
+            }
+
+            foreach (var (question, articleId) in new (string, string?)[]
+            {
+                ("Di thang toi bai do xe duoc khong?", "walk-in-and-entry-guide"),
+                ("Nếu đến cổng sau giờ hẹn thì sao?", "arrival-and-no-show-guide"),
+                ("Nếu gửi xe lâu hơn giờ kết thúc thì sao?", "payment-guide"),
+                ("Do I get a refund if I cancel 45 minutes before the reservation starts?", "cancellation-refund-guide"),
+                ("Thời lượng đặt chỗ tối đa 24 giờ phải không?", "booking-guide"),
+                ("Tôi có thể đặt chỗ trước tối đa bao nhiêu ngày?", "booking-guide"),
+                ("Nếu hủy đặt chỗ trước 24 giờ thì có được hoàn tiền không?", "cancellation-refund-guide"),
+                ("Hủy chỗ trước nửa tiếng có lấy lại tiền không?", "cancellation-refund-guide"),
+                ("How many days ahead can I book a parking spot?", "booking-guide"),
+                ("Can I just show up at the car park without booking?", "walk-in-and-entry-guide"),
+                ("Tôi vẫn có thể gửi xe trực tiếp không?", "walk-in-and-entry-guide"),
+                ("Đã thanh toán mà thanh chắn không mở", "checkout-and-departure-guide"),
+                ("Không thấy thông báo xác nhận giao dịch", "notification-guide"),
+                ("Cổng không mở ở trường thì sao?", null),
+                ("Tôi trẻ và muốn dự báo thời tiết", null),
+                ("Can I park without a reservation and buy insurance?", null),
+                ("Không nhận được thông báo tuyển dụng thì sao?", null),
+                ("Tôi muốn hủy vé tháng xe buýt", null),
+                ("Không đặt trước có gửi xe đạp được không?", null),
+                ("Can I park without a reservation in a van?", null),
+                ("Cứ chạy thẳng tới bãi gửi xe được không? Dự báo thời tiết?", null),
+                ("Does parking without booking include car insurance?", null)
+            })
+            {
+                var reply = await handler.Handle(new GuestMessage(Guid.NewGuid(), question, "auto"), default);
+                var actual = reply.Sources.SingleOrDefault()?.ArticleId;
+                Assert.True(actual == articleId, $"{question}: expected {articleId ?? "no source"}, got {actual ?? "no source"}");
+                Assert.Equal(articleId is null ? "clarification" : "answered", reply.Outcome);
+            }
+
             foreach (var (question, locale, articleId, outcome, expectedText) in new[] {
                 ("What is SmartPark?", "en", "smartpark-overview", "answered", "available in Vietnamese only"),
                 ("Các loại xe?", "vi", "vehicle-guide", "answered", "xe máy"),

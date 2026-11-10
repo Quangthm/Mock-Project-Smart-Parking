@@ -175,7 +175,7 @@ public sealed class DemoGroundedGeneratorTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SmartParking.slnx"))) directory = directory.Parent;
         Assert.NotNull(directory);
         var corpus = Path.Combine(directory.FullName, "docs", "03-design", "ai", "p1", "knowledge");
-        Assert.Single(Directory.GetFiles(corpus, "*.md"));
+        Assert.True(File.Exists(Path.Combine(corpus, "smartpark-knowledge.md")));
         var handler = new FakeHandler("openai", id);
         using var client = new HttpClient(handler);
         using var generator = new DemoGroundedGenerator(new(corpus, "openai", "model-test", "synthetic-key"), client);

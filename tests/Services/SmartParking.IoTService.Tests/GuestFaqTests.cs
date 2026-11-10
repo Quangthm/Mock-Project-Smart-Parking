@@ -246,10 +246,42 @@ public sealed class GuestFaqTests
     }
 
     [Theory]
+    [InlineData("gemini", "Đặt chỗ tối thiểu 15 phút đúng không?", "booking-guide", "Thời lượng đặt chỗ tối thiểu")]
+    [InlineData("openai", "Đặt chỗ trước tối đa bao nhiêu ngày?", "booking-guide", "Có thể đặt chỗ trước tối đa")]
+    [InlineData("gemini", "Cứ chạy thẳng tới bãi gửi xe được không?", "walk-in-and-entry-guide", "Có thể tới gửi xe trực tiếp")]
+    [InlineData("openai", "Can I get a refund if I cancel a monthly pass?", "pass-cancellation-guide", "chỉ tính phần đủ điều kiện hoàn")]
+    [InlineData("gemini", "Bãi đóng cửa cả ngày, vậy hủy gói tháng có hoàn tiền?", "pass-cancellation-guide", "khi bãi đóng cửa tạm thời hoặc vĩnh viễn")]
+    public async Task RecognizedPublicIntentUsesOnlyTheCanonicalQuestion(string provider, string question, string sourceId, string promptFragment)
+    {
+        var fixture = new Fixture();
+        fixture.EnableProvider(provider);
+        var knowledge = fixture.Corpus.Value!;
+        if (knowledge.Articles.All(article => article.Id != sourceId))
+            fixture.Corpus.Value = knowledge with { Articles = [.. knowledge.Articles, knowledge.Articles[0] with { Id = sourceId }] };
+
+        var reply = await fixture.Handler.Handle(new GuestMessage(Guid.NewGuid(), question, "auto"), default);
+
+        Assert.Equal("answered", reply.Outcome);
+        Assert.Equal(sourceId, Assert.Single(reply.Sources).ArticleId);
+        Assert.Equal(1, fixture.Answers.Generations);
+        Assert.Contains(promptFragment, fixture.Answers.LastQuestion);
+        Assert.DoesNotContain(question, fixture.Answers.LastQuestion);
+        Assert.DoesNotContain("15", fixture.Answers.LastQuestion);
+    }
+
+    [Theory]
     [InlineData("How to pay with 0901234567?")]
     [InlineData("How to pay with me@example.test?")]
     [InlineData("How to pay with my token?")]
-    public async Task SensitiveGuestQuestionsNeverCallGemini(string question)
+    [InlineData("Đặt chỗ tối thiểu 15 phút đúng không? OTP 123456")]
+    [InlineData("Đặt chỗ tối thiểu 15 phút đúng không? me@example.test")]
+    [InlineData("Đặt chỗ tối thiểu 15@phút đúng không?")]
+    [InlineData("Đặt chỗ trước tối đa bao nhiêu ngày ở bãi gần tôi?")]
+    [InlineData("Đến bãi còn nhận xe lúc này không?")]
+    [InlineData("Is the parking lot accepting cars right now?")]
+    [InlineData("What happens if I stay past my reservation AB123?")]
+    [InlineData("Đặt chỗ tối thiểu 123456 phút đúng không?")]
+    public async Task RestrictedGuestQuestionsNeverCallGemini(string question)
     {
         var fixture = new Fixture();
         fixture.EnableProvider("gemini");

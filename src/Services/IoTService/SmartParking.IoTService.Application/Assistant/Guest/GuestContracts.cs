@@ -93,10 +93,9 @@ public sealed class GuestHandlers(IAssistantManagementStore store, IPublicKnowle
                 var article = knowledge.Articles.SingleOrDefault(a => a.Id == articleId);
                 if (article is null) throw new GuestFailure(503, "DEPENDENCY_UNAVAILABLE");
                 var adapter = answers.Create(knowledge, article, locale);
-                var question = intent == GuestIntents.ParkingOverstay
-                    ? GuestIntents.ParkingOverstayQuestion
-                    : en ? article.TitleEn : article.TitleVi;
-                var screenedQuestion = intent == GuestIntents.ParkingOverstay ? null : PublicFaqQuestion.Screen(request.Message, article);
+                var canonicalQuestion = GuestIntents.CanonicalQuestion(intent);
+                var question = canonicalQuestion ?? (en ? article.TitleEn : article.TitleVi);
+                var screenedQuestion = canonicalQuestion is null ? PublicFaqQuestion.Screen(request.Message, article) : null;
                 var answer = ManagementRules.Candidates(state).Count == 0
                     ? await adapter.KnowledgeAsync(question, token).WaitAsync(token)
                     : await generator.GenerateAsync(question,

@@ -18,11 +18,14 @@ public static class GuestIntents
         _ => null
     };
 
-    internal static string ArticleId(string intent) => intent == ParkingOverstay ? "payment-guide" : intent;
+    internal static string ArticleId(string intent) => PublicFaqIntents.Find(intent)?.ArticleId ?? intent;
+
+    internal static string? CanonicalQuestion(string intent) => PublicFaqIntents.Find(intent)?.Question;
 
     public static string Classify(string message, IReadOnlyList<PublicArticle>? articles = null)
     {
         var question = PublicFaqRetrieval.Normalize(message);
+        if (PublicFaqIntents.MatchPublicPolicy(message, question, articles) is { } policy) return policy.Id;
         if (RestrictedIntent(message, question) is { } restricted) return restricted;
         var text = $" {question} ";
         if (Has(text, "do xe qua gio", "do qua gio", "gui xe qua gio", "de xe qua gio", "lay xe tre", "lay xe muon")) return ParkingOverstay;
@@ -33,7 +36,8 @@ public static class GuestIntents
         var topicQuestion = question.StartsWith(brandPrefix, StringComparison.Ordinal) ? question[brandPrefix.Length..] : question;
         foreach (var (topic, phrases) in Topics)
             if (phrases.Contains(question, StringComparer.Ordinal) || phrases.Contains(topicQuestion, StringComparer.Ordinal)) return topic;
-        return articles is null ? "unknown" : PublicFaqRetrieval.Find(message, articles)?.Id ?? "unknown";
+        return articles is null ? "unknown" :
+            PublicFaqIntents.MatchParaphrase(message, text, articles) ?? PublicFaqRetrieval.Find(message, articles)?.Id ?? "unknown";
     }
 
     internal static string? RestrictedIntent(string message, string? normalized = null)
@@ -41,6 +45,8 @@ public static class GuestIntents
         var text = $" {normalized ?? PublicFaqRetrieval.Normalize(message)} ";
         if (Has(text, "my bookings", "my reservations", "my vehicles", "my booking", "my reservation", "my vehicle", "my car", "my account", "cua toi", "cua minh", "xe toi", "xe minh", "lich dat", "book for me", "dat giup", "tao booking")) return "private";
         if (Has(text, "nearby", "near me", "gan day", "gan toi", "con cho", "cho trong", "available spaces", "availability", "how much", "bao nhieu", "price now", "gia hien tai", "list parking", "danh sach bai")) return "dynamic";
+        if (Has(text, "con nhan xe", "accepting vehicles", "accepting cars") &&
+            Has(text, "luc nay", "bay gio", "hien tai", "ngay bay gio", "right now", "now")) return "dynamic";
         if (message.Any(char.IsDigit) || message.Contains('@') || Has(text, "password", "mat khau", "otp", "token", "bearer", "secret", "api key")) return "sensitive";
         if (Has(text, "hotline", "address", "dia chi", "partner", "doi tac", "phone number", "so dien thoai",
             "opening hours", "gio lam viec", "founded", "founder", "sang lap")) return "unknown";
