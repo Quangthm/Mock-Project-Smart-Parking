@@ -106,6 +106,24 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     return () => { active = false }
   }, [site?.id, user?.id])
 
+  const [form, setForm] = useState({
+    code: site?.code ?? "",
+    name: site?.name ?? "",
+    address: site?.address ?? "",
+    totalSlots: savedLot ? String(savedLot.totalSlots) : site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "30",
+    floors: savedLot ? String(savedLot.floors) : "1",
+    latitude: site?.latitude ?? CITIES[0].defaultLat,
+    longitude: site?.longitude ?? CITIES[0].defaultLng,
+    isActive: site?.isActive ?? true,
+    hourlyRate: savedLot?.hourlyRate ?? 15000,
+    dailyRate: savedLot?.dailyRate ?? 100000,
+    nightRate: savedLot?.nightRate ?? 50000,
+    gracePeriodMinutes: savedLot?.gracePeriodMinutes ?? 15,
+    subscriptionMonthly: savedLot?.subscriptionMonthly ?? 800000,
+    subscriptionYearly: savedLot?.subscriptionYearly ?? 8000000,
+    ...draft?.form,
+  })
+
   function chooseLotType(type: LotType) {
     if (type === lotType) return
     modelChoiceChangedRef.current = true

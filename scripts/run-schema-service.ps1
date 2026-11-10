@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
@@ -152,6 +152,8 @@ if ($Service -eq 'User') {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
     }
+    if ($env:SMARTPARK_TURNSTILE_ENABLED) { $env:Turnstile__Enabled = $env:SMARTPARK_TURNSTILE_ENABLED }
+    if ($env:SMARTPARK_TURNSTILE_SECRET_KEY) { $env:Turnstile__SecretKey = $env:SMARTPARK_TURNSTILE_SECRET_KEY }
     if ($env:SMARTPARK_WORKFLOW_KEY_DIRECTORY) {
         $keyDirectory = $env:SMARTPARK_WORKFLOW_KEY_DIRECTORY
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }

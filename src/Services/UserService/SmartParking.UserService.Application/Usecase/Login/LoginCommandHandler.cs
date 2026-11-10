@@ -9,11 +9,16 @@ using UserService.Application.Services;
 namespace UserService.Application.Usecase.Login;
 
 public sealed class LoginCommandHandler(IUnitOfWork unitOfWork, IPasswordService passwords,
-    AuthSessionService sessions, AuthenticationPolicy policy, TimeProvider clock, IMfaPolicy? mfa = null)
+    AuthSessionService sessions, AuthenticationPolicy policy, TimeProvider clock, IMfaPolicy? mfa = null, IBotVerificationService? botVerifier = null)
     : IRequestHandler<LoginCommand, LoginResult>
 {
     public async Task<LoginResult> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
+        if (botVerifier is not null)
+        {
+            await botVerifier.VerifyAsync(request.TurnstileToken, "password_login", cancellationToken);
+        }
+
         await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
         var user = await unitOfWork.UserRepository.GetByEmailForLoginAsync(request.Email.Trim(), cancellationToken);
         if (user is null || user.DeletedOn != null)

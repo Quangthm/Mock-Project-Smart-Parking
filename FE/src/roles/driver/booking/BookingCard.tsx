@@ -8,6 +8,7 @@ import { formatStatus } from "../../../lib/formatStatus"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 
 import { driverData as store } from "../data/data"
 
@@ -21,6 +22,11 @@ export function BookingCard({
   const [show3DModal, setShow3DModal] = useState(false)
 
   const lot = store.getLots().find((l) => l.id === booking.lotId)
+
+  const bookedFloor = (() => {
+    const token = (booking.slotNumber || "").match(/^([A-Z]+\d*)/i)
+    return token ? token[1].toUpperCase() : null
+  })()
 
   const paymentStatus = booking.paymentStatus
 
@@ -353,15 +359,18 @@ export function BookingCard({
                   minHeight: 0,
                 }}
               >
-                <Parking3DViewer
-                  lotType={lot?.type || "outdoor"}
-                  modelUrl={lot?.modelUrl}
-                  slots={lot?.slots || []}
-                  selectedSlotId={booking.slotId || booking.slotNumber}
-                  focusSlotId={booking.slotId || booking.slotNumber}
-                  height={560}
-                  interactive={true}
-                />
+                <ErrorBoundary name="Parking 3D viewer">
+                  <Parking3DViewer
+                    lotType={lot?.type || "outdoor"}
+                    modelUrl={lot?.modelUrl}
+                    slots={lot?.slots || []}
+                    selectedSlotId={booking.slotId || booking.slotNumber}
+                    focusSlotId={booking.slotId || booking.slotNumber}
+                    activeFloor={bookedFloor}
+                    height={560}
+                    interactive={true}
+                  />
+                </ErrorBoundary>
               </div>
 
               <div

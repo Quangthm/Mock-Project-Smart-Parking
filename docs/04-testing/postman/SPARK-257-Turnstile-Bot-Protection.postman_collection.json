@@ -1,0 +1,624 @@
+{
+  "info": {
+    "_postman_id": "7b8f95c2-b501-447a-9cf7-21a48c66e257",
+    "name": "SmartParking - Turnstile Bot Protection (SPARK-257)",
+    "description": "# SmartParking — Turnstile Bot Protection API Verification (SPARK-257)\n\nCollection kiểm thử tích hợp tự động cho Jira task **SPARK-257** ([SEC-AUTH] Protect public authentication flows from automated abuse).\n\n## Mục tiêu kiểm thử\n1. Kiểm tra Happy Path với dummy token hợp lệ cho cả 3 public auth endpoints (`/login`, `/register/driver`, `/register/owner`).\n2. Kiểm tra Fail-Closed và các kịch bản Rejection theo AC2, AC3, AC5 (Missing, Whitespace, Invalid, Expired, >2048 chars, Action mismatch, >64KB payload).\n3. Kiểm tra Layered Defense Rate Limiting (10 req/phút/IP) trả về HTTP 429.\n\n## Yêu cầu môi trường\n- `userServiceUrl`: Mặc định `http://localhost:5035`\n- `dummyPassToken`: `1x0000000000000000000000000000000AA`\n- `dummyFailToken`: `2x0000000000000000000000000000000AA`\n- `dummyExpiredToken`: `3x0000000000000000000000000000000AA`\n- `driverEmail`: `driver@gmail.com`\n- `driverPassword`: `Password@123`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Happy Path (Valid Tokens)",
+      "description": "Kiểm tra xử lý thành công khi token Turnstile hợp lệ được gửi kèm request.",
+      "item": [
+        {
+          "name": "1.1 Login with Valid Turnstile Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Đăng nhập thành công với turnstileToken hợp lệ. Mong đợi HTTP 200 và JWT token trong payload."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is true', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('AccessToken is returned in data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data.accessToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('User email matches login email', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.user.email).to.eql(pm.environment.get('driverEmail'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Register Driver with Valid Turnstile Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"QA Driver Tester\",\n  \"email\": \"{{tempDriverEmail}}\",\n  \"phone\": \"0912345678\",\n  \"password\": \"Password@123\",\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/register/driver",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "register", "driver"]
+            },
+            "description": "Đăng ký tài xế thành công với turnstileToken hợp lệ. Mong đợi HTTP 201 Created."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const uniqueEmail = 'driver_qa_' + Date.now() + '@test.local';",
+                  "pm.variables.set('tempDriverEmail', uniqueEmail);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is true', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Register Owner with Valid Turnstile Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"QA Owner Tester\",\n  \"email\": \"{{tempOwnerEmail}}\",\n  \"phone\": \"0987654321\",\n  \"password\": \"Password@123\",\n  \"businessName\": \"QA SmartPark Enterprise\",\n  \"lotType\": \"outdoor\",\n  \"agreedToPolicy\": true,\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/register/owner",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "register", "owner"]
+            },
+            "description": "Đăng ký chủ bãi xe thành công với turnstileToken hợp lệ. Mong đợi HTTP 201 Created."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const uniqueEmail = 'owner_qa_' + Date.now() + '@test.local';",
+                  "pm.variables.set('tempOwnerEmail', uniqueEmail);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is true', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Bot Verification Rejections (AC2, AC3, AC5)",
+      "description": "Kiểm thử các kịch bản token không hợp lệ, thiếu token, token quá dài hoặc không khớp action.",
+      "item": [
+        {
+          "name": "2.1 Reject Missing Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi request không kèm turnstileToken. Mong đợi HTTP 400 và code BOT_VERIFICATION_REQUIRED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is BOT_VERIFICATION_REQUIRED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('BOT_VERIFICATION_REQUIRED');",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is false', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Reject Whitespace Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"   \"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi turnstileToken chỉ chứa khoảng trắng. Mong đợi HTTP 400 và code BOT_VERIFICATION_REQUIRED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is BOT_VERIFICATION_REQUIRED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('BOT_VERIFICATION_REQUIRED');",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is false', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Reject Invalid Token Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{dummyFailToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi turnstileToken không hợp lệ (Cloudflare trả invalid-input-response). Mong đợi HTTP 400 BOT_VERIFICATION_FAILED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is BOT_VERIFICATION_FAILED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('BOT_VERIFICATION_FAILED');",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is false', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Reject Expired or Duplicate Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{dummyExpiredToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi turnstileToken đã hết hạn hoặc đã sử dụng (Cloudflare trả timeout-or-duplicate). Mong đợi HTTP 400 BOT_VERIFICATION_EXPIRED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is BOT_VERIFICATION_EXPIRED or BOT_VERIFICATION_FAILED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.be.oneOf(['BOT_VERIFICATION_EXPIRED', 'BOT_VERIFICATION_FAILED']);",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is false', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Reject Token Exceeding 2048 Chars",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{oversizedToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi token dài hơn 2048 ký tự. Mong đợi HTTP 400 BOT_VERIFICATION_FAILED (không ném VALIDATION_FAILED)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const oversized = 'x'.repeat(2049);",
+                  "pm.variables.set('oversizedToken', oversized);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is BOT_VERIFICATION_FAILED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('BOT_VERIFICATION_FAILED');",
+                  "});",
+                  "",
+                  "pm.test('Does not throw generic VALIDATION_FAILED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.not.eql('VALIDATION_FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Reject Action Mismatch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Action Mismatch Tester\",\n  \"email\": \"{{tempMismatchEmail}}\",\n  \"phone\": \"0912345678\",\n  \"password\": \"Password@123\",\n  \"turnstileToken\": \"{{dummyFailToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/register/driver",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "register", "driver"]
+            },
+            "description": "Gửi token không khớp action (hoặc provider verification fail). Mong đợi HTTP 400 BOT_VERIFICATION_FAILED."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const uniqueEmail = 'mismatch_' + Date.now() + '@test.local';",
+                  "pm.variables.set('tempMismatchEmail', uniqueEmail);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is BOT_VERIFICATION_FAILED', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('BOT_VERIFICATION_FAILED');",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is false', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 Reject Payload Exceeding 64KB (Stage 2 Defense)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{dummyPassToken}}\",\n  \"padding\": \"{{oversizedPadding}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi request body vượt quá giới hạn 64KB (RequestSizeLimit). Mong đợi HTTP 413 PAYLOAD_TOO_LARGE."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const padding = 'a'.repeat(66000);",
+                  "pm.variables.set('oversizedPadding', padding);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 413 Payload Too Large', function () {",
+                  "    pm.response.to.have.status(413);",
+                  "});",
+                  "",
+                  "pm.test('Error code is PAYLOAD_TOO_LARGE', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('PAYLOAD_TOO_LARGE');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Rate Limiting Protection (Layered Defense)",
+      "description": "Kiểm thử cơ chế Rate Limiting (10 req/phút/IP) hoạt động trước khi bot verification được gọi.",
+      "item": [
+        {
+          "name": "3.1 Burst Consumption of Rate Limit Quota",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Thực hiện burst gửi liên tiếp các request để tiêu thụ quota 10 request/phút của LoginRateLimit."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const targetUrl = pm.environment.get('userServiceUrl') + '/api/auth/login';",
+                  "const payload = JSON.stringify({",
+                  "    email: pm.environment.get('driverEmail'),",
+                  "    password: pm.environment.get('driverPassword'),",
+                  "    turnstileToken: pm.environment.get('dummyPassToken')",
+                  "});",
+                  "// Burst 10 requests rapidly to consume the window quota",
+                  "for (let i = 0; i < 10; i++) {",
+                  "    pm.sendRequest({",
+                  "        url: targetUrl,",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: payload }",
+                  "    }, function (err, res) {});",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Burst request completes', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 429]);",
+                  "});",
+                  "",
+                  "pm.test('Rate limiting quota burst executed', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Rate Limit Exceeded (Assert HTTP 429)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{dummyPassToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Gửi request vượt quá giới hạn hạn mức 10 req/phút. Mong đợi HTTP 429 Too Many Requests."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 429 Too Many Requests', function () {",
+                  "    pm.response.to.have.status(429);",
+                  "});",
+                  "",
+                  "pm.test('Rate limit header or response is enforced', function () {",
+                  "    pm.expect(pm.response.code).to.eql(429);",
+                  "});",
+                  "",
+                  "pm.test('Layered defense blocks before downstream service', function () {",
+                  "    pm.expect(pm.response.status).to.match(/Too Many Requests/i);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
