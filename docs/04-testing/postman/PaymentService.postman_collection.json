@@ -128,7 +128,7 @@
     },
     {
       "key": "payosOrderCode",
-      "value": "",
+      "value": "202610200001",
       "type": "string"
     },
     {
@@ -138,6 +138,16 @@
     },
     {
       "key": "currentIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webhookSignature",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webhookReference",
       "value": "",
       "type": "string"
     }
@@ -1672,9 +1682,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Returns array of driver invoices', () => {",
+                  "pm.test('Returns driver invoices list or paged items', () => {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
+                  "    const items = Array.isArray(json) ? json : (json.data && json.data.items ? json.data.items : json.items);",
+                  "    pm.expect(items).to.be.an('array');",
                   "});"
                 ]
               }
@@ -1700,6 +1711,205 @@
                 "payments",
                 "invoices",
                 "my-history"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.16 Download Invoice PDF - Happy Path (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type is application/pdf', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+                  "});",
+                  "pm.test('Content-Disposition specifies PDF attachment with HD_ prefix', () => {",
+                  "    const disposition = pm.response.headers.get('Content-Disposition');",
+                  "    pm.expect(disposition).to.be.a('string');",
+                  "    pm.expect(disposition).to.include('attachment');",
+                  "    pm.expect(disposition).to.include('HD_');",
+                  "    pm.expect(disposition).to.include('.pdf');",
+                  "});",
+                  "pm.test('Response body is a valid non-empty PDF binary stream', () => {",
+                  "    pm.expect(pm.response.stream.length).to.be.above(0);",
+                  "    const text = pm.response.text();",
+                  "    pm.expect(text.startsWith('%PDF')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Actor-UserId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/invoices/{{spark321InvoiceId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "invoices",
+                "{{spark321InvoiceId}}",
+                "download"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.17 Download Invoice PDF - Forbidden Other Driver (Expected 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('Error code is FORBIDDEN_INVOICE_ACCESS', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.errorCode).to.eql('FORBIDDEN_INVOICE_ACCESS');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Actor-UserId",
+                "value": "99999999-9999-9999-9999-999999999999",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/invoices/{{spark321InvoiceId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "invoices",
+                "{{spark321InvoiceId}}",
+                "download"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.18 Filter Driver History with Status and Pagination (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Response envelope has paged metadata', () => {",
+                  "    const json = pm.response.json();",
+                  "    const paged = json.data || json;",
+                  "    pm.expect(paged).to.have.property('items');",
+                  "    pm.expect(paged).to.have.property('totalCount');",
+                  "    pm.expect(paged).to.have.property('pageNumber');",
+                  "    pm.expect(paged).to.have.property('pageSize');",
+                  "    pm.expect(paged).to.have.property('totalPages');",
+                  "    pm.expect(paged.pageNumber).to.eql(1);",
+                  "    pm.expect(paged.pageSize).to.eql(10);",
+                  "    pm.expect(paged.items).to.be.an('array');",
+                  "});",
+                  "pm.test('Items match status filter and include pdfUrl', () => {",
+                  "    const json = pm.response.json();",
+                  "    const paged = json.data || json;",
+                  "    paged.items.forEach(item => {",
+                  "        pm.expect(item.financialStatus.status).to.eql('PAID');",
+                  "        const pdfUrl = item.pdfUrl || (item.invoiceIdentity && item.invoiceIdentity.pdfUrl);",
+                  "        pm.expect(pdfUrl).to.be.a('string');",
+                  "        pm.expect(pdfUrl).to.include('/download');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Actor-UserId",
+                "value": "{{tenantId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/invoices/my-history?status=PAID&pageNumber=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "invoices",
+                "my-history"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PAID"
+                },
+                {
+                  "key": "pageNumber",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
               ]
             },
             "auth": {
@@ -2237,27 +2447,26 @@
                 "type": "text/javascript",
                 "exec": [
                   "const orderCode = Number(pm.collectionVariables.get('payosOrderCode') || pm.collectionVariables.get('onlineOrderCode') || 202610200001);",
+                  "pm.collectionVariables.set('payosOrderCode', orderCode.toString());",
                   "const amount = Number(pm.collectionVariables.get('onlineAmount') || 25000);",
+                  "pm.collectionVariables.set('onlineAmount', amount.toString());",
+                  "const reference = 'REF_' + Date.now();",
+                  "pm.collectionVariables.set('webhookReference', reference);",
                   "const dataObj = {",
-                  "    accountNumber: '0123456789',",
+                  "    accountNumber: '123456789',",
                   "    amount: amount,",
                   "    currency: 'VND',",
-                  "    description: 'Thanh toan do xe',",
+                  "    description: 'SmartPark Checkout',",
                   "    orderCode: orderCode,",
-                  "    paymentLinkId: 'mock-link-12345',",
-                  "    reference: 'FT' + Date.now(),",
-                  "    transactionDateTime: '2026-10-20 14:30:00'",
+                  "    paymentLinkId: 'link_test_123',",
+                  "    reference: reference,",
+                  "    transactionDateTime: '2026-10-20 10:00:00'",
                   "};",
                   "const sortedKeys = Object.keys(dataObj).sort();",
                   "const dataString = sortedKeys.map(k => `${k}=${dataObj[k]}`).join('&');",
                   "const checksumKey = pm.collectionVariables.get('payosChecksumKey') || '';",
                   "const signature = CryptoJS.HmacSHA256(dataString, checksumKey).toString(CryptoJS.enc.Hex);",
-                  "pm.request.body.raw = JSON.stringify({",
-                  "    code: '00',",
-                  "    desc: 'success',",
-                  "    data: dataObj,",
-                  "    signature: signature",
-                  "});"
+                  "pm.collectionVariables.set('webhookSignature', signature);"
                 ]
               }
             },
@@ -2302,7 +2511,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"to-be-replaced-by-prerequest-script\"\n}",
+              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": {{payosOrderCode}},\n    \"amount\": {{onlineAmount}},\n    \"description\": \"SmartPark Checkout\",\n    \"accountNumber\": \"123456789\",\n    \"reference\": \"{{webhookReference}}\",\n    \"transactionDateTime\": \"2026-10-20 10:00:00\",\n    \"currency\": \"VND\",\n    \"paymentLinkId\": \"link_test_123\"\n  },\n  \"signature\": \"{{webhookSignature}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2320,27 +2529,26 @@
                 "type": "text/javascript",
                 "exec": [
                   "const orderCode = Number(pm.collectionVariables.get('payosOrderCode') || pm.collectionVariables.get('onlineOrderCode') || 202610200001);",
+                  "pm.collectionVariables.set('payosOrderCode', orderCode.toString());",
                   "const amount = Number(pm.collectionVariables.get('onlineAmount') || 25000);",
+                  "pm.collectionVariables.set('onlineAmount', amount.toString());",
+                  "const reference = pm.collectionVariables.get('webhookReference') || ('REF_' + Date.now());",
+                  "pm.collectionVariables.set('webhookReference', reference);",
                   "const dataObj = {",
-                  "    accountNumber: '0123456789',",
+                  "    accountNumber: '123456789',",
                   "    amount: amount,",
                   "    currency: 'VND',",
-                  "    description: 'Thanh toan do xe',",
+                  "    description: 'SmartPark Checkout',",
                   "    orderCode: orderCode,",
-                  "    paymentLinkId: 'mock-link-12345',",
-                  "    reference: 'FT' + Date.now(),",
-                  "    transactionDateTime: '2026-10-20 14:30:00'",
+                  "    paymentLinkId: 'link_test_123',",
+                  "    reference: reference,",
+                  "    transactionDateTime: '2026-10-20 10:00:00'",
                   "};",
                   "const sortedKeys = Object.keys(dataObj).sort();",
                   "const dataString = sortedKeys.map(k => `${k}=${dataObj[k]}`).join('&');",
                   "const checksumKey = pm.collectionVariables.get('payosChecksumKey') || '';",
                   "const signature = CryptoJS.HmacSHA256(dataString, checksumKey).toString(CryptoJS.enc.Hex);",
-                  "pm.request.body.raw = JSON.stringify({",
-                  "    code: '00',",
-                  "    desc: 'success',",
-                  "    data: dataObj,",
-                  "    signature: signature",
-                  "});"
+                  "pm.collectionVariables.set('webhookSignature', signature);"
                 ]
               }
             },
@@ -2385,7 +2593,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 202610200001,\n    \"amount\": 25000\n  },\n  \"signature\": \"to-be-replaced-by-prerequest-script\"\n}",
+              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": {{payosOrderCode}},\n    \"amount\": {{onlineAmount}},\n    \"description\": \"SmartPark Checkout\",\n    \"accountNumber\": \"123456789\",\n    \"reference\": \"{{webhookReference}}\",\n    \"transactionDateTime\": \"2026-10-20 10:00:00\",\n    \"currency\": \"VND\",\n    \"paymentLinkId\": \"link_test_123\"\n  },\n  \"signature\": \"{{webhookSignature}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

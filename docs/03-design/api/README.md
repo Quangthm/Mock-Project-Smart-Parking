@@ -21,3 +21,4 @@ All new API endpoint specifications and refactors must follow the standard templ
 | 3D Digital Twin & Operational Layout Projection (hub) | [3d-digital-twin-api-design.md](3d-digital-twin-api-design.md) | FacilityService (transitional: ParkingService) |
 | 3D Digital Twin — SPARK-228 Slot State Binding (Sprint 2) | [3d-digital-twin-spark-228-api-design.md](3d-digital-twin-spark-228-api-design.md) | FacilityService (transitional: ParkingService) |
 | 3D Digital Twin — SPARK-244 Operator Monitoring (Sprint 3) | [3d-digital-twin-spark-244-api-design.md](3d-digital-twin-spark-244-api-design.md) | FacilityService (transitional: ParkingService) |
+| Driver Payment History & Server-Side PDF Invoices | [driver-payment-history-and-pdf-invoice-api-design.md](driver-payment-history-and-pdf-invoice-api-design.md) | PaymentService |

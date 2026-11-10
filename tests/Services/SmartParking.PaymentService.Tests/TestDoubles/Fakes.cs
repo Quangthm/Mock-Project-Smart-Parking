@@ -1,6 +1,8 @@
+using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
-using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
+using SmartParking.PaymentService.Application.DTOs.Invoices;
+using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Tests.TestDoubles;
 
@@ -210,6 +212,64 @@ public class FakeInvoiceRepository : IInvoiceRepository
             .OrderByDescending(i => i.CreatedAt)
             .ToList();
         return Task.FromResult<IReadOnlyList<Invoice>>(list);
+    }
+
+    public Task<(IReadOnlyList<Invoice> Items, int TotalCount)> GetByAccountIdPagedAsync(
+        Guid accountId,
+        string? status,
+        DateTimeOffset? fromDate,
+        DateTimeOffset? toDate,
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Invoices
+            .Where(i => (i.PaymentOrder != null && i.PaymentOrder.AccountId == accountId) ||
+                        (i.PricingSnapshot != null && i.PricingSnapshot.AccountId == accountId));
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(i =>
+                (i.PaymentOrder != null && string.Equals(i.PaymentOrder.Status.ToString(), status.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                (i.PricingSnapshot != null && string.Equals(i.PricingSnapshot.Status, status.Trim(), StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(i => i.CreatedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(i => i.CreatedAt <= toDate.Value);
+        }
+
+        var list = query.OrderByDescending(i => i.CreatedAt).ToList();
+        var totalCount = list.Count;
+
+        var effectivePageNumber = pageNumber < 1 ? 1 : pageNumber;
+        var effectivePageSize = pageSize < 1 ? 10 : pageSize;
+
+        var paged = list
+            .Skip((effectivePageNumber - 1) * effectivePageSize)
+            .Take(effectivePageSize)
+            .ToList();
+
+        return Task.FromResult<(IReadOnlyList<Invoice> Items, int TotalCount)>((paged, totalCount));
+    }
+}
+
+public class FakePdfInvoiceGenerator : IPdfInvoiceGenerator
+{
+    public byte[] DummyPdfBytes { get; set; } = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37, 0x0A }; // %PDF-1.7
+    public CustomerInvoiceResponseDto? LastInvoicePassed { get; private set; }
+    public int CallCount { get; private set; }
+
+    public Task<byte[]> GenerateInvoicePdfAsync(CustomerInvoiceResponseDto invoice, CancellationToken cancellationToken = default)
+    {
+        CallCount++;
+        LastInvoicePassed = invoice;
+        return Task.FromResult(DummyPdfBytes);
     }
 }
 
