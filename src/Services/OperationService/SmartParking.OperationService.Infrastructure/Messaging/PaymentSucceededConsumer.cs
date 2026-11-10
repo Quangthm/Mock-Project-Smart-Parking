@@ -3,6 +3,7 @@ using SmartParking.OperationService.Application.Common.Interfaces.Services;
 
 namespace SmartParking.OperationService.Infrastructure.Messaging;
 
+[MessageUrn("SmartParking.PaymentService.Domain.Events:PaymentSucceededV1")]
 public sealed record PaymentSucceededV1
 {
     public Guid EventId { get; init; }

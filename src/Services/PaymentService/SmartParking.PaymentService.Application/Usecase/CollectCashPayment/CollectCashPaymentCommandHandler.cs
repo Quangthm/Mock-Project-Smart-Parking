@@ -91,6 +91,19 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
             _logger.LogInformation("Order {OrderId} is already PAID. Replaying invoice for cash collection request.", order.Id);
             if (invoice != null)
             {
+                // A previous success event may have been published while the downstream
+                // consumer was unavailable. Re-stage it on an idempotent cash replay so
+                // Operations can finish the session without creating another transaction.
+                var successfulCashTransaction = order.Transactions.FirstOrDefault(
+                    transaction => transaction.Status == PaymentStatus.SUCCESS &&
+                                   transaction.PaymentMethod == PaymentMethod.CASH);
+                if (successfulCashTransaction is not null)
+                {
+                    await PublishCashPaymentSucceededAsync(
+                        order, invoice, successfulCashTransaction, cancellationToken);
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+
                 return InvoiceDtoMapper.MapToDto(invoice, order);
             }
         }
@@ -137,30 +150,8 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
         invoice.PricingSnapshot.GatewayTransactionId = gatewayTxId;
         _invoiceRepository.Update(invoice);
 
-        // Stage Outbox Event PaymentSucceededV1 BEFORE SaveChangesAsync to guarantee atomic commit!
-        var outboxEvent = new PaymentSucceededV1
-        {
-            EventId = Guid.NewGuid(),
-            OccurredAt = now,
-            CorrelationId = order.OrderCode,
-            PaymentOrderId = order.Id,
-            PaymentTransactionId = transaction.Id,
-            PaymentMethod = "CASH",
-            GatewayReference = gatewayTxId,
-            TenantId = order.TenantId,
-            SiteId = order.SiteId,
-            ReferenceType = order.ReferenceType.ToString(),
-            ReferenceId = order.ReferenceId,
-            PlateNumber = invoice.PricingSnapshot.PlateNumber,
-            AccountId = order.AccountId,
-            Amount = order.FinalAmount,
-            ParkingFee = invoice.BaseParkingFee > 0 ? invoice.BaseParkingFee : order.FinalAmount,
-            PenaltyFee = invoice.OverstayPenaltyFee,
-            PenaltyReason = invoice.PricingSnapshot.LineItems.FirstOrDefault(l => l.ItemType == "PENALTY_OVERSTAY")?.Description,
-            Currency = invoice.PricingSnapshot.Currency ?? "VND"
-        };
-
-        await _eventPublisher.PublishAsync(outboxEvent, cancellationToken);
+        // Stage PaymentSucceededV1 before SaveChangesAsync so it commits with the payment.
+        await PublishCashPaymentSucceededAsync(order, invoice, transaction, cancellationToken);
 
         // Atomic DB Commit: order + transaction + invoice + outboxMessage in one transaction
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -168,5 +159,35 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
         _logger.LogInformation("Cash payment recorded and PaymentSucceededV1 staged into outbox for Order {OrderId}, Tx {TxId}.", order.Id, transaction.Id);
 
         return InvoiceDtoMapper.MapToDto(invoice, order);
+    }
+
+    private Task PublishCashPaymentSucceededAsync(
+        PaymentOrder order,
+        Invoice invoice,
+        PaymentTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = invoice.PricingSnapshot;
+        return _eventPublisher.PublishAsync(new PaymentSucceededV1
+        {
+            EventId = Guid.NewGuid(),
+            OccurredAt = transaction.PaidAt ?? order.UpdatedAt,
+            CorrelationId = order.OrderCode,
+            PaymentOrderId = order.Id,
+            PaymentTransactionId = transaction.Id,
+            PaymentMethod = PaymentMethod.CASH.ToString(),
+            GatewayReference = transaction.GatewayTransactionId,
+            TenantId = order.TenantId,
+            SiteId = order.SiteId,
+            ReferenceType = order.ReferenceType.ToString(),
+            ReferenceId = order.ReferenceId,
+            PlateNumber = snapshot.PlateNumber,
+            AccountId = order.AccountId,
+            Amount = order.FinalAmount,
+            ParkingFee = invoice.BaseParkingFee > 0 ? invoice.BaseParkingFee : order.FinalAmount,
+            PenaltyFee = invoice.OverstayPenaltyFee,
+            PenaltyReason = snapshot.LineItems.FirstOrDefault(line => line.ItemType == "PENALTY_OVERSTAY")?.Description,
+            Currency = snapshot.Currency ?? "VND"
+        }, cancellationToken);
     }
 }

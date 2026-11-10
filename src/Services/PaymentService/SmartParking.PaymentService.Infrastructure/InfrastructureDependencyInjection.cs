@@ -60,8 +60,6 @@ public static class InfrastructureDependencyInjection
                 {
                     cfg.Message<SmartParking.PaymentService.Domain.Events.PaymentSucceededV1>(message =>
                         message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
-                    cfg.Message<SmartParking.PaymentService.Infrastructure.Messaging.PaymentSucceededV1>(message =>
-                        message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                     var options = configuration.GetSection(RabbitMqOptions.SectionName).Get<RabbitMqOptions>()
                                   ?? new RabbitMqOptions();
 
