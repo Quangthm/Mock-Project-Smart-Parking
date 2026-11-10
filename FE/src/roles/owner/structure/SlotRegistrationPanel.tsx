@@ -371,7 +371,7 @@ export function SlotRegistrationPanel({
                       onChange={() => toggleMeshFromList(mesh)}
                       className="size-4 accent-[var(--primary)]"
                     />
-                    <span className="min-w-0 truncate font-mono" title={mesh.name}>{mesh.name}</span>
+                    <span className="min-w-0 truncate tabular-nums" title={mesh.name}>{mesh.name}</span>
                   </label>
                 </li>
               )

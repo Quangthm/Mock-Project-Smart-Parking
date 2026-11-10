@@ -62,7 +62,14 @@ type SiteDraft = {
 }
 
 export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => void, onCancel: () => void) {
-  const savedProfileRequest = useRef("")
+  const savedProfileRequest = useRef(site ? JSON.stringify({
+    action: "profile",
+    code: site.code.trim().toUpperCase(),
+    name: site.name.trim(),
+    address: site.address,
+    latitude: site.latitude,
+    longitude: site.longitude,
+  }) : "")
   const confirmedSiteActive = useRef(site?.isActive)
   const { user } = useApp()
   const savedLot = site ? store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === site.id) : undefined
@@ -186,24 +193,6 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   })
   const isManualCode = Boolean(site?.code)
 
-  const [form, setForm] = useState({
-    code: site?.code ?? "",
-    name: site?.name ?? "",
-    address: site?.address ?? "",
-    totalSlots: savedLot ? String(savedLot.totalSlots) : site?.totalPhysicalCapacity ? String(site.totalPhysicalCapacity) : "30",
-    floors: savedLot ? String(savedLot.floors) : "1",
-    latitude: site?.latitude ?? CITIES[0].defaultLat,
-    longitude: site?.longitude ?? CITIES[0].defaultLng,
-    isActive: site?.isActive ?? true,
-    hourlyRate: savedLot?.hourlyRate ?? 15000,
-    dailyRate: savedLot?.dailyRate ?? 100000,
-    nightRate: savedLot?.nightRate ?? 50000,
-    gracePeriodMinutes: savedLot?.gracePeriodMinutes ?? 15,
-    subscriptionMonthly: savedLot?.subscriptionMonthly ?? 800000,
-    subscriptionYearly: savedLot?.subscriptionYearly ?? 8000000,
-    ...draft?.form,
-  })
-
   // Auto-calculate capacity based on active floors
   useEffect(() => {
     if (site && !modelChoiceChangedRef.current) return
@@ -237,6 +226,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   const initialSetupSnapshot = useRef(setupSnapshot)
   const initialCapacity = useRef([form.totalSlots, form.floors])
   const [busy, setBusy] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   const [error, setError] = useState("")
 
   // Auto-generate Site Code based on Smart Parking logic: SPK-[CITY]-[SLUG]
@@ -294,6 +284,17 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     const siteCode = (isManualCode && form.code.trim() ? form.code.trim() : computedCode).toUpperCase()
     const siteName = form.name.trim()
     const finalAddress = fullAddress || form.address.trim() || `${form.name}, ${district}, ${selectedCity}`
+    const profile = {
+      action: "profile",
+      code: siteCode,
+      name: siteName,
+      address: finalAddress,
+      latitude: site && !locationConfirmed ? site.latitude : form.latitude,
+      longitude: site && !locationConfirmed ? site.longitude : form.longitude,
+    }
+    const profileRequest = JSON.stringify(profile)
+    const profileChanged = savedProfileRequest.current !== profileRequest
+    const setupChanged = setupSnapshot !== initialSetupSnapshot.current || modelChoiceChangedRef.current
 
     if (!siteCode || !siteName || !finalAddress) {
       setError("Please enter the site name and address.")
@@ -303,7 +304,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       setError("Choose a province or city and its current ward, commune or special zone.")
       return
     }
-    if (!locationConfirmed || !validParkingCoordinates({ lat: form.latitude, lng: form.longitude })) {
+    if ((!site || profileChanged || (setupChanged && !savedLot)) &&
+        (!locationConfirmed || !validParkingCoordinates({ lat: form.latitude, lng: form.longitude }))) {
       setError("Confirm the parking entrance on the map before saving.")
       return
     }
@@ -311,7 +313,6 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     const totalSlotsNum = parseInt(form.totalSlots, 10)
     const floorsNum = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
 
-    const setupChanged = setupSnapshot !== initialSetupSnapshot.current || modelChoiceChangedRef.current
     const capacityChanged = modelChoiceChangedRef.current || form.totalSlots !== initialCapacity.current[0] ||
       form.floors !== initialCapacity.current[1]
     if (site && capacityChanged && savedLot && !modelChoiceChangedRef.current &&
@@ -336,29 +337,25 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
       const activeModelDef = ALLOWED_PARKING_MODELS[lotType]
 
       if (site) {
-        const profile = {
-          action: "profile",
-          code: siteCode,
-          name: siteName,
-          address: finalAddress,
-          latitude: form.latitude,
-          longitude: form.longitude,
-        }
-        const profileRequest = JSON.stringify([site.id, profile])
-        if (savedProfileRequest.current !== profileRequest) {
+        if (profileChanged) {
           await parkingApi.edit(site.id, profile)
           savedProfileRequest.current = profileRequest
         }
 
         const activeChanged = form.isActive !== site.isActive
         if (form.isActive !== confirmedSiteActive.current) {
+          setUpdatingStatus(true)
           try {
             await parkingApi.edit(site.id, { action: "active", resourceId: site.id, active: form.isActive })
             confirmedSiteActive.current = form.isActive
           } catch (error) {
             const reason = error instanceof Error ? error.message : "Please try again."
-            setError(`Site details were saved, but the status change could not be confirmed. ${reason}`)
+            setError(profileChanged
+              ? `Site details were saved, but the status change could not be confirmed. ${reason}`
+              : `The status change could not be confirmed. ${reason}`)
             return
+          } finally {
+            setUpdatingStatus(false)
           }
         }
 
@@ -392,8 +389,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
             subscriptionMonthly: form.subscriptionMonthly,
             subscriptionYearly: form.subscriptionYearly,
             status: form.isActive ? "active" : "inactive",
-            lat: form.latitude,
-            lng: form.longitude,
+            lat: profile.latitude ?? cachedLot?.lat ?? form.latitude,
+            lng: profile.longitude ?? cachedLot?.lng ?? form.longitude,
           })
         } catch {
           setError("Site details were saved, but the browser could not save the local setup. Check your browser storage and try again.")
@@ -405,8 +402,8 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           code: siteCode,
           name: siteName,
           address: finalAddress,
-          latitude: form.latitude,
-          longitude: form.longitude,
+          latitude: profile.latitude,
+          longitude: profile.longitude,
           isActive: form.isActive,
           status: activeChanged ? (form.isActive ? "ACTIVE" : "INACTIVE") : site.status,
         })
@@ -508,7 +505,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   return {
     formId, hasSavedSetup: Boolean(savedLot), lotType, chooseLotType, selectedCity, district, setDistrict, ward, setWard,
     streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
-    devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
+    devices, setDevices, busy, updatingStatus, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   }
 }

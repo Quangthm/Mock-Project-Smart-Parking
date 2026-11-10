@@ -80,26 +80,27 @@ export function CapacitySummary({ structure }: { structure: Structure }) {
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)]">
-        <span>
-          Live state: {structure.slots.filter((slot) => slot.isPhysicallyOccupied).length} occupied
-          {sum("protected") !== null ? ` · ${sum("protected")} protected` : ""}
-          {sum("pendingPayment") !== null ? ` · ${sum("pendingPayment")} pending payment` : ""}
-          {sum("effectiveBackup") !== null ? ` · ${sum("effectiveBackup")} effective backup` : ""}
-        </span>
-        {projectionState && (
-          <Badge tone={projectionTone(projectionState)}>
-            projection {projectionState}
-          </Badge>
-        )}
+      <div className="space-y-2 text-sm text-[var(--muted)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="tabular-nums">
+            Live state: {structure.slots.filter((slot) => slot.isPhysicallyOccupied).length} occupied
+            {sum("protected") !== null ? ` · ${sum("protected")} protected` : ""}
+            {sum("pendingPayment") !== null ? ` · ${sum("pendingPayment")} pending payment` : ""}
+            {sum("effectiveBackup") !== null ? ` · ${sum("effectiveBackup")} effective backup` : ""}
+          </span>
+          {projectionState && (
+            <Badge tone={projectionTone(projectionState)}>
+              projection {projectionState}
+            </Badge>
+          )}
+        </div>
         {reason && projectionState !== "consistent" && (
-          <span className="text-amber-700 dark:text-amber-300">{reason}</span>
+          <p className="break-words text-amber-700 dark:text-amber-300">{reason}</p>
         )}
         {!capacity && (
-          <span className="text-amber-700 dark:text-amber-300">
-            Configured limit and operational availability are unavailable because the structure read has no capacity
-            projection.
-          </span>
+          <p className="break-words text-amber-700 dark:text-amber-300">
+            Capacity data is unavailable. The configured limit and operational availability cannot be shown.
+          </p>
         )}
       </div>
     </section>
