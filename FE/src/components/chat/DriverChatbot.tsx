@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 import { assistantApi, assistantConfigured, type ChatMessage, type Conversation } from "../../lib/assistantApi"
+import { interpretBookingTurn, type BookingTurn } from "../../lib/assistantBookingPreview"
 import { AuthApiError, getAuthSessionGeneration, subscribeAuthSession } from "../../lib/authApi"
 import { UntitledIcon } from "../icon/UntitledIcon"
 
@@ -36,7 +37,9 @@ function MessageCards({ message, detail, disabled }: { message: ChatMessage; det
       <strong>{label(record(reservation.vehicle).displayLabel)}</strong>
       <p>{date(reservation.startAt)} – {date(reservation.endAt)}</p>
       <p>{label(reservation.status)} · Dữ liệu lúc {date(reservation.asOf)}</p>
-      {allowed.has(label(reservation.id)) && <button type="button" disabled={disabled} className="min-h-11 underline disabled:opacity-50" onClick={() => detail(label(reservation.id))}>Xem chi tiết mới nhất</button>}
+      {allowed.has(label(reservation.id))
+        ? <button type="button" disabled={disabled} className="min-h-11 underline disabled:opacity-50" onClick={() => detail(label(reservation.id))}>Xem chi tiết mới nhất</button>
+        : <p className="break-all text-xs">Mã lịch đặt {label(reservation.id)}</p>}
     </div>
     if (card.type === "parking" && label(parking.name)) return <div key={index} className="border-t border-[var(--border)] pt-2">
       <strong>{label(parking.name)}</strong><p>{label(parking.address)}</p>
@@ -48,15 +51,19 @@ function MessageCards({ message, detail, disabled }: { message: ChatMessage; det
   })
 }
 
-export function DriverChatbot(props: { pendingQuestion?: string; onUseQuestion?: () => void }) {
+type DriverChatbotProps = {
+  pendingQuestion?: string
+  onUseQuestion?: () => void
+  allowBookingPreview?: boolean
+}
+
+export function DriverChatbot(props: DriverChatbotProps) {
   const generation = useSyncExternalStore(subscribeAuthSession, getAuthSessionGeneration)
   if (!assistantConfigured) return null
   return <DriverChatSession key={generation} generation={generation} {...props} />
 }
 
-function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
-  generation: number; pendingQuestion?: string; onUseQuestion?: () => void
-}) {
+function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBookingPreview }: DriverChatbotProps & { generation: number }) {
   const [open, setOpen] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const [hasSavedChat, setHasSavedChat] = useState(false)
@@ -65,6 +72,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
   const [input, setInput] = useState("")
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [booking, setBooking] = useState<BookingTurn | null>(null)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingRequest | null>(null)
   const [canResend, setCanResend] = useState(false)
@@ -80,7 +88,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
     const before = scrollHeightBeforePrepend.current
     area.scrollTop = before === null ? area.scrollHeight : area.scrollTop + area.scrollHeight - before
     scrollHeightBeforePrepend.current = null
-  }, [messages, open])
+  }, [messages, booking, open])
   useEffect(() => () => active.current?.abort(), [])
   useEffect(() => {
     const controller = new AbortController()
@@ -96,6 +104,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
         if (controller.signal.aborted) return
         setEnabled(available)
         if (!available) {
+          setBooking(null)
           const saved = await assistantApi.conversations(null, controller.signal)
           if (!controller.signal.aborted) setHasSavedChat(saved.items.length > 0)
         }
@@ -140,6 +149,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
     setHistoryCursor(history.nextCursor)
     // Older pages use a fixed message snapshot even when their metadata is newer.
     if (cursor) return
+    if (conversation && conversation.id !== history.conversation.id) setBooking(null)
     setConversation(history.conversation)
     setPending(history.activeRequestClientMessageId
       ? { conversationId: id, requestId: history.activeRequestClientMessageId } : null)
@@ -156,12 +166,20 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
       const page = await assistantApi.conversations(null, signal)
       if (signal.aborted || generation !== getAuthSessionGeneration()) return
       const current = page.items[0]
-      if (!current) resetConversation()
-      else if (!pending || pending.conversationId !== current.id) await loadHistory(current.id, signal)
+      if (!current) {
+        if (conversation) resetConversation()
+      } else if (!pending || pending.conversationId !== current.id) await loadHistory(current.id, signal)
     })
   }
   function send(text: string) {
-    if (!enabled || pending || !text.trim()) return
+    if (!enabled || active.current || pending || !text.trim() || generation !== getAuthSessionGeneration()) return
+    const bookingTurn = allowBookingPreview ? interpretBookingTurn(booking, text) : null
+    if (bookingTurn) {
+      setBooking(bookingTurn)
+      setNotice("")
+      setInput("")
+      return
+    }
     void run(async signal => {
       const attempt = conversation ? null : (creation.current ??= { id: crypto.randomUUID(), locale: "vi" })
       let current = conversation
@@ -254,6 +272,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
   }
   function resetConversation() {
     setConversation(null)
+    setBooking(null)
     setHasSavedChat(false)
     setMessages([])
     setHistoryCursor(null)
@@ -326,7 +345,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
             if (area.scrollTop <= 16 && area.scrollHeight > area.clientHeight) loadOlderMessages()
           }}>
           {!enabled && <p>Hiện chỉ có thể xem lịch sử. Gửi câu hỏi chưa khả dụng.</p>}
-          {enabled && !busy && !pending && !messages.length && <div className="space-y-4">
+          {enabled && !busy && !pending && !messages.length && !booking && <div className="space-y-4">
             <div className="flex items-start gap-2.5">
               <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--card)] text-[var(--primary)]"><UntitledIcon name="sparkles" size={15} /></span>
               <p className="max-w-[86%] rounded-2xl rounded-tl-sm bg-[var(--card)] px-3.5 py-2.5 leading-relaxed">Xin chào! Mình có thể giải đáp các câu hỏi về SmartParking.</p>
@@ -360,6 +379,22 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion }: {
                   <details key={index}><summary>{label(source.title)}</summary><p className="whitespace-pre-wrap break-words">{label(source.excerpt)}</p></details>)}
               </div>
             </article>)}
+          {enabled && booking && <article aria-label="Bản nháp đặt chỗ" className="space-y-2 break-words rounded-2xl bg-[var(--card)] p-3">
+            <h3 className="font-semibold">Bản nháp đặt chỗ</h3>
+            <dl className="space-y-1">
+              <div><dt className="inline font-medium">Loại xe: </dt><dd className="inline">{booking.preview.vehicleType === "CAR" ? "Ô tô" : booking.preview.vehicleType === "MOTORCYCLE" ? "Xe máy" : "Chưa nhập"}</dd></div>
+              <div><dt className="inline font-medium">Xe: </dt><dd className="inline">{booking.preview.vehicleText ?? "Chưa nhập"}</dd></div>
+              <div><dt className="inline font-medium">Bãi: </dt><dd className="inline">{booking.preview.siteText ?? "Chưa nhập"}</dd></div>
+              <div><dt className="inline font-medium">Khung giờ: </dt><dd className="inline">{booking.preview.startAt && booking.preview.endAt
+                ? `${date(booking.preview.startAt)} – ${date(booking.preview.endAt)} (giờ Việt Nam)`
+                : booking.fields.day ? `Ngày ${booking.fields.day.split("-").reverse().join("/")}, chưa rõ giờ`
+                  : booking.fields.times ? `${booking.fields.times.start} – ${booking.fields.times.end}, chưa rõ ngày`
+                    : "Chưa đủ ngày giờ"}</dd></div>
+            </dl>
+            <p>{booking.reply}</p>
+            <p className="text-xs text-[var(--muted)]">Thông tin nhập trong phiên này. Xe, bãi và chỗ trống đang chờ xác minh.</p>
+            <button type="button" className="min-h-11 underline" onClick={() => setBooking(null)}>Bỏ bản nháp</button>
+          </article>}
           {busy && <p role="status">Đang tải…</p>}
           {notice && <p role="alert">{notice}</p>}
           {pending && <div className="flex flex-wrap gap-3">

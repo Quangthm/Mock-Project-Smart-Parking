@@ -522,7 +522,7 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
         )}
       </main>
       {user?.role === "driver" && <div hidden={bookingLot !== null || (findingParking && parkingDetailsOpen)}>
-        <DriverChatbot pendingQuestion={pendingQuestion} onUseQuestion={onUseQuestion} />
+        <DriverChatbot allowBookingPreview pendingQuestion={pendingQuestion} onUseQuestion={onUseQuestion} />
       </div>}
     </DashboardSidebar>
   )
