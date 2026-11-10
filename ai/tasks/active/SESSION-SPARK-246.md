@@ -105,6 +105,13 @@
   - UI Component: `FE/src/roles/driver/parking/FindMyCarCard.tsx` + `find-my-car.css` hiển thị thẻ vị trí thích ứng (Exact Slot, Zone-only, Pending, Stale Banner có nút Tải lại).
   - Tích hợp: nhúng vào `ActiveBookings.tsx` khi có xe check-in.
   - Unit tests: `tests/frontend/driver-find-my-car.test.cjs` 6/6 pass; toàn bộ 220 test FE pass.
+- [x] **Architectural Quality Gate (P1 - P3 Review):**
+  - Rà soát toàn bộ code đối chiếu với `SmartPark-Coding-Skill-v1.0.md` & `ai/AGENTS.md`. Đạt chuẩn 100% Clean Architecture, CQRS, Redaction bảo mật và WCAG 2.1 AA.
+- [x] **Đồng bộ branch với develop (Sync & Merge develop):**
+  - Đóng gói toàn bộ code P1, P2, P3 thành 5 atomic Conventional Commits (`docs(api)`, `feat(facility)`, `feat(operations)`, `feat(fe-driver)` x2).
+  - Merge thành công 35 commits mới từ `origin/develop` (`4880569a`), tự động giải quyết không conflict.
+  - Sửa lỗi test harness cho thư viện mới `motion/react` trong `operator-provisioning.test.cjs`.
+  - Toàn bộ test suite sau merge: Backend build 0 warnings / 0 errors; Frontend 227/227 tests PASS; TypeScript compile 0 errors.
 - [ ] **Phase 4 (Gói 4: E2E Integration) — TRẠNG THÁI: TẠM DỪNG (HALT) CHỜ DOCKER TỪ SPARK-244.**
 
 ---
