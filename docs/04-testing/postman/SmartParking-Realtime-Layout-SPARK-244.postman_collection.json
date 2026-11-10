@@ -647,7 +647,7 @@
               }
             },
             "url": "{{reservationServiceUrl}}/api/parking-sessions/{{walkInSessionId}}/walk-in/check-out?siteId={{seededSiteId}}",
-            "description": "ParkingSessionsController.cs:41-51; ReservationGateStore.CheckOutWalkInAsync:113-158 writes OccupancyReleased {sessionId, slotId=session.CurrentSlotId?.ToString()} in the same transaction. A walk-in has no allocation, so slotId is null and the Facility projection intentionally does not change any parking_slots row (OccupancyProjectionStore.cs:36-57 only acts when SlotId is set)."
+            "description": "ParkingSessionsController.cs:41-51; ReservationGateStore.CheckOutWalkInAsync:113-158 writes OccupancyReleased {sessionId, slotId=session.CurrentSlotId?.ToString()} in the same transaction. A walk-in has no allocation, so slotId is null and the Facility projection intentionally does not change any parking_slots row (OccupancyProjectionRepository.cs:36-57 only acts when SlotId is set)."
           }
         },
         {

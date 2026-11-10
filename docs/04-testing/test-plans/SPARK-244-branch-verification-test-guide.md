@@ -28,7 +28,7 @@ Contract: 3D Digital Twin `v1.2.0` + `docs/03-design/api/3d-digital-twin-spark-2
 | d | P2 publisher | Worker poll `published_at IS NULL` + `FOR UPDATE SKIP LOCKED`, publish sang topic exchange `smartpark.occupancy` | `Infrastructure/Outbox/OccupancyOutboxWorker.cs`, `RabbitMqOutboxPublisher.cs` |
 | e | P2 hub | `/ws/parking-lots/{siteId}/layout`, group `site:{siteId}:operators`, gửi `SnapshotRequired` | `API/Hubs/ParkingLotLayoutHub.cs` |
 | f | P2 broadcaster | Sau khi publish thì đẩy delta xuống hub | `API/Realtime/SignalRLayoutRealtimeBroadcaster.cs` |
-| g | P2 consumer | `processed_events` + `slot_sequence_watermarks` + `occupancy_release_ledger`, cập nhật `parking_slots` | `FacilityService/Infrastructure/OccupancyProjectionWorker.cs`, `Persistence/OccupancyProjectionStore.cs` |
+| g | P2 consumer | `processed_events` + `slot_sequence_watermarks` + `occupancy_release_ledger`, cập nhật `parking_slots` | `FacilityService/Infrastructure/OccupancyProjectionWorker.cs`, `Persistence/OccupancyProjectionRepository.cs` |
 | h | P2.1 compliance | Tách DB access của consumer ra khỏi Infrastructure về Persistence; bỏ config chết | — |
 | i | P3 FE | Guard chống trùng event + nối hub vào dashboard | `FE/src/lib/realtimeIdempotency.ts`, `FE/src/lib/operatorLayoutLive.ts`, `OperatorDashboard.tsx` |
 | j | P4 | Postman collection + environment + 2 guide | `docs/04-testing/**` |
@@ -173,7 +173,7 @@ Cần mở **DevTools → Network → WS** để xem: URL hub, status `101`, và
 | C2 | Chức năng | Postman | Snapshot vận hành đúng contract (folder 01) | 200 + đủ field; 400/404 đúng mã | **VERIFIED** |
 | C3 | Đường ống dữ liệu | Postman + DB | Walk-in → outbox → consumer (folder 02) | 4 event mới, tất cả published, processed == outbox | **VERIFIED** |
 | C4 | Độ bền dữ liệu (biên API) | Postman + DB | Release-once ở tầng API (folder 03) | claim 200 → release 204 → release 204 (no-op) → slot AVAILABLE | **VERIFIED** |
-| C4b | Độ bền dữ liệu (ledger) | xUnit + Postgres | Release-once qua `OccupancyProjectionStore` (G3 thật) | 4/4 test xanh: dedup eventId, ledger chặn giải phóng lần 2, walk-in không ghi ledger, sequence cũ bị bỏ | **VERIFIED** (4/4 pass) |
+| C4b | Độ bền dữ liệu (ledger) | xUnit + Postgres | Release-once qua `OccupancyProjectionRepository` (G3 thật) | 4/4 test xanh: dedup eventId, ledger chặn giải phóng lần 2, walk-in không ghi ledger, sequence cũ bị bỏ | **VERIFIED** (4/4 pass) |
 | C5 | Hợp đồng (chức năng chưa có) | Postman | Zone-only reserved count (folder 04) | `zoneOnlyReservedCount` số, khớp số slot RESERVED của zone | **VERIFIED** |
 | C6 | Chức năng (phân quyền) | Postman | Operator scope (folder 05) | 403 `OPERATOR_LOT_UNASSIGNED`; driver 403 | **VERIFIED** |
 | C7 | Chức năng (hiệu năng) | Postman | Latency proxy (folder 06) | read ≤ 2000 ms; write→read ≤ 2000 ms | **VERIFIED** |
@@ -371,7 +371,7 @@ Kết quả đã chạy lại 2026-11-03: `401` / `200 id=… code=CarParkingSpa
 
 **FAIL:** `3.1` trả 200 (thiếu bảo vệ key — nghiêm trọng); `3.3` vẫn `AVAILABLE` (endpoint internal không ghi); release #2 trả 5xx.
 
-**BLOCKED (đối với Postman):** nhánh **ledger** của consumer (`occupancy_release_ledger`) — chỉ ghi khi event có `slotId`; walk-in không có `slotId`, và Postman không publish được vào RabbitMQ. Nhánh này **đã được phủ bằng C4b** (integration test gọi thẳng `OccupancyProjectionStore`), nên đây không còn là lỗ hổng kiểm chứng — chỉ là giới hạn của công cụ Postman.
+**BLOCKED (đối với Postman):** nhánh **ledger** của consumer (`occupancy_release_ledger`) — chỉ ghi khi event có `slotId`; walk-in không có `slotId`, và Postman không publish được vào RabbitMQ. Nhánh này **đã được phủ bằng C4b** (integration test gọi thẳng `OccupancyProjectionRepository`), nên đây không còn là lỗ hổng kiểm chứng — chỉ là giới hạn của công cụ Postman.
 
 **Dọn dẹp:** sau C4 slot đã về `AVAILABLE`, không cần làm gì thêm. Nếu bỏ dở giữa chừng, chạy lại bước 4 một lần để nhả slot.
 
@@ -379,7 +379,7 @@ Kết quả đã chạy lại 2026-11-03: `401` / `200 id=… code=CarParkingSpa
 
 ### C4b — Release-once tầng **ledger** (integration test, không dùng Postman)
 
-**Kiểm gì:** cơ chế chống giải phóng slot hai lần của G3 nằm ở consumer, gồm 3 lớp bảo vệ nối tiếp trong `OccupancyProjectionStore.ApplyAsync`:
+**Kiểm gì:** cơ chế chống giải phóng slot hai lần của G3 nằm ở consumer, gồm 3 lớp bảo vệ nối tiếp trong `OccupancyProjectionRepository.ApplyAsync`:
 
 | Lớp | Bảng | Chặn được gì |
 |---|---|---|
@@ -406,7 +406,7 @@ function GetEnvVar([string]$name){ ((Get-Content .\.env | Where-Object { $_ -mat
 $env:SMARTPARK_STRUCTURE_TEST_CONNECTION = "Host=localhost;Port=5442;Database=smartpark_facility;Username=smartpark_facility;Password=$(GetEnvVar 'SMARTPARK_DEV_PASSWORD')"
 
 # 3) Chạy riêng nhóm test của C4b
-dotnet test .\tests\Services\SmartParking.FacilityService.Tests\SmartParking.FacilityService.Tests.csproj --filter "FullyQualifiedName~OccupancyProjectionStore" -v minimal
+dotnet test .\tests\Services\SmartParking.FacilityService.Tests\SmartParking.FacilityService.Tests.csproj --filter "FullyQualifiedName~OccupancyProjectionRepository" -v minimal
 ```
 
 **Kết quả mong đợi:** `Passed: 4, Failed: 0, Skipped: 0`.
@@ -832,7 +832,7 @@ docker exec facility-db-1 psql -w -U smartpark_facility -d smartpark_facility -c
 | Map lỗi scope 401/403 | `.../Infrastructure/Clients/OperatorIdentityClient.cs` |
 | Outbox worker / publisher / DI | `.../Infrastructure/Outbox/OccupancyOutboxWorker.cs`, `RabbitMqOutboxPublisher.cs`, `.../InfrastructureDependencyInjection.cs` |
 | Ghi outbox + cấp sequence | `.../Persistence/ReservationGateStore.cs` |
-| Consumer + idempotency | `FacilityService/Infrastructure/OccupancyProjectionWorker.cs`, `FacilityService/Persistence/OccupancyProjectionStore.cs` |
+| Consumer + idempotency | `FacilityService/Infrastructure/OccupancyProjectionWorker.cs`, `FacilityService/Persistence/OccupancyProjectionRepository.cs` |
 | Snapshot DTO + zone field | `FacilityService/Application/OperationalLayoutProjection.cs` |
 | Snapshot reader | `FacilityService/Persistence/PostgresOperationalLayoutReader.cs` |
 | Claim / release nội bộ | `FacilityService/API/Program.cs`, `Persistence/OperatorGateSlotStore.cs` |
