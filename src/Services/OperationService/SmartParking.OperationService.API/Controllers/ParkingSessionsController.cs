@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
@@ -10,6 +11,30 @@ namespace SmartParking.OperationService.API.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class ParkingSessionsController(IMediator mediator) : ApiControllerBase(mediator)
 {
+    [HttpGet("my-history")]
+    public async Task<IActionResult> MyHistory(
+        [FromQuery] string? status,
+        [FromQuery] int limit = 50,
+        CancellationToken ct = default)
+    {
+        var rawAccountId = User.FindFirst("account_id")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+
+        if (string.IsNullOrWhiteSpace(rawAccountId) || !Guid.TryParse(rawAccountId, out var accountId))
+        {
+            // If caller provides X-Account-Id header (e.g. gateway or internal routing), respect it if authenticated
+            var headerAccount = Request.Headers["X-Account-Id"].ToString();
+            if (string.IsNullOrWhiteSpace(headerAccount) || !Guid.TryParse(headerAccount, out accountId))
+            {
+                return Unauthorized(new { success = false, message = "Driver authorization required." });
+            }
+        }
+
+        var sessions = await Mediator.Send(new ListDriverParkingSessionsQuery(accountId, status, limit), ct);
+        return Ok(new { success = true, data = sessions });
+    }
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] Guid siteId, CancellationToken ct)
     {
