@@ -13,6 +13,7 @@ function load(file, imports = {}, globals = {}) {
   }).outputText;
   const context = { exports: {}, Error, ...globals, require(name) {
     if (name === 'react-dom') return { createPortal: content => content };
+    if (name === 'motion/react') return { motion: new Proxy({}, { get: () => 'div' }), useReducedMotion: () => false };
     if (name.endsWith("/ui/RoundedSelect")) return { RoundedSelect: "select" };
     if (name.endsWith("/ui/PageHeader")) return { PageHeader: "page-header" };
     if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" }; if (name.endsWith("/ui/Badge")) return { Badge: "badge" };
