@@ -28,6 +28,7 @@ public sealed class ParkingSessionRow
     public Guid? AccessItemId { get; set; }
     public Guid? AccountId { get; set; }
     public Guid? CurrentSlotId { get; set; }
+    public Guid? CurrentSpatialUnitId { get; set; }
     public string? OriginalPlate { get; set; }
     public string? NormalizedPlate { get; set; }
     public string VehicleType { get; set; } = "";
