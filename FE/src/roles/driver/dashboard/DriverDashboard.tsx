@@ -253,8 +253,9 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
 
                 maxHeight: profileSection === "vehicles" ? "min(calc(100dvh - 2rem), 920px)" : "min(90vh, 760px)",
 
-                overflowY: "auto",
-                overscrollBehavior: profileSection === "vehicles" ? "contain" : undefined,
+                display: profileSection === "vehicles" ? "flex" : undefined,
+                flexDirection: profileSection === "vehicles" ? "column" : undefined,
+                overflowY: profileSection === "vehicles" ? "hidden" : "auto",
 
                 border: "1px solid var(--border)",
 
@@ -268,7 +269,7 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
               }}
             >
               <div
-                className={profileSection === "vehicles" ? "px-4 pt-4 pb-4 sm:px-6 sm:pt-6" : undefined}
+                className={profileSection === "vehicles" ? "shrink-0 px-4 pt-4 pb-4 sm:px-6 sm:pt-6" : undefined}
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -459,7 +460,9 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
               )}
 
               {profileSection === "vehicles" && (
-                <div className="px-4 pb-4 sm:px-6 sm:pb-6"><VehicleManager /></div>
+                <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
+                  <VehicleManager />
+                </div>
               )}
             </section>
           </div>

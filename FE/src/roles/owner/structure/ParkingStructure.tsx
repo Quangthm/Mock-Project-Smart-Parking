@@ -600,7 +600,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
               </section>
 
             </div>
-            <aside className="min-w-0" aria-label="Site structure tree">
+            <aside className="min-w-0" aria-label="Parking structure hierarchy">
               <StructureTree siteId={siteId} units={units} slots={slots} paths={paths} modelUrl={modelUrl} onChanged={refresh} />
             </aside>
           </div>
