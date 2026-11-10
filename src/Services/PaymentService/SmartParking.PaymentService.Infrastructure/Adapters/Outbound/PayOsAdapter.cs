@@ -39,10 +39,10 @@ public class PayOsAdapter : IPaymentGatewayPort
         {
             _logger.LogInformation("PayOS credentials not configured or sandbox mode. Emulating payment link for OrderCode {OrderCode}.", request.OrderCode);
 
-            var mockPaymentLinkId = Guid.NewGuid().ToString("N");
+            var mockPaymentLinkId = $"MOCK-{request.TransactionId:N}";
             return new PaymentInitiateResult(
                 IsSuccess: true,
-                CheckoutUrl: $"https://pay.payos.vn/web/{mockPaymentLinkId}",
+                CheckoutUrl: $"http://localhost:5173/payment/success?transactionId={request.TransactionId}",
                 QrCode: $"00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540{request.AmountVnd}5802VN62230819{request.Description}6304ABCD",
                 AccountNumber: "0123456789",
                 AccountName: "SMARTPARKING CORP",
@@ -244,13 +244,14 @@ public class PayOsAdapter : IPaymentGatewayPort
             _options.ClientId.StartsWith("replace-with") ||
             _options.ClientId.StartsWith("mock"))
         {
-            // Sandbox fallback
+            // Sandbox fallback: an initiated checkout remains pending until the
+            // explicit demo-pay flow or a webhook marks it successful.
             return new PaymentVerificationResult(
                 IsFound: true,
-                PaymentStatus: "SUCCESS",
-                AmountVnd: 25000,
-                GatewayTransactionId: gatewayTransactionId ?? "MOCK-GW-TX",
-                PaidAt: DateTimeOffset.UtcNow
+                PaymentStatus: "PENDING",
+                AmountVnd: 0,
+                GatewayTransactionId: gatewayTransactionId,
+                PaidAt: null
             );
         }
 

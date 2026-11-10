@@ -51,28 +51,35 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             throw new PaymentDomainException("ORDER_EXPIRED", "Đơn hàng này đã hết hạn thanh toán.");
         }
 
-        // Idempotency check:
-        // If caller passed an idempotency key, check if order was already initialized with the SAME idempotency key
-        if (!string.IsNullOrEmpty(request.IdempotencyKey) && order.IdempotencyKey == request.IdempotencyKey)
+        if (order.FinalAmount <= 0)
         {
-            var pendingTx = order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.PENDING);
-            if (pendingTx != null)
-            {
-                _logger.LogInformation("Replaying existing checkout for OrderId {OrderId} with IdempotencyKey {Key}", order.Id, request.IdempotencyKey);
-                return new PaymentCheckoutResponseDto(
-                    PaymentTransactionId: pendingTx.Id,
-                    OrderCode: long.TryParse(order.OrderCode, out var oc) ? oc : 100000 + (long)Math.Abs(order.Id.GetHashCode() % 900000),
-                    Amount: (long)order.FinalAmount,
-                    CheckoutUrl: $"https://pay.payos.vn/web/{pendingTx.GatewayTransactionId ?? pendingTx.Id.ToString("N")}",
-                    QrCode: "00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540250005802VN62230819Thanh toan do xe 20266304ABCD",
-                    AccountNumber: "0123456789",
-                    AccountName: "SMARTPARKING CORP",
-                    Bin: "970422",
-                    Status: pendingTx.Status.ToString(),
-                    ExpiresAt: order.ExpiresAt ?? now.AddMinutes(15),
-                    IsReplayed: true
-                );
-            }
+            throw new PaymentDomainException(
+                "ZERO_AMOUNT_ORDER",
+                "Đơn hàng không phát sinh phí; không cần tạo thanh toán PayOS.");
+        }
+
+        // A pending transaction already represents the active checkout for this order.
+        // PaymentOrder.IdempotencyKey belongs to order preparation and is globally unique;
+        // do not replace it with the separate checkout request's idempotency key.
+        var pendingTx = order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.PENDING);
+        if (pendingTx != null)
+        {
+            _logger.LogInformation("Replaying existing pending checkout for OrderId {OrderId}.", order.Id);
+            return new PaymentCheckoutResponseDto(
+                PaymentTransactionId: pendingTx.Id,
+                OrderCode: long.TryParse(order.OrderCode, out var oc) ? oc : 100000 + (long)Math.Abs(order.Id.GetHashCode() % 900000),
+                Amount: (long)order.FinalAmount,
+                CheckoutUrl: IsMockGatewayTransactionId(pendingTx.GatewayTransactionId)
+                    ? $"http://localhost:5173/payment/success?transactionId={pendingTx.Id}"
+                    : $"https://pay.payos.vn/web/{pendingTx.GatewayTransactionId ?? pendingTx.Id.ToString("N")}",
+                QrCode: "00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540250005802VN62230819Thanh toan do xe 20266304ABCD",
+                AccountNumber: "0123456789",
+                AccountName: "SMARTPARKING CORP",
+                Bin: "970422",
+                Status: pendingTx.Status.ToString(),
+                ExpiresAt: order.ExpiresAt ?? now.AddMinutes(15),
+                IsReplayed: true
+            );
         }
 
         // Check retry limit
@@ -80,12 +87,6 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         if (!PaymentStateMachine.IsRetryAllowed(failedAttempts))
         {
             throw new PaymentDomainException("PAYMENT_RETRY_LIMIT_EXCEEDED", $"Đơn hàng đã vượt quá giới hạn thử lại ({PaymentStateMachine.MaxRetryLimit} lần).");
-        }
-
-        // Update idempotency key if provided
-        if (!string.IsNullOrEmpty(request.IdempotencyKey))
-        {
-            order.IdempotencyKey = request.IdempotencyKey;
         }
 
         var transactionId = Guid.NewGuid();
@@ -96,7 +97,7 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         }
 
         var expiresAt = order.ExpiresAt ?? now.AddMinutes(15);
-        var description = $"Thanh toan {orderCodeNumber}";
+        var description = $"SP {orderCodeNumber}";
 
         var gatewayRequest = new PaymentInitiateRequest(
             TransactionId: transactionId,
@@ -161,4 +162,9 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             IsReplayed: false
         );
     }
+
+    private static bool IsMockGatewayTransactionId(string? gatewayTransactionId) =>
+        gatewayTransactionId?.StartsWith("MOCK-", StringComparison.Ordinal) == true ||
+        (gatewayTransactionId is not null &&
+         Guid.TryParseExact(gatewayTransactionId, "N", out _));
 }

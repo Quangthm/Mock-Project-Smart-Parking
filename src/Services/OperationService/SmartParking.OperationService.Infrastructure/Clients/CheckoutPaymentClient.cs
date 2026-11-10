@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 
@@ -9,7 +10,8 @@ namespace SmartParking.OperationService.Infrastructure.Clients;
 
 public sealed class CheckoutPaymentClient(
     HttpClient client,
-    IHttpContextAccessor context) : ICheckoutPaymentClient
+    IHttpContextAccessor context,
+    IConfiguration configuration) : ICheckoutPaymentClient
 {
     public async Task<CheckoutPricing> CalculateAsync(
         Guid tenantId,
@@ -140,10 +142,30 @@ public sealed class CheckoutPaymentClient(
         {
             using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
+            {
+                if ((int)response.StatusCode < 500)
+                {
+                    PaymentErrorEnvelope? paymentError = null;
+                    try
+                    {
+                        paymentError = await response.Content.ReadFromJsonAsync<PaymentErrorEnvelope>(cancellationToken: ct);
+                    }
+                    catch (JsonException)
+                    {
+                        // Keep the upstream client-error status even if its body is malformed.
+                    }
+
+                    throw new ReservationGateException(
+                        (int)response.StatusCode,
+                        paymentError?.ErrorCode ?? "PAYMENT_REQUEST_REJECTED",
+                        paymentError?.Message ?? "Payment service rejected the checkout request.");
+                }
+
                 throw new ReservationGateException(
-                    response.StatusCode == HttpStatusCode.NotFound ? 404 : 503,
+                    503,
                     "PAYMENT_SERVICE_ERROR",
                     "Payment service could not process the checkout request.");
+            }
 
             return await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct)
                 ?? throw new ReservationGateException(503, "PAYMENT_SERVICE_ERROR", "Payment service returned an empty response.");
@@ -162,6 +184,10 @@ public sealed class CheckoutPaymentClient(
     private HttpRequestMessage CreateRequest(HttpMethod method, string path)
     {
         var request = new HttpRequestMessage(method, path);
+        var serviceKey = configuration["Services:Key"];
+        if (!string.IsNullOrWhiteSpace(serviceKey))
+            request.Headers.TryAddWithoutValidation("X-Internal-Service-Key", serviceKey);
+
         var authorization = context.HttpContext?.Request.Headers.Authorization.ToString();
         if (!string.IsNullOrWhiteSpace(authorization))
             request.Headers.TryAddWithoutValidation("Authorization", authorization);
@@ -172,6 +198,7 @@ public sealed class CheckoutPaymentClient(
         new(status.TransactionId, status.OrderId, status.Amount, status.Status, status.PaidAt, status.IsAuthoritative);
 
     private sealed record PaymentEnvelope<T>(bool Success, T Data);
+    private sealed record PaymentErrorEnvelope(string? ErrorCode, string? Message);
     private sealed record PaymentPricing(long FinalAmountVnd, string Currency, decimal TotalParkedMinutes, bool IsFreeStay);
     private sealed record PaymentOrder(Guid OrderId, string OrderCode, decimal Amount, string Status, DateTimeOffset ExpiresAt);
     private sealed record PreparedPaymentOrder(

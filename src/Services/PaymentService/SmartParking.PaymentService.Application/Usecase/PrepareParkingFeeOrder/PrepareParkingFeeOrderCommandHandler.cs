@@ -79,25 +79,50 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
                     nameof(request.IdempotencyKey));
             }
 
-            var existingInvoice = await _invoiceRepository.GetByPaymentOrderIdAsync(existingOrder.Id, cancellationToken);
-            _logger.LogInformation("Replaying existing order {OrderId} for idempotency key {Key}.", existingOrder.Id, request.IdempotencyKey);
-            return new PrepareParkingFeeOrderResponseDto(
-                OrderId: existingOrder.Id,
-                OrderCode: existingOrder.OrderCode,
-                SessionId: existingOrder.ReferenceId,
-                Currency: existingInvoice?.PricingSnapshot.Currency ?? "VND",
-                BaseParkingFee: existingInvoice?.BaseParkingFee ?? existingOrder.Amount,
-                PenaltyFee: existingInvoice?.OverstayPenaltyFee ?? (request.PenaltyAmount ?? 0m),
-                FinalAmount: existingOrder.FinalAmount,
-                Status: existingOrder.Status.ToString(),
-                TariffId: existingInvoice?.PricingSnapshot.TariffId ?? Guid.Empty,
-                TariffVersion: existingInvoice?.PricingSnapshot.TariffVersion ?? 1,
-                TotalParkedMinutes: existingInvoice?.TotalParkedMinutes ?? 0,
-                ExpiresAt: existingOrder.ExpiresAt,
-                CreatedAt: existingOrder.CreatedAt,
-                DepositDeducted: existingOrder.DepositDeducted,
-                SurplusRefund: existingInvoice?.PricingSnapshot.SurplusRefund ?? 0m
-            );
+            var checkedAt = DateTimeOffset.UtcNow;
+            if (existingOrder.Status == PaymentOrderStatus.PENDING && existingOrder.IsExpired(checkedAt))
+            {
+                if (existingOrder.Transactions.Any(transaction =>
+                        transaction.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN))
+                {
+                    throw new PaymentDomainException(
+                        PaymentDomainException.OrderExpired,
+                        "Đơn hàng đã hết hạn nhưng giao dịch trước đó chưa được đối soát; không thể tạo đơn thanh toán mới.");
+                }
+
+                // Retire an expired, unsettled order so the same stable preparation key
+                // can identify a newly priced order. Keep the old order and invoice as history.
+                existingOrder.MarkCancelled(checkedAt);
+                existingOrder.IdempotencyKey = null;
+                _orderRepository.Update(existingOrder);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation(
+                    "Expired payment order {OrderId} was retired before preparing a fresh order for session {SessionId}.",
+                    existingOrder.Id,
+                    request.SessionId);
+            }
+            else
+            {
+                var existingInvoice = await _invoiceRepository.GetByPaymentOrderIdAsync(existingOrder.Id, cancellationToken);
+                _logger.LogInformation("Replaying existing order {OrderId} for idempotency key {Key}.", existingOrder.Id, request.IdempotencyKey);
+                return new PrepareParkingFeeOrderResponseDto(
+                    OrderId: existingOrder.Id,
+                    OrderCode: existingOrder.OrderCode,
+                    SessionId: existingOrder.ReferenceId,
+                    Currency: existingInvoice?.PricingSnapshot.Currency ?? "VND",
+                    BaseParkingFee: existingInvoice?.BaseParkingFee ?? existingOrder.Amount,
+                    PenaltyFee: existingInvoice?.OverstayPenaltyFee ?? (request.PenaltyAmount ?? 0m),
+                    FinalAmount: existingOrder.FinalAmount,
+                    Status: existingOrder.Status.ToString(),
+                    TariffId: existingInvoice?.PricingSnapshot.TariffId ?? Guid.Empty,
+                    TariffVersion: existingInvoice?.PricingSnapshot.TariffVersion ?? 1,
+                    TotalParkedMinutes: existingInvoice?.TotalParkedMinutes ?? 0,
+                    ExpiresAt: existingOrder.ExpiresAt,
+                    CreatedAt: existingOrder.CreatedAt,
+                    DepositDeducted: existingOrder.DepositDeducted,
+                    SurplusRefund: existingInvoice?.PricingSnapshot.SurplusRefund ?? 0m
+                );
+            }
         }
 
         // 3. Retrieve Tariff Policy

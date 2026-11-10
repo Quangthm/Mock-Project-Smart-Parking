@@ -79,7 +79,7 @@ public class PayOsAdapterTests
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(result.CheckoutUrl);
-        Assert.StartsWith("https://pay.payos.vn/web/", result.CheckoutUrl);
+        Assert.StartsWith("http://localhost:5173/payment/success?transactionId=", result.CheckoutUrl);
         Assert.NotNull(result.QrCode);
         Assert.Equal("970422", result.Bin);
         Assert.Equal("SMARTPARKING CORP", result.AccountName);

@@ -4,6 +4,7 @@ const paymentBase = (import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "/payment-api"
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const checkoutKey = (orderId: string) => `sp_payos_checkout_${orderId}`
 const idempotencyKey = (orderId: string) => `sp_payos_idempotency_${orderId}`
+const checkoutStorage = typeof window === "undefined" ? null : window.localStorage
 
 export interface CheckoutResponse {
   paymentTransactionId: string
@@ -38,7 +39,8 @@ export function isPaymentOrderId(value: string): boolean {
 export function isTrustedPayOsUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    return url.protocol === "https:" && url.hostname === "pay.payos.vn"
+    return (url.protocol === "https:" && url.hostname === "pay.payos.vn") ||
+      (url.protocol === "http:" && url.hostname === "localhost" && url.port === "5173")
   } catch { return false }
 }
 
@@ -79,8 +81,8 @@ export const paymentApi = {
   async checkout(orderId: string): Promise<CheckoutResponse> {
     const normalized = orderId.trim().toLowerCase()
     if (!isPaymentOrderId(normalized)) throw new Error("Enter a valid payment order ID.")
-    const key = sessionStorage.getItem(idempotencyKey(normalized)) ?? crypto.randomUUID()
-    sessionStorage.setItem(idempotencyKey(normalized), key)
+    const key = checkoutStorage?.getItem(idempotencyKey(normalized)) ?? crypto.randomUUID()
+    checkoutStorage?.setItem(idempotencyKey(normalized), key)
     const origin = window.location.origin
     const result = await paymentRequest<CheckoutResponse>(`/orders/${normalized}/checkout`, {
       method: "POST",
@@ -98,8 +100,8 @@ export const paymentApi = {
     if (result.accountNumber === "0123456789" && result.accountName === "SMARTPARKING CORP") {
       throw new Error("Payment Service is using its demo gateway. Configure real payOS credentials before sending a payment.")
     }
-    sessionStorage.setItem(checkoutKey(normalized), JSON.stringify(result))
-    sessionStorage.setItem("sp_payos_latest_order", normalized)
+    checkoutStorage?.setItem(checkoutKey(normalized), JSON.stringify(result))
+    checkoutStorage?.setItem("sp_payos_latest_order", normalized)
     return result
   },
   status(transactionId: string): Promise<PaymentStatusResponse> {
@@ -109,13 +111,13 @@ export const paymentApi = {
   rememberedCheckout(orderId: string): CheckoutResponse | null {
     if (!isPaymentOrderId(orderId)) return null
     try {
-      const value = JSON.parse(sessionStorage.getItem(checkoutKey(orderId.toLowerCase())) ?? "null")
+      const value = JSON.parse(checkoutStorage?.getItem(checkoutKey(orderId.toLowerCase())) ?? "null")
       return value && isPaymentOrderId(value.paymentTransactionId) && isTrustedPayOsUrl(value.checkoutUrl) ? value as CheckoutResponse : null
     } catch { return null }
   },
   resetAttempt(orderId: string): void {
     if (!isPaymentOrderId(orderId)) return
-    sessionStorage.removeItem(idempotencyKey(orderId.toLowerCase()))
-    sessionStorage.removeItem(checkoutKey(orderId.toLowerCase()))
+    checkoutStorage?.removeItem(idempotencyKey(orderId.toLowerCase()))
+    checkoutStorage?.removeItem(checkoutKey(orderId.toLowerCase()))
   },
 }
