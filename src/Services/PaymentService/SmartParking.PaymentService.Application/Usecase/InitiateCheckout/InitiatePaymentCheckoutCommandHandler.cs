@@ -48,7 +48,7 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
 
         if (order.IsExpired(now))
         {
-            throw new PaymentDomainException("ORDER_EXPIRED", "Đơn hàng này đã hết hạn thanh toán.");
+            throw new PaymentDomainException("ORDER_EXPIRED", "This payment order has expired.");
         }
 
         if (order.FinalAmount <= 0)

@@ -87,7 +87,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
                 {
                     throw new PaymentDomainException(
                         PaymentDomainException.OrderExpired,
-                        "Đơn hàng đã hết hạn nhưng giao dịch trước đó chưa được đối soát; không thể tạo đơn thanh toán mới.");
+                        "This payment order has expired, but its previous transaction has not been reconciled. A new payment order cannot be created yet.");
                 }
 
                 // Retire an expired, unsettled order so the same stable preparation key
