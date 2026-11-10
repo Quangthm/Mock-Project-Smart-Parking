@@ -146,6 +146,37 @@ $composeEnv = @{
     SMARTPARK_ASSISTANT_DOCKER_GUEST_RELEASE = $guestRelease
     SMARTPARK_ASSISTANT_DOCKER_CHAT_RELEASE = $chatRelease
 }
+foreach ($owner in @('User','Operations','Search')) {
+    $enabledName = "Assistant__Reads__${owner}__Enabled"
+    $originName = "Assistant__Reads__${owner}__Origin"
+    $enabled = [string]$settings[$enabledName]
+    if (!$enabled) { $enabled = 'false' }
+    if ($enabled -notin @('true','false')) { throw "Invalid Assistant setting: $enabledName must be true or false." }
+    $composeEnv[$enabledName] = $enabled
+    $composeEnv[$originName] = ''
+    if ($enabled -eq 'true') {
+        $ownerOrigin = Get-RequiredSetting $originName
+        $uri = $null
+        if (![Uri]::TryCreate($ownerOrigin, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or
+            $uri.UserInfo -or $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.Fragment) {
+            throw "Assistant read requires a fixed HTTPS origin: $originName."
+        }
+        if ($uri.IsLoopback) {
+            throw "Invalid Docker Assistant origin: $originName points to the Assistant container. Use an HTTPS origin reachable from the container, or disable $enabledName until it is available."
+        }
+        $composeEnv[$originName] = $ownerOrigin
+    }
+}
+$ageName = 'Assistant__Reads__Search__MaxAgeSeconds'
+$skewName = 'Assistant__Reads__Search__ClockSkewSeconds'
+$age = $skew = 0
+if ($composeEnv['Assistant__Reads__Search__Enabled'] -eq 'true' -and
+    (![int]::TryParse($settings[$ageName], [ref]$age) -or $age -lt 1 -or $age -gt 3600 -or
+     ![int]::TryParse($settings[$skewName], [ref]$skew) -or $skew -lt 0 -or $skew -gt 60)) {
+    throw "Enabled Assistant search needs $ageName (1-3600) and $skewName (0-60)."
+}
+$composeEnv[$ageName] = [string]$age
+$composeEnv[$skewName] = [string]$skew
 if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not found. Start Docker Desktop and retry.' }
 $endpoint = $env:DOCKER_HOST
 if ($env:DOCKER_CONTEXT -or !$endpoint) {

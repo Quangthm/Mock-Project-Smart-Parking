@@ -47,11 +47,24 @@ foreach ($owner in @('User','Operations','Search')) {
     $flag = $settings["Assistant__Reads__${owner}__Enabled"]
     $name = "Assistant__Reads__${owner}__Origin"
     if (!$flag -or $flag -eq 'false') { Report $name 'DISABLED' 'Owner read disabled.'; continue }
+    $origin = [string]$settings[$name]
     $uri = $null
-    if ($flag -ne 'true' -or ![Uri]::TryCreate($settings[$name], [UriKind]::Absolute, [ref]$uri) -or
+    if ($flag -ne 'true' -or [string]::IsNullOrWhiteSpace($origin) -or
+        ![Uri]::TryCreate($origin, [UriKind]::Absolute, [ref]$uri) -or
         $uri.Scheme -ne 'https' -or $uri.UserInfo -or $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.Fragment) {
         Report $name 'INVALID' 'Enabled reads need fixed HTTPS origins.'
+    } elseif ($settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true' -and $uri.IsLoopback) {
+        Report $name 'INVALID' 'Docker Assistant is enabled. Use an HTTPS origin reachable from the container.'
     } else { Report $name 'CONFIGURED' 'HTTPS origin configured; TLS/auth/reachability unverified.' }
+}
+if ($settings['Assistant__Reads__Search__Enabled'] -eq 'true') {
+    foreach ($bounds in @(@('MaxAgeSeconds', 1, 3600), @('ClockSkewSeconds', 0, 60))) {
+        $name = 'Assistant__Reads__Search__' + $bounds[0]
+        $seconds = 0
+        if (![int]::TryParse($settings[$name], [ref]$seconds) -or $seconds -lt $bounds[1] -or $seconds -gt $bounds[2]) {
+            Report $name 'INVALID' "Enabled search requires an integer in $($bounds[1])-$($bounds[2])."
+        } else { Report $name 'CONFIGURED' 'Value is in bounds; deployment freshness policy unverified.' }
+    }
 }
 $knowledge = $settings['Assistant__Guest__KnowledgeDirectory']
 foreach ($file in @('smartpark-knowledge.md','publication.json')) {

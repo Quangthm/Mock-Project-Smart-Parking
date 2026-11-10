@@ -18,6 +18,14 @@ services:
       Assistant__Guest__AllowedOrigins__0: ${SMARTPARK_ASSISTANT_DOCKER_ORIGIN:?Configure frontend origin}
       Assistant__Guest__ReleaseEnabled: ${SMARTPARK_ASSISTANT_DOCKER_GUEST_RELEASE:-false}
       Assistant__Chat__ReleaseEnabled: ${SMARTPARK_ASSISTANT_DOCKER_CHAT_RELEASE:-false}
+      Assistant__Reads__User__Enabled: ${Assistant__Reads__User__Enabled:-false}
+      Assistant__Reads__User__Origin: ${Assistant__Reads__User__Origin:-}
+      Assistant__Reads__Operations__Enabled: ${Assistant__Reads__Operations__Enabled:-false}
+      Assistant__Reads__Operations__Origin: ${Assistant__Reads__Operations__Origin:-}
+      Assistant__Reads__Search__Enabled: ${Assistant__Reads__Search__Enabled:-false}
+      Assistant__Reads__Search__Origin: ${Assistant__Reads__Search__Origin:-}
+      Assistant__Reads__Search__MaxAgeSeconds: ${Assistant__Reads__Search__MaxAgeSeconds:-0}
+      Assistant__Reads__Search__ClockSkewSeconds: ${Assistant__Reads__Search__ClockSkewSeconds:-0}
     volumes:
       - type: bind
         source: ${SMARTPARK_ASSISTANT_DOCKER_KEYS:?Configure keyring directory}
