@@ -788,3 +788,77 @@
 .audit-log-table td { vertical-align: top; line-height: 1.5; }
 @media (max-width: 640px) { .audit-log-search { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .audit-log-table tbody tr { transition: none; } }
+.btn-outline.structure-action {
+  transition: background-color 150ms ease, border-color 150ms ease, scale 150ms cubic-bezier(.23, 1, .32, 1);
+}
+.btn-outline.structure-action:not(:disabled):hover { transform: none; }
+.btn-outline.structure-action:not(:disabled):active { transform: none; scale: .97; }
+.btn-outline.structure-action-danger {
+  color: var(--occupied);
+  background: var(--status-occupied-bg);
+  border-color: color-mix(in srgb, var(--occupied) 32%, var(--border));
+}
+.btn-outline.structure-action-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--occupied) 15%, var(--status-occupied-bg));
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-outline.structure-action { transition: none; }
+  .btn-outline.structure-action:not(:disabled):active { scale: 1; }
+}
+
+@media (forced-colors: none) {
+  input[type="checkbox"]:not([role="switch"]) {
+    appearance: none;
+    position: relative;
+    display: inline-grid;
+    inline-size: 1.125rem;
+    block-size: 1.125rem;
+    flex: none;
+    place-items: center;
+    vertical-align: middle;
+    border: 1px solid color-mix(in srgb, var(--muted) 70%, var(--border));
+    border-radius: .375rem;
+    background: var(--card);
+    cursor: pointer;
+  }
+  input[type="checkbox"]:not([role="switch"])::before,
+  input[type="checkbox"]:not([role="switch"])::after {
+    content: "";
+    pointer-events: none;
+    opacity: 0;
+  }
+  input[type="checkbox"]:not([role="switch"])::before {
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: var(--primary);
+    transform: scale(.7);
+    transition: transform 300ms cubic-bezier(.23, 1, .32, 1), opacity 200ms cubic-bezier(.23, 1, .32, 1);
+  }
+  input[type="checkbox"]:not([role="switch"])::after {
+    z-index: 1;
+    inline-size: 72%;
+    block-size: 72%;
+    background: var(--primary-fg);
+    clip-path: polygon(11% 51%, 25% 38%, 42% 55%, 77% 21%, 91% 35%, 42% 84%);
+    transform: scale(.7);
+    transition: transform 150ms cubic-bezier(.23, 1, .32, 1), opacity 150ms cubic-bezier(.23, 1, .32, 1);
+  }
+  input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate)::before,
+  input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate)::after {
+    opacity: 1;
+    transform: scale(1);
+  }
+  input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate)::after { transition-delay: 120ms; }
+  input[type="checkbox"]:not([role="switch"]):indeterminate::after { clip-path: inset(42% 16% round 1px); }
+  input[type="checkbox"]:not([role="switch"]):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+  input[type="checkbox"]:not([role="switch"]):disabled { opacity: .55; cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    input[type="checkbox"]:not([role="switch"])::before,
+    input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate)::after,
+    input[type="checkbox"]:not([role="switch"])::after { transition: none; }
+  }
+}
