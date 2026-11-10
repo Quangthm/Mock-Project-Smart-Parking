@@ -8,7 +8,7 @@ namespace SmartParking.FacilityService.Persistence;
 // processed_events deduplicates by eventId, slot_sequence_watermarks rejects stale sequence
 // numbers for the same slot, and occupancy_release_ledger guarantees a session is released
 // at most once even if release events are redelivered.
-public sealed class OccupancyProjectionStore(NpgsqlDataSource source) : IOccupancyProjectionStore
+public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOccupancyProjectionRepository
 {
     public async Task<bool> ApplyAsync(OccupancyProjectionEvent projectionEvent, CancellationToken ct)
     {

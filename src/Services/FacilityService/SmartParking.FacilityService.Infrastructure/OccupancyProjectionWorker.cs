@@ -21,7 +21,7 @@ public sealed class RabbitMqProjectionOptions
 }
 
 // Transport adapter only: consumes occupancy events published by OperationService and hands each
-// one to IOccupancyProjectionStore (Persistence), which owns the database idempotency guarantees
+// one to IOccupancyProjectionRepository (Persistence), which owns the database idempotency guarantees
 // (delta design G5). This worker holds no SQL or database dependency.
 public sealed class OccupancyProjectionWorker(
     IServiceScopeFactory scopeFactory,

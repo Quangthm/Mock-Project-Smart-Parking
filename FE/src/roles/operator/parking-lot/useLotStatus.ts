@@ -259,7 +259,7 @@ export function useLotStatus(
   const siteLayout = resolveLotLayout(site)
   const [fetchedLayout, setFetchedLayout] = useState<OperationalLayoutProjection | null>(null)
   const propLayout = useMemo(
-    () => options.layout ?? siteLayout ?? fetchedLayout,
+    () => options.layout ?? fetchedLayout ?? siteLayout,
     [options.layout, siteLayout, fetchedLayout],
   )
   useEffect(() => {

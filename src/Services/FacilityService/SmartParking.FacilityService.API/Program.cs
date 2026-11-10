@@ -49,7 +49,7 @@ public static class FacilityHost
         builder.Services.AddScoped<IStructureSynchronizationStore, PostgresStructureSynchronizationStore>();
         builder.Services.AddScoped<IStructureSynchronizationService, StructureSynchronizationService>();
         builder.Services.AddHostedService<StructureSynchronizationWorker>();
-        builder.Services.AddScoped<IOccupancyProjectionStore, OccupancyProjectionStore>();
+        builder.Services.AddScoped<IOccupancyProjectionRepository, OccupancyProjectionRepository>();
         // Occupancy projection is enabled only when the broker is configured; without it the
         // projection tables stay untouched and the operator layout keeps serving its snapshot.
         if (!string.IsNullOrWhiteSpace(builder.Configuration["RabbitMq:ConnectionString"]))

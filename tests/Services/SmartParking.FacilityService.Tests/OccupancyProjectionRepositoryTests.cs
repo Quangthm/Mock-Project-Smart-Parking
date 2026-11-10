@@ -9,13 +9,13 @@ namespace SmartParking.FacilityService.Tests;
 // unique ledger index, FOR UPDATE watermarks), so they need SMARTPARK_STRUCTURE_TEST_CONNECTION
 // pointing at an isolated server with CREATE DATABASE. Until that variable is set they are skipped
 // through the shared [StructurePostgresFact] attribute (declared in PostgresStructureWorkflowTests).
-public sealed class OccupancyProjectionStoreTests
+public sealed class OccupancyProjectionRepositoryTests
 {
     [StructurePostgresFact]
     public async Task DuplicateEventIdIsAppliedOnce()
     {
         await using var fixture = await OccupancyProjectionFixture.CreateAsync();
-        var store = new OccupancyProjectionStore(fixture.DataSource);
+        var store = new OccupancyProjectionRepository(fixture.DataSource);
         var eventId = Guid.NewGuid();
         var change = new OccupancyProjectionEvent(
             EventId: eventId,
@@ -40,7 +40,7 @@ public sealed class OccupancyProjectionStoreTests
     public async Task SpentReleaseLedgerDoesNotFreeASlotReoccupiedByAnotherSession()
     {
         await using var fixture = await OccupancyProjectionFixture.CreateAsync();
-        var store = new OccupancyProjectionStore(fixture.DataSource);
+        var store = new OccupancyProjectionRepository(fixture.DataSource);
         var sessionA = Guid.NewGuid();
 
         // Session A occupies the slot, then releases it: the ledger records session A once.
@@ -66,7 +66,7 @@ public sealed class OccupancyProjectionStoreTests
     public async Task ReleaseWithoutSlotIsRecordedButNotProjected()
     {
         await using var fixture = await OccupancyProjectionFixture.CreateAsync();
-        var store = new OccupancyProjectionStore(fixture.DataSource);
+        var store = new OccupancyProjectionRepository(fixture.DataSource);
         var session = Guid.NewGuid();
 
         Assert.True(await store.ApplyAsync(Change(fixture, "OCCUPIED", 1), CancellationToken.None));
@@ -95,7 +95,7 @@ public sealed class OccupancyProjectionStoreTests
     public async Task StaleSequenceIsIgnoredAfterTheWatermarkAdvances()
     {
         await using var fixture = await OccupancyProjectionFixture.CreateAsync();
-        var store = new OccupancyProjectionStore(fixture.DataSource);
+        var store = new OccupancyProjectionRepository(fixture.DataSource);
 
         Assert.True(await store.ApplyAsync(Change(fixture, "OCCUPIED", 10), CancellationToken.None));
         Assert.Equal("OCCUPIED", await fixture.SlotStateAsync());

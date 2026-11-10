@@ -22,7 +22,6 @@ public static class PersistenceDependencyInjection
         services.AddScoped<ISlotAllocationRepository, SlotAllocationRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.TryAddScoped<IStructureSafetyStore, StructureSafetyStore>();
-        services.AddScoped<IReservationGateStore, ReservationGateStore>();
         services.AddScoped<IOccupancyOutboxStore, OccupancyOutboxStore>();
         return services;
     }

@@ -4,7 +4,7 @@ namespace SmartParking.FacilityService.Application;
 // Application owns the port; Persistence implements it with the database idempotency
 // guarantees (processed_events, slot_sequence_watermarks, occupancy_release_ledger) from
 // the SPARK-244 delta design (G5). Infra/transport concerns stay out of this contract.
-public interface IOccupancyProjectionStore
+public interface IOccupancyProjectionRepository
 {
     // Returns true only when the event advanced the projection. Returns false when the event
     // was a duplicate (eventId already processed) or stale (sequence not ahead of the slot
