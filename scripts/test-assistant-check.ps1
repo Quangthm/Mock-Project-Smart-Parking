@@ -11,7 +11,11 @@ function dotnet { throw 'Unexpected dotnet call from read-only check.' }
 function docker { throw 'Unexpected Docker call from read-only check.' }
 $fixture = Join-Path $scratch 'review.env'
 @('ConnectionStrings__IoT=synthetic-secret-not-for-output',
+    'SMARTPARK_ASSISTANT_DOCKER_ENABLED=true',
     'Assistant__Reads__User__Enabled=true', 'Assistant__Reads__User__Origin=http://localhost:5035',
+    'Assistant__Reads__Operations__Enabled=true',
+    'Assistant__Reads__Search__Enabled=true', 'Assistant__Reads__Search__Origin=https://operations.example.test',
+    'Assistant__Reads__Search__MaxAgeSeconds=0', 'Assistant__Reads__Search__ClockSkewSeconds=0',
     'Assistant__Guest__ReleaseEnabled=invalid') | Set-Content -LiteralPath $fixture -Encoding UTF8
 $before = [IO.File]::ReadAllText($fixture)
 $priorConnection = $env:ConnectionStrings__IoT
@@ -21,8 +25,18 @@ if ($text -match 'synthetic-secret-not-for-output') { throw 'Secret leaked.' }
 if ($env:ConnectionStrings__IoT -cne $priorConnection) { throw 'Process environment changed.' }
 if ([IO.File]::ReadAllText($fixture) -cne $before -or (Test-Path -LiteralPath (Join-Path $scratch '.env'))) { throw 'Configuration written.' }
 if (!($rows | Where-Object { $_.Check -eq 'Assistant__Reads__User__Origin' -and $_.Status -eq 'INVALID' })) { throw 'HTTP read accepted.' }
+if (!($rows | Where-Object { $_.Check -eq 'Assistant__Reads__Operations__Origin' -and $_.Status -eq 'INVALID' })) { throw 'Missing HTTPS origin not reported.' }
+if (!($rows | Where-Object { $_.Check -eq 'Assistant__Reads__Search__Origin' -and $_.Status -eq 'CONFIGURED' })) { throw 'Valid HTTPS origin rejected.' }
+if (!($rows | Where-Object { $_.Check -eq 'Assistant__Reads__Search__MaxAgeSeconds' -and $_.Status -eq 'INVALID' })) { throw 'Invalid search freshness accepted.' }
+if (!($rows | Where-Object { $_.Check -eq 'Assistant__Reads__Search__ClockSkewSeconds' -and $_.Status -eq 'CONFIGURED' })) { throw 'Valid zero clock skew rejected.' }
 if (!($rows | Where-Object { $_.Check -eq 'Functional readiness' -and $_.Status -eq 'UNVERIFIED' })) { throw 'Readiness falsely accepted.' }
 if (!($rows | Where-Object { $_.Check -eq 'Assistant__Jwt__Issuer' -and $_.Status -eq 'MISSING' })) { throw 'Missing JWT not reported.' }
+$dockerFixture = Join-Path $scratch 'docker-loopback.env'
+($before -replace 'https://operations.example.test', 'https://localhost:5056') | Set-Content -LiteralPath $dockerFixture -Encoding UTF8
+$dockerRows = @(& (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $dockerFixture)
+if (!($dockerRows | Where-Object { $_.Check -eq 'Assistant__Reads__Search__Origin' -and $_.Status -eq 'INVALID' -and $_.Detail -like 'Docker Assistant*' })) {
+    throw 'Docker Assistant loopback origin not rejected.'
+}
 $rejected = $false
 try { & (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $fixture -RecreateDb }
 catch { $rejected = $_.Exception.Message -match 'cannot be combined' }

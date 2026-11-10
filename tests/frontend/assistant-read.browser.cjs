@@ -12,28 +12,47 @@ const messages = `${conversations}/${conversationId}/messages`;
 const result = `${conversations}/${conversationId}/requests/${requestId}`;
 const question = 'Lịch đặt của tôi';
 const now = '2026-11-08T02:00:00Z';
+const reservationId = '90000000-0000-4000-8000-000000000003';
+const reservationWithoutAction = '90000000-0000-4000-8000-000000000004';
 const conversation = { id: conversationId, title: 'Hội thoại kiểm thử A', locale: 'vi', revision: 2,
   createdAt: now, lastMessageAt: now, expiresAt: '2026-12-08T02:00:00Z' };
 const answer = { id: requestId, sequence: 2, role: 'assistant', content: 'Phản hồi riêng A',
-  createdAt: now, clientMessageId: requestId, outcome: 'answered', sources: [], actions: [],
-  mode: 'system', cards: [{ type: 'parking', asOf: now, parking: { name: 'Bãi fixture', availability: {} } }] };
+  createdAt: now, clientMessageId: requestId, outcome: 'answered', sources: [],
+  actions: [{ type: 'view_reservation', reservationId }], mode: 'system', cards: [
+    { type: 'parking', asOf: now, parking: { name: 'Bãi chưa rõ chỗ', availability: { availableCount: null } } },
+    { type: 'parking', asOf: now, parking: { name: 'Bãi đã đủ xe', availability: { availableCount: 0 } } },
+    { type: 'reservation', reservation: { id: reservationId, vehicle: { displayLabel: 'Xe kiểm thử A' },
+      startAt: now, endAt: '2026-11-08T04:00:00Z', status: 'CONFIRMED', asOf: now } },
+    { type: 'reservation', reservation: { id: reservationWithoutAction, vehicle: { displayLabel: 'Xe kiểm thử khác' },
+      startAt: now, endAt: '2026-11-08T04:00:00Z', status: 'CONFIRMED', asOf: now } },
+  ] };
 const older = { ...answer, id: 'older-message', sequence: 1, role: 'user', content: 'Tin nhắn từ trang cũ' };
 const latest = { ...answer, id: 'latest-message', sequence: 4, content: 'Phản hồi từ tab khác' };
+const empty = { ...latest, id: 'empty', sequence: 6, cards: [], actions: [], outcome: 'empty',
+  content: 'Không tìm thấy bãi nào được xác nhận phù hợp với bộ lọc đã gửi.' };
+const failure = { ...empty, id: 'failure', sequence: 8, outcome: 'dependency_unavailable',
+  content: 'API tìm bãi gặp lỗi khi trả kết quả. Bạn có thể thử lại.' };
+const detail = { ...empty, id: 'detail', sequence: 10, outcome: 'answered',
+  content: 'Chi tiết lịch đặt vừa được đọc lại.', cards: answer.cards.filter(card => card.reservation?.id === reservationId) };
 
 async function scenario(browser, viewport, dist) {
   const page = await browser.newPage({ viewport, serviceWorkers: 'block' });
   page.setDefaultTimeout(8000);
   let enabled = false, recovered = false, hold = false, reset = false;
-  let paginate = false, latestAvailable = false;
+  let paginate = false, latestAvailable = false, detailAvailable = false;
   let sentRevision;
   let releaseHistory;
   const historyReleased = new Promise(resolve => { releaseHistory = resolve; });
   const account = id => ({ userId: id, role: 'driver', email: `${id}@example.test`,
     fullName: `Fixture ${id}`, onboardingComplete: true });
   const requests = [];
+  const posts = [];
   await page.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
+    // The map SDK can emit background telemetry while the Driver dashboard is open.
+    const endpoint = `${url.origin}${url.pathname}`;
+    if (request.method() === 'POST' && endpoint !== 'https://api.maptiler.com/metrics') posts.push(endpoint);
     const routePath = url.pathname;
     const ok = data => route.fulfill({ json: { success: true, data } });
     if (url.origin !== origin) return route.abort();
@@ -60,7 +79,13 @@ async function scenario(browser, viewport, dist) {
     }
     if (routePath === messages && isA) {
       if (request.method() === 'POST') {
-        sentRevision = request.postDataJSON().expectedRevision;
+        const { expectedRevision, message, clientMessageId } = request.postDataJSON();
+        if (message === `reservation details ${reservationId}`) {
+          assert.equal(expectedRevision, 8);
+          detailAvailable = true;
+          return ok({ requestId: clientMessageId, conversationId, clientMessageId, state: 'completed', answer: detail, revision: 10 });
+        }
+        sentRevision = expectedRevision;
         latestAvailable = true;
         return route.fulfill({ status: 409, json: { success: false, code: 'REVISION_CONFLICT' } });
       }
@@ -69,7 +94,8 @@ async function scenario(browser, viewport, dist) {
           activeRequestClientMessageId: null });
       }
       if (latestAvailable) {
-        return ok({ conversation: { ...conversation, revision: 4 }, items: [answer, latest], nextCursor: null,
+        const items = [answer, latest, empty, failure, ...(detailAvailable ? [detail] : [])];
+        return ok({ conversation: { ...conversation, revision: items.at(-1).sequence }, items, nextCursor: null,
           activeRequestClientMessageId: null });
       }
       if (hold) await historyReleased;
@@ -89,6 +115,11 @@ async function scenario(browser, viewport, dist) {
   const guest = button('Open SmartParking AI');
   const driver = button('Trợ lý · Lịch sử');
   const panel = page.getByRole('region', { name: 'Trợ lý SmartParking' });
+  const booking = panel.getByRole('article', { name: 'Bản nháp đặt chỗ' });
+  const send = async text => {
+    await panel.getByRole('textbox').fill(text);
+    await button('Gửi', panel).click();
+  };
   const login = async id => {
     await page.getByPlaceholder('you@example.com or phone number').fill(`${id}@example.test`);
     await page.getByPlaceholder('Enter your password').fill('fixture-password');
@@ -113,6 +144,8 @@ async function scenario(browser, viewport, dist) {
     await driver.click();
     await button('Kiểm tra kết quả', panel).click();
     await panel.getByText('Chỗ trống: Chưa xác định', { exact: true }).waitFor();
+    await panel.getByText('Chỗ trống: 0', { exact: true }).waitFor();
+    await panel.getByText(`Mã lịch đặt ${reservationWithoutAction}`, { exact: true }).waitFor();
     await button('Đưa vào ô soạn', panel).click();
     assert.equal(await panel.getByRole('textbox').inputValue(), question);
     assert.equal(requests.filter(([method]) => method === 'POST').length, 1);
@@ -125,8 +158,39 @@ async function scenario(browser, viewport, dist) {
     await panel.getByText(older.content, { exact: true }).waitFor();
     await button('Gửi', panel).click();
     await panel.getByText(latest.content, { exact: true }).waitFor();
+    await panel.getByText(empty.content, { exact: true }).waitFor();
+    await panel.getByText(failure.content, { exact: true }).waitFor();
     assert.equal(sentRevision, conversation.revision);
     assert.equal(await panel.getByRole('textbox').inputValue(), question);
+    await button('Xem chi tiết mới nhất', panel).first().click();
+    await panel.getByText(detail.content, { exact: true }).waitFor();
+    const postsBeforeDraft = posts.length;
+    await send('đặt cho tôi chỗ ô tô từ 14h đến 16h mai');
+    await booking.getByText(/xe nào.*bãi nào/).waitFor();
+    await send('51A-123.45');
+    await booking.getByText(/bãi nào/).waitFor();
+    await send('bãi FPT');
+    await booking.getByText('FPT', { exact: true }).waitFor();
+    await booking.getByText(/14:00.*16:00/).waitFor();
+    await send('đổi xe sang xe máy');
+    await booking.getByText('Xe máy', { exact: true }).waitFor();
+    assert.equal(await booking.getByText('51A-123.45', { exact: true }).count(), 0);
+    await send('xe 59A1-123.45 nhé?');
+    await booking.getByText('59A1-123.45', { exact: true }).waitFor();
+    await send('đổi bãi sang bãi Vincom và đổi giờ sang 15h đến 17h');
+    await booking.getByText(/từng thay đổi/).waitFor();
+    await booking.getByText('FPT', { exact: true }).waitFor();
+    await send('đổi bãi sang bãi Trung Tâm');
+    await booking.getByText('Trung Tâm', { exact: true }).waitFor();
+    await send('đổi giờ sang chiều mai');
+    await booking.getByText(/giờ bắt đầu và giờ kết thúc/).waitFor();
+    assert.equal(await booking.getByText(/14:00.*16:00/).count(), 0);
+    await send('đổi giờ sang 15h đến 17h');
+    await booking.getByText(/15:00.*17:00/).waitFor();
+    await send('đồng ý');
+    await booking.getByText(/xem lại thông tin bên dưới/).waitFor();
+    assert.deepEqual(posts.slice(postsBeforeDraft), []);
+    assert.equal(await booking.evaluate(element => element.scrollWidth > element.clientWidth), false);
     latestAvailable = false;
     paginate = false;
     await button('Mới', panel).click();
@@ -140,9 +204,12 @@ async function scenario(browser, viewport, dist) {
     await driver.click();
     await panel.getByText('Hiện chỉ có thể xem lịch sử. Gửi câu hỏi chưa khả dụng.').waitFor();
     await panel.getByText(answer.content, { exact: true }).waitFor();
-    await button('Đóng', panel).click();
+    await booking.waitFor({ state: 'hidden' });
     enabled = true;
-    await focus();
+    await afterResponse('/api/assistant/capabilities', focus);
+    await send('đặt chỗ ô tô từ 14h đến 16h mai tại bãi Riêng Của A');
+    await booking.getByText('Riêng Của A', { exact: true }).waitFor();
+    await button('Đóng', panel).click();
     hold = true;
     const historyHeld = page.waitForRequest(req =>
       new URL(req.url()).pathname === messages && req.method() === 'GET' &&
@@ -161,6 +228,10 @@ async function scenario(browser, viewport, dist) {
     await afterResponse(conversations, () => driver.click());
     await panel.getByRole('textbox').waitFor();
     assert.equal(await panel.getByText(answer.content, { exact: true }).count(), 0);
+    assert.equal(await booking.count(), 0);
+    await send('đặt chỗ ô tô từ 14h đến 16h mai');
+    await booking.getByText(/xe nào.*bãi nào/).waitFor();
+    assert.equal(await booking.getByText('Riêng Của A', { exact: true }).count(), 0);
     assert.equal(await panel.getByRole('combobox').count(), 0);
     await button('Đóng', panel).click();
     await page.locator('.profile-trigger').filter({ hasText: 'Fixture b' }).click();
@@ -172,11 +243,15 @@ async function scenario(browser, viewport, dist) {
     await login('a');
     await driver.click();
     await panel.getByText(answer.content, { exact: true }).waitFor();
+    assert.equal(await booking.count(), 0);
+    await send('đặt chỗ ô tô từ 14h đến 16h mai tại bãi Mới');
+    await booking.getByText('Mới', { exact: true }).waitFor();
     await button('Mới', panel).click();
     await afterResponse(`${conversations}/${conversationId}/reset`, () => button('Tạo chat mới', confirm).click());
     await panel.getByText(answer.content, { exact: true }).waitFor({ state: 'hidden' });
+    await booking.waitFor({ state: 'hidden' });
     assert.equal(reset, true);
-    console.log(`${viewport.width}x${viewport.height}: FAQ gate, login handoff, recovery, history, availability, Driver gate, logout/relogin PASS`);
+    console.log(`${viewport.width}x${viewport.height}: FAQ, history/recovery, S06 reads, S07 booking preview and edits, logout/relogin PASS`);
   } finally {
     releaseHistory();
     await page.close();

@@ -1,11 +1,12 @@
 #Requires -Version 7.0
 # Disposable Docker projects and locally signed test JWTs.
-param([switch]$NoBuild)
+param([switch]$NoBuild, [switch]$PreflightOnly)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = 'assistantqa-' + [Guid]::NewGuid().ToString('N').Substring(0,12)
 $scratch = Join-Path $root ".cache/assistant fixture $project"
 $envPath = Join-Path $scratch 'test.env'
+$schema = $null
 $rsa = [Security.Cryptography.RSA]::Create(2048)
 $certificateRsa = [Security.Cryptography.RSA]::Create(2048)
 
@@ -41,11 +42,13 @@ function Invoke-Assistant([string]$Path, [hashtable]$Headers, [hashtable]$Body) 
     }
     return (Invoke-RestMethod @http).data
 }
-function Invoke-Setup([string]$SettingsPath, [string]$ExpectedFailure) {
+function Invoke-Setup([string]$SettingsPath, [string]$ExpectedFailure, [switch]$ValidateOnly) {
     $shell = if ($IsWindows) { 'powershell.exe' } else { 'pwsh' }
     $arguments = @('-NoProfile')
     if ($IsWindows) { $arguments += @('-ExecutionPolicy','Bypass') }
-    $output = & $shell @arguments -File $runner -EnvPath $SettingsPath -SchemaProject $project -NoBuild 2>&1
+    $runnerOptions = @('-NoBuild')
+    if ($ValidateOnly) { $runnerOptions += '-ValidateOnly' }
+    $output = & $shell @arguments -File $runner -EnvPath $SettingsPath -SchemaProject $project @runnerOptions 2>&1
     $failed = $LASTEXITCODE -ne 0
     if ($ExpectedFailure) {
         if (!$failed -or ($output -join ' ') -notmatch $ExpectedFailure) {
@@ -74,7 +77,7 @@ try {
         'scripts/database/migrations/20261105_iot_assistant_s05.sql','scripts/database/migrations/20261110_iot_assistant_current_chat.sql')) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
     }
-    if (!$NoBuild) {
+    if (!$NoBuild -and !$PreflightOnly) {
         Invoke-Docker @('build','--file',(Join-Path $root 'docker/Dockerfile.assistant'),'--tag','smartpark/assistant:local',
             (Join-Path $root 'src/Services/IoTService'))
     }
@@ -127,8 +130,24 @@ Hướng dẫn giả lập cho Docker.
     ) | Set-Content -LiteralPath $envPath -Encoding utf8
     $frontendEnv = Join-Path $scratch 'FE/.env'
     'VITE_OTHER_SETTING=preserve' | Set-Content -LiteralPath $frontendEnv -Encoding utf8
-    $schema = @('compose','--project-name',$project,'--env-file',$envPath,'-f',(Join-Path $scratch 'compose.schema-integration.yml'))
     $runner = Join-Path $scratch 'scripts/setup-assistant-docker.ps1'
+    $searchEnv = Join-Path $scratch 'search.env'
+    $searchSettings = @(Get-Content -LiteralPath $envPath) + @(
+        'Assistant__Reads__Search__Enabled=true'
+        'Assistant__Reads__Search__MaxAgeSeconds=60'
+        'Assistant__Reads__Search__ClockSkewSeconds=5'
+    )
+    ($searchSettings + 'Assistant__Reads__Search__Origin=https://localhost:5056') |
+        Set-Content -LiteralPath $searchEnv -Encoding UTF8
+    Invoke-Setup $searchEnv 'Invalid Docker Assistant origin: Assistant__Reads__Search__Origin' -ValidateOnly
+    ($searchSettings + 'Assistant__Reads__Search__Origin=https://operations.example.test') |
+        Set-Content -LiteralPath $searchEnv -Encoding UTF8
+    Invoke-Setup $searchEnv -ValidateOnly
+    if ($PreflightOnly) {
+        Write-Host 'PASS: Docker Assistant preflight rejects loopback and accepts a non-loopback HTTPS origin.'
+        return
+    }
+    $schema = @('compose','--project-name',$project,'--env-file',$envPath,'-f',(Join-Path $scratch 'compose.schema-integration.yml'))
     Invoke-Docker ($schema + @('up','-d','--wait','--wait-timeout','60','iot-db'))
     $schemaProbe = "SELECT xmin FROM assistant_management_state WHERE id = 1 AND to_regclass('ux_assistant_conversation_current') IS NOT NULL"
     $initialState = & docker @schema exec -T iot-db psql -U smartpark_iot -d smartpark_iot -Atc $schemaProbe

@@ -146,10 +146,14 @@ public sealed partial class AuthenticatedChatTests
         var more = await Ask("more reservations", 4);
         Assert.Equal("empty", more.GetProperty("answer").GetProperty("outcome").GetString());
         Assert.Contains("cursor=synthetic-cursor", owner.Paths[2].Query);
-        owner.Status = 404;
         var detail = await Ask("reservation details " + owner.Reservation, 6);
-        Assert.Equal("not_found", detail.GetProperty("answer").GetProperty("outcome").GetString());
+        Assert.Equal("answered", detail.GetProperty("answer").GetProperty("outcome").GetString());
+        Assert.Equal(owner.Reservation, detail.GetProperty("answer").GetProperty("cards")[0].GetProperty("reservation").GetProperty("id").GetGuid());
         Assert.Equal("/api/me/reservations/" + owner.Reservation, owner.Paths[3].AbsolutePath);
+        owner.Status = 404;
+        detail = await Ask("reservation details " + owner.Reservation, 8);
+        Assert.Equal("not_found", detail.GetProperty("answer").GetProperty("outcome").GetString());
+        Assert.Empty(detail.GetProperty("answer").GetProperty("cards").EnumerateArray());
         Assert.Equal(0, f.Answers.Generations); Assert.Empty(f.Answers.Inputs);
         Assert.All(owner.Accounts, a => Assert.Equal(f.Account, a));
         var capabilities = await f.Data(await f.Get("/api/assistant/capabilities"));
@@ -157,8 +161,8 @@ public sealed partial class AuthenticatedChatTests
         Assert.True(capabilities.GetProperty("features").GetProperty("readMyReservations").GetBoolean());
         Assert.False(capabilities.GetProperty("features").GetProperty("searchParking").GetBoolean());
         f.Settings.State = f.Settings.State with { Enabled = false };
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await f.Post(route, new { clientMessageId = Guid.NewGuid(), expectedRevision = 8, message = "my vehicles" })).StatusCode);
-        Assert.Equal(4, owner.Calls);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await f.Post(route, new { clientMessageId = Guid.NewGuid(), expectedRevision = 10, message = "my vehicles" })).StatusCode);
+        Assert.Equal(5, owner.Calls);
     }
 
     [Fact]
@@ -267,6 +271,57 @@ public sealed partial class AuthenticatedChatTests
     }
 
     [Theory]
+    [InlineData("Tìm bãi gần FPT chiều mai", true, true, true)]
+    [InlineData("Giúp tôi tìm bãi ô tô gần FPT chiều mai", true, false, true)]
+    [InlineData("Tìm bãi gần 10.77,106.70 chiều mai", false, true, true)]
+    [InlineData("Tìm bãi ô tô gần 10.77,106.70 chiều mai", false, false, true)]
+    [InlineData("Tìm bãi gần showroom ô tô FPT chiều mai", true, true, true)]
+    [InlineData("Tìm bãi gần FPT hiện tại", true, true, false)]
+    [InlineData("Tìm bãi gần FPT, không ngay bây giờ", true, true, true)]
+    [InlineData("Tìm bãi ô tô gần FPT from=2026-11-11T14:00:00+07:00 to=2026-11-11T16:00:00+07:00", true, false, false)]
+    [InlineData("Tìm bãi ô tô gần FPT to=2026-11-11T16:00:00+07:00 from=2026-11-11T14:00:00+07:00 radius=4", true, false, false)]
+    public async Task NaturalSearchAsksForUndeterminedFieldsWithoutDispatch(string message, bool location, bool vehicle, bool time)
+    {
+        var owner = new ReadOwner();
+        await using var f = await Fixture.Create(owner: owner, search: true);
+        f.EnableProvider();
+        var id = await f.Conversation();
+        var result = await f.Data(await f.Post($"/api/assistant/conversations/{id}/messages",
+            new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message }));
+        var answer = result.GetProperty("answer");
+        Assert.Equal("clarification", answer.GetProperty("outcome").GetString());
+        var prompt = answer.GetProperty("content").GetString()!.Split("Hãy gửi lại")[0];
+        Assert.Equal(location, prompt.Contains("điểm xuất phát"));
+        Assert.Equal(vehicle, prompt.Contains("một loại xe"));
+        Assert.Equal(time, prompt.Contains("khung giờ"));
+        Assert.Empty(f.Answers.Inputs);
+        Assert.Empty(owner.Paths);
+    }
+
+    [Fact]
+    public async Task CompleteSearchWithExplicitIntervalSendsBothInstantsToOwner()
+    {
+        var owner = new ReadOwner();
+        await using var f = await Fixture.Create(owner: owner, search: true);
+        var id = await f.Conversation();
+        var start = f.Clock.GetUtcNow().ToOffset(TimeSpan.FromHours(7)).AddDays(1);
+        var end = start.AddHours(2);
+        var result = await f.Data(await f.Post($"/api/assistant/conversations/{id}/messages", new
+        {
+            clientMessageId = Guid.NewGuid(), expectedRevision = 0,
+            message = $"Tìm bãi ô tô gần 10.77,106.70 from={start:O} to={end:O}"
+        }));
+        var answer = result.GetProperty("answer");
+        Assert.Equal("answered", answer.GetProperty("outcome").GetString());
+        var availability = answer.GetProperty("cards")[0].GetProperty("parking").GetProperty("availability");
+        Assert.Equal("interval", availability.GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, availability.GetProperty("availableCount").ValueKind);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Assert.Single(owner.Paths).Query);
+        Assert.Equal(start.ToString("O"), query["startAt"].ToString());
+        Assert.Equal(end.ToString("O"), query["endAt"].ToString());
+    }
+
+    [Theory]
     [InlineData("timeout", "timeout")]
     [InlineData("malformed", "dependency_unavailable")]
     public async Task SearchMalformedAndTimeoutStayOutsideModel(string mode, string outcome)
@@ -325,8 +380,9 @@ public sealed partial class AuthenticatedChatTests
                 if (Mode == "malformed") return new(HttpStatusCode.OK) { Content = new StringContent("{\"success\":true,\"data\":{}}") };
                 if (Status != 200) return new((HttpStatusCode)Status);
                 var now = DateTimeOffset.UtcNow;
+                var kind = request.RequestUri.Query.Contains("startAt=", StringComparison.Ordinal) ? "interval" : "current";
                 var row = new ParkingSummary(Site, "Synthetic lot", "Synthetic address", 10m, 105m,
-                    40, "outdoor", ["CAR"], new("current", null, null, "unknown"), null,
+                    40, "outdoor", ["CAR"], new(kind, null, null, "unknown"), null,
                     new(now, null, now), new(new("fresh", null), new("unknown", "unknown"), new("unknown", "not_configured")));
                 var next = request.RequestUri.Query.Contains("cursor=", StringComparison.Ordinal);
                 return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { success = true,
