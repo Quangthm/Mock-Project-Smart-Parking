@@ -154,6 +154,8 @@ export interface OperatorSite {
   modelUrl?: string
   modelFileName?: string
   lotType?: LotType
+  operationalLayout?: OperationalLayoutProjection | null
+  layout?: OperationalLayoutProjection | null
   slots: OperatorSlot[]
   units: Structure["units"]
 }
@@ -355,6 +357,8 @@ function siteFromOperationalLayout(
       stalenessThresholdSeconds: projection.stalenessThresholdSeconds,
     },
     lotType: inferredType,
+    operationalLayout: projection,
+    layout: projection,
     modelUrl: ALLOWED_PARKING_MODELS[inferredType]?.path,
     modelFileName: ALLOWED_PARKING_MODELS[inferredType]?.fileName,
     units,
