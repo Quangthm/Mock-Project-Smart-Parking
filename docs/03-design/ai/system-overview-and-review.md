@@ -21,7 +21,7 @@ Repo chưa xác nhận tên cá nhân cho các owner còn mở. Cột người p
 | Vai trò | Nhiệm vụ được hỗ trợ hiện tại | Giới hạn liên quan |
 | --- | --- | --- |
 | Guest | Hỏi SmartPark, loại xe, cách đặt chỗ/thanh toán/hỗ trợ theo tài liệu công khai | Yêu cầu đọc dữ liệu riêng dẫn tới đăng nhập. Guest không có lịch sử bền vững |
-| Driver | FAQ, hội thoại theo Account, lịch sử, hủy/tra lại kết quả. Đọc xe/lịch đặt/tìm bãi khi được bật | Các câu tra cứu dùng nhóm câu được hỗ trợ cục bộ. Chưa trích xuất yêu cầu booking tự do thành draft |
+| Driver | FAQ, hội thoại theo Account, lịch sử, hủy/tra lại kết quả. Đọc xe/lịch đặt/tìm bãi khi được bật. Nhập và chỉnh bản nháp đặt chỗ trong widget | Tra cứu và nhập bản nháp dùng các mẫu câu được hỗ trợ. Bản nháp chờ tích hợp form và dữ liệu owner |
 | Admin | Quản lý provider và dùng FAQ trong chat riêng | Admin API riêng. Khóa được mã hóa. Chat Admin không dùng các tool dữ liệu Driver |
 | Business/Owner | FAQ, lịch sử và reset chat riêng | Chat Owner không dùng các tool dữ liệu Driver |
 | Operator hoặc role khác | Hướng dẫn công khai nếu widget khả dụng | Các endpoint hội thoại riêng chỉ hỗ trợ Driver, Admin và Owner |
@@ -115,8 +115,8 @@ Trạng thái “đã có” nói về implementation đã đối chiếu. “Ch
 | S03 — UI Settings | UI group provider, chỉnh model/key, reorder, discovery và test có source, browser fixture đã kiểm | Full UI với UserService/backend thật trên candidate bàn giao | FE + QA đóng khi nhóm TC-ADM đạt với backend thật |
 | S04 — Knowledge/FAQ | Parser Markdown, publication hash/version/time gate, lexical và lỗi gõ giới hạn, 21 câu eval, Việt/Anh/fallback | Corpus deployment được duyệt từng phiên bản, chất lượng model thật và câu diễn đạt ngoài tập eval | Admin nội dung + IoT + QA đóng sau test/citation trên corpus cụ thể |
 | S05 — Driver/history/recovery | Account isolation, ledger, replay, cancel, history, crash recovery, retention đã có test PG | Lost commit ACK, deadline dưới lock, backlog/outage và tích hợp JWT thật/tải đại diện còn cần kiểm | IoT/DevOps/QA thực hiện trên fixture/môi trường đích |
-| S06 — Owner reads | Adapter vehicles, own reservations/list/detail, search và read cards | Live trust/HTTPS/fixtures, Docker read config, positive availability | IoT/FE/QA tích hợp API đã có, owner xử lý dữ kiện còn thiếu ở mục 7 |
-| S07 — Draft đặt chỗ | Contract/checklist về revision, quote, expiry và câu hỏi cần chốt | NLU/extraction, draft store/lifecycle/edit/quote chưa triển khai | IoT triển khai sau khi Operations/Payment/BA chốt contract và validation |
+| S06 — Owner reads | Adapter vehicles, own reservations/list/detail, search, read cards và cấu hình Docker | Nghiệm thu HTTPS, JWT và dữ liệu thật. Nguồn số chỗ theo khung giờ còn thiếu | IoT/FE/QA tích hợp API đã có, owner xử lý dữ kiện còn thiếu ở mục 7 |
+| S07 — Draft đặt chỗ | Widget Driver nhận và chỉnh xe, bãi và giờ qua các mẫu câu tiếng Việt. Bản nháp lưu trong phiên widget | Xác minh xe/bãi, lưu trữ và thời hạn bản nháp, quote và dữ liệu chuyển sang form | IoT/FE phối hợp sau khi Operations/Payment/BA chốt contract và validation |
 | S08 — UI chat/thẻ/form | Guest, Driver, intent login, history/recovery, thẻ read/detail và Account-switch guard | Chat → form điền sẵn, xác nhận và create/payment chưa nối | FE + IoT sau S07 và API ghi owner, QA chạy toàn luồng |
 | S09 — Hiệu năng/vận hành | HTTP pooling, parse reuse vẫn kiểm fresh bytes/manifest, stage metrics và fixture baseline | Representative workload, SLO, p95/error/abort với DB/provider thật, collector đích | Leader/QA/DevOps chốt tải/budget và đo trước release |
 | S10 — Setup/nghiệm thu | Docker opt-in, bootstrap an toàn, smoke PG/crash/retention, schema replay, DB restore/keyring tests | Toàn stack trên máy thành viên, UserService/provider thật và rollout/rollback đích | QA/DevOps + owner release đóng theo mục 10 |
@@ -129,7 +129,7 @@ Trạng thái “đã có” nói về implementation đã đối chiếu. “Ch
 | --- | --- | --- | --- |
 | Đóng gói candidate Git và rerun gate liên quan | Working tree có staged/unstaged/untracked, push HEAD cũ chưa gửi được implementation mới | Developer chatbot + reviewer | Trước giao tester, rà đủ file/secret, ghi commit và lệnh test của candidate |
 | QA User/Admin/Driver + provider thật | TestServer/synthetic JWT không chứng minh cấu hình UserService/provider ở máy nhận | QA + IoT + Admin, User owner hỗ trợ trust | Có môi trường và quota test, TC-ADM/FAQ/DRV áp dụng đều đạt |
-| Hoàn thiện cấu hình Docker owner reads | `compose.assistant.yml` hiện chưa export `Assistant:Reads:*` | IoT/DevOps + FE khi cần UI đọc | Khi muốn bật S06 bằng container, cần cấu hình HTTPS/trust rồi kiểm capability và owner thực |
+| Nghiệm thu Docker owner reads | Compose đã truyền `Assistant:Reads:*`. Môi trường QA cần HTTPS origin và dữ liệu owner | IoT/DevOps + FE khi cần UI đọc | Cấu hình HTTPS/trust, rồi kiểm capability và các ca đọc với API thật |
 | Ca mất ACK, deadline dưới lock, backlog/outage | Kiểm chứng hành vi khi network/DB lỗi, độ đúng của ledger trong các interleaving chưa đo | IoT + QA kỹ thuật | Trước chốt vận hành theo workload, có fixture cưỡng bức tình huống và kết quả rõ |
 | Đánh giá model thật và retrieval rộng hơn | Tập 21 câu cố định chưa đại diện toàn bộ câu người dùng | IoT + QA + Admin nội dung | Có tập giữ riêng, đo sai nguồn/từ chối nhầm/citation. Mở egress/semantic cần duyệt phương án trước |
 | Metrics collector, SLO và kế hoạch backup/restore | Fixture timing không đo DB/TLS/provider thật, backup deletion SLA và rollout đích còn mở | Leader + DevOps + QA | Trước release môi trường đích, có tải/budget, backup DB+keyring+PFX và diễn tập khôi phục |
@@ -159,7 +159,7 @@ Bằng chứng source cần leader chú ý khi chốt.
 - Operations hiện đăng ký `UnsupportedDiscoveryCapacity`, nên số chỗ dương chưa có authority. Có thể hiển thị unknown. Không dùng mock count làm bằng chứng đủ chỗ.
 - Payment có tariff calculator và discovery estimate. Chưa thấy route booking quote đủ G04 trong call chain khảo sát.
 - `ReservationSnapshotHttpAdapter` của Payment gọi `internal/reservations/{id}/pricing-snapshot`, chưa tìm thấy counterpart producer route ở Operations trong checkout này.
-- `CheckoutPaymentClient` gọi `/api/v1/payments/orders/prepare`, Payment đang expose `POST /api/v1/payments/orders` với DTO khác. Chốt wire ở owner, không chỉ sửa URL để đi tiếp.
+- Payment có `POST /api/v1/payments/orders/prepare` cho checkout cước của phiên gửi xe. Liên kết booking với đơn thanh toán vẫn chờ hợp đồng và tích hợp của owner.
 - API staff/gate/check-in/out hiện có của Operations chưa chứng minh tồn tại Driver create reservation cho chatbot.
 
 Các nhận định trên là khảo sát source, chưa kết luận môi trường hoặc nhánh riêng của thành viên không có implementation. Leader yêu cầu owner trả lời bằng contract, branch/commit và test evidence. Chi tiết ở [phiếu dependency](service-dependencies-and-decisions.md) và [điều kiện đặt chỗ](booking-prerequisites.md).
@@ -170,7 +170,7 @@ Các nhận định trên là khảo sát source, chưa kết luận môi trư�
 
 Script cần public PEM, issuer/audience đúng UserService, PFX RSA/keyring bền vững và bản knowledge đã duyệt. Chỉ bootstrap ba migration trong một transaction nếu phần Assistant của IoT DB còn trống. Schema có dữ liệu legacy hoặc dở dang bị chặn. DB đã có credential/history cần operator chọn dùng lại bộ keyring gốc. Việc dùng Windows DPAPI trên host rồi chuyển sang Linux/PFX cần kế hoạch chuyển đổi riêng.
 
-Container liveness đạt chưa chứng minh FAQ/provider/owner sẵn sàng. Admin vẫn nhập provider key/model và bật cấu hình cùng công tắc chung. FE URL chỉ được thêm khi trống, giá trị đã có được giữ. Owner reads chưa được truyền qua overlay Docker hiện tại. Các default read flags vì vậy giữ false.
+Admin nhập provider key/model, bật cấu hình và công tắc chung để nghiệm thu FAQ trên môi trường đích. FE URL chỉ được thêm khi trống. Compose truyền cấu hình owner reads, mặc định tắt cho tới khi QA có HTTPS origin tin cậy và dữ liệu test.
 
 [Hướng dẫn setup chi tiết](../../../LOCAL-SETUP.md#ai-chatbot-bằng-docker) và [tài liệu tester](../../04-testing/assistant-handoff-testing.md) ghi lệnh, fixture và expected result. Bản full setup với UserService thực, SMTP cho đăng ký Driver và provider quota cần được kiểm trên máy người nhận. Khi dùng tài khoản test đã được chuẩn bị, FAQ/history không cần mở API owner reads.
 

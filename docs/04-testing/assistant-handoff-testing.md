@@ -216,18 +216,39 @@ Với TC-API-04, giữ nguyên `expectedRevision` của POST gốc khi replay. K
 
 ## 6. Test tích hợp owner sau khi môi trường sẵn sàng
 
-Docker Assistant mặc định chỉ provision phạm vi Settings/FAQ/history. Overlay hiện không chuyển các cờ owner reads vào container. Muốn chạy nhóm này, IoT/DevOps phải cấu hình triển khai bổ sung hoặc dùng host runner đã cấu hình và có các owner HTTPS thực.
+Các cờ owner reads mặc định tắt. Khi môi trường test đã sẵn sàng, thêm cấu hình sau vào `.env` local ở gốc repo. Thay hostname bằng HTTPS origin Operations được cấp và dùng ngưỡng freshness do môi trường test quy định. Ví dụ `60` và `5` dưới đây chỉ minh họa đơn vị giây.
 
-Kiểm `GET /api/assistant/capabilities` bằng Driver trước mỗi nhóm. `getMyVehicles`, `readMyReservations`, `searchParking` là cờ cấu hình/readiness của Assistant, vẫn cần xác nhận owner có thể trả dữ liệu. Ghi BLOCKED nếu thiếu fixture/trust/source.
+```dotenv
+Assistant__Chat__ReleaseEnabled=true
+Assistant__Reads__Operations__Enabled=true
+Assistant__Reads__Operations__Origin=https://operations.example.test
+Assistant__Reads__Search__Enabled=true
+Assistant__Reads__Search__Origin=https://operations.example.test
+Assistant__Reads__Search__MaxAgeSeconds=60
+Assistant__Reads__Search__ClockSkewSeconds=5
+```
+
+1. Chạy `./setup.ps1 -AssistantCheck` để kiểm tra cấu hình mà không in giá trị. Khi `SMARTPARK_ASSISTANT_DOCKER_ENABLED=true`, checker báo `INVALID` cho origin loopback của một read đang bật. Search cần age 1–3600 và skew 0–60. Bật Settings toàn cục của Assistant và chuẩn bị corpus đã duyệt, IoT DB, keyring và public JWT trust theo mục 2–3.
+2. Với Docker của nhóm, giữ DB trong `smartpark-schema` và chạy Assistant bằng `./scripts/run-app-service.ps1 -Service Assistant` trong `smartpark-app`. Dùng HTTPS origin Operations do owner cấp, truy cập được từ container và có chuỗi chứng chỉ được tin cậy. Docker preflight từ chối origin loopback như `https://localhost:5056`. Trong lúc chờ HTTPS, giữ cờ read tương ứng ở `false` để chạy FAQ và chat. Với host, dùng `./scripts/run-schema-service.ps1 -Service Assistant`. Cập nhật `VITE_ASSISTANT_API_BASE_URL` trong `FE/.env` nếu chạy Vite trên host và nạp lại cấu hình FE khi đổi URL.
+3. Đăng nhập Driver qua UserService. Kiểm `GET /api/assistant/capabilities` có `features.readMyReservations=true` và `features.searchParking=true`. Các cờ phản ánh cấu hình và readiness của Assistant. Kiểm tiếp các ca bên dưới để xác minh owner có thể trả dữ liệu.
+
+Với Operations chạy trên host, owner có thể dùng `SMARTPARK_SERVICE_RESERVATION_LISTEN_URLS` trong `.env.example` để thêm HTTPS với chứng chỉ đã được tin cậy. Với Operations chạy bằng Docker, DevOps cần cấp HTTPS ingress để Assistant gọi được từ container.
+
+| Bên phụ trách | Đầu vào để chạy với dữ liệu thật |
+| --- | --- |
+| Operations + DevOps | HTTPS tin cậy cho `/api/me/reservations`, `/api/me/reservations/{id}` và `/api/parking-search`. Own reads cần `OwnReservationReads` với issuer, audience và khóa công khai khớp JWT Driver. Cần bật `Discovery`, cấu hình HTTPS đến Facility và Payment, ngưỡng freshness và chuẩn bị lịch cho hai Account A/B. |
+| UserService + QA | Hai tài khoản Driver và phiên đăng nhập thật, cùng quyền truy cập môi trường test. Giữ token trong phiên đăng nhập hoặc công cụ test riêng. |
+| Facility | Bãi đang hoạt động đã công bố, tọa độ và loại xe hỗ trợ. Cung cấp tọa độ của một vùng chắc chắn không có bãi để test rỗng. |
+| Payment + Operations | Cấu hình khóa dịch vụ discovery và ràng buộc site–tenant để Operations gọi Payment khi tìm bãi. |
 
 | ID / mức | Điều kiện riêng | Thao tác | Kết quả mong đợi |
 | --- | --- | --- | --- |
 | TC-OWN-01 / P1 | User read bật, HTTPS và XE-A/B tồn tại | A hỏi `Xe của tôi`, B hỏi cùng câu | Mỗi Account chỉ thấy xe được UserService cho phép |
-| TC-OWN-02 / P1 | Operations read bật và có LỊCH-A/B | A hỏi `Lịch đặt của tôi`, bấm Xem chi tiết mới nhất | Dữ liệu khớp owner, không có LỊCH-B |
+| TC-OWN-02 / P1 | Operations read bật và có LỊCH-A/B | A hỏi `Lịch đặt của tôi`, bấm Xem chi tiết mới nhất. Với thẻ chỉ có mã, gửi `chi tiết lịch đặt <mã>` | Dữ liệu khớp owner, không có LỊCH-B |
 | TC-OWN-03 / P1 | LỊCH-A giao ngày mai, B không có lịch ngày mai | Hỏi `Ngày mai tôi có lịch đặt không?` bằng A và B | A có lịch giao khoảng ngày Việt Nam, B nhận rỗng rõ ràng |
 | TC-OWN-04 / P0 | UUID lịch A, token B | B gửi `chi tiết lịch đặt <UUID lịch A>` | Không có thẻ/chi tiết của A, backend owner từ chối resource ngoài quyền |
 | TC-OWN-05 / P1 | Search bật, HTTPS, age 1–3600 giây và skew 0–60 giây, bãi test đã publish | Gửi `Tìm bãi ô tô gần 10.77,106.70 radius=5`, thay tọa độ theo fixture | Kết quả khớp catalogue. Dữ liệu giá/chỗ trống thiếu hiển thị chưa xác định, không suy từ FAQ |
-| TC-OWN-06 / P1 | Như OWN-05 | Gửi `Tìm bãi ô tô`, rồi tìm tại vùng fixture chắc chắn không có bãi | Thiếu gốc tìm phải hỏi lại. Vùng rỗng chỉ trả empty nếu owner xác nhận không có kết quả |
+| TC-OWN-06 / P1 | Như OWN-05 | Sau ca tọa độ, gửi `Tìm bãi gần FPT chiều mai`, rồi gửi mẫu hoàn chỉnh với tọa độ của vùng rỗng | Chat hỏi tọa độ, loại xe và giờ cụ thể. Gửi lại đầy đủ trong một tin nhắn. Khung giờ tương lai dùng `from=` và `to=` với ngày giờ ISO 8601 có offset. Chỉ hiện rỗng khi owner trả danh sách rỗng |
 | TC-OWN-07 / P1 | Owner read có trước, vận hành tạo lỗi ở owner test | Gửi lại câu tra cứu | Lỗi nguồn khác empty. Không thay bằng bãi/xe/lịch giả lập |
 
 Thiếu nguồn positive availability hiện là hạn chế đã biết. Owner phải cung cấp dữ kiện nhất quán trước khi nghiệm thu “còn chỗ trong toàn bộ khung giờ”.

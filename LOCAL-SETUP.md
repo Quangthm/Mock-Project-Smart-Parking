@@ -55,6 +55,16 @@ Checklist trước khi setup:
 
 ### AI Chatbot bằng Docker
 
+**Smoke test cách ly cho tester.** Mở Docker Desktop ở chế độ Linux containers và chạy từ thư mục gốc bằng PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File scripts/test-assistant-docker-setup.ps1
+```
+
+Bộ test tự tạo PostgreSQL, JWT và tài liệu FAQ mẫu. Tester có thể chạy trước khi chuẩn bị `.env`, tài khoản UserService và provider key. Test build image `smartpark/assistant:local`, kiểm Settings, quyền Admin/Driver, FAQ và lịch sử qua lần chạy lại setup, rồi dọn container và volume test.
+
+**Chạy chatbot cùng stack của nhóm.** Chuẩn bị cấu hình bên dưới để test bằng tài khoản UserService và dữ liệu của môi trường QA.
+
 Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bảng Assistant trong `smartpark_iot` cùng các bảng IoT khi khởi tạo volume mới. Chuẩn bị các đầu vào local sau để setup và runner `All` chạy container Assistant.
 
 | Cấu hình | Giá trị dùng ở máy dev |
@@ -98,6 +108,9 @@ Write-Host "Local setup files: $devKeys"
 Chọn thư mục con `keyring` cho `Assistant__Management__KeyDirectory` và một thư mục knowledge riêng. Giữ khóa JWT riêng, `.env` và các file cá nhân ngoài hai thư mục này.
 
 ```powershell
+# Kiểm tra cấu hình trước khi dựng stack
+.\setup.ps1 -AssistantCheck
+
 # Máy mới, sau khi đã điền cấu hình và mở Docker Desktop
 .\setup.ps1 -SkipSonarQube
 .\scripts\run-app-service.ps1 -Service All
@@ -111,6 +124,8 @@ Assistant nằm trong project Docker `smartpark-app`, cổng mặc định `http
 Đường dẫn public PEM, PFX, keyring và knowledge có thể ghi tương đối so với thư mục chứa file `.env` khi dùng Docker. Mỗi thành viên giữ file cấu hình và vật liệu khóa của mình ngoài Git.
 
 `/health/live` kiểm container sống. Admin vào Settings để nhập provider key, chọn model, bật provider và cấu hình, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-app-assistant-1`.
+
+Để kiểm tìm bãi và tra lịch với API thật, bật từng cờ `Assistant__Reads__*__Enabled` sau khi nhận HTTPS origin mà container truy cập và tin cậy được. Dùng [hướng dẫn QA owner reads](docs/04-testing/assistant-handoff-testing.md#6-test-tích-hợp-owner-sau-khi-môi-trường-sẵn-sàng) để cấu hình và đối chiếu dữ liệu test.
 
 Với volume IoT có sẵn mà phần chatbot còn trống, runner Assistant bổ sung các bảng trong một transaction. Với DB đã chạy S05, sao lưu, dừng Assistant cũ và áp migration mới theo [hướng dẫn hội thoại](docs/03-design/ai/conversation-and-recovery.md#approval-and-scope) trước khi dựng bản mới. Setup kiểm tra schema đã nâng cấp. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
 
