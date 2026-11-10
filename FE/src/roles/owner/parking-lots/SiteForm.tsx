@@ -45,7 +45,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
   const {
     formId, hasSavedSetup, lotType, chooseLotType, selectedCity, district, setDistrict, ward, setWard,
     streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
-    devices, setDevices, busy, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
+    devices, setDevices, busy, updatingStatus, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
     handleCityChange, handleNameChange, submit, cancel,
   } = useSiteForm(site, onSaved, onCancel)
   const [otherDistrict, setOtherDistrict] = useState(() => Boolean(district && !DISTRICTS_BY_PROVINCE[selectedCity]?.includes(district)))
@@ -54,13 +54,14 @@ export function SiteForm({ site, onSaved, onCancel }: {
   const districtOptions = DISTRICTS_BY_PROVINCE[selectedCity] ?? []
 
   return (
-    <form className="space-y-5 text-[var(--fg)] max-h-[85dvh] overflow-y-auto pr-1" onSubmit={submit}
+    <form className="flex min-h-0 min-w-0 flex-col text-[var(--fg)]" onSubmit={submit}
       onInvalidCapture={event => {
         const section = event.target instanceof HTMLElement ? event.target.closest("details") : null
         if (section) section.open = true
       }}>
       {/* Header */}
-      <div className="pb-2">
+      <div className="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 pb-4 sm:px-6 sm:pt-6">
+        <div className="min-w-0">
         <h3 className="text-lg font-bold text-[var(--fg)] flex items-center gap-2">
           <span>{site ? "Edit Parking Site" : "Create Parking Site"}</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] font-semibold">
@@ -72,8 +73,14 @@ export function SiteForm({ site, onSaved, onCancel }: {
             ? "Open the section you want to update, then save your changes."
             : "Create a parking site and review its live model and capacity in Parking Structure."}
         </p>
+        </div>
+        <button type="button" aria-label="Close parking site form" disabled={busy} onClick={cancel}
+          className="grid size-11 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--raised)] focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-50">
+          <UntitledIcon name="x" size={18} />
+        </button>
       </div>
 
+      <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
       <fieldset disabled={busy} className="space-y-4.5" style={{ border: 0, padding: 0, margin: 0 }}>
         {site && (
           <fieldset className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
@@ -398,10 +405,11 @@ export function SiteForm({ site, onSaved, onCancel }: {
             Cancel
           </button>
           <button type="submit" className="btn-primary text-xs px-5 py-2 font-medium" disabled={busy}>
-            {busy ? "Saving…" : site ? "Save Changes" : "Create Parking Site"}
+            {updatingStatus ? "Updating Status…" : busy ? "Saving…" : site ? "Save Changes" : "Create Parking Site"}
           </button>
         </div>
       </fieldset>
+      </div>
     </form>
   )
 }
