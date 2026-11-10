@@ -8,6 +8,8 @@ namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 public sealed record ListReservationsQuery(Guid SiteId) : IRequest<IReadOnlyList<ReservationGateEntry>>;
 public sealed record ListParkingSessionsQuery(Guid SiteId) : IRequest<IReadOnlyList<ParkingSessionHistoryEntry>>;
+public sealed record ListDriverParkingSessionsQuery(Guid AccountId, string? StatusFilter, int Limit = 50)
+    : IRequest<IReadOnlyList<ParkingSessionHistoryEntry>>;
 public sealed record FindReservationQuery(Guid SiteId, string Query) : IRequest<ReservationGateEntry>;
 public sealed record FindWalkInSessionQuery(Guid SiteId, string Plate) : IRequest<WalkInParkingSession>;
 public sealed record CheckInWalkInCommand(Guid SiteId, string PlateNumber, string? ImageData, string? VehicleType)
@@ -138,6 +140,18 @@ public sealed class ListParkingSessionsQueryHandler(
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
         return await store.ListSessionsAsync(scope.TenantId, request.SiteId, ct);
+    }
+}
+
+public sealed class ListDriverParkingSessionsQueryHandler(
+    IReservationGateStore store) : IRequestHandler<ListDriverParkingSessionsQuery, IReadOnlyList<ParkingSessionHistoryEntry>>
+{
+    public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> Handle(ListDriverParkingSessionsQuery request, CancellationToken ct)
+    {
+        if (request.AccountId == Guid.Empty)
+            throw new ReservationGateException(401, "UNAUTHENTICATED", "Authenticated driver account is required.");
+
+        return await store.ListSessionsByAccountAsync(request.AccountId, request.StatusFilter, request.Limit, ct);
     }
 }
 

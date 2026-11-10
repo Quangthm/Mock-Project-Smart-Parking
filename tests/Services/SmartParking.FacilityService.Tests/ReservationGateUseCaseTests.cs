@@ -44,6 +44,28 @@ public sealed class ReservationGateUseCaseTests
     }
 
     [Fact]
+    public async Task ListDriverParkingSessionsQueryHandler_ReturnsSessionsForAccount()
+    {
+        var (_, store) = CreateMocks();
+        var handler = new ListDriverParkingSessionsQueryHandler(store);
+
+        var result = await handler.Handle(new ListDriverParkingSessionsQuery(userId, "ALL", 10), CancellationToken.None);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task ListDriverParkingSessionsQueryHandler_ThrowsOnEmptyAccountId()
+    {
+        var (_, store) = CreateMocks();
+        var handler = new ListDriverParkingSessionsQueryHandler(store);
+
+        var ex = await Assert.ThrowsAsync<ReservationGateException>(() =>
+            handler.Handle(new ListDriverParkingSessionsQuery(Guid.Empty, "ALL"), CancellationToken.None));
+        Assert.Equal("UNAUTHENTICATED", ex.Code);
+    }
+
+    [Fact]
     public async Task FindReservationQueryHandler_ThrowsOnInvalidQuery()
     {
         var (identity, store) = CreateMocks();
@@ -181,6 +203,9 @@ public sealed class ReservationGateUseCaseTests
             => Task.FromResult<IReadOnlyList<ReservationGateEntry>>([CreateSampleReservationEntry()]);
 
         public Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(Guid tenantId, Guid siteId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<ParkingSessionHistoryEntry>>([]);
+
+        public Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsByAccountAsync(Guid accountId, string? statusFilter, int limit, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<ParkingSessionHistoryEntry>>([]);
 
         public Task<ReservationGateEntry?> FindAsync(Guid tenantId, Guid siteId, string query, CancellationToken ct)

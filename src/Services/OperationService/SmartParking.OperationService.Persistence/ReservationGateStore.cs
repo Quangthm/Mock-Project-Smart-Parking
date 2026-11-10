@@ -30,6 +30,41 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
         }).ToArray();
     }
 
+    public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsByAccountAsync(
+        Guid accountId, string? statusFilter, int limit, CancellationToken ct)
+    {
+        var query = db.ParkingSessions.AsNoTracking()
+            .Where(s => s.AccountId == accountId);
+
+        if (!string.IsNullOrWhiteSpace(statusFilter) && !string.Equals(statusFilter, "ALL", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedStatus = statusFilter.Trim().ToUpperInvariant();
+            query = query.Where(s => s.SessionStatus == normalizedStatus);
+        }
+
+        var maxItems = limit is > 0 and <= 100 ? limit : 50;
+
+        var sessions = await query
+            .OrderByDescending(s => s.EntryTime).ThenByDescending(s => s.CreatedAt)
+            .Take(maxItems)
+            .ToListAsync(ct);
+
+        var ids = sessions.Select(s => s.Id).ToArray();
+        var allocations = await db.SlotAllocations.AsNoTracking()
+            .Where(a => a.ParkingSessionId != null && ids.Contains(a.ParkingSessionId.Value))
+            .OrderByDescending(a => a.CreatedAt)
+            .ToListAsync(ct);
+
+        return sessions.Select(s =>
+        {
+            var slotId = s.CurrentSlotId ?? allocations.FirstOrDefault(a => a.ParkingSessionId == s.Id)?.SlotId;
+            return new ParkingSessionHistoryEntry(
+                s.Id, s.ReservationId, s.TenantId, s.SiteId, s.AccessItemId, s.AccountId,
+                slotId, null, s.OriginalPlate, s.NormalizedPlate, s.VehicleType, s.TicketReference,
+                s.EntryTime, s.EntryImageUrl, s.ExitTime, s.ExitImageUrl, s.SessionStatus, s.Version, s.CreatedAt);
+        }).ToArray();
+    }
+
     public async Task<IReadOnlyList<ReservationGateEntry>> ListAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
         var reservations = await db.Reservations.AsNoTracking()
