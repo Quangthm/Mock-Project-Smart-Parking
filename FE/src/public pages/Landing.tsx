@@ -38,7 +38,7 @@ const PAYMENT_METHODS = [
 ]
 
 export function Landing() {
-  const { setView } = useApp()
+  const { setView, view } = useApp()
   const landingRef = useRef<HTMLDivElement>(null)
   const reducedMotion = useReducedMotion()
 
@@ -84,7 +84,7 @@ export function Landing() {
             <div><strong>03</strong><span>Arrive and park</span></div>
           </div>
         </motion.div>
-        <Suspense fallback={<div className="parking-hero-3d" role="img" aria-label="SmartParking parking building and car illustration"><div className="parking-hero-3d-fallback" aria-hidden="true"><span /><span /><span /></div></div>}><ParkingHero3D /></Suspense>
+        <Suspense fallback={<div className="parking-hero-3d" role="img" aria-label="SmartParking parking building and car illustration"><div className="parking-hero-3d-fallback" aria-hidden="true"><span /><span /><span /></div></div>}><ParkingHero3D active={view === "landing"} /></Suspense>
       </section>
 
       <section className="landing-section landing-benefits">

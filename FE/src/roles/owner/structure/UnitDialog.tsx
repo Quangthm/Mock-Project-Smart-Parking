@@ -18,7 +18,7 @@ import { ReleasedIdentifierDialog } from "./ReleasedIdentifierDialog"
 import { StructureFeedback } from "./StructureFeedback"
 
 const inputClass = "input w-full text-sm"
-const labelClass = "space-y-1 text-xs font-medium text-[var(--muted)]"
+const labelClass = "grid min-w-0 gap-2 text-xs font-medium text-[var(--muted)]"
 
 export type UnitDialogModel =
   | {
@@ -173,7 +173,7 @@ export function UnitDialog({
         <Modal title={title} onClose={busy ? () => {} : onClose}>
         <form className="space-y-4" onSubmit={submit}>
           {isCreate && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid items-start gap-4 sm:grid-cols-2">
               <label className={labelClass}>
                 <span>Type</span>
                 <RoundedSelect
@@ -195,9 +195,7 @@ export function UnitDialog({
               </label>
               {type !== "FLOOR" && (
                 <label className={labelClass}>
-                  <span>
-                    Parent {type === "ZONE" ? "(optional — leave empty for an outdoor root zone)" : "(required)"}
-                  </span>
+                  <span>{type === "ZONE" ? "Parent (optional)" : "Parent"}</span>
                   <RoundedSelect
                     className={inputClass}
                     value={parentId}
@@ -214,6 +212,7 @@ export function UnitDialog({
                       </option>
                     ))}
                   </RoundedSelect>
+                  {type === "ZONE" && <span className="text-xs font-normal">Choose Lot root for an outdoor zone.</span>}
                 </label>
               )}
             </div>
@@ -289,7 +288,7 @@ export function UnitDialog({
 
           <StructureFeedback error={error} notice={notice} fallback="The unit change failed." />
 
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-3 pt-4">
             <button type="button" className="btn-outline" onClick={onClose} disabled={busy}>
               Cancel
             </button>

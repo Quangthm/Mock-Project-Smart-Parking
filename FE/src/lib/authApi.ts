@@ -199,6 +199,7 @@ export async function request<T>(
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
   extraHeaders?: Record<string, string>,
+  responseFormat: "json" | "blob" = "json",
 ): Promise<T> {
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
@@ -231,7 +232,9 @@ export async function request<T>(
   }
 
   const payload =
-    response.status === 204 ? null : await response.json().catch(() => null)
+    response.status === 204 ? null
+      : response.ok && responseFormat === "blob" ? await response.blob()
+      : await response.json().catch(() => null)
 
   // Do not let an old response update the UI or clear a replacement login.
   const issuesSession = apiPrefix === "/api/auth" && ["/login", "/otp/login", "/mfa/login"].includes(path)

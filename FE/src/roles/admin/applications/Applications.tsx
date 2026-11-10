@@ -15,12 +15,14 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { request } from "../../../lib/authApi"
 import { showUiToast } from "../../../lib/uiToast"
 import { formatStatus } from "../../../lib/formatStatus"
+import { useDialogKeyboard } from "../../../components/ui/useDialogKeyboard"
 
 export function Applications() {
   const { accentColor } = useApp()
   const [apps, setApps] = useState<OwnerApplicationRecord[]>([])
   const [contractDrafts, setContractDrafts] = useState<Record<string, ContractDraftRecord | null>>({})
   const [modelApp, setModelApp] = useState<OwnerApplicationRecord | null>(null)
+  const modelDialogRef = useDialogKeyboard<HTMLElement>(modelApp?.id ?? null, () => setModelApp(null))
   const [modelUrl, setModelUrl] = useState<string | null>(null)
   const [modelLoading, setModelLoading] = useState(false)
   const [modelError, setModelError] = useState("")
@@ -407,7 +409,7 @@ export function Applications() {
         <button type="button" className="btn-outline" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next</button>
       </nav>}
       {modelApp && createPortal(<div className="dashboard-theme partner-contract-backdrop" data-accent={accentColor} onMouseDown={event => { if (event.target === event.currentTarget) setModelApp(null) }}>
-        <section className="partner-contract-dialog" role="dialog" aria-modal="true" aria-label="Parking lot 3D model">
+        <section ref={modelDialogRef} className="partner-contract-dialog" role="dialog" aria-modal="true" aria-label="Parking lot 3D model" tabIndex={-1}>
           <header className="partner-contract-header"><div><p className="partner-contract-eyebrow">Owner application</p><h2>{modelApp.lotSetup?.name || "Parking lot"} · 3D model</h2></div><button type="button" className="partner-contract-close" aria-label="Close 3D model" onClick={() => setModelApp(null)}>×</button></header>
           <div className="partner-contract-content">
             <p>{contractDrafts[modelApp.id]?.modelFileName ? `Owner import: ${contractDrafts[modelApp.id]?.modelFileName}` : `System model: ${modelApp.lotSetup?.modelFileName || "Not specified"}`}</p>

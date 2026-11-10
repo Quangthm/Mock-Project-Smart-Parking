@@ -59,7 +59,7 @@ export function OperatorOverview({
       <div className="operator-empty-workspace rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm text-[var(--muted)]">
         <UntitledIcon name="building" size={32} />
         <p className="mt-2 font-medium">No assigned parking site found.</p>
-        <p className="text-xs">Please contact your facility administrator or owner.</p>
+        <p className="text-base sm:text-sm">Please contact your facility administrator or owner.</p>
       </div>
     )
   }
@@ -68,7 +68,7 @@ export function OperatorOverview({
     <div className="space-y-6">
       <PageHeader title={lot.name} eyebrow={lot.address || undefined} description="Live operational dashboard, parking occupancy, and gate controls." actions={allLots.length > 1 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5">
-            <span className="text-xs font-medium text-[var(--muted)] pl-2">Site:</span>
+            <span className="text-base sm:text-sm font-medium text-[var(--muted)] pl-2">Site:</span>
             <RoundedSelect
               className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm font-medium text-[var(--fg)] outline-none focus:border-[var(--primary)]"
               value={lot.id}
@@ -96,7 +96,7 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums text-[var(--fg)]">{totalSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">Configured spaces</div>
+            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Configured spaces</div>
           </div>
         </button>
 
@@ -112,7 +112,7 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums">{availableSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">Ready for walk-in/booking</div>
+            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Ready for walk-in/booking</div>
           </div>
         </button>
 
@@ -128,7 +128,7 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums">{occupiedSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">Vehicles physically in lot</div>
+            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Vehicles physically in lot</div>
           </div>
         </button>
 
@@ -144,7 +144,7 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums">{reservedSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">Incoming & payment holds</div>
+            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Incoming & payment holds</div>
           </div>
         </button>
 
@@ -160,7 +160,7 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums">{backupSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">Emergency / overflow pool</div>
+            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Emergency / overflow pool</div>
           </div>
         </button>
 
@@ -176,7 +176,7 @@ export function OperatorOverview({
           </div>
           <div className="mt-3">
             <div className="text-2xl font-semibold tabular-nums">{maintenanceSlots}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--muted)]">
+            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">
               Unavailable slots
               {failClosedSlots > 0 ? ` · ${failClosedSlots} bays with no reliable state` : ''}
             </div>
@@ -236,11 +236,11 @@ export function OperatorOverview({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-semibold text-[var(--fg)]">Lot Occupancy Rate</h3>
-                <p className="text-xs text-[var(--muted)]">Ratio of occupied and reserved capacity</p>
+                <p className="text-base sm:text-sm text-[var(--muted)]">Ratio of occupied and reserved capacity</p>
               </div>
               <div className="text-right">
                 <span className="text-xl font-extrabold text-[var(--fg)]">{occupancyRate}%</span>
-                <span className="text-xs text-[var(--muted)] ml-1">utilized</span>
+                <span className="text-base sm:text-sm text-[var(--muted)] ml-1">utilized</span>
               </div>
             </div>
 
@@ -272,7 +272,7 @@ export function OperatorOverview({
               />
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--muted)]">
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-base sm:text-sm text-[var(--muted)]">
               <div className="flex items-center gap-1.5">
                 <span className="operator-legend-dot" data-status="occupied" />
                 <span>Occupied ({occupiedSlots})</span>
@@ -297,13 +297,13 @@ export function OperatorOverview({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-[var(--fg)]">Active Parking Operations</h3>
-                <p className="text-xs text-[var(--muted)]">
+                <p className="text-base sm:text-sm text-[var(--muted)]">
                   Vehicles currently in lot or confirmed for immediate check-in
                 </p>
               </div>
               <button
                 type="button"
-                className="text-xs font-semibold text-[var(--primary)] hover:underline"
+                className="text-base sm:text-sm font-semibold text-[var(--primary)] hover:underline"
                 onClick={() => onNavigateTab("checkin")}
               >
                 View all ({activeBookings.length}) →
@@ -311,7 +311,7 @@ export function OperatorOverview({
             </div>
 
             {activeBookings.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center text-xs text-[var(--muted)]">
+              <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center text-base sm:text-sm text-[var(--muted)]">
                 No active bookings currently in or arriving at this site.
               </div>
             ) : (

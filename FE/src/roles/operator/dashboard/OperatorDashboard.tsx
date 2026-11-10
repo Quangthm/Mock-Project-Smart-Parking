@@ -390,7 +390,7 @@ export function OperatorDashboard({
         {/* Tab View Container */}
         <div key={tab} className="animate-in">
           {/* TAB 1: OVERVIEW */}
-          {accessRole === "operation" && tab === "overview" && (
+          {accessRole === "operation" && tab === "overview" && !sitesLoading && !sitesError && (
             <OperatorOverview
               lot={selectedLot}
               allLots={ownerLots}
