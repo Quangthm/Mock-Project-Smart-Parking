@@ -17,7 +17,7 @@ public sealed partial class ReadTools
         if (text is "more parking" or "tim bai tiep theo")
         {
             var remaining = 12000;
-            var context = (await store.Context(account, conversation.Id, ct)).Take(6)
+            var context = (await store.Context(new ChatScope(account, "driver"), conversation.Id, ct)).Take(6)
                 .TakeWhile(t => (remaining -= t.Question.Length + t.Answer.Content.Length) >= 0).ToArray();
             var last = context.FirstOrDefault(t => ParkingSearch.IsRequest(Normalize(t.Question)) ||
                 Normalize(t.Question) is "more parking" or "tim bai tiep theo");

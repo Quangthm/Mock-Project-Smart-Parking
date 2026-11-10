@@ -11,7 +11,7 @@ public sealed class ChatFailure(int status, string code) : Exception
     public string Code { get; } = code;
 }
 public sealed record Conversation(Guid Id, string Title, string Locale, long Revision, DateTimeOffset CreatedAt,
-    DateTimeOffset? LastMessageAt, DateTimeOffset ExpiresAt);
+    DateTimeOffset? LastMessageAt, DateTimeOffset? ExpiresAt);
 public sealed record ChatMessage(Guid Id, long Sequence, string Role, string Content, DateTimeOffset CreatedAt,
     Guid ClientMessageId, string? Outcome, GuestSource[] Sources, object[] Actions, string Mode, object[] Cards);
 public sealed record RequestError(string Code, string Message, bool Retryable);
@@ -21,6 +21,12 @@ public sealed record RequestResult(Guid RequestId, Guid ClientMessageId, Guid Co
 public sealed record ChatPage<T>(IReadOnlyList<T> Items, string? NextCursor);
 public sealed record History(Conversation Conversation, IReadOnlyList<ChatMessage> Items, string? NextCursor, Guid? ActiveRequestClientMessageId);
 public sealed record CreateConversation(Guid ClientConversationId, string? Locale) : IRequest<CreatedConversation>;
+public readonly record struct ChatScope(Guid AccountId, string Role)
+{
+    public static bool Supports(string role) => role is "driver" or "admin" or "owner";
+    public static ChatScope From(CurrentActor actor) => new(actor.AccountId, actor.Role);
+}
+public sealed record ResetConversation(Guid ConversationId) : IRequest<bool>;
 public sealed record CreatedConversation(Conversation Conversation, bool Created);
 public sealed record SendChat(Guid ConversationId, Guid ClientMessageId, long? ExpectedRevision, string? Message) : IRequest<RequestResult>
 {
@@ -29,7 +35,7 @@ public sealed record SendChat(Guid ConversationId, Guid ClientMessageId, long? E
 public sealed record ReadChat(Guid ConversationId, Guid? ClientMessageId = null, bool Cancel = false) : IRequest<object>;
 public sealed record ListChat(Guid? ConversationId, int Limit, string? Cursor) : IRequest<object>;
 public sealed record ChatCursor(Guid AccountId, Guid? ConversationId, int Limit, DateTimeOffset Snapshot,
-    DateTimeOffset? Activity, Guid? Id, long UpperSequence, long BeforeSequence);
+    DateTimeOffset? Activity, Guid? Id, long UpperSequence, long BeforeSequence, string Role = "driver");
 public interface IChatCursors
 {
     string Encode(ChatCursor cursor);
@@ -41,16 +47,17 @@ public sealed record ChatSnapshot(long SettingsRevision, string CorpusFingerprin
 public interface IChatStore
 {
     Task<bool> Ready(CancellationToken ct);
-    Task<CreatedConversation?> FindCreation(Guid account, Guid key, string locale, CancellationToken ct);
+    Task<CreatedConversation?> FindCreation(ChatScope scope, Guid key, string locale, CancellationToken ct);
     Task<CreatedConversation> Create(CurrentActor actor, Guid key, string locale, CancellationToken ct);
-    Task<Conversation> Get(Guid account, Guid conversation, CancellationToken ct);
-    Task<IReadOnlyList<Conversation>> List(Guid account, ChatCursor cursor, CancellationToken ct);
-    Task<(IReadOnlyList<ChatMessage> Messages, Guid? Active)> Messages(Guid account, Guid conversation, ChatCursor cursor, CancellationToken ct);
-    Task<RequestResult?> Lookup(Guid account, Guid conversation, Guid key, string? fingerprint, CancellationToken ct);
-    Task<Admission> Admit(Guid account, SendChat input, string fingerprint, ChatSnapshot snapshot, int deadlineMs, CancellationToken ct);
-    Task<IReadOnlyList<ContextTurn>> Context(Guid account, Guid conversation, CancellationToken ct);
-    Task<bool> DispatchAllowed(Guid account, Guid conversation, Guid key, CancellationToken ct);
-    Task<RequestResult> Finish(Guid account, Guid conversation, Guid key, GuestReply? answer, string? error, bool cancel, CancellationToken ct);
+    Task<Conversation> Get(ChatScope scope, Guid conversation, CancellationToken ct);
+    Task<IReadOnlyList<Conversation>> List(ChatScope scope, ChatCursor cursor, CancellationToken ct);
+    Task<(Conversation Conversation, IReadOnlyList<ChatMessage> Messages, Guid? Active)> Messages(ChatScope scope, Guid conversation, ChatCursor cursor, CancellationToken ct);
+    Task<RequestResult?> Lookup(ChatScope scope, Guid conversation, Guid key, string? fingerprint, CancellationToken ct);
+    Task<Admission> Admit(ChatScope scope, SendChat input, string fingerprint, ChatSnapshot snapshot, int deadlineMs, CancellationToken ct);
+    Task<IReadOnlyList<ContextTurn>> Context(ChatScope scope, Guid conversation, CancellationToken ct);
+    Task<bool> DispatchAllowed(ChatScope scope, Guid conversation, Guid key, CancellationToken ct);
+    Task<RequestResult> Finish(ChatScope scope, Guid conversation, Guid key, GuestReply? answer, string? error, bool cancel, CancellationToken ct);
+    Task Reset(ChatScope scope, Guid conversation, CancellationToken ct);
     Task Recover(CancellationToken ct);
     Task Purge(CancellationToken ct);
 }

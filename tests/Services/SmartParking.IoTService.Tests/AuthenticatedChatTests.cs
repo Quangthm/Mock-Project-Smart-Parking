@@ -295,6 +295,7 @@ public sealed partial class AuthenticatedChatTests
         await pending;
         var lookup = await f.Data(await f.Get(route + $"/requests/{key}"));
         Assert.Equal("cancelled", lookup.GetProperty("state").GetString());
+        await f.Data(await f.Post(route + "/reset", new { }));
         var other = await f.Conversation();
         var next = await f.Data(await f.Post($"/api/assistant/conversations/{other}/messages",
             new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message = "more parking" }));
@@ -423,6 +424,34 @@ public sealed partial class AuthenticatedChatTests
         }
     }
 
+    [Theory]
+    [InlineData("What happens if I stay past my reservation?", "payment-guide", "Đỗ xe quá giờ")]
+    [InlineData("Đặt chỗ tối thiểu 15 phút đúng không?", "booking-guide", "Thời lượng đặt chỗ tối thiểu")]
+    [InlineData("What happens if I stay past my reservation AB123?", null, null)]
+    public async Task DriverPublicPolicyUsesCanonicalQuestion(string question, string? articleId, string? prompt)
+    {
+        await using var f = await Fixture.Create();
+        f.EnableProvider();
+        var id = await f.Conversation();
+        var result = await f.Data(await f.Post($"/api/assistant/conversations/{id}/messages",
+            new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message = question }));
+        var answer = result.GetProperty("answer");
+        var sources = answer.GetProperty("sources").EnumerateArray();
+        if (articleId is null)
+        {
+            Assert.Equal("clarification", answer.GetProperty("outcome").GetString());
+            Assert.Empty(sources);
+            Assert.Empty(f.Answers.Inputs);
+            return;
+        }
+
+        Assert.Equal("answered", answer.GetProperty("outcome").GetString());
+        Assert.Equal(articleId, Assert.Single(sources).GetProperty("articleId").GetString());
+        var input = Assert.Single(f.Answers.Inputs);
+        Assert.StartsWith(prompt!, input);
+        Assert.DoesNotContain(question, input);
+    }
+
     [Fact]
     public async Task ProductionRoutesUseJwtAccountAndHonestCapabilities()
     {
@@ -431,7 +460,7 @@ public sealed partial class AuthenticatedChatTests
         Assert.True(capabilities.GetProperty("features").GetProperty("faq").GetBoolean());
         Assert.All(capabilities.GetProperty("features").EnumerateObject().Where(x=>x.Name!="faq"),x=>Assert.False(x.Value.GetBoolean()));
         var id=await f.Conversation();
-        foreach(var (account,user,role,status) in new[]{(Guid.NewGuid(),f.User,"driver",404),(Guid.NewGuid(),Guid.NewGuid(),"driver",404),(f.Account,f.User,"admin",403),(f.Account,f.User,"owner",403)})
+        foreach(var (account,user,role,status) in new[]{(Guid.NewGuid(),f.User,"driver",404),(Guid.NewGuid(),Guid.NewGuid(),"driver",404),(f.Account,f.User,"admin",404),(f.Account,f.User,"owner",404),(f.Account,f.User,"operator",403)})
         {
             var token=f.Token(account,user,role);
             foreach(var route in new[]{ $"/conversations/{id}",$"/conversations/{id}/messages",$"/conversations/{id}/requests/{Guid.NewGuid()}"})
@@ -514,6 +543,32 @@ public sealed partial class AuthenticatedChatTests
         Assert.Equal(JsonValueKind.Null,result.GetProperty("answer").ValueKind);Assert.Single((await f.Data(await f.Get(route+"/messages"))).GetProperty("items").EnumerateArray());
     }
     [Fact]
+    public async Task OneCurrentChatPerRoleAndResetRetryTargetsOnlyOldChat()
+    {
+        await using var f = await Fixture.Create();
+        var key = Guid.NewGuid();
+        var driver = await f.Conversation(key);
+        var adminToken = f.Token(role: "admin");
+        var ownerToken = f.Token(role: "owner");
+        var admin = await f.Conversation(key, adminToken);
+        var owner = await f.Conversation(key, ownerToken);
+        Assert.NotEqual(driver, admin);
+        Assert.NotEqual(admin, owner);
+
+        var path = $"/api/assistant/conversations/{driver}";
+        Assert.Equal(HttpStatusCode.Conflict, (await f.Post("/api/assistant/conversations",
+            new { clientConversationId = Guid.NewGuid(), locale = "en" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await f.Post(path + "/reset", new { }, adminToken)).StatusCode);
+        await f.Data(await f.Post(path + "/reset", new { }));
+        Assert.Equal(HttpStatusCode.NotFound, (await f.Get(path + "/messages")).StatusCode);
+        var replacement = await f.Conversation();
+        await f.Data(await f.Post(path + "/reset", new { }));
+        Assert.Equal(HttpStatusCode.OK, (await f.Get($"/api/assistant/conversations/{replacement}", f.Token())).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await f.Get($"/api/assistant/conversations/{admin}", adminToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await f.Get($"/api/assistant/conversations/{owner}", ownerToken)).StatusCode);
+    }
+
+    [Fact]
     public async Task RetentionPagingAndCursorAccountBinding()
     {
         await using var f=await Fixture.Create();var id=await f.Conversation();
@@ -521,13 +576,15 @@ public sealed partial class AuthenticatedChatTests
         var route=$"/api/assistant/conversations/{id}/messages";
         var first=await f.Data(await f.Get(route+"?limit=2"));var cursor=first.GetProperty("nextCursor").GetString()!;
         Assert.Equal(5,first.GetProperty("items")[0].GetProperty("sequence").GetInt64());
+        Assert.Equal(6, first.GetProperty("conversation").GetProperty("revision").GetInt64());
+        await f.Data(await f.Post(route, new { clientMessageId = Guid.NewGuid(), expectedRevision = 6, message = "payment" }));
         var second=await f.Data(await f.Get(route+"?limit=2&cursor="+Uri.EscapeDataString(cursor)));Assert.Equal(3,second.GetProperty("items")[0].GetProperty("sequence").GetInt64());
         Assert.Equal(HttpStatusCode.BadRequest,(await f.Get(route+"?limit=3&cursor="+Uri.EscapeDataString(cursor))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await f.Get(route+"?limit=2&cursor="+Uri.EscapeDataString(cursor),f.Token(Guid.NewGuid(),f.User))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await f.Get(route+"?limit=2&cursor=forged")).StatusCode);
         f.Clock.Now=f.Clock.Now.AddDays(30);
-        Assert.Equal(HttpStatusCode.NotFound,(await f.Get($"/api/assistant/conversations/{id}",f.Token())).StatusCode);
-        Assert.Empty((await f.Data(await f.Get("/api/assistant/conversations",f.Token()))).GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.OK,(await f.Get($"/api/assistant/conversations/{id}",f.Token())).StatusCode);
+        Assert.Single((await f.Data(await f.Get("/api/assistant/conversations",f.Token()))).GetProperty("items").EnumerateArray());
     }
     [Fact]
     public async Task ContextRemainsLocalAndGuestTranscriptIsNotImported()
@@ -537,6 +594,7 @@ public sealed partial class AuthenticatedChatTests
         await f.Data(await f.Post(route,new{clientMessageId=Guid.NewGuid(),expectedRevision=2,message="tell me more"}));
         Assert.Equal(new[]{"Payment guidance","Payment guidance"},f.Answers.Inputs);
         await f.Data(await f.Post(route,new{clientMessageId=Guid.NewGuid(),expectedRevision=4,message="my account SECRET 12345"}));Assert.Equal(2,f.Answers.Calls);
+        await f.Data(await f.Post($"/api/assistant/conversations/{id}/reset", new { }));
         var another=await f.Conversation();Assert.Empty((await f.Data(await f.Get($"/api/assistant/conversations/{another}/messages"))).GetProperty("items").EnumerateArray());
         await f.Data(await f.Post($"/api/assistant/conversations/{another}/messages",new{clientMessageId=Guid.NewGuid(),expectedRevision=0,message="tell me more"}));Assert.Equal(2,f.Answers.Calls);
     }
@@ -622,12 +680,14 @@ public sealed partial class AuthenticatedChatTests
     [Fact]
     public async Task ConcurrentGenerationLimitDoesNotBlockRecovery()
     {
-        await using var f=await Fixture.Create();var first=await f.Conversation();var second=await f.Conversation();var third=await f.Conversation();f.Answers.Block=true;
+        await using var f=await Fixture.Create();
+        var secondToken=f.Token(Guid.NewGuid()); var thirdToken=f.Token(Guid.NewGuid());
+        var first=await f.Conversation();var second=await f.Conversation(token:secondToken);var third=await f.Conversation(token:thirdToken);f.Answers.Block=true;
         var key=Guid.NewGuid();var one=f.Post($"/api/assistant/conversations/{first}/messages",new{clientMessageId=key,expectedRevision=0,message="payment"});
         await f.Answers.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var two=f.Post($"/api/assistant/conversations/{second}/messages",new{clientMessageId=Guid.NewGuid(),expectedRevision=0,message="payment"});
+        var two=f.Post($"/api/assistant/conversations/{second}/messages",new{clientMessageId=Guid.NewGuid(),expectedRevision=0,message="payment"},secondToken);
         using var deadline=new CancellationTokenSource(5000);while(f.Answers.Calls<2)await Task.Delay(10,deadline.Token);
-        var rejected=await f.Post($"/API/assistant/conversations/{third}/messages/",new{clientMessageId=Guid.NewGuid(),expectedRevision=0,message="payment"});Assert.Equal(HttpStatusCode.TooManyRequests,rejected.StatusCode);Assert.NotNull(rejected.Headers.RetryAfter);
+        var rejected=await f.Post($"/API/assistant/conversations/{third}/messages/",new{clientMessageId=Guid.NewGuid(),expectedRevision=0,message="payment"},thirdToken);Assert.Equal(HttpStatusCode.TooManyRequests,rejected.StatusCode);Assert.NotNull(rejected.Headers.RetryAfter);
         Assert.Equal("running",(await f.Data(await f.Get($"/api/assistant/conversations/{first}/requests/{key}"))).GetProperty("state").GetString());
         f.Answers.Release.TrySetResult();await one;await two;Assert.Equal(2,f.Answers.Calls);
     }
@@ -636,8 +696,8 @@ public sealed partial class AuthenticatedChatTests
     {
         await using var f=await Fixture.Create(overall:800);var id=await f.Conversation();var key=Guid.NewGuid();
         // Use a synthetic saved result because an 800ms overall fixture reserves its budget for finalization.
-        await f.Store.Admit(f.Account,new(id,key,0,"payment"),"synthetic",new(1,"synthetic-hash","test-v1"),25000,default);
-        await f.Store.Finish(f.Account,id,key,new(Guid.NewGuid(),"knowledge","answered","saved",[new("payment-guide","test-v1","en","title","excerpt")],[],[]),null,false,default);
+        await f.Store.Admit(new ChatScope(f.Account, "driver"),new(id,key,0,"payment"),"synthetic",new(1,"synthetic-hash","test-v1"),25000,default);
+        await f.Store.Finish(new ChatScope(f.Account, "driver"),id,key,new(Guid.NewGuid(),"knowledge","answered","saved",[new("payment-guide","test-v1","en","title","excerpt")],[],[]),null,false,default);
         f.Corpus.Stall=true;
         var result=await f.Data(await f.Get($"/api/assistant/conversations/{id}/requests/{key}"));Assert.Equal("completed",result.GetProperty("state").GetString());
         Assert.Equal(HttpStatusCode.GatewayTimeout,(await f.Post("/api/assistant/conversations",new{clientConversationId=Guid.NewGuid(),locale="en"})).StatusCode);Assert.Equal(0,f.Answers.Calls);
@@ -646,7 +706,7 @@ public sealed partial class AuthenticatedChatTests
     public async Task OrphanLookupRecoversWithoutRedispatchAndOldKeyRemainsTerminal()
     {
         await using var f=await Fixture.Create();var id=await f.Conversation();var key=Guid.NewGuid();
-        await f.Store.Admit(f.Account,new(id,key,0,"payment"),"synthetic",new(1,"synthetic-hash","test-v1"),100,default);
+        await f.Store.Admit(new ChatScope(f.Account, "driver"),new(id,key,0,"payment"),"synthetic",new(1,"synthetic-hash","test-v1"),100,default);
         f.Clock.Now=f.Clock.Now.AddSeconds(1);
         var result=await f.Data(await f.Get($"/api/assistant/conversations/{id}/requests/{key}"));
         Assert.Equal("failed",result.GetProperty("state").GetString());Assert.Equal("REQUEST_INTERRUPTED",result.GetProperty("requestError").GetProperty("code").GetString());
@@ -738,7 +798,7 @@ public sealed partial class AuthenticatedChatTests
         private Task<HttpResponseMessage> Send(HttpMethod method,string path,object? body,string? token)
         {var request=new HttpRequestMessage(method,path);if(body is not null)request.Content=JsonContent.Create(body);if(token!="")request.Headers.Authorization=new("Bearer",token??initial);return Client.SendAsync(request);}
         public async Task<JsonElement> Data(HttpResponseMessage response){Assert.True(response.IsSuccessStatusCode,await response.Content.ReadAsStringAsync());Assert.Equal("no-store",response.Headers.CacheControl?.ToString());return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").Clone();}
-        public async Task<Guid> Conversation(Guid? creation=null)=> (await Data(await Post("/api/assistant/conversations",new{clientConversationId=creation??Guid.NewGuid(),locale="en",accountId=Guid.NewGuid()}))).GetProperty("id").GetGuid();
+        public async Task<Guid> Conversation(Guid? creation=null,string? token=null)=> (await Data(await Post("/api/assistant/conversations",new{clientConversationId=creation??Guid.NewGuid(),locale="en",accountId=Guid.NewGuid()},token))).GetProperty("id").GetGuid();
         public async ValueTask DisposeAsync(){Answers.Release.TrySetResult();Client.Dispose();await app.StopAsync();await app.DisposeAsync();key.Dispose();}
     }
 }

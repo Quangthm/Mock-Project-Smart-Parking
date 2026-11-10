@@ -11,7 +11,7 @@ public sealed class ChatDeadlineBehavior<TRequest,TResponse>(ChatBudget budget) 
 {
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
     {
-        if (request is not (CreateConversation or SendChat or ReadChat or ListChat or GetAssistantCapabilitiesQuery)) return await next(ct);
+        if (request is not (CreateConversation or ResetConversation or SendChat or ReadChat or ListChat or GetAssistantCapabilitiesQuery)) return await next(ct);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(budget.Remaining);
         try { return await next(deadline.Token); }

@@ -21,6 +21,7 @@ import { RoleRoute } from "./components/navigation/RoleRoute"
 import { Footer } from "./components/layout/Footer"
 
 import { GuestChatbot } from "./components/chat/GuestChatbot"
+import { DriverChatbot } from "./components/chat/DriverChatbot"
 import { AppToastHost } from "./components/feedback/AppToastHost"
 
 import { Landing } from "./public pages/Landing"
@@ -205,7 +206,9 @@ function AppContent() {
         </AnimatePresence>
       </main>
       {authReady && user && usesDashboardNavbar && view !== "driver" && (
-        <GuestChatbot key={user.id} role={user.role} />
+        user.role === "admin" || user.role === "owner"
+          ? <DriverChatbot key={`${user.id}:${user.role}`} />
+          : <GuestChatbot key={user.id} role={user.role} />
       )}
       {authReady && !user && view === "landing" && <GuestChatbot onSignIn={question => {
         setGuestQuestion(question)

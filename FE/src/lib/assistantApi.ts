@@ -1,7 +1,7 @@
 import { request } from "./authApi"
 
 export interface AssistantStatus { enabled: boolean; guestFaq: boolean; locales: string[]; contractVersion: string }
-export interface Conversation { id: string; title: string; locale: string; revision: number; createdAt: string; lastMessageAt: string | null; expiresAt: string }
+export interface Conversation { id: string; title: string; locale: string; revision: number; createdAt: string; lastMessageAt: string | null; expiresAt: string | null }
 export interface ChatMessage { id: string; sequence: number; role: string; content: string; createdAt: string; clientMessageId: string; outcome: string | null; sources: unknown[]; actions: unknown[]; mode: string; cards: unknown[] }
 export interface RequestResult { requestId: string; clientMessageId: string; conversationId: string; state: "running" | "completed" | "failed" | "cancelled"; revision: number; answer: ChatMessage | null; requestError: { code: string; message: string; retryable: boolean } | null }
 export interface Page<T> { items: T[]; nextCursor: string | null }
@@ -50,6 +50,10 @@ export const assistantApi = {
   capabilities: (signal?: AbortSignal) => privateCall<Record<string, unknown>>("/capabilities", undefined, signal),
   create: (clientConversationId: string, locale: "vi" | "en", signal?: AbortSignal) => privateCall<Conversation>("/conversations", { clientConversationId: id(clientConversationId), locale }, signal),
   conversations: (cursor?: string | null, signal?: AbortSignal) => privateCall<Page<Conversation>>("/conversations" + paging(cursor), undefined, signal),
+  reset: async (conversationId: string, signal?: AbortSignal) => {
+    const result = await privateCall<{ reset: boolean }>(`/conversations/${id(conversationId)}/reset`, {}, signal)
+    if (result.reset !== true) throw new Error("INVALID_ASSISTANT_RESPONSE")
+  },
   history: (conversationId: string, cursor?: string | null, signal?: AbortSignal) => privateCall<History>(`/conversations/${id(conversationId)}/messages` + paging(cursor), undefined, signal),
   send: (conversationId: string, body: { clientMessageId: string; expectedRevision: number; message: string }, signal?: AbortSignal) => {
     id(body.clientMessageId)

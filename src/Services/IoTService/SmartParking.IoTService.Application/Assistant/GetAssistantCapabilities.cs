@@ -16,7 +16,7 @@ public sealed class GetAssistantCapabilitiesHandler(ICurrentActor currentActor, 
     {
         cancellationToken.ThrowIfCancellationRequested();
         var actor = currentActor.Actor ?? throw new AssistantAccessException(false);
-        if (actor.Role != "driver") throw new AssistantAccessException(true);
+        if (!Chat.ChatScope.Supports(actor.Role) || readiness is null && actor.Role != "driver") throw new AssistantAccessException(true);
         var enabled = false;
         if (readiness is not null)
         {
@@ -24,7 +24,8 @@ public sealed class GetAssistantCapabilitiesHandler(ICurrentActor currentActor, 
             catch (Chat.ChatFailure ex) when (ex.Code is "ASSISTANT_DISABLED" or "RETRIEVAL_UNAVAILABLE") { }
         }
         if (clock is not null && actor.ExpiresAt <= clock.GetUtcNow()) throw new AssistantAccessException(false);
+        var driver = actor.Role == "driver";
         return new AssistantCapabilities(enabled, readiness is null ? "0.3.0" : "0.4.1", ["vi", "en"], 4000,
-            new(enabled, enabled && reads?.Vehicles == true, enabled && reads?.Search == true, enabled && reads?.Reservations == true, false, false, false, false));
+            new(enabled, enabled && driver && reads?.Vehicles == true, enabled && driver && reads?.Search == true, enabled && driver && reads?.Reservations == true, false, false, false, false));
     }
 }

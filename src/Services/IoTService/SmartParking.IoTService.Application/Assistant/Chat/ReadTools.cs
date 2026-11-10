@@ -61,7 +61,7 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
             DateTimeOffset? from = null, to = null; string? cursor = null;
             if (next)
             {
-                var turns = await store.Context(account, conversation.Id, ct);
+                var turns = await store.Context(new ChatScope(account, "driver"), conversation.Id, ct);
                 var remaining = 12000;
                 var bounded = turns.Take(6).TakeWhile(t => (remaining -= t.Question.Length + t.Answer.Content.Length) >= 0);
                 var page = bounded.SelectMany(t => t.Answer.Cards).Select(PageCard).FirstOrDefault(p => p is not null);

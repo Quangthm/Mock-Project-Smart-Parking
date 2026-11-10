@@ -17,11 +17,15 @@ const conversation = { id: conversationId, title: 'Hội thoại kiểm thử A'
 const answer = { id: requestId, sequence: 2, role: 'assistant', content: 'Phản hồi riêng A',
   createdAt: now, clientMessageId: requestId, outcome: 'answered', sources: [], actions: [],
   mode: 'system', cards: [{ type: 'parking', asOf: now, parking: { name: 'Bãi fixture', availability: {} } }] };
+const older = { ...answer, id: 'older-message', sequence: 1, role: 'user', content: 'Tin nhắn từ trang cũ' };
+const latest = { ...answer, id: 'latest-message', sequence: 4, content: 'Phản hồi từ tab khác' };
 
 async function scenario(browser, viewport, dist) {
   const page = await browser.newPage({ viewport, serviceWorkers: 'block' });
   page.setDefaultTimeout(8000);
-  let enabled = false, recovered = false, hold = false;
+  let enabled = false, recovered = false, hold = false, reset = false;
+  let paginate = false, latestAvailable = false;
+  let sentRevision;
   let releaseHistory;
   const historyReleased = new Promise(resolve => { releaseHistory = resolve; });
   const account = id => ({ userId: id, role: 'driver', email: `${id}@example.test`,
@@ -48,10 +52,28 @@ async function scenario(browser, viewport, dist) {
       return ok({ content: 'Sign in to view your reservations.', mode: 'system',
         outcome: 'handoff', actions: [{ type: 'login' }] });
     }
-    if (routePath === conversations) return ok({ items: isA ? [conversation] : [], nextCursor: null });
+    if (routePath === conversations) return ok({ items: isA && !reset ? [conversation] : [], nextCursor: null });
+    if (routePath === `${conversations}/${conversationId}/reset` && isA) {
+      assert.equal(request.method(), 'POST');
+      reset = true;
+      return ok({ reset: true });
+    }
     if (routePath === messages && isA) {
+      if (request.method() === 'POST') {
+        sentRevision = request.postDataJSON().expectedRevision;
+        latestAvailable = true;
+        return route.fulfill({ status: 409, json: { success: false, code: 'REVISION_CONFLICT' } });
+      }
+      if (url.searchParams.has('cursor')) {
+        return ok({ conversation: { ...conversation, revision: 4 }, items: [older], nextCursor: null,
+          activeRequestClientMessageId: null });
+      }
+      if (latestAvailable) {
+        return ok({ conversation: { ...conversation, revision: 4 }, items: [answer, latest], nextCursor: null,
+          activeRequestClientMessageId: null });
+      }
       if (hold) await historyReleased;
-      return ok({ conversation, items: recovered ? [answer] : [], nextCursor: null,
+      return ok({ conversation, items: recovered ? [answer] : [], nextCursor: paginate ? 'older-page' : null,
         activeRequestClientMessageId: recovered ? null : requestId }).catch(error => {
         if (!hold) throw error;
       });
@@ -95,12 +117,30 @@ async function scenario(browser, viewport, dist) {
     assert.equal(await panel.getByRole('textbox').inputValue(), question);
     assert.equal(requests.filter(([method]) => method === 'POST').length, 1);
     await button('Đóng', panel).click();
+    paginate = true;
     await driver.click();
+    await panel.getByText(answer.content, { exact: true }).waitFor();
+    // Dispatch without Playwright scrolling the button into view and triggering auto-pagination.
+    await button('Tin nhắn cũ hơn', panel).dispatchEvent('click');
+    await panel.getByText(older.content, { exact: true }).waitFor();
+    await button('Gửi', panel).click();
+    await panel.getByText(latest.content, { exact: true }).waitFor();
+    assert.equal(sentRevision, conversation.revision);
+    assert.equal(await panel.getByRole('textbox').inputValue(), question);
+    latestAvailable = false;
+    paginate = false;
+    await button('Mới', panel).click();
+    const confirm = page.getByRole('dialog', { name: 'Tạo đoạn chat mới?' });
+    await button('Giữ đoạn chat', confirm).click();
+    assert.equal(reset, false);
     await panel.getByText(answer.content, { exact: true }).waitFor();
     await button('Đóng', panel).click();
     enabled = false;
     await afterResponse('/api/assistant/capabilities', focus);
-    await driver.waitFor({ state: 'hidden' });
+    await driver.click();
+    await panel.getByText('Hiện chỉ có thể xem lịch sử. Gửi câu hỏi chưa khả dụng.').waitFor();
+    await panel.getByText(answer.content, { exact: true }).waitFor();
+    await button('Đóng', panel).click();
     enabled = true;
     await focus();
     hold = true;
@@ -119,10 +159,23 @@ async function scenario(browser, viewport, dist) {
     }
     await login('b');
     await afterResponse(conversations, () => driver.click());
-    await panel.getByRole('combobox').waitFor();
-    await panel.locator('select:not([disabled])').waitFor();
+    await panel.getByRole('textbox').waitFor();
     assert.equal(await panel.getByText(answer.content, { exact: true }).count(), 0);
-    assert.equal(await panel.getByRole('option', { name: conversation.title }).count(), 0);
+    assert.equal(await panel.getByRole('combobox').count(), 0);
+    await button('Đóng', panel).click();
+    await page.locator('.profile-trigger').filter({ hasText: 'Fixture b' }).click();
+    await button('Sign Out').click();
+    if (!(await page.getByPlaceholder('you@example.com or phone number').isVisible())) {
+      await button('Sign In').first().click();
+    }
+    hold = false;
+    await login('a');
+    await driver.click();
+    await panel.getByText(answer.content, { exact: true }).waitFor();
+    await button('Mới', panel).click();
+    await afterResponse(`${conversations}/${conversationId}/reset`, () => button('Tạo chat mới', confirm).click());
+    await panel.getByText(answer.content, { exact: true }).waitFor({ state: 'hidden' });
+    assert.equal(reset, true);
     console.log(`${viewport.width}x${viewport.height}: FAQ gate, login handoff, recovery, history, availability, Driver gate, logout/relogin PASS`);
   } finally {
     releaseHistory();

@@ -63,7 +63,7 @@ public sealed class ChatExecution(IChatStore store, TimeProvider clock, ILogger<
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(5000);
                 await store.Recover(timeout.Token);
-                if (clock.GetUtcNow() >= purgeAt) { await store.Purge(timeout.Token); purgeAt = clock.GetUtcNow().AddDays(1); }
+                if (clock.GetUtcNow() >= purgeAt) { await store.Purge(timeout.Token); purgeAt = clock.GetUtcNow().AddMinutes(1); }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch { logger.LogWarning("Assistant recovery unavailable; pending requests remain recoverable in storage."); }
@@ -122,7 +122,7 @@ public static class ChatHosting
     }
     public static void MapChat(this WebApplication app)
     {
-        var group = app.MapGroup("/api/assistant").RequireAuthorization("AssistantDriver").RequireRateLimiting("chat-read");
+        var group = app.MapGroup("/api/assistant").RequireAuthorization("AssistantChat").RequireRateLimiting("chat-read");
         group.AddEndpointFilter(async (context, next) =>
         {
             _ = context.HttpContext.RequestServices.GetRequiredService<ChatBudget>();
@@ -138,6 +138,13 @@ public static class ChatHosting
             var result = await mediator.Send(input, ct);
             ctx.Response.Headers.Location = $"/api/assistant/conversations/{result.Conversation.Id}";
             return Result(ctx, result.Conversation, result.Created ? 201 : 200);
+        });
+        group.MapPost("/conversations/{id}/reset", async (string id, HttpContext ctx, IMediator mediator, CancellationToken ct) =>
+        {
+            var body = await Body<JsonElement>(ctx, ct);
+            if (body.ValueKind != JsonValueKind.Object) throw new ChatFailure(400, "VALIDATION_FAILED");
+            var reset = await mediator.Send(new ResetConversation(Id(id)), ct);
+            return Result(ctx, new { reset });
         });
         group.MapGet("/conversations", (HttpContext ctx, IMediator mediator, CancellationToken ct) => Page(ctx, mediator, null, ct));
         group.MapGet("/conversations/{id}", async (string id, HttpContext ctx, IMediator mediator, CancellationToken ct) =>

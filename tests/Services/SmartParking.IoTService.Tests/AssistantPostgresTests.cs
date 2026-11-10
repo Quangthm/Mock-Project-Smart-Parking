@@ -321,6 +321,39 @@ public sealed class AssistantPostgresTests
     }
 
     [AssistantPostgresFact]
+    public async Task AssistantPostgresCurrentChatUniquenessAndResetFence()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var ct = timeout.Token;
+        await using var source = OpenSource();
+        await using var peerSource = OpenSource();
+        var store = new AssistantChatStore(source);
+        var peer = new AssistantChatStore(peerSource);
+        var actor = new CurrentActor(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "driver", DateTimeOffset.UtcNow.AddMinutes(1));
+        var scope = ChatScope.From(actor);
+        var key = Guid.NewGuid();
+        var attempts = new[] { store.Create(actor, key, "vi", ct), peer.Create(actor, Guid.NewGuid(), "vi", ct) };
+        var conflict = await Assert.ThrowsAsync<ChatFailure>(() => Task.WhenAll(attempts));
+        Assert.Equal("CONVERSATION_EXISTS", conflict.Code);
+        var current = Assert.Single(attempts, attempt => attempt.IsCompletedSuccessfully).Result.Conversation;
+        var admin = await peer.Create(actor with { Role = "admin" }, key, "vi", ct);
+        Assert.NotEqual(current.Id, admin.Conversation.Id);
+        Assert.Equal(404, (await Assert.ThrowsAsync<ChatFailure>(
+            () => store.Reset(new ChatScope(actor.AccountId, "admin"), current.Id, ct))).Status);
+
+        var message = Guid.NewGuid();
+        await store.Admit(scope, new SendChat(current.Id, message, 0, "payment"), "fixture",
+            new ChatSnapshot(0, "synthetic-fingerprint", "test-v1"), 15000, ct);
+        await peer.Reset(scope, current.Id, ct);
+        Assert.False(await store.DispatchAllowed(scope, current.Id, message, ct));
+        Assert.Equal(404, (await Assert.ThrowsAsync<ChatFailure>(
+            () => store.Finish(scope, current.Id, message, null, null, true, ct))).Status);
+        var replacement = await store.Create(actor, Guid.NewGuid(), "vi", ct);
+        await peer.Reset(scope, current.Id, ct);
+        Assert.Equal(replacement.Conversation.Id, (await store.Get(scope, replacement.Conversation.Id, ct)).Id);
+    }
+
+    [AssistantPostgresFact]
     public async Task ChatSerializesAdmissionAndTerminalWritesAndRecoversAnAbandonedRequest()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -337,26 +370,26 @@ public sealed class AssistantPostgresTests
         Assert.All(creations, result => Assert.Equal(conversation, result.Conversation.Id));
         var snapshot = new ChatSnapshot(0, "synthetic-fingerprint", "test-v1");
         var input = new SendChat(conversation, Guid.NewGuid(), 0, "payment");
-        var admissions = await Task.WhenAll(store.Admit(account, input, "same", snapshot, 15000, ct),
-            peerStore.Admit(account, input, "same", snapshot, 15000, ct));
+        var admissions = await Task.WhenAll(store.Admit(new ChatScope(account, "driver"), input, "same", snapshot, 15000, ct),
+            peerStore.Admit(new ChatScope(account, "driver"), input, "same", snapshot, 15000, ct));
         var admitted = Assert.Single(admissions, result => result.Created).Result;
         Assert.All(admissions, result => Assert.Equal(admitted.RequestId, result.Result.RequestId));
-        var conflict = await Assert.ThrowsAsync<ChatFailure>(() => peerStore.Admit(account, input, "different", snapshot, 15000, ct));
+        var conflict = await Assert.ThrowsAsync<ChatFailure>(() => peerStore.Admit(new ChatScope(account, "driver"), input, "different", snapshot, 15000, ct));
         Assert.Equal("IDEMPOTENCY_CONFLICT", conflict.Code);
-        var busy = await Assert.ThrowsAsync<ChatFailure>(() => peerStore.Admit(account, input with { ClientMessageId = Guid.NewGuid() }, "other", snapshot, 15000, ct));
+        var busy = await Assert.ThrowsAsync<ChatFailure>(() => peerStore.Admit(new ChatScope(account, "driver"), input with { ClientMessageId = Guid.NewGuid() }, "other", snapshot, 15000, ct));
         Assert.Equal("CONVERSATION_BUSY", busy.Code);
 
         var key = input.ClientMessageId;
         var answer = new GuestReply(Guid.Empty, "knowledge", "answered", "Synthetic answer", [], [], []);
-        var terminal = await Task.WhenAll(store.Finish(account, conversation, key, null, null, true, ct),
-            peerStore.Finish(account, conversation, key, answer, null, false, ct));
+        var terminal = await Task.WhenAll(store.Finish(new ChatScope(account, "driver"), conversation, key, null, null, true, ct),
+            peerStore.Finish(new ChatScope(account, "driver"), conversation, key, answer, null, false, ct));
         Assert.Equal(terminal[0].State, terminal[1].State);
         Assert.Contains(terminal[0].State, new[] { "cancelled", "completed" });
         var revision = terminal[0].State == "cancelled" ? 1 : 2;
         Assert.All(terminal, result => Assert.Equal(revision, result.Revision));
 
         var pending = new SendChat(conversation, Guid.NewGuid(), revision, "payment");
-        await store.Admit(account, pending, "abandoned", snapshot, 15000, ct);
+        await store.Admit(new ChatScope(account, "driver"), pending, "abandoned", snapshot, 15000, ct);
         await using (var expire = primary.CreateCommand("UPDATE assistant_requests SET deadline=clock_timestamp()-interval '1 second' WHERE conversation_id=$1 AND client_message_id=$2"))
         {
             expire.Parameters.AddWithValue(conversation);
@@ -366,20 +399,22 @@ public sealed class AssistantPostgresTests
         await using var reopened = OpenSource();
         var restarted = new AssistantChatStore(reopened);
         await Task.WhenAll(restarted.Recover(ct), peerStore.Recover(ct));
-        Assert.Equal(revision + 2, (await restarted.Get(account, conversation, ct)).Revision);
-        Assert.False(await restarted.DispatchAllowed(account, conversation, pending.ClientMessageId, ct));
-        var recovered = await restarted.Finish(account, conversation, pending.ClientMessageId, answer, null, false, ct);
+        Assert.Equal(revision + 2, (await restarted.Get(new ChatScope(account, "driver"), conversation, ct)).Revision);
+        Assert.False(await restarted.DispatchAllowed(new ChatScope(account, "driver"), conversation, pending.ClientMessageId, ct));
+        var recovered = await restarted.Finish(new ChatScope(account, "driver"), conversation, pending.ClientMessageId, answer, null, false, ct);
         Assert.Equal("failed", recovered.State);
         Assert.Equal("REQUEST_INTERRUPTED", recovered.RequestError?.Code);
         Assert.Equal(revision + 2, recovered.Revision);
         Assert.Null(recovered.Answer);
-        Assert.Equal(admitted.RequestId, (await restarted.Lookup(account, conversation, key, "same", ct))?.RequestId);
-        var cursor = new ChatCursor(account, conversation, 10, DateTimeOffset.UtcNow, null, null, long.MaxValue, long.MaxValue);
-        var (messages, active) = await restarted.Messages(account, conversation, cursor, ct);
+        Assert.Equal(admitted.RequestId, (await restarted.Lookup(new ChatScope(account, "driver"), conversation, key, "same", ct))?.RequestId);
+        // A cursor timestamp captured before the write must not omit messages from the current revision.
+        var cursor = new ChatCursor(account, conversation, 10, DateTimeOffset.UnixEpoch, null, null, long.MaxValue, long.MaxValue);
+        var (history, messages, active) = await restarted.Messages(new ChatScope(account, "driver"), conversation, cursor, ct);
+        Assert.Equal(recovered.Revision, history.Revision);
         Assert.Equal(revision + 1, messages.Count);
         Assert.Equal(revision - 1, messages.Count(message => message.Role == "assistant"));
         Assert.Null(active);
-        var foreign = await Assert.ThrowsAsync<ChatFailure>(() => restarted.Get(Guid.NewGuid(), conversation, ct));
+        var foreign = await Assert.ThrowsAsync<ChatFailure>(() => restarted.Get(new ChatScope(Guid.NewGuid(), "driver"), conversation, ct));
         Assert.Equal(404, foreign.Status);
     }
 

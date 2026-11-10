@@ -62,8 +62,11 @@ public static class AssistantAuthentication
                 OnForbidden = context => AssistantErrors.WriteAsync(context.HttpContext, AssistantErrors.ForStatus(403))
             };
         });
-        services.AddAuthorization(options => options.AddPolicy("AssistantDriver", policy =>
-            policy.RequireAuthenticatedUser().RequireRole("driver")));
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy("AssistantDriver", policy => policy.RequireAuthenticatedUser().RequireRole("driver"));
+            options.AddPolicy("AssistantChat", policy => policy.RequireAuthenticatedUser().RequireRole("driver", "admin", "owner"));
+        });
         return services;
     }
 

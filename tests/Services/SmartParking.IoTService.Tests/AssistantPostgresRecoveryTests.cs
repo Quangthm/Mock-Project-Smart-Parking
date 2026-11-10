@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using SmartParking.IoTService.Application.Assistant.Authorization;
+using SmartParking.IoTService.Application.Assistant.Chat;
 using SmartParking.IoTService.Persistence;
 
 namespace SmartParking.IoTService.Tests;
@@ -14,7 +15,7 @@ public sealed partial class AuthenticatedChatTests
 
     [AssistantPostgresFact]
     [Trait("Category", "AssistantPostgres")]
-    public async Task AssistantPostgresHidesExpiredHistoryAndPurgesOnlyWithoutHold()
+    public async Task AssistantPostgresHidesResetHistoryAndPurgesOnlyAfterSevenDaysWithoutHold()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         var ct = timeout.Token;
@@ -31,13 +32,18 @@ public sealed partial class AuthenticatedChatTests
         // Ensure startup purge is finished before expiring the rows whose pre-purge state we assert.
         while ((await CountRows(startupProbe))[0] != 0)
             await Task.Delay(50, ct);
-        var active = await CreateConversation();
         var expired = await CreateConversation();
+        await Reset(expired.Conversation);
         var held = await CreateConversation();
+        await Reset(held.Conversation);
+        var active = await CreateConversation();
+
+        await store.Purge(ct);
+        Assert.Equal(new long[] { 1, 2, 1, 1 }, await CountRows(expired.Conversation));
 
         await using (var expire = database.CreateCommand("""
             UPDATE assistant_conversations
-            SET created_at = statement_timestamp() - interval '30 days', expires_at = statement_timestamp(), retention_hold = id = $2
+            SET deleted_at = statement_timestamp() - interval '168 hours', expires_at = statement_timestamp(), retention_hold = id = $2
             WHERE id IN ($1, $2)
             """))
         {
@@ -71,13 +77,13 @@ public sealed partial class AuthenticatedChatTests
         {
             var creation = Guid.NewGuid();
             var conversation = await host.Conversation(creation);
-            var initial = await store.Get(host.Account, conversation, ct);
-            Assert.InRange(initial.ExpiresAt - initial.CreatedAt, TimeSpan.FromDays(30), TimeSpan.FromDays(30).Add(TimeSpan.FromSeconds(1)));
+            var initial = await store.Get(new ChatScope(host.Account, "driver"), conversation, ct);
+            Assert.Null(initial.ExpiresAt);
             var message = Guid.NewGuid();
             var reply = await host.Data(await host.Post($"/api/assistant/conversations/{conversation}/messages",
                 new { clientMessageId = message, expectedRevision = 0, message = "payment" }));
             Assert.Equal("completed", reply.GetProperty("state").GetString());
-            Assert.Equal(initial.ExpiresAt, (await store.Get(host.Account, conversation, ct)).ExpiresAt);
+            Assert.Equal(initial.ExpiresAt, (await store.Get(new ChatScope(host.Account, "driver"), conversation, ct)).ExpiresAt);
             await using var tool = database.CreateCommand("""
                 INSERT INTO assistant_tool_runs(conversation_id, tool_name, input_parameters)
                 VALUES ($1, 'synthetic_fixture', '{}'::jsonb)
@@ -85,6 +91,14 @@ public sealed partial class AuthenticatedChatTests
             tool.Parameters.AddWithValue(conversation);
             Assert.Equal(1, await tool.ExecuteNonQueryAsync(ct));
             return (conversation, message, creation);
+        }
+
+        async Task Reset(Guid id)
+        {
+            await host.Data(await host.Post($"/api/assistant/conversations/{id}/reset", new { }));
+            await using var query = database.CreateCommand("SELECT expires_at - deleted_at FROM assistant_conversations WHERE id=$1");
+            query.Parameters.AddWithValue(id);
+            Assert.Equal(TimeSpan.FromDays(7), Assert.IsType<TimeSpan>(await query.ExecuteScalarAsync(ct)));
         }
 
         async Task<long[]> CountRows(Guid conversation)
@@ -140,7 +154,7 @@ public sealed partial class AuthenticatedChatTests
                     await Task.Delay(100, ct);
                 }
                 pending = JsonSerializer.Deserialize<PendingChat>(await File.ReadAllTextAsync(marker, ct))!;
-                Assert.True(await store.DispatchAllowed(pending.Account, pending.Conversation, pending.Message, ct));
+                Assert.True(await store.DispatchAllowed(new ChatScope(pending.Account, "driver"), pending.Conversation, pending.Message, ct));
             }
             finally
             {
@@ -151,7 +165,7 @@ public sealed partial class AuthenticatedChatTests
             // Wait for startup/periodic recovery rather than allowing GET request lookup to repair the row.
             await using var restarted = await Fixture.Create(chatStore: store);
             restarted.EnableProvider();
-            while ((await store.Get(pending.Account, pending.Conversation, ct)).Revision == 1)
+            while ((await store.Get(new ChatScope(pending.Account, "driver"), pending.Conversation, ct)).Revision == 1)
                 await Task.Delay(200, ct);
 
             var token = restarted.Token(pending.Account, pending.User);

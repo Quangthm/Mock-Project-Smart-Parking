@@ -69,20 +69,23 @@ public sealed partial class AuthenticatedChatTests(ITestOutputHelper output)
 
         async Task Exercise(int count, Fixture fixture)
         {
-            var targets = new List<(Guid Conversation, Guid Request)>();
+            var targets = new List<(Guid Conversation, Guid Request, string Token)>();
             for (var index = 0; index < count; index++)
-                targets.Add((await fixture.Conversation(), Guid.NewGuid()));
+            {
+                var token = fixture.Token(Guid.NewGuid());
+                targets.Add((await fixture.Conversation(token: token), Guid.NewGuid(), token));
+            }
 
             await Run(targets, _ => fixture.Post(FaqRoute,
                 new { requestId = Guid.NewGuid(), message = "What is SmartPark?", locale = "en" }, token: ""), "outcome", "answered");
             await Run(targets, target => fixture.Post($"/api/assistant/conversations/{target.Conversation}/messages",
-                new { clientMessageId = target.Request, expectedRevision = 0, message = "Tell me about astronomy" }), "state", "completed");
-            await Run(targets, target => fixture.Get($"/api/assistant/conversations/{target.Conversation}/requests/{target.Request}"),
+                new { clientMessageId = target.Request, expectedRevision = 0, message = "Tell me about astronomy" }, target.Token), "state", "completed");
+            await Run(targets, target => fixture.Get($"/api/assistant/conversations/{target.Conversation}/requests/{target.Request}", target.Token),
                 "state", "completed");
         }
 
-        async Task Run(List<(Guid Conversation, Guid Request)> targets,
-            Func<(Guid Conversation, Guid Request), Task<HttpResponseMessage>> send, string field, string expected)
+        async Task Run(List<(Guid Conversation, Guid Request, string Token)> targets,
+            Func<(Guid Conversation, Guid Request, string Token), Task<HttpResponseMessage>> send, string field, string expected)
         {
             foreach (var chunk in targets.Chunk(concurrency))
             {
