@@ -1,6 +1,6 @@
 # AI Chatbot — Đọc từ đây
 
-Mục tiêu: chatbot chạy thật, ổn định với knowledge và API có quyền truy cập. FAQ đã có bằng chứng Gemini thật; đặt chỗ toàn luồng chưa xong. Cập nhật cấu trúc tài liệu: **08/11/2026**.
+Chatbot trả lời từ knowledge đã duyệt và gọi API trong phạm vi được cấp quyền. FAQ đã có bằng chứng Gemini thật. Luồng đặt chỗ toàn trình còn mở. Mục lục cập nhật **10/11/2026**.
 
 ## Tìm đúng tài liệu
 
@@ -16,7 +16,7 @@ Mục tiêu: chatbot chạy thật, ổn định với knowledge và API có quy
 | Chuẩn bị draft sau khi đủ nguồn | [Điều kiện đặt chỗ](booking-prerequisites.md) |
 | DTO/route/quyền/lỗi | [Contract S01](../api/assistant-s01-end-to-end-api-design.md), [ma trận API](assistant-s01-api-matrix.md) |
 | Tiếp tục backend hiện tại | [Quá trình phát triển backend](../../../ai/tasks/active/chatbot-development-progress.md) |
-| Tra quyết định/bằng chứng cũ | [Lịch sử thiết kế](luu-tru/design-history.md), [lịch sử triển khai](../../../ai/tasks/archive/chatbot-implementation-history.md) |
+| Tra quyết định/bằng chứng cũ | [Lịch sử thiết kế](luu-tru/design-history.md), [lịch sử triển khai](../../../ai/tasks/archive/chatbot-implementation-history.md), [bản lưu knowledge 0.3.1](luu-tru/knowledge/smartpark-knowledge-old.md) |
 
 ## Quy tắc cập nhật
 

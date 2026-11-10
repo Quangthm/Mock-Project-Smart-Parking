@@ -45,10 +45,11 @@ Chạy lệnh ở thư mục gốc repo. Nhận đúng nhánh/commit được gi
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Điền các trường sau trong `.env`. File path phải tuyệt đối. Xem [công thức tạo khóa dev và hướng dẫn chi tiết](../../LOCAL-SETUP.md#ai-chatbot-bằng-docker).
+Điền các trường sau trong `.env`. Runner Docker chấp nhận đường dẫn tuyệt đối hoặc tương đối so với thư mục chứa `.env`. Xem [công thức tạo khóa dev và hướng dẫn chi tiết](../../LOCAL-SETUP.md#ai-chatbot-bằng-docker).
 
 | Trường | Giá trị cần điền |
 | --- | --- |
+| `SMARTPARK_ASSISTANT_DOCKER_ENABLED` | `true` để setup và runner `All` chạy Assistant |
 | `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` | Khóa riêng của UserService local theo mục 5.5 trong LOCAL-SETUP. Giữ khóa đang dùng nếu đã có |
 | `Assistant__Jwt__PublicKeyFile` | PEM công khai cùng cặp khóa JWT đó |
 | `Assistant__Jwt__Issuer` | Mặc định của UserService Docker là `SmartParking.UserService`, đối chiếu cấu hình thực |
@@ -64,13 +65,13 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 Các password DB/Admin còn trống theo mẫu được setup sinh. Lấy thông tin đăng nhập từ `.env` local sau setup, không gửi nội dung file vào báo cáo. Không tạo lại khóa JWT trên máy đang có bộ khóa của nhóm. Keyring DPAPI Windows cần quy trình chuyển đổi trước khi dùng Linux container.
 
 ```powershell
-.\setup.ps1 -WithAssistant -SkipSonarQube
+.\setup.ps1 -SkipSonarQube
 .\scripts\run-app-service.ps1 -Service All
 ```
 
-Kỳ vọng setup dựng DB nền, cài ba migration Assistant trên phần chatbot trống, build và chạy Assistant. Luồng app stack tiếp tục dựng User/Facility/Operation/Payment/FE. Frontend mở tại `http://localhost:5173`, Assistant tại `http://localhost:5076`. Port có thể đổi theo cấu hình của đợt test.
+Kỳ vọng setup dựng DB nền, cài các migration Assistant trên phần chatbot trống, build và chạy Assistant. Luồng app stack tiếp tục dựng User/Facility/Operation/Payment/FE. Frontend mở tại `http://localhost:5173`, Assistant tại `http://localhost:5076`. Port có thể đổi theo cấu hình của đợt test.
 
-Script điền `VITE_ASSISTANT_API_BASE_URL` vào `FE/.env` khi trường đang trống. Nếu trường đã có giá trị khác, QA đối chiếu và chọn URL của môi trường được giao. Khởi động lại FE khi đổi file. `setup.ps1` mặc định cần thêm `-WithAssistant` để dựng chatbot.
+Runner Docker tự đặt `VITE_ASSISTANT_API_BASE_URL` cho container frontend theo cổng Assistant healthy trong project `smartpark-app`. Khi dựng riêng bằng `-Service Assistant`, frontend Docker đang chạy được cập nhật tự động. Frontend chạy bằng host vẫn đọc `FE/.env`.
 
 ### 2.3. Máy đã có DB hoặc đang chạy Assistant bằng host
 
@@ -183,18 +184,18 @@ Cần A/B, release Driver, corpus và Settings sẵn sàng. Dùng câu FAQ `Smar
 
 | ID / mức | Thao tác | Kết quả mong đợi |
 | --- | --- | --- |
-| TC-DRV-01 / P0 | A mở Trợ lý · Lịch sử → Mới, gửi FAQ, đóng/mở và reload | Một câu người dùng và một câu trả lời, đúng thứ tự, nguồn Driver mở được |
+| TC-DRV-01 / P0 | Dùng tài khoản A chưa có chat. Mở Trợ lý · Lịch sử, gửi FAQ đầu tiên, đóng/mở và reload | Lượt gửi đầu tiên tạo chat. Một câu người dùng và một câu trả lời, đúng thứ tự, nguồn Driver mở được |
 | TC-DRV-02 / P0 | Ghi CONV-A. B mở danh sách và gọi GET history/requests của CONV-A bằng JWT của B | B không thấy CONV-A. API cho resource của A trả 404 |
 | TC-DRV-03 / P1 | Guest hỏi lịch đặt, Sign in bằng A, chọn Đưa vào ô soạn, quan sát Network trước Gửi | Chỉ đưa câu vào ô soạn, không tự POST message. Bấm Gửi mới tạo yêu cầu |
 | TC-DRV-04 / P1 | A gửi `What is SmartPark?` rồi `tell me more` trong cùng hội thoại | Tiếp tục FAQ theo nguồn công khai đã chọn trong context hợp lệ. Không tự đọc dữ liệu tài khoản |
 | TC-DRV-05 / P0 | Slow network, gửi FAQ, Offline khi request còn pending. Online lại và chọn Kiểm tra kết quả | Tra đúng clientMessageId. Nếu cho gửi lại, cùng ID và payload. Không tạo câu hỏi trùng |
 | TC-DRV-06 / P1 | Với request đủ lâu, chọn Hủy yêu cầu, sau đó tra lại cùng ID | Terminal đầu tiên giữ nguyên. Nếu cancel thắng thì cancelled, kết quả về muộn không chèn thêm. Completed trước cancel được giữ |
-| TC-DRV-07 / P1 | Hai tab A mở cùng hội thoại. Tab 1 gửi câu, tab 2 gửi từ revision cũ | Backend trả busy/revision conflict khi phù hợp. UI tải lại dữ liệu, không nhân đôi message |
+| TC-DRV-07 / P1 | Hai tab A mở cùng đoạn chat có đủ tin để phân trang. Tab 1 gửi câu và chờ hoàn tất. Tab 2 chọn Tin nhắn cũ hơn rồi gửi câu | Tab 2 vẫn gửi revision của trang mới nhất đã hiển thị và nhận `REVISION_CONFLICT`. UI tải lại trang mới nhất, giữ câu vừa nhập để người dùng gửi lại và không tạo tin nhắn trùng |
 | TC-DRV-08 / P0 | A đang tải history chậm, logout rồi login B, chờ response cũ về | UI của B không nhận tin/thẻ hay trạng thái request của A |
 | TC-DRV-09 / P1 | Ghi CONV-A/REQ-A, restart Assistant test cùng DB/keyring, mở lại hội thoại | History hoàn tất còn nguyên. Tra request cũ không kích hoạt generation mới |
 | TC-DRV-10 / P1 | Dùng harness crash hoặc developer tạo provider giả lập chờ, kill tiến trình sau admission và restart | Sau deadline, worker ghi REQUEST_INTERRUPTED, cùng ID tra lại được, không redispatch. Xem mục 7 |
-| TC-DRV-11 / P2 | Có trên 20 hội thoại và trên 50 tin một hội thoại, dùng Thêm hội thoại/Tin nhắn cũ hơn | Phân trang đúng Account, không lặp ID, thứ tự transcript đúng |
-| TC-DRV-12 / P1 | Dùng fixture sắp hết hạn, đọc trước và sau expiresAt; chạy purge bằng harness | Hết hạn nhận 404 cả replay. Purge giữ hold nội bộ, không cấp quyền xem lại cho Driver |
+| TC-DRV-11 / P2 | Dùng một đoạn chat có trên 50 tin, chọn Tin nhắn cũ hơn đến hết lịch sử | Tin nhắn cũ được ghép đúng thứ tự, không lặp ID và không làm mất vị trí đang đọc |
+| TC-DRV-12 / P1 | Reset đoạn chat, mở lại lịch sử và tra ID cũ. Dùng harness PostgreSQL cách ly để kiểm tra purge trước và sau mốc 7 ngày | Chat cũ ẩn ngay, history và replay trả 404. Purge giữ chat trước hạn và giữ chat có hold; chat đến hạn không có hold được xóa |
 | TC-DRV-13 / P1 | Driver gửi ba câu muộn/quá giờ như TC-FAQ-04 | Cùng quyết định nguồn và hướng dẫn với Guest ở ba intent tương ứng |
 
 ## 5. API và ranh giới chức năng

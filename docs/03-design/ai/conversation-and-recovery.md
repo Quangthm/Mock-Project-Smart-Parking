@@ -6,7 +6,11 @@ Mốc S05 ban đầu05/11: IoT355/355 và build pass; full solution còn4 Facili
 
 ## Approval and scope
 
-On 2026-11-05 the user delegated selection after explicit D02/D03/wire questions. Selected: absolute **30 days from conversation creation**, immediate expiry hiding, daily cleanup; local context at most **six completed turns and 12,000 UTF-16 characters**; provider receives only a server-owned FAQ topic and approved public excerpt. Raw text, transcript, Account/User IDs, tokens and private records never become provider context. This deliberately supports narrow FAQ continuation (“tell me more”, “explain more”, “nói rõ hơn”, “giải thích thêm”), not general conversational extraction. Guest transcript is never imported.
+On 2026-11-10 the user approved one current conversation per Account and role (Driver, Admin and Business/Owner). It has no automatic expiry. Confirming **+ Mới** hides the current conversation immediately, cancels any running request and schedules permanent deletion after seven days, subject to acknowledged holds. The first message starts the replacement. Guest FAQ stays session-only. This supersedes S05's original 30-day absolute expiry for current conversations.
+
+Local context remains bounded to six completed turns and 12,000 UTF-16 characters. The provider receives only a server-owned FAQ topic and approved public excerpt. Guest transcripts and private Account data stay outside provider context.
+
+For existing S05 databases, stop the old Assistant and back up IoT before applying [the current-chat migration](../../../scripts/database/migrations/20261110_iot_assistant_current_chat.sql). It resumes the latest eligible Driver conversation per Account. Other legacy conversations remain outside the current chat and keep their original expiry and holds. Coordinate API and frontend rollout after migration. Restoring the pre-upgrade backup is the rollback path for the old app version. Docker setup applies this migration on a fresh Assistant schema and checks it on existing schemas.
 
 S01 §§4–6 and inherited P0 conversation/ledger wire, B-03 delivery expiry and B-05 limits were approved for code/offline tests. D01 delegation and D05 domain APIs are not consumed. B-02 runtime/key rotation, backup deletion SLA, provider deployment/retention terms and Admin publication remain OPEN. TOKEN stale claims may remain accepted until JWT expiry; there is no live revocation guarantee. G08 `/hubs/access` / `AccessRevoked` still lacks a server counterpart.
 
@@ -14,13 +18,14 @@ S01 §§4–6 and inherited P0 conversation/ledger wire, B-03 delivery expiry an
 
 Driver và Guest dùng chung cách xử lý câu hỏi về đến trễ, đỗ quá giờ và thời điểm chưa rõ. Câu đỗ quá giờ dùng câu hỏi cố định của backend và mục hướng dẫn thanh toán đã duyệt. Hai trường hợp còn lại trả hướng dẫn tại chỗ. Tin nhắn ngoài phạm vi hướng người dùng về FAQ. Trạng thái tìm bãi thuộc `capabilities.features.searchParking` và phản hồi khi người dùng gửi yêu cầu tìm bãi.
 
-All routes below require locally validated RS256 JWT with trusted issuer/audience/public key, required identity claims and exact Driver role. Owner is `account_id`, never `sub`, body or model. Same User with another Account is isolated; a new valid token for the same Account can recover retained results. JSON, no-store, correlation ID; unknown JSON fields ignored without affecting ownership or fingerprints.
+All routes below require a validated RS256 JWT for Driver, Admin or Owner. The server scopes each operation and cursor by the token's `account_id` and role. Vehicle and reservation reads and parking search remain restricted to Driver. A fresh token for the same Account and role can resume the current chat. JSON responses use no-store and a correlation ID.
 
 | Method / route | Payload / result |
 |---|---|
 | GET `/api/assistant/capabilities` | No query/body; version0.4.1; FAQ only when release/global/storage/publication ready; all business flags false |
-| POST `/api/assistant/conversations` | `{clientConversationId,locale}`;201 new/200 replay; Location; changed locale409 |
-| GET `/api/assistant/conversations` | `limit` default20/max50, protected cursor; current Account only |
+| POST `/api/assistant/conversations` | `{clientConversationId,locale}`; 201 new, 200 replay, 409 `CONVERSATION_EXISTS` when another create won. |
+| GET `/api/assistant/conversations` | Current conversation for this Account and role, or an empty list. |
+| POST `/api/assistant/conversations/{id}/reset` | JSON object `{}`; 200 with data `{reset:true}` when reset or previously reset. 404 for a foreign or purged conversation. Retries target the same conversation ID. |
 | GET `/api/assistant/conversations/{id}` | Conversation; missing/foreign/expired404 |
 | GET `/api/assistant/conversations/{id}/messages` | limit50/max100, protected cursor; newest page returned ascending sequence; active request ID; no provider call |
 | POST `/api/assistant/conversations/{id}/messages` | `{clientMessageId,expectedRevision,message}`;200 terminal/202 running replay with Location/Retry-After2; fingerprint trimmed message+expectedRevision |
@@ -43,7 +48,7 @@ Host owns and awaits admitted work independently of socket disconnect. Each actu
 
 Global off stops new conversation/message admission and new reply delivery. Existing authenticated history/result lookup and identical replay remain usable, including create replay. Terminal persistence precedes a final token-expiry and snapshot check; after401 the same Account refreshes via UserService and looks up the existing key. A publication/settings change suppresses fresh delivery but does not destroy stored recovery evidence.
 
-Startup/periodic recovery performs set-based, conversation-locked, skip-locked transitions for overdue running requests, without provider redispatch. Poll interval1s, batch≤1000, operation timeout5s. The intended recovery target is within60s after deadline; **real PostgreSQL contention/load/restart and outage behavior are UNVERIFIED**, and an unavailable store prevents that guarantee. Lookup also recovers an overdue request transactionally. Expired conversations are immediately invisible; daily purge cascades ledger/messages/tool records except internal retention holds. Holds do not grant Driver access or auto-release.
+Startup/periodic recovery performs set-based, conversation-locked, skip-locked transitions for overdue running requests, without provider redispatch. Poll interval1s, batch≤1000, operation timeout5s. The intended recovery target is within60s after deadline; **real PostgreSQL contention/load/restart and outage behavior are UNVERIFIED**, and an unavailable store prevents that guarantee. Lookup also recovers an overdue request transactionally. Reset conversations are immediately invisible. Minute cleanup batches delete due conversations and cascade to the ledger, messages and tool records. Acknowledged holds preserve data while ordinary reads stay blocked.
 
 ## SQL and separately authorized setup
 
@@ -58,13 +63,13 @@ Before any apply, the operator must obtain separate authorization and:
 5. Retain existing JWT/managed datasource/protection configuration. Proposed new deployment key `Assistant:Chat:ReleaseEnabled` defaults false; enable only after schema, publication, auth and operational gates are accepted. Guest release is separate. Existing guest origins allow Authorization and now expose Location; do not use wildcard origins. No current environment file was read or changed.
 6. Run the PostgreSQL scenarios below using synthetic data in a separately approved isolated database; then perform explicitly authorized runtime acceptance. Never test real paid providers without separate permission.
 
-Rollback: stop S05 writers and workers, disable Chat release, take an incident backup. Keep added columns/tables while rolling application code back; dropping them destroys history/recovery evidence. If full restoration is required, restore the pre-migration backup into a separate verified database first and reconcile any post-migration data/holds before replacement. Restoring old DB data cannot undo provider charges. No destructive down migration is supplied or executed.
+Rollback of the current-chat upgrade requires stopping Assistant and restoring the pre-upgrade backup into a separate verified database before switching back to S05. Preserve an incident backup and reconcile post-upgrade data and holds first.
 
 ## PostgreSQL acceptance scenarios
 
 Use two independent connections/hosts and a fake provider with controllable barriers. Capture SQL-visible rows and provider-call counters; memory locks are not acceptance evidence.
 
-The [isolated PostgreSQL harness](../../04-testing/assistant-handoff-testing.md#nghiệm-thu-backend-trên-postgresql-cách-ly) verifies duplicate creation/admission, conflict and busy outcomes, terminal serialization and overdue recovery at the store boundary. The crash test kills a TestServer process inside synthetic provider generation, then checks recovery after the durable deadline and replay without another dispatch. The retention test checks the 30-day lifetime, immediate invisibility at expiry and purge with or without an internal hold. Deadline under a held lock, backlog, lost commit acknowledgement and legacy recovery remain [UNVERIFIED].
+The [isolated PostgreSQL harness](../../04-testing/assistant-handoff-testing.md#nghiệm-thu-backend-trên-postgresql-cách-ly) verifies duplicate creation/admission, conflict and busy outcomes, terminal serialization and overdue recovery at the store boundary. The crash test kills a TestServer process inside synthetic provider generation, then checks recovery after the durable deadline and replay without another dispatch. The retention test checks indefinite current history, immediate invisibility after reset and purge at the seven-day deadline with or without an internal hold. Deadline under a held lock, backlog, lost commit acknowledgement and legacy recovery remain [UNVERIFIED].
 
 | Scenario | Required observation |
 |---|---|
@@ -78,7 +83,7 @@ The [isolated PostgreSQL harness](../../04-testing/assistant-handoff-testing.md#
 | Two recovery workers plus completion/cancel | same conversation lock protocol; one terminal transition, correct revision, no duplicated message |
 | Large overdue backlog/locked conversations | set-based batches commit progress; measure60s target; skip-locked contention does not claim guaranteed SLA |
 | Lost commit acknowledgement/storage outage | caller retains key and queries; no automatic new ID/provider retry; safe dependency error |
-| Absolute expiry/hold/purge | equality hidden in all APIs/replay;30days from creation unchanged by activity; hold retains internal data only; purge cascades |
+| Reset/hold/purge | Reset hides the transcript and replay immediately. The seven-day deadline is unchanged on retry. Purge cascades and preserves held data. |
 | Restart history/cursors | stored transcript/ledger retained; persistent protection keyring decodes cursors; wrong Account/resource/limit rejected |
 | Migration legacy/malformed schema | transaction aborts safely; no guessed owner, no credential copy, tested backup restoration |
 
@@ -88,4 +93,4 @@ S06 uses Account-owned history/ledger and conservative local context. Vehicles/r
 
 S08 must use a dedicated abort/deadline-aware transport (normal shared10s timeout is shorter than25s work), or treat timeout as unknown and look up the same key. Do not globally increase auth API timeout. Preserve `authApi` argument6 extraHeaders / argument7 options.
 
-On logout or Account switch: increment session/account generation, abort local requests, clear private transcript/history/draft/pending intent; reject every late response unless Account generation + conversation ID + client request ID still match. Aborting the socket alone does not cancel durable work; use the cancel endpoint while authorized when the UI explicitly cancels. Do not rely on G08 realtime revocation. On401, use UserService's existing refresh/reauth policy; only the same Account may look up the old request. Provider503 is not logout. Guest pending intent is memory-only, requires explicit continuation after login, never transcript import or mutation replay. Global off hides/closes launcher but must retain an authenticated recovery path. No S08 UI was changed.
+On logout or Account switch, increment the session generation, abort local requests and clear private client state. Backend history stays scoped to the authenticated Account and role. The authenticated widget can reopen saved history when generation is off. Aborting a socket does not cancel durable work. Use the cancel or reset endpoint for an explicit cancellation. Guest sign-in carries only the pending question into the composer after confirmation.

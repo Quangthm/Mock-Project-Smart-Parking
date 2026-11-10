@@ -1,10 +1,10 @@
 # AI Chatbot — Tổng quan hệ thống và phạm vi đề nghị leader duyệt
 
-Cập nhật 08/11/2026. Dành cho leader, BA/Product, owner service, frontend và QA. Đối chiếu source trên nhánh `AI-ChatBot`, HEAD nền `3d3def76` cùng thay đổi working tree chưa đóng gói. Khi mở PR, điền commit bản bàn giao vào biên bản. Bản này mô tả hiện trạng, đề nghị phạm vi review và các điều kiện để hoàn tất.
+Cập nhật 10/11/2026 cho leader, BA/Product, owner service, frontend và QA. Dùng SHA trong PR để ghi nhận bản bàn giao. [Hướng dẫn QA](../../04-testing/assistant-handoff-testing.md) ghi các bước chạy và tiêu chí nghiệm thu.
 
 ## 1. Quyết định cần leader xem trước
 
-Có thể bàn giao review và test phần **Settings, FAQ, hội thoại Driver, lịch sử, hủy/phục hồi và Docker Assistant**. Phần **tra cứu xe/lịch đặt/tìm bãi có source nhưng còn nghiệm thu tích hợp**. Phần **hiểu yêu cầu đặt chỗ → điền sẵn form → khách xác nhận → tạo đơn/thanh toán** chưa triển khai đầy đủ.
+Có thể bàn giao review và test phần **Settings, FAQ, hội thoại Driver/Admin/Owner, lịch sử, reset, hủy/phục hồi và Docker Assistant**. Phần **tra cứu xe/lịch đặt/tìm bãi có source nhưng còn nghiệm thu tích hợp**. Phần **hiểu yêu cầu đặt chỗ → điền sẵn form → khách xác nhận → tạo đơn/thanh toán** chưa triển khai đầy đủ.
 
 | Câu hỏi | Trả lời hiện tại |
 | --- | --- |
@@ -22,8 +22,9 @@ Repo chưa xác nhận tên cá nhân cho các owner còn mở. Cột người p
 | --- | --- | --- |
 | Guest | Hỏi SmartPark, loại xe, cách đặt chỗ/thanh toán/hỗ trợ theo tài liệu công khai | Yêu cầu đọc dữ liệu riêng dẫn tới đăng nhập. Guest không có lịch sử bền vững |
 | Driver | FAQ, hội thoại theo Account, lịch sử, hủy/tra lại kết quả. Đọc xe/lịch đặt/tìm bãi khi được bật | Các câu tra cứu dùng nhóm câu được hỗ trợ cục bộ. Chưa trích xuất yêu cầu booking tự do thành draft |
-| Admin | Quản lý Gemini/OpenAI, key/model, thứ tự, bật/tắt, discovery, Test connection, rotate/revoke | Admin API riêng. Khóa được mã hóa, bản trả Settings không có plaintext secret |
-| Owner/Operator hoặc role khác | Có thể dùng hướng dẫn công khai theo UI hiện hành | Driver chat API yêu cầu đúng role Driver. Không lấy dữ liệu Driver chỉ vì người gọi đã đăng nhập |
+| Admin | Quản lý provider và dùng FAQ trong chat riêng | Admin API riêng. Khóa được mã hóa. Chat Admin không dùng các tool dữ liệu Driver |
+| Business/Owner | FAQ, lịch sử và reset chat riêng | Chat Owner không dùng các tool dữ liệu Driver |
+| Operator hoặc role khác | Hướng dẫn công khai nếu widget khả dụng | Các endpoint hội thoại riêng chỉ hỗ trợ Driver, Admin và Owner |
 | Người xuất bản knowledge | Duyệt và triển khai bản Markdown cùng manifest | Việc chọn source hoặc có file trong repo không tự phê duyệt nội dung phục vụ |
 
 Câu hỏi “Đặt cho tôi ô tô từ 14h đến 16h ngày mai” thuộc đích S07/S08. Trải nghiệm đích là hỏi thêm ngày/vị trí/xe nếu thiếu, lấy dữ kiện từ owner, cho khách xem form đã điền và xác nhận. Bản hiện tại chưa có đường nối chat sang form điền sẵn. Nút mở màn hình tìm bãi thủ công đã có trong widget không chứng minh luồng này hoàn tất.
@@ -58,7 +59,7 @@ Sơ đồ thể hiện đường gọi logic. Các đường owner read chỉ ch
 | Infrastructure | `src/Services/IoTService/SmartParking.IoTService.Infrastructure/Assistant` | HTTP Gemini/OpenAI, đọc/kiểm publication, mã hóa secret bằng Data Protection, HTTP đọc owner |
 | Persistence | `src/Services/IoTService/SmartParking.IoTService.Persistence` | Npgsql, transaction/lock, receipt quản trị, request ledger, history, recovery và retention |
 | Frontend | `FE/src/components/chat`, `FE/src/roles/admin/setting`, `FE/src/lib/assistantApi.ts` | Widget Guest, panel Driver, Settings, transport, Account generation guard và thẻ tra cứu |
-| Knowledge | `docs/03-design/ai/p1/knowledge/smartpark-knowledge.md` | Nguồn biên tập tiếng Việt, 12 mục. Runtime dùng bản triển khai đã duyệt, không duy trì bản policy tiếng Anh thứ hai |
+| Knowledge | `docs/03-design/ai/p1/knowledge/smartpark-knowledge.md` | Nguồn biên tập tiếng Việt 0.4.0, 21 mục. Runtime dùng bản triển khai đã duyệt, không duy trì bản policy tiếng Anh thứ hai |
 | Docker/setup | `compose.assistant.yml`, `docker/Dockerfile.assistant`, `scripts/setup-assistant-docker.ps1`, `setup.ps1` | Image/container Assistant, bootstrap IoT trống, kiểm đầu vào và nối URL FE |
 
 Chatbot .NET hiện có **bốn assembly** API/Application/Infrastructure/Persistence. Chưa có project Domain riêng cho chatbot trong IoTService. Python LPR/camera là runtime riêng trong cùng thư mục service, chạy bằng tùy chọn khác. Việc build Assistant không yêu cầu model nhận diện biển số.
@@ -98,7 +99,7 @@ Reviewer đọc route/DTO/error đầy đủ ở [contract S01](../api/assistant
 - Driver có context hẹp để tiếp tục FAQ, tối đa sáu lượt hoàn tất và 12.000 ký tự UTF-16. Đây chưa phải bộ nhớ booking nhiều lượt hoặc khả năng hiểu mọi cách diễn đạt tự do.
 - Input chat tối đa 4.000 ký tự, output tối đa 8.000. Guest request có giới hạn 20 giây. Driver có overall budget 25 giây và generation tối đa 20 giây. Managed routing mặc định tối đa ba candidate, mỗi attempt 7 giây, AI chain 18 giây trong tổng 20 giây, cooldown 60 giây.
 - Các hạn mức theo process. Hai generation Driver đồng thời, 10 message/phút/Account; Guest hai POST đồng thời và 10 POST/phút/socket IP; protected read/recovery limiter 60/phút/Account. Đây là giới hạn xử lý và tài nguyên, chưa là latency SLO hoặc quota phân tán.
-- Conversation hết hạn tuyệt đối sau 30 ngày từ tạo. Hết hạn ẩn ngay, purge chạy hàng ngày, hold nội bộ giữ dữ liệu nhưng không cấp lại quyền Driver. Poll recovery 1 giây, cancel/settings poll trong generation 100 ms. Cancel/off có thể không ngăn được request provider đã qua dispatch boundary hoặc chi phí đã phát sinh.
+- Mỗi Account và role có một chat hiện tại, giữ đến khi xác nhận reset. Reset ẩn chat ngay, hủy yêu cầu đang chạy và đặt hạn xóa sau 7 ngày, có ngoại lệ hold đã duyệt. Recovery kiểm tra mỗi giây. Trong lúc generation, kiểm tra cancel và Settings mỗi 100 ms. Cancel/off có thể không ngăn được request đã gửi provider hoặc chi phí đã phát sinh.
 - Global off khóa nhận câu mới, bảo toàn history và tra ledger khi còn quyền. Tắt/rotate/revoke được kiểm lại theo snapshot. Test đúng phần đã dispatch và kết quả terminal, không hứa exactly-once billing.
 
 Nguồn quyết định quyền là [ADR authorization](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) và [operation classification](../../01-requirements/srs/authorization-operation-classification.md). Thay policy freshness hoặc egress cần phê duyệt tương ứng.

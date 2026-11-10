@@ -133,3 +133,70 @@ Theo yêu cầu người dùng, bỏ SESSION/ngày khỏi tên file chatbot; dù
 - Giữ nghiệp vụ mới của `develop` cho Turnstile, media, phiên đăng nhập và Facility CQRS. Giữ cấu hình, route Discovery và tùy chọn HTTP riêng của Assistant. Sửa khai báo state trùng có sẵn trong form bãi xe và cập nhật fixture kiểm thử theo import hiện hành.
 - Build .NET và frontend thành công. Bộ .NET offline đạt 1.221 test, gồm 12 test kiến trúc. Frontend đạt 268 test. Năm script PowerShell offline kiểm tra setup, runner, listener, migration plan và readiness đạt.
 - Docker, PostgreSQL tích hợp, broker và provider thật vẫn chờ nghiệm thu môi trường. Các gate về đặt chỗ và availability giữ theo tài liệu owner.
+
+
+## Bản đề xuất knowledge mở rộng — 10/11/2026
+
+- Tạo [bản nháp 0.4.0](../../../docs/03-design/ai/p1/knowledge/smartpark-knowledge.md) bên cạnh nguồn hiện hành. Kế thừa 12 mã mục, bổ sung 9 mục hướng dẫn và mở rộng các quy tắc đã có căn cứ. Bản nháp dành cho FAQ công khai và người lái, chưa được công bố.
+- Hai subagent kiểm tra độc lập về nghiệp vụ và chọn nguồn. Vòng đầu tái hiện một hồi quy chọn loại xe và chỉ ra các điểm thiếu về no-show, hủy gói, điều kiện vào bãi và thời hạn thanh toán. Đã sửa và kiểm tra lại.
+- Harness .NET 10 ngoại tuyến dùng parser, loader công bố và bộ chọn nguồn trong repo. Loader từ chối bản draft và chấp nhận bản sao fixture có công bố mô phỏng. Bản cuối giữ 43/43 kỳ vọng phân loại cũ và 58/58 đường dẫn tệp tham chiếu tồn tại. Các câu mới thử được chọn đúng mục cho tới trễ, khách đến trực tiếp, hủy gói, hóa đơn và sự cố tại cổng. Chưa gọi provider hoặc nghiệm thu runtime.
+- Handoff: review/phê duyệt nội dung và kiểm thử trên môi trường đích nếu chọn làm bản thay thế. Bộ phân loại hiện tại vẫn chuyển một số câu có số hoặc cụm “bao nhiêu” sang nhánh hạn chế trước khi đọc knowledge. Cải thiện nhánh này là công việc backend riêng.
+
+- Theo yêu cầu tiếp theo, chọn 0.4.0 làm nguồn biên tập smartpark-knowledge.md và lưu nguyên byte của 0.3.1 dưới tên smartpark-knowledge-old.md. Giữ metadata draft/pending cho nguồn repo.
+
+
+## Công bố knowledge 0.4.0 cho Docker local — 10/11/2026
+
+- Admin xác nhận duyệt 0.4.0 cho Docker local trong phản hồi Codex ngày 10/11/2026. Bản sao Markdown đã duyệt và manifest khớp SHA-256 được đặt vào thư mục knowledge đang mount của Assistant local. Giữ bản 0.3.1 và manifest tương ứng trong thư mục rollback của mount. Nguồn biên tập trong repo giữ trạng thái draft.
+- Trước công bố, smoke test FAQ thật trả HTTP 200 và `vehicle-guide@0.3.1`. Sau công bố, status trả HTTP 200 với Guest FAQ khả dụng. Câu “Can I park without a reservation?” trả HTTP 200, `mode=ai`, `outcome=answered`, nguồn `walk-in-and-entry-guide@0.4.0`, trace `95d5cf0bb38f43a487c3a9ed082473f6`. Không cần khởi động lại Assistant.
+- Kiểm chứng ngoại tuyến trước rollout: 43/43 ca phân loại, 244 test backend đạt và 3 ca skip, 53 test frontend đạt. Phạm vi nghiệm thu thật là Guest API local và một câu công khai.
+
+## Smoke test lại AI Chatbot — 10/11/2026
+
+- Kiểm working tree của `AI-ChatBot` tại `d2ee96e0`, gồm các thay đổi chưa commit. Tách kết quả từ source hiện tại, Docker đang chạy và fixture cách ly.
+- `dotnet test` cho IoTService từ source hiện tại đạt 479, lỗi 4 và skip 6. Cả 4 ca `SingleVietnameseCorpusAnswersBothLanguages` dừng tại `Assert.Single(Directory.GetFiles(corpus, "*.md"))` do có thêm `smartpark-knowledge-old.md`. Năm ca opt-in chạy riêng bằng `scripts/test-assistant-postgres.ps1` đều đạt, gồm crash/recovery, retention và lưu lịch sử sau restart. Migration replay và backup/restore cũng đạt. Ca skip còn lại là tiến trình con của harness crash.
+- Frontend đạt 53/53, `npm --prefix FE run build` đạt. Hai browser harness dùng dữ liệu fixture đạt cho Driver recovery/history và Admin Settings. Năm script fixture setup, check, runner, owner listeners và migration plan đạt. `scripts/test-assistant-docker-setup.ps1 -NoBuild` đạt trên image local với JWT và DB fixture, kiểm Admin đọc Settings, Driver bị chặn 403 ở Settings, Guest fallback và Driver history sau khi chạy lại setup.
+- Docker live đạt liveness 204, status 200 với `guestFaq=true`, CORS preflight, từ chối JWT thiếu/sai 401, JSON sai 400, content type sai 415, rate limit 429 và cách ly route Demo. Widget Guest thực tế ở 1440×900 và 390×844 hiển thị FAQ từ `smartpark-overview@0.4.0`, sau đó chuyển sang đăng nhập khi hỏi lịch đặt. Guest không xác nhận giá hiện tại và không lặp token giả lập.
+- **FAIL provider generation.** Các lượt Guest và Demo thử trên runtime trả `mode=knowledge` với nguồn 0.4.0. Log Guest có upstream HTTP 503 và timeout. Demo cũng ghi timeout. Trace Guest `b49a413d38804928ab1af780e778192e`, Demo `d4d177abd3d2456ab0e729e30c5de013`. Chưa chẩn đoán được nguyên nhân phía provider.
+- **FAIL phân loại policy trên Docker.** `Đặt chỗ trước tối đa bao nhiêu ngày?` bị đưa sang giá/chỗ trống (`58ad49f71d474796b04a7c46e8caaf3e`), `Hủy đặt chỗ trước 24 giờ có được hoàn tiền không?` bị báo dữ liệu nhạy cảm (`3981e852aec04c3e9a4363779e3c3c29`). DLL đang chạy thiếu `PublicFaqIntents`. DLL build từ working tree chọn đúng route cho hai câu này, nhưng `Tôi có thể đặt chỗ trước tối đa bao nhiêu ngày?` vẫn vào `dynamic` và `Nếu hủy đặt chỗ trước 24 giờ thì có được hoàn tiền không?` vẫn vào `sensitive`.
+- [UNVERIFIED] Phiên Admin/Driver do UserService thật cấp, diagnostics và mutation trên Settings live, đọc dữ liệu owner live. Các cờ owner reads chưa được chuyển vào container đang kiểm. Chuẩn bị đặt chỗ và positive availability tiếp tục theo phạm vi đã chốt với các owner.
+- Bàn giao các lỗi để xử lý và kiểm lại. Lượt này chỉ ghi kết quả vào nhật ký. Runtime hiện có được kiểm tra trực tiếp, các thao tác ghi/restart chỉ diễn ra trong fixture.
+
+
+## Cải thiện nhận diện câu hỏi FAQ — 10/11/2026
+
+- Guest và Driver FAQ dùng thêm cụm từ theo ngữ cảnh cho walk-in, đến trễ, lấy xe quá giờ, hủy gói, sự cố cổng và thiếu thông báo. Một số câu quy tắc công khai có số qua mẫu toàn câu và dùng câu hỏi cố định do backend cung cấp. Tách hủy gói tự nguyện với bãi đóng cửa. Giữ kiểm tra dữ liệu cá nhân và trạng thái hiện tại của bãi trước truy xuất thông thường.
+- Hai subagent review độc lập sau mỗi vòng sửa về định tuyến và dữ liệu gửi provider. Đã xử lý các lỗi review về ký tự nhạy cảm, chủ đề ghép, điều kiện về loại xe, từ “vẫn”, hoàn gói khi bãi đóng cửa và câu hỏi bãi còn nhận xe lúc này. Review cuối không phát hiện blocker.
+- IoTService.Tests bản cuối đạt 489, lỗi 0, skip 6. Frontend Assistant đạt 53/53. Các kiểm tra bao gồm 43/43 kỳ vọng phân loại gốc và 38/38 ca smoke qua Guest handler fixture. Đã sửa ca Demo để kiểm tra tên file knowledge chính khi có file lưu 0.3.1. Probe riêng xác nhận câu hỏi khả năng tiếp nhận ngay lúc này đi nhánh dynamic ở cả Việt và Anh.
+- Các cách hỏi ngoài mẫu như “How long is a booking at minimum?” và “Đặt trước lâu nhất được mấy hôm?” vẫn có thể chưa tìm được nguồn. [UNVERIFIED] Câu trả lời từ model thật trên build mới. Chưa cập nhật image hay restart Docker Assistant trong lượt sửa code.
+
+
+## Smoke test Docker với bộ nhận diện mới — 10/11/2026
+
+- Build lại và recreate riêng service Assistant trong project smartpark-app, dùng cấu hình của container đang chạy. Image mới f8669910540a thay b8525c7a69dd. Container healthy, status HTTP 200, Guest FAQ khả dụng, corpus mount 0.4.0.
+- Guest API trả HTTP 200 cho 10/10 câu và đi đúng nhánh. Tám câu trích đúng nguồn 0.4.0 ở mode knowledge. Hai câu đối chứng hỏi lại đúng cho “Gửi xe muộn thì sao?” và từ chối xác nhận bãi còn nhận xe lúc này. Các cách hỏi chạy thẳng đến bãi, đến sau giờ hẹn, đặt tối thiểu 15 phút và hủy trước 24 giờ đã chọn đúng mục.
+- Provider generation chưa đạt trong lượt này. Log ghi Timeout, không có mã HTTP upstream. Nhánh dự phòng trả trích đoạn tiếng Việt có nguồn, câu tiếng Anh có thông báo tài liệu chỉ có bản tiếng Việt. Chưa xác nhận câu trả lời của model trên image mới. Không sửa code, dữ liệu hoặc cấu hình provider trong lượt smoke.
+
+
+## Smoke test 27 câu với provider thật — 10/11/2026
+
+- Guest API Docker local dùng image f8669910540a và corpus 0.4.0. Thử 3 đợt tuần tự lúc 10:29–10:33 giờ Việt Nam, cách ít nhất 65 giây sau mỗi đợt. 21 câu FAQ và 6 ca đối chứng. HTTP 200 cho 27/27, đúng nhánh 25/27, đúng nguồn FAQ 19/21, đúng giới hạn 6/6. Model 9/21 và tài liệu dự phòng 10/21. Hai câu FAQ đặt trước lâu nhất được mấy hôm và thời lượng đặt tối thiểu bằng tiếng Anh chưa tìm được nguồn.
+- Theo đợt, tỷ lệ model trên 7 câu FAQ là 2/7, 5/7 và 2/7. Log trong cửa sổ test có một Gemini 503 và hai timeout. Độ trễ đầu cuối p50 32 ms, p95 7027 ms. Chín câu mode ai có trung vị 5005 ms và khoảng 1484–6724 ms. Mẫu nhỏ chạy tuần tự, chưa đo tải đồng thời hoặc SLA.
+- Kiểm nội dung: luồng AI phân biệt bãi tạm đóng và vĩnh viễn, hỗ trợ xe máy tùy bãi và chưa xác nhận xe đạp. Câu hoàn trước 45 phút nêu đúng các bậc và tiền đủ điều kiện đã thu, nhưng cần người đọc tự áp mốc. Tài liệu dự phòng chọn đúng bài nhưng trả cả mục, và ba câu tiếng Anh ở mode knowledge chỉ có nội dung gốc tiếng Việt. Không đổi cấu hình provider hoặc code.
+
+## Một đoạn chat đang dùng cho mỗi Account và role — 10/11/2026
+
+- Người dùng duyệt một đoạn chat đang dùng cho Driver, Admin và Business/Owner. Xác nhận `+ Mới` làm ẩn đoạn cũ ngay và đặt hạn dọn sau 7 ngày. Quyền tra cứu dữ liệu nghiệp vụ vẫn thuộc Driver. Hold đã duyệt giữ dữ liệu trong phạm vi tương ứng.
+- Đã đồng bộ SRS, thông báo trong chat và trang quyền riêng tư. Migration S05 giữ đoạn Driver còn hiệu lực gần nhất, các đoạn cũ hơn giữ nguyên hạn lưu và hold. Đã thử nâng cấp, chạy lại migration và khôi phục backup trong PostgreSQL cách ly. Chưa áp migration lên DB đang chạy.
+- Kiểm chứng đạt 490 test .NET offline, 6 test PostgreSQL cách ly, 20 test frontend liên quan, build Vite và Chrome desktop/mobile với API giả. Ba subagent đã review và kiểm tra lại các sửa đổi.
+
+## Review trước PR — 10/11/2026
+
+- Trang lịch sử cũ chỉ bổ sung tin nhắn và cursor, giữ revision của trang mới nhất đang hiển thị. Backend đọc revision, tin nhắn và request đang chạy dưới cùng khóa hội thoại. Cursor lịch sử dùng sequence để giữ giới hạn trang khi có tin mới. Đã cập nhật ca QA cho lượt gửi đầu tiên, hai tab, phân trang và purge sau reset, cùng mô tả retention trong tài liệu tự học.
+- Subagent review độc lập hai vòng, phát hiện race ở trang đầu và xác nhận bản sửa sau vòng hai. Build Vite, 268 test frontend, Chrome 1440×900 và 390×844 với API giả, harness migration plan và `git diff --check` đạt. Toàn solution .NET đạt 1.238, lỗi 0, skip 104, trong đó IoT đạt 490, skip 7.
+- Đưa migration current-chat, source FAQ và bản lưu corpus được tham chiếu vào Git index. File tạm được chuyển vào `.cache`. Index chỉ chứa nhóm file mới đã chọn, các thay đổi tracked khác vẫn cần được chọn vào commit theo phạm vi PR.
+- [UNVERIFIED] Chưa chạy lại migration PostgreSQL thật hoặc smoke provider thật trong lượt này. Bước tiếp theo là đồng bộ với `develop`, kiểm checkout của commit sẽ mở PR và xác minh cả volume mới lẫn nâng cấp từ S05.
+
+## Chuẩn bị PR cho QA — 10/11/2026
+
+- Giữ hướng dẫn QA, tổng quan cho leader và hợp đồng ở các tài liệu có mục đích riêng. Chuyển ghi chú tự học cá nhân sang `.cache`. Chuyển corpus 0.3.1 nguyên nội dung sang kho lưu trữ và cập nhật liên kết. Thư mục knowledge dùng cho triển khai chỉ chứa nguồn 0.4.0 ở trạng thái draft.

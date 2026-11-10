@@ -1,5 +1,7 @@
 # SmartPark Assistant — P0 API theo phương án B
 
+**Amendment 10/11/2026.** The current-chat contract supersedes historical Driver-only and conversation expiry rules in this document. Driver, Admin and Business/Owner each have one current chat per Account and role. Confirmed reset hides the old chat and makes it due for deletion after seven days. See [current chat and recovery](../ai/conversation-and-recovery.md#approval-and-scope).
+
 | Metadata | Giá trị |
 | --- | --- |
 | Status | IN REVIEW — hướng B được người dùng xác nhận; wire/policy gaps bên dưới chưa final-approved |

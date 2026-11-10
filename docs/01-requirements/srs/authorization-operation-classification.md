@@ -92,7 +92,7 @@ The **Freshness / origin** column represents the **approved initial direction** 
 | Audit | Read security/audit records | Yes | `TOKEN` | No by default | Notification & Audit / User & Access | Local scope and least-privilege mandatory; review if 15-min stale role becomes unacceptable. |
 | Notification | Read own notifications | Yes | `TOKEN` | No | Notification & Audit | Local Account ownership. |
 | Assistant | FAQ/informational chatbot query | Yes if personalized | `TOKEN` | Not solely for authorization | Assistant / IoT as owned | Public FAQ may be `PUBLIC` when no actor required. |
-| Assistant | Read own conversation/history | Yes | `TOKEN` | No | Assistant | Local Account ownership. |
+| Assistant | Read or reset own conversation/history | Yes | `TOKEN` | No | Assistant | Local Account and role ownership. Reset affects the targeted conversation only. |
 | Assistant | Chatbot-triggered business write | Depends on underlying action | **Inherit underlying operation** | Depends | Owning business service | Six REQUEST families remain REQUEST when invoked through chatbot. Manual confirmation/business rules remain. |
 | Realtime | Connect to authenticated access/notification hub | Yes | `TOKEN` on connection | No auth Saga | Hub owner | Server-side revocation notification is best-effort UX; SignalR disconnect is not enforcement. |
 | Internal integration | Consume trusted domain/integration event | No end-user JWT required | `SERVICE` | Depends | Event consumer | Broker identity, trusted origin/contract, idempotency, resource facts. |

@@ -9,7 +9,7 @@ Tài liệu onboarding chi tiết cho môi trường local. Happy path nằm ở
 git branch --show-current          # nhánh làm việc mặc định: develop
 .\setup.ps1                        # dựng DB + credential + SonarQube + restore
 # Cấu hình RSA/JWT ổn định theo mục 5.5 trước khi chạy shared JWT
-.\scripts\run-app-service.ps1 -Service All   # chạy 5 container BE + FE
+.\scripts\run-app-service.ps1 -Service All   # chạy app stack, gồm Assistant nếu đã bật
 # Mở http://localhost:5173
 ```
 
@@ -51,22 +51,23 @@ Checklist trước khi setup:
 3. Probe authentication từng DB và áp workflow migration đúng trạng thái schema.
 4. Đồng bộ user-secrets cho User/Facility/Operation/Payment theo `.env` ở `[5/7]`.
 5. Dựng SonarQube (mặc định) và restore solution ở `[7/7]`.
-6. Setup mặc định để các API và frontend khởi động riêng theo [mục 3](#3-run-application). Tùy chọn `-WithAssistant` dựng thêm container chatbot.
+6. Setup mặc định để các API và frontend khởi động riêng theo [mục 3](#3-run-application). Bật Assistant trong `.env` để đưa chatbot vào quy trình Docker của nhóm.
 
 ### AI Chatbot bằng Docker
 
-Trên máy mới, sao chép `.env.example` thành `.env`. Chuẩn bị các đầu vào local sau trước khi chạy với `-WithAssistant`.
+Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bảng Assistant trong `smartpark_iot` cùng các bảng IoT khi khởi tạo volume mới. Chuẩn bị các đầu vào local sau để setup và runner `All` chạy container Assistant.
 
 | Cấu hình | Giá trị dùng ở máy dev |
 | --- | --- |
+| `SMARTPARK_ASSISTANT_DOCKER_ENABLED` | `true` để setup và `-Service All` chạy Assistant. Mặc định `false` cho máy chưa chuẩn bị đầu vào. |
 | `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` | Cấu hình khóa RSA riêng của UserService theo mục 5.5. Giữ khóa đang dùng nếu môi trường đã có. |
 | `Assistant__Jwt__PublicKeyFile`, `Assistant__Jwt__Issuer`, `Assistant__Jwt__Audience` | Public PEM tương ứng và issuer/audience đang dùng của UserService. Docker mặc định dùng `SmartParking.UserService` và `SmartParking`. |
-| `Assistant__Management__KeyDirectory` | Thư mục keyring tuyệt đối, ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
+| `Assistant__Management__KeyDirectory` | Thư mục keyring ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
 | `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
 | `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). |
 | `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
 
-Nếu chưa có bộ khóa dev, có thể tạo bằng PowerShell 7 trong **một thư mục mới ngoài repo**. Cặp JWT này dành riêng cho UserService local. PFX dùng một khóa RSA khác. Nạp PEM riêng vào cấu hình UserService theo mục 5.5 và dùng đường dẫn tuyệt đối cho public PEM và PFX.
+Nếu chưa có bộ khóa dev, có thể tạo bằng PowerShell 7 trong **một thư mục mới ngoài repo**. Cặp JWT này dành riêng cho UserService local. PFX dùng một khóa RSA khác. Nạp PEM riêng vào cấu hình UserService theo mục 5.5.
 
 ```powershell
 $devKeys = Join-Path $env:LOCALAPPDATA ('SmartPark-Assistant-' + [Guid]::NewGuid().ToString('N'))
@@ -98,18 +99,20 @@ Chọn thư mục con `keyring` cho `Assistant__Management__KeyDirectory` và m�
 
 ```powershell
 # Máy mới, sau khi đã điền cấu hình và mở Docker Desktop
-.\setup.ps1 -WithAssistant -SkipSonarQube
+.\setup.ps1 -SkipSonarQube
 .\scripts\run-app-service.ps1 -Service All
 
 # Máy đã chạy stack DB, chỉ bổ sung hoặc cập nhật Assistant
-.\scripts\setup-assistant-docker.ps1
-# Khi chỉ đổi cấu hình và đã có image Assistant
-.\scripts\setup-assistant-docker.ps1 -NoBuild
+.\scripts\run-app-service.ps1 -Service Assistant
 ```
 
-Assistant chạy ở `http://localhost:5076` mặc định. Script thêm URL vào `FE/.env` nếu URL Assistant đang trống. Nếu FE đang chạy, khởi động lại FE để đọc cấu hình. `/health/live` kiểm container sống. Admin vào Settings để nhập provider key, chọn model, bật provider và cấu hình, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-assistant-assistant-1`.
+Assistant nằm trong project Docker `smartpark-app`, cổng mặc định `http://localhost:5076`. Runner nối frontend Docker với cổng của Assistant đang healthy và giữ nguyên URL host đã cấu hình trong `FE/.env`. `-Service Assistant` cũng cập nhật frontend Docker nếu frontend đang chạy. Dùng `-NoBuild` khi các image đã có và chỉ đổi cấu hình. `-WithAssistant` vẫn dùng được để chạy setup một lần. Nếu container Assistant đời cũ còn chạy trong project `smartpark-assistant`, dừng container cũ trước khi chuyển và giữ nguyên volume, PFX và keyring.
 
-Setup Docker áp ba migration Assistant vào schema IoT local còn trống phần chatbot. Chạy lại với schema đầy đủ chỉ kiểm schema. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Schema dở dang hoặc lịch sử cũ cần chuyển đổi sẽ làm script dừng để review. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Tìm bãi theo owner, xác nhận đặt chỗ và thanh toán có bước tích hợp riêng. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
+Đường dẫn public PEM, PFX, keyring và knowledge có thể ghi tương đối so với thư mục chứa file `.env` khi dùng Docker. Mỗi thành viên giữ file cấu hình và vật liệu khóa của mình ngoài Git.
+
+`/health/live` kiểm container sống. Admin vào Settings để nhập provider key, chọn model, bật provider và cấu hình, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-app-assistant-1`.
+
+Với volume IoT có sẵn mà phần chatbot còn trống, runner Assistant bổ sung các bảng trong một transaction. Với DB đã chạy S05, sao lưu, dừng Assistant cũ và áp migration mới theo [hướng dẫn hội thoại](docs/03-design/ai/conversation-and-recovery.md#approval-and-scope) trước khi dựng bản mới. Setup kiểm tra schema đã nâng cấp. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
 
 ### Cảnh báo ghi đè và mất dữ liệu
 
@@ -153,8 +156,9 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 .\scripts\run-app-service.ps1 -Service Facility
 .\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Payment
+.\scripts\run-app-service.ps1 -Service Assistant
 .\scripts\run-app-service.ps1 -Service Frontend
-.\scripts\run-app-service.ps1 -Service All        # cả 5 container
+.\scripts\run-app-service.ps1 -Service All        # cả app stack, gồm Assistant khi đã bật
 ```
 
 | Container | Host URL | Ghi chú |
