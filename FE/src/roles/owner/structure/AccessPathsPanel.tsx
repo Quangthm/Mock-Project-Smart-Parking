@@ -11,6 +11,7 @@ import { MAX_SLOT_CODE_LENGTH } from "../../../lib/structureRules"
 import { ReleasedIdentifierDialog } from "./ReleasedIdentifierDialog"
 import { StructureFeedback } from "./StructureFeedback"
 import { useStructureAction } from "./useStructureAction"
+import { useStructureConfirmation } from "./useStructureConfirmation"
 
 const inputClass = "input w-full text-sm"
 const labelClass = "space-y-1 text-xs font-medium text-[var(--muted)]"
@@ -34,6 +35,7 @@ export function AccessPathsPanel({
   const [released, setReleased] = useState<ReleasedIdentifier | null>(null)
   const [formNotice, setFormNotice] = useState("")
   const { busy, error, notice, run } = useStructureAction(onChanged)
+  const { ask, dialog: confirmation } = useStructureConfirmation()
 
   const unitName = (id: string | null) =>
     (id && units.find((unit) => unit.id === id)?.name) || "—"
@@ -81,11 +83,15 @@ export function AccessPathsPanel({
   }
 
   function removePath(path: AccessPath) {
-    if (!confirm(`Delete access path ${path.code}? The path row is released and can only be restored explicitly.`)) return
-    void run(
-      () => parkingApi.edit(siteId, { action: "removePath", resourceId: path.id }),
-      `Access path ${path.code} released.`,
-    )
+    ask({
+      title: "Delete Access Path?",
+      description: `Are you sure you want to delete ${path.code}? The path can only be restored explicitly.`,
+      label: "Delete",
+      confirm: () => void run(
+          () => parkingApi.edit(siteId, { action: "removePath", resourceId: path.id }),
+          `Access path ${path.code} released.`,
+        ),
+    })
   }
 
   return (
@@ -158,7 +164,7 @@ export function AccessPathsPanel({
               </div>
               <button
                 type="button"
-                className="btn-ghost px-2 py-1 text-[11px] text-[var(--occupied)]"
+                className="btn-outline structure-action structure-action-danger min-h-11 text-xs"
                 onClick={() => removePath(path)}
                 disabled={busy}
                 aria-label={`Delete access path ${path.code}`}
@@ -191,6 +197,7 @@ export function AccessPathsPanel({
           }}
         />
       )}
+      {confirmation}
     </section>
   )
 }

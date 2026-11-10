@@ -11,6 +11,7 @@ Start with [shared contracts and pending API work](v1.1-contracts.md). The follo
 | Partner Registration, existing Owner role | [Registration and first-lot setup](../../03-design/api/owner-register-api-design.md) |
 | Initial application review and document replacement | [Admin review](../../03-design/api/admin-approve-owner-api-design.md) |
 | Driver registration and verification | [Driver](../../03-design/api/driver-register-api-design.md) |
+| Public auth bot protection (Turnstile) | [SPARK-257 bot-protection design](../../03-design/api/bot-protection-spark-257-api-design.md) |
 | Operator invitation and activation | [Operator](../../03-design/api/owner-create-operator-api-design.md) |
 | Admin directory and restricted access changes | [Admin management](../../03-design/api/admin-manage-users-api-design.md) |
 | Additional lots, structure, deactivation | [Facility](../../03-design/api/parking-structure-api-design.md) |

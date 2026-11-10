@@ -303,8 +303,7 @@ export function SlotRegistrationPanel({
         <div>
           <h2 className="text-base font-semibold">Slot registration</h2>
           <p className="mt-1 max-w-2xl text-xs text-[var(--muted)]">
-            Select unregistered template bays in the 3D view. Each selected mesh becomes one registration request; a
-            partial result is reported per mesh, and a retry re-sends only the meshes that failed.
+            Select bays in the 3D model to register them. Retry only failed bays.
           </p>
           <p className="mt-1 text-[11px] text-[var(--muted)]">
             {census.unregisteredMeshes} unregistered mesh{census.unregisteredMeshes === 1 ? "" : "es"} ·{" "}
@@ -372,7 +371,7 @@ export function SlotRegistrationPanel({
                       onChange={() => toggleMeshFromList(mesh)}
                       className="size-4 accent-[var(--primary)]"
                     />
-                    <span className="min-w-0 truncate font-mono" title={mesh.name}>{mesh.name}</span>
+                    <span className="min-w-0 truncate tabular-nums" title={mesh.name}>{mesh.name}</span>
                   </label>
                 </li>
               )

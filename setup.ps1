@@ -500,7 +500,7 @@ if ($CredentialMode -eq 'Team') {
     foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { throw "Team file must configure $name." }
     }
-    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL')) {
+    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL','SMARTPARK_CLOUDINARY_CLOUD_NAME','SMARTPARK_CLOUDINARY_API_KEY','SMARTPARK_CLOUDINARY_API_SECRET')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { continue }
         if ($settings[$name] -and $settings[$name] -notlike 'replace-with-*' -and $settings[$name] -cne $team[$name]) {
             throw "Team/local conflict for $name. Existing configuration was preserved; reconcile it explicitly before retrying."
@@ -688,6 +688,10 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         'Services:Payment' = 'http://localhost:5065/'
     }
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
+    foreach ($field in @{'CloudName'='CLOUD_NAME'; 'ApiKey'='API_KEY'; 'ApiSecret'='API_SECRET'}.GetEnumerator()) {
+        $value = $settings['SMARTPARK_CLOUDINARY_' + $field.Value]
+        if (![string]::IsNullOrWhiteSpace($value)) { $desired['MediaStorage:Cloudinary:' + $field.Key] = $value }
+    }
     foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
         if ($url) { $desired["Services:$remoteService"] = $url }
@@ -696,6 +700,7 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     $jwtAudience = if ($settings['SMARTPARK_JWT_AUDIENCE']) { $settings['SMARTPARK_JWT_AUDIENCE'] } else { 'SmartParking' }
     $jwtPath = if ($settings['SMARTPARK_JWT_JWKS_PATH']) { $settings['SMARTPARK_JWT_JWKS_PATH'] } else { '/.well-known/jwks.json' }
     if ($service -eq 'User') {
+        $desired['MediaStorage:Enabled'] = if ($settings['SMARTPARK_USER_MEDIA_ENABLED']) { $settings['SMARTPARK_USER_MEDIA_ENABLED'] } else { 'false' }
         $desired['Jwt:Issuer'] = $jwtIssuer
         $desired['Jwt:Audience'] = $jwtAudience
         $desired['Jwt:JwksPath'] = $jwtPath
@@ -751,6 +756,7 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
     # Optional keys (JWT PEM, SMTP fields) that are no longer configured in .env are removed.
     $removable = @()
     $optionalNames = @('Jwt:PrivateKeyPem','Jwt:PrivateKeyPemBase64','Jwt:KeyId','Otp:Smtp:Host','Otp:Smtp:Port','Otp:Smtp:Username','Otp:Smtp:Password','Otp:Smtp:From')
+    $optionalNames += @('MediaStorage:Cloudinary:CloudName','MediaStorage:Cloudinary:ApiKey','MediaStorage:Cloudinary:ApiSecret','MediaStorage:Enabled')
     # Remove any old private-signing aliases accidentally stored by other services.
     if ($service -ne 'User') { $optionalNames += @($existingByService[$service].Keys | Where-Object { Test-JwtSigningSecretName $_ }) }
     foreach ($name in ($optionalNames | Select-Object -Unique)) {

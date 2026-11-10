@@ -21,5 +21,5 @@ public sealed record OwnProfileResponse(
         user.FullName,
         user.Email ?? string.Empty,
         role,
-        user.AvatarUrl);
+        user.AvatarAssetId is { } assetId ? $"/api/media/images/{assetId}/content" : user.AvatarUrl);
 }

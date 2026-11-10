@@ -12,6 +12,7 @@ public sealed class DriverRegistrationDto
     [StringLength(15, MinimumLength = 8)]
     [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$")]
     public string? Password { get; set; }
+    public string? TurnstileToken { get; set; }
 }
 
 public sealed class VerifyDriverOtpDto

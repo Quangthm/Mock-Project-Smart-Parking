@@ -10,7 +10,7 @@ import {
 } from "../../../lib/structureRules"
 import { StructureFeedback } from "./StructureFeedback"
 
-const labelClass = "space-y-1 text-xs font-medium text-[var(--muted)]"
+const labelClass = "grid min-w-0 gap-2 text-xs font-medium text-[var(--muted)]"
 
 function storedCategories(slot: Slot): string[] {
   if (slot.vehicleTypes && slot.vehicleTypes.length > 0) return slot.vehicleTypes
@@ -56,7 +56,7 @@ export function SlotCompatibilityDialog({
 
   async function save(event: FormEvent) {
     event.preventDefault()
-    if (resolution.error || blocked) return
+    if (busy || resolution.error || blocked) return
     setBusy(true)
     setError(null)
     try {
@@ -121,6 +121,7 @@ export function SlotCompatibilityDialog({
         <label className={labelClass}>
           <span>Primary category (counted in this pool)</span>
           <RoundedSelect
+            className="w-full"
             value={primary}
             onChange={(event) => setPrimary(event.target.value)}
             disabled={busy || categories.length === 0}

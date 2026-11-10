@@ -1,3 +1,4 @@
+import { ParkingDateField } from "../../../components/forms/ParkingDateField"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../../context/AppContext';
@@ -98,8 +99,8 @@ export function RevenueDashboard({ selectedSiteId = 'all', sites }: { selectedSi
           </summary>
           <div className="mt-4 grid gap-4 border-t border-[var(--border)] pt-4 sm:grid-cols-2 xl:grid-cols-3">
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Parking lot<RoundedSelect className="input" value={lotFilter} onChange={event => setLotFilter(event.target.value)}><option value="all">All parking lots</option>{ownerLots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}</RoundedSelect></label>
-        <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">From date<input className="input" type="date" value={dateFrom} max={dateTo || undefined} onChange={event => setDateFrom(event.target.value)} /></label>
-        <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">To date<input className="input" type="date" value={dateTo} min={dateFrom || undefined} onChange={event => setDateTo(event.target.value)} /></label>
+        <ParkingDateField label="From date" value={dateFrom} max={dateTo || undefined} onChange={setDateFrom} />
+        <ParkingDateField label="To date" value={dateTo} min={dateFrom || undefined} onChange={setDateTo} />
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Payment method<RoundedSelect className="input" value={filterMethod} onChange={event => setFilterMethod(event.target.value)}><option value="all">All payment methods</option><option value="momo">MoMo</option><option value="vnpay">VNPay</option><option value="zalopay">ZaloPay</option><option value="visa">Visa / Card</option><option value="applepay">Apple Pay</option><option value="qr">VietQR</option><option value="unknown">Not recorded</option></RoundedSelect></label>
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Payment status<RoundedSelect className="input" value={paymentStatusFilter} onChange={event => setPaymentStatusFilter(event.target.value)}><option value="all">All payment statuses</option><option value="paid">Paid</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="unknown">Not recorded</option></RoundedSelect></label>
         <label className="grid gap-2 text-sm font-semibold text-[var(--fg)]">Customer type<RoundedSelect className="input" value={customerFilter} onChange={event => setCustomerFilter(event.target.value)}><option value="all">All customers</option><option value="system">System account</option><option value="walk-in">Walk-in</option></RoundedSelect></label>

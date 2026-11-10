@@ -45,6 +45,7 @@ public sealed class DriverRegistrationHttpTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
@@ -64,6 +65,8 @@ public sealed class DriverRegistrationHttpTests
         {
             options.RejectionStatusCode = 429;
             options.AddPolicy("DriverOtp", _ => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter("test", _ => new()
+            { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy("RegistrationRateLimit", _ => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter("test", _ => new()
             { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         await using var app = builder.Build();
@@ -89,7 +92,7 @@ public sealed class DriverRegistrationHttpTests
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/auth/register/driver/verify", new { registrationId = id, code = "123" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/auth/register/driver/verify", new { registrationId = id, code = "123456" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/auth/register/driver/resend", new { registrationId = id })).StatusCode);
-        for (var i = 0; i < 3; i++) await client.PostAsJsonAsync("/api/auth/register/driver/resend", new { registrationId = id });
+        for (var i = 0; i < 7; i++) await client.PostAsJsonAsync("/api/auth/register/driver/resend", new { registrationId = id });
         Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostAsJsonAsync("/api/auth/register/driver/resend", new { registrationId = id })).StatusCode);
     }
 }

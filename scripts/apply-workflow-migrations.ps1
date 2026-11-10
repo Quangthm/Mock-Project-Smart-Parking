@@ -95,6 +95,19 @@ if ($state -eq 'empty') {
 
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.
+if ($Service -eq 'User') {
+    # The existing session/outbox preflight intentionally accepts a pre-media
+    # database. Reuse only the bounded, rerunnable media section of the canonical
+    # base; replaying the whole initialization script against existing data is unsafe.
+    $userSql = Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/microservices/01-user-access-service-db.sql') -Raw
+    $mediaStart = $userSql.IndexOf('-- SPARK-373 additive', [StringComparison]::Ordinal)
+    $mediaEnd = $userSql.IndexOf('-- END SPARK-373 media schema', [StringComparison]::Ordinal)
+    if ($mediaStart -lt 0 -or $mediaEnd -le $mediaStart) { throw 'Canonical User media SQL section is missing or invalid; no media upgrade applied.' }
+    $userSql.Substring($mediaStart, $mediaEnd - $mediaStart) | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User media upgrade failed; preserve data and reconcile before retrying. No volume reset is required.' }
+    Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-media-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
+}
 foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
     if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') {

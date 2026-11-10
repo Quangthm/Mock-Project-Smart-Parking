@@ -5,6 +5,7 @@ import { unitRemovalBlockers, type StructureUnitType } from "../../../lib/struct
 import { StructureFeedback } from "./StructureFeedback"
 import { UnitDialog, type UnitDialogModel } from "./UnitDialog"
 import { useStructureAction } from "./useStructureAction"
+import { useStructureConfirmation } from "./useStructureConfirmation"
 
 const CHILD_TYPE: Partial<Record<StructureUnitType, StructureUnitType>> = {
   FLOOR: "ZONE",
@@ -34,6 +35,7 @@ export function StructureTree({
 }) {
   const [dialog, setDialog] = useState<UnitDialogModel | null>(null)
   const { busy, error, notice, run, setError, setNotice } = useStructureAction(onChanged)
+  const { ask, dialog: confirmation } = useStructureConfirmation()
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string | null, Unit[]>()
@@ -61,11 +63,15 @@ export function StructureTree({
       setNotice("")
       return
     }
-    if (!confirm(`Delete unit “${unit.name}”? Its row is released and can only be restored explicitly.`)) return
-    void run(
-      () => parkingApi.edit(siteId, { action: "removeUnit", resourceId: unit.id }),
-      "Unit released.",
-    )
+    ask({
+      title: "Delete Unit?",
+      description: `Are you sure you want to delete “${unit.name}”? The unit can only be restored explicitly.`,
+      label: "Delete",
+      confirm: () => void run(
+        () => parkingApi.edit(siteId, { action: "removeUnit", resourceId: unit.id }),
+        "Unit released.",
+      ),
+    })
   }
 
   function addRoot(type: StructureUnitType) {
@@ -84,7 +90,7 @@ export function StructureTree({
           return (
             <li key={unit.id}>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="grid gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Badge tone={unitTypeTone(unit.type)}>{unit.type}</Badge>
                     <span className="min-w-0 truncate text-sm font-semibold text-[var(--fg)]" title={unit.name}>{unit.name}</span>
@@ -97,34 +103,34 @@ export function StructureTree({
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {childType && (
                       <button
                         type="button"
-                        className="btn-ghost px-2 py-1 text-[11px]"
+                        className="btn-outline structure-action w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8!"
                         onClick={() => setDialog({ mode: "create", type: childType, parentId: unit.id })}
                         aria-label={`Add ${childType.toLowerCase()} under ${unit.name}`}
                       >
-                        + {childType}
+                        + {childType === "ZONE" ? "Zone" : "Block"}
                       </button>
                     )}
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-1 text-[11px]"
+                      className="btn-outline structure-action w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8!"
                       onClick={() => setDialog({ mode: "rename", unit })}
                     >
                       Rename
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-1 text-[11px]"
+                      className="btn-outline structure-action w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8!"
                       onClick={() => setDialog({ mode: "capacity", unit })}
                     >
                       Capacity
                     </button>
                     <button
                       type="button"
-                      className="btn-ghost px-2 py-1 text-[11px] text-[var(--occupied)]"
+                      className={`btn-outline structure-action structure-action-danger w-full px-2! py-1.5! text-xs! [@media(pointer:fine)]:min-h-8! ${childType ? "" : "col-start-2"}`}
                       onClick={() => removeUnit(unit)}
                       disabled={busy}
                       aria-describedby={reasons.length > 0 ? `unit-${unit.id}-blockers` : undefined}
@@ -148,10 +154,10 @@ export function StructureTree({
   }
 
   return (
-    <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Spatial tree">
+    <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Parking Structure">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold">Spatial tree</h2>
+          <h2 className="text-base font-semibold">Parking Structure</h2>
           <p className="mt-1 text-xs text-[var(--muted)]">
             FLOOR → ZONE → BLOCK, at most three levels. A child type must follow its parent, and a slot belongs to exactly one unit.
           </p>
@@ -191,6 +197,7 @@ export function StructureTree({
           }}
         />
       )}
+      {confirmation}
     </section>
   )
 }

@@ -4,6 +4,7 @@ import { parkingApi, type Slot, type Unit } from "../../../lib/parkingApi"
 import { categoriesOfSlot as categoriesOf, primaryCategoryOfSlot as primaryOf } from "../../../lib/structureRules"
 import { StructureFeedback } from "./StructureFeedback"
 import { useStructureAction } from "./useStructureAction"
+import { useStructureConfirmation } from "./useStructureConfirmation"
 
 const MAX_BATCH = 50
 
@@ -28,6 +29,7 @@ export function RegisteredSlotsPanel({
   const [selected, setSelected] = useState<string[]>([])
   const [search, setSearch] = useState("")
   const { busy, error, notice, run, setError } = useStructureAction(onChanged)
+  const { ask, dialog: confirmation } = useStructureConfirmation()
 
   const moved = selected.filter((id) => slots.some((slot) => slot.id === id))
   const shown = slots.filter((slot) =>
@@ -41,7 +43,7 @@ export function RegisteredSlotsPanel({
     )
   }
 
-  async function removeSlots(ids: string[]) {
+  function removeSlots(ids: string[]) {
     if (ids.length === 0) return
     if (ids.length > MAX_BATCH) {
       setError(new Error(`A deactivation batch accepts at most ${MAX_BATCH} items.`))
@@ -52,21 +54,19 @@ export function RegisteredSlotsPanel({
       .map((slot) => slot.code)
       .slice(0, 3)
       .join(", ")
-    if (
-      !confirm(
-        `Remove ${ids.length} slot${ids.length === 1 ? "" : "s"} (${names}${ids.length > 3 ? ", …" : ""}) as one atomic change? If any item fails, nothing is removed.`,
-      )
-    )
-      return
-    const ok = await run(
-      () =>
-        parkingApi.batch(
-          siteId,
-          ids.map((resourceId) => ({ action: "removeSlot" as const, resourceId })),
-        ),
-      `${ids.length} slot${ids.length === 1 ? "" : "s"} removed in one batch.`,
-    )
-    if (ok) setSelected([])
+    const count = `${ids.length} slot${ids.length === 1 ? "" : "s"}`
+    ask({
+      title: "Remove Parking Slots?",
+      description: `Are you sure you want to remove ${count} (${names}${ids.length > 3 ? ", …" : ""})? If any slot cannot be removed, the entire change is rejected.`,
+      label: "Remove",
+      confirm: async () => {
+        const ok = await run(
+          () => parkingApi.batch(siteId, ids.map(resourceId => ({ action: "removeSlot", resourceId }))),
+          `${count} removed.`,
+        )
+        if (ok) setSelected([])
+      },
+    })
   }
 
   return (
@@ -92,7 +92,7 @@ export function RegisteredSlotsPanel({
           </label>
           <button
             type="button"
-            className="btn-outline px-2.5 py-1.5 text-xs text-[var(--occupied)]"
+            className="btn-outline structure-action structure-action-danger min-h-11 text-xs"
             onClick={() => void removeSlots(moved)}
             disabled={busy || moved.length === 0}
           >
@@ -137,7 +137,7 @@ export function RegisteredSlotsPanel({
                   aria-pressed={isSelected}
                   aria-label={`Focus slot ${slot.code} in the 3D view`}
                 >
-                  <span className="block font-mono text-xs font-semibold text-[var(--fg)]">{slot.code}</span>
+                  <span className="block break-words text-xs font-semibold tabular-nums text-[var(--fg)]">{slot.code}</span>
                   <span className="block text-[11px] text-[var(--muted)]">{unitName(slot.unitId)}</span>
                 </button>
 
@@ -180,7 +180,7 @@ export function RegisteredSlotsPanel({
                   </button>
                   <button
                     type="button"
-                    className="btn-ghost px-2 py-1 text-[11px] text-[var(--occupied)]"
+                    className="btn-outline structure-action structure-action-danger min-h-11 text-xs"
                     onClick={() => void removeSlots([slot.id])}
                     disabled={busy}
                     aria-label={`Remove slot ${slot.code}`}
@@ -193,6 +193,7 @@ export function RegisteredSlotsPanel({
           })}
         </ul>
       )}
+      {confirmation}
     </section>
   )
 }
