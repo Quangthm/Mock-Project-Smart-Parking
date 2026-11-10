@@ -11,6 +11,8 @@ import { getDrivingRoute, type DrivingRoute } from "../../../lib/routingApi"
 import { ParkingDetailsPanel, type VehicleCapacityInfo } from "./ParkingDetailsPanel"
 import { useApp } from "../../../context/AppContext"
 import { searchDiscoveryLots, type DiscoveryLotItem, type OriginSource } from "../../../lib/driverDiscoveryApi"
+import { parkingApi } from "../../../lib/parkingApi"
+import { mapOperationalLayoutSlots } from "../../../lib/driverSlotMapping"
 
 type LatLng = { lat: number; lng: number }
 type MapState = "loading" | "ready" | "missing-key" | "error"
@@ -127,6 +129,9 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const locationRequestRef = useRef(0)
   const routeRequestRef = useRef<AbortController | null>(null)
   const routeSequenceRef = useRef(0)
+  // Guards against duplicate operational-layout fetches while one is in flight.
+  const resolvingLotsRef = useRef(new Set<string>())
+  const mountedRef = useRef(true)
   const [selected, setSelected] = useState<ParkingLot | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [searchCollapsed, setSearchCollapsed] = useState(true)
@@ -247,6 +252,43 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     window.addEventListener("sp-data-change", refresh)
     return () => window.removeEventListener("sp-data-change", refresh)
   }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+  // Owner-created lots are persisted with `slots: []`; the real bays live in
+  // FacilityService. Resolve each slot-less lot once from the authoritative
+  // operational-layout projection so availability and Book Now are accurate.
+  // LOOP GUARD: only lots with empty slots are fetched/saved, and a saved lot is
+  // skipped on the next run, so the save -> `sp-data-change` cycle terminates.
+  useEffect(() => {
+    const unresolved = sourceLots.filter((lot) => !Array.isArray(lot.slots) || lot.slots.length === 0)
+    if (!unresolved.length) return
+    unresolved.forEach((lot) => {
+      if (resolvingLotsRef.current.has(lot.id)) return
+      resolvingLotsRef.current.add(lot.id)
+      void (async () => {
+        try {
+          const layout = await parkingApi.operationalLayout(lot.id)
+          if (!mountedRef.current) return
+          const mappedSlots = mapOperationalLayoutSlots(layout.slots)
+          if (!mappedSlots.length) return
+          const updatedLot: ParkingLot = {
+            ...lot,
+            slots: mappedSlots,
+            totalSlots: layout.metrics?.totalPhysicalCapacity ?? mappedSlots.length,
+          }
+          store.saveLot(updatedLot)
+          setSourceLots((previous) => previous.map((item) => (item.id === lot.id ? updatedLot : item)))
+        } catch {
+          // Offline, fixture mode or an unavailable service: keep the existing
+          // (empty) slots and never throw or overwrite them.
+        } finally {
+          resolvingLotsRef.current.delete(lot.id)
+        }
+      })()
+    })
+  }, [sourceLots])
   useEffect(() => {
     if (!selected) return
     const latest = lots.find((lot) => lot.id === selected.id)

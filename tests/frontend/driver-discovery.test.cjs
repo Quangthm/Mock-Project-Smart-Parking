@@ -128,3 +128,48 @@ test('fixture mode serves the bundled envelope without touching the network', as
   assert.deepEqual(result, envelope.data);
   assert.equal(result.items.length, 2);
 });
+
+const slotsOperationalEnvelope = JSON.parse(
+  fs.readFileSync(path.join(fixturesDir, 'slots-operational-fixture.json'), 'utf8'),
+);
+
+test('maps an operational-layout projection into a bookable driver lot (Note 3)', () => {
+  // Pure mapper only: no imports to stub, so the Node harness loads it directly.
+  const mapping = load('lib/driverSlotMapping.ts', {});
+  const projection = slotsOperationalEnvelope.data;
+  const mapped = mapping.mapOperationalLayoutSlots(projection.slots);
+
+  assert.equal(mapped.length, projection.slots.length);
+
+  // id/number/floor/status come from the contract axes, never formatSlotLabel.
+  const first = mapped[0];
+  const firstSource = projection.slots[0];
+  assert.equal(first.id, firstSource.slotId);
+  assert.equal(first.number, firstSource.slotCode);
+  assert.equal(first.number, 'CarParkingSpace_001');
+  assert.equal(first.floor, 1); // "Floor_G" has no digit -> default 1
+  assert.equal(first.status, 'available'); // AVAILABLE + UNRESERVED
+
+  // floorCode digits drive the floor number, default 1.
+  assert.equal(mapping.driverSlotFloor('Floor 3'), 3);
+  assert.equal(mapping.driverSlotFloor('Floor_G'), 1);
+  assert.equal(mapping.driverSlotFloor(undefined), 1);
+
+  // Reservation/physical axes follow the operatorApi fail-closed convention.
+  assert.equal(mapped.find((slot) => slot.number === 'CarParkingSpace_002').status, 'reserved');
+  assert.equal(mapped.find((slot) => slot.number === 'CarParkingSpace_004').status, 'reserved'); // BACKUP
+  assert.equal(mapped.find((slot) => slot.number === 'CarParkingSpace_009').status, 'disabled'); // UNKNOWN
+
+  // A lot resolved from the projection must report availability and be bookable.
+  const availableCount = mapped.filter((slot) => slot.status === 'available').length;
+  assert.ok(availableCount > 0);
+
+  const lot = {
+    id: projection.siteId,
+    status: 'active',
+    slots: mapped,
+    totalSlots: projection.metrics.totalPhysicalCapacity,
+  };
+  const canBook = lot.status === 'active' && availableCount > 0;
+  assert.equal(canBook, true);
+});
