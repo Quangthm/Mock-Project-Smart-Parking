@@ -11,6 +11,7 @@ if (!(Test-Path -LiteralPath $EnvPath -PathType Leaf)) {
     throw 'Copy .env.example to .env and configure the approved Assistant inputs before using -WithAssistant.'
 }
 $EnvPath = (Resolve-Path -LiteralPath $EnvPath).Path
+$envDirectory = Split-Path -Parent $EnvPath
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $EnvPath -NoExport
 
 function Get-RequiredSetting([string]$Name) {
@@ -21,16 +22,23 @@ function Get-RequiredSetting([string]$Name) {
     return $value
 }
 
+function Resolve-AssistantPath([string]$Value, [string]$Name) {
+    if (![IO.Path]::IsPathRooted($Value)) {
+        return Join-Path $envDirectory $Value
+    }
+    if ([IO.Path]::DirectorySeparatorChar -eq '\' -and
+        $Value -notmatch '^[A-Za-z]:[\\/]' -and $Value -notmatch '^\\\\[^\\/]+[\\/][^\\/]+') {
+        throw "Use an absolute path or a path relative to the environment file for $Name."
+    }
+    return $Value
+}
+
 function Get-RequiredPath([string]$Name, [string]$Kind) {
-    $value = Get-RequiredSetting $Name
-    $absolute = [IO.Path]::IsPathRooted($value)
-    if ([IO.Path]::DirectorySeparatorChar -eq '\') {
-        $absolute = $value -match '^[A-Za-z]:[\\/]' -or $value -match '^\\\\[^\\/]+[\\/][^\\/]+'
+    $path = Resolve-AssistantPath (Get-RequiredSetting $Name) $Name
+    if (!(Test-Path -LiteralPath $path -PathType $Kind)) {
+        throw "Assistant setup cannot find the required $Kind for $Name. Relative paths are resolved from the environment file."
     }
-    if (!$absolute -or !(Test-Path -LiteralPath $value -PathType $Kind)) {
-        throw "Assistant setup requires an existing absolute $Kind path for $Name."
-    }
-    return (Resolve-Path -LiteralPath $value).Path
+    return (Resolve-Path -LiteralPath $path).Path
 }
 
 $publicKeyFile = Get-RequiredPath 'Assistant__Jwt__PublicKeyFile' 'Leaf'
@@ -49,6 +57,7 @@ function Test-UnderDirectory([string]$Path, [string]$Directory) {
 }
 $signingKeyFile = $env:SMARTPARK_JWT_PRIVATE_KEY_FILE
 if (!$signingKeyFile) { $signingKeyFile = $settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] }
+if ($signingKeyFile) { $signingKeyFile = Resolve-AssistantPath $signingKeyFile 'SMARTPARK_JWT_PRIVATE_KEY_FILE' }
 $excludedFiles = @($EnvPath, (Join-Path $root '.env'))
 if ($signingKeyFile -and (Test-Path -LiteralPath $signingKeyFile -PathType Leaf)) {
     $signingKeyFile = (Resolve-Path -LiteralPath $signingKeyFile).Path
@@ -121,6 +130,9 @@ if (($adopt -eq 'true' -and !$keyFiles.Count) -or
     throw 'Existing Assistant data requires the original certificate-protected keyring. Windows DPAPI keys are not portable to this container.'
 }
 $composeEnv = @{
+    # The Assistant and base app use separate files in the same Compose project.
+    COMPOSE_IGNORE_ORPHANS = 'true'
+    COMPOSE_REMOVE_ORPHANS = 'false'
     SMARTPARK_ASSISTANT_DOCKER_PORT = [string]$port
     SMARTPARK_ASSISTANT_SCHEMA_NETWORK = "${SchemaProject}_default"
     SMARTPARK_ASSISTANT_DOCKER_ISSUER = Get-RequiredSetting 'Assistant__Jwt__Issuer'
@@ -158,11 +170,11 @@ $connection['Password'] = Get-RequiredSetting 'SMARTPARK_DEV_PASSWORD'
 $composeEnv['SMARTPARK_ASSISTANT_DOCKER_CONNECTION'] = $connection.ConnectionString
 $composeEnv['PGPASSWORD'] = $connection['Password']
 $schemaCompose = @('compose','--project-name',$SchemaProject,'--env-file',$EnvPath,'-f',(Join-Path $root 'compose.schema-integration.yml'))
-$assistantProject = if ($SchemaProject -eq 'smartpark-schema') { 'smartpark-assistant' } else { "$SchemaProject-assistant" }
+$assistantProject = if ($SchemaProject -eq 'smartpark-schema') { 'smartpark-app' } else { "$SchemaProject-assistant" }
 $assistantCompose = @('compose','--project-name',$assistantProject,'--env-file',$EnvPath,'-f',(Join-Path $root 'compose.assistant.yml'))
 
-# Reuse the canonical ordered migration list. Execute the three reviewed bodies as a single
-# transaction only for an empty, canonical Assistant schema. Each source owns one BEGIN/COMMIT.
+# New IoT volumes initialize Assistant through Compose. Keep this fallback for
+# existing IoT volumes with an untouched Assistant base, in one transaction.
 $plan = & (Join-Path $PSScriptRoot 'apply-workflow-migrations.ps1') -Service Iot -SchemaRoot $root -PlanAssistant
 $bodies = foreach ($entry in $plan) {
     $body = Get-Content -LiteralPath (Join-Path $root $entry.File) -Raw -Encoding UTF8
@@ -217,19 +229,27 @@ $verify = @'
 \endif
 DO $assistant_setup$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM assistant_management_state WHERE id = 1)
+    IF to_regclass('public.assistant_management_state') IS NULL
         OR to_regclass('public.assistant_management_credentials') IS NULL
         OR to_regclass('public.assistant_management_receipts') IS NULL
         OR to_regclass('public.assistant_connection_tests') IS NULL
         OR to_regclass('public.ux_assistant_conversation_client') IS NULL
         OR to_regclass('public.ux_assistant_message_sequence') IS NULL
         OR to_regclass('public.ux_assistant_request_running') IS NULL THEN
-        RAISE EXCEPTION 'Assistant schema is incomplete. Review the existing IoT database before retrying.';
+        RAISE EXCEPTION 'Assistant schema is incomplete. Review the IoT schema and migration history before retrying.';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM assistant_management_state WHERE id = 1) THEN
+        RAISE EXCEPTION 'Assistant management state is missing. Review the IoT schema before retrying.';
     END IF;
     PERFORM owner_account_id, client_conversation_id, locale, revision, last_message_at, expires_at, retention_hold
         FROM assistant_conversations LIMIT 0;
     PERFORM sequence, client_message_id, response FROM assistant_messages LIMIT 0;
     PERFORM id, conversation_id, client_message_id, state, deadline, snapshot FROM assistant_requests LIMIT 0;
+    IF to_regclass('public.ux_assistant_conversation_current') IS NULL THEN
+        RAISE EXCEPTION 'Assistant current chat index is missing.'
+            USING HINT = 'For an intact S05 schema, apply the reviewed 20261110_iot_assistant_current_chat.sql. If chat_role already exists, review and repair the schema before retrying.';
+    END IF;
+    PERFORM chat_role FROM assistant_conversations LIMIT 0;
 END
 $assistant_setup$;
 SELECT (EXISTS (SELECT 1 FROM assistant_management_credentials)
@@ -239,7 +259,8 @@ SELECT (EXISTS (SELECT 1 FROM assistant_management_credentials)
 \else
 DO $assistant_setup$
 BEGIN
-    RAISE EXCEPTION 'Existing Assistant data needs its original certificate and keyring. Review compatibility before enabling the existing-keyring opt-in.';
+    RAISE EXCEPTION 'Existing Assistant data needs its original certificate and keyring.'
+        USING HINT = 'After verifying both match the existing IoT data, set SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true in the environment file and retry.';
 END
 $assistant_setup$;
 \endif
@@ -263,6 +284,11 @@ function Invoke-AssistantDocker([string[]]$Arguments, [string]$Failure, [string]
 
 $previous = @{}
 try {
+    if ($assistantProject -eq 'smartpark-app') {
+        $legacy = @(& docker ps --quiet --filter 'label=com.docker.compose.project=smartpark-assistant' --filter 'label=com.docker.compose.service=assistant')
+        if ($LASTEXITCODE -ne 0) { throw 'Could not check for the previous Assistant container.' }
+        if ($legacy.Count) { throw 'Stop the previous smartpark-assistant Assistant container before starting Assistant in smartpark-app. Keep its DB volume and keyring.' }
+    }
     foreach ($name in $composeEnv.Keys) {
         $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
         [Environment]::SetEnvironmentVariable($name, [string]$composeEnv[$name], 'Process')
@@ -275,7 +301,7 @@ try {
         Invoke-AssistantDocker ($assistantCompose + @('build','assistant')) 'Could not build the Assistant image.'
     }
     Invoke-AssistantDocker ($schemaCompose + @('exec','-T','-e','PGPASSWORD','iot-db','psql','-h','iot-db','-X','-q','-U','smartpark_iot','-d','smartpark_iot','-v','ON_ERROR_STOP=1','-v',"assistant_adopt=$adopt")) `
-        'Assistant database setup stopped. Check IoT DB authentication, schema and existing keyring before retrying.' `
+        'Assistant database setup stopped. See the PostgreSQL error above, then resolve it before retrying.' `
         ((@($guard) + $bodies + @($verify)) -join "`n")
     Invoke-AssistantDocker ($assistantCompose + @('up','-d','--wait','--wait-timeout','90','--no-build','assistant')) `
         'Assistant did not become healthy. Check its Docker logs and the configured public key/certificate.'
@@ -300,5 +326,5 @@ if (Test-Path -LiteralPath (Join-Path $root 'FE') -PathType Container) {
         Write-Warning "Existing Assistant URL in FE/.env was preserved. Use $url there if you want the Docker Assistant."
     }
 }
-Write-Host "Assistant container is live at $url. Restart a running frontend to reload FE/.env."
+Write-Host "Assistant container is live at $url. Run scripts/run-app-service.ps1 -Service Frontend -NoBuild to refresh an existing Docker frontend."
 Write-Host 'Admin Settings, provider activation and FAQ/chat readiness are checked separately.'

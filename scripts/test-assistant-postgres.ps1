@@ -13,7 +13,8 @@ $baseSchema = 'scripts/database/microservices/06-iot-recognition-service-db.sql'
 $assistantMigrations = @(
     'scripts/database/migrations/20261103_iot_assistant_management.sql'
     'scripts/database/migrations/20261105_iot_assistant_s02.sql'
-    'scripts/database/migrations/20261105_iot_assistant_s05.sql'
+    'scripts/database/migrations/20261105_iot_assistant_s05.sql',
+    'scripts/database/migrations/20261110_iot_assistant_current_chat.sql'
 )
 
 function Invoke-TestSchema([string[]]$SqlFiles) {
@@ -59,7 +60,35 @@ try {
     }
     if (!$ready) { throw 'Disposable PostgreSQL did not start within the test timeout.' }
 
-    Invoke-TestSchema (@($baseSchema) + $assistantMigrations)
+    Invoke-TestSchema (@($baseSchema) + $assistantMigrations[0..2])
+    $legacy = @'
+INSERT INTO assistant_conversations
+    (id,user_id,owner_account_id,client_conversation_id,title,locale,created_at,updated_at,last_message_at,expires_at,retention_hold)
+SELECT id::uuid,'10000000-0000-4000-8000-000000000011','10000000-0000-4000-8000-000000000012',id::uuid,
+    title,'vi',statement_timestamp()-interval '10 days',statement_timestamp(),
+    statement_timestamp()-age,expires_at,held
+FROM (VALUES
+    ('10000000-0000-4000-8000-000000000001','Latest eligible',interval '1 day','2099-01-01 UTC'::timestamptz,false),
+    ('10000000-0000-4000-8000-000000000002','Older eligible',interval '2 days','2099-01-02 UTC'::timestamptz,false),
+    ('10000000-0000-4000-8000-000000000003','Expired held',interval '1 hour','2000-01-01 UTC'::timestamptz,true)
+) AS fixture(id,title,age,expires_at,held);
+INSERT INTO assistant_messages (id,conversation_id,sender_role,content,created_at,sequence,client_message_id,response)
+VALUES ('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000002','USER',
+    'Legacy fixture',statement_timestamp(),1,'10000000-0000-4000-8000-000000000005','{}');
+'@
+    $legacy | docker exec -i $container psql -X -q -v ON_ERROR_STOP=1 -U postgres -d $database
+    if ($LASTEXITCODE -ne 0) { throw 'Could not seed the disposable S05 upgrade fixture.' }
+    Invoke-TestSchema @($assistantMigrations[-1])
+    $upgradeCheck = @'
+SELECT
+    (SELECT chat_role='driver' AND expires_at IS NULL FROM assistant_conversations WHERE title='Latest eligible')
+    AND (SELECT chat_role IS NULL AND expires_at='2099-01-02 UTC' FROM assistant_conversations WHERE title='Older eligible')
+    AND (SELECT chat_role IS NULL AND retention_hold AND expires_at='2000-01-01 UTC' FROM assistant_conversations WHERE title='Expired held')
+    AND EXISTS (SELECT 1 FROM assistant_messages WHERE content='Legacy fixture');
+'@
+    $upgraded = $upgradeCheck | docker exec -i $container psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d $database
+    if ($LASTEXITCODE -ne 0 -or $upgraded -cne 't') { throw 'The current-chat migration did not preserve the expected S05 data.' }
+    Write-Host 'PASS: populated S05 upgrade keeps the latest eligible chat, legacy deadlines, hold and message.'
 
     $mapping = @(docker port $container '5432/tcp')
     if ($LASTEXITCODE -ne 0 -or $mapping.Count -ne 1 -or $mapping[0] -notmatch '^127\.0\.0\.1:(\d+)$') {
@@ -77,7 +106,7 @@ try {
     $dump = '/tmp/assistant-test.dump'
     docker exec $container pg_dump -Fc -U postgres -d $database -f $dump
     if ($LASTEXITCODE -ne 0) { throw 'Backup of the disposable PostgreSQL fixture failed.' }
-    Invoke-TestSchema $assistantMigrations
+    Invoke-TestSchema @($assistantMigrations[-1])
     if ((Get-AssistantDataFingerprint $database) -ne $before) {
         throw 'Reapplying Assistant migrations modified the test Settings or conversation data.'
     }

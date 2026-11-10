@@ -18,7 +18,7 @@ $codeRoot = Split-Path $PSScriptRoot -Parent
 if ($PlanAssistant) {
     if ($Service -notin @('Iot','Parking')) { throw '-PlanAssistant supports only Iot or Parking (Facility DB).' }
     $files = if ($Service -eq 'Iot') {
-        @('20261103_iot_assistant_management.sql','20261105_iot_assistant_s02.sql','20261105_iot_assistant_s05.sql')
+        @('20261103_iot_assistant_management.sql','20261105_iot_assistant_s02.sql','20261105_iot_assistant_s05.sql','20261110_iot_assistant_current_chat.sql')
     } else { @('20261106_facility_discovery_publication.sql') }
     $target = if ($Service -eq 'Iot') { 'smartpark_iot' } else { 'smartpark_facility' }
     $order = 0
@@ -43,8 +43,9 @@ if (!$EnvPath) { $EnvPath = Join-Path $SchemaRoot '.env' }
 if (!(Test-Path -LiteralPath $EnvPath -PathType Leaf)) { throw 'Migration requires the environment file for this schema checkout.' }
 $null = & (Join-Path $codeRoot 'scripts/load-env.ps1') -EnvPath $EnvPath
 
-# Ordered script lists mirroring compose.schema-integration.yml init order
-# (numeric container names force postgres /docker-entrypoint-initdb.d order).
+# Ordered base scripts for databases that are still empty.
+# Fresh Docker volumes load the full init list in compose.schema-integration.yml.
+# The Assistant runner verifies existing IoT overlays before starting Assistant.
 $scripts = @{
     User = @(
         'microservices/01-user-access-service-db.sql'
@@ -179,6 +180,8 @@ if ($Service -eq 'User') {
     Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-access-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. Preserve data and pending messages; use a reviewed migration or explicitly authorized reset.' }
     Write-Output 'User schema already current; full session and outbox verifier passed. Consolidated base skipped; incremental features verified/applied.'
+} elseif ($Service -eq 'Iot') {
+    Write-Output 'IoT base schema verified. The Assistant runner checks the Assistant schema before startup.'
 } elseif ($state -eq 'current') {
     Write-Output "$Service schema already current; verified required relations, nothing to apply."
 } else {

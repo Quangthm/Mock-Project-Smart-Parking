@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Assistant','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -14,6 +14,9 @@ $project = 'smartpark-app'
 if (!(Test-Path -LiteralPath $envFile)) { throw 'Run setup.ps1 first (.env missing).' }
 if (!(Test-Path -LiteralPath $composePath)) { throw 'compose.app.yml missing.' }
 if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not found. Start Docker Desktop and retry.' }
+
+$settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
+$assistantEnabled = $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
 
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
 
@@ -38,6 +41,19 @@ function Invoke-Docker {
         return $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previous
+    }
+}
+
+if ($Service -eq 'Assistant' -or ($Service -eq 'All' -and $assistantEnabled)) {
+    & (Join-Path $PSScriptRoot 'setup-assistant-docker.ps1') -EnvPath $envFile -NoBuild:$NoBuild
+    if ($Service -eq 'Assistant') {
+        $frontend = Invoke-Docker -Arguments @('ps','--quiet','--filter',"label=com.docker.compose.project=$project",'--filter','label=com.docker.compose.service=frontend') -Capture
+        if ($frontend.ExitCode -ne 0) { throw 'Assistant started, but the frontend state could not be checked.' }
+        if (!$frontend.Text.Trim()) { return }
+        Write-Host 'Refreshing the running Docker frontend to use the Assistant container.'
+        $Service = 'Frontend'
+        $NoBuild = $true
+        $NoLogWindow = $true
     }
 }
 
@@ -85,9 +101,28 @@ $upArgs = @('up','-d')
 if ($NoBuild) { $upArgs += '--no-build' } else { $upArgs += '--build' }
 $upArgs += $targets
 $originalSigningKey = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM
+$originalAssistantUrl = $env:VITE_ASSISTANT_API_BASE_URL
+$originalIgnoreOrphans = $env:COMPOSE_IGNORE_ORPHANS
+$originalRemoveOrphans = $env:COMPOSE_REMOVE_ORPHANS
 try {
+    # Assistant is managed by a separate Compose file in this same project.
+    $env:COMPOSE_IGNORE_ORPHANS = 'true'
+    $env:COMPOSE_REMOVE_ORPHANS = 'false'
+    if ($targets -contains 'frontend') {
+        $assistant = Invoke-Docker -Arguments @('ps','--quiet','--filter',"label=com.docker.compose.project=$project",'--filter','label=com.docker.compose.service=assistant','--filter','health=healthy') -Capture
+        if ($assistant.ExitCode -ne 0) { throw 'Could not check the Docker Assistant state.' }
+        $assistantId = $assistant.Text.Trim()
+        if ($assistantId) {
+            $binding = Invoke-Docker -Arguments @('port',$assistantId,'8080/tcp') -Capture
+            if ($binding.ExitCode -ne 0 -or $binding.Text.Trim() -notmatch '^127\.0\.0\.1:([0-9]+)$') {
+                throw 'Could not read the Docker Assistant loopback port.'
+            }
+            $env:VITE_ASSISTANT_API_BASE_URL = "http://localhost:$($Matches[1])"
+        } elseif ($assistantEnabled) {
+            throw 'Docker Assistant is enabled but has no healthy container. Run scripts/run-app-service.ps1 -Service Assistant first.'
+        }
+    }
     if ($targets -contains 'user-service') {
-        $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
         $signingKeyFile = $env:SMARTPARK_JWT_PRIVATE_KEY_FILE
         if (!$signingKeyFile) { $signingKeyFile = $settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] }
         if ($signingKeyFile) {
@@ -103,6 +138,9 @@ try {
     $upExit = Invoke-Docker -Arguments ($composeArgs + $upArgs)
 } finally {
     $env:SMARTPARK_JWT_PRIVATE_KEY_PEM = $originalSigningKey
+    $env:VITE_ASSISTANT_API_BASE_URL = $originalAssistantUrl
+    $env:COMPOSE_IGNORE_ORPHANS = $originalIgnoreOrphans
+    $env:COMPOSE_REMOVE_ORPHANS = $originalRemoveOrphans
 }
 if ($upExit -ne 0) { throw 'docker compose up failed.' }
 

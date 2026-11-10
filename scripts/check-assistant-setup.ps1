@@ -63,6 +63,7 @@ foreach ($migration in @(
     @('smartpark_iot','20261103_iot_assistant_management.sql'),
     @('smartpark_iot','20261105_iot_assistant_s02.sql'),
     @('smartpark_iot','20261105_iot_assistant_s05.sql'),
+    @('smartpark_iot','20261110_iot_assistant_current_chat.sql'),
     @('smartpark_facility','20261106_facility_discovery_publication.sql'))) {
     $exists = Test-Path -LiteralPath (Join-Path $root "scripts/database/migrations/$($migration[1])") -PathType Leaf
     if (!$exists) { Report $migration[1] 'MISSING' 'Required SQL source missing.' }

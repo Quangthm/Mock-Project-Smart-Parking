@@ -21,9 +21,14 @@ if ($AssistantCheck) {
 }
 if ($AssistantEnvPath) { throw '-AssistantEnvPath requires -AssistantCheck.' }
 if ($RebuildAi -and !$WithAiCamera) { throw '-RebuildAi requires -WithAiCamera.' }
+$envFile = Join-Path $PSScriptRoot '.env'
+if (!$WithAssistant -and !$SkipDatabase -and !$RecreateDb -and (Test-Path -LiteralPath $envFile -PathType Leaf)) {
+    $localSettings = & (Join-Path $PSScriptRoot 'scripts/load-env.ps1') -EnvPath $envFile -NoExport
+    $WithAssistant = $localSettings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
+}
 if ($WithAssistant) {
     if ($SkipDatabase -or $RecreateDb) { throw '-WithAssistant cannot be combined with -SkipDatabase or -RecreateDb.' }
-    & (Join-Path $PSScriptRoot 'scripts/setup-assistant-docker.ps1') -ValidateOnly
+    & (Join-Path $PSScriptRoot 'scripts/setup-assistant-docker.ps1') -EnvPath $envFile -ValidateOnly
 }
 # SonarQube credentials are always prepared (like the database passwords); the
 # stack starts on a full run. -SkipSonarQube disables both; -SkipDatabase still
@@ -35,7 +40,6 @@ $taskRoot = $PSScriptRoot
 # Clear inherited aliases before invoking any helper processes.
 Clear-JwtSigningEnvironment
 $composeFile = Join-Path $taskRoot 'compose.schema-integration.yml'
-$envFile = Join-Path $taskRoot '.env'
 $aiModelRoot = 'src/Services/IoTService/python-ai/models'
 $aiModelFiles = @(
     'EDSR_x2.pb', 'ESPCN_x2.pb', 'FSRCNN_x2.pb',
@@ -867,7 +871,7 @@ if (!$SkipRestore) {
 if ($WithAssistant) {
     & (Join-Path $taskRoot 'scripts/setup-assistant-docker.ps1') -EnvPath $envFile
 }
-$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Facility, Operation and Payment.'
+$setupDone = 'Setup complete. For Docker, run scripts/run-app-service.ps1 -Service All. For host development, use scripts/run-schema-service.ps1.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
 if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

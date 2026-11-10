@@ -189,6 +189,63 @@ Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -
 Assert-Setup ([IO.File]::ReadAllText((Join-Path $assistantFixture '.env')) -ceq $assistantBefore) 'Assistant setup replaced an existing .env.'
 Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipDatabase } 'cannot be combined'
 Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -RecreateDb } 'cannot be combined'
+[IO.File]::AppendAllText((Join-Path $assistantFixture '.env'), "`nSMARTPARK_ASSISTANT_DOCKER_ENABLED=true`n")
+$global:setupTestAssistantSteps = @()
+& (Join-Path $assistantFixture 'setup.ps1') -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive
+Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -join '|')) 'Configured Assistant was not included in normal setup.'
+& {
+    $runner = Join-Path $assistantFixture 'scripts/run-app-service.ps1'
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/run-app-service.ps1') -Destination $runner
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'compose.app.yml') -Destination $assistantFixture
+    $global:setupTestAssistantSteps = @()
+    $global:setupTestFrontendUrl = ''
+    $global:setupTestFrontendRunning = $true
+    $global:setupTestAssistantHealthy = $true
+    function docker {
+        $global:LASTEXITCODE = 0
+        if ($args[0] -eq 'ps') {
+            if ($args -contains 'label=com.docker.compose.service=frontend') {
+                if ($global:setupTestFrontendRunning) { return 'frontend-container' }
+            } elseif ($global:setupTestAssistantHealthy) { return 'assistant-container' }
+            return
+        }
+        if ($args[0] -eq 'port') { return '127.0.0.1:6076' }
+        if ($args -contains 'up') {
+            Assert-Setup ($args -contains '--no-build') 'App runner did not preserve NoBuild.'
+            Assert-Setup ($env:COMPOSE_REMOVE_ORPHANS -ceq 'false') 'App runner could remove Assistant as an orphan.'
+            if ($global:setupTestRefreshOnly) {
+                Assert-Setup ($args[-1] -ceq 'frontend' -and $args -notcontains 'user-service') 'Assistant refreshed another app service.'
+            }
+            $global:setupTestAssistantSteps += 'app'
+            $global:setupTestFrontendUrl = $env:VITE_ASSISTANT_API_BASE_URL
+        }
+        if ($args[0] -eq 'compose' -and $args -contains 'ps') { return '{"State":"running","Health":"healthy"}' }
+    }
+    $previousUrl = $env:VITE_ASSISTANT_API_BASE_URL
+    $previousRemoveOrphans = $env:COMPOSE_REMOVE_ORPHANS
+    try {
+        $env:COMPOSE_REMOVE_ORPHANS = 'true'
+        $env:VITE_ASSISTANT_API_BASE_URL = 'https://localhost:5075'
+        & $runner -Service All -NoBuild -NoLogWindow
+        Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq 'assistant|app') 'All did not start Assistant before the app stack.'
+        Assert-Setup ($global:setupTestFrontendUrl -ceq 'http://localhost:6076') 'Docker frontend did not receive the published Assistant port.'
+        Assert-Setup ($env:VITE_ASSISTANT_API_BASE_URL -ceq 'https://localhost:5075') 'App runner changed the caller frontend configuration.'
+        Assert-Setup ($env:COMPOSE_REMOVE_ORPHANS -ceq 'true') 'App runner changed the caller Compose configuration.'
+        $global:setupTestAssistantSteps = @()
+        $global:setupTestRefreshOnly = $true
+        & $runner -Service Assistant -NoBuild -NoLogWindow
+        Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq 'assistant|app') 'Assistant did not refresh the running Docker frontend.'
+        $global:setupTestAssistantSteps = @()
+        $global:setupTestFrontendRunning = $false
+        & $runner -Service Assistant -NoBuild -NoLogWindow
+        Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq 'assistant') 'Assistant started a previously stopped frontend.'
+        $global:setupTestAssistantHealthy = $false
+        Expect-Failure { & $runner -Service Frontend -NoBuild -NoLogWindow } 'Docker Assistant is enabled but has no healthy container'
+    } finally {
+        $env:VITE_ASSISTANT_API_BASE_URL = $previousUrl
+        $env:COMPOSE_REMOVE_ORPHANS = $previousRemoveOrphans
+    }
+}
 Write-Output 'PASS: local reuse, idempotence, shared Team baseline, remote URL, MapTiler import, secrets sync/overwrite/removal, skip-secrets and old-volume protection.'
 . (Join-Path $sourceRoot 'scripts/jwt-environment.ps1')
 $global:setupTestOldVolume = $false

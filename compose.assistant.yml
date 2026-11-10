@@ -1,4 +1,4 @@
-# Opt-in normal Assistant for local development. Start via scripts/setup-assistant-docker.ps1.
+# Assistant service for the local app project. Start via scripts/run-app-service.ps1 -Service Assistant.
 services:
   assistant:
     build:

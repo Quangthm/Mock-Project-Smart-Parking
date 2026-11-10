@@ -4,7 +4,7 @@ param([switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = 'assistantqa-' + [Guid]::NewGuid().ToString('N').Substring(0,12)
-$scratch = Join-Path $root ".cache/$project"
+$scratch = Join-Path $root ".cache/assistant fixture $project"
 $envPath = Join-Path $scratch 'test.env'
 $rsa = [Security.Cryptography.RSA]::Create(2048)
 $certificateRsa = [Security.Cryptography.RSA]::Create(2048)
@@ -16,9 +16,9 @@ function Get-FreePort {
 function ConvertTo-Base64Url([byte[]]$Bytes) {
     return [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
 }
-function Get-TestToken([string]$Role) {
+function Get-TestToken([string]$Role, [Guid]$Account = [Guid]::NewGuid(), [Guid]$User = [Guid]::NewGuid()) {
     $now = [DateTimeOffset]::UtcNow
-    $payload = @{ iss='test-user'; aud='test-assistant'; sub=[Guid]::NewGuid(); account_id=[Guid]::NewGuid()
+    $payload = @{ iss='test-user'; aud='test-assistant'; sub=$User; account_id=$Account
         jti=[Guid]::NewGuid(); role=$Role; nbf=$now.AddMinutes(-1).ToUnixTimeSeconds(); exp=$now.AddMinutes(10).ToUnixTimeSeconds() }
     $header = ConvertTo-Base64Url ([Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}'))
     $claims = ConvertTo-Base64Url ([Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Compress)))
@@ -34,7 +34,7 @@ function Invoke-Docker([string[]]$Arguments) {
 function Invoke-Assistant([string]$Path, [hashtable]$Headers, [hashtable]$Body) {
     $http = @{ Uri="$baseUrl/api/assistant/$Path"; TimeoutSec=10 }
     if ($Headers) { $http.Headers = $Headers }
-    if ($Body) {
+    if ($null -ne $Body) {
         $http.Method = 'Post'
         $http.ContentType = 'application/json'
         $http.Body = $Body | ConvertTo-Json -Depth 8
@@ -71,7 +71,7 @@ try {
         'scripts/apply-workflow-migrations.ps1','scripts/load-env.ps1','scripts/jwt-environment.ps1',
         'scripts/database/microservices/06-iot-recognition-service-db.sql',
         'scripts/database/migrations/20261103_iot_assistant_management.sql','scripts/database/migrations/20261105_iot_assistant_s02.sql',
-        'scripts/database/migrations/20261105_iot_assistant_s05.sql')) {
+        'scripts/database/migrations/20261105_iot_assistant_s05.sql','scripts/database/migrations/20261110_iot_assistant_current_chat.sql')) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
     }
     if (!$NoBuild) {
@@ -115,13 +115,13 @@ Hướng dẫn giả lập cho Docker.
         "SMARTPARK_RABBITMQ_PASSWORD=$([Guid]::NewGuid().ToString('N'))"
         "SMARTPARK_DB_IOT_PORT=$dbPort"
         "SMARTPARK_ASSISTANT_DOCKER_PORT=$port"
-        "Assistant__Jwt__PublicKeyFile='$publicKeyPath'"
+        'Assistant__Jwt__PublicKeyFile=assistant-public.pem'
         'Assistant__Jwt__Issuer=test-user'
         'Assistant__Jwt__Audience=test-assistant'
-        "Assistant__Management__KeyDirectory='$(Join-Path $scratch 'keys')'"
-        "Assistant__Management__KeyEncryptionCertificatePath='$certPath'"
+        'Assistant__Management__KeyDirectory=keys'
+        "Assistant__Management__KeyEncryptionCertificatePath=$([IO.Path]::GetFileName($certPath))"
         "Assistant__Management__KeyEncryptionCertificatePassword=$password"
-        "Assistant__Guest__KnowledgeDirectory='$(Join-Path $scratch 'knowledge')'"
+        'Assistant__Guest__KnowledgeDirectory=knowledge'
         'Assistant__Guest__ReleaseEnabled=true'
         'Assistant__Chat__ReleaseEnabled=true'
     ) | Set-Content -LiteralPath $envPath -Encoding utf8
@@ -130,20 +130,28 @@ Hướng dẫn giả lập cho Docker.
     $schema = @('compose','--project-name',$project,'--env-file',$envPath,'-f',(Join-Path $scratch 'compose.schema-integration.yml'))
     $runner = Join-Path $scratch 'scripts/setup-assistant-docker.ps1'
     Invoke-Docker ($schema + @('up','-d','--wait','--wait-timeout','60','iot-db'))
+    $schemaProbe = "SELECT xmin FROM assistant_management_state WHERE id = 1 AND to_regclass('ux_assistant_conversation_current') IS NOT NULL"
+    $initialState = & docker @schema exec -T iot-db psql -U smartpark_iot -d smartpark_iot -Atc $schemaProbe
+    if ($LASTEXITCODE -ne 0 -or $initialState -notmatch '^\d+$') { throw 'IoT Compose did not initialize the current Assistant schema.' }
     $wrongPassword = Join-Path $scratch 'wrong-password.env'
     (Get-Content -LiteralPath $envPath) -replace '^SMARTPARK_DEV_PASSWORD=.*$', 'SMARTPARK_DEV_PASSWORD=invalid-fixture-password' |
         Set-Content -LiteralPath $wrongPassword -Encoding utf8
     Invoke-Setup $wrongPassword 'password authentication failed'
-    $migration = & docker @schema exec -T iot-db psql -U smartpark_iot -d smartpark_iot -Atc "SELECT to_regclass('assistant_management_state') IS NULL"
-    if ($LASTEXITCODE -ne 0 -or ($migration -join '').Trim() -ne 't') { throw 'Setup wrote SQL after authentication failure.' }
+    $stateAfterFailure = & docker @schema exec -T iot-db psql -U smartpark_iot -d smartpark_iot -Atc $schemaProbe
+    if ($LASTEXITCODE -ne 0 -or $stateAfterFailure -cne $initialState) { throw 'Failed authentication changed the initial Assistant state.' }
     Invoke-Setup $envPath
     Invoke-Setup $envPath
+    $stateAfterSetup = & docker @schema exec -T iot-db psql -U smartpark_iot -d smartpark_iot -Atc $schemaProbe
+    if ($LASTEXITCODE -ne 0 -or $stateAfterSetup -cne $initialState) { throw 'Assistant setup replayed the fresh-volume migrations.' }
     if (!(Select-String -LiteralPath $frontendEnv -SimpleMatch "VITE_ASSISTANT_API_BASE_URL=$baseUrl" -Quiet) -or
         !(Select-String -LiteralPath $frontendEnv -SimpleMatch 'VITE_OTHER_SETTING=preserve' -Quiet)) {
         throw 'Assistant frontend URL or preservation check failed.'
     }
     $admin = @{ Authorization = "Bearer $(Get-TestToken 'admin')" }
-    $driver = @{ Authorization = "Bearer $(Get-TestToken 'driver')" }
+    $account = [Guid]::NewGuid()
+    $user = [Guid]::NewGuid()
+    $driver = @{ Authorization = "Bearer $(Get-TestToken 'driver' $account $user)" }
+    $owner = @{ Authorization = "Bearer $(Get-TestToken 'owner' $account $user)" }
     $settings = (Invoke-Assistant 'admin/settings' $admin).settings
     if ($settings.revision -ne 0 -or $settings.enabled) { throw 'Expected disabled Assistant Settings on fresh schema.' }
     $denied = Invoke-WebRequest "$baseUrl/api/assistant/admin/settings" -Headers $driver -TimeoutSec 10 -SkipHttpErrorCheck
@@ -172,16 +180,46 @@ Hướng dẫn giả lập cho Docker.
         throw 'Docker Guest FAQ did not use the fixture publication.'
     }
     $chat = Invoke-Assistant 'conversations' $driver @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
+    $ownerChat = Invoke-Assistant 'conversations' $owner @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
+    $adminChat = Invoke-Assistant 'conversations' $admin @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
+    $driverPath = "conversations/$($chat.id)"
+    $foreign = Invoke-WebRequest "$baseUrl/api/assistant/$driverPath/messages" -Headers $owner -TimeoutSec 10 -SkipHttpErrorCheck
+    if ($foreign.StatusCode -ne 404) { throw 'Owner can access Driver history on the same Account.' }
     $message = Invoke-Assistant "conversations/$($chat.id)/messages" $driver @{
         clientMessageId=[Guid]::NewGuid(); expectedRevision=0; message='SmartPark'
     }
     if ($message.state -ne 'completed' -or $message.answer.mode -ne 'knowledge') { throw 'Docker Driver FAQ failed.' }
+    # A missing Current Chat marker in a populated schema must stop setup.
+    Invoke-Docker ($schema + @('exec','-T','iot-db','psql','-U','smartpark_iot','-d','smartpark_iot','-v','ON_ERROR_STOP=1',
+        '-c','ALTER INDEX ux_assistant_conversation_current RENAME TO fixture_current_chat_index'))
+    Invoke-Setup $envPath 'Assistant current chat index is missing'
+    Invoke-Docker ($schema + @('exec','-T','iot-db','psql','-U','smartpark_iot','-d','smartpark_iot','-v','ON_ERROR_STOP=1',
+        '-c','ALTER INDEX fixture_current_chat_index RENAME TO ux_assistant_conversation_current'))
     Invoke-Setup $envPath 'Existing Assistant data needs its original certificate and keyring'
     Add-Content -LiteralPath $envPath -Value 'SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true'
     Invoke-Setup $envPath
-    $history = Invoke-Assistant "conversations/$($chat.id)/messages" $driver
+    $driver = @{ Authorization = "Bearer $(Get-TestToken 'driver' $account $user)" }
+    $history = Invoke-Assistant "$driverPath/messages" $driver
     if ($history.items.Count -ne 2) { throw 'Docker rerun did not preserve Driver history.' }
-    Write-Host 'PASS: Docker setup, password guard, keyring opt-in, Admin JWT, Guest FAQ and Driver history after rerun.'
+    if (!(Invoke-Assistant "$driverPath/reset" $driver @{}).reset) { throw 'Reset was not acknowledged.' }
+    $oldHistory = Invoke-WebRequest "$baseUrl/api/assistant/$driverPath/messages" -Headers $driver -TimeoutSec 10 -SkipHttpErrorCheck
+    if ($oldHistory.StatusCode -ne 404 -or (Invoke-Assistant 'conversations' $driver).items.Count -ne 0) {
+        throw 'Reset did not hide Driver history.'
+    }
+    $replacement = Invoke-Assistant 'conversations' $driver @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
+    if ($replacement.id -eq $chat.id -or (Invoke-Assistant "conversations/$($replacement.id)/messages" $driver).items.Count -ne 0) {
+        throw 'The replacement conversation is not empty.'
+    }
+    if (!(Invoke-Assistant "$driverPath/reset" $driver @{}).reset -or
+        (Invoke-Assistant 'conversations' $driver).items[0].id -ne $replacement.id -or
+        (Invoke-Assistant 'conversations' $owner).items[0].id -ne $ownerChat.id -or
+        (Invoke-Assistant 'conversations' $admin).items[0].id -ne $adminChat.id) {
+        throw 'Reset retry affected a current conversation.'
+    }
+    Write-Host 'PASS: IoT Compose init, Docker setup replay, Admin JWT, Guest FAQ, role isolation, resumed Driver history and reset.'
+} catch {
+    if ($schema) { & docker @schema logs --tail 40 iot-db }
+    throw
 } finally {
     if ($certificate) { $certificate.Dispose() }
     $certificateRsa.Dispose()
