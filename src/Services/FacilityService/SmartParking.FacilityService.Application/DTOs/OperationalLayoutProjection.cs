@@ -25,7 +25,30 @@ public sealed record OperationalLayoutProjectionDto(
     int StalenessThresholdSeconds,
     LayoutMetricsDto Metrics,
     IReadOnlyList<FloorProjectionDto> Floors,
-    IReadOnlyList<SlotVisualStateDto> Slots);
+    IReadOnlyList<SlotVisualStateDto> Slots,
+    // v1.3.0 additions: omitted from the v1.2.0 wire shape while null so the current
+    // contract envelope is preserved until the version is bumped.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    DateTimeOffset? TelemetryHeartbeatAt = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    DriverReservationDto? DriverReservation = null);
+
+public sealed record DriverReservationDto(
+    Guid ReservationId,
+    bool IsReallocated,
+    PositionScopeDto RequestedPosition,
+    AllocatedPositionDto? AllocatedPosition);
+
+public sealed record PositionScopeDto(
+    string Scope, // "SLOT" | "ZONE"
+    Guid? SlotId,
+    Guid? ZoneId);
+
+public sealed record AllocatedPositionDto(
+    string Scope, // "SLOT" | "ZONE"
+    Guid? SlotId,
+    Guid AllocationId,
+    string AllocationStatus); // "RESERVED" | "OCCUPIED"
 
 public sealed record LayoutMetricsDto(
     int TotalPhysicalCapacity,
