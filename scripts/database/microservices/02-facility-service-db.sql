@@ -201,6 +201,7 @@ CREATE INDEX IF NOT EXISTS ix_structure_synchronizations_pending
     ON structure_synchronizations(created_at) WHERE state <> 'completed';
 
 -- 11. BẢNG CỬA SỔ BẢO TRÌ CẤU TRÚC (STRUCTURE MAINTENANCE WINDOWS - SPARK-238)
+-- BEGIN SPARK-238 maintenance schema
 CREATE TABLE IF NOT EXISTS structure_maintenance_windows (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
@@ -238,6 +239,7 @@ BEGIN
     END IF;
 END
 $$;
+-- END SPARK-238 maintenance schema
 
 -- 12. CÁC BẢNG QUẢN LÝ VẬN HÀNH DÀNH CHO OPERATOR
 CREATE TABLE IF NOT EXISTS support_tickets (

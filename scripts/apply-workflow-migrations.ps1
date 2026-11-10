@@ -3,11 +3,15 @@ param(
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
     [switch]$PlanAssistant,
+    [switch]$UpgradeFacilityMaintenance,
     [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$ProjectName = 'smartpark-schema'
 )
 $ErrorActionPreference = 'Stop'
 # Existing schema maps retain Reservation as their compatibility key.
 if ($Service -eq 'Operation') { $Service = 'Reservation' }
+if ($UpgradeFacilityMaintenance -and ($Service -ne 'Parking' -or $PlanAssistant)) {
+    throw '-UpgradeFacilityMaintenance requires -Service Parking and cannot be combined with -PlanAssistant.'
+}
 $codeRoot = Split-Path $PSScriptRoot -Parent
 # Approval artifact only. No env import, Docker/DB connection, SQL application,
 # or assertion that migrations are pending/already applied to a live database.
@@ -97,6 +101,9 @@ $state = (& docker compose --project-name $ProjectName --env-file $EnvPath -f $c
 if ($LASTEXITCODE -ne 0 -or $state -notin @('current','legacy','empty')) {
     throw "Cannot determine the schema state of the $Service database. Check the $container container logs; no data was changed."
 }
+if ($UpgradeFacilityMaintenance -and $state -ne 'current') {
+    throw 'The Facility maintenance upgrade requires an initialized canonical Facility database.'
+}
 if ($state -eq 'legacy') {
     throw "$Service database uses a legacy schema layout (canonical sentinel '$sentinel' is missing while public tables exist). Run .\setup.ps1 -RecreateDb to rebuild all six databases from the canonical scripts; setup never drops existing data on its own."
 }
@@ -134,8 +141,34 @@ if ($Service -eq 'User') {
     if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
 }
 foreach ($table in (@($required) + @($sentinel))) {
-    $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
-    if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') {
+    $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('public.$table') IS NOT NULL"
+    if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -notin @('t','f')) {
+        throw "Could not verify required $Service relation $table."
+    }
+    if (($exists -join '').Trim() -eq 'f') {
+        if ($Service -eq 'Parking' -and $table -eq 'structure_maintenance_windows') {
+            if (!$UpgradeFacilityMaintenance) {
+                throw 'Facility is missing SPARK-238. Back up smartpark_facility, then run .\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot . -UpgradeFacilityMaintenance from the repository root.'
+            }
+            $facilitySql = Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/microservices/02-facility-service-db.sql') -Raw -Encoding UTF8
+            $start = $facilitySql.IndexOf('-- BEGIN SPARK-238 maintenance schema', [StringComparison]::Ordinal)
+            $end = $facilitySql.IndexOf('-- END SPARK-238 maintenance schema', [StringComparison]::Ordinal)
+            if ($start -lt 0 -or $end -le $start) { throw 'Canonical Facility maintenance SQL section is missing or invalid.' }
+            $upgrade = @(
+                'BEGIN;'
+                'SET LOCAL search_path = public, pg_catalog;'
+                "SET LOCAL lock_timeout = '5s';"
+                'SELECT pg_advisory_xact_lock(238);'
+                'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+                'CREATE EXTENSION IF NOT EXISTS btree_gist;'
+                $facilitySql.Substring($start, $end - $start)
+                'COMMIT;'
+            ) -join "`n"
+            $upgrade | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -X -U $database -d $database -v ON_ERROR_STOP=1
+            if ($LASTEXITCODE -ne 0) { throw 'Facility SPARK-238 upgrade failed. Review the PostgreSQL error before retrying.' }
+            Write-Output 'Facility SPARK-238 maintenance schema applied.'
+            return
+        }
         if ($Service -eq 'Parking' -and $table -eq 'owner_onboarding_provisions') {
             throw 'Missing required Facility relation owner_onboarding_provisions. Existing Facility data requires a separately reviewed migration; do not replay the base schema or recreate database volumes unless a reset is explicitly authorized.'
         }
