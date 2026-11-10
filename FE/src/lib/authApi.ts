@@ -18,6 +18,7 @@ let refreshInFlight: Promise<void> | null = null
 let logoutInProgress = false
 // A refresh rotates credentials within a login; login/logout changes its identity.
 let sessionGeneration = 0
+export const getSessionGeneration = () => sessionGeneration
 
 function requireSessionGeneration(expected: number) {
   if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")
@@ -88,6 +89,10 @@ export class AuthApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    // Raw failure envelope. Callers that understand a specific contract (for example the
+    // structure API's `released`/`commitments`/`items` members) can read it without
+    // inventing a second HTTP client.
+    public payload?: unknown,
   ) {
     super(message)
   }
@@ -194,6 +199,7 @@ export async function request<T>(
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
   extraHeaders?: Record<string, string>,
+  responseFormat: "json" | "blob" = "json",
 ): Promise<T> {
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
@@ -203,28 +209,32 @@ export async function request<T>(
   const token = sessionStorage.getItem(tokenKey)
 
   let response: Response
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData
 
   try {
     response = await fetch(serverUrl + apiPrefix + path, {
       method,
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(multipart ? 60_000 : 10_000),
 
       headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
 
         ...(token ? { Authorization: "Bearer " + token } : {}),
-        ...extraHeaders,
+
+        ...(extraHeaders ?? {}),
       },
 
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
     throw new Error("Cannot reach the authentication server. Please try again.")
   }
 
   const payload =
-    response.status === 204 ? null : await response.json().catch(() => null)
+    response.status === 204 ? null
+      : response.ok && responseFormat === "blob" ? await response.blob()
+      : await response.json().catch(() => null)
 
   // Do not let an old response update the UI or clear a replacement login.
   const issuesSession = apiPrefix === "/api/auth" && ["/login", "/otp/login", "/mfa/login"].includes(path)
@@ -260,7 +270,7 @@ export async function request<T>(
         ? "Your session has expired. Please sign in again."
         : "Authentication request failed.")
 
-    throw new AuthApiError(message, response.status, payload?.code)
+    throw new AuthApiError(message, response.status, payload?.code, payload)
   }
 
   return payload as T
@@ -297,6 +307,7 @@ export const authApi = {
     email?: string
     phone?: string
     password?: string
+    turnstileToken?: string
   }): Promise<DriverRegistration> {
     const response = await request<ApiResponse<DriverRegistration>>(
       "/register/driver",
@@ -350,11 +361,11 @@ export const authApi = {
 
   expiresAt: () => Number(sessionStorage.getItem(expiryKey) ?? 0),
 
-  async login(email: string, password: string): Promise<PasswordLoginResult> {
+  async login(email: string, password: string, turnstileToken?: string): Promise<PasswordLoginResult> {
     const response = await request<ApiResponse<LoginSession | MfaLoginChallenge> & { mfaRequired?: boolean }>(
       "/login",
       "POST",
-      { email: email.trim(), password },
+      { email: email.trim(), password, turnstileToken },
     )
 
     if (response.mfaRequired && response.success) {

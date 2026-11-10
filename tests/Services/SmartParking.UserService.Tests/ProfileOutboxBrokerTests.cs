@@ -18,14 +18,14 @@ public sealed class ProfileBrokerFactAttribute : FactAttribute
     public ProfileBrokerFactAttribute()
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION"))
-            || !int.TryParse(Environment.GetEnvironmentVariable("SMARTPARK_PROFILE_RABBITMQ_PORT"), out _))
+            || string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SMARTPARK_PROFILE_RABBITMQ_PORT")))
             Skip = "Set the isolated PostgreSQL test connection and SMARTPARK_PROFILE_RABBITMQ_PORT (loopback broker) to run real delivery checks.";
     }
 }
 
 public sealed class ProfileOutboxBrokerTests
 {
-    [ProfileBrokerFact]
+    [ProfileBrokerFact, Trait("Category", "PostgresRabbitMQ")]
     public async Task BrokerOutagePreservesCommittedEventAndRecoveryRoutesItWithoutAConsumer()
     {
         var brokerPort = int.Parse(Environment.GetEnvironmentVariable("SMARTPARK_PROFILE_RABBITMQ_PORT")!);

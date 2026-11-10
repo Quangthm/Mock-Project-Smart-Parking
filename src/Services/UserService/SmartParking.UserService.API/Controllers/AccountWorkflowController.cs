@@ -63,10 +63,3 @@ public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSe
     [Authorize,HttpPost("deliveries/{id:guid}/retry")]
     public async Task<IActionResult> Retry(Guid id,CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new RetryWorkflowDeliveryCommand(id),ct)});
 }
-[ApiController,Authorize,Route("api/vehicles"),ResponseCache(NoStore=true,Location=ResponseCacheLocation.None)]
-public sealed class VehiclesController(IMediator mediator):ControllerBase
-{
-    [HttpGet] public async Task<IActionResult> List(CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new ListOwnVehiclesQuery(),ct)});
-    [HttpPost] public async Task<IActionResult> Create(VehicleDto body,CancellationToken ct){var v=await mediator.Send(new SaveOwnVehicleCommand(null,body),ct);return StatusCode(201,new{success=true,data=v});}
-    [HttpPatch("{id:guid}")] public async Task<IActionResult> Update(Guid id,VehicleDto body,CancellationToken ct)=>Ok(new{success=true,data=await mediator.Send(new SaveOwnVehicleCommand(id,body),ct)});
-}

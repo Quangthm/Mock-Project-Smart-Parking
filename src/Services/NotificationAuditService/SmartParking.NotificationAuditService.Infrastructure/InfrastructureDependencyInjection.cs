@@ -21,6 +21,7 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<INotificationChannelAdapter, InAppDeliveryAdapter>();
         services.AddScoped<INotificationChannelAdapter, LocalEmailCaptureAdapter>();
         services.AddScoped<INotificationChannelAdapter, LocalSmsFixtureAdapter>();
+        services.AddScoped<INotificationChannelAdapter, LocalPushFixtureAdapter>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 
         var useInMemory = configuration.GetValue<bool>("RabbitMQ:UseInMemory");

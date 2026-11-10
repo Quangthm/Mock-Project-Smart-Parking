@@ -1,4 +1,6 @@
+import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { VehicleImageInput } from "../../../components/VehicleImageInput"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
@@ -16,6 +18,7 @@ import { qrLogo } from "../data/paymentOptions"
 import { PaymentCheckout } from "../payments/PaymentCheckout"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { BookingDateTimePicker } from "./BookingDateTimePicker"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
@@ -25,6 +28,9 @@ import {
   isSupportedVietnamesePlate,
   vehiclesApi,
   type RegisteredVehicle,
+  type RegistrationClaim,
+  canonicalVietnamesePlate,
+  pendingRegistrationMessage,
 } from "../../../lib/vehiclesApi"
 
 type Step = "slot" | "details" | "payment" | "qr" | "cash"
@@ -33,7 +39,7 @@ type BookingPaymentMethod = "qr" | "cash"
 type VehicleForm = {
   type: "motorcycle" | "car"
   plate: string
-  imageReference: string
+  imageAssetId: string
 }
 
 const slotTakenMessage =
@@ -56,20 +62,24 @@ function formatDuration(hours: number) {
     .filter(Boolean).join(" ")
 }
 
-export function BookingFlow({
-  lot,
-  onDone,
-  resumeBooking,
-}: {
+type BookingFlowProps = {
   lot: ParkingLot
   onDone: () => void
   resumeBooking?: Booking
-}) {
-  const { user } = useApp()
+}
 
+export function BookingFlow(props: BookingFlowProps) {
+  const { user } = useApp()
+  return user ? <AccountBookingFlow key={getSessionGeneration()} {...props} /> : null
+}
+
+function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
+  const { user } = useApp()
   const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
 
   const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
+
+  const [activeFloor3D, setActiveFloor3D] = useState<number | "all">("all")
 
   const [lotSnapshot, setLotSnapshot] = useState(
     () => store.getLots().find((item) => item.id === lot.id) ?? lot,
@@ -81,18 +91,21 @@ export function BookingFlow({
       : null,
   )
 
+  const [registrationClaims, setRegistrationClaims] = useState<RegistrationClaim[]>([])
   const [vehicles, setVehicles] = useState<RegisteredVehicle[]>([])
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [addVehicleOpen, setAddVehicleOpen] = useState(false)
   const [vehicleLoading, setVehicleLoading] = useState(false)
   const [vehicleSaving, setVehicleSaving] = useState(false)
+  const [vehicleNotice, setVehicleNotice] = useState("")
+  const [vehicleListFailed, setVehicleListFailed] = useState(false)
   const [vehicleError, setVehicleError] = useState("")
   const [vehicleReload, setVehicleReload] = useState(0)
 
   const [vehicleForm, setVehicleForm] = useState<VehicleForm>({
-    type: "motorcycle",
+    type: "car",
     plate: "",
-    imageReference: "",
+    imageAssetId: "",
   })
 
   const [startTime, setStartTime] = useState(
@@ -115,26 +128,34 @@ export function BookingFlow({
   useEffect(() => {
     if (!user || resumeBooking) return
     let active = true
+    setVehicles([])
+    setSelectedVehicleId("")
     setVehicleLoading(true)
+    setVehicleListFailed(false)
     setVehicleError("")
-    vehiclesApi.list()
-      .then((items) => {
+    setRegistrationClaims([])
+    Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+      .then(([allItems, claims]) => {
+        const items = allItems.filter(item => item.vehicleType === "CAR")
         if (!active) return
+        setRegistrationClaims(claims)
         setVehicles(items)
         setSelectedVehicleId((current) =>
-          items.some((item) => item.id === current) ? current : items[0]?.id ?? "",
+          items.some(item => item.id === current) ? current : items[0]?.id ?? "",
         )
         setAddVehicleOpen(items.length === 0)
       })
       .catch((error) => {
-        if (active)
+        if (active) {
           setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
+          setVehicleListFailed(true)
+        }
       })
       .finally(() => {
         if (active) setVehicleLoading(false)
       })
     return () => { active = false }
-  }, [user?.id, resumeBooking?.id, vehicleReload])
+  }, [user, resumeBooking?.id, vehicleReload])
 
   useEffect(() => {
     function refreshLots(event: StorageEvent) {
@@ -166,7 +187,8 @@ export function BookingFlow({
 
   const amount = Math.ceil(hours) * lot.hourlyRate
 
-  const selectedVehicle = vehicles.find(
+  const bookingVehicles = vehicles.filter(vehicle => vehicle.vehicleType === "CAR")
+  const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
   )
 
@@ -220,36 +242,56 @@ export function BookingFlow({
     setStep("details")
   }
 
+  useEffect(() => {
+    setVehicleForm({ type: "car", plate: "", imageAssetId: "" })
+    setVehicleSaving(false)
+  }, [user])
+
   async function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (vehicleSaving || !user) return
+    const generation = getSessionGeneration()
+    if (vehicleSaving || !user || !vehicleForm.imageAssetId) return
     const vehicleType = vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE"
     if (!isSupportedVietnamesePlate(vehicleForm.plate, vehicleType)) {
       setVehicleError("Use a supported Vietnamese plate: 51A-123.45 for cars or 59-B1 123.45 for motorcycles.")
       return
     }
-    setVehicleSaving(true)
     setVehicleError("")
+    setVehicleNotice("")
+    setVehicleSaving(true)
     try {
       const created = await vehiclesApi.save({
-        plate: vehicleForm.plate.trim().toUpperCase(),
+        plate: vehicleForm.plate,
         vehicleType,
-        imageReference: vehicleForm.imageReference,
+        imageAssetId: vehicleForm.imageAssetId,
       })
-      setVehicles((current) => [...current, created])
-      setSelectedVehicleId(created.id)
-      setVehicleForm((current) => ({ ...current, plate: "", imageReference: "" }))
+      if (getSessionGeneration() !== generation) return
+      if (created.vehicleType === "CAR") {
+        setVehicles((current) => [...current, created])
+        setSelectedVehicleId(created.id)
+      } else setVehicleNotice("Motorcycle registered. Specific Slot booking requires a car.")
+      setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
       setMessage("")
       setAddVehicleOpen(false)
     } catch (error) {
-      setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
+      if (getSessionGeneration() !== generation) return
+      if (error instanceof AuthApiError && error.code === "PLATE_EXISTS") {
+        try {
+          const [items, claims] = await Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+          if (getSessionGeneration() !== generation) return
+          setRegistrationClaims(claims)
+          setVehicles(items.filter(item => item.vehicleType === "CAR"))
+          setVehicleError(claims.some(c => c.canonicalPlate === canonicalVietnamesePlate(vehicleForm.plate))
+            ? pendingRegistrationMessage : "This plate is already registered. Choose an active car.")
+        } catch { if (getSessionGeneration() === generation) setVehicleError("Could not confirm registration status. Please refresh.") }
+      } else setVehicleError(error instanceof Error ? error.message : "Cannot save vehicle.")
     } finally {
-      setVehicleSaving(false)
+      if (getSessionGeneration() === generation) setVehicleSaving(false)
     }
   }
 
   function continueToPaymentStep() {
-    if (!selectedSlot || !selectedVehicle || !validTimeWindow) return
+    if (!selectedSlot || !selectedVehicle || !validTimeWindow || vehicleLoading || vehicleListFailed) return
     setMessage("")
     setStep("payment")
   }
@@ -265,6 +307,17 @@ export function BookingFlow({
 
     setStep(paymentMethod)
   }
+
+  const activeFloorKey: string =
+    activeFloor3D === "all"
+      ? "all"
+      : lotSnapshot.type === "basement"
+        ? `B${activeFloor3D}`
+        : lotSnapshot.type === "multi-storey"
+          ? activeFloor3D === 1
+            ? "G"
+            : `L${activeFloor3D - 1}`
+          : "all"
 
   return (
     <div className="driver-booking-flow" style={{ maxWidth: 1440, margin: "0 auto" }}>
@@ -437,15 +490,68 @@ export function BookingFlow({
           {/* 3D Mode */}
           {viewMode === "3d" && (
             <div style={{ marginBottom: "1rem" }}>
-              <Parking3DViewer
-                lotType={lotSnapshot.type}
-                modelUrl={lotSnapshot.modelUrl}
-                slots={lotSnapshot.slots}
-                selectedSlotId={selectedSlot?.id}
-                onSelectSlot={step === "slot" ? chooseSlot : undefined}
-                height="min(70vh, 700px)"
-                interactive={step === "slot"}
-              />
+              {lotSnapshot.floors > 1 && (
+                <div
+                  role="group"
+                  aria-label="Filter 3D view by floor"
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    marginBottom: "0.6rem",
+                  }}
+                >
+                  {(
+                    [
+                      "all",
+                      ...Array.from(
+                        { length: lotSnapshot.floors },
+                        (_, index) => index + 1,
+                      ),
+                    ] as (number | "all")[]
+                  ).map((floor) => {
+                    const isActive = activeFloor3D === floor
+                    const label = floor === "all" ? "All" : `Floor ${floor}`
+                    return (
+                      <button
+                        key={floor}
+                        type="button"
+                        onClick={() => setActiveFloor3D(floor)}
+                        aria-pressed={isActive}
+                        style={{
+                          padding: "0.3rem 0.7rem",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          borderRadius: "calc(var(--radius) - 2px)",
+                          border: `1px solid ${
+                            isActive ? "var(--primary)" : "var(--border)"
+                          }`,
+                          background: isActive ? "var(--primary)" : "var(--card)",
+                          color: isActive ? "var(--primary-fg)" : "var(--muted)",
+                          cursor: "pointer",
+                          transition:
+                            "background-color 0.2s, color 0.2s, border-color 0.2s",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <ErrorBoundary name="Parking 3D viewer">
+                <Parking3DViewer
+                  lotType={lotSnapshot.type}
+                  modelUrl={lotSnapshot.modelUrl}
+                  slots={lotSnapshot.slots}
+                  selectedSlotId={selectedSlot?.id}
+                  onSelectSlot={step === "slot" ? chooseSlot : undefined}
+                  activeFloor={activeFloorKey}
+                  height="min(70vh, 700px)"
+                  interactive={step === "slot"}
+                />
+              </ErrorBoundary>
             </div>
           )}
 
@@ -649,13 +755,13 @@ export function BookingFlow({
             <label className="label">
               Vehicle
               {vehicleLoading && <span className="text-sm text-[var(--muted)]">Loading vehicles…</span>}
-              {!vehicleLoading && vehicles.length > 0 && (
+              {!vehicleLoading && bookingVehicles.length > 0 && (
                 <RoundedSelect
                   className="input"
                   value={selectedVehicleId}
                   onChange={(event) => setSelectedVehicleId(event.target.value)}
                 >
-                  {vehicles.map((vehicle) => (
+                  {bookingVehicles.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
                       {vehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} ·{" "}
                       {formatVietnamesePlate(vehicle)}
@@ -667,13 +773,14 @@ export function BookingFlow({
           {vehicleError && (
             <div role="alert" className="mb-3 text-sm text-red-600">
               {vehicleError}{" "}
-              {!vehicles.length && !vehicleLoading && !addVehicleOpen && (
+              {vehicleListFailed && !vehicleLoading && (
                 <button type="button" className="underline" onClick={() => setVehicleReload((n) => n + 1)}>
                   Retry
                 </button>
               )}
             </div>
           )}
+          {registrationClaims.map(claim => <p key={claim.id} role="status">{claim.rawPlate}: {pendingRegistrationMessage}</p>)}
           {!vehicleLoading && !vehicleError && vehicles.length === 0 && (
             <p
               style={{
@@ -682,10 +789,11 @@ export function BookingFlow({
                 fontSize: "0.82rem",
               }}
             >
-              You have not saved a vehicle yet. Add one to continue.
+              No active cars available. Register a car to book this slot.
             </p>
           )}
-          {!vehicleLoading && (
+          {vehicleNotice && <p className="mb-3 rounded-lg bg-[var(--bg)] p-3 text-sm" role="status">{vehicleNotice}</p>}
+          {!vehicleLoading && !vehicleListFailed && (
             <button
               className="btn-outline"
               type="button"
@@ -702,7 +810,7 @@ export function BookingFlow({
               {addVehicleOpen ? "Cancel Add Vehicle" : "+ Add New Vehicle"}
             </button>
           )}
-          {addVehicleOpen && !vehicleLoading && (
+          {addVehicleOpen && !vehicleLoading && !vehicleListFailed && (
             <form
               onSubmit={addVehicle}
               style={{
@@ -744,37 +852,24 @@ export function BookingFlow({
                       plate: event.target.value,
                     }))
                   }}
-                  onBlur={() => setVehicleForm((current) => ({
-                    ...current,
-                    plate: formatVietnamesePlateValue(
-                      current.plate,
-                      current.type === "car" ? "CAR" : "MOTORCYCLE",
-                    ),
-                  }))}
+                  aria-description={`Plate preview: ${formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}`}
                   placeholder={vehicleForm.type === "car" ? "e.g. 51A-123.45" : "e.g. 59-B1 123.45"}
                   required
                   maxLength={30}
                 />
+                <span>Plate preview: {formatVietnamesePlateValue(vehicleForm.plate, vehicleForm.type === "car" ? "CAR" : "MOTORCYCLE")}</span>
               </label>
-              <label className="label" style={{ gridColumn: "1 / -1" }}>
-                Vehicle image (HTTPS URL)
-                <input
-                  className="input"
-                  type="url"
-                  required
-                  maxLength={2048}
-                  value={vehicleForm.imageReference}
-                  onChange={(event) => {
-                    setVehicleError("")
-                    setVehicleForm((current) => ({ ...current, imageReference: event.target.value }))
-                  }}
-                  placeholder="https://example.com/vehicle.jpg"
-                />
-              </label>
+              <div className="label" style={{ gridColumn: "1 / -1" }}>
+                Vehicle image
+                <VehicleImageInput key={`${getSessionGeneration()}-${vehicleReload}`} onUploaded={assetId => {
+                  setVehicleError("")
+                  setVehicleForm(current => ({ ...current, imageAssetId: assetId }))
+                }} />
+              </div>
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={vehicleSaving}
+                disabled={vehicleSaving || !vehicleForm.imageAssetId}
                 style={{ gridColumn: "1 / -1", justifyContent: "center" }}
               >
                 {vehicleSaving ? "Saving…" : "Save Vehicle"}
@@ -807,7 +902,9 @@ export function BookingFlow({
             <button
               type="button"
               className="btn-outline"
-              onClick={() => setStep("slot")}
+              onClick={() => {
+                setStep("slot")
+              }}
             >
               Back
             </button>
@@ -816,6 +913,7 @@ export function BookingFlow({
               className="btn-primary"
               disabled={
                 vehicleLoading ||
+                vehicleListFailed ||
                 vehicleSaving ||
                 !selectedVehicle ||
                 !validTimeWindow

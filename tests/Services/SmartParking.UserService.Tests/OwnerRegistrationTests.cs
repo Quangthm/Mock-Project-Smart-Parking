@@ -13,7 +13,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class OwnerRegistrationTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RegistrationReviewDuplicatesConcurrencyAndMigration()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;

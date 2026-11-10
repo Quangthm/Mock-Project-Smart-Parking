@@ -4,7 +4,7 @@ param(
     [switch]$NoLogWindow
 )
 $ErrorActionPreference = 'Stop'
-if ($Service -eq 'Facility') { $Service = 'Parking' }
+if ($Service -eq 'Parking') { $Service = 'Facility' } # Legacy CLI alias.
 if ($Service -eq 'Reservation') { $Service = 'Operation' }
 $root = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $root '.env'
@@ -46,15 +46,14 @@ if ($config.ExitCode -ne 0) { throw "compose.app.yml is invalid.`n$($config.Text
 
 $map = @{
     User        = 'user-service'
-    Parking     = 'parking-service'
-    Operation    = 'reservation-service'
-    Reservation  = 'reservation-service'
+    Facility     = 'facility-service'
+    Operation    = 'operation-service'
     Payment      = 'payment-service'
     Notification = 'notification-service'
-    Frontend    = 'frontend'
+    Frontend     = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','parking-service','reservation-service','payment-service','notification-service','frontend')
+    @('user-service','facility-service','operation-service','payment-service','notification-service','frontend')
 } else {
     @($map[$Service])
 }

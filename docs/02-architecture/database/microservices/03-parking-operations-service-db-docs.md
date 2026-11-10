@@ -272,7 +272,7 @@ Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái 
 ### 14.2 `smartpark_operations` (03b)
 
 - `reservation-site-capacity-pools.sql` — tạo `site_capacity_pools` đúng shape BE (D7); phải chạy trước safety overlay.
-- `reservation-structure-safety.sql` — `structure_edit_holds`, `structure_site_state`, `structure_removed_resources` + guard trigger trên `reservations`, `parking_sessions`, `slot_allocations`, `site_capacity_pools`.
+- `reservation-structure-safety.sql` — `structure_edit_holds`, `structure_site_state` + guard trigger trên `reservations`, `parking_sessions`, `slot_allocations`, `site_capacity_pools`.
 - `reservation-structure-receipts.sql` — `structure_release_receipts`.
 - `reservation-confirmation-time.sql` — trigger stamp `confirmed_at`; không ADD COLUMN vì cột đã có trong base 03b.
 

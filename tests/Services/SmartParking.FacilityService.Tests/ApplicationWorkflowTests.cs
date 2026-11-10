@@ -1,4 +1,7 @@
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Persistence;
+using SmartParking.FacilityService.Application.Common.Security;
 using SmartParking.FacilityService.Domain;
 using ReservationDomain = SmartParking.OperationService.Domain;
 
@@ -10,9 +13,10 @@ public sealed class ApplicationWorkflowTests
     public async Task AssignedOperatorLayoutReadsWithoutCreatingAnEditHold()
     {
         var fixture = new WorkflowFixture();
-        var service = new OperatorLayoutService(fixture, fixture, fixture);
-        var result = await service.ReadAsync(fixture.SiteId, CancellationToken.None);
-        Assert.Same(fixture.Structure, result);
+        var handler = new SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperatorLayout.GetOperatorLayoutQueryHandler(
+            fixture, fixture, fixture, Microsoft.Extensions.Logging.Abstractions.NullLogger<SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperatorLayout.GetOperatorLayoutQueryHandler>.Instance);
+        var result = await handler.Handle(new SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperatorLayout.GetOperatorLayoutQuery(fixture.SiteId), CancellationToken.None);
+        Assert.Equal(fixture.Structure.Site, result.Site);
         Assert.Equal(new[] { "site-scope", "snapshot" }, fixture.Events);
         Assert.Empty(fixture.Store.Rows);
     }
@@ -21,8 +25,10 @@ public sealed class ApplicationWorkflowTests
     public async Task UnassignedOperatorCannotReadSnapshotOrLayout()
     {
         var fixture = new WorkflowFixture { Authorized = false };
-        var service = new OperatorLayoutService(fixture, fixture, fixture);
-        var error = await Assert.ThrowsAsync<StructureException>(() => service.ReadAsync(fixture.SiteId, CancellationToken.None));
+        var handler = new SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperatorLayout.GetOperatorLayoutQueryHandler(
+            fixture, fixture, fixture, Microsoft.Extensions.Logging.Abstractions.NullLogger<SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperatorLayout.GetOperatorLayoutQueryHandler>.Instance);
+        var error = await Assert.ThrowsAsync<StructureException>(() =>
+            handler.Handle(new SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperatorLayout.GetOperatorLayoutQuery(fixture.SiteId), CancellationToken.None));
         Assert.Equal("FORBIDDEN", error.Code);
         Assert.Equal(new[] { "site-scope" }, fixture.Events);
         Assert.Empty(fixture.Store.Rows);
@@ -163,6 +169,7 @@ public sealed class ApplicationWorkflowTests
     public async Task ReadAlsoRecoversItsHoldAndDoesNotBeginAnEdit()
     {
         var fixture = new WorkflowFixture();
+        fixture.Store.Rows.Add(new(Guid.NewGuid(), fixture.Owner.TenantId, fixture.SiteId, null, "preparing", null));
         await fixture.Service.GetAsync(fixture.Owner, fixture.SiteId);
 
         Assert.DoesNotContain("begin", fixture.Events);
@@ -203,6 +210,31 @@ public sealed class ApplicationWorkflowTests
             ReservationDomain.StructureEditPolicy.ValidateOutcome(nullEntry));
     }
 
+    private sealed class StructureWorkflowTestHelper(IStructureUnitOfWork unitOfWork)
+    {
+        public async Task ChangeAsync(OwnerScope owner, Guid siteId, Action<ParkingStructure> change)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, CancellationToken.None);
+            change(session.Structure);
+            await session.CommitAsync(CancellationToken.None);
+        }
+
+        public async Task SetOperationalBackupAsync(
+            OwnerScope owner, Guid siteId, Guid slotId, bool active, string reason, CancellationToken ct)
+        {
+            await using var session = await unitOfWork.BeginEditAsync(owner, siteId, ct, markedSlot: slotId, reason: reason);
+            session.Structure.MarkBackup(slotId, active);
+            await session.CommitAsync(ct);
+        }
+
+        public Task MarkOperationalBackupAsync(
+            OwnerScope owner, Guid siteId, Guid slotId, string reason, CancellationToken ct)
+            => SetOperationalBackupAsync(owner, siteId, slotId, true, reason, ct);
+
+        public Task GetAsync(OwnerScope owner, Guid siteId)
+            => unitOfWork.RecoverAsync(owner, siteId, CancellationToken.None);
+    }
+
     private sealed class WorkflowFixture :
         IOwnerAuthorizer, ISlotOperatorAuthorizer, IOperatorSiteAuthorizer, IStructureCommitments, IParkingStructureRepository
     {
@@ -214,7 +246,8 @@ public sealed class ApplicationWorkflowTests
         public ParkingStructure Structure { get; }
         public MemoryStore Store { get; }
         public StructureSynchronizationService Synchronization { get; }
-        public ParkingStructureService Service { get; }
+        public IStructureUnitOfWork UnitOfWork { get; }
+        public StructureWorkflowTestHelper Service { get; }
         public bool Authorized { get; set; } = true;
         public bool FailRelease { get; set; }
         public bool RevokeDuringAcquire { get; set; }
@@ -227,7 +260,8 @@ public sealed class ApplicationWorkflowTests
             SlotId = Structure.AddSlot(unit, "A01", VehicleType.CAR);
             Store = new MemoryStore(Events);
             Synchronization = new(Store, this);
-            Service = new(this, this, this, this, Store, Synchronization);
+            UnitOfWork = new StructureUnitOfWork(this, this, this, this, Store, Synchronization);
+            Service = new StructureWorkflowTestHelper(UnitOfWork);
         }
 
         public Task<bool> IsOwnerAsync(OwnerScope owner, CancellationToken ct)
@@ -263,20 +297,15 @@ public sealed class ApplicationWorkflowTests
         {
             Events.Add(outcome is null ? "release-abort" : "release-outcome");
             if (FailRelease || site == FailingSite)
-                throw new StructureException("COMMITMENTS_UNAVAILABLE", "Simulated lost response.");
+                throw new StructureException("COMMITMENTS_UNAVAILABLE", "Transient transport failure.");
             return Task.CompletedTask;
         }
 
         public Task ForceReleaseAsync(Guid tenant, Guid site, CancellationToken ct)
         {
-            ForceReleaseCalls++;
             Events.Add("force-release");
-            if (FailRelease || site == FailingSite)
-                throw new StructureException("COMMITMENTS_UNAVAILABLE", "Simulated lost response.");
             return Task.CompletedTask;
         }
-
-        public int ForceReleaseCalls { get; private set; }
 
         public Task<IParkingStructureEdit> BeginEditAsync(
             OwnerScope owner, Guid site, CommitmentSnapshot snapshot, Guid? operation, CancellationToken ct)
@@ -284,7 +313,7 @@ public sealed class ApplicationWorkflowTests
             Events.Add("begin");
             return Task.FromResult<IParkingStructureEdit>(new MemoryEdit(this));
         }
-        public Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid site, CommitmentSnapshot snapshot, CancellationToken ct)
+        public Task<ParkingStructure> ReadAsync(OwnerScope owner, Guid site, CommitmentSnapshot? snapshot, CancellationToken ct)
             => Task.FromResult(Structure);
         public Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<SiteProfile>>([Structure.Site]);

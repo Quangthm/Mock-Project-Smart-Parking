@@ -23,7 +23,7 @@ public sealed class PostgresFactAttribute : FactAttribute
 
 public sealed class PostgresAuthTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task LoginUsesReplacementUserWhenDeletedUserHasSameEmail()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
@@ -83,7 +83,7 @@ public sealed class PostgresAuthTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task MigrationConcurrencyRotationRevocationAndRestartUseRealPostgres()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;

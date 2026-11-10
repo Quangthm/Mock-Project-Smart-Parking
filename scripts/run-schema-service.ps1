@@ -1,7 +1,6 @@
 param(
     [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification')][string]$Service
 )
-)
 $ErrorActionPreference = 'Stop'
 # Parking remains an alias so existing scripts and configuration continue to work.
 if ($Service -eq 'Facility') { $Service = 'Parking' }
@@ -9,13 +8,37 @@ if ($Service -eq 'Facility') { $Service = 'Parking' }
 if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+$previousSigningEnvironment = Get-JwtSigningEnvironment
+$mediaNames = @('SMARTPARK_CLOUDINARY_CLOUD_NAME','SMARTPARK_CLOUDINARY_API_KEY','SMARTPARK_CLOUDINARY_API_SECRET','SMARTPARK_USER_MEDIA_ENABLED','MediaStorage__Cloudinary__CloudName','MediaStorage__Cloudinary__ApiKey','MediaStorage__Cloudinary__ApiSecret','MediaStorage__Enabled')
+$previousMediaEnvironment = @{}
+foreach ($name in $mediaNames) { $previousMediaEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+try {
 
 if (!(Test-Path -LiteralPath $envFile -PathType Leaf)) {
     throw "Missing $envFile. Run setup.ps1 at the repository root first."
 }
 
-# Load .env through the shared parser; it exports every key to the process env.
-$null = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile
+# Only UserService may receive raw or mapped private signing material.
+$settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -IncludeUserServiceSigningSecrets:($Service -eq 'User')
+
+# Read the parsed file, not inherited variables: removed keys must clear stale
+# raw settings and override saved user-secrets for this launch. Whitespace is
+# deliberately unconfigured and survives Windows PowerShell 5.1 environment IO.
+foreach ($field in @{'CloudName'='CLOUD_NAME'; 'ApiKey'='API_KEY'; 'ApiSecret'='API_SECRET'}.GetEnumerator()) {
+    $source = 'SMARTPARK_CLOUDINARY_' + $field.Value
+    $value = $settings[$source]
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = ' ' }
+    [Environment]::SetEnvironmentVariable($source, $value, 'Process')
+    [Environment]::SetEnvironmentVariable('MediaStorage__Cloudinary__' + $field.Key, $value, 'Process')
+}
+if ($Service -eq 'User') {
+    $env:MediaStorage__Enabled = if ($settings['SMARTPARK_USER_MEDIA_ENABLED']) { $settings['SMARTPARK_USER_MEDIA_ENABLED'] } else { 'false' }
+    $env:SMARTPARK_USER_MEDIA_ENABLED = $env:MediaStorage__Enabled
+} else {
+    [Environment]::SetEnvironmentVariable('MediaStorage__Enabled', $null, 'Process')
+    [Environment]::SetEnvironmentVariable('SMARTPARK_USER_MEDIA_ENABLED', $null, 'Process')
+}
 
 if ([string]::IsNullOrWhiteSpace($env:SMARTPARK_DEV_PASSWORD)) {
     throw 'SMARTPARK_DEV_PASSWORD is empty in .env. Run setup.ps1 first.'
@@ -43,9 +66,6 @@ foreach ($remoteService in @('User','Parking','Reservation','Payment','Notificat
     if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
 }
 
-$dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT'; Notification = 'SMARTPARK_DB_NOTIFICATION_PORT' }
-$defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444'; Notification = '5445' }
-$apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065'; Notification = '5068' }
 
 $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }
@@ -111,7 +131,8 @@ if ($Service -eq 'User') {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
     }
-    if ($env:SMARTPARK_JWT_PRIVATE_KEY_PEM) { $env:Jwt__PrivateKeyPem = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM }
+    if ($env:SMARTPARK_TURNSTILE_ENABLED) { $env:Turnstile__Enabled = $env:SMARTPARK_TURNSTILE_ENABLED }
+    if ($env:SMARTPARK_TURNSTILE_SECRET_KEY) { $env:Turnstile__SecretKey = $env:SMARTPARK_TURNSTILE_SECRET_KEY }
     if ($env:SMARTPARK_WORKFLOW_KEY_DIRECTORY) {
         $keyDirectory = $env:SMARTPARK_WORKFLOW_KEY_DIRECTORY
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
@@ -128,3 +149,8 @@ if ($Service -eq 'Notification') {
 }
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
 if ($LASTEXITCODE -ne 0) { throw "$serviceDisplay exited with code $LASTEXITCODE" }
+} finally {
+    # Do not leave UserService .env signing secrets in the launching shell.
+    Restore-JwtSigningEnvironment $previousSigningEnvironment
+    foreach ($name in $mediaNames) { [Environment]::SetEnvironmentVariable($name, $previousMediaEnvironment[$name], 'Process') }
+}

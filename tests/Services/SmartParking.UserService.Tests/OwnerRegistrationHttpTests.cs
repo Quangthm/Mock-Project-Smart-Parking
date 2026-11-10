@@ -51,6 +51,7 @@ public sealed class OwnerRegistrationHttpTests
         builder.Services.AddApiCurrentActor();
         builder.Services.AddApplicationServices(builder.Configuration.GetSection("AuthenticationPolicy").Get<global::UserService.Application.Common.Models.JwT.AuthenticationPolicy>() ?? new());
         builder.Services.AddSingleton<IVehicleRepository, UnsupportedVehicleRepository>();
+        builder.Services.AddSingleton<IRegistrationClaimRepository, UnsupportedVehicleRepository>();
         builder.Services.AddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         builder.Services.AddSingleton<IParkingDirectory, TestParkingDirectory>();
         builder.Services.AddSingleton<IWorkflowProtector, TestWorkflowProtector>();
@@ -66,8 +67,12 @@ public sealed class OwnerRegistrationHttpTests
         builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
         var registrations = new Registrations();
         builder.Services.AddSingleton<IOwnerRegistrationService>(registrations);
-        builder.Services.AddRateLimiter(options => options.AddPolicy("DriverOtp", _ =>
-            System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("test")));
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.AddPolicy("DriverOtp", _ => System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("test"));
+            options.AddPolicy("RegistrationRateLimit", _ => System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("test"));
+            options.AddPolicy("LoginRateLimit", _ => System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("test"));
+        });
         await using var app = builder.Build();
         app.UseRouting();
         app.UseApiErrorResponses();

@@ -27,7 +27,7 @@ public sealed class DriverRegistrationTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RegistrationLifecycleConcurrencyAndDeliveryRollback()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
@@ -69,9 +69,7 @@ public sealed class DriverRegistrationTests
                 await new DataSeeder(db, passwords).SeedAsync();
                 // Exercise upgrading the old phone-required schema, and repeated migration application.
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE users ALTER COLUMN phone SET NOT NULL");
-                var root = new DirectoryInfo(AppContext.BaseDirectory);
-                while (root != null && !File.Exists(Path.Combine(root.FullName, "SmartParking.slnx"))) root = root.Parent;
-                var migration = await File.ReadAllTextAsync(Path.Combine(root!.FullName, "scripts/database/05.4-Driver-Registration-OTP.sql"));
+                var migration = await File.ReadAllTextAsync(ServiceSchema.ScriptPath("test/05.4-Driver-Registration-OTP.sql"));
                 await db.Database.ExecuteSqlRawAsync(migration);
                 await db.Database.ExecuteSqlRawAsync(migration);
             }

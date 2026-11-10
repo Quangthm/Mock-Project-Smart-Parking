@@ -5,10 +5,20 @@ x-backend-env: &backend-env
   ASPNETCORE_URLS: http://+:8080
   Services__Key: ${SMARTPARK_SERVICE_KEY:?Set SMARTPARK_SERVICE_KEY}
   Services__User: http://user-service:8080/
-  Services__Parking: http://parking-service:8080/
-  Services__Reservation: http://reservation-service:8080/
+  Services__Parking: http://facility-service:8080/
+  Services__Reservation: http://operation-service:8080/
   Services__Payment: http://payment-service:8080/
   Services__Notification: http://notification-service:8080/
+  MediaStorage__Cloudinary__CloudName: ${SMARTPARK_CLOUDINARY_CLOUD_NAME:-}
+  MediaStorage__Cloudinary__ApiKey: ${SMARTPARK_CLOUDINARY_API_KEY:-}
+  MediaStorage__Cloudinary__ApiSecret: ${SMARTPARK_CLOUDINARY_API_SECRET:-}
+
+# Future consumer authentication contract only; middleware is a later task.
+# HTTP here is confined to the local-development Docker network.
+x-jwt-validation: &jwt-validation
+  JwtValidation__Issuer: ${SMARTPARK_JWT_ISSUER:-SmartParking.UserService}
+  JwtValidation__Audience: ${SMARTPARK_JWT_AUDIENCE:-SmartParking}
+  JwtValidation__JwksUri: http://user-service:8080${SMARTPARK_JWT_JWKS_PATH:-/.well-known/jwks.json}
 
 x-healthcheck: &healthcheck
   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
@@ -27,6 +37,7 @@ services:
     image: smartpark/user-service:local
     environment:
       <<: *backend-env
+      MediaStorage__Enabled: ${SMARTPARK_USER_MEDIA_ENABLED:-false}
       ConnectionStrings__User: "Host=user-db;Port=5432;Database=smartpark_user;Username=smartpark_user;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       DevelopmentAdmin__Email: ${SMARTPARK_ADMIN_EMAIL:-admin@smartpark.local}
       DevelopmentAdmin__Password: ${SMARTPARK_ADMIN_PASSWORD:?Set SMARTPARK_ADMIN_PASSWORD}
@@ -43,8 +54,13 @@ services:
       # Operator activation links must point to the browser-facing frontend.
       Onboarding__PublicOrigin: ${SMARTPARK_ONBOARDING_PUBLIC_ORIGIN:-http://localhost:5173}
       Onboarding__AllowHttpLoopback: ${SMARTPARK_ONBOARDING_ALLOW_HTTP_LOOPBACK:-true}
-      # Optional JWT signing key (Jwt:PrivateKeyPem). Empty keeps the Development ephemeral key.
+      Jwt__Issuer: ${SMARTPARK_JWT_ISSUER:-SmartParking.UserService}
+      Jwt__Audience: ${SMARTPARK_JWT_AUDIENCE:-SmartParking}
+      Jwt__KeyId: ${SMARTPARK_JWT_KEY_ID:-}
+      Jwt__JwksPath: ${SMARTPARK_JWT_JWKS_PATH:-/.well-known/jwks.json}
+      # Only the issuer receives private material. A KeyId requires a stable key.
       Jwt__PrivateKeyPem: ${SMARTPARK_JWT_PRIVATE_KEY_PEM:-}
+      Jwt__PrivateKeyPemBase64: ${SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64:-}
       Workflow__KeyDirectory: /app/.cache/workflow-keys
       Messaging__Enabled: ${SMARTPARK_MESSAGING_ENABLED:-false}
       SMARTPARK_RABBITMQ_HOST: rabbitmq
@@ -53,7 +69,13 @@ services:
       SMARTPARK_RABBITMQ_PASSWORD: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
       SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
-      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-}
+      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443}
+      # Cloudflare Turnstile Bot Protection (SPARK-257)
+      Turnstile__Enabled: ${SMARTPARK_TURNSTILE_ENABLED:-true}
+      Turnstile__SecretKey: ${SMARTPARK_TURNSTILE_SECRET_KEY:-}
+      Turnstile__ExpectedHostnames__0: localhost
+      Turnstile__ExpectedHostnames__1: 127.0.0.1
+      Turnstile__ExpectedHostnames__2: ::1
     ports:
       - "127.0.0.1:5035:8080"
     volumes:
@@ -63,38 +85,42 @@ services:
     healthcheck: *healthcheck
     restart: "no"
 
-  parking-service:
+  facility-service:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
         SERVICE: FacilityService
-    image: smartpark/parking-service:local
+    image: smartpark/facility-service:local
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *jwt-validation]
       ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5045:8080"
     networks:
-      - smartpark
+      smartpark:
+        aliases:
+          - parking-service
     healthcheck: *healthcheck
     restart: "no"
 
-  reservation-service:
+  operation-service:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
       args:
         SERVICE: OperationService
-    image: smartpark/reservation-service:local
+    image: smartpark/operation-service:local
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *jwt-validation]
       Services__Payment: http://payment-service:8080/
       ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5055:8080"
     networks:
-      - smartpark
+      smartpark:
+        aliases:
+          - operation-service
     healthcheck: *healthcheck
     restart: "no"
 
@@ -106,20 +132,20 @@ services:
         SERVICE: PaymentService
     image: smartpark/payment-service:local
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *jwt-validation]
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      Services__OperationService__BaseUrl: http://operation-service:8080/
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
+      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD}
       # PaymentService reads Services:ReservationService:BaseUrl (not Services:Reservation).
-      Services__ReservationService__BaseUrl: http://reservation-service:8080/
       # Empty PayOS credentials keep the local sandbox emulation (fake checkout link/QR).
       PayOs__ClientId: ${SMARTPARK_PAYOS_CLIENT_ID:-}
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}
       PayOs__ChecksumKey: ${SMARTPARK_PAYOS_CHECKSUM_KEY:-}
       PayOs__BaseUrl: ${SMARTPARK_PAYOS_BASE_URL:-https://api-merchant.payos.vn}
-      RabbitMQ__Host: ${SMARTPARK_RABBITMQ_HOST:-rabbitmq}
-      RabbitMQ__Port: "${SMARTPARK_RABBITMQ_PORT:-5672}"
-      RabbitMQ__VirtualHost: "${SMARTPARK_RABBITMQ_VHOST:-/}"
-      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-guest}
-      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD:-guest}
     ports:
       - "127.0.0.1:5065:8080"
     networks:
@@ -135,14 +161,14 @@ services:
         SERVICE: NotificationAuditService
     image: smartpark/notification-service:local
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *jwt-validation]
       ConnectionStrings__Notification: "Host=notification-db;Port=5432;Database=smartpark_notification;Username=smartpark_notification;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       ConnectionStrings__NotificationAudit: "Host=notification-db;Port=5432;Database=smartpark_notification;Username=smartpark_notification;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
-      RabbitMQ__Host: ${SMARTPARK_RABBITMQ_HOST:-rabbitmq}
-      RabbitMQ__Port: "${SMARTPARK_RABBITMQ_PORT:-5672}"
-      RabbitMQ__VirtualHost: "${SMARTPARK_RABBITMQ_VHOST:-/}"
-      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-guest}
-      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD:-guest}
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
+      RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD}
     ports:
       - "127.0.0.1:5068:8080"
     networks:
@@ -163,6 +189,7 @@ services:
       VITE_NOTIFICATION_API_BASE_URL: http://localhost:5068
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
+      VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "127.0.0.1:5173:5173"

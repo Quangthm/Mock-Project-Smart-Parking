@@ -7,7 +7,7 @@ namespace SmartParking.UserService.Tests;
 /// <summary>Exercises the documented deployment order without the legacy test overlays.</summary>
 public sealed class SessionSchemaReconciliationTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ConsolidatedBaseIsCompleteAndLegacyNullSessionsRemainImmutable()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
