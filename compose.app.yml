@@ -7,6 +7,9 @@ x-backend-env: &backend-env
   Services__User: http://user-service:8080/
   Services__Parking: http://facility-service:8080/
   Services__Reservation: http://operation-service:8080/
+  MediaStorage__Cloudinary__CloudName: ${SMARTPARK_CLOUDINARY_CLOUD_NAME:-}
+  MediaStorage__Cloudinary__ApiKey: ${SMARTPARK_CLOUDINARY_API_KEY:-}
+  MediaStorage__Cloudinary__ApiSecret: ${SMARTPARK_CLOUDINARY_API_SECRET:-}
 
 # Future consumer authentication contract only; middleware is a later task.
 # HTTP here is confined to the local-development Docker network.
@@ -32,6 +35,7 @@ services:
     image: smartpark/user-service:local
     environment:
       <<: *backend-env
+      MediaStorage__Enabled: ${SMARTPARK_USER_MEDIA_ENABLED:-false}
       ConnectionStrings__User: "Host=user-db;Port=5432;Database=smartpark_user;Username=smartpark_user;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       DevelopmentAdmin__Email: ${SMARTPARK_ADMIN_EMAIL:-admin@smartpark.local}
       DevelopmentAdmin__Password: ${SMARTPARK_ADMIN_PASSWORD:?Set SMARTPARK_ADMIN_PASSWORD}
@@ -63,7 +67,13 @@ services:
       SMARTPARK_RABBITMQ_PASSWORD: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
       SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
-      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-}
+      Cors__AllowedOrigins: ${SMARTPARK_USER_CORS_ORIGINS:-http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443}
+      # Cloudflare Turnstile Bot Protection (SPARK-257)
+      Turnstile__Enabled: ${SMARTPARK_TURNSTILE_ENABLED:-true}
+      Turnstile__SecretKey: ${SMARTPARK_TURNSTILE_SECRET_KEY:-}
+      Turnstile__ExpectedHostnames__0: localhost
+      Turnstile__ExpectedHostnames__1: 127.0.0.1
+      Turnstile__ExpectedHostnames__2: ::1
     ports:
       - "127.0.0.1:5035:8080"
     volumes:
@@ -159,6 +169,7 @@ services:
       VITE_PAYMENT_API_BASE_URL: http://localhost:5065
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
+      VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "127.0.0.1:5173:5173"

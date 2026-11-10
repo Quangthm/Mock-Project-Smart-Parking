@@ -15,8 +15,11 @@ function load(file, imports = {}, globals = {}) {
     if (name === 'react-dom') return { createPortal: content => content };
     if (name.endsWith("/ui/RoundedSelect")) return { RoundedSelect: "select" };
     if (name.endsWith("/ui/PageHeader")) return { PageHeader: "page-header" };
-    if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" };
+    if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" }; if (name.endsWith("/ui/Badge")) return { Badge: "badge" };
+    if (name.endsWith("/forms/PasswordVisibilityIcon")) return { PasswordVisibilityIcon: "password-icon" };
+    if (name.endsWith("/ui/Button")) return { Button: "button" };
     if (name.endsWith("/icon/UntitledIcon")) return { UntitledIcon: 'icon' };
+    if (name.endsWith("/feedback/ErrorBoundary")) return { ErrorBoundary: ({ children }) => children };
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];
   } };
@@ -51,8 +54,12 @@ function hooks() {
 }
 function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
+  let nested = [];
+  if (typeof tree.type === 'function') {
+    try { const res = tree.type(tree.props); if (res) nested = [res]; } catch {}
+  }
   const children = tree.props?.children;
-  return [tree, ...[children, tree.props?.actions].flat(Infinity).flatMap(nodes)];
+  return [tree, ...[children, tree.props?.actions, ...nested].flat(Infinity).flatMap(nodes)];
 }
 const permissions = ['DEVICE_STATUS_VIEW', 'DEVICE_MANAGE', 'CASH_COLLECT', 'APPEAL_REVIEW', 'SLOT_OVERRIDE'];
 
@@ -307,9 +314,20 @@ function structureScreen(h, parkingApi = {}) {
     '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
     '../../../lib/uiToast': { showUiToast() {} },
     '../data/data': { ownerData: { getLotsByOwner: () => [] } },
-    '../../../lib/3d/parking3DConfig': { ALLOWED_PARKING_MODELS: {} },
+    '../../../lib/3d/parking3DConfig': { ALLOWED_PARKING_MODELS: { outdoor: { path: '/models/outdoor.glb' } } },
+    '../../../lib/3d/modelSlotCapacity': { useModelStructure: () => ({ url: '', analysis: null, loading: false, error: '' }) },
     '../../../lib/3d/ownerModelStorage': { loadOwnerModelUrl: async () => null },
     '../../../lib/operationalLayout': { formatSlotLabel: value => value, mapSlotVisualState: () => 'available' },
+    '../../../lib/3d/meshSlotMapping': { suggestSlotCode: () => '' },
+    '../../../lib/structureRules': load('lib/structureRules.ts'),
+    './AccessPathsPanel': { AccessPathsPanel: () => null },
+    './CapacitySummary': { CapacitySummary: () => null },
+    './RegisteredSlotsPanel': { RegisteredSlotsPanel: props => h.runtime.jsx('div', { 'aria-label': `Space ${props.slots?.[0]?.code}` }) },
+    './ServiceAvailabilityPanel': { ServiceAvailabilityPanel: () => null },
+    './SlotCompatibilityDialog': { SlotCompatibilityDialog: () => null },
+    './SlotRegistrationPanel': { SlotRegistrationPanel: () => null },
+    './StructureTree': { StructureTree: () => null },
+    './StructureFeedback': { structureErrorMessage: err => err?.message || String(err) },
   }).ParkingStructure;
 }
 

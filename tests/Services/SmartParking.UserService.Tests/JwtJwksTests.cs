@@ -273,7 +273,7 @@ public sealed class JwtJwksTests
             {
                 ["ConnectionStrings:User"] = "Host=127.0.0.1;Database=unused_jwks_tests;Username=unused",
                 ["Services:Parking"] = "http://parking.test/", ["Services:Key"] = new string('x', 40),
-                ["Messaging:Enabled"] = "false", ["Jwt:Issuer"] = options.Issuer, ["Jwt:Audience"] = options.Audience,
+                ["Messaging:Enabled"] = "false", ["Turnstile:Enabled"] = "false", ["Jwt:Issuer"] = options.Issuer, ["Jwt:Audience"] = options.Audience,
                 ["Jwt:PrivateKeyPem"] = options.PrivateKeyPem, ["Jwt:PrivateKeyPemBase64"] = options.PrivateKeyPemBase64,
                 ["Jwt:KeyId"] = options.KeyId, ["Jwt:JwksPath"] = options.JwksPath,
                 ["Workflow:KeyDirectory"] = environment == "Production" ? Path.GetTempPath() : null

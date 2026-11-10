@@ -11,7 +11,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class IdentityRegressionTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RefreshWinningAfterLogoutAuthenticationCannotKeepLogicalSessionAlive()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
@@ -39,7 +39,7 @@ public sealed class IdentityRegressionTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task LegacyOperatorTimedOrAdminUnlockCannotBypassContactVerification()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
@@ -70,7 +70,7 @@ public sealed class IdentityRegressionTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RoleDefaultsNeverOverrideExplicitEmptyOrBackupMarkOptIn()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();var clock=new TestClock();

@@ -32,7 +32,7 @@ public sealed class DirectRolePersistenceTests
         Assert.DoesNotContain("account_roles", db.Accounts.Include(a => a.Role).ToQueryString());
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task CanonicalSetupSeedsAndEnforcesDirectRolesWithoutLegacyOverlays()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;

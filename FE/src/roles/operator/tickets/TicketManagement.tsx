@@ -172,7 +172,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
         </div>
       )}
       {actionFeedback && (
-        <div role="status" className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-xs text-green-600 font-medium">
+        <div role="status" className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/10 p-3.5 text-base sm:text-sm text-[var(--available)] font-medium">
           <div className="flex items-center gap-2">
             <UntitledIcon name="check-circle" size={16} />
             <span>{actionFeedback}</span>
@@ -198,7 +198,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
               : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]"
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-blue-600">
+          <div className="flex items-center justify-between text-base sm:text-sm font-semibold text-[var(--primary)]">
             <span>Awaiting Review (Open)</span>
             <span className="h-2 w-2 rounded-full bg-blue-500" />
           </div>
@@ -214,7 +214,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
               : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]"
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-amber-600">
+          <div className="flex items-center justify-between text-base sm:text-sm font-semibold text-[var(--pending)]">
             <span>In Progress</span>
             <span className="h-2 w-2 rounded-full bg-amber-500" />
           </div>
@@ -230,7 +230,7 @@ export function TicketManagement({ siteId }: { siteId: string }) {
               : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]"
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-green-600">
+          <div className="flex items-center justify-between text-base sm:text-sm font-semibold text-[var(--available)]">
             <span>Decided / Resolved</span>
             <span className="h-2 w-2 rounded-full bg-green-500" />
           </div>

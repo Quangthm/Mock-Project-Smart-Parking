@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Usecases.Operations.Commands.ExecuteStructureOperation;
+using SmartParking.FacilityService.Application.Usecases.Operations.Queries.GetStructureOperation;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Tests;
@@ -61,9 +64,15 @@ public sealed class StructureOperationAndEditHandlerTests
         Assert.Equal("B01", structure.Slots[0].Code);
         Assert.Equal(zone2, structure.Slots[0].UnitId);
 
-        StructureEditHandler.Apply(structure, new StructureEdit("configureSlot", ResourceId: slotId, VehicleType: VehicleType.MOTORCYCLE, SlotType: SlotType.STANDARD, Coordinates3D: "{\"x\":1}", Features: "{\"ev\":true}"));
+        StructureEditHandler.Apply(structure, new StructureEdit("configureSlot", ResourceId: slotId, VehicleType: VehicleType.MOTORCYCLE, SlotType: SlotType.STANDARD));
         Assert.Equal(VehicleType.MOTORCYCLE, structure.Slots[0].VehicleType);
-        Assert.Equal("{\"x\":1}", structure.Slots[0].Coordinates3D);
+        Assert.Equal(new[] { VehicleType.MOTORCYCLE }, structure.Slots[0].VehicleTypes);
+
+        // Geometry and features are server-owned: non-null values are rejected instead of persisted.
+        var geometry = Assert.Throws<StructureException>(() => StructureEditHandler.Apply(structure, new StructureEdit(
+            "configureSlot", ResourceId: slotId, VehicleType: VehicleType.MOTORCYCLE, SlotType: SlotType.STANDARD, Coordinates3D: "{\"x\":1}")));
+        Assert.Equal("INVALID_STRUCTURE", geometry.Code);
+        Assert.Equal("Slot geometry comes from the lot's fixed 3D template.", geometry.Message);
     }
 
     [Fact]
@@ -114,35 +123,45 @@ public sealed class StructureOperationAndEditHandlerTests
     }
 
     [Fact]
-    public async Task StructureOperationService_ThrowsOnEmptyKeyOrUnsupportedAction()
+    public async Task ExecuteStructureOperationCommandHandler_ThrowsOnEmptyKeyOrUnsupportedAction()
     {
         var owner = new OwnerScope(Guid.NewGuid(), Guid.NewGuid());
         var siteId = Guid.NewGuid();
         var authorizer = new FakeAuthorizer();
         var store = new FakeOperationStore();
         var planner = new FakePlanner();
-        var service = new StructureOperationService(store, planner, null!, authorizer);
+        var scopeResolver = new FakeScopeResolver(owner);
+        var logger = NullLogger<ExecuteStructureOperationCommandHandler>.Instance;
+        var handler = new ExecuteStructureOperationCommandHandler(scopeResolver, store, planner, null!, authorizer, logger);
 
         await Assert.ThrowsAsync<StructureException>(() =>
-            service.ExecuteAsync(owner, siteId, Guid.Empty, new StructureEdit("removeSlot"), CancellationToken.None));
+            handler.Handle(new ExecuteStructureOperationCommand(siteId, Guid.Empty, new StructureEdit("removeSlot")), CancellationToken.None));
 
         await Assert.ThrowsAsync<StructureException>(() =>
-            service.ExecuteAsync(owner, siteId, Guid.NewGuid(), new StructureEdit("unknownAction"), CancellationToken.None));
+            handler.Handle(new ExecuteStructureOperationCommand(siteId, Guid.NewGuid(), new StructureEdit("unknownAction")), CancellationToken.None));
     }
 
     [Fact]
-    public async Task StructureOperationService_ReadAsync_AuthorizesAndReturns()
+    public async Task GetStructureOperationQueryHandler_ReadAsync_AuthorizesAndReturns()
     {
         var owner = new OwnerScope(Guid.NewGuid(), Guid.NewGuid());
         var siteId = Guid.NewGuid();
         var opId = Guid.NewGuid();
         var authorizer = new FakeAuthorizer();
         var store = new FakeOperationStore { Existing = new StructureOperation(opId, siteId, "completed", null, null) };
-        var service = new StructureOperationService(store, new FakePlanner(), null!, authorizer);
+        var scopeResolver = new FakeScopeResolver(owner);
+        var logger = NullLogger<GetStructureOperationQueryHandler>.Instance;
+        var handler = new GetStructureOperationQueryHandler(scopeResolver, authorizer, store, logger);
 
-        var result = await service.ReadAsync(owner, siteId, opId, CancellationToken.None);
+        var result = await handler.Handle(new GetStructureOperationQuery(siteId, opId), CancellationToken.None);
         Assert.Equal(opId, result.Id);
         Assert.True(authorizer.WasAuthorized);
+    }
+
+    private sealed class FakeScopeResolver(OwnerScope scope) : IOwnerScopeResolver
+    {
+        public Task<OwnerScope> ResolveAsync(Guid? tenantId, CancellationToken cancellationToken, string requiredPermission = "PARKING_MANAGE")
+            => Task.FromResult(scope);
     }
 
     private sealed class FakeAuthorizer : IOwnerAuthorizer

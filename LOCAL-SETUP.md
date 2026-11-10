@@ -32,7 +32,7 @@ Checklist trước khi setup:
 | **Schema volume** | Named volume Docker giữ dữ liệu PostgreSQL. Xóa volume = mất dữ liệu dev. |
 | **Runner** | `scripts/run-schema-service.ps1` chạy một API với biến môi trường nạp từ `.env`. |
 | **user-secrets** | Kho secret .NET cho Visual Studio/`dotnet run`; setup đồng bộ từ `.env` ở `[5/7]`. |
-| **Canonical script** | SQL baseline trong `scripts/database/microservices` + overlay, được mount theo thứ tự của compose. |
+| **Canonical script** | SQL baseline trong `scripts/database/microservices` (các script overlay trước đây đã được gộp hoàn toàn vào các file này). |
 | **Sentinel** | Bảng/cột đánh dấu schema đã đúng để runner biết có cần áp migration hay không. |
 | **Block-list** | Danh sách script legacy bị runner chặn, không được áp lại. |
 
@@ -375,7 +375,7 @@ Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết
 
 ### 7.2 Schema baseline, overlay và script legacy
 
-- Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service), tiếp theo overlay trong `scripts/database/overlay` theo đúng thứ tự mount của `compose.schema-integration.yml`.
+- Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service). Toàn bộ các overlay trước đây đã được hợp nhất trực tiếp vào các file canonical này theo đúng thứ tự khởi tạo của `compose.schema-integration.yml`.
 - Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
 - `docker-compose.yml` (compose monolith cũ, port `5433`, container `smartparking_db`) và `scripts/database/docker-compose-smartpark.yml` **đã bị xoá** khỏi repo. Database được tạo bằng `compose.schema-integration.yml` thông qua `setup.ps1`.
 
@@ -390,6 +390,15 @@ PostgreSQL chỉ chạy init SQL khi volume **mới hoàn toàn**. Với volume 
 | Schema cũ (có bảng cũ nhưng thiếu sentinel) | Dừng và yêu cầu `.\setup.ps1 -RecreateDb` |
 
 Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ liệu đang dùng. Volume đã init theo baseline mới chạy lại `.\setup.ps1` là an toàn (migration skip và chỉ verify).
+
+**Sau khi `git pull` một branch có thay đổi SQL:** volume đã tồn tại **không** tự nhận script mới — phải chạy lại bước migration. Runner probe trạng thái và verify bảng bắt buộc (Parking hiện gồm `structure_maintenance_windows`, Reservation gồm `site_capacity_pools`):
+
+```powershell
+.\setup.ps1 -SkipRestore                                        # cả 6 DB + đồng bộ user-secrets
+.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .   # hoặc chỉ một DB
+```
+
+Rebuild image app là bước **riêng** (migration không build lại service): xem [QUICK_START.md](QUICK_START.md#8-pull-branch-mới--cập-nhật-image-service-và-schema-db).
 
 #### Volume cũ thiếu bảng overlay
 
@@ -464,3 +473,8 @@ Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skill
 Mã nguồn, project và namespace dùng tên OperationService. Chạy bằng -Service Operation; -Service Reservation vẫn là alias tương thích. Giữ UserSecretsId SmartParking.ReservationService.API.LocalDevelopment, các khóa ConnectionStrings:Reservation / Services:Reservation và biến SMARTPARK_*RESERVATION*. Compose dùng service/image operation-service; hostname reservation-service vẫn là network alias tương thích. Build arg là OperationService. Port API 5055, database smartpark_operations và các HTTP route giữ nguyên.
 
 Sau khi pull, chạy dotnet restore SmartParking.slnx và dotnet build SmartParking.slnx. Với Docker, chạy scripts/run-app-service.ps1 -Service Operation để build lại image; không dùng -NoBuild cho lần đầu sau đổi tên.
+# Cloudinary media configuration (SPARK-373)
+
+Add `SMARTPARK_CLOUDINARY_CLOUD_NAME`, `SMARTPARK_CLOUDINARY_API_KEY`, `SMARTPARK_CLOUDINARY_API_SECRET` and `SMARTPARK_USER_MEDIA_ENABLED=false` manually to an existing ignored `.env`. Use development credentials from a private source; setup never generates them. Keep provider values out of frontend variables and logs. Four .NET services and both Python processes receive the shared credential; only UserService receives the activation switch.
+
+Rerun `./setup.ps1 -SkipDatabase -SkipRestore` to synchronize changed values or remove blank/missing values from user-secrets. Restart host processes; recreate affected app containers with `./scripts/run-app-service.ps1 -Service <X|All> -NoBuild` and AI containers through the usual AI launcher. No volume reset is required. Team imports preserve conflict handling. See the [complete environment map](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md#cloudinary-development-media-settings-spark-373) and [pending automatic-deletion work](docs/05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md).

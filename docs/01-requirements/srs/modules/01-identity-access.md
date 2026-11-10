@@ -99,6 +99,8 @@ Vehicle removal is soft removal only. Reject removal while active reservations, 
 
 Reject conflicting active normalized-plate binding without disclosing the other account. Admin reviews verified contact, relevant registration/transfer evidence and scoped Operator findings; notify existing holder. Never transfer for nonresponse alone; unresolved cases stay pending/escalated. User & Access performs the guarded change and preserves historical associations.
 
+**SPARK-243 claim-image clarification — approved 7 November 2026:** associate the submitted owned photo with the claimant's pending registration submission, without creating an active vehicle or changing the incumbent's binding. Claimant access is Account-scoped; explicitly authorized reviewer access comes with UC-VEH-02 adjudication. The existing image deadline is not extended by a pending claim. Claim-specific preservation is deferred under [VEH-CLAIM-HOLD-01](../../../05-project-management/decision-log/2026-11-07-vehicle-claim-images.md). Implementation remains pending.
+
 ### FR-VEH-03
 
 **Status:** CONFIRMED — implementation pending / not assessed  
@@ -177,3 +179,7 @@ SEC-01/SEC-02 are approved by the PM on 13 October 2026. [Authentication recover
 
 
 Design/implementation owners and exit criteria: [V11-DES-01–04, 06–07 and 10–11](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.
+
+## SPARK-243 registration delivery boundary — 8 November 2026
+
+Approved registration categories are CAR and MOTORCYCLE, with multiple distinct vehicles per Account. CAR-only applies to Specific Slot reservation eligibility, not UserService registration. An equivalent plate bound to another Account creates only the claimant's private PENDING_DISPUTE submission; the incumbent keeps the same vehicle ID, binding and existing rights. Intake does not execute full adjudication, notification or transfer. FR-VEH-02 remains confirmed, with UC-VEH-02 adjudication deferred. No automatic promotion on retry, silence, removal or image expiry. External M5 CAR-only registration wording is flagged for its document owner; external source material was not edited.

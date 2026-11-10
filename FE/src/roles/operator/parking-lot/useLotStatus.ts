@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { DemoSlotSession, OperatorSite, OperatorSlot } from "../../../lib/operatorApi"
 import { parkingApi } from "../../../lib/parkingApi"
-import type { SlotStatus } from "../../../lib/types"
+import type { LotType, SlotStatus } from "../../../lib/types"
 import {
   isLayoutStale,
   layoutAgeSeconds,
@@ -12,6 +12,18 @@ import {
   type SlotVisualState,
   type SlotVisualStateDto,
 } from "../../../lib/operationalLayout"
+
+/**
+ * Maps a numeric floor selection to the GLB node key used by the 3D model's
+ * floor-isolation pass. `"all"` and lot types without a modelled floor layout
+ * resolve to `"all"` so nothing is hidden.
+ */
+export function floorKeyFor(lotType: LotType | undefined | null, floor: number | "all"): string {
+  if (floor === "all") return "all"
+  if (lotType === "basement") return floor === 1 ? "B1" : floor === 2 ? "B2" : `B${floor}`
+  if (lotType === "multi-storey") return floor === 1 ? "G" : floor === 2 ? "L1" : floor === 3 ? "L2" : `L${floor - 1}`
+  return "all"
+}
 
 /**
  * Kept as the legacy six-value vocabulary so existing callers keep compiling.
@@ -222,7 +234,7 @@ export function useLotStatus(
   options: UseLotStatusOptions = {},
 ) {
   const [viewMode, setViewMode] = useState<ViewMode>("3d")
-  const [selectedFloor, setSelectedFloor] = useState<number>(1)
+  const [selectedFloor, setSelectedFloor] = useState<number | "all">(1)
   const [selectedZone, setSelectedZone] = useState<string>("all")
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<"all" | "car" | "motorcycle">("all")
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
@@ -340,7 +352,7 @@ export function useLotStatus(
         const floor = parent?.type === "FLOOR"
           ? site.units.filter((unit) => unit.type === "FLOOR").findIndex((unit) => unit.id === parent.id) + 1
           : 1
-        return isOutdoor || floor === selectedFloor
+        return isOutdoor || selectedFloor === "all" || floor === selectedFloor
       })
   }, [site, isOutdoor, selectedFloor])
 
@@ -487,7 +499,7 @@ export function useLotStatus(
   )
 
   const filteredSlots = useMemo(() => allSlots.filter((slot) => {
-    if (!isOutdoor && slot.floor !== selectedFloor) return false
+    if (!isOutdoor && selectedFloor !== "all" && slot.floor !== selectedFloor) return false
     if (selectedZone !== "all") {
       let unit = site?.units.find((item) => item.id === slot.unitId)
       while (unit && unit.id !== selectedZone) {
