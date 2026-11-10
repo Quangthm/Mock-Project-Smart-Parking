@@ -9,7 +9,7 @@ public sealed partial class ReadTools
         Func<CancellationToken, Task> dispatch, CancellationToken ct)
     {
         Require(account);
-        var english = conversation.Locale == "en";
+        var english = conversation.Locale == "en" && !ParkingSearch.IsVietnameseRequest(text);
         if (!options.Search)
             return Reply("unavailable", english ? "Live parking search is unavailable." : "Tra cứu bãi đỗ hiện chưa khả dụng.");
         string? cursor = null;
@@ -31,8 +31,7 @@ public sealed partial class ReadTools
         }
         var query = ParkingSearch.Parse(text);
         if (query is null)
-            return Reply("clarification", english ? "Enter one origin as latitude,longitude and a vehicle type, e.g. find parking car near 10.77,106.70."
-                : "Hãy nhập một điểm xuất phát và loại xe, ví dụ: tìm bãi ô tô gần 10.77,106.70.");
+            return Reply("clarification", ParkingSearch.Clarification(text, english));
         try
         {
             await dispatch(ct);
@@ -44,12 +43,17 @@ public sealed partial class ReadTools
                 .Append(new ParkingPageCard("parking_page", page.NextCursor, original, page.AsOf)).ToArray();
             return Reply(page.Items.Length == 0 ? "empty" : "answered",
                 page.Items.Length == 0
-                    ? (english ? "No parking sites are proven to match these filters." : "Chưa có bãi được xác nhận đáp ứng các bộ lọc này.")
+                    ? (english ? "No parking sites were confirmed to match these filters." : "Không tìm thấy bãi nào được xác nhận phù hợp với bộ lọc đã gửi.")
                     : (english ? "Parking search results from SmartPark." : "Kết quả tìm bãi do SmartPark cung cấp."), cards);
         }
         catch (OwnerReadFailure error)
         {
-            return Reply(error.Code, english ? "SmartPark could not complete this search." : "SmartPark chưa hoàn tất tra cứu.");
+            return Reply(error.Code, error.Code switch
+            {
+                "invalid" => english ? "The parking search API rejected the filters. Check the location, filters and time range." : "API tìm bãi từ chối bộ lọc. Hãy kiểm tra tọa độ, bộ lọc và khung giờ.",
+                "timeout" => english ? "The parking search API timed out. Please try again." : "API tìm bãi phản hồi quá thời gian chờ. Bạn có thể thử lại.",
+                _ => english ? "The parking search API could not return results. Please try again." : "API tìm bãi gặp lỗi khi trả kết quả. Bạn có thể thử lại."
+            });
         }
     }
 

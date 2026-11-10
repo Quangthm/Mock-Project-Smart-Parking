@@ -95,9 +95,21 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
             // At most 19 result cards plus paging metadata, five safe actions; each displayed ID remains owner-issued.
             var actions = result.Items.Take(5).Select(r => new GuestAction("view_reservation", r.Id)).ToArray();
             var range = from is null ? "" : $" [{from:O}, {to:O}) UTC; Asia/Ho_Chi_Minh.";
-            return Reply(result.Items.Length == 0 ? "empty" : "answered", (en ? "Reservation records from the owner service." : "Lịch đặt từ dịch vụ quản lý đặt chỗ.") + range, cards, actions);
+            var content = result.Items.Length == 0
+                ? (en ? "No reservations found for this request." : "Không tìm thấy lịch đặt cho yêu cầu này.")
+                : (en ? "Reservation records from the owner service." : "Lịch đặt từ dịch vụ quản lý đặt chỗ.");
+            return Reply(result.Items.Length == 0 ? "empty" : "answered", content + range, cards, actions);
         }
-        catch (OwnerReadFailure error) { return Reply(error.Code, en ? "The owner service could not complete this read. No empty-result claim is made." : "Dịch vụ dữ liệu chưa hoàn tất tra cứu; đây không phải kết quả không có dữ liệu."); }
+        catch (OwnerReadFailure error)
+        {
+            return Reply(error.Code, error.Code switch
+            {
+                "login_required" => en ? "Please sign in again to continue." : "Bạn hãy đăng nhập lại để tiếp tục tra cứu.",
+                "forbidden" => en ? "Your account cannot access this data." : "Tài khoản của bạn không có quyền xem dữ liệu này.",
+                "not_found" when detail.Success => en ? "Reservation not found." : "Không tìm thấy lịch đặt này.",
+                _ => en ? "The owner service could not complete this read." : "Dịch vụ dữ liệu gặp lỗi khi tra cứu."
+            });
+        }
     }
     private void Require(Guid account)
     {
