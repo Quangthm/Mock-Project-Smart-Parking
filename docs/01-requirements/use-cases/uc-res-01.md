@@ -13,6 +13,12 @@ Create a parking reservation.
 
 Authenticated eligible Driver with vehicle and reviewed terms.
 
+## Authorization and pending-workflow boundary — approved 2026-11-04
+
+Create reservation is REQUEST. Authenticate locally, atomically admit pending workflow plus outbox and return pending before final outcome. The business flow below requires accepted Account-current Allowed at final confirmation; any provisional capacity claim before Allowed requires separate approval. The existing five-minute payment hold does not authorize a speculative authorization hold.
+
+See the [operation matrix](../srs/authorization-operation-classification.md) and [mandatory REQUEST design checklist](../srs/authorization-operation-classification.md#5-implementation-documentation-checklist). Specify branch eligibility, correlation/attempts, pending observation, combined outcomes, deadlines, idempotency, revocation race, pivot, compensation and late/unknown handling before implementing the affected workflow. This amendment approves direction, not a completed Saga or wire contract.
+
 ## Main flow
 
 1. Validate 15-minute minimum, 24-hour maximum, 7-day horizon, same-vehicle compatibility, restrictions and optional lot cap.

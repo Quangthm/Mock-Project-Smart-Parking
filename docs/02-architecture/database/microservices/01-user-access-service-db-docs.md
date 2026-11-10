@@ -12,11 +12,21 @@ The [21 October V11-06 clarification](../../../05-project-management/decision-lo
 
 ## 0. Deployment profile
 
+### SPARK-373 User image amendment — 7 November 2026
+
+UserDb now owns `media_assets` and `media_holds`, plus nullable local FKs `users.avatar_asset_id` and `vehicles.image_asset_id`. Avatar ownership is User-scoped; vehicle ownership is the exact creator Driver Account and owned target/draft. The composite creator FK preserves User/Account ownership. Unique scoped upload keys and provider locators, concurrency versions, pending-work and retention indexes support reconciliation. Provider credentials and signed URLs are never stored in these rows.
+
+Admission records immutable byte hash/type/size/dimensions, provider identity and policy timestamps. Unattached drafts expire after 24 hours; attached images after 30 days from admission. Holds retain independent origin, actor, reason/reference and acknowledgement/review/release metadata. Automatic deletion and operational hold-versus-delete integration remain [USER-MEDIA-CLEANUP-01](../../../05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md); timestamps and expired-read checks are implemented now.
+
+Fresh SQL includes the additive media schema. For initialized supported databases, `scripts/apply-workflow-migrations.ps1` performs the existing session/outbox preflight, applies the bounded media section of `microservices/01-user-access-service-db.sql` even when the old base is current, then runs `test/verify-user-media-schema.sql` alongside existing verification. The canonical media section is transactional and rerunnable; it does not reset volumes, auto-run at API startup, drop old columns or fetch/backfill URLs. Review [database rollout instructions](../../../../scripts/database/README.md#user-image-upgrade-and-rollback-spark-373).
+
+`avatar_url`/`image_url` remain for reconciliation/rollback. Existing terms (`system_terms_and_conditions.document_url`), accepted `terms_id`, `lot_setup` and `draft_structure` are separate from uploaded applicant evidence. No terms or Partner-version table migration is included; DB25 stays deferred under the approved Partner PDF policy.
+
 | Hạng mục | Giá trị |
 |---|---|
 | Database vật lý | `smartpark_user` (PostgreSQL 16, port `5441`) |
 | Base DDL | [`01-user-access-service-db.sql`](../../../../scripts/database/microservices/01-user-access-service-db.sql) |
-| SPARK-248 current DDL layout | Current `feat/SPARK-248-manage-own-profile` integrates the session/Account binding and MassTransit framework DDL directly into base `01-user-access-service-db.sql`; the earlier separate `13-own-profile-session-account.sql` / `14-user-profile-outbox.sql` paths are no longer present in the current `scripts/database/microservices/` branch layout. Treat the base file as the recorded fresh-install definition; existing/partial databases still require reviewed migration rather than replay. |
+| Canonical UserDb layout | Base `01-user-access-service-db.sql` contains the runtime User, Account-bound session, replay-proof, MFA, Owner setup, and MassTransit inbox/outbox schema. Fresh setup applies this base and runs the read-only verifier. Existing/partial databases still require a separately reviewed migration rather than replay. |
 | Deployment status | Base hiện tạo trực tiếp `accounts.role_code`; người vận hành thực hiện reset/recreate development DB sau khi review. Không có ALTER migration cho thay đổi role |
 | Runtime deviation | `roles` seed 7 mã thay vì 4 mã SRS; xem §5 |
 
@@ -50,6 +60,7 @@ Client → API Gateway (JWT RS256)
 - `accounts` = bản thể vận hành, gắn với tenant/site, một `user` có thể có nhiều `account`; mỗi `account` có đúng một vai trò qua `role_code` bắt buộc.
 - Tất cả cross-service references (đến Parking Service, Reservation Service…) sử dụng **Logical ID** lưu dưới dạng `UUID`, không enforce bằng FK vật lý.
 - Ba bảng quoted-name `"InboxState"`, `"OutboxState"`, `"OutboxMessage"` là **framework persistence của MassTransit**, không phải business aggregate của User & Access. Application không đọc/ghi trực tiếp các bảng này để thực hiện nghiệp vụ; mapping được đăng ký bởi `AddTransactionalOutboxEntities()` và runtime outbox được cấu hình qua `AddEntityFrameworkOutbox<AppDbContext>()`.
+- `OperatorAccessChanged` là integration event có `SchemaVersion` và `AggregateVersion`, được publish bằng scoped EF Bus Outbox. Consumer `smartpark-user-access-projection-v1` dùng EF inbox/deduplication rồi chỉ gửi SignalR invalidation hint; client phải tải lại trạng thái có thẩm quyền. Payload/access version không thay thế kiểm tra User, Account, Role và session hiện tại.
 - `workflow_deliveries` là trạng thái delivery ở cấp ứng dụng cho workflow OTP/notification; nó **không thay thế** MassTransit transactional outbox tables và không nên được mô tả như cùng một storage concern.
 
 ---
@@ -93,6 +104,7 @@ Lưu trữ **thông tin định danh vật lý của một con người** trong 
 | `avatar_url` | `TEXT NULL` | URL ảnh đại diện của người dùng; được phép sửa qua profile-edit flow thông thường | Legacy URL column; target is authorized User-owned upload/asset reference per media contract (DB18/DB25) | FR-AUTH-03 |
 | `failed_login_attempts` | `INT NOT NULL DEFAULT 0` | Đếm số lần nhập sai thông tin đăng nhập **liên tiếp**. Khi đạt ngưỡng 3, tài khoản bị khóa tạm thời. Reset về 0 sau mỗi lần đăng nhập thành công | Tăng 1 mỗi khi authentication thất bại; reset khi thành công | FR-AUTH-02; §3.1.1; §4.3 (lockout 3 lần) |
 | `locked_until` | `TIMESTAMPTZ NULL` | Thời điểm kết thúc khóa tạm thời do brute-force. `NULL` khi tài khoản không bị khóa tạm. Sau thời điểm này, tài khoản tự động cho phép đăng nhập lại mà không cần Admin can thiệp | Gán = `NOW() + INTERVAL '15 minutes'` tại lớp Application khi `failed_login_attempts` đạt ngưỡng (§4.3) | FR-AUTH-02; §3.1.1; §4.3 |
+| `access_version` | `BIGINT NOT NULL DEFAULT 0` | Phiên bản access state dùng để phát hành sự kiện thay đổi quyền truy cập có thứ tự; không tự quyết định request authorization | Application increments it with the relevant access mutation | Access-event contract |
 | `email_verified_at` | `TIMESTAMPTZ NULL` | Thời điểm email được xác thực thành công qua mã OTP | Application gán = `NOW()` khi xác thực thành công | FR-AUTH-03 |
 | `phone_verified_at` | `TIMESTAMPTZ NULL` | Thời điểm số điện thoại được xác thực thành công qua mã OTP | Application gán = `NOW()` khi xác thực thành công | FR-AUTH-03 |
 | `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` | Trạng thái vòng đời của tài khoản người dùng. `PENDING_VERIFICATION`: Chờ xác thực OTP. `REJECTED`: Bị từ chối duyệt | Mặc định `ACTIVE` khi tạo. Chỉ Admin được thay đổi `status`, không phải customer | FR-AUTH-02; FR-AUTH-05; FR-AUTH-06 |
@@ -190,12 +202,12 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 |---|---|---|
 | `FK_accounts_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa luôn toàn bộ account của user đó |
 | `accounts_role_code_fkey` | `FOREIGN KEY (role_code) REFERENCES roles(code) ON DELETE RESTRICT` | Không cho xóa Role đang được Account tham chiếu; Account bắt buộc có một Role hợp lệ |
-| `chk_accounts_status` | `CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL'))` | Giới hạn trạng thái account hợp lệ |
+| `chk_accounts_status` | `CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED', 'PENDING_APPROVAL', 'PENDING_VERIFICATION'))` | Giới hạn trạng thái account hợp lệ |
 | `idx_accounts_user_id` | `user_id` | Tra cứu nhanh toàn bộ account của một user |
 | `idx_accounts_role_code` | `role_code` (nonunique) | Tra cứu Account theo Role; nhiều Account được phép dùng cùng Role |
 | `idx_accounts_tenant_id` | `tenant_id` | Liệt kê toàn bộ account thuộc một tenant (dùng khi Owner/Admin quản lý) |
 | `idx_accounts_site_id` | `site_id` | Liệt kê account Operator được gắn vào một site cụ thể |
-| `AK_accounts_id_user_id` (script 13) | `UNIQUE (id, user_id)` | Principal key cho composite session ownership FK; không giới hạn số Account của một User |
+| `AK_accounts_id_user_id` | `UNIQUE (id, user_id)` | Principal key cho composite session ownership FK; không giới hạn số Account của một User |
 
 ### 4.5 Ghi chú Quan hệ & Cross-service
 
@@ -322,7 +334,7 @@ Quản lý vòng đời của cặp token JWT (Access Token + Refresh Token) the
 - Hỗ trợ revocation: khi logout, `is_revoked = true` để invalidate token ngay lập tức mà không cần đợi hết hạn.
 - Liên kết device/IP để phát hiện đăng nhập bất thường.
 
-Base01 định nghĩa vòng đời token. Script 13 bổ sung binding `(account_id, user_id)` tới đúng Account và chủ sở hữu; cả hai giá trị bất biến sau khi tạo session. Session mới bắt buộc được Application gắn Account. Cột `account_id` vẫn nullable để giữ nguyên legacy rows; các session thiếu binding phải đăng nhập lại và không được backfill bằng cách đoán Account. Script 14/outbox và read-only verifier là prerequisite riêng như §0.
+Base01 định nghĩa vòng đời token, binding `(account_id, user_id)` tới đúng Account và chủ sở hữu, immutability trigger, replay proof, và MassTransit framework state. Session mới bắt buộc được Application gắn Account. Cột `account_id` vẫn nullable để giữ nguyên legacy rows; các session thiếu binding phải đăng nhập lại và không được backfill bằng cách đoán Account. Fresh setup applies only base01; the read-only verifier checks the resulting schema. Existing/partial databases require a separately reviewed migration.
 
 ### 7.2 Traceability Mapping
 
@@ -338,14 +350,15 @@ Base01 định nghĩa vòng đời token. Script 13 bổ sung binding `(account_
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ | Nguồn gốc dữ liệu / Cách sinh | Mapping SRS |
 |---|---|---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh duy nhất của bản ghi token | Tự sinh bởi `uuid_generate_v4()` | — |
-| `user_id` | `UUID NOT NULL` | FK đến user sở hữu token, đồng thời thuộc composite Account ownership FK của script 13; bất biến sau khi tạo session | Gán bằng `users.id` của user đang đăng nhập | FR-AUTH-02 |
-| `account_id` (script 13) | `UUID NULL` | Account chính xác gắn session; cùng `user_id` tham chiếu `accounts(id,user_id)`. NULL chỉ tương thích lưu trữ legacy session không còn dùng để truy cập | Application chọn Account hợp lệ khi login; refresh giữ nguyên binding | FR-AUTH-02; FR-AUTH-06 |
+| `user_id` | `UUID NOT NULL` | FK đến user sở hữu token, đồng thời thuộc composite Account ownership FK; bất biến sau khi tạo session | Gán bằng `users.id` của user đang đăng nhập | FR-AUTH-02 |
+| `account_id` | `UUID NULL` | Account chính xác gắn session; cùng `user_id` tham chiếu `accounts(id,user_id)`. NULL chỉ tương thích lưu trữ legacy session không còn dùng để truy cập | Application chọn Account hợp lệ khi login; refresh giữ nguyên binding | FR-AUTH-02; FR-AUTH-06 |
 | `token_hash` | `VARCHAR(255) NOT NULL` | Giá trị băm của Refresh Token (plain-text Refresh Token **không** được lưu) | Sinh bởi Application: `SHA-256(raw_refresh_token)` | §4.3 (Security) |
 | `device_info` | `VARCHAR(255) NULL` | Thông tin thiết bị (user-agent string, tên thiết bị). Dùng để hiển thị danh sách session | Trích xuất từ HTTP `User-Agent` header | §4.3 (Security monitoring) |
 | `ip_address` | `VARCHAR(45) NULL` | IP của client tại thời điểm đăng nhập | Trích xuất từ request tại API Gateway / Application | §4.3 |
 | `expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Refresh Token hết hạn | Target: absolute session-start + 7 days; enforce 24-hour inactivity separately; mapping pending DB26 | §3.1.4; §4.3 |
 | `access_token_id` | `UUID NOT NULL` | Định danh duy nhất của Access Token tương ứng (JWT claim `jti`) | Sinh bởi Application khi tạo JWT; gán vào JWT claim `jti` | FR-AUTH-02; §3.1.4 |
 | `access_expires_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm Access Token hết hạn | Target: issuance + 15 minutes; DB26 alignment pending | §3.1.4; §4.3 |
+| `last_refreshed_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Mốc refresh gần nhất phục vụ inactivity policy | Set on session creation and updated on successful refresh | §3.1.4 |
 | `is_revoked` | `BOOLEAN NOT NULL DEFAULT false` | Cờ revocation: `true` khi token bị vô hiệu hóa trước hạn | Application set = `true` tại logout hoặc force-revoke | FR-AUTH-02; FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cấp token (login time) | Tự sinh bởi database | — |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật (thường là khi revoke) | Application cập nhật khi `is_revoked` thay đổi | — |
@@ -355,14 +368,16 @@ Base01 định nghĩa vòng đời token. Script 13 bổ sung binding `(account_
 | Tên / Index | Định nghĩa / Cột | Ý nghĩa |
 |---|---|---|
 | `FK_user_refresh_tokens_users` | `REFERENCES users(id) ON DELETE CASCADE` | Xóa user thì xóa toàn bộ token |
-| `FK_user_refresh_tokens_accounts_account_id_user_id` (script 13) | `FOREIGN KEY (account_id, user_id) REFERENCES accounts(id, user_id) ON DELETE RESTRICT` | Không cho session gắn Account của User khác; không xóa Account đang được session tham chiếu |
-| `IX_user_refresh_tokens_account_id_user_id` (script 13) | `(account_id, user_id)` | Tra cứu binding và hỗ trợ FK |
-| `tr_auth_session_account_binding` (script 13) | `BEFORE UPDATE OF account_id, user_id` | Từ chối thay đổi Account/User binding, kể cả NULL legacy; không chặn token rotation/revocation hợp lệ |
+| `FK_user_refresh_tokens_accounts_account_id_user_id` | `FOREIGN KEY (account_id, user_id) REFERENCES accounts(id, user_id) ON DELETE RESTRICT` | Không cho session gắn Account của User khác; không xóa Account đang được session tham chiếu |
+| `IX_user_refresh_tokens_account_id_user_id` | `(account_id, user_id)` | Tra cứu binding và hỗ trợ FK |
+| `tr_auth_session_account_binding` | `BEFORE UPDATE OF account_id, user_id` | Từ chối thay đổi Account/User binding, kể cả NULL legacy; không chặn token rotation/revocation hợp lệ |
 | `uq_user_refresh_tokens_hash` | `UNIQUE(token_hash)` | Unique token hash |
 | `uq_user_refresh_tokens_access` | `UNIQUE(access_token_id)` | Unique access token ID |
 | `chk_expires_at_valid` | `CHECK (expires_at > created_at)` | Đảm bảo token không bao giờ được tạo với `expires_at` trong quá khứ |
 | `idx_user_refresh_tokens_user_id` | `user_id` | Tra cứu toàn bộ token của một user (dùng khi logout tất cả thiết bị) |
 | `idx_user_refresh_tokens_expires_at` | `expires_at` | Hỗ trợ cleanup job: xóa hàng loạt token đã hết hạn |
+
+`rotated_session_proofs` stores consumed access-token IDs and their session/user proof data so refresh replay checks remain available after token rotation. Its `session_id` and `user_id` foreign keys cascade on deletion; the table and indexes are part of canonical base01.
 
 ---
 
@@ -447,7 +462,7 @@ Quản lý các phiên bản điều khoản dịch vụ và thỏa thuận phá
 
 ### 9B.1 Mục đích nghiệp vụ
 
-Partner Registration retains the Owner role and persists a pending User/Account/application immediately. The combined first-lot setup and consented mandatory VNeID simulation precede email OTP; verified email precedes combined Admin approval/rejection. Approval and successful provisioning precede normal Owner login; lot opening stays separate. Existing `draft_structure`/terms columns are recorded evidence, not proof of document upload/versioning, simulation or provisioning. DB25–DB27 track those gaps. Additional lots require independent proposal identities; the existing one-per-user constraint must not be misrepresented as supporting that flow.
+Partner Registration retains the Owner role and persists a pending User/Account/application immediately. The combined first-lot setup and consented mandatory VNeID simulation precede email OTP; verified email precedes combined Admin approval/rejection. Approval and successful provisioning precede normal Owner login; lot opening stays separate. Owner onboarding state is represented by the authoritative application, account and provisioning records; there is no generic `users.onboarding_complete` flag. Existing `draft_structure`/terms columns are recorded evidence, not proof of document upload/versioning, simulation or provisioning. DB25–DB27 track those gaps. Additional lots require independent proposal identities; the existing one-per-user constraint must not be misrepresented as supporting that flow.
 
 ### 9B.2 Traceability Mapping
 
@@ -472,6 +487,10 @@ Partner Registration retains the Owner role and persists a pending User/Account/
 | `tenant_id` | `UUID NULL` | FK liên kết đến `tenants.id` được tạo ra sau khi Admin duyệt đơn (`ON DELETE SET NULL`) | Gán bằng ID của tenant mới tạo khi duyệt đơn | FR-AUTH-05 |
 | `site_id` | `UUID NULL` | Logical ID của bãi xe được khởi tạo ở trạng thái `PENDING_APPROVAL` bên Facility & Visualization Service | Application sinh trước hoặc lấy từ Facility Service | FR-LOT-01 |
 | `draft_structure` | `JSONB NULL` | Snapshot cấu hình bãi dự kiến (Zone, Floor, Capacity) lúc đăng ký | Frontend gửi lên dưới dạng JSON | §3.2.3 |
+| `lot_setup` | `JSONB NULL` | Canonical Owner initial-lot setup state | Application stores the approved setup payload | Owner setup |
+| `setup_token_hash` | `TEXT NULL` | Hashed, scoped setup credential; raw token is not persisted | Application hashes the issued token | Owner setup |
+| `setup_token_expires_at` | `TIMESTAMPTZ NULL` | Expiry of the scoped setup credential | Application assigns expiry | Owner setup |
+| `approval_requested_by` | `UUID NULL` | User who requested approval after completing setup | Application records the authenticated requester | Owner setup |
 | `status` | `VARCHAR(20) NOT NULL DEFAULT 'pending'` | Trạng thái xử lý đơn. `pending`: chờ Admin xem xét. `approved`: final review approval, distinct from provisioning and operational opening (DB27). `rejected`: bị từ chối | `'pending'` khi tạo; Admin cập nhật thành `'approved'` hoặc `'rejected'` | FR-AUTH-05 |
 | `submitted_at` | `TIMESTAMPTZ NOT NULL` | Thời điểm nộp đơn chính thức | Do Application gán = `NOW()` khi user submit | FR-AUTH-05 |
 | `reviewed_at` | `TIMESTAMPTZ NULL` | Thời điểm Admin xem xét và ra quyết định. `NULL` khi `status = 'pending'` | Do Application gán = `NOW()` khi Admin cập nhật `status` | FR-AUTH-05 |
@@ -644,7 +663,9 @@ Ba bảng framework được tạo trực tiếp trong current base `01-user-acc
 
 Đây là **transport/framework persistence**, không phải business entity để controller/Application query trực tiếp. MassTransit sở hữu schema semantics và lifecycle của các hàng này. User & Access chỉ tương tác qua publish/send abstraction và transaction/DbContext đã được cấu hình.
 
-Current SPARK-248 `ProfileOutboxRegistration` đặt `QueryDelay = 1 second`, tắt inbox cleanup service vì UserService hiện **publish-only**, và dùng `Messaging:OutboxDeliveryEnabled` để có thể giữ delivery service disabled cho tới khi durable RabbitMQ topology được provision/verify. Việc tắt delivery service không biến các message đã commit thành “đã publish”; trạng thái database và broker delivery phải được phân biệt.
+`ProfileOutboxRegistration` đặt `QueryDelay = 1 second` và dùng `Messaging:OutboxDeliveryEnabled` để có thể giữ producer delivery service disabled cho tới khi durable RabbitMQ topology được provision/verify. Khi `Messaging:Enabled` bật, access-event consumer chạy với EF inbox/outbox middleware trên cùng `AppDbContext`; consumer state không phải projection authority. Việc tắt producer delivery service không biến các message đã commit thành “đã publish”; trạng thái database và broker delivery phải được phân biệt.
+
+The versioned `OperatorAccessChanged` contract carries `EventId`, `SchemaVersion`, `AggregateId`, `AggregateVersion`, `OccurredAt`, `OperationId`, `ActorId`, `TenantIds` and `Status`. Its EF Bus Outbox write commits with the originating UserDb mutation. The consumer sends only a SignalR invalidation hint; clients reload authoritative state and never use this event as an authorization decision. The retained endpoint is `smartpark-user-access-projection-v1`; MassTransit EF inbox state provides message/consumer deduplication.
 
 RabbitMQ topology là concern riêng với PostgreSQL persistence. Script provisioning profile-audit hiện cấu hình durable fanout exchange `smartpark.user-access.user-profile-name-changed.v1`, durable queue `smartpark.notification-audit.user-profile-name-changed.v1`, và binding tương ứng; các exchange/queue này **không phải database tables**.
 
@@ -661,7 +682,7 @@ Không dùng `workflow_deliveries` thay cho MassTransit outbox và không dùng 
 
 ### 13.3 Bảng `"InboxState"` — MassTransit consumer inbox state
 
-Current DDL vẫn materialize `"InboxState"` vì `AddTransactionalOutboxEntities()` đăng ký framework entities đầy đủ, dù current UserService profile messaging path là publisher-only và runtime tắt inbox cleanup service.
+Current DDL materializes `"InboxState"` for the enabled access-event consumer's MassTransit EF inbox as well as the framework model.
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa framework |
 |---|---|---|
@@ -770,7 +791,7 @@ Key invariants:
 - Database commit and durable outbox persistence are coordinated through the configured EF outbox; application code must not implement a second hand-written RabbitMQ publish-after-commit path for the same event.
 - A committed `"OutboxMessage"` is evidence that the message is durably pending/recorded in UserDb, **not** by itself proof that RabbitMQ or a downstream consumer has processed it.
 - `"Delivered"` is framework transport state; do not reinterpret it as business acceptance.
-- Current UserService messaging configuration is publisher-only. The presence of `"InboxState"` in the schema follows MassTransit framework registration and does not imply that UserService currently owns a message consumer.
+- UserService publishes versioned access-change events and consumes them only to send realtime invalidation hints. The event consumer does not own an authoritative access projection.
 - Keep quoted table/column casing exact. These framework mappings intentionally do not follow the snake_case convention used by User & Access business tables.
 - Do not hand-edit framework rows or redefine their schema independently of the MassTransit version/model configuration.
 
@@ -855,3 +876,17 @@ MassTransit framework persistence:
 | Extension | Lý do sử dụng |
 |---|---|
 | `uuid-ossp` | Cung cấp hàm `uuid_generate_v4()` để sinh UUID v4 làm primary key |
+
+## SPARK-243 canonical schema and persistence boundary
+
+The only SQL file changed for this feature is `scripts/database/microservices/01-user-access-service-db.sql`. It declares the final columns, tables, checks and indexes with `CREATE ... IF NOT EXISTS`. There is no vehicle upgrade script, overlay, `ADD COLUMN`, database vehicle function or revision trigger. Replaying on an already aligned schema is idempotent; `IF NOT EXISTS` does **not** reshape an older table or prove its definition matches. No existing/shared database is automatically updated, reset or repaired.
+
+Explicit user-approved exceptions are limited to: (1) the three circular media foreign keys added after both tables exist, guarded by the constraint catalogue; (2) the pre-existing `protect_auth_session_account_binding` function/trigger, preventing a persisted session from being moved to another User or Account even by non-EF writers; and (3) the idempotent fixed role catalogue seed. The Account ownership alternate key and all noncircular constraints are declared inside their CREATE TABLE statements.
+
+`vehicles.id` remains stable. `vehicle_registration_claims` is UserService-owned, with Account and media FKs and one open row per `(account_id, normalized_plate)`. `media_assets.registration_claim_id` is distinct from the upload-worker lease `claim_id` and `vehicle_id`. Pending images cannot become active vehicle attachments. Reads validate the exact claimant Account and asset reference.
+
+Vehicle binding revision is a mapped optimistic concurrency property. `UnitOfWork.SaveChangesAsync` advances it when tracked Account/normalized plate/category/removal fields change, preserving it for image/raw-format changes. All future binding writers must use repositories and this UoW; direct SQL/ExecuteUpdate bypasses revision maintenance and is not a supported binding-write path. Driver identity-changing edits remain disabled until Operations dependency coordination exists. No distributed booking lock is implied by the revision.
+
+Registration handlers coordinate the active-plate invariant through the vehicle repository and a short UoW transaction. The repository owns parameterized PostgreSQL locking/targeted INSERT; it never commits. Claims and photo association commit atomically before the API returns a conflict. Domain owns supported identity and narrow metadata mutations. The schema retains global active-plate uniqueness, including live null-owner rows; historical-only ownership remains blocked for reconciliation.
+
+For deployment use a newly provisioned or independently confirmed aligned schema, and follow the [checklist](../../../04-testing/reports/SPARK-243-deployment-checklist.md). Do not apply archival `05.8` or the now-removed prototype overlay. Existing installations with older columns or the prototype vehicle trigger require an explicitly reviewed owner-led transition; this task does not provide or authorize that transition.

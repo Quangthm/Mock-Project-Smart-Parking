@@ -19,6 +19,7 @@ import { extractOwnerPolicyPdfSections } from "../../../lib/ownerPolicyPdfTempla
 import { deleteOwnerPolicySectionDocument, deleteOwnerPolicySectionText, getOwnerPolicySectionDocuments, getOwnerPolicySectionTexts, ownerPolicySections, saveOwnerPolicySectionText, starterOwnerPolicyText, type OwnerPolicySectionDocuments, type OwnerPolicySectionId, type OwnerPolicySectionTexts } from "../../../lib/policySections"
 
 type DepositMode = "percentage" | "fixed"
+type PolicyPanel = "document" | "sections" | "platform" | "pricing"
 
 interface PolicyState {
   pricingEnabled: boolean
@@ -97,6 +98,7 @@ export function PolicySettings({
   })
 
   const [saved, setSaved] = useState(false)
+  const [activePanel, setActivePanel] = useState<PolicyPanel>("document")
 
   // Owner parking lots & PDF Policy state
   const ownerLots = useMemo(
@@ -402,6 +404,20 @@ export function PolicySettings({
       aria-labelledby="policy-settings-title"
     >
       <PageHeader id="policy-settings-title" eyebrow="Owner tools" title="Policy Settings" description="Manage owner documents by topic and review separate SmartParking platform policies." />
+      <div className="policy-flow-nav" role="group" aria-label="Policy sections">
+        <button type="button" className={activePanel === "document" ? "is-active" : ""} aria-pressed={activePanel === "document"} aria-controls="owner-policy-document" onClick={() => setActivePanel("document")}><span className="policy-flow-number">01</span><strong>Owner PDF</strong><small>{currentPdf?.fileData ? "Document uploaded" : "Start with the template"}</small></button>
+        <button type="button" className={activePanel === "sections" ? "is-active" : ""} aria-pressed={activePanel === "sections"} aria-controls="owner-policy-sections" onClick={() => setActivePanel("sections")}><span className="policy-flow-number">02</span><strong>Owner sections</strong><small>Edit rules by topic</small></button>
+        <button type="button" className={activePanel === "platform" ? "is-active" : ""} aria-pressed={activePanel === "platform"} aria-controls="platform-policy" onClick={() => setActivePanel("platform")}><span className="policy-flow-number">03</span><strong>Platform rules</strong><small>Read-only SmartParking policies</small></button>
+        <button type="button" className={activePanel === "pricing" ? "is-active" : ""} aria-pressed={activePanel === "pricing"} aria-controls="pricing-policy-settings" onClick={() => setActivePanel("pricing")}><span className="policy-flow-number">04</span><strong>Pricing & deposit</strong><small>Review calculation settings</small></button>
+      </div>
+
+      {(activePanel === "document" || activePanel === "sections") && <div className="policy-scope-bar">
+        <label htmlFor="policy-lot-scope">Applies to</label>
+        <RoundedSelect id="policy-lot-scope" className="input" value={selectedLotId} onChange={event => handleLotChange(event.target.value)}>
+          <option value="all">All Sites (Default)</option>
+          {ownerLots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}
+        </RoundedSelect>
+      </div>}
 
       {pdfNotice && (
         <div
@@ -415,7 +431,9 @@ export function PolicySettings({
 
       {/* PDF Policy Document Upload & Management Section */}
       <section
-        className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 space-y-4"
+        id="owner-policy-document"
+        hidden={activePanel !== "document"}
+        className="policy-content-panel rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 space-y-4"
         aria-label="Owner policy documents"
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--border)] pb-4">
@@ -429,32 +447,10 @@ export function PolicySettings({
               </span>
             </div>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Complete the Owner policy template, upload one PDF, then review the imported section drafts below.
+              Complete the Owner policy template, upload one PDF, then review the imported drafts in Owner sections.
             </p>
           </div>
 
-          {/* Scope / Lot selector */}
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="policy-lot-scope"
-              className="text-xs font-medium text-[var(--muted)] whitespace-nowrap"
-            >
-              Applies to:
-            </label>
-            <RoundedSelect
-              id="policy-lot-scope"
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg)] outline-none"
-              value={selectedLotId}
-              onChange={(e) => handleLotChange(e.target.value)}
-            >
-              <option value="all">All Sites (Default)</option>
-              {ownerLots.map((lot) => (
-                <option key={lot.id} value={lot.id}>
-                  {lot.name}
-                </option>
-              ))}
-            </RoundedSelect>
-          </div>
         </div>
 
         {/* Current Document Status Card */}
@@ -541,7 +537,7 @@ export function PolicySettings({
         </p>
       </section>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="owner-policy-sections-heading">
+      <section id="owner-policy-sections" hidden={activePanel !== "sections"} className="policy-content-panel rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="owner-policy-sections-heading">
         <h2 id="owner-policy-sections-heading" className="text-lg font-semibold text-[var(--fg)]">Owner Policies by Section</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">Edit the starter text directly on this page, then save each section. Site-specific content takes priority over the all-sites version.</p>
         <p className="mt-1 text-xs text-[var(--muted)]">Saved text is visible to Drivers in this browser profile.</p>
@@ -564,14 +560,16 @@ export function PolicySettings({
         </div>
       </section>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="platform-policy-heading">
+      <section id="platform-policy" hidden={activePanel !== "platform"} className="policy-content-panel rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6" aria-labelledby="platform-policy-heading">
         <h2 id="platform-policy-heading" className="text-lg font-semibold text-[var(--fg)]">Platform Policies</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">SmartParking manages these documents. Owners can review them here; site uploads do not replace them.</p>
         <div className="mt-4 flex flex-wrap gap-2">{([{ label: "Terms of Service", view: "terms" }, { label: "Privacy Policy", view: "privacy" }, { label: "Payment & Refund", view: "payment-refund" }] as const).map(item => <button key={item.view} type="button" className="btn-outline" onClick={() => handleOpenPreview("platform", item.view)}>{item.label}</button>)}</div>
       </section>
 
       <section
-        className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]"
+        id="pricing-policy-settings"
+        hidden={activePanel !== "pricing"}
+        className="policy-content-panel overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]"
         aria-label="Pricing and deposit policy settings"
       >
         <div className="overflow-x-auto">

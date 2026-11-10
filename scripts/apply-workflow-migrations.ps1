@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
@@ -22,18 +22,10 @@ $scripts = @{
     )
     Parking = @(
         'microservices/02-facility-service-db.sql',
-        'microservices/03a-parking-structure-ops-service-db.sql',
-        'overlay/parking-tenants.sql',
-        'overlay/parking-structure-synchronizations.sql',
-        'overlay/parking-operator-tables.sql',
-        'overlay/parking-slot-constraints.sql'
+        'microservices/03a-parking-structure-ops-service-db.sql'
     )
     Reservation = @(
-        'microservices/03b-reservation-operations-service-db.sql',
-        'overlay/reservation-site-capacity-pools.sql',
-        'overlay/reservation-structure-safety.sql',
-        'overlay/reservation-structure-receipts.sql',
-        'overlay/reservation-confirmation-time.sql'
+        'microservices/03b-reservation-operations-service-db.sql'
     )
     Payment = @(
         'microservices/04-payment-pricing-service-db.sql'
@@ -49,7 +41,7 @@ $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation=
 $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
-    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs')
+    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows')
     Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts')
     Payment = @()
     Notification = @()
@@ -59,9 +51,9 @@ $required = @{
 # this database. Index for User (partial unique on normalized_plate), table elsewhere.
 $sentinel = @{ User='uq_active_vehicle_plate'; Parking='tenants'; Reservation='site_capacity_pools'; Payment='payment_orders'; Notification='notification_templates'; Iot='devices' }[$Service]
 
-# Block list: legacy 05.x workflow scripts and integration/* alignment scripts are
+# Block list: remaining legacy 05.1–05.12 workflow scripts and integration/* alignment scripts are
 # superseded by the new base files + overlays; applying them would double-apply or conflict.
-$blockedPattern = '(^|[\\/])05\.[1-9][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
+$blockedPattern = '(^|[\\/])05\.(?:[1-9]|1[0-2])[-.][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
 foreach ($script in $scripts) {
     $relative = "scripts/database/$script"
     if ($relative -match $blockedPattern) {
@@ -100,24 +92,30 @@ if ($state -eq 'empty') {
     }
 }
 
-# These incremental features are not included in the canonical baseline.
-# Apply on both empty and current databases; each migration is re-runnable.
-$features = switch ($Service) {
-    'User' { '05.13-Mfa-Lifecycle.sql'; '05.14-Identity-Access-Hardening.sql'; '05.15-Owner-Onboarding.sql' }
-    'Parking' { '05.16-Parking-Owner-Onboarding.sql' }
-    default { }
-}
-foreach ($feature in $features) {
-    $sql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$feature") -Raw
-    $sql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
-    if ($LASTEXITCODE -ne 0) { throw "Feature migration failed for $Service at $feature." }
-}
 
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.
+if ($Service -eq 'User') {
+    # The existing session/outbox preflight intentionally accepts a pre-media
+    # database. Reuse only the bounded, rerunnable media section of the canonical
+    # base; replaying the whole initialization script against existing data is unsafe.
+    $userSql = Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/microservices/01-user-access-service-db.sql') -Raw
+    $mediaStart = $userSql.IndexOf('-- SPARK-373 additive', [StringComparison]::Ordinal)
+    $mediaEnd = $userSql.IndexOf('-- END SPARK-373 media schema', [StringComparison]::Ordinal)
+    if ($mediaStart -lt 0 -or $mediaEnd -le $mediaStart) { throw 'Canonical User media SQL section is missing or invalid; no media upgrade applied.' }
+    $userSql.Substring($mediaStart, $mediaEnd - $mediaStart) | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User media upgrade failed; preserve data and reconcile before retrying. No volume reset is required.' }
+    Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-media-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
+}
 foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
-    if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') { throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts." }
+    if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') {
+        if ($Service -eq 'Parking' -and $table -eq 'owner_onboarding_provisions') {
+            throw 'Missing required Facility relation owner_onboarding_provisions. Existing Facility data requires a separately reviewed migration; do not replay the base schema or recreate database volumes unless a reset is explicitly authorized.'
+        }
+        throw "Missing required $Service relation $table; the database does not match the canonical schema. Run .\setup.ps1 -RecreateDb to rebuild it from the canonical scripts."
+    }
 }
 if ($Service -eq 'User') {
     Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-access-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1

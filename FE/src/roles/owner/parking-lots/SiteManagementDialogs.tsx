@@ -4,6 +4,7 @@ import { SiteForm } from "./SiteForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import type { SiteManagementModel } from "./useSiteManagement"
 import { formatStatus } from "../../../lib/formatStatus"
+import { useDialogKeyboard } from "../../../components/ui/useDialogKeyboard"
 
 export function SiteManagementDialogs({ model }: { model: SiteManagementModel }) {
   const {
@@ -11,6 +12,12 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
     inspectSite, setInspectSite, assignModal, setAssignModal, assignBusy, assignError,
     handleSavedSite, handleConfirmAssign,
   } = model
+  const activeDialog = showFormModal ? "form" : assignModal ? "assign" : inspectSite ? "roster" : null
+  const dialogRef = useDialogKeyboard(activeDialog, () => {
+    if (showFormModal) { setShowFormModal(false); setEditingSite(undefined) }
+    else if (assignModal && !assignBusy) setAssignModal(null)
+    else if (inspectSite) setInspectSite(null)
+  })
   return (
     <>
       {/* Modal 1: Site Create/Edit Modal */}
@@ -18,11 +25,9 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
         typeof document !== "undefined" &&
         createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
           >
-            <div className="relative w-full max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={editingSite ? `Edit ${editingSite.name}` : "Add parking site"} tabIndex={-1} className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
               <SiteForm
                 key={editingSite?.id ?? "new"}
                 site={editingSite}
@@ -42,26 +47,25 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
         typeof document !== "undefined" &&
         createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
             onClick={(e) => {
               if (e.target === e.currentTarget && !assignBusy) setAssignModal(null)
             }}
           >
-            <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-[var(--fg)] space-y-4 animate-in">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Assign staff to facility" tabIndex={-1} className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-[var(--fg)] space-y-4 animate-in">
               <div className="flex items-start justify-between border-b border-[var(--border)] pb-3">
                 <div>
                   <h3 className="text-base font-bold text-[var(--fg)]">
                     Assign Staff to Facility
                   </h3>
-                  <p className="text-xs text-[var(--muted)]">
+                  <p className="text-base sm:text-sm text-[var(--muted)]">
                     Facility: <strong>{assignModal.targetSite.name}</strong>
                   </p>
                 </div>
                 <button
                   type="button"
-                  className="text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
+                  aria-label="Close assignment dialog"
+                  className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--fg)] cursor-pointer"
                   onClick={() => setAssignModal(null)}
                   disabled={assignBusy}
                 >
@@ -70,12 +74,12 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
               </div>
 
               {assignError && (
-                <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
+                <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-base sm:text-sm text-[var(--occupied)]">
                   {assignError}
                 </div>
               )}
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5 space-y-3 text-xs">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3.5 space-y-3 text-base sm:text-sm">
                 <div>
                   <label className="label mb-1" htmlFor="assign-operator-select">
                     Select Operator:
@@ -112,7 +116,7 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
 
                   return (
                     <div className="border-t border-[var(--border)] pt-2 space-y-1">
-                      <span className="text-[var(--muted)] block text-[11px]">
+                      <span className="text-[var(--muted)] block text-base sm:text-sm">
                         Current site duties:
                       </span>
                       <span className="font-medium text-[var(--fg)]">
@@ -124,10 +128,10 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
               </div>
 
               {/* Warning confirmation notice */}
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-base sm:text-sm text-[var(--pending)]">
                 <UntitledIcon name="alert" size={15} className="shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  Confirming assignment authorizes this operator to monitor barrier controls, manage check-in tickets, and supervise slots at <strong>{assignModal.targetSite.name}</strong>.
+                  Site reassignment is unavailable until the service provides an assignment endpoint. Existing operator assignments are unchanged.
                 </p>
               </div>
 
@@ -144,9 +148,9 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
                   type="button"
                   className="btn-primary text-xs px-4 py-2 font-medium"
                   onClick={handleConfirmAssign}
-                  disabled={assignBusy || !assignModal.selectedOpId}
+                  disabled
                 >
-                  {assignBusy ? "Confirming…" : "Confirm Assignment"}
+                  Assignment unavailable
                 </button>
               </div>
             </div>
@@ -159,33 +163,32 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
         typeof document !== "undefined" &&
         createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
             onClick={(e) => {
               if (e.target === e.currentTarget) setInspectSite(null)
             }}
           >
-            <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-[var(--fg)] space-y-4 animate-in">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${inspectSite.name} staff roster`} tabIndex={-1} className="relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-[var(--fg)] space-y-4 animate-in">
               <div className="flex items-start justify-between border-b border-[var(--border)] pb-3">
                 <div>
                   <h3 className="text-base font-bold text-[var(--fg)]">
                     {inspectSite.name} — Staff Roster
                   </h3>
-                  <p className="text-xs text-[var(--muted)]">
+                  <p className="text-base sm:text-sm text-[var(--muted)]">
                     {inspectSite.address}
                   </p>
                 </div>
                 <button
                   type="button"
-                  className="text-[var(--muted)] hover:text-[var(--fg)] cursor-pointer"
+                  aria-label="Close staff roster"
+                  className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--fg)] cursor-pointer"
                   onClick={() => setInspectSite(null)}
                 >
                   <UntitledIcon name="x" size={16} />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-3 text-xs">
+              <div className="flex-1 overflow-y-auto space-y-3 text-base sm:text-sm">
                 {(() => {
                   const assigned = operators.filter((op) =>
                     op.siteIds.includes(inspectSite.id),
@@ -209,10 +212,10 @@ export function SiteManagementDialogs({ model }: { model: SiteManagementModel })
                             {op.fullName.charAt(0)}
                           </div>
                           <div>
-                            <div className="font-semibold text-xs text-[var(--fg)]">
+                            <div className="font-semibold text-base sm:text-sm text-[var(--fg)]">
                               {op.fullName}
                             </div>
-                            <div className="text-[10px] text-[var(--muted)] font-mono">
+                            <div className="text-base sm:text-sm text-[var(--muted)] font-mono break-all">
                               {op.email}
                             </div>
                           </div>

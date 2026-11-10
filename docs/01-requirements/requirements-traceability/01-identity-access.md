@@ -25,3 +25,16 @@ Original IDs retained; SEC-01/02 adds5 FRs,4 rules,3 UCs and3 cross-role stories
 ## v1.1 decision and acceptance links
 
 V11-01–04, V11-06–07, V11-11; D01–10, D12: [exact changed clauses, API/architecture contracts and acceptance scenarios](v1.1-decision-coverage.md). Existing IDs are retained; these associations describe requirements, not implementation/test completion.
+
+## Authorization freshness amendment — 2026-11-04
+
+FR-AUTH-06 and BR-AUTH-01/07 retain their IDs with revised freshness semantics; BR-AUTH-03 resource ownership remains mandatory; FR-AUTH-02/04 and recovery rules retain UserService local authority. See the [operation matrix](../srs/authorization-operation-classification.md), [ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [AF-001–AF-014 acceptance/coverage map](../../04-testing/requirements-traceability/authorization-freshness-scenarios.md). The map covers affected reservation, gate and plan use cases without inventing missing modify/reschedule APIs. Existing product permissions remain unchanged; no implementation/test completion asserted.
+
+
+## SPARK-243 implementation coverage — 8 November 2026
+
+FR-VEH-01/03: CAR/MOTORCYCLE registration, original input, exact Account ownership, owned images and safe metadata edits are implemented in the working tree. FR-VEH-02: incumbent protection and private PENDING_DISPUTE intake only; adjudication/transfer remain deferred. FR-VEH-04: CAR-only Specific Slot picker is implemented; Operations reservation enforcement remains its own slice. These narrower facts supersede “not assessed” only for this delivered scope; full requirement acceptance is not claimed.
+
+US-D09 / SPARK-243 (224–227) links [API](../../03-design/api/vehicle-registration-api-design.md), [executed test evidence](../../04-testing/reports/SPARK-243-vehicle-registration-2026-11-08.md) and [acceptance scenarios](../../04-testing/requirements-traceability/acceptance-scenarios.md#vehicle-registration-scenarios). AC-098 removal is separately deferred. Live provider/browser acceptance is pending by explicit user decision; no cross-service booking preservation run is claimed.
+
+The subsequent 8 November architecture correction replaces service/store forwarding with MediatR handlers, repositories and IUnitOfWork. Earlier PostgreSQL results require rerun; current evidence is explicitly separated in the linked report. The original schema file is consolidated, without a feature upgrade overlay.

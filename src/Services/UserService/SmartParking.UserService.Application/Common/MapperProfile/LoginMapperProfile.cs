@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using UserService.Application.DTOs;
 using UserService.Application.Usecase.Login;
 
@@ -18,6 +18,7 @@ namespace UserService.Application.Common.MapperProfile
             CreateMap<LoginCommand, LoginDto>()
                 .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.Email))
                 .ForMember(dest => dest.Password, opt => opt.MapFrom(src => src.Password))
+                .ForMember(dest => dest.TurnstileToken, opt => opt.MapFrom(src => src.TurnstileToken))
                 .ReverseMap();
         }
     }

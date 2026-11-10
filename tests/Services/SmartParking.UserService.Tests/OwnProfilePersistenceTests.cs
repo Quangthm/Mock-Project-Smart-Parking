@@ -14,7 +14,7 @@ namespace SmartParking.UserService.Tests;
 /// <summary>Real PostgreSQL profile behavior, separate from deterministic authorization race tests.</summary>
 public sealed class OwnProfilePersistenceTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task TrackedLoaderRefreshesStaleStateAndPreservesPendingWork()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -32,7 +32,7 @@ public sealed class OwnProfilePersistenceTests
         Assert.Equal("Pending company", user.CompanyName);
         Assert.Equal(Microsoft.EntityFrameworkCore.EntityState.Modified, db.Entry(user).State);
     }
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task SharedUserNameAndLegacyAvatarRoundTripWithoutChangingOtherFields()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -79,7 +79,7 @@ public sealed class OwnProfilePersistenceTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ApprovedScalarBoundaryMatchesPostgresCapacityAndRejectsOverflowBeforeMutation()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -104,7 +104,7 @@ public sealed class OwnProfilePersistenceTests
         Assert.Equal(1, await verify.Set<MassTransit.EntityFrameworkCoreIntegration.OutboxMessage>().CountAsync());
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ACurrentLockedAccountIsDeniedDespiteAnotherEligibleAccount()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -156,7 +156,7 @@ public sealed class OwnProfilePersistenceTests
             db.AuthSessions.Add(new AuthSession
             {
                 Id = Guid.NewGuid(), UserId = userId, AccountId = account, AccessTokenId = token,
-                TokenHash = token.ToString("N"), CreatedAt = clock.Now,
+                TokenHash = token.ToString("N"), CreatedAt = clock.Now, LastRefreshedAt = clock.Now,
                 AccessExpiresAt = clock.Now.AddHours(1), ExpiresAt = clock.Now.AddDays(1)
             });
         await db.SaveChangesAsync();

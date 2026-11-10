@@ -7,6 +7,8 @@ import { AuthApiError } from "../../../lib/authApi"
 import { restoreOwnerRegistration, ownerRegistrationStage, type PendingOwnerRegistration } from "../../../lib/ownerRegistration"
 import { OwnerRegistrationRecovery } from "../../authentications/Sign Up/OwnerRegistrationRecovery"
 import { GroupedNumberInput } from "../../../components/forms/GroupedNumberInput"
+import { RoundedSelect } from "../../../components/ui/RoundedSelect"
+import { CITIES, DISTRICTS_BY_PROVINCE } from "../../../lib/vietnamAdministrativeUnits"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { formatGroupedDigits } from "../../../lib/groupedDigits"
 
@@ -20,11 +22,12 @@ import {
   ALLOWED_PARKING_MODELS,
   validateModelUpload,
 } from "../../../lib/3d/parking3DConfig"
-import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { useModelCarCapacity, useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
-import { loadContractDraft, saveContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
-import { PartnerContractDialog } from "../../../components/modals/PartnerContractDialog"
+import { contractDraftStorageKey, loadContractDraft, saveOwnerContractHandoff, type ContractDraftRecord } from "../../../lib/partnerContract"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ParkingLocationPicker, validParkingCoordinates, type ParkingCoordinates } from "../../../components/ui/ParkingLocationPicker"
+import { WardField } from "../../../components/forms/WardField"
 
 type OnboardStep = 1 | 2 | 3 | 4 | 5
 
@@ -128,9 +131,15 @@ export function OnboardingWizard({
   const [lotConfig, setLotConfig] = useState({
     name: "",
     address: "",
-    totalSlots: "",
     floors: "",
   })
+  const [provinceCode, setProvinceCode] = useState<string>(CITIES[0].code)
+  const [district, setDistrict] = useState("")
+  const [ward, setWard] = useState("")
+  const [selectedLocation, setSelectedLocation] = useState<ParkingCoordinates | null>(null)
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false)
+  const [otherDistrict, setOtherDistrict] = useState(false)
+  const address = [lotConfig.address.trim(), ward.trim(), district.trim(), CITIES.find(city => city.code === provinceCode)?.name].filter(Boolean).join(", ")
 
   const [devices, setDevices] = useState<Record<string, boolean>>({
     camera: false,
@@ -151,7 +160,6 @@ export function OnboardingWizard({
 
   const [systemPolicyAccepted, setSystemPolicyAccepted] = useState(false)
   const [contractDraft, setContractDraft] = useState<ContractDraftRecord | null>(() => registration ? loadContractDraft(registration.id) : null)
-  const [showContract, setShowContract] = useState(false)
   const [showModelPreview, setShowModelPreview] = useState(false)
 
   const [completionError, setCompletionError] = useState("")
@@ -174,11 +182,50 @@ export function OnboardingWizard({
   const activeModelUrl = customModelUrl || activeModelDef.path
 
   const activeModelFileName = customModelFileName || activeModelDef.fileName
-  const setupFingerprint = JSON.stringify({ lotType, lotConfig, devices, pricing, customModelFileName })
+  const setupFingerprint = JSON.stringify({ lotType, lotConfig, provinceCode, district, ward, selectedLocation, devices, pricing, customModelFileName })
   const activeContractDraft = contractDraft?.setupFingerprint === setupFingerprint ? contractDraft : null
+
+  useEffect(() => {
+    if (!registration) return
+    const syncContract = () => {
+      const latest = loadContractDraft(registration.id)
+      setContractDraft(latest)
+      if (latest?.ownerAcknowledgedAt) setCompletionError("")
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === contractDraftStorageKey(registration.id)) syncContract()
+    }
+    window.addEventListener("storage", onStorage)
+    window.addEventListener("focus", syncContract)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener("focus", syncContract)
+    }
+  }, [registration?.id])
+
+  function prepareContractPage() {
+    if (!registration) return
+    try {
+      saveOwnerContractHandoff({
+        applicationId: registration.id,
+        ownerName: registration.ownerName || user?.name || "Owner",
+        ownerEmail: registration.email,
+        businessName: registration.businessName || "Owner business",
+        lotName: lotConfig.name || "Parking lot",
+        setupFingerprint,
+        modelFileName: customModelFileName || undefined,
+      })
+      setCompletionError("")
+    } catch {
+      setCompletionError("Cannot open the agreement because browser storage is unavailable.")
+      return false
+    }
+  }
 
   useEffect(() => () => { if (customModelUrl) URL.revokeObjectURL(customModelUrl) }, [customModelUrl])
   const modelCapacity = useModelCarCapacity(activeModelUrl)
+  const modelStructure = useModelStructure(activeModelUrl)
+  const modelFloors = modelStructure.analysis?.floors ?? []
 
   function handleLotTypeSelect(type: LotType) {
     setLotType(type)
@@ -189,6 +236,8 @@ export function OnboardingWizard({
     setCustomModelFile(null)
 
     setModelUploadError(null)
+    const defaultFloors = type === "basement" ? "2" : type === "multi-storey" ? "3" : "1"
+    setLotConfig((cur) => ({ ...cur, floors: defaultFloors }))
   }
 
   function handleModelFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -247,23 +296,23 @@ export function OnboardingWizard({
 
     try {
       const name = lotConfig.name.trim()
-      const address = lotConfig.address.trim()
-      if (!name || !address) {
-        throw new Error("Please enter the parking lot name and address.")
+      if (!name || !lotConfig.address.trim() || !ward.trim()) {
+        throw new Error("Please enter the parking lot name, street address, and current ward or commune.")
+      }
+      if (!validParkingCoordinates(selectedLocation)) {
+        throw new Error("Confirm the parking entrance on the map before continuing.")
       }
 
-      const totalSlots = Number(lotConfig.totalSlots)
+      // Capacity is derived from the slots the Owner registers, not from this form.
+      // The 3D model's bay count is shown read-only, so it must never gate submission.
+      const totalSlots = modelCapacity.capacity ?? 0
 
       const floors = LOT_TYPE_INFO[lotType].hasFloors
         ? Number(lotConfig.floors)
         : 1
 
-      if (modelCapacity.capacity === null) {
-        throw new Error(modelCapacity.error || "Checking the selected 3D model's car bay capacity. Please wait.")
-      }
-      if (!Number.isInteger(totalSlots) || totalSlots < 1 || totalSlots > modelCapacity.capacity ||
-          !Number.isInteger(floors) || floors < 1 || floors > 20) {
-        throw new Error(`Enter 1–${modelCapacity.capacity} car spaces, matching the selected 3D model, and a valid floor count.`)
+      if (!Number.isInteger(floors) || floors < 1 || floors > 20) {
+        throw new Error("Enter a valid floor count between 1 and 20.")
       }
 
       const numericPricing = {
@@ -280,7 +329,7 @@ export function OnboardingWizard({
       }
 
       if (registration) {
-        if (customModelFile) await saveOwnerModel(registration.id, customModelFile)
+        const savedModelUrl = customModelFile ? await saveOwnerModel(registration.id, customModelFile) : null
         const setup: OwnerLotSetup = {
           name,
           address,
@@ -304,6 +353,29 @@ export function OnboardingWizard({
           setupToken ?? "",
           setup,
         )
+        // shortcut: the Owner site API omits setup metadata, so this preview is available only in the setup browser.
+        try {
+          store.saveLot({
+            id: application.id,
+            ownerId: application.ownerId,
+            createdAt: new Date().toISOString(),
+            name,
+            address,
+            type: lotType,
+            totalSlots,
+            floors,
+            modelUrl: savedModelUrl ?? activeModelDef.path,
+            modelFileName: activeModelFileName,
+            devices: setup.devices,
+            slots: [],
+            ...numericPricing,
+            status: "pending",
+            lat: selectedLocation.lat,
+            lng: selectedLocation.lng,
+          })
+        } catch (cacheError) {
+          console.warn("Parking lot setup was submitted, but its local preview could not be saved.", cacheError)
+        }
         registration.onComplete(application)
         return
       }
@@ -312,9 +384,26 @@ export function OnboardingWizard({
         code: `SPK-ONB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
         name,
         address,
+        latitude: selectedLocation.lat,
+        longitude: selectedLocation.lng,
       })
       if (!site || typeof site.id !== "string" || !site.id.trim()) {
         throw new Error("The server did not return a valid site ID. Please try again.")
+      }
+
+      // Auto-create FLOOR units based on active floors
+      const targetFloors = modelFloors.slice(0, Math.min(floors, modelFloors.length))
+      for (const fl of targetFloors) {
+        try {
+          await parkingApi.unit(site.id, {
+            type: "FLOOR",
+            name: fl.displayName,
+            parentId: null,
+            capacity: fl.capacity,
+          })
+        } catch (unitErr) {
+          console.warn("Could not auto-create floor unit:", unitErr)
+        }
       }
 
       const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
@@ -348,8 +437,8 @@ export function OnboardingWizard({
         ...numericPricing,
         status: "active",
 
-        lat: 10.77 + Math.random() * 0.1,
-        lng: 106.69 + Math.random() * 0.1,
+        lat: selectedLocation.lat,
+        lng: selectedLocation.lng,
       }
 
       try {
@@ -573,245 +662,66 @@ export function OnboardingWizard({
               )}
             </div>
 
-            {/* 3D Model Integration Section */}
-            <div
-              style={{
-                marginTop: "1.25rem",
-                marginBottom: "1.5rem",
-                padding: "1.1rem",
-                background: "var(--bg)",
-                border: "1.5px solid var(--border)",
-                borderRadius: "var(--radius)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  marginBottom: "0.75rem",
-                  flexWrap: "wrap",
-                  gap: "0.5rem",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      fontSize: "0.95rem",
-                      color: "var(--fg)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <span><UntitledIcon name="parking" size={18} /> 3D Parking Model</span>
-                    <span
-                      style={{
-                        fontSize: "0.7rem",
-                        padding: "0.1rem 0.45rem",
-                        borderRadius: "999px",
-                        background: "var(--status-available-bg)",
-                        color: "var(--primary)",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Auto-detected
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.8rem",
-                      color: "var(--muted)",
-                      marginTop: "0.2rem",
-                    }}
-                  >
-                    Linked model:{" "}
-                    <strong style={{ color: "var(--primary)" }}>
-                      {activeModelFileName}
-                    </strong>
-                  </div>
-                </div>
+            <section aria-label="3D parking model" className="my-5 min-w-0 space-y-4 rounded-2xl bg-[var(--bg)] p-4 sm:p-5">
+              <header>
+                <h3 className="text-base font-semibold text-[var(--fg)]">3D Parking Model</h3>
+                <p className="mt-1 text-sm text-[var(--muted)]">Choose a GLB file or preview the linked model.</p>
+              </header>
 
-                <label className="owner-model-import" style={{ cursor: "pointer" }}>
-                  <span
-                    className="btn-outline"
-                    style={{
-                      fontSize: "0.78rem",
-                      padding: "0.35rem 0.65rem",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
-                    <UntitledIcon name="file" size={14} /> Import your 3D model (.glb)
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label className="owner-model-import cursor-pointer">
+                  <span className="btn-outline structure-action">
+                    <span aria-hidden="true"><UntitledIcon name="file" size={16} /></span>
+                    Import GLB
                   </span>
-                  <input
-                    type="file"
-                    accept=".glb"
-                    className="sr-only"
-                    onChange={handleModelFileUpload}
-                  />
+                  <input type="file" accept=".glb,model/gltf-binary" className="sr-only" onChange={handleModelFileUpload} />
                 </label>
+                <button type="button" className="btn-outline structure-action"
+                  onClick={() => setShowModelPreview(value => !value)} aria-expanded={showModelPreview}
+                  aria-controls="setup-model-preview">
+                  {showModelPreview ? "Hide 3D Preview" : "Preview 3D Model"}
+                </button>
               </div>
 
-              {registration && customModelFileName && <p className="text-xs text-[var(--muted)]">This model is stored in this browser for preview. The registration service still records the standard model for this lot type.</p>}
+              {modelUploadError && <p role="alert" className="rounded-lg bg-[var(--status-occupied-bg)] p-3 text-sm text-[var(--occupied)]">{modelUploadError}</p>}
 
-              {/* Strict file rule notification */}
-              <div
-                style={{
-                  padding: "0.55rem 0.75rem",
-                  background: "var(--primary)08",
-                  border: "1px solid var(--primary)20",
-                  borderRadius: "var(--radius)",
-                  fontSize: "0.76rem",
-                  color: "var(--fg)",
-                  marginBottom: "0.85rem",
-                  lineHeight: 1.5,
-                }}
-              >
-                <strong style={{ color: "var(--primary)" }}>
-                  3D Model Requirements:
-                </strong>{" "}
-                The supplied models are:
-                <span
-                  style={{
-                    fontWeight: 600,
-                    color:
-                      lotType === "outdoor" ? "var(--primary)" : "var(--muted)",
-                    marginLeft: 4,
-                  }}
-                >
-                  outdoor_parking_lot.glb
-                </span>
-                ,
-                <span
-                  style={{
-                    fontWeight: 600,
-                    color:
-                      lotType === "multi-storey"
-                        ? "var(--primary)"
-                        : "var(--muted)",
-                    marginLeft: 4,
-                  }}
-                >
-                  indoor_parking_lot.glb
-                </span>
-                ,
-                <span
-                  style={{
-                    fontWeight: 600,
-                    color:
-                      lotType === "basement"
-                        ? "var(--primary)"
-                        : "var(--muted)",
-                    marginLeft: 4,
-                  }}
-                >
-                  underground_parking_lot.glb
-                </span>
-                . Your own GLB is also accepted when its car bays have recognizable names, such as Slot_001 or CarParkingSpace_001.
-              </div>
-
-              {modelUploadError && (
-                <div
-                  role="alert"
-                  style={{
-                    padding: "0.65rem 0.85rem",
-                    background: "#fef2f2",
-                    border: "1.5px solid #f87171",
-                    borderRadius: "var(--radius)",
-                    color: "#dc2626",
-                    fontSize: "0.8rem",
-                    marginBottom: "0.85rem",
-                    lineHeight: 1.45,
-                    fontWeight: 500,
-                  }}
-                >
-                  {modelUploadError}
+              <dl className="grid gap-3 rounded-xl bg-[var(--card)] p-4 text-sm sm:grid-cols-2">
+                <div className="min-w-0">
+                  <dt className="text-[var(--muted)]">Linked model</dt>
+                  <dd className="mt-1 break-all font-semibold" translate="no">{activeModelFileName}</dd>
                 </div>
-              )}
-
-              {/* Digital Twin Mapping Details */}
-              <div
-                style={{
-                  borderRadius: "calc(var(--radius) - 2px)",
-                  padding: "1rem",
-                  border: "1px solid var(--border)",
-                  background: "var(--card)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: "0.75rem",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        color: "var(--muted)",
-                        display: "block",
-                        fontSize: "0.72rem",
-                      }}
-                    >
-                      Arch. Model Template:
-                    </span>
-                    <strong
-                      style={{ color: "var(--fg)", fontFamily: "monospace" }}
-                    >
-                      {activeModelFileName}
-                    </strong>
-                  </div>
-                  <div>
-                    <span
-                      style={{
-                        color: "var(--muted)",
-                        display: "block",
-                        fontSize: "0.72rem",
-                      }}
-                    >
-                      Structural Type:
-                    </span>
-                    <strong style={{ color: "var(--fg)" }}>
-                      {LOT_TYPE_INFO[lotType].label}
-                    </strong>
-                  </div>
-                  <div>
-                    <span
-                      style={{
-                        color: "var(--muted)",
-                        display: "block",
-                        fontSize: "0.72rem",
-                      }}
-                    >
-                      Digital Twin Synchronization:
-                    </span>
-                    <span style={{ color: "var(--primary)", fontWeight: 600 }}>
-                      {customModelFile ? "Owner model · local preview" : "System model"}
-                    </span>
-                  </div>
+                <div className="min-w-0">
+                  <dt className="text-[var(--muted)]">Parking type</dt>
+                  <dd className="mt-1 font-semibold">{LOT_TYPE_INFO[lotType].label}</dd>
                 </div>
-                <p
-                  style={{
-                    margin: "0.75rem 0 0",
-                    fontSize: "0.75rem",
-                    color: "var(--muted)",
-                    lineHeight: 1.45,
-                    borderTop: "1px solid var(--border)",
-                    paddingTop: "0.5rem",
-                  }}
-                >
-                  {customModelFile ? "This imported model is previewed in this browser. A backend upload is needed before other users can see it." : "The system model can display live space occupancy when operators open the parking site."}
+                <div className="sm:col-span-2">
+                  <dt className="font-semibold">{customModelFile ? "Owner model · local preview" : "System model"}</dt>
+                  <dd className="mt-1 text-[var(--muted)]">
+                    {customModelFile
+                      ? registration
+                        ? "The imported model is available in this browser. Registration records the standard model for this lot type."
+                        : "The imported model is available in this browser."
+                      : "This model can display live occupancy in the Operator workspace."}
+                  </dd>
+                </div>
+              </dl>
+
+              <details className="group">
+                <summary className="btn-outline structure-action cursor-pointer list-none marker:hidden">
+                  Model Requirements
+                  <span aria-hidden="true" className="transition-transform group-open:rotate-180 motion-reduce:transition-none">
+                    <UntitledIcon name="chevron-down" size={16} />
+                  </span>
+                </summary>
+                <p className="mt-3 break-words text-sm text-[var(--muted)]">
+                  Use a supplied template or a custom GLB with named car bays, such as <strong translate="no">Slot_001</strong> or <strong translate="no">CarParkingSpace_001</strong>.
                 </p>
+              </details>
+
+              <div id="setup-model-preview" hidden={!showModelPreview} className="overflow-hidden rounded-xl">
+                {showModelPreview && <Parking3DViewer modelUrl={activeModelUrl} lotType={lotType} interactive={false} showLegend={false} height={300} />}
               </div>
-              <button type="button" className="btn-outline mt-4" onClick={() => setShowModelPreview(value => !value)} aria-expanded={showModelPreview}>
-                {showModelPreview ? "Hide 3D preview" : "Preview selected 3D model"}
-              </button>
-              {showModelPreview && <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--border)]"><Parking3DViewer modelUrl={activeModelUrl} lotType={lotType} interactive={false} showLegend={false} height={300} /></div>}
-            </div>
+            </section>
 
             <button className="btn-primary" onClick={() => setStep(2)}>
               Continue
@@ -852,16 +762,66 @@ export function OnboardingWizard({
                 />
               </div>
               <div>
-                <label className="label">Address *</label>
+                <label className="label" htmlFor="owner-setup-street">Street Address / Complex *</label>
                 <input
+                  id="owner-setup-street"
                   className="input"
                   value={lotConfig.address}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setLotConfig((c) => ({ ...c, address: e.target.value }))
-                  }
-                  placeholder="Full address"
+                    setSelectedLocation(null)
+                    setLocationPickerOpen(false)
+                  }}
+                  placeholder="e.g. 72 Le Thanh Ton Street"
                 />
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="owner-setup-province">Province *</label>
+                  <RoundedSelect id="owner-setup-province" className="input" value={provinceCode} onChange={event => {
+                    setProvinceCode(event.target.value)
+                    setDistrict("")
+                    setWard("")
+                    setOtherDistrict(false)
+                    setSelectedLocation(null)
+                    setLocationPickerOpen(false)
+                  }}>
+                    {CITIES.map(city => <option key={city.code} value={city.code}>{city.code === "HCM" ? "TP.HCM" : city.name}</option>)}
+                  </RoundedSelect>
+                </div>
+                <div>
+                  <label className="label" htmlFor="owner-setup-district">Former district / area (optional)</label>
+                  <RoundedSelect id="owner-setup-district" className="input" value={otherDistrict ? "__other__" : district} onChange={event => {
+                    const custom = event.target.value === "__other__"
+                    setOtherDistrict(custom)
+                    setDistrict(custom ? "" : event.target.value)
+                    setSelectedLocation(null)
+                    setLocationPickerOpen(false)
+                  }}>
+                    <option value="" disabled>Select a district</option>
+                    {(DISTRICTS_BY_PROVINCE[provinceCode] ?? []).map(name => <option key={name} value={name}>{name}</option>)}
+                    <option value="__other__">Other district / area</option>
+                  </RoundedSelect>
+                  {otherDistrict && <input className="input mt-2" aria-label="Other district or area" value={district} onChange={event => { setDistrict(event.target.value); setSelectedLocation(null); setLocationPickerOpen(false) }} placeholder="Enter former district or area" maxLength={120} />}
+                </div>
+              </div>
+              <WardField key={provinceCode} id="owner-setup-ward" provinceCode={provinceCode} value={ward} required
+                onChange={value => { setWard(value); setSelectedLocation(null); setLocationPickerOpen(false) }} />
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
+                <div className="space-y-1">
+                  <p className="text-sm text-[var(--muted)]">{validParkingCoordinates(selectedLocation) ? `Entrance pin confirmed · ${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}` : "Confirm the exact parking entrance so the map pin matches this site."}</p>
+                  {registration && <p className="text-xs text-[var(--muted)]">During registration, this pin is saved in this browser. Confirm it again in Owner Parking Lots after approval to save it to the parking service.</p>}
+                </div>
+                <button type="button" className="btn-outline" disabled={!lotConfig.address.trim() || !ward.trim()} onClick={() => setLocationPickerOpen(open => !open)}>{locationPickerOpen ? "Close map" : selectedLocation ? "Move entrance pin" : "Set entrance pin"}</button>
+              </div>
+              {locationPickerOpen && <ParkingLocationPicker
+                name={lotConfig.name}
+                address={address}
+                center={{ lat: CITIES.find(city => city.code === provinceCode)?.defaultLat ?? CITIES[0].defaultLat, lng: CITIES.find(city => city.code === provinceCode)?.defaultLng ?? CITIES[0].defaultLng }}
+                initial={selectedLocation}
+                onConfirm={point => { setSelectedLocation(point); setLocationPickerOpen(false) }}
+                onCancel={() => setLocationPickerOpen(false)}
+              />}
               <div
                 style={{
                   display: "grid",
@@ -872,23 +832,21 @@ export function OnboardingWizard({
                 }}
               >
                 <div>
-                  <label className="label">Planned Car Spaces *</label>
+                  <label className="label">Planned Car Spaces</label>
                   <input
                     className="input"
                     type="number"
-                    min={1}
-                    max={modelCapacity.capacity ?? undefined}
-                    value={lotConfig.totalSlots}
-                    placeholder="e.g. 50"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) =>
-                      setLotConfig((c) => ({
-                        ...c,
-                        totalSlots: e.target.value,
-                      }))
-                    }
+                    value={modelCapacity.capacity ?? ""}
+                    placeholder="—"
+                    readOnly
+                    aria-readonly="true"
                   />
-                  <p className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error || (modelCapacity.capacity === null ? "Checking car bays in the selected 3D model…" : `Maximum ${modelCapacity.capacity} car spaces in this model.`)}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Capacity is counted from the slots you register. Set per-area limits in Parking Structure.
+                  </p>
+                  {modelCapacity.error && (
+                    <p role="status" className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error}</p>
+                  )}
                 </div>
                 {LOT_TYPE_INFO[lotType].hasFloors && (
                   <div>
@@ -905,7 +863,7 @@ export function OnboardingWizard({
                         setLotConfig((c) => ({ ...c, floors: e.target.value }))
                       }
                     />
-                    {lotConfig.totalSlots &&
+                    {modelCapacity.capacity !== null &&
                       lotConfig.floors &&
                       parseInt(String(lotConfig.floors)) > 0 && (
                         <p
@@ -917,7 +875,7 @@ export function OnboardingWizard({
                         >
                           ~
                           {Math.ceil(
-                            parseInt(String(lotConfig.totalSlots)) /
+                            modelCapacity.capacity /
                               parseInt(String(lotConfig.floors)),
                           )}{" "}
                           slots per floor
@@ -936,8 +894,7 @@ export function OnboardingWizard({
                 onClick={() => setStep(3)}
                 disabled={
                   !lotConfig.name ||
-                  !lotConfig.address ||
-                  !lotConfig.totalSlots ||
+                  !lotConfig.address || !district.trim() || !validParkingCoordinates(selectedLocation) ||
                   (LOT_TYPE_INFO[lotType].hasFloors && !lotConfig.floors)
                 }
               >
@@ -1248,10 +1205,10 @@ export function OnboardingWizard({
                 value={`${activeModelFileName} (${customModelFile ? "Owner import · local preview" : "System model"})`}
               />
               <Row label="Name" value={lotConfig.name} />
-              <Row label="Address" value={lotConfig.address} />
+              <Row label="Address" value={address} />
               <Row
                 label="Total Slots"
-                value={String(parseInt(String(lotConfig.totalSlots)) || 0)}
+                value={modelCapacity.capacity !== null ? String(modelCapacity.capacity) : "—"}
               />
               {LOT_TYPE_INFO[lotType].hasFloors && (
                 <Row
@@ -1299,7 +1256,7 @@ export function OnboardingWizard({
                 <p>Read the agreement and add your draft signature before submitting your parking lot for review.</p>
                 <span>{activeContractDraft?.ownerAcknowledgedAt ? `Draft signed by ${activeContractDraft.ownerName}` : "Owner draft signature required"}</span>
               </div>
-              <button type="button" className="btn-outline" onClick={() => setShowContract(true)}>{activeContractDraft?.ownerAcknowledgedAt ? "View contract" : "Read and sign draft"}</button>
+              <a className="btn-outline" href={`/owner/contract/${encodeURIComponent(registration.id)}`} target="_blank" rel="noopener" onClick={event => { if (prepareContractPage() === false) event.preventDefault() }}>{activeContractDraft?.ownerAcknowledgedAt ? "View contract" : "Read and sign draft"}</a>
             </div>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button className="btn-outline" onClick={() => setStep(4)}>
@@ -1345,30 +1302,6 @@ export function OnboardingWizard({
           </div>
         )}
       </div>
-      {registration && showContract && <PartnerContractDialog
-        applicationId={registration.id}
-        ownerName={registration.ownerName || user?.name || "Owner"}
-        businessName={registration.businessName || "Owner business"}
-        lotName={lotConfig.name || "Parking lot"}
-        record={activeContractDraft}
-        signer="owner"
-        signerName={registration.ownerName || user?.name || ""}
-        onClose={() => setShowContract(false)}
-        onSign={(name) => {
-          const next: ContractDraftRecord = {
-            ...activeContractDraft,
-            ownerName: name,
-            ownerEmail: registration.email,
-            businessName: registration.businessName || "Owner business",
-            lotName: lotConfig.name || "Parking lot",
-            ownerAcknowledgedAt: new Date().toISOString(),
-            modelFileName: customModelFileName || undefined,
-            setupFingerprint,
-          }
-          saveContractDraft(registration.id, next)
-          setContractDraft(next)
-          setShowContract(false)
-        }} />}
     </div>
   )
 }

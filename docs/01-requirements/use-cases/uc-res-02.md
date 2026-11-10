@@ -13,6 +13,12 @@ Allocate, queue and reallocate reservations.
 
 Confirmed entitlement; allocation/recovery time or accepted reallocation request.
 
+## Authorization and pending-workflow boundary — approved 2026-11-04
+
+User-initiated modify/reschedule reservation belongs to REQUEST; scheduler/service recovery uses SERVICE, not a fabricated customer JWT. This mixed allocation/reallocation use case is not a blanket REQUEST classification: exact user reallocation-command mapping remains design work. No new modification/rescheduling feature or endpoint is introduced by the matrix.
+
+See the [operation matrix](../srs/authorization-operation-classification.md) and [mandatory REQUEST design checklist](../srs/authorization-operation-classification.md#5-implementation-documentation-checklist). Specify branch eligibility, correlation/attempts, pending observation, combined outcomes, deadlines, idempotency, revocation race, pivot, compensation and late/unknown handling before implementing the affected workflow. This amendment approves direction, not a completed Saga or wire contract.
+
 ## Main flow
 
 1. Calculate `allocation_point = reservation_start - effective ALLOCATION_LEAD_TIME`; use the confirmed 1-hour default when no permitted override resolves. If a confirmed reservation is created/confirmed after its allocation point, evaluate it immediately with the same idempotent command as the scheduler.

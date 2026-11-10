@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
 import { CheckInOut } from "../check-in-out/CheckInOut"
 import { LotStatus } from "../parking-lot/LotStatus"
+import type { SlotStatusFilter } from "../parking-lot/useLotStatus"
 import { EmergencyPanel } from "../emergency/EmergencyPanel"
 import { SlotManagement } from "../parking-slots/SlotManagement"
 import { TicketManagement } from "../tickets/TicketManagement"
@@ -324,16 +325,19 @@ export function OperatorDashboard({
     <DashboardSidebar groups={sidebarGroups}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
         {sitesError && (
-          <div role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
-            {sitesError}
+          <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
+            <span>{sitesError}</span>
+            <button type="button" className="btn-outline" onClick={() => setRefreshKey((value) => value + 1)}>
+              Retry
+            </button>
           </div>
         )}
         {sitesLoading && (
-          <p role="status" className="mb-5 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>
+          <p role="status" className="sr-only">Loading assigned parking sites…</p>
         )}
         {accessRole === "operation" && selectedLot && resourceStatus.map(([label, state]) => (
           state.scope !== resourceScope || state.loading ? (
-            <p key={label} role="status" className="mb-3 text-sm text-[var(--muted)]">Loading {label.toLowerCase()}…</p>
+            <p key={label} role="status" className="sr-only">Loading {label.toLowerCase()}…</p>
           ) : state.error ? (
             <div key={label} role="alert" className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
               {label}: {state.error}
@@ -380,7 +384,7 @@ export function OperatorDashboard({
         {/* Tab View Container */}
         <div key={tab} className="animate-in">
           {/* TAB 1: OVERVIEW */}
-          {accessRole === "operation" && tab === "overview" && (
+          {accessRole === "operation" && tab === "overview" && !sitesLoading && !sitesError && (
             <OperatorOverview
               lot={selectedLot}
               allLots={ownerLots}
@@ -425,7 +429,7 @@ export function OperatorDashboard({
 
           {/* TAB 7: ASSIGNMENTS */}
           {accessRole === "operation" && tab === "assignments" && (
-            <OperatorAssignments currentLot={selectedLot} />
+            <OperatorAssignments currentLot={selectedLot} sites={ownerLots} />
           )}
 
           {/* TAB 8: FINANCIAL REPORTS */}
@@ -437,7 +441,7 @@ export function OperatorDashboard({
                 <p className="text-sm text-[var(--muted)]">No assigned parking sites are available.</p>
               )}
               {!sitesLoading && reportsLoading && (
-                <p role="status" className="text-sm text-[var(--muted)]">Loading reservation reports…</p>
+                <p role="status" className="sr-only">Loading reservation reports…</p>
               )}
 
               {!sitesLoading && !sitesError && !reportsLoading && !reportsError && reportSiteIds.length > 0 && (<>
@@ -592,7 +596,7 @@ function CashierPOS({
         <PageHeader eyebrow={lot?.name ?? "No assigned site"} title={readOnly ? "Cashier View" : "Cashier POS Terminal"} description={readOnly ? "Look up the active parking session and view its recorded payment details." : "Look up the active parking session and confirm its checkout. Payment collection is not simulated."} />
 
         {sitesLoading && (
-          <p role="status" className="mt-4 text-sm text-[var(--muted)]">Loading assigned parking sites…</p>
+          <p role="status" className="sr-only">Loading assigned parking sites…</p>
         )}
         {sitesError && (
           <div role="alert" className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">

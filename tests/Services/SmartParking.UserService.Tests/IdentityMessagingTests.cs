@@ -4,12 +4,14 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using MassTransit.EntityFrameworkCoreIntegration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.API.Hubs;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Infrastructure.Services;
 
 namespace SmartParking.UserService.Tests;
@@ -25,7 +27,7 @@ public sealed class IdentityMessagingTests
                 Skip="Requires isolated local PostgreSQL and RabbitMQ fixtures.";
         }
     }
-    [RabbitPostgresFact]
+    [RabbitPostgresFact, Trait("Category", "PostgresRabbitMQ")]
     public async Task CommittedOutboxReachesRabbitInboxAndAuthorizedSignalRConnection()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
@@ -65,7 +67,7 @@ public sealed class IdentityMessagingTests
         {
             var db=scope.ServiceProvider.GetRequiredService<global::UserService.Persistence.AppDbContext>();
             await using var tx=await db.Database.BeginTransactionAsync(timeout.Token);
-            scope.ServiceProvider.GetRequiredService<IAccessEventStore>().Stage(message);
+            await scope.ServiceProvider.GetRequiredService<IEventPublisher>().PublishAsync(message, timeout.Token);
             await db.SaveChangesAsync(timeout.Token);await tx.CommitAsync(timeout.Token);
         }
         string received;
@@ -73,8 +75,7 @@ public sealed class IdentityMessagingTests
         Assert.DoesNotContain(owner.Email,received);
         await using(var db=fixture.Open())
         {
-            var version=await db.Database.SqlQuery<long>($"SELECT version AS \"Value\" FROM access_projection WHERE user_id={message.AggregateId}").SingleAsync(timeout.Token);
-            Assert.Equal(1,version);
+            Assert.True(await db.Set<InboxState>().AnyAsync(state => state.MessageId == message.EventId, timeout.Token));
             await db.Accounts.Where(a=>a.UserId==owner.Id).ExecuteUpdateAsync(s=>s.SetProperty(a=>a.Permissions,Array.Empty<string>()),timeout.Token);
         }
         using(var scope=app.Services.CreateScope())

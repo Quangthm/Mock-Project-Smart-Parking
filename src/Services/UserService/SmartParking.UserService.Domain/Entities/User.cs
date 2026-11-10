@@ -14,7 +14,6 @@ public class User : BaseEntity
     public string PasswordHash { get; set; } = string.Empty;
 
     public string FullName { get; set; } = string.Empty;
-    public bool OnboardingComplete { get; set; }
     public long AccessVersion { get; set; }
     public string? CompanyName { get; set; }
     public DateTimeOffset? EmailVerifiedAt { get; set; }
@@ -27,6 +26,7 @@ public class User : BaseEntity
     /// Profile input cannot assign or remove this value. Media mutation is a separate slice.
     /// </remarks>
     public string? AvatarUrl { get; set; }
+    public Guid? AvatarAssetId { get; set; }
 
     public UserStatus Status { get; set; }
 

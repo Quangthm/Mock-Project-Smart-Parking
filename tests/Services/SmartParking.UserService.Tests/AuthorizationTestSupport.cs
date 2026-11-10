@@ -7,6 +7,7 @@ using SmartParking.UserService.Domain.Entities;
 using UserService.Application.Authorization;
 using UserService.Application.Common.Interfaces.Persistence;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Persistence;
 using UserService.Persistence.Repositories;
 
@@ -18,14 +19,19 @@ internal static class TestAuthorization
     // and unused feature services are substituted; an unexpected feature call fails loudly.
     public static void AddServices(IServiceCollection services, AuthTestFixture fixture)
     {
+        services.TryAddSingleton<IUserRepository>(fixture);
         services.TryAddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
-        services.TryAddSingleton<IAccessEventStore, UnusedAccessEvents>();
+        services.TryAddSingleton<IEventPublisher, RecordingEventPublisher>();
         services.TryAddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         services.TryAddSingleton<IAuthorizationScopeStore>(new MemoryScopes(fixture));
         services.TryAddSingleton<IParkingDirectory, TestParkingDirectory>();
         services.TryAddSingleton<IUserManagementService>(UnsupportedFeature.Create<IUserManagementService>());
         services.TryAddSingleton<IOwnerRegistrationService>(UnsupportedFeature.Create<IOwnerRegistrationService>());
         services.TryAddSingleton<IAccountWorkflows>(UnsupportedFeature.Create<IAccountWorkflows>());
+        services.TryAddSingleton(new global::UserService.Application.Media.MediaSettings(false, ""));
+        services.TryAddSingleton<global::UserService.Application.Common.Interfaces.Persistence.IMediaAssetRepository>(UnsupportedFeature.Create<global::UserService.Application.Common.Interfaces.Persistence.IMediaAssetRepository>());
+        services.TryAddSingleton<global::UserService.Application.Media.IMediaProvider>(UnsupportedFeature.Create<global::UserService.Application.Media.IMediaProvider>());
+        services.TryAddSingleton<global::UserService.Application.Media.IImageInspector>(UnsupportedFeature.Create<global::UserService.Application.Media.IImageInspector>());
     }
 
     private sealed class MemoryScopes(AuthTestFixture fixture) : IAuthorizationScopeStore
@@ -53,7 +59,7 @@ internal static class TestAuthorization
             var now = clock.GetUtcNow();
             session = new AuthSession { Id = Guid.NewGuid(), UserId = userId, AccountId = account.Id,
                 AccessTokenId = Guid.NewGuid(), TokenHash = Guid.NewGuid().ToString("N"),
-                CreatedAt = now, AccessExpiresAt = now.AddHours(1), ExpiresAt = now.AddDays(7) };
+                CreatedAt = now, LastRefreshedAt = now, AccessExpiresAt = now.AddHours(1), ExpiresAt = now.AddDays(7) };
             db.AuthSessions.Add(session);
             await db.SaveChangesAsync();
         }

@@ -13,6 +13,7 @@ import type { User } from "../lib/types"
 import { store } from "../lib/store"
 
 import { authApi, authExpiredEvent } from "../lib/authApi"
+import { watchAccessRevocation, type AccessRevokedReason } from "../lib/accessRealtime"
 import { showUiToast } from "../lib/uiToast"
 import { restoreDriverRegistration } from "../roles/authentications/Sign Up/DriverOtpForm"
 import { restoreOwnerRegistration } from "../lib/ownerRegistration"
@@ -247,6 +248,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => setAuthError(""), 5_200)
     return () => window.clearTimeout(timer)
   }, [authError])
+
+  useEffect(() => {
+    if (!authReady || !user) return
+    let revoked = false
+    const messages: Record<AccessRevokedReason, string> = {
+      USER_LOCKED: "Your account has been locked. Please contact support or an administrator if you believe this is incorrect.",
+      ACCOUNT_DISABLED: "This account is no longer available. Please sign in again or contact support.",
+      SESSION_REVOKED: "Your session is no longer valid. Please sign in again.",
+    }
+    return watchAccessRevocation((reason) => {
+      if (revoked) return
+      revoked = true
+      authRevision.current++
+      authApi.clearSession()
+      setUserState(null)
+      userRef.current = null
+      store.setCurrentUserId(null)
+      setDashboardMenuOpen(false)
+      setView("sign-in")
+      setAuthError(messages[reason])
+    })
+  }, [authReady, user, setView])
 
   // Requests refresh an expiring access token on demand. An unattended tab must
   // neither discard a valid refresh session nor keep it alive with a timer.

@@ -1,13 +1,13 @@
 # SmartPark — Architecture Reference
 
 **Status:** WORKING
-**Last Updated:** 2026-10-12
+**Last Updated:** 2026-11-04 (authorization policy and focused source inspection; older inventory rows retain their historical scope)
 **Purpose:** Single source of truth for verified architecture facts — tech stack (implemented vs planned), service boundaries, layer responsibilities, CQRS flow, function placement, and definition of done.
 **Read when:** planning or implementing any backend, cross-service, database, architecture, or API contract change, or when you need to know what actually exists in the repo.
 **Canonical owner of:** Technology inventory, service boundaries, Clean Architecture rules, Conflict Register.
 **Companion files:** `ai/context/architecture-guardrails.md` (detailed guardrails), `ai/context/current-state.md` (current state + backlogs), `ai/context/project-context.md` (shared domain context), `ai/context/important-decisions.md` (locked/working decisions).
 
-> This file records **verified repo facts** (checked against code). Where docs and code disagree, the Conflict Register (§8) is authoritative for "what actually exists".
+> This file distinguishes **verified repo facts** (checked against code) from explicitly labelled approved target policy. The 2026-11-04 update is not a fresh audit of every older technology-inventory row. Where docs and code disagree, the Conflict Register (§8) is authoritative for "what actually exists".
 
 ---
 
@@ -115,6 +115,10 @@ Persistence / Infrastructure implementation
 
 ---
 
+### Approved authorization target — 2026-11-04
+
+Read the [authorization ADR](../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [operation matrix](../docs/01-requirements/srs/authorization-operation-classification.md). They own the approved TOKEN default, six async Account-current REQUEST families, CQRS contract and numeric Saga retry defaults. The shared coding guide §4 owns implementation conventions. Exact-session continuity, COMMIT/general WORKFLOW, AccessHandle/AccessVersion and detailed use-case Saga decisions remain deferred as specified there. No runtime migration is claimed by this documentation update.
+
 ## 5. Function placement
 
 | Function | Where it belongs |
@@ -169,6 +173,7 @@ Before reporting a change complete:
 | 5 | CI SDK version | Not specified | `.gitlab-ci.yml` uses `dotnet/sdk:7.0`; project targets `net10.0` | CI builds will fail on target framework mismatch | Flag mismatch; do not "fix" CI without explicit approval | Unresolved |
 | 6 | OperationService layers | 5 layers (architecture docs) | API, Application, Domain, Infrastructure and Persistence projects exist; EF Core + MediatR | Using obsolete two-project paths causes build failures | Use src/Services/OperationService and SmartParking.OperationService.* | Resolved — verified 2026-10-27 |
 | 7 | UserService namespaces | Not specified | Mixed `UserService.*` vs `SmartParking.UserService.*` namespace conventions | Inconsistent namespaces cause build errors when adding references | Match the namespace convention of the surrounding file | Unresolved |
+| 8 | Authorization freshness versus old universal session checks | Approved 2026-11-04 ADR/matrix supersede blanket current-session/current-grant enforcement on every business request; CQRS and numeric retry contracts explicitly approved | Focused inspection at `40f54683`: UserService `ApiAuthenticationExtensions` wires `CurrentAccountBearerEvents`, whose `TokenValidated` invokes `ICurrentAccessService.ValidateAsync`; `CurrentAccessPolicy` verifies current bound session/account/role locally. No `AuthorizationAttemptId`, `PendingAuthorization`, `ICurrentAccountAccessRequester` or `SagaStateMachine` matches found in `src/**/*.cs`; this is a scoped search, not proof no equivalent workflow exists | Mistaking target docs for delivered Sagas, copying exact-session checks into every business service, or removing valid UserService local checks | Apply the new target for future work; retain UserService local authority; inspect each affected implementation and tests before migration; do not infer exact claims or deployed freshness from the docs | Documentation reconciled; runtime adoption/acceptance OPEN and outside this task |
 
 ---
 

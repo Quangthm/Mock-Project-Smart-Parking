@@ -22,7 +22,7 @@ function mapStyleUrl(style: MapStyleName, apiKey: string, theme: "light" | "dark
 const lotTypeLabels: Record<LotType, string> = { outdoor: "Outdoor", basement: "Underground", "multi-storey": "Indoor (Multi-storey)" }
 
 function validCoordinates(point: LatLng) {
-  return Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180
+  return Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180 && !(point.lat === 0 && point.lng === 0)
 }
 function distanceKm(from: LatLng, to: LatLng) {
   const radians = (degrees: number) => degrees * Math.PI / 180

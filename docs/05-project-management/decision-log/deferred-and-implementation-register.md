@@ -4,7 +4,37 @@
 
 **Status separation:** IMPLEMENTATION PENDING = confirmed MVP behavior needs code/schema/tests. POST-v1.0 DETAIL = confirmed AI/LPR direction retained, detailed integration/evaluation intentionally later. FUTURE = feature outside selected MVP. Historical alternatives in the source tables are not active requirements.
 
+## UserService repository refactoring — 9 November 2026
+
+| Backlog ID | Status / owner | Required outcome |
+|---|---|---|
+| USER-UOW-01 | **DEFERRED — refactoring not implemented**; UserService / backend tests | Remove the redundant direct user-repository dependency from `MediaUseCases` through existing `IUnitOfWork.UserRepository`; reassess fixture registrations and inspect similar cases without expanding the unit-of-work contract. Preserve production repository DI and transaction semantics. See [scope, constraints and acceptance](2026-11-09-unit-of-work-repository-refactoring.md). No Jira issue created. |
+
+## SPARK-243 claim-image follow-up — 7 November 2026
+
+| Work ID | Status / owner | Required outcome |
+|---|---|---|
+| VEH-CLAIM-HOLD-01 | DEFERRED design and implementation; UserService / UC-VEH-02 | Define explicit preservation when review needs claim photos beyond their normal deadline, including authorized scope, owner acknowledgement, review/release and deletion-race coordination. A pending claim never creates unlimited retention. See the [approved decision and acceptance criteria](2026-11-07-vehicle-claim-images.md#backlog-veh-claim-hold-01). |
+
+This is a repository backlog item, not a created Jira issue. Claim-photo association is approved for SPARK-243; reviewer access is implemented with later adjudication. Existing acknowledged holds and USER-MEDIA-CLEANUP-01 remain governed by their approved policies. No service-authentication alternative is approved by this entry.
+
 ## Current disposition by original follow-up ID
+
+### Service identity future direction — 7 November 2026
+
+| Backlog ID | Status | Owner / next implementation |
+|---|---|---|
+| SERVICE-AUTH-01 | **FUTURE / refactoring direction; implementation DEFERRED.** User approved backlogging option 2 outside current SPARK-243 work. | Architecture/security, infrastructure and service owners: established-provider OAuth service tokens, destination/permission restrictions, lifecycle/outage rules, tested pilot and gradual migration. Provider and detailed policy are unselected. See [decision, acceptance and current options](2026-11-07-service-authentication-deferral.md). No Jira issue created. |
+
+SPARK-243 subsequently approved the existing shared service key for temporary binding-lookup enforcement. All key holders share access; per-service identity/permission isolation and migration remain in SERVICE-AUTH-01. No unprotected endpoint or removal of human security controls is authorized.
+
+### User media foundation follow-up — 6 November 2026
+
+| Backlog ID | Status | Owner / next implementation |
+|---|---|---|
+| USER-MEDIA-CLEANUP-01 | **DEFERRED — automatic deletion not implemented; evidence NOT RUN.** User-approved scope change to SPARK-373; existing retention policy is not extended. | UserService: expiry selection, hold/deletion serialization, provider deletion/reconciliation, bounded recovery and verification. Unattached drafts have a 24-hour lifetime. See [decision, limitations and acceptance checklist](2026-11-06-user-media-cleanup-deferral.md). Timestamps and expired-read blocking are implemented and verified in the foundation; automatic deletion remains deferred. This is a repository backlog ID; no Jira issue has been created. |
+
+### Original follow-up dispositions
 
 | ID | Current disposition | Main destination |
 |---|---|---|
@@ -69,7 +99,7 @@ All V11-01–12 and D01–D12 business choices in the [approved register](2026-1
 
 | Work ID | Owner/action | Completion evidence |
 |---|---|---|
-| V11-DES-01 | User + media/backend security: agree agreement upload/download contracts, allowed formats/limits, protected references, retention classification, version binding and concurrency controls | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
+| V11-DES-01 | User + media/backend security: Partner policy APPROVED on 6 November 2026 (readable PDF, 10 MiB inclusive, two current required kinds and lifecycle retention); Partner wire details/runtime DEFERRED; provider verification PENDING. Complete protected upload/read/version-concurrency transport and implementation | Scoped initial-application replacement only; original/version/actor/time/reason retained; no arbitrary URL bypass; approved/rejected records immutable |
 | V11-DES-02 | User + FE/security: specify the fake VNeID API returned GUID substitute and its persisted User binding, other mock fields, explicit consent, failure/completion evidence and retention | Every non-exempt role covered; Operator email activation; sole seeded Admin exemption; no real government assurance |
 | V11-DES-03 | User/security + FE: agree scoped setup/resend/verification credential expiry, storage, renewal, secure recovery and safe login error envelope | Application ID alone cannot authorize; no normal Owner login before review and successful provisioning; no token/profile overexposure |
 | V11-DES-04 | User/Facility/Operations/Payment architects: specify durable provisioning keys, outcome lookup, event versions, retries and readiness mapping | One tenant/site per accepted proposal; pending/failed/unknown outcome visible; approval and notification cannot imply opening |
@@ -155,7 +185,7 @@ For the confirmed core local targets and remaining proposed test details, record
 | 04 Search | **CONFIRMED:** Search/discovery module in Operations, consuming Facility and Payment contracts/projections as needed. | Independent Search deployment is future extraction only. | **Medium:** ranking fixtures, freshness and query contracts remain design work. |
 | 05 Availability | **CONFIRMED — SB-01/B01:** Parking Operations owns authoritative bookable/admission availability and all competing operational claims/visits. | Facility-based authority and separate Capacity deployment were not selected. | **Critical:** query freshness, observation reconciliation and capacity-change implementation remain OPEN; protocol direction is confirmed; all consumers use the same authority. |
 | 06 Pricing | **CONFIRMED — SB-01/B02:** Payment & Pricing owns tariff/pricing/financial rules; all unrelated policies stay with their business domains. | Facility tariff authority, separate Pricing deployment and centralized global Policy service were not selected. | **High:** B03/B04 and immutable accepted-version principles are confirmed; remaining policy bounds and detailed contracts need specification; §16.1–2 settles the stated defaults. |
-| 07 Auth | **OWNERSHIP CONFIRMED:** User & Access owns identity/authentication/current grants; consuming services enforce applicable resource access. | Gateway-only authorization remains unsuitable; replicated grants or live lookup are still implementation alternatives. | **Critical:** gateway/service protocol and session/revocation implementation remain to specify. B08 token parameters and all-role email/phone OTP-login scope are confirmed in §16.5; TOTP is FUTURE; current protected-action checks are confirmed. |
+| 07 Auth | **OWNERSHIP CONFIRMED:** User & Access owns identity/authentication/current grants; consuming services enforce applicable resource access. | Gateway-only authorization remains unsuitable; the 2026-11-04 ADR selects local TOKEN validation and async Account-current REQUEST. Distributed authorization projections remain deferred. | **Critical:** gateway/service protocol and session/revocation implementation remain to specify. B08 token parameters and all-role email/phone OTP-login scope are confirmed in §16.5; SEC-01/02 makes TOTP current MVP; protected actions follow the 2026-11-04 freshness matrix with local resource/security safeguards. |
 | 08 Events | **PRINCIPLES CONFIRMED:** owner publishes outcomes; origin durably captures important audit facts, Notification & Audit projects them asynchronously; notification failure does not undo business state. | Fire-and-forget and synchronous central audit prerequisite were not selected. RabbitMQ + MassTransit is CONFIRMED; MQTT device scope and Kafka deferral retained. | **High:** event schemas, publisher/consumer matrix, delivery attempts and deduplication/replay remain OPEN. |
 | 09 Consistency | **PRINCIPLES CONFIRMED:** local Operations transactional invariants; HTTP/OpenAPI immediate requests and durable outcomes; one coordinator per workflow, no synchronous cycles. | Distributed transactions or eventual-only competing capacity decisions were not selected by this handoff. | **Critical:** individual coordinators, timeouts, pending/unknown/compensation and reconciliation contracts remain OPEN. |
 
@@ -195,3 +225,21 @@ Native mobile app; autonomous-vehicle integration; loyalty points; national digi
 | Technical configuration | Implementation/design review pending | Merchant/payee mapping, credentials, provider limits, test budget/amounts, timeouts/reconciliation scheduling, SDK/API version and callback hosting. No invented numeric business defaults. |
 
 Do not downgrade money/capacity/refund requirements because a native provider is deferred. If the approved payOS acceptance or required refund execution cannot be demonstrated, record the concrete blocker under PM-04; do not claim completion from fixtures.
+
+## Authorization implementation and deferred work — 2026-11-04
+
+The [ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [matrix](../../01-requirements/srs/authorization-operation-classification.md) approve freshness, CQRS and numeric retry defaults. This supersedes older registry language leaving global live-lookup/projection selection open. Local UserService security/factor versions remain; distributed AccessVersion is deferred. Existing Payment business-attempt limits remain distinct from Saga middleware budgets.
+
+| Item | Status / owner | Exit criterion |
+|---|---|---|
+| Runtime adoption and actor adapter | OPEN implementation; affected service owners | Inspect current local/auth implementations, preserve UserService local security guards, map real claims, migrate scoped behavior and demonstrate tests. |
+| Six REQUEST families | APPROVED direction; Operations with User/Payment/Facility as applicable | Explicit API/Saga contracts, pending observation, allowed speculation/limits, join/gates, cancellation, attempts, retry overrides, idempotency/status, revocation race, pivot/compensation and manual review. |
+| Reservation capacity holds and state machine | DEFERRED design; Operations | Explicit decision on pre-ALLOW holds, TTL/quota/isolation, authority and late/unknown cleanup. Existing payment hold does not approve speculative capacity. |
+| Gate/checkout safety and invocation paths | OPEN use-case design; Operations/IoT/Payment | Distinguish real user, operator and machine origins; never strand exit on Account lock or erase obligations; define safety/authority exceptions. |
+| Modify/reschedule and existing plan lifecycle mapping | OPEN use-case detail; Operations | Map real supported commands; no feature introduced by a classification row. New plan registration REQUEST; existing renewal/change/cancel TOKEN initially. |
+| Broker trust and operation-status contracts | OPEN implementation/design; owning services | Trusted publishers/consumers, attempt correlation, durable idempotency and authoritative reconciliation or explicit manual review. No invented endpoint. |
+| SignalR revocation UX | APPROVED direction; User/FE | Backend-targeted notification after security commit; safe forced logout and missed-delivery tests. Exact wire contract remains design work. |
+| Stronger freshness/session continuity | DEFERRED | Separate approval for COMMIT/general WORKFLOW, exact-session reference/AccessHandle, AccessVersion or distributed authorization projection. |
+| SignalR scale-out | DEFERRED until scaling | Backplane/managed service or equivalent design when multiple instances require it. |
+
+Acceptance is [NOT RUN](../../04-testing/requirements-traceability/authorization-freshness-scenarios.md). Approved numeric policies are starter defaults, not measured SLOs; implementations document justified overrides and measured evidence.

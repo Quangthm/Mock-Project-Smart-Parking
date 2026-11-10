@@ -11,6 +11,7 @@ This file is a compact working snapshot. Detailed decisions should be stored as 
 | AI form filling | WORKING | AI may help fill an existing form; correct UI form must be shown for manual confirmation | BA context |
 | Product AI scope | MVP / WORKING | Chatbot, recommendation, and LPR/CV are in current MVP scope; model/provider details remain deferred. Repo reality: chatbot is a disabled scaffold; LPR has initial Python service in `src/Services/IoTService/python-ai/` | Review + Reservation specification |
 | AI service boundary | OPEN / DEFERRED | Requires architecture review | BA architecture backlog |
+| Authorization freshness | APPROVED 2026-11-04 | TOKEN default; six async Account-current REQUEST families; explicit speculative-work approval and finalization gates; CQRS contract and numeric retry defaults approved; implementation separate | [ADR](../../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md), [matrix](../../docs/01-requirements/srs/authorization-operation-classification.md) |
 | Normative baseline | CONFIRMED | Baseline upgraded to SRS v1.1 and Solution Architecture v1.1 | Team decision review |
 | Business-rule provenance | CONFIRMED | Do not silently promote proposals/open items to requirements | BA context |
 | Status vocabulary | CONFIRMED | Use project status labels consistently | BA context |

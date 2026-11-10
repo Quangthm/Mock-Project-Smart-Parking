@@ -4,7 +4,7 @@ import * as THREE from "three"
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
+import { loadGltfWithCache } from "../../lib/3d/gltfModelCache"
 
 import type { LotType, ParkingSlot } from "../../lib/types"
 
@@ -26,13 +26,29 @@ import {
   ALLOWED_PARKING_MODELS,
   SLOT_VISUAL_STATE_HEX,
   SLOT_VISUAL_STATE_LABELS,
+  inferLotType,
 } from "../../lib/3d/parking3DConfig"
+import {
+  describeBindingDiagnostics,
+  isObjectVisible,
+  applyFloorIsolation,
+  type UnregisteredMeshRef,
+} from "../../lib/3d/floorIsolation"
 
+// SPARK-228 raw-exact contract matcher: the sole source of operational-overlay state.
 import {
   mapModelSlots,
   findSlotMesh,
+  normalizeSlotIdentifier,
   SlotMatchResult,
 } from "../../lib/3d/slotMatcher"
+
+// SPARK-238 tolerant matcher: the sole source of registration/interactivity.
+import {
+  mapRegisteredMeshes,
+  findRegisteredSlotMesh,
+  type RegisteredMeshMapping,
+} from "../../lib/3d/registeredMeshMapping"
 
 import {
   resolveSlotVisualState,
@@ -49,18 +65,26 @@ type ViewerSlotData = ParkingSlot & {
 }
 
 /**
- * A mesh without bound slot data is not evidence of a free bay. It is rendered
- * with the fail-closed `unknown` appearance (A4).
+ * A mesh with no bound slot on the decision's own mapping is not evidence of a
+ * free bay. It fails closed to the `unknown` appearance (A4).
+ *
+ * The bound slot is passed in explicitly so each caller feeds exactly one
+ * mapping: the operational-overlay colour reads the SPARK-228 raw-exact binding,
+ * while hover/pick reads the SPARK-238 tolerant binding. `mesh.userData` is never
+ * consulted here, so the two matchers cannot contaminate each other's decision.
  */
-function viewerSlotFor(mesh: THREE.Object3D): ViewerSlotData {
-  const bound = mesh.userData.slotData as ViewerSlotData | undefined
+function viewerSlotFor(
+  mesh: THREE.Object3D,
+  boundSlot: ParkingSlot | null | undefined,
+): ViewerSlotData {
+  const bound = boundSlot as ViewerSlotData | undefined
 
-  // `mapModelSlots` invents `slot-auto-*` records for meshes it cannot bind.
-  // Those are not evidence of a free bay, so they fail closed too.
+  // `mapModelSlots` once invented `slot-auto-*` records for meshes it could not
+  // bind. Those are not evidence of a free bay, so they fail closed too.
   if (!bound || String(bound.id ?? "").startsWith("slot-auto-")) {
     return {
-      id: mesh.userData.slotId || mesh.name,
-      number: mesh.userData.slotNumber || mesh.name,
+      id: mesh.name,
+      number: mesh.name,
       floor: 1,
       status: "available",
       physicalState: "UNKNOWN",
@@ -97,56 +121,15 @@ const SLOT_LEGEND_STATES: SlotVisualState[] = [
 ]
 
 const BINDING_WARNING_TAG = "[3d]"
-const BINDING_EXAMPLE_LIMIT = 10
-
-export interface BindingDiagnostics {
-  matched: number
-  unmatchedSlotCodes: string[]
-  unmatchedMeshNames: string[]
-  totalUnmatchedSlotCodes: number
-  totalUnmatchedMeshNames: number
-  signature: string
-}
-
-/**
- * Builds the one-line binding report for a mapping pass. Returns `null` when
- * every contract slot code found a mesh and every candidate mesh found a slot,
- * so callers never log a healthy mapping.
- */
-export function describeBindingDiagnostics(
-  match: Pick<SlotMatchResult, "unmatchedSlotCodes" | "unmatchedMeshNames">,
-  slotCount: number,
-): BindingDiagnostics | null {
-  const unmatchedSlotCodes = Array.isArray(match.unmatchedSlotCodes)
-    ? match.unmatchedSlotCodes
-    : []
-  const unmatchedMeshNames = Array.isArray(match.unmatchedMeshNames)
-    ? match.unmatchedMeshNames
-    : []
-
-  if (unmatchedSlotCodes.length === 0 && unmatchedMeshNames.length === 0) {
-    return null
-  }
-
-  return {
-    matched: Math.max(0, slotCount - unmatchedSlotCodes.length),
-    unmatchedSlotCodes: unmatchedSlotCodes.slice(0, BINDING_EXAMPLE_LIMIT),
-    unmatchedMeshNames: unmatchedMeshNames.slice(0, BINDING_EXAMPLE_LIMIT),
-    totalUnmatchedSlotCodes: unmatchedSlotCodes.length,
-    totalUnmatchedMeshNames: unmatchedMeshNames.length,
-    signature: [
-      slotCount,
-      unmatchedSlotCodes.join("\u0000"),
-      unmatchedMeshNames.join("\u0000"),
-    ].join("\u0001"),
-  }
-}
 
 function logBindingDiagnostics(
   match: SlotMatchResult,
   slotCount: number,
   lastSignatureRef: { current: string | null },
 ): void {
+  // SPARK-228's matcher reports the unmatched slot codes and unmatched mesh
+  // names directly, so they are forwarded straight into the diagnostic shape; the
+  // one-shot deduplication below is preserved unchanged.
   const diagnostics = describeBindingDiagnostics(match, slotCount)
 
   if (!diagnostics) {
@@ -162,6 +145,10 @@ function logBindingDiagnostics(
   const { signature: _signature, ...payload } = diagnostics
   console.warn(`${BINDING_WARNING_TAG} slot/mesh binding incomplete`, payload)
 }
+
+// Stable empty default: a fresh `[]` on every render would make the registration
+// repaint effect run on unrelated renders (for example on every hover).
+const NO_MESH_KEYS: string[] = []
 
 export interface Parking3DViewerProps {
   modelUrl?: string
@@ -201,6 +188,23 @@ export interface Parking3DViewerProps {
     isCustomGlb: boolean
     modelName: string
   }) => void
+
+  /** Structure editing: select unregistered template meshes instead of claiming slots. */
+  registerMode?: boolean
+
+  selectedMeshKeys?: string[]
+
+  onToggleMesh?: (mesh: UnregisteredMeshRef) => void
+
+  onMeshCensus?: (info: {
+    registeredMeshes: number
+    unregisteredMeshes: number
+    unmatchedSlots: number
+    unregistered: UnregisteredMeshRef[]
+  }) => void
+
+  /** Floor grouping isolation: isolates and renders only the selected floor group. */
+  activeFloor?: string | null
 }
 
 export function Parking3DViewer({
@@ -231,7 +235,25 @@ export function Parking3DViewer({
   showControls = true,
 
   onModelLoaded,
+
+  registerMode = false,
+
+  selectedMeshKeys = NO_MESH_KEYS,
+
+  onToggleMesh,
+
+  onMeshCensus,
+
+  activeFloor = null,
 }: Parking3DViewerProps) {
+  const resolvedLotType = useMemo(() => {
+    if (lotType && lotType !== "outdoor") return lotType
+    return inferLotType({
+      floors: layout?.floors.length,
+      slots: slots.map((s) => ({ slotCode: s.number })),
+    })
+  }, [lotType, layout, slots])
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -256,7 +278,11 @@ export function Parking3DViewer({
 
     currentSceneContent: THREE.Object3D | null
 
-    slotMapping: SlotMatchResult | null
+    // SPARK-228 raw-exact binding: operational-overlay visual state only.
+    overlayMapping: SlotMatchResult | null
+
+    // SPARK-238 tolerant binding: registration, interactivity, census, A12 inert.
+    registrationMapping: RegisteredMeshMapping | null
 
     animFrameId: number
   } | null>(null)
@@ -268,6 +294,14 @@ export function Parking3DViewer({
   const [hoveredSlot, setHoveredSlot] = useState<{
     slot: ViewerSlotData
     visualState: SlotVisualState
+    screenX: number
+    screenY: number
+  } | null>(null)
+
+  const [hoveredMesh, setHoveredMesh] = useState<{
+    name: string
+    key: string
+    selected: boolean
     screenX: number
     screenY: number
   } | null>(null)
@@ -332,27 +366,34 @@ export function Parking3DViewer({
 
   // Determine target model file URL
 
-  const targetUrl = modelUrl || ALLOWED_PARKING_MODELS[lotType]?.path
+  const targetUrl = modelUrl || ALLOWED_PARKING_MODELS[resolvedLotType]?.path
 
   const expectedFileName =
-    ALLOWED_PARKING_MODELS[lotType]?.fileName || "outdoor_parking_lot.glb"
+    ALLOWED_PARKING_MODELS[resolvedLotType]?.fileName ||
+    "outdoor_parking_lot.glb"
 
   // Apply slot statuses & highlights
 
   const refreshSlotVisuals = useCallback(() => {
     const inst = threeRef.current
 
-    if (!inst || !inst.slotMapping) return
+    if (!inst || !inst.overlayMapping) return
 
-    // Iterate every candidate mesh, not only formally bound ones: an unbound
-    // bay must still fail closed to `unknown`, never keep its free-looking GLB
-    // material (A4).
-    const meshes = inst.slotMapping.allSlotMeshes ?? []
+    // Operational-overlay colouring is SPARK-228's decision. Iterate every raw
+    // candidate mesh, not only formally bound ones: an unbound bay must still fail
+    // closed to `unknown`, never keep its free-looking GLB material (A4). The bound
+    // slot comes from the raw-exact mapping, so a mesh the tolerant matcher alone
+    // binds has no operational state colour.
+    const { allSlotMeshes } = inst.overlayMapping
 
-    for (const mesh of meshes) {
+    for (const mesh of allSlotMeshes) {
       if (!(mesh instanceof THREE.Mesh)) continue
 
-      const slotData = viewerSlotFor(mesh)
+      const slotData = viewerSlotFor(
+        mesh,
+        inst.overlayMapping.slotByObjectId.get(mesh.id) ??
+          (layout ? undefined : inst.registrationMapping?.slotByObjectId.get(mesh.id)),
+      )
 
       const projected =
         layoutSlots.get(mesh.name) ??
@@ -363,13 +404,17 @@ export function Parking3DViewer({
         !!selectedSlotId &&
         (slotData.id === selectedSlotId ||
           slotData.number === selectedSlotId ||
-          mesh.name === selectedSlotId)
+          mesh.name === selectedSlotId ||
+          normalizeSlotIdentifier(slotData.number) ===
+            normalizeSlotIdentifier(selectedSlotId))
 
       const isFocused =
         !!focusSlotId &&
         (slotData.id === focusSlotId ||
           slotData.number === focusSlotId ||
-          mesh.name === focusSlotId)
+          mesh.name === focusSlotId ||
+          normalizeSlotIdentifier(slotData.number) ===
+            normalizeSlotIdentifier(focusSlotId))
 
       inst.materialManager.applySlotState(
         mesh,
@@ -377,6 +422,18 @@ export function Parking3DViewer({
         isSelected,
         isFocused,
       )
+    }
+
+    // Registration staging is SPARK-238's decision. Unregistered template meshes
+    // never receive a live slot colour: while registering they may carry a
+    // selection tint (the Owner explicitly asked to pick them), otherwise they are
+    // restored to the model's own material so they stay visually inert (A12).
+    const selected = new Set(selectedMeshKeysRef.current)
+    for (const mesh of inst.registrationMapping?.unregisteredSlotMeshes ?? []) {
+      if (!(mesh instanceof THREE.Mesh)) continue
+      if (registerModeRef.current)
+        inst.materialManager.applyRegistrationState(mesh, selected.has(mesh.uuid))
+      else inst.materialManager.restoreOriginal(mesh)
     }
   }, [selectedSlotId, focusSlotId, layoutSlots])
 
@@ -387,13 +444,16 @@ export function Parking3DViewer({
   const focusOnSlotKey = useCallback((targetSlotKey: string) => {
     const inst = threeRef.current
 
-    if (!inst || !inst.slotMapping) return
+    if (!inst || !inst.registrationMapping) return
 
     if (lastFocusedKeyRef.current === targetSlotKey) return
 
     lastFocusedKeyRef.current = targetSlotKey
 
-    const mesh = findSlotMesh(inst.slotMapping.meshBySlotKey, targetSlotKey)
+    const mesh = findRegisteredSlotMesh(
+      inst.registrationMapping.meshBySlotKey,
+      targetSlotKey,
+    )
 
     if (mesh) {
       inst.cameraController.focusOnObject(mesh, inst.camera, inst.controls)
@@ -490,7 +550,7 @@ export function Parking3DViewer({
 
     controls.minDistance = 3
 
-    controls.maxDistance = 120
+    controls.maxDistance = 500
 
     controls.target.set(0, 0, 0)
 
@@ -513,7 +573,9 @@ export function Parking3DViewer({
 
       currentSceneContent: null,
 
-      slotMapping: null,
+      overlayMapping: null,
+
+      registrationMapping: null,
 
       animFrameId: 0,
     }
@@ -535,9 +597,9 @@ export function Parking3DViewer({
 
       // Pulsing material for selected slot
 
-      if (selectedSlotId && threeRef.current?.slotMapping) {
+      if (selectedSlotId && threeRef.current?.overlayMapping) {
         const mesh = findSlotMesh(
-          threeRef.current.slotMapping.meshBySlotKey,
+          threeRef.current.overlayMapping.meshBySlotKey,
           selectedSlotId,
         )
 
@@ -603,11 +665,47 @@ export function Parking3DViewer({
 
   onModelLoadedRef.current = onModelLoaded
 
+  const registerModeRef = useRef(registerMode)
+
+  registerModeRef.current = registerMode
+
+  const onToggleMeshRef = useRef(onToggleMesh)
+
+  onToggleMeshRef.current = onToggleMesh
+
+  const onMeshCensusRef = useRef(onMeshCensus)
+
+  onMeshCensusRef.current = onMeshCensus
+
+  const selectedMeshKeysRef = useRef(selectedMeshKeys)
+
+  selectedMeshKeysRef.current = selectedMeshKeys
+
   const loadedModelUrlRef = useRef<string | null>(null)
 
   const refreshSlotVisualsRef = useRef(refreshSlotVisuals)
 
   refreshSlotVisualsRef.current = refreshSlotVisuals
+
+  const lastFramedFloorRef = useRef<string | null>(null)
+
+  const reportCensus = useCallback(
+    (mapping: RegisteredMeshMapping, slotCount: number) => {
+      const visibleUnregistered = mapping.unregisteredSlotMeshes.filter((mesh) =>
+        isObjectVisible(mesh),
+      )
+      onMeshCensusRef.current?.({
+        registeredMeshes: mapping.allSlotMeshes.length,
+        unregisteredMeshes: visibleUnregistered.length,
+        unmatchedSlots: Math.max(0, slotCount - mapping.allSlotMeshes.length),
+        unregistered: visibleUnregistered.map((mesh) => ({
+          key: mesh.uuid,
+          name: mesh.name || "Template mesh",
+        })),
+      })
+    },
+    [],
+  )
 
   // Load Model (.glb file or procedural twin)
 
@@ -632,6 +730,8 @@ export function Parking3DViewer({
       inst.scene.remove(inst.currentSceneContent)
 
       inst.currentSceneContent = null
+
+      lastFramedFloorRef.current = null
     }
 
     const applySceneContent = (
@@ -647,33 +747,47 @@ export function Parking3DViewer({
 
       loadedModelUrlRef.current = targetUrl || ""
 
-      // Map slots using latest slots
+      // Map slots using latest slots. Compose the two mappings: SPARK-228
+      // (raw-exact) drives operational-overlay state, SPARK-238 (tolerant) drives
+      // registration, pick and census. They are stored separately and never
+      // collapsed, so each decision has exactly one source.
+      const overlayMapping = mapModelSlots(loadedObject, slotsRef.current)
 
-      const mapping = mapModelSlots(loadedObject, slotsRef.current)
+      const registrationMapping = mapRegisteredMeshes(
+        loadedObject,
+        slotsRef.current,
+      )
 
-      inst.slotMapping = mapping
+      inst.overlayMapping = overlayMapping
+
+      inst.registrationMapping = registrationMapping
 
       logBindingDiagnostics(
-        mapping,
+        overlayMapping,
         slotsRef.current.length,
         bindingWarningSignatureRef,
       )
+
+      // Apply floor grouping isolation if an active floor is requested
+      const activeTarget = applyFloorIsolation(loadedObject, activeFloor)
+
+      reportCensus(registrationMapping, slotsRef.current.length)
 
       // Visuals
 
       refreshSlotVisualsRef.current()
 
       // Frame camera overview only on initial model load
-
+      lastFramedFloorRef.current = activeFloor || ""
       inst.cameraController.resetToOverview(
-        loadedObject,
+        activeTarget || loadedObject,
         inst.camera,
         inst.controls,
       )
 
       if (onModelLoadedRef.current) {
         onModelLoadedRef.current({
-          detectedSlotKeys: mapping.detectedSlotKeys,
+          detectedSlotKeys: registrationMapping.detectedSlotKeys,
 
           isCustomGlb: isGlb,
 
@@ -684,20 +798,14 @@ export function Parking3DViewer({
       setLoading(false)
     }
 
-    // Attempt to load GLB file
-
-    const loader = new GLTFLoader()
+    // Attempt to load GLB file from in-memory cache / singleton loader
 
     const cleanUrl = targetUrl
 
     if (cleanUrl) {
-      loader.load(
-        cleanUrl,
-
-        (gltf) => {
-          // Successfully loaded GLB!
-
-          const modelScene = gltf.scene
+      loadGltfWithCache(cleanUrl)
+        .then((modelScene) => {
+          if (!inst) return
 
           // Add default lighting if model has no lights
 
@@ -720,36 +828,32 @@ export function Parking3DViewer({
           }
 
           applySceneContent(modelScene, true, expectedFileName)
-        },
-
-        undefined,
-
-        (err) => {
-          // File not found or not yet put in folder: Fallback to procedural model with slots
+        })
+        .catch((err) => {
+          if (!inst) return
 
           console.info(
-            `[3D Viewer] Model file "${cleanUrl}" not yet found on disk. Initializing high-fidelity procedural 3D model with matching naming convention (${expectedFileName}).`,
+            `[3D Viewer] Model file "${cleanUrl}" not loaded (${err instanceof Error ? err.message : String(err)}). Initializing procedural 3D model with matching naming convention (${expectedFileName}).`,
           )
 
           const proceduralLot = generateProceduralParkingLot(
-            lotType,
+            resolvedLotType,
             slotsRef.current,
             1,
           )
 
           applySceneContent(proceduralLot, false, expectedFileName)
-        },
-      )
+        })
     } else {
       const proceduralLot = generateProceduralParkingLot(
-        lotType,
+        resolvedLotType,
         slotsRef.current,
         1,
       )
 
       applySceneContent(proceduralLot, false, expectedFileName)
     }
-  }, [targetUrl, lotType, expectedFileName])
+  }, [targetUrl, resolvedLotType, expectedFileName, reportCensus])
 
   // Sync slot data when slots array updates without reloading the 3D model
 
@@ -764,20 +868,62 @@ export function Parking3DViewer({
       if (node.userData?.isSlot) delete node.userData.slotData
     })
 
-    const mapping = mapModelSlots(inst.currentSceneContent, slots)
+    const overlayMapping = mapModelSlots(inst.currentSceneContent, slots)
 
-    inst.slotMapping = mapping
+    const registrationMapping = mapRegisteredMeshes(inst.currentSceneContent, slots)
 
-    logBindingDiagnostics(mapping, slots.length, bindingWarningSignatureRef)
+    inst.overlayMapping = overlayMapping
 
-    refreshSlotVisuals()
-  }, [slots, refreshSlotVisuals])
+    inst.registrationMapping = registrationMapping
+
+    logBindingDiagnostics(
+      overlayMapping,
+      slots.length,
+      bindingWarningSignatureRef,
+    )
+
+    reportCensus(registrationMapping, slots.length)
+
+    // Read the latest repaint callback through its ref instead of depending on it.
+    // Selecting a slot or re-mapping the layout changes `refreshSlotVisuals`'s
+    // identity; depending on it here would re-run the whole scene remap (and its
+    // census report) for a change that only needs a repaint.
+    refreshSlotVisualsRef.current()
+  }, [slots, reportCensus])
 
   // Update visuals whenever selectedSlotId changes
 
   useEffect(() => {
     refreshSlotVisuals()
   }, [selectedSlotId, focusSlotId, refreshSlotVisuals])
+
+  // Registration selection is owned by the structure screen; repaint the template tint
+  // without re-mapping the scene.
+  useEffect(() => {
+    refreshSlotVisualsRef.current()
+  }, [registerMode, selectedMeshKeys])
+
+  // Active floor isolation & camera gliding effect
+  useEffect(() => {
+    const inst = threeRef.current
+    if (!inst || !inst.currentSceneContent) return
+
+    const activeTarget = applyFloorIsolation(inst.currentSceneContent, activeFloor)
+    const effectiveFloor = activeFloor || ""
+    if (lastFramedFloorRef.current !== effectiveFloor) {
+      lastFramedFloorRef.current = effectiveFloor
+      inst.cameraController.resetToOverview(
+        activeTarget || inst.currentSceneContent,
+        inst.camera,
+        inst.controls,
+      )
+    }
+
+    if (inst.registrationMapping) {
+      reportCensus(inst.registrationMapping, slotsRef.current.length)
+    }
+    refreshSlotVisualsRef.current()
+  }, [activeFloor, reportCensus])
 
   // Camera focus when focusSlotId or selectedSlotId changes
 
@@ -789,74 +935,84 @@ export function Parking3DViewer({
     }
   }, [focusSlotId, selectedSlotId, focusOnSlotKey])
 
-  // Raycasting for click selection and hover
+  // Raycasting helpers
+
+  const pickMesh = (
+    event: React.PointerEvent<HTMLCanvasElement>,
+    meshes: THREE.Object3D[],
+  ): THREE.Mesh | null => {
+    const inst = threeRef.current
+    const canvas = canvasRef.current
+    if (!inst || !canvas || meshes.length === 0) return null
+
+    const rect = canvas.getBoundingClientRect()
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(new THREE.Vector2(x, y), inst.camera)
+    const intersects = raycaster.intersectObjects(meshes, true)
+    const allowed = new Set(meshes)
+    for (const hit of intersects) {
+      if (!isObjectVisible(hit.object)) continue
+      let target: THREE.Object3D | null = hit.object
+      while (target) {
+        if (target instanceof THREE.Mesh && allowed.has(target)) return target
+        target = target.parent
+      }
+    }
+    return null
+  }
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!interactive) return
 
     const inst = threeRef.current
 
-    if (!inst || !inst.slotMapping) return
+    if (!inst || !inst.registrationMapping) return
 
-    const canvas = canvasRef.current
+    // Structure editing: a click selects an unregistered template mesh. It never
+    // claims a slot and never focuses the camera, so several bays can be picked.
+    if (registerMode) {
+      const mesh = pickMesh(e, inst.registrationMapping.unregisteredSlotMeshes)
+      if (mesh) {
+        onToggleMeshRef.current?.({ key: mesh.uuid, name: mesh.name || "Template mesh" })
+      }
+      return
+    }
 
-    if (!canvas) return
+    const targetMesh = pickMesh(e, inst.registrationMapping.allSlotMeshes)
 
-    const rect = canvas.getBoundingClientRect()
+    if (targetMesh && targetMesh.userData.isSlot) {
+      const slotData = viewerSlotFor(
+        targetMesh,
+        inst.registrationMapping.slotByObjectId.get(targetMesh.id),
+      )
 
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      const projected =
+        layoutSlots.get(targetMesh.name) ??
+        layoutSlots.get(slotData.id) ??
+        layoutSlots.get(slotData.number)
 
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      const visualSlot = withProjectedState(slotData, projected)
 
-    const raycaster = new THREE.Raycaster()
-
-    raycaster.setFromCamera(new THREE.Vector2(x, y), inst.camera)
-
-    const slotMeshes: THREE.Object3D[] = inst.slotMapping.allSlotMeshes || []
-
-    const intersects = raycaster.intersectObjects(slotMeshes, true)
-
-    if (intersects.length > 0) {
-      let targetMesh: THREE.Object3D | null = intersects[0].object
-
-      while (
-        targetMesh &&
-        !targetMesh.userData.isSlot &&
-        targetMesh.parent &&
-        targetMesh.parent !== inst.scene
-      ) {
-        targetMesh = targetMesh.parent
+      if (onSelectSlot) {
+        onSelectSlot(visualSlot)
       }
 
-      if (targetMesh && targetMesh.userData.isSlot) {
-        const slotData = viewerSlotFor(targetMesh)
+      lastFocusedKeyRef.current = visualSlot.id || visualSlot.number
 
-        const projected =
-          layoutSlots.get(targetMesh.name) ??
-          layoutSlots.get(slotData.id) ??
-          layoutSlots.get(slotData.number)
-
-        const visualSlot = withProjectedState(slotData, projected)
-
-        if (onSelectSlot) {
-          onSelectSlot(visualSlot)
-        }
-
-        lastFocusedKeyRef.current = visualSlot.id || visualSlot.number
-
-        inst.cameraController.focusOnObject(
-          targetMesh,
-          inst.camera,
-          inst.controls,
-        )
-      }
+      inst.cameraController.focusOnObject(
+        targetMesh,
+        inst.camera,
+        inst.controls,
+      )
     }
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const inst = threeRef.current
 
-    if (!inst || !inst.slotMapping) return
+    if (!inst || !inst.registrationMapping) return
 
     const canvas = canvasRef.current
 
@@ -864,58 +1020,53 @@ export function Parking3DViewer({
 
     const rect = canvas.getBoundingClientRect()
 
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-
-    const raycaster = new THREE.Raycaster()
-
-    raycaster.setFromCamera(new THREE.Vector2(x, y), inst.camera)
-
-    const slotMeshes: THREE.Object3D[] = inst.slotMapping.allSlotMeshes || []
-
-    const intersects = raycaster.intersectObjects(slotMeshes, true)
-
-    if (intersects.length > 0) {
-      let targetMesh: THREE.Object3D | null = intersects[0].object
-
-      while (
-        targetMesh &&
-        !targetMesh.userData.isSlot &&
-        targetMesh.parent &&
-        targetMesh.parent !== inst.scene
-      ) {
-        targetMesh = targetMesh.parent
-      }
-
-      if (targetMesh && targetMesh.userData.isSlot) {
-        const slotData = viewerSlotFor(targetMesh)
-
-        const projected =
-          layoutSlots.get(targetMesh.name) ??
-          layoutSlots.get(slotData.id) ??
-          layoutSlots.get(slotData.number)
-
-        const visualSlot = withProjectedState(slotData, projected)
-
-        setHoveredSlot({
-          slot: visualSlot,
-
-          visualState: resolveSlotVisualState(visualSlot),
-
+    if (registerMode) {
+      const mesh = pickMesh(e, inst.registrationMapping.unregisteredSlotMeshes)
+      setHoveredSlot(null)
+      if (mesh) {
+        setHoveredMesh({
+          name: mesh.name || "Template mesh",
+          key: mesh.uuid,
+          selected: selectedMeshKeys.includes(mesh.uuid),
           screenX: e.clientX - rect.left,
-
           screenY: e.clientY - rect.top,
         })
-
-        canvas.style.cursor = interactive ? "pointer" : "default"
-
+        canvas.style.cursor = "pointer"
         return
       }
+      setHoveredMesh(null)
+      canvas.style.cursor = "grab"
+      return
+    }
+
+    const targetMesh = pickMesh(e, inst.registrationMapping.allSlotMeshes)
+
+    if (targetMesh && targetMesh.userData.isSlot) {
+      const slotData = viewerSlotFor(
+        targetMesh,
+        inst.registrationMapping.slotByObjectId.get(targetMesh.id),
+      )
+
+      const projected =
+        layoutSlots.get(targetMesh.name) ??
+        layoutSlots.get(slotData.id) ??
+        layoutSlots.get(slotData.number)
+
+      const visualSlot = withProjectedState(slotData, projected)
+
+      setHoveredMesh(null)
+      setHoveredSlot({
+        slot: visualSlot,
+        visualState: resolveSlotVisualState(visualSlot),
+        screenX: e.clientX - rect.left,
+        screenY: e.clientY - rect.top,
+      })
+      canvas.style.cursor = interactive ? "pointer" : "default"
+      return
     }
 
     setHoveredSlot(null)
-
+    setHoveredMesh(null)
     canvas.style.cursor = "grab"
   }
 
@@ -929,7 +1080,7 @@ export function Parking3DViewer({
         ref={canvasRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerLeave={() => setHoveredSlot(null)}
+        onPointerLeave={() => { setHoveredSlot(null); setHoveredMesh(null) }}
         className="w-full h-full block touch-none transition-opacity duration-300"
         style={{ opacity: isStale ? STALE_DIM_OPACITY : 1 }}
       />
@@ -940,6 +1091,13 @@ export function Parking3DViewer({
           ageSeconds={staleAgeSeconds}
           className="absolute left-3 top-3 right-20 sm:right-auto sm:max-w-md z-20 pointer-events-none shadow-lg"
         />
+      )}
+
+      {registerMode && (
+        <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[min(22rem,calc(100%-5rem))] rounded-lg border border-amber-300/40 bg-[#151c1b]/90 px-3 py-2 text-[11px] leading-4 text-amber-100">
+          <strong className="block text-xs text-white">Selecting unregistered bays</strong>
+          Registered bays stay live and cannot be selected here. Picked template meshes are inert until you register them.
+        </div>
       )}
 
       {/* Loading overlay */}
@@ -1027,6 +1185,25 @@ export function Parking3DViewer({
               Click to select this slot
             </div>
           )}
+        </div>
+      )}
+
+      {/* Hover Tooltip for unregistered template meshes */}
+      {hoveredMesh && (
+        <div
+          className="absolute pointer-events-none z-20 px-2.5 py-1.5 rounded-md bg-[#151c1b] text-white text-xs border border-white/20 shadow-xl transform -translate-x-1/2 -translate-y-full -mt-2"
+          style={{ left: hoveredMesh.screenX, top: hoveredMesh.screenY }}
+        >
+          <div className="font-bold flex items-center gap-1.5">
+            <span>{hoveredMesh.name}</span>
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+          </div>
+          <div className="text-[10px] text-slate-300">
+            Not registered — no capacity, no booking
+          </div>
+          <div className="text-[9px] text-amber-300 mt-0.5">
+            {hoveredMesh.selected ? "Click to deselect" : "Click to select for registration"}
+          </div>
         </div>
       )}
 

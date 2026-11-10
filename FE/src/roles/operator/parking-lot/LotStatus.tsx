@@ -3,6 +3,7 @@ import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { ParkingStatus, type ParkingStatusKind } from "../../../components/ui/ParkingStatus"
 import { StaleDataBanner, STALE_DIM_OPACITY } from "../../../components/ui/StaleDataBanner"
 import {
@@ -11,6 +12,7 @@ import {
 } from "../../../lib/3d/parking3DConfig"
 import {
   formatSlotLabel,
+  operationalFixtureMode,
   type OperationalLayoutProjection,
   type PhysicalState,
   type ReservationState,
@@ -18,7 +20,7 @@ import {
 } from "../../../lib/operationalLayout"
 import { SlotInspectionModal } from "./SlotInspectionModal"
 import type { OperatorSite } from "../../../lib/operatorApi"
-import { useLotStatus, type LotVisualFilter } from "./useLotStatus"
+import { useLotStatus, floorKeyFor, type LotVisualFilter } from "./useLotStatus"
 
 interface LotStatusProps {
   lot: OperatorSite | null
@@ -148,6 +150,8 @@ export function LotStatus({
     ? { opacity: STALE_DIM_OPACITY }
     : undefined
 
+  const activeFloorKey = floorKeyFor(site?.lotType, selectedFloor)
+
   return (
     <div className="space-y-6">
       <PageHeader title="Parking Structure & Slot Monitoring" eyebrow={<>{isOutdoor ? "Single-Level Facility" : `Multi-Level Facility (${site.floors} Floors)`} · {site.totalSlots} total slots</>} description="Live digital twin, floor navigation, and real-time physical space supervision." actions={<div className="flex flex-wrap items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
@@ -244,6 +248,22 @@ export function LotStatus({
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-semibold text-[var(--muted)]">Level:</span>
               <div className="flex gap-1">
+                {site.floors > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFloor("all")
+                      setSelectedZone("all")
+                    }}
+                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                      selectedFloor === "all"
+                        ? "bg-[var(--action)] text-[var(--action-fg)]"
+                        : "bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--fg)] border border-[var(--border)]"
+                    }`}
+                  >
+                    Toàn bộ
+                  </button>
+                )}
                 {Array.from({ length: site.floors }, (_, i) => i + 1).map((floor) => (
                   <button
                     key={floor}
@@ -361,17 +381,21 @@ export function LotStatus({
                   {site.modelFileName || "Procedural Lot Engine"}
                 </span>
               </div>
-              <Parking3DViewer
-                modelUrl={site.modelUrl}
-                slots={filteredSlots}
-                layout={layout}
-                showStaleBanner={false}
-                selectedSlotId={inspectedSlot?.id || inspectedSlot?.number}
-                focusSlotId={searchQuery.trim() || null}
-                onSelectSlot={(slot) => setInspectedSlot(filteredSlots.find((item) => item.id === slot.id) ?? null)}
-                height={420}
-                interactive={true}
-              />
+              <ErrorBoundary name="Parking 3D viewer">
+                <Parking3DViewer
+                  modelUrl={site.modelUrl}
+                  lotType={site.lotType}
+                  activeFloor={activeFloorKey}
+                  slots={filteredSlots}
+                  layout={layout}
+                  showStaleBanner={false}
+                  selectedSlotId={inspectedSlot?.id || inspectedSlot?.number}
+                  focusSlotId={searchQuery.trim() || null}
+                  onSelectSlot={(slot) => setInspectedSlot(filteredSlots.find((item) => item.id === slot.id) ?? null)}
+                  height={420}
+                  interactive={true}
+                />
+              </ErrorBoundary>
             </div>
           )}
         </div>
@@ -383,7 +407,7 @@ export function LotStatus({
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="font-bold text-sm text-[var(--fg)]">
-                2D Schematic Map — {isOutdoor ? "Ground Zone Grid" : `Floor ${selectedFloor}`}
+                2D Schematic Map — {isOutdoor ? "Ground Zone Grid" : selectedFloor === "all" ? "Toàn bộ" : `Floor ${selectedFloor}`}
               </h3>
               <p className="text-xs text-[var(--muted)]">
                 Physical and reservation states are shown separately. Select a space for details.

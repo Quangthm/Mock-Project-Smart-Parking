@@ -16,7 +16,8 @@ const stale = staleEnvelope.data;
  * to CommonJS, run it in a vm, and stub every import by name.
  */
 function load(file, imports, replacements = {}) {
-  let source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8');
+  let source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8')
+    .replace(/import\.meta\.env\.\w+/g, 'undefined');
   for (const [from, to] of Object.entries(replacements)) source = source.split(from).join(to);
   const js = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -267,10 +268,13 @@ test('an empty slot array leaves every mesh unmatched instead of fabricating slo
   assert.deepEqual([...result.unmatchedMeshNames].sort(), ['CarParkingSpace_001', 'CarParkingSpace_002']);
 });
 
+const parking3DConfig = load('lib/3d/parking3DConfig.ts', {});
+
 const operatorApiImports = {
   './authApi': { request: async () => ({ success: true, data: null }) },
   './store': { store: { getLots: () => [] } },
   './3d/ownerModelStorage': { loadOwnerModelUrl: async () => null },
+  './3d/parking3DConfig': parking3DConfig,
   './operationalLayout': layout,
 };
 
@@ -302,6 +306,11 @@ test('operator sites map the authoritative projection and keep both axes on OCCU
   assert.equal(site.totalSlots, fresh.slots.length);
   assert.equal(site.floors, fresh.floors.length);
 
+  // SPARK-238: the adapter infers a lot type and binds the matching 3D model
+  assert.ok(['outdoor', 'basement', 'multi-storey'].includes(site.lotType));
+  assert.equal(site.modelUrl, parking3DConfig.ALLOWED_PARKING_MODELS[site.lotType].path);
+  assert.equal(site.modelFileName, parking3DConfig.ALLOWED_PARKING_MODELS[site.lotType].fileName);
+
   const protectedSlot = site.slots.find(slot => slot.number === 'CarParkingSpace_007');
   assert.equal(protectedSlot.physicalState, 'OCCUPIED');
   assert.equal(protectedSlot.reservationState, 'PROTECTED');
@@ -318,6 +327,42 @@ test('operator sites map the authoritative projection and keep both axes on OCCU
   const bookableSlot = site.slots.find(slot => slot.number === 'CarParkingSpace_021');
   assert.equal(bookableSlot.isBookable, true);
   assert.equal(bookableSlot.status, 'available');
+});
+
+test('assigned operator site uses the scoped legacy layout when the live projection lacks its arrays', async () => {
+  const legacy = {
+    site: {
+      id: fresh.siteId, tenantId: 'tenant-1', code: fresh.siteCode, name: fresh.siteName,
+      address: 'Assigned lot', latitude: null, longitude: null, isActive: true,
+    },
+    units: [], slots: [], capacityViews: [],
+  };
+  let legacyCalls = 0;
+  const operatorApi = load('lib/operatorApi.ts', {
+    ...operatorApiImports,
+    './parkingApi': {
+      operatorsApi: { assignments: async () => [{ siteId: fresh.siteId, tenantId: 'tenant-1', permissions: ['SLOT_OVERRIDE'] }] },
+      parkingApi: {
+        operationalLayout: async () => ({ siteId: fresh.siteId, siteName: fresh.siteName }),
+        operatorLayout: async id => { assert.equal(id, fresh.siteId); legacyCalls++; return legacy; },
+      },
+    },
+  }, operatorApiReplacements);
+
+  const sites = await operatorApi.loadOperatorSites({ id: 'operator-1', role: 'operator' });
+  assert.equal(legacyCalls, 1);
+  assert.equal(sites.length, 1);
+  assert.equal(sites[0].id, fresh.siteId);
+  assert.equal(sites[0].name, fresh.siteName);
+  assert.equal(sites[0].freshness, null);
+});
+
+test('invalid operator assignments report an API contract error instead of a map exception', async () => {
+  const operatorApi = load('lib/operatorApi.ts', {
+    ...operatorApiImports,
+    './parkingApi': { operatorsApi: { assignments: async () => undefined }, parkingApi: {} },
+  }, operatorApiReplacements);
+  await assert.rejects(operatorApi.loadOperatorSites({ id: 'operator-1', role: 'operator' }), /invalid site list/);
 });
 
 // F3: the owner path now reads the same authoritative projection as the operator
@@ -363,6 +408,11 @@ test('owner sites read the operational-layout projection too, keeping list() met
   assert.equal(site.freshness.generatedAt, fresh.generatedAt);
   assert.equal(site.freshness.stalenessThresholdSeconds, fresh.stalenessThresholdSeconds);
 
+  // SPARK-238: the owner path also labels the inferred lot type + bound model
+  assert.ok(['outdoor', 'basement', 'multi-storey'].includes(site.lotType));
+  assert.equal(site.modelUrl, parking3DConfig.ALLOWED_PARKING_MODELS[site.lotType].path);
+  assert.equal(site.modelFileName, parking3DConfig.ALLOWED_PARKING_MODELS[site.lotType].fileName);
+
   const backup = site.slots.find(slot => slot.number === 'CarParkingSpace_004');
   assert.equal(backup.physicalState, 'AVAILABLE');
   assert.equal(backup.reservationState, 'BACKUP');
@@ -371,6 +421,40 @@ test('owner sites read the operational-layout projection too, keeping list() met
   const unknownSlot = site.slots.find(slot => slot.number === 'CarParkingSpace_009');
   assert.equal(unknownSlot.physicalState, 'UNKNOWN');
   assert.notEqual(unknownSlot.status, 'available');
+});
+
+test('operator sites infer a basement lot type and bind the underground 3D model', async () => {
+  const basementProjection = {
+    siteId: 'site-basement',
+    siteCode: 'SPK-HCM-BASEMENT',
+    siteName: 'Bai xe tang ham B1',
+    generatedAt: '2026-10-26T12:00:00.000Z',
+    isFresh: true,
+    stalenessThresholdSeconds: 30,
+    floors: [
+      { floorId: 'f1', name: 'B1', maxCapacity: 10, level: 1 },
+      { floorId: 'f2', name: 'B2', maxCapacity: 10, level: 2 },
+    ],
+    slots: [
+      { slotId: 's1', slotCode: 'B1-01', floorId: 'f1', zoneCode: 'Z1', physicalState: 'AVAILABLE', reservationState: 'UNRESERVED', supportedVehicleType: 'CAR' },
+    ],
+  };
+  const operatorApi = load('lib/operatorApi.ts', {
+    ...operatorApiImports,
+    './parkingApi': {
+      operatorsApi: { assignments: async () => [{ siteId: 'site-basement', tenantId: 'tenant-1', permissions: [] }] },
+      parkingApi: {
+        operationalLayout: async () => basementProjection,
+        operatorLayout: async () => { throw new Error('basement projection must not fall back to legacy'); },
+      },
+    },
+  }, operatorApiReplacements);
+
+  const sites = await operatorApi.loadOperatorSites({ id: 'operator-basement', role: 'operator' });
+  assert.equal(sites.length, 1);
+  assert.equal(sites[0].lotType, 'basement');
+  assert.equal(sites[0].modelUrl, parking3DConfig.ALLOWED_PARKING_MODELS.basement.path);
+  assert.equal(sites[0].modelFileName, 'underground_parking_lot.glb');
 });
 
 function loadParkingApi(flag, requestImpl) {

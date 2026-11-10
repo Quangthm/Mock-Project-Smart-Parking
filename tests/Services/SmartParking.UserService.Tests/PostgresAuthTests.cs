@@ -23,7 +23,7 @@ public sealed class PostgresFactAttribute : FactAttribute
 
 public sealed class PostgresAuthTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task LoginUsesReplacementUserWhenDeletedUserHasSameEmail()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
@@ -83,7 +83,7 @@ public sealed class PostgresAuthTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task MigrationConcurrencyRotationRevocationAndRestartUseRealPostgres()
     {
         var input = Environment.GetEnvironmentVariable("SMARTPARK_AUTH_TEST_CONNECTION")!;
@@ -119,7 +119,7 @@ public sealed class PostgresAuthTests
                 Assert.True(passwords.Verify("Password@123", seeded.PasswordHash));
                 await new DataSeeder(db, passwords).SeedAsync();
                 Assert.Equal(seeded.PasswordHash, (await db.Users.AsNoTracking().SingleAsync()).PasswordHash);
-                await ServiceSchema.ApplyFeaturesAsync(db);
+                await ServiceSchema.VerifyCanonicalAsync(db);
 
             }
 

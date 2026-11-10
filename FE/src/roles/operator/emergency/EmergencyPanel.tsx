@@ -5,11 +5,19 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { operatorOperationsApi, type OperatorIncident } from "../../../lib/operatorApi"
 import { showUiToast } from "../../../lib/uiToast"
 
+const incidentLabels: Record<string, string> = {
+  "wrong-spot": "Wrong spot",
+  overtime: "Overstay",
+  damage: "Vehicle damage",
+  other: "Other incident",
+}
+
 export function EmergencyPanel({ siteId }: { siteId: string }) {
   const [incidents, setIncidents] = useState<OperatorIncident[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [incidentView, setIncidentView] = useState<"reported" | "resolved">("reported")
 
   const [form, setForm] = useState({
     plate: "",
@@ -88,8 +96,9 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
     }
   }
 
-  const openIncidents = incidents.filter((i) => i.status === "reported")
+  const openIncidents = incidents.filter((i) => i.status !== "resolved")
   const resolvedIncidents = incidents.filter((i) => i.status === "resolved")
+  const visibleIncidents = incidentView === "reported" ? openIncidents : resolvedIncidents
 
   return (
     <div className="space-y-6">
@@ -114,7 +123,7 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
       )}
 
       {loading && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
+        <div role="status" className="sr-only">
           Loading facility incidents…
         </div>
       )}
@@ -122,17 +131,22 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Left: Active Incidents List */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-[var(--fg)]">
-              Active Security Alerts ({openIncidents.length})
-            </h2>
-            <span className="text-xs text-[var(--muted)]">
-              {resolvedIncidents.length} resolved
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-bold text-[var(--fg)]">Incident queue</h2>
+            <div className="flex flex-wrap gap-2" aria-label="Incident status">
+              <button type="button" className={incidentView === "reported" ? "btn-primary" : "btn-outline"}
+                aria-pressed={incidentView === "reported"} onClick={() => setIncidentView("reported")}>
+                Open ({openIncidents.length})
+              </button>
+              <button type="button" className={incidentView === "resolved" ? "btn-primary" : "btn-outline"}
+                aria-pressed={incidentView === "resolved"} onClick={() => setIncidentView("resolved")}>
+                Resolved ({resolvedIncidents.length})
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {openIncidents.map((inc) => (
+            {visibleIncidents.map((inc) => (
               <div
                 key={inc.id}
                 className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2.5 transition"
@@ -149,17 +163,21 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
                         inc.type === "wrong-spot" ? "text-red-600" : inc.type === "damage" ? "text-orange-600" : "text-amber-600"
                       }`}
                     >
-                      {inc.type === "wrong-spot" ? "Wrong Spot Alert" : inc.type === "damage" ? "Vehicle Damage" : "Overtime Stay"}
+                      {incidentLabels[inc.type] ?? inc.type}
                     </span>
                   </div>
                   <span className="text-xs text-[var(--muted)]">{new Date(inc.createdAt).toLocaleString()}</span>
                 </div>
 
+                <span className="text-xs font-semibold text-[var(--muted)]">
+                  {inc.status === "resolved" ? "Resolved" : inc.status === "reported" ? "Reported" : "Status unavailable"}
+                </span>
+
                 <p className="whitespace-pre-wrap text-xs text-[var(--muted)] bg-[var(--bg)] p-2 rounded border border-[var(--border)]">
                   {inc.details}
                 </p>
 
-                <div className="flex justify-end pt-2">
+                {incidentView === "reported" && inc.status === "reported" && <div className="flex justify-end pt-2">
                   <button
                     type="button"
                     className="btn-outline text-xs py-1 px-3 text-green-600 border-green-500/30 hover:bg-green-500/10"
@@ -168,15 +186,14 @@ export function EmergencyPanel({ siteId }: { siteId: string }) {
                   >
                     <UntitledIcon name="check" size={13} /> Mark Resolved
                   </button>
-                </div>
+                </div>}
               </div>
             ))}
 
-            {openIncidents.length === 0 && (
+            {!loading && visibleIncidents.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--muted)]">
                 <UntitledIcon name="check-circle" size={24} />
-                <p className="mt-2 font-medium">No open incidents or security alarms.</p>
-                <p className="text-[11px]">No incidents have been reported for this facility.</p>
+                <p className="mt-2 font-medium">{incidentView === "reported" ? "No open incidents." : "No resolved incidents yet."}</p>
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
 using SmartParking.OperationService.API;
@@ -203,8 +204,7 @@ public sealed class StructureHttpContractTests
             return Task.CompletedTask;
         }
 
-        public Task<object> ImpactAsync(Guid tenant, Guid site, CancellationToken ct)
-            => Task.FromResult<object>(new { reservations = Array.Empty<object>(), sessions = Array.Empty<object>() });
+        public Task<ReservationDomain.StructureImpactResponse> ImpactAsync(Guid tenant, Guid site, CancellationToken ct) => Task.FromResult(new ReservationDomain.StructureImpactResponse([], []));
 
         public Task ForceReleaseAsync(Guid tenant, Guid site, CancellationToken ct)
         {

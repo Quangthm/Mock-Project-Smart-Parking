@@ -11,7 +11,7 @@ using UserService.Application.DTOs;
 
 namespace UserService.Application.Services;
 
-public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking, AccountWorkflowService workflows, IAccountAuthorizationService authorization)
+public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswordService passwords, TimeProvider clock, IParkingDirectory parking, AccountWorkflowService workflows, IAccountAuthorizationService authorization, IBotVerificationService? botVerifier = null)
     : IOwnerRegistrationService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
@@ -29,6 +29,11 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
 
     public async Task<OwnerApplicationDto> RegisterAsync(OwnerRegistrationDto body, CancellationToken ct)
     {
+        if (botVerifier is not null)
+        {
+            await botVerifier.VerifyAsync(body.TurnstileToken, "owner_register", ct);
+        }
+
         Validate(body);
         var email = body.Email.Trim().ToLowerInvariant();
         var phone = AccountWorkflowService.Contact(body.Phone);
@@ -162,7 +167,6 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         {
             // Deterministic ID makes remote provisioning retryable if the local commit fails.
             var tenantId = application.Id;
-            user.OnboardingComplete = true;
             account.TenantId = tenantId;
             account.Status = "ACTIVE";
         }

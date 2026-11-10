@@ -16,6 +16,7 @@ public sealed class OwnerRegistrationDto
     [Required, RegularExpression("^(outdoor|basement|multi-storey)$")] public string LotType { get; set; } = "";
     [Range(typeof(bool), "true", "true", ErrorMessage = "Partner terms must be accepted.")]
     public bool AgreedToPolicy { get; set; }
+    public string? TurnstileToken { get; set; }
 }
 
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]

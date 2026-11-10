@@ -1,6 +1,6 @@
 # SmartPark Data Dictionary — Recorded Deployment Profile
 
-This dictionary preserves the recorded deployment profile of branch `feature/db-hybrid-srs-v1`: 6 physical databases, 7 base DDL files, and 8 deployment overlays, including T4-approved deviations. The User & Access section additionally reflects the current approved one-role-per-Account clean-install schema and the separate SPARK-248 session/outbox setup. These are repository definitions, not a claim that a development database has been reset. Other v1.1 gaps remain [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending).
+This dictionary records the canonical deployment profile: 6 physical databases, 7 base DDL files, and 8 deployment overlays, including T4-approved deviations. The User & Access section reflects the one-role-per-Account clean-install schema and the consolidated UserDb base, including session/replay, MFA, Owner setup and MassTransit persistence. These are repository definitions, not a claim that a development database has been reset. Other v1.1 gaps remain [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending).
 
 ## 1. Global persistence strategies
 
@@ -12,23 +12,26 @@ This dictionary preserves the recorded deployment profile of branch `feature/db-
 
 ## 2. User & Access DB (`smartpark_user`)
 
-Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship. Apply the existing separate scripts [`13-own-profile-session-account.sql`](../../../scripts/database/microservices/13-own-profile-session-account.sql) then [`14-user-profile-outbox.sql`](../../../scripts/database/microservices/14-user-profile-outbox.sql) for the current SPARK-248 runtime, as described in the [profile deployment guide](../../04-testing/reports/SPARK-248/own-profile-outbox.md). They are not folded into the base schema.
+Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/01-user-access-service-db.sql), which creates the direct Account-to-Role relationship and the canonical UserService runtime schema. Fresh setup applies this base and runs the read-only [UserDb verifier](../../../scripts/database/test/verify-user-access-schema.sql). Existing/partial databases require a separately reviewed migration.
 
 | Table | Key columns / rules |
 |---|---|
-| `users` | `id`, `phone`, `email`, `password_hash`, `full_name`, `company_name`, `status` (`ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_APPROVAL`, `PENDING_VERIFICATION`, `REJECTED`), `failed_login_attempts`, `locked_until` |
+| `users` | `id`, `phone`, `email`, `password_hash`, `full_name`, `company_name`, `access_version`, `status` (`ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_APPROVAL`, `PENDING_VERIFICATION`, `REJECTED`), `failed_login_attempts`, `locked_until`; no generic `onboarding_complete` |
 | `tenants` | Organization root; `code`, `name`, `contact_email`, `contact_phone`, `tax_code`, `status` (`ACTIVE`, `INACTIVE`, `SUSPENDED`) |
 | `accounts` | Contextual account; `user_id`, required `role_code VARCHAR(50)` FK to `roles.code` with `ON DELETE RESTRICT`, nullable `tenant_id`/`site_id`, `permissions`, `status`; one user may have multiple accounts, each with exactly one role. Nonunique `idx_accounts_role_code` allows many accounts to share a role |
 | `roles` | `code VARCHAR(50)` PK; **7 seeded codes:** `DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN` |
 | `vehicles` | `account_id`, `original_plate`, `normalized_plate`, `vehicle_type`; active-plate uniqueness via `uq_active_vehicle_plate` |
-| `user_refresh_tokens` | Refresh-token lifecycle; unique `token_hash` and `access_token_id`. Script 13 adds nullable legacy `account_id` and composite FK `(account_id,user_id) → accounts(id,user_id)` with restrictive deletion; trigger freezes both binding identifiers. New sessions always bind an Account; legacy NULL bindings require new login |
+| `user_refresh_tokens` | Refresh-token lifecycle; unique `token_hash` and `access_token_id`, `last_refreshed_at`, nullable legacy `account_id` and composite FK `(account_id,user_id) → accounts(id,user_id)` with restrictive deletion; trigger freezes both binding identifiers. New sessions always bind an Account; legacy NULL bindings require new login |
+| `rotated_session_proofs` | Consumed access-token IDs and session/user proof data for refresh replay checks; session/user FKs cascade |
 | `driver_registrations` | OTP hash, channel, expiry, failed attempts |
 | `system_terms_and_conditions` | Versioned legal terms |
 | `owner_applications` | Owner onboarding; `status` (`pending`, `approved`, `rejected`), review fields, `tenant_id` |
 | `operator_grants` | 1-1 with operator account; permission array checked by `CHECK` constraints |
 | `auth_challenges` | Short-lived authentication challenges |
 | `workflow_deliveries` | Durable workflow/event delivery records |
-| `mfa_credentials` | TOTP/MFA credentials |
+| `mfa_credentials`, `mfa_recovery_codes` | TOTP/MFA credentials, pending protected secret and hashed one-time recovery codes |
+
+Versioned `OperatorAccessChanged` integration events are captured through the scoped MassTransit EF Bus Outbox in the same UserDb transaction as their mutations. The EF inbox deduplicates the consumer; its only action is a SignalR invalidation hint, after which clients reload authoritative state.
 
 Runtime role mapping: `PLATFORM_ADMIN`/`ADMIN` → admin; `BUSINESS_OWNER`/`OWNER` → owner; `SITE_OPERATOR`/`OPERATOR` → operator; `DRIVER` → driver.
 
@@ -52,7 +55,7 @@ Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 | `structure_backup_policies` (03a) | `unit_id` (arch name `spatial_unit_id`), `vehicle_type`, `count` (arch name `backup_count`); unique site/unit policy indexes |
 | `operator_incident_events` (03a) | `tenant_id`, `site_id`, `actor_id`, `incident_type`, `details`, `status` (`reported`, `resolved`) |
 
-Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4).
+Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4). Facility base `02-facility-service-db.sql` defines `owner_onboarding_provisions` for idempotent owner provisioning.
 
 ## 4. Reservation & Operations DB (`smartpark_operations`)
 
@@ -71,7 +74,7 @@ Base: `03b-reservation-operations-service-db.sql`.
 | `search_facility_projections` | Search/read model: coordinates, operational status, open flag |
 | `audit_logs` | Gate/operator audit; append-only |
 
-Overlays: `site_capacity_pools` (D7) with `total_capacity`, `max_reservation_quota`, `current_reserved_count`, `pending_payment_count`, `occupied_count`, `protected_count`, `backup_count`; `structure_edit_holds`, `structure_site_state`, `structure_removed_resources` + guard triggers; `structure_release_receipts`; `confirmed_at` trigger.
+Overlays: `site_capacity_pools` (D7) with `total_capacity`, `max_reservation_quota`, `current_reserved_count`, `pending_payment_count`, `occupied_count`, `protected_count`, `backup_count`; `structure_edit_holds`, `structure_site_state` + guard triggers; `structure_release_receipts`; `confirmed_at` trigger.
 
 ## 5. Payment & Pricing DB (`smartpark_payment`)
 

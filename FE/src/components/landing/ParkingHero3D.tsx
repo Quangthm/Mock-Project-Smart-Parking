@@ -9,9 +9,11 @@ function ease(value: number) {
   return t * t * t * (t * (t * 6 - 15) + 10)
 }
 
-export function ParkingHero3D() {
+export function ParkingHero3D({ active = true }: { active?: boolean }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const pausedRef = useRef(false)
+  const activeRef = useRef(active)
+  activeRef.current = active
   const [paused, setPaused] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [parkingLabel, setParkingLabel] = useState<string | null>("Arriving · Basement Parking")
@@ -22,7 +24,7 @@ export function ParkingHero3D() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)")
     let renderer: THREE.WebGLRenderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" })
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     } catch {
       setUnavailable(true)
       return
@@ -31,7 +33,7 @@ export function ParkingHero3D() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.18
     renderer.setClearColor(0x000000, 0)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
     mount.appendChild(renderer.domElement)
@@ -49,7 +51,7 @@ export function ParkingHero3D() {
     const key = new THREE.DirectionalLight(0xfff7ed, 2.3)
     key.position.set(8, 13, 9)
     key.castShadow = true
-    key.shadow.mapSize.set(1024, 1024)
+    key.shadow.mapSize.set(512, 512)
     key.shadow.camera.left = -13
     key.shadow.camera.right = 13
     key.shadow.camera.top = 9
@@ -58,6 +60,7 @@ export function ParkingHero3D() {
     scene.add(key)
 
     const materials: THREE.Material[] = []
+    const boxGeometries = new Map<string, THREE.BoxGeometry>()
     const standard = (color: number, metalness = 0, roughness = 0.68) => {
       const material = new THREE.MeshStandardMaterial({ color, metalness, roughness })
       materials.push(material)
@@ -75,10 +78,16 @@ export function ParkingHero3D() {
     const white = standard(0xe8f4e9)
 
     const box = (parent: THREE.Object3D, w: number, h: number, d: number, material: THREE.Material, x = 0, y = 0, z = 0) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material)
+      const sizeKey = `${w}:${h}:${d}`
+      let geometry = boxGeometries.get(sizeKey)
+      if (!geometry) {
+        geometry = new THREE.BoxGeometry(w, h, d)
+        boxGeometries.set(sizeKey, geometry)
+      }
+      const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(x, y, z)
-      mesh.castShadow = h > 0.08
-      mesh.receiveShadow = true
+      mesh.castShadow = h > 0.2 && w > 0.2 && d > 0.2
+      mesh.receiveShadow = h > 0.08 && w > 0.2 && d > 0.2
       parent.add(mesh)
       return mesh
     }
@@ -259,6 +268,8 @@ export function ParkingHero3D() {
     const targetFocus = point(0, 0, 0)
     const offset = point(5.4, 5.8, 7.8)
     const direction = new THREE.Vector3()
+    const aheadPoint = new THREE.Vector3()
+    const behindPoint = new THREE.Vector3()
     let elapsed = 0
     let visible = true
     let width = 0
@@ -329,8 +340,8 @@ export function ParkingHero3D() {
         const lot = lots[phase.lot]
         movingCar.position.y = lot.heightAt(movingCar.position.x)
         movingCar.scale.setScalar(0.72)
-        const ahead = phase.route.getPointAt(Math.min(1, progress + 0.003))
-        const behind = phase.route.getPointAt(Math.max(0, progress - 0.003))
+        const ahead = phase.route.getPointAt(Math.min(1, progress + 0.003), aheadPoint)
+        const behind = phase.route.getPointAt(Math.max(0, progress - 0.003), behindPoint)
         direction.copy(ahead).sub(behind).normalize()
         if (phase.stage === "reverse") direction.negate()
         targetYaw = Math.atan2(-direction.z, direction.x)
@@ -376,10 +387,11 @@ export function ParkingHero3D() {
     const animate = () => {
       timer.update()
       const delta = Math.min(timer.getDelta(), 0.05)
-      if (!visible || document.hidden || !width || !height || pausedRef.current || reducedMotion.matches) return
+      if (!activeRef.current || !visible || document.hidden || !width || !height || pausedRef.current || reducedMotion.matches) return
       elapsed += delta
       render(delta)
     }
+    let themeFrame = 0
     const applyTheme = () => {
       const dark = document.documentElement.classList.contains("dark")
       concrete.color.setHex(dark ? 0xc6d3c9 : 0xd9e5dc)
@@ -388,7 +400,10 @@ export function ParkingHero3D() {
       stripe.color.setHex(dark ? 0xf1f1dd : 0xffffff)
       metal.color.setHex(dark ? 0xb7c9c2 : 0xa8c0b2)
       renderer.toneMappingExposure = dark ? 1.18 : 1.06
-      render(1)
+      if (pausedRef.current || reducedMotion.matches) {
+        cancelAnimationFrame(themeFrame)
+        themeFrame = requestAnimationFrame(() => render(1))
+      }
     }
     const themeObserver = new MutationObserver(applyTheme)
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
@@ -403,9 +418,12 @@ export function ParkingHero3D() {
       timer.dispose()
       reducedMotion.removeEventListener("change", onMotionChange)
       themeObserver.disconnect()
+      cancelAnimationFrame(themeFrame)
       resizeObserver.disconnect()
       intersection.disconnect()
-      scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Line) object.geometry.dispose() })
+      const geometries = new Set<THREE.BufferGeometry>()
+      scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Line) geometries.add(object.geometry) })
+      geometries.forEach(geometry => geometry.dispose())
       materials.forEach(material => material.dispose())
       environment.dispose()
       renderer.dispose()

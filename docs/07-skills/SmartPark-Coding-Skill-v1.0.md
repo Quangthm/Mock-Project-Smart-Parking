@@ -5,7 +5,7 @@ description: Implement or review SmartPark backend and frontend features using t
 
 # SmartPark coding skill — approved final
 
-Decision snapshot: 2026-10-29. This is the reusable shared coding guide for SmartPark implementation and PR review. For coding tasks, it is the primary implementation convention loaded by `ai/AGENTS.md`; it does not replace authoritative SRS/business rules, approved architecture/service ownership, more specific feature contracts, or nonconflicting scoped `AGENTS.md` instructions. Feature-specific rules remain feature-specific unless this guide explicitly promotes them to a shared convention. Examples are illustrative SmartPark examples, not universal product requirements or compiled repository code.
+Decision snapshot: 2026-11-04 (authorization amendment; other conventions retained). This is the reusable shared coding guide for SmartPark implementation and PR review. For coding tasks, it is the primary implementation convention loaded by `ai/AGENTS.md`; it does not replace authoritative SRS/business rules, approved architecture/service ownership, more specific feature contracts, or nonconflicting scoped `AGENTS.md` instructions. Feature-specific rules remain feature-specific unless this guide explicitly promotes them to a shared convention. Examples are illustrative SmartPark examples, not universal product requirements or compiled repository code.
 
 ## 1. Authority and efficient context loading
 
@@ -31,7 +31,7 @@ Read applicable root/nested AGENTS.md and relevant linked skills. Search the act
 | Task | Read first | Trace in source |
 |---|---|---|
 | API/use case | Current requirement/module, permission matrix, API contract | Controller, input/command, validator, behaviors, handler, response |
-| Authorization | Account/session model, permissions, applicable revocation rules | Token issue/validation, actor adapter, authoritative stores, invalidators |
+| Authorization | Authorization ADR, operation classification matrix, permissions, applicable local security/revocation rules | Token issue/validation, actor adapter, authoritative stores, invalidators |
 | Persistence | Entity/schema/mapping, migration policy | Repository, tracking, UoW, transaction and competing writers |
 | Errors/logging | Approved envelope/code catalogue, observability rules | MVC/auth result producers, exception handlers, logging registration |
 | Integration event | Service ownership, event/audit contract | Scoped publisher, outbox context, topology, relay and consumers |
@@ -75,7 +75,7 @@ A useful summary is:
 |---|---|
 | State belongs to the same aggregate | Load aggregate → Domain transition → save |
 | Rule depends on an external fact | Application retrieves fact → passes encapsulated fact/DTO to Domain |
-| Cross-service fact | Application port → Infrastructure HTTP adapter → authoritative owner |
+| Cross-service fact | Application port → Infrastructure adapter → authoritative owner; HTTP for immediate results, approved Saga messages for asynchronous decisions |
 | Domain entity needs DB/service itself | Avoid |
 | Same transition rule is reused in multiple flows | Put the rule/state machine in the aggregate or Domain policy, not individual handlers |
 | Race-sensitive state change | Domain validation + Persistence concurrency enforcement |
@@ -113,22 +113,101 @@ SmartPark API default: ignore unknown JSON properties using normal ASP.NET Core 
 
 JSON parsing/model-state errors occur before MediatR; handle them at API. Application validators enforce command rules; Domain maintains invariants. Use ValidateAsync with cancellation; serialize validator execution when shared scoped dependencies are not thread-safe. Keep writes out of input validators. Test actual DI dispatch, not only direct handler calls.
 
-## 4. Trusted Account identity and shared User data
+### Controller parameters: omit redundant `[FromBody]`
 
-Authorize using the authenticated Account, exact session and current applicable authority. Resolve User from that trusted relationship. User data is shared across its Accounts; another active Account does not legitimize an operation through a locked Account.
-
-Application defines a small current-actor port. API implements it from authenticated request context. Actual claim names and identifier types must match verified token/session contracts; do not assume sub means AccountId or jti means a GUID session primary key.
+For JSON endpoints on an `[ApiController]` (including controllers that inherit the attribute), omit `[FromBody]` on an ordinary request DTO when binding-source inference is enabled and the DTO is not registered in DI. ASP.NET Core already reads that parameter from the request body. Name it `request`; its name does not determine how it binds.
 
 ```csharp
-// Illustrative shape, subject to actual identifier conventions:
-public interface ICurrentActor
+[HttpPatch("me")]
+public async Task<IActionResult> Update(
+    UpdateOwnProfileRequest request,
+    CancellationToken cancellationToken)
 {
-    Guid? AccountId { get; }
-    Guid? SessionId { get; }
+    var command = mapper.Map<UpdateOwnProfileCommand>(request);
+    var result = await mediator.Send(command, cancellationToken);
+    return ApiResponseFactory.Success(result).ToActionResult();
 }
 ```
 
-Fail closed when required identity is absent. Never trust raw JWT decoding, body identifiers or spoofable headers. Token claims establish asserted identity; fresh stores determine current Account/session eligibility. Background jobs use explicit trusted execution context, not captured HttpContext.
+Use an explicit binding attribute when omitting it would change the HTTP contract. For example, use `[FromQuery]` for a complex filter supplied in the query string, or `[FromBody]` for a scalar that must come from the JSON body. Leave `CancellationToken` unannotated; ASP.NET Core supplies it.
+
+**Review check:** Before removing an existing `[FromBody]`, verify the controller or its base class has `[ApiController]`, the service has not disabled binding-source inference, and the parameter meets the DTO conditions above. Apply this convention to the action under review; avoid unrelated controller cleanup.
+
+## 4. Trusted actor and per-operation authorization freshness
+
+Approved 2026-11-04: read the [authorization ADR](../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [operation matrix](../01-requirements/srs/authorization-operation-classification.md). The matrix owns classification; [permissions](../01-requirements/srs/permissions.md) owns grants. This replaces the old universal exact-session/current-store rule, not UserService's own authoritative security checks or local resource authorization.
+
+### Authentication and actor context
+
+Protected user APIs validate JWTs through ASP.NET Core authentication (signature/key, issuer, audience, allowed algorithm, lifetime/clock skew and required claims) and enforce `[Authorize]` or equivalent policy. Access-token lifetime is 15 minutes. Controllers/handlers/Domain do not manually decode or revalidate JWTs. Public and machine/provider endpoints declare their distinct trust policy.
+
+Application owns `ICurrentActor`; API implements it from authenticated `HttpContext.User`. Application does not depend on HttpContext, ClaimsPrincipal or ASP.NET types. The approved conceptual shape is:
+
+```csharp
+public interface ICurrentActor
+{
+    Guid? UserId { get; }
+    Guid? AccountId { get; }
+    string? RoleCode { get; }
+    bool IsAuthenticated { get; }
+}
+```
+
+Actual names/types must match the real token contract. Do not infer that `sub` is AccountId or `jti` is a GUID session key. Fail closed on missing/malformed required actor claims. This adapter exposes token-time identity only: no automatic account/session fetch, JWT validation, UserService call or current-access authorization. Never trust body-selected actor IDs or spoofable headers. User data can be shared across Accounts; another active Account does not legitimize acting as the bound Account.
+
+### UserService public signing keys and startup order (SPARK-327)
+
+**Current implementation:** UserService issues RS256 access tokens and anonymously publishes its active public key at `GET /.well-known/jwks.json` (configurable `Jwt:JwksPath`). Only UserService receives the RSA private PEM/Base64. FacilityService, OperationService and PaymentService receive public trust configuration but **do not yet implement JWKS-backed JWT authentication**. Payment's Development authentication handler is not JWT validation. Do not interpret populated configuration or a healthy container as proof that consumer JWT protection exists. Consumer middleware remains a separate implementation task, as confirmed on 2026-11-06.
+
+Consumers obtain **public verification keys**, never the signing private key:
+
+| Consumer configuration | Local host process | Docker application network |
+| --- | --- | --- |
+| `JwtValidation:Issuer` | `SmartParking.UserService` | Same configured issuer |
+| `JwtValidation:Audience` | `SmartParking` | Same configured audience |
+| `JwtValidation:JwksUri` | `http://localhost:5035/.well-known/jwks.json` | `http://user-service:8080/.well-known/jwks.json` |
+
+These are example defaults; preserve environment overrides and the configured JWKS path. Docker uses service DNS and the internal port, not `localhost:5035` (which would refer to the consumer container itself). Host runners/setup supply the corresponding host URI. The endpoint needs neither a bearer token nor `X-Service-Key`.
+
+The response is the standard `{"keys":[...]}` document. Each active RSA JWK has `kid`, `kty=RSA`, `use=sig`, `alg=RS256`, `n` and `e`. Match the JWT header's `kid` to a trusted public key, then let authentication middleware validate the signature, issuer, audience, RS256, expiration/not-before and required actor claims. A matching `kid` or decoded payload alone is not validation. Trust only the configured JWKS URL; never follow JWT-supplied `jku`/`x5u` locations. Use HTTPS/protected transport outside the documented local Development network. See the [JWKS contract](../03-design/api/userservice-jwks-api-design.md) and [Microsoft JWT bearer guidance](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication?view=aspnetcore-10.0).
+
+UserService currently exposes a **JWKS endpoint, not an OpenID Connect discovery document**. Do not assign that JSON URL to `Authority`/OIDC `MetadataAddress` and assume automatic discovery will work. The future implementation must use an appropriate JWKS retriever/configuration manager integrated with authentication middleware, with inward-owned configuration and Infrastructure transport. Controllers and Domain must not perform key downloads or custom JWT validation.
+
+**Startup/concurrency requirements for that future implementation:**
+
+- Starting a consumer must not require a successful network request to UserService. Avoid synchronous key downloads in constructors, DI factories or host startup. A background warm-up must handle DNS failures, refused connections, timeouts and non-success responses without terminating the host.
+- Without a usable trusted key, protected requests fail closed with the approved authentication/dependency error contract. Never accept an unverified token, generate a replacement key, or fall back to a shared signing secret. Keep process liveness separate from authentication readiness; a key-service outage should not produce a restart loop.
+- Cache public keys and validate locally. The current publisher advertises `Cache-Control: public, max-age=300`. Bound cache freshness and any permitted stale-key grace explicitly in the consumer design; do not keep stale keys indefinitely or silently extend token expiration. Failed downloads must not replace a valid cached key set with an empty set.
+- Coordinate concurrent refreshes so many requests/unknown `kid` values do not each launch a download. Use a shared in-flight refresh per configured issuer, bounded timeout, retry backoff/jitter and throttling for unknown-key refreshes. Publish a fully validated key-set snapshot atomically. Request cancellation must not corrupt the shared snapshot or leave a refresh lock held.
+- Unknown `kid` remains untrusted until a bounded refresh obtains a matching valid key. Cached trusted keys may be used only within the approved cache policy. Recovery must work after UserService becomes available, without restarting consumers. Specify timeout/backoff/cache-grace values and error-envelope details in the consumer task before implementing them; this section does not claim a cache/refetch implementation already exists.
+- Keep key discovery separate from per-request Account/session freshness and REQUEST Sagas. Public-key caching is not an authorization-state cache and does not change the approved TOKEN/REQUEST rules below.
+
+Future consumer tests must cover cold start with UserService unavailable; eventual recovery; warm-cache outage; simultaneous cold/unknown-key requests; malformed/empty JWKS; an unknown key that remains unknown; wrong algorithm/issuer/audience/signature; key-set replacement; and continued process liveness. Current publication has one active key; overlapping rotation is still deferred.
+
+**Current Docker startup checks and limits:** current consumers do not fetch UserService/JWKS at startup. The reusable `node --test tests/startup/consumer-startup.test.cjs` check starts compiled Facility/Operation/Payment APIs with an unavailable UserService endpoint and dummy database settings, verifies `/health` remains 200, and asserts no startup request to UserService. Run after building the solution. This proves the present startup behavior; it does not prove future consumer authentication or business operations work during an outage.
+
+The schema and app Compose files are separate projects. An external Docker network supplies connectivity, not dependency ordering. Run setup's schema initialization/migration phase to completion before starting app services; setup already uses `compose up -d --wait` for infrastructure, then applies migrations. For an already initialized environment, wait for schema infrastructure health before the app runner. Starting both project groups simultaneously from Docker Desktop does not guarantee database readiness, and UserService's Development seeding still needs its database. Do not claim this JWT task fixes every database/migration startup race. Within a single Compose model, `depends_on: condition: service_healthy` can gate a dependency, but it does not replace recovery when that dependency later goes down ([Docker startup-order documentation](https://docs.docker.com/compose/how-tos/startup-order/)).
+
+### TOKEN, REQUEST and non-user origins
+
+- `TOKEN` is the initial default for authenticated end-user business operations. Enforce endpoint policy, local ownership/scope and Domain invariants; do not contact UserService solely to refresh claims. Remaining token-lifetime staleness is accepted.
+- The matrix selects exactly six `REQUEST` families. The HTTP handler atomically persists pending workflow intent plus outbox and returns accepted/pending, never a premature final success. It does not synchronously query UserService for freshness.
+- A durable Saga obtains Account-current authority asynchronously. Only explicitly approved independent reversible/speculative steps may overlap that check. Persist each branch outcome and cancellation intent; join the current correlated outcomes. Accepted `Allowed` and all required prerequisites gate finalization/irreversible protected effects. Denial with in-flight/unknown work requires reconciliation or compensation before clean cancellation is reported.
+- UserService evaluates current User/Account/role authority, not a token-role echo. The resource owner still decides ownership, facility/lot scope and business truth. Account-current does not guarantee exact browser-session continuity after admission; JWT expiry or session-only revocation does not automatically cancel the Saga.
+- UserService-owned login/refresh/security workflows use authoritative local checks, concurrency and audit without an authorization Saga merely for local data. Existing local security/factor versions are not the deferred distributed AccessVersion.
+- Internal consumers, devices and payment providers use service/device/provider trust; do not fabricate an end-user actor. Chatbot actions inherit the underlying action's freshness and user-confirmation requirement. Checkout preserves approved safety/obligation exceptions; account lock cannot strand physical exit.
+
+Current-access integration uses inward-owned semantic contracts. The approved illustrative `ICurrentAccountAccessRequester.RequestAsync(CurrentAccountAccessRequest, CancellationToken)` dispatches/records a request, not a grant. Include workflow/correlation ID, AuthorizationAttemptId, AttemptNumber, trusted actor snapshot and approved policy context; exact wire fields remain a use-case contract. Infrastructure owns MassTransit/RabbitMQ and scheduling adapters. Never persist raw JWT/refresh/password/MFA credentials in workflows, messages, domain records or logs.
+
+Do not initially introduce `IAuthorizationRequirement`, `IRequiresAuthenticatedActor`, `IRequiresCurrentAccess`, an executable `AuthorizationFreshness` enum or a generic authorization-dispatch MediatR pipeline. Classification is a reviewed design contract, not automatic runtime enforcement. No freshness attribute, property, registry entry or equivalent code-level declaration is required on controllers, commands, queries or handlers. Follow the matrix and implement/test the corresponding behavior directly; references to "declared freshness" mean the documented design choice only. `COMMIT`, general `WORKFLOW`, AccessHandle and AccessVersion remain deferred.
+
+### Saga reliability and design gates
+
+Use the approved numeric policies and profiles in [ADR §9](../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#9-global-saga-retry-redelivery-timeout-and-unknown-outcome-policy); document justified overrides and tests. Do not multiply middleware redelivery with Saga reissue schedules. New current-access evaluations get new AuthorizationAttemptIds; retries of the same business effect reuse its stable OperationId. Fence stale-attempt ALLOW, duplicates, expired commands and terminal-state resurrection. Authorization unavailability is distinct from denial; an unknown effect is distinct from failure. Reconcile by the owner's authoritative evidence; `NotFound` alone does not prove no effect. Compensation has its own stable identity referencing the original effect.
+
+Every important Saga must specify permitted speculative effects and limits, separate branch state/join, authorization gate, actor/policy contract, retry owner and total budget, deadlines, idempotency/retention, status reconciliation, denial with late/in-flight effects, accepted post-ALLOW race, revocation by state, pivot, compensation, forward recovery and manual-review/observability behavior. Missing material details are unfinished design: surface that boundary and continue independent work. No global capacity-hold policy or timestamp cleanup is implied. Preserve historical, physical and financial facts.
+
+SignalR is best-effort revocation UX after backend security commit. Backend targets affected connections; client clears credentials/state/caches, stops reconnect and returns to Sign In without normal logout against an already revoked session. Missing delivery does not enforce freshness; scale-out remains deferred. See ADR §16 for the conceptual contract.
 
 ## 5. Tracked writes, UoW and atomic authorization
 
@@ -243,11 +322,11 @@ Use Microsoft `ILogger<T>` with providers; do not implement an unnecessary custo
 
 ### Service integration decision rule
 
-Use **synchronous internal service APIs** for immediate authoritative decisions required to complete the current command.
+Use **synchronous internal service APIs** when the approved interaction requires an immediate authoritative response. `REQUEST` freshness explicitly uses durable asynchronous admission and Saga coordination; it is not an immediate HTTP dependency.
 
 Use **RabbitMQ/MassTransit** for durable facts, asynchronous commands, downstream reactions and eventually consistent integration.
 
-Do not use publish/subscribe merely as RPC in disguise.
+Do not use publish/subscribe merely as blocking RPC in disguise. Approved asynchronous current-access requests and correlated Saga outcomes are intentional durable workflows.
 
 A business dependency does not automatically require a synchronous network dependency. For example, Parking Operations may business-depend on successful payment without keeping an HTTP request open while waiting for payment confirmation.
 
@@ -326,7 +405,7 @@ A real RabbitMQ integration test is required when the claim depends on broker to
 Select verification categories according to the behavior changed; do not mechanically run irrelevant suites:
 
 - HTTP success plus applicable binding/type/content errors; correct status/envelope; challenge/forbid headers; 404/405/415/429 or other framework producers when relevant.
-- Authorization for every role/scope affected by the feature, including current Account/session validity, own-resource/tenant/site boundaries, revocation/lock behavior, and service-to-service identity where applicable.
+- Authorization for every role/scope affected by the feature, including TOKEN/REQUEST behavior selected by the approved matrix and use-case design, UserService local security checks, own-resource/tenant/site boundaries, accepted stale/revocation windows, and service-to-service identity where applicable. For REQUEST test either branch order, denial during in-flight work, late success, stale authorization attempts, unknown outcomes, deadlines and restart recovery; no speculative step is enabled without its own approval.
 - Input and Domain boundary cases, including unknown JSON fields being ignored without mutating protected/unsupported fields.
 - Concurrency tests proportional to the actual invariant: simple accepted last-write-wins updates do not require lock/race harnesses solely for ceremony; flows that depend on serialization require real PostgreSQL conflicting interleavings, fresh-state verification and every participating writer/protocol.
 - When messaging/outbox is in scope: business/outbox atomicity, no event after rollback, stable event identity across delivery retries, duplicate/redelivery safety, broker outage/recovery, durable routing/topology and consumer idempotency as applicable.
@@ -340,6 +419,7 @@ Deliver actual files changed, request-to-response call path, decisions versus pr
 ## 11. Quick rejection checklist for agent-generated changes
 
 - Reject client-selected actor/owner identifiers used as authorization authority for own-resource operations, and reject authorization that ignores the authenticated/current Account/session/scope required by the contract.
+- Reject blanket current-access network checks for TOKEN, synchronous REQUEST admission, unapproved speculation, finalization before Allowed, fabricated user actors, raw JWT persistence, unbounded retry and unknown-as-failed cleanup.
 - Reject transactions/locks added without an identified concurrency invariant, and reject atomic-authorization claims when competing writers are not coordinated through the same protocol and fresh state.
 - Reject broad tracked-entity Update or request-to-entity mapping that can overwrite security fields.
 - Reject unapproved client-controlled references, ownership claims, media/security-field mutations, or invented read conversions that are not supported by the authoritative contract.

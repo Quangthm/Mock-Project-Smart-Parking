@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.UserService.Domain.Entities;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
 using UserService.Infrastructure.Services;
@@ -12,7 +13,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class AuthorizationPersistenceTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ProvisioningAssignsOneRolePerSiteAndScopeReadsRespectCurrentMembershipsAndGrants()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -38,7 +39,7 @@ public sealed class AuthorizationPersistenceTests
         var ownerAccess = await TestAuthorization.ForUserAsync(db, clock, owner.Id!.Value, parking, allowedAccount.Id);
         var workflows = WorkflowTestSupport.Create(db, clock, ownerAccess);
         var provisioning = new CreateOperatorHandler(new IdentityAccessRepository(db), new UnitOfWork(db, new UserRepository(db)),
-            new OperatorInvitationFactory(new TestWorkflowProtector()), clock, parking, new AccessEventStore(db, clock), ownerAccess);
+            new OperatorInvitationFactory(new TestWorkflowProtector()), clock, parking, new RecordingEventPublisher(), ownerAccess);
         var siteA = Guid.NewGuid();
         var siteB = Guid.NewGuid();
         var deniedSite = Guid.NewGuid();

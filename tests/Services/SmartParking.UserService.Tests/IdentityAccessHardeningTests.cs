@@ -4,10 +4,12 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using MassTransit.EntityFrameworkCoreIntegration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.UserService.Domain.Entities;
 using SmartParking.UserService.Domain.Enum;
 using UserService.Application.Common.Interfaces.Services;
+using UserService.Application.Common.Interfaces.MessageBroker;
 using UserService.Application.Common.Models.Exceptions;
 using UserService.Application.DTOs;
 using UserService.Application.Services;
@@ -62,7 +64,7 @@ public sealed class IdentityAccessHardeningTests
         await Assert.ThrowsAsync<AuthException>(() => handler.Handle(new(session.RefreshToken), default));
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ScopedOwnerGrantsAndOperatorActivationThroughProductionHttpPipeline()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -142,7 +144,8 @@ public sealed class IdentityAccessHardeningTests
             var user = await db.Users.SingleAsync(u => u.Id == operatorId);
             Assert.NotNull(user.EmailVerifiedAt);
             Assert.Equal(UserStatus.Active, user.Status);
-            Assert.Equal(2, await db.AccessEventOutbox.CountAsync());
+            Assert.Equal(2, await db.Set<OutboxMessage>()
+                .CountAsync(message => message.MessageType.Contains(nameof(OperatorAccessChanged))));
             // Explicit empty grants revoke only A; no action may borrow permissions from another membership.
             await db.Accounts.Where(a => a.UserId == owner.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.Permissions, Array.Empty<string>()));
         }
@@ -151,47 +154,7 @@ public sealed class IdentityAccessHardeningTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/auth/owner-scope")).StatusCode);
     }
 
-    [PostgresFact]
-    public async Task OutboxRollbackLeaseRecoveryInboxDeduplicationAndVersionGuard()
-    {
-        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
-        var clock = new TestClock();
-        var message = new OperatorAccessChanged(Guid.NewGuid(),1,Guid.NewGuid(),2,clock.Now,Guid.NewGuid(),Guid.NewGuid(),[Guid.NewGuid()],"active");
-        await using (var db = fixture.Open())
-        {
-            await using var tx = await db.Database.BeginTransactionAsync();
-            new AccessEventStore(db,clock).Stage(message);
-            await db.SaveChangesAsync();
-            await tx.RollbackAsync();
-        }
-        await using (var db = fixture.Open())
-        {
-            Assert.Empty(await db.AccessEventOutbox.ToArrayAsync());
-            new AccessEventStore(db,clock).Stage(message);
-            await db.SaveChangesAsync();
-        }
-        async Task<AccessEventLease?> Claim()
-        { await using var db=fixture.Open(); return await new AccessEventStore(db,clock).ClaimAsync(default); }
-        var claims = await Task.WhenAll(Claim(),Claim());
-        var first = Assert.Single(claims.OfType<AccessEventLease>());
-        clock.Now = clock.Now.AddSeconds(31);
-        var retried = (await Claim())!;
-        Assert.Equal(first.Message.EventId,retried.Message.EventId);
-        Assert.NotEqual(first.LeaseId,retried.LeaseId);
-        await using (var db=fixture.Open())
-        {
-            var events = new AccessEventStore(db,clock);
-            await events.CompleteAsync(first,default);
-            Assert.Null((await db.AccessEventOutbox.AsNoTracking().SingleAsync()).PublishedAt);
-            await events.CompleteAsync(retried,default);
-            Assert.NotNull((await db.AccessEventOutbox.AsNoTracking().SingleAsync()).PublishedAt);
-            Assert.True(await events.ApplyProjectionAsync(message,default));
-            Assert.False(await events.ApplyProjectionAsync(message,default));
-            Assert.False(await events.ApplyProjectionAsync(message with { EventId=Guid.NewGuid(), AggregateVersion=1, Status="pending_verification" },default));
-        }
-    }
-
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RefreshDatabaseCasEnforcesIdleBoundaryAndUpdatesOnlySuccessfulRefresh()
     {
         await using var fixture=await UserServiceDatabaseFixture.CreateAsync();
@@ -216,6 +179,34 @@ public sealed class IdentityAccessHardeningTests
         clock.Now=clock.Now.AddHours(24);
         Assert.False(await Rotate(current));
         await using(var db=fixture.Open()) Assert.Equal(issued.AddHours(23),(await db.AuthSessions.SingleAsync()).LastRefreshedAt);
+    }
+
+    [PostgresFact, Trait("Category", "Postgres")]
+    public async Task RefreshedAccessTokenImmediatelyOpensProtectedProfileWithPostgres()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        var clock = new TestClock();
+        var user = NewUser("refresh-profile@example.test", "DRIVER", clock);
+        await using (var db = fixture.Open()) { db.Users.Add(user); await db.SaveChangesAsync(); }
+        await using var host = await fixture.StartHostAsync(clock);
+        using var client = host.GetTestClient();
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email = user.Email, password = "Password@123" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        using var loginBody = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        var original = loginBody.RootElement.GetProperty("data");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", original.GetProperty("accessToken").GetString());
+        using var before = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, before.StatusCode);
+        clock.Now = clock.Now.AddSeconds(2);
+        using var refresh = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = original.GetProperty("refreshToken").GetString() });
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+        using var refreshBody = JsonDocument.Parse(await refresh.Content.ReadAsStringAsync());
+        client.DefaultRequestHeaders.Authorization = new("Bearer", refreshBody.RootElement.GetProperty("data").GetProperty("accessToken").GetString());
+        using var after = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", original.GetProperty("accessToken").GetString());
+        using var revoked = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
     }
 
     private static User NewUser(string email,string role,TestClock clock)

@@ -1,6 +1,9 @@
 import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
 import { parkingApi, type Site, type Structure, type CapacityView } from "../../../lib/parkingApi"
+import { ownerData as store } from "../data/data"
+import type { ParkingLot } from "../../../lib/types"
+import { reconcileOwnerLotSetups } from "../../../lib/ownerLotSetup"
 
 interface LotCapacityMetrics {
   total: number
@@ -14,13 +17,26 @@ interface LotCapacityMetrics {
 
 interface SiteWithStructure {
   site: Site
+  setup: ParkingLot | null
   structure: Structure | null
   metrics: LotCapacityMetrics | null
   structureError: string | null
 }
 
+function describeLoadFailure(error: unknown): string {
+  if (error instanceof Error) {
+    const status = (error as { status?: number }).status
+    if (status === 401)
+      return "Your session has expired. Sign in again to load your parking facilities."
+    if (status === 403)
+      return "You are not authorized to view these parking facilities. Complete owner onboarding or ask an administrator to link your account to a site."
+    return error.message || "Failed to load parking lots."
+  }
+  return "Failed to load parking lots."
+}
+
 export function useLotManagement(siteFilterId = "all") {
-  const { user } = useApp()
+  const { user, authReady } = useApp()
   const [data, setData] = useState<SiteWithStructure[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -38,6 +54,23 @@ export function useLotManagement(siteFilterId = "all") {
 
   useEffect(() => {
     let current = true
+
+    // Wait for session restoration before requesting protected data, otherwise the
+    // first render can fire an unauthenticated request and leave the page empty.
+    if (!authReady) {
+      return () => {
+        current = false
+      }
+    }
+
+    if (!user?.id) {
+      setLoading(false)
+      setError("Sign in to load your parking facilities.")
+      return () => {
+        current = false
+      }
+    }
+
     setLoading(true)
     setError("")
 
@@ -45,6 +78,9 @@ export function useLotManagement(siteFilterId = "all") {
       .list()
       .then(async (sites) => {
         if (!current) return
+        await reconcileOwnerLotSetups(sites, user?.id ?? "").catch(() => {})
+        if (!current) return
+        const savedLots = new Map(store.getLotsByOwner(user?.id ?? "").map(lot => [lot.id, lot]))
 
         // Fetch structures in parallel for live capacity breakdown
         const sitesWithMetrics = await Promise.all(
@@ -52,10 +88,11 @@ export function useLotManagement(siteFilterId = "all") {
             try {
               const structure = await parkingApi.structure(site.id)
               const metrics = calculateMetrics(structure.capacityViews)
-              return { site, structure, metrics, structureError: metrics ? null : "Capacity data is unavailable for this site." }
+              return { site, setup: savedLots.get(site.id) ?? null, structure, metrics, structureError: metrics ? null : "Capacity data is unavailable for this site." }
             } catch (cause) {
               return {
                 site,
+                setup: savedLots.get(site.id) ?? null,
                 structure: null,
                 metrics: null,
                 structureError: cause instanceof Error ? cause.message : "Could not load parking structure.",
@@ -67,10 +104,7 @@ export function useLotManagement(siteFilterId = "all") {
         if (current) setData(sitesWithMetrics)
       })
       .catch((err) => {
-        if (current)
-          setError(
-            err instanceof Error ? err.message : "Failed to load parking lots.",
-          )
+        if (current) setError(describeLoadFailure(err))
       })
       .finally(() => {
         if (current) setLoading(false)
@@ -79,7 +113,7 @@ export function useLotManagement(siteFilterId = "all") {
     return () => {
       current = false
     }
-  }, [user?.id, reload])
+  }, [authReady, user?.id, reload])
 
   function calculateMetrics(views: CapacityView[] = []): LotCapacityMetrics | null {
     if (!views?.length) return null
@@ -188,8 +222,10 @@ export function useLotManagement(siteFilterId = "all") {
   function refresh() { setReload((value) => value + 1) }
   function saveSite(updatedSite: Site) {
     setData((current) => current.map((item) => item.site.id === updatedSite.id
-      ? { ...item, site: updatedSite } : item))
+      ? { ...item, site: updatedSite, setup: store.getLotsByOwner(user?.id ?? "").find(lot => lot.id === updatedSite.id) ?? null } : item))
     setEditSite(null)
+    // The reload is the source of truth; the optimistic merge only avoids a flash.
+    refresh()
   }
 
   return {

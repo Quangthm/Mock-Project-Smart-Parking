@@ -15,7 +15,6 @@ namespace UserService.Persistence
         public DbSet<Account> Accounts { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<AuthSession> AuthSessions { get; set; } = null!;
-        public DbSet<AccessEventOutbox> AccessEventOutbox { get; set; } = null!;
         public DbSet<RotatedSessionProof> RotatedSessionProofs { get; set; } = null!;
         public DbSet<DriverRegistration> DriverRegistrations { get; set; } = null!;
         public DbSet<OwnerApplication> OwnerApplications { get; set; } = null!;
@@ -29,6 +28,8 @@ namespace UserService.Persistence
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            ConfigureMedia(modelBuilder);
+            ConfigureVehicleClaims(modelBuilder);
             // Keep framework entities/mappings exact; the reviewed SQL script is generated from this model.
             modelBuilder.AddTransactionalOutboxEntities();
             modelBuilder.Entity<RotatedSessionProof>(entity =>
@@ -41,17 +42,6 @@ namespace UserService.Persistence
                 entity.Property(e => e.TokenHash).HasColumnName("token_hash");
                 entity.Property(e => e.AccessExpiresAt).HasColumnName("access_expires_at");
                 entity.HasOne<AuthSession>().WithMany().HasForeignKey(e => e.SessionId).OnDelete(DeleteBehavior.Cascade);
-            });
-            modelBuilder.Entity<AccessEventOutbox>(entity =>
-            {
-                entity.ToTable("access_event_outbox");
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Id).HasColumnName("id");
-                entity.Property(e => e.Payload).HasColumnName("payload");
-                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-                entity.Property(e => e.PublishedAt).HasColumnName("published_at");
-                entity.Property(e => e.LeaseId).HasColumnName("lease_id");
-                entity.Property(e => e.LeaseUntil).HasColumnName("lease_until");
             });
             MapWorkflow<AuthChallenge>(modelBuilder, "auth_challenges", "Id");
             MapWorkflow<WorkflowDelivery>(modelBuilder, "workflow_deliveries", "Id");
@@ -67,6 +57,8 @@ namespace UserService.Persistence
                 entity.Property(v=>v.CanonicalPlate).HasColumnName("normalized_plate").HasMaxLength(20);
                 entity.Property(v=>v.VehicleType).HasColumnName("vehicle_type");
                 entity.Property(v=>v.ImageReference).HasColumnName("image_url");
+                entity.Property(v=>v.ImageAssetId).HasColumnName("image_asset_id");
+                entity.HasOne<MediaAsset>().WithMany().HasForeignKey(v=>v.ImageAssetId).OnDelete(DeleteBehavior.Restrict);
                 entity.Property(v=>v.CreatedAt).HasColumnName("created_at");
                 entity.Property(v=>v.UpdatedAt).HasColumnName("updated_at");
                 entity.Property(v=>v.DeletedAt).HasColumnName("deleted_at");
@@ -135,11 +127,12 @@ namespace UserService.Persistence
                 entity.Property(e => e.FullName).HasColumnName("full_name");
                 entity.Property(e => e.AccessVersion).HasColumnName("access_version");
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
+                entity.Property(e => e.AvatarAssetId).HasColumnName("avatar_asset_id");
+                entity.HasOne<MediaAsset>().WithMany().HasForeignKey(e => e.AvatarAssetId).OnDelete(DeleteBehavior.Restrict);
                 // Preserve the stored, read-only avatar value without reinterpretation or conversion.
                 entity.Property(e => e.AvatarUrl)
                     .HasColumnName("avatar_url")
                     .HasColumnType("text");
-                entity.Property(e=>e.OnboardingComplete).HasColumnName("onboarding_complete");
                 entity.Property(e=>e.EmailVerifiedAt).HasColumnName("email_verified_at");
                 entity.Property(e=>e.PhoneVerifiedAt).HasColumnName("phone_verified_at");
                 entity.Property(e => e.Status).HasColumnName("status").HasConversion(

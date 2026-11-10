@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
@@ -8,13 +8,37 @@ if ($Service -eq 'Facility') { $Service = 'Parking' }
 if ($Service -eq 'Operation') { $Service = 'Reservation' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $taskRoot '.env'
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+$previousSigningEnvironment = Get-JwtSigningEnvironment
+$mediaNames = @('SMARTPARK_CLOUDINARY_CLOUD_NAME','SMARTPARK_CLOUDINARY_API_KEY','SMARTPARK_CLOUDINARY_API_SECRET','SMARTPARK_USER_MEDIA_ENABLED','MediaStorage__Cloudinary__CloudName','MediaStorage__Cloudinary__ApiKey','MediaStorage__Cloudinary__ApiSecret','MediaStorage__Enabled')
+$previousMediaEnvironment = @{}
+foreach ($name in $mediaNames) { $previousMediaEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+try {
 
 if (!(Test-Path -LiteralPath $envFile -PathType Leaf)) {
     throw "Missing $envFile. Run setup.ps1 at the repository root first."
 }
 
-# Load .env through the shared parser; it exports every key to the process env.
-$null = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile
+# Only UserService may receive raw or mapped private signing material.
+$settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -IncludeUserServiceSigningSecrets:($Service -eq 'User')
+
+# Read the parsed file, not inherited variables: removed keys must clear stale
+# raw settings and override saved user-secrets for this launch. Whitespace is
+# deliberately unconfigured and survives Windows PowerShell 5.1 environment IO.
+foreach ($field in @{'CloudName'='CLOUD_NAME'; 'ApiKey'='API_KEY'; 'ApiSecret'='API_SECRET'}.GetEnumerator()) {
+    $source = 'SMARTPARK_CLOUDINARY_' + $field.Value
+    $value = $settings[$source]
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = ' ' }
+    [Environment]::SetEnvironmentVariable($source, $value, 'Process')
+    [Environment]::SetEnvironmentVariable('MediaStorage__Cloudinary__' + $field.Key, $value, 'Process')
+}
+if ($Service -eq 'User') {
+    $env:MediaStorage__Enabled = if ($settings['SMARTPARK_USER_MEDIA_ENABLED']) { $settings['SMARTPARK_USER_MEDIA_ENABLED'] } else { 'false' }
+    $env:SMARTPARK_USER_MEDIA_ENABLED = $env:MediaStorage__Enabled
+} else {
+    [Environment]::SetEnvironmentVariable('MediaStorage__Enabled', $null, 'Process')
+    [Environment]::SetEnvironmentVariable('SMARTPARK_USER_MEDIA_ENABLED', $null, 'Process')
+}
 
 if ([string]::IsNullOrWhiteSpace($env:SMARTPARK_DEV_PASSWORD)) {
     throw 'SMARTPARK_DEV_PASSWORD is empty in .env. Run setup.ps1 first.'
@@ -39,6 +63,28 @@ $env:Services__Payment = 'http://localhost:5065/'
 foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
     $url = [Environment]::GetEnvironmentVariable('SMARTPARK_SERVICE_' + $remoteService.ToUpperInvariant() + '_URL')
     if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
+}
+
+$jwtIssuer = if ($env:SMARTPARK_JWT_ISSUER) { $env:SMARTPARK_JWT_ISSUER } else { 'SmartParking.UserService' }
+$jwtAudience = if ($env:SMARTPARK_JWT_AUDIENCE) { $env:SMARTPARK_JWT_AUDIENCE } else { 'SmartParking' }
+$jwtPath = if ($env:SMARTPARK_JWT_JWKS_PATH) { $env:SMARTPARK_JWT_JWKS_PATH } else { '/.well-known/jwks.json' }
+if ($Service -eq 'User') {
+    $env:Jwt__Issuer = $jwtIssuer
+    $env:Jwt__Audience = $jwtAudience
+    $env:Jwt__JwksPath = $jwtPath
+    # A blank environment value disappears on Windows PowerShell 5.1. A space
+    # explicitly overrides stale user-secrets while remaining unconfigured.
+    $env:Jwt__KeyId = if ($env:SMARTPARK_JWT_KEY_ID) { $env:SMARTPARK_JWT_KEY_ID } else { ' ' }
+    foreach ($field in @('PrivateKeyPem','PrivateKeyPemBase64')) {
+        $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
+        $value = [Environment]::GetEnvironmentVariable($sourceName, 'Process')
+        if (!(Test-JwtConfiguredValue $value)) { $value = ' ' }
+        [Environment]::SetEnvironmentVariable('Jwt__' + $field, $value, 'Process')
+    }
+} else {
+    $env:JwtValidation__Issuer = $jwtIssuer
+    $env:JwtValidation__Audience = $jwtAudience
+    $env:JwtValidation__JwksUri = ([Uri]::new([Uri]$env:Services__User, $jwtPath)).AbsoluteUri
 }
 
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
@@ -106,7 +152,8 @@ if ($Service -eq 'User') {
         $value = [Environment]::GetEnvironmentVariable('SMARTPARK_SMTP_' + $field.ToUpperInvariant())
         if ($value) { [Environment]::SetEnvironmentVariable('Otp__Smtp__' + $field, $value, 'Process') }
     }
-    if ($env:SMARTPARK_JWT_PRIVATE_KEY_PEM) { $env:Jwt__PrivateKeyPem = $env:SMARTPARK_JWT_PRIVATE_KEY_PEM }
+    if ($env:SMARTPARK_TURNSTILE_ENABLED) { $env:Turnstile__Enabled = $env:SMARTPARK_TURNSTILE_ENABLED }
+    if ($env:SMARTPARK_TURNSTILE_SECRET_KEY) { $env:Turnstile__SecretKey = $env:SMARTPARK_TURNSTILE_SECRET_KEY }
     if ($env:SMARTPARK_WORKFLOW_KEY_DIRECTORY) {
         $keyDirectory = $env:SMARTPARK_WORKFLOW_KEY_DIRECTORY
         if (![IO.Path]::IsPathRooted($keyDirectory)) { $keyDirectory = Join-Path $taskRoot $keyDirectory }
@@ -117,3 +164,8 @@ $projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { '
 $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
 if ($LASTEXITCODE -ne 0) { throw "${projectService}Service exited with code $LASTEXITCODE" }
+} finally {
+    # Do not leave UserService .env signing secrets in the launching shell.
+    Restore-JwtSigningEnvironment $previousSigningEnvironment
+    foreach ($name in $mediaNames) { [Environment]::SetEnvironmentVariable($name, $previousMediaEnvironment[$name], 'Process') }
+}

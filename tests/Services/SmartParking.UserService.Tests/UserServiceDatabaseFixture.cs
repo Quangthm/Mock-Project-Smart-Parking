@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using MassTransit;
 using Microsoft.Extensions.Hosting;
 using System.Security.Cryptography;
 using UserService.API;
@@ -76,6 +77,8 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:User"] = ConnectionString,
+                ["Messaging:Enabled"] = "false",
+                ["Messaging:OutboxDeliveryEnabled"] = "false",
                 ["Services:Parking"] = "http://parking.test/",
                 ["SMARTPARK_RABBITMQ_HOST"] = "127.0.0.1",
                 ["SMARTPARK_RABBITMQ_PORT"] = "5672",
@@ -91,12 +94,21 @@ internal sealed class UserServiceDatabaseFixture : IAsyncDisposable
                 ["DevelopmentAdmin:Email"] = null
             });
             configureConfiguration?.Invoke(builder);
-        }, configure);
+        }, builder =>
+        {
+            // Preserve production outbox capture, but database-only HTTP tests must
+            // never start the broker connection. Delivery tests explicitly opt in.
+            if (!builder.Configuration.GetValue<bool>("Messaging:Enabled") &&
+                !builder.Configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
+                builder.Services.RemoveMassTransitHostedService();
+            // Delivery scheduling is exercised directly in DriverWorkflowTests.
+            // Remove the timer before startup so it cannot race test OTP extraction.
+            foreach (var registration in builder.Services.Where(service =>
+                service.ServiceType == typeof(IHostedService) && service.ImplementationType == typeof(WorkflowDeliveryWorker)).ToArray())
+                builder.Services.Remove(registration);
+            configure?.Invoke(builder);
+        });
         await app.StartAsync();
-        // Delivery scheduling is exercised explicitly against PostgreSQL in DriverWorkflowTests.
-        // Stop the timer here so extracting test-only OTP fixtures cannot race provider retries.
-        foreach (var worker in app.Services.GetServices<IHostedService>().OfType<WorkflowDeliveryWorker>())
-            await worker.StopAsync(CancellationToken.None);
         return app;
     }
 

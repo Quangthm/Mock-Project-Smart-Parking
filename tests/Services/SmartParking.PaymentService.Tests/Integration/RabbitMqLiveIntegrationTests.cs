@@ -25,26 +25,9 @@ public class RabbitMqLiveIntegrationTests
     {
         public RabbitMqLiveFactAttribute()
         {
-            if (!IsRabbitMqAvailable())
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SMARTPARK_RABBIT_TEST_PORT")))
             {
-                Skip = "Requires local RabbitMQ broker running on 127.0.0.1:5672. Skipping live broker test in CI/CD environment.";
-            }
-        }
-
-        private static bool IsRabbitMqAvailable()
-        {
-            try
-            {
-                using var tcp = new System.Net.Sockets.TcpClient();
-                var asyncResult = tcp.BeginConnect("127.0.0.1", 5672, null, null);
-                var success = asyncResult.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(200));
-                if (!success) return false;
-                tcp.EndConnect(asyncResult);
-                return true;
-            }
-            catch
-            {
-                return false;
+                Skip = "Set SMARTPARK_RABBIT_TEST_PORT and isolated broker credentials to run live delivery checks.";
             }
         }
     }
@@ -109,10 +92,10 @@ public class RabbitMqLiveIntegrationTests
     private ServiceProvider BuildServiceProvider(LiveMessageCollector collector, string queueName)
     {
         const string host = "127.0.0.1";
-        const ushort port = 5672;
-        const string vhost = "/";
-        const string username = "guest";
-        const string password = "guest";
+        var port = ushort.Parse(Environment.GetEnvironmentVariable("SMARTPARK_RABBIT_TEST_PORT")!);
+        var vhost = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_VHOST") ?? "/";
+        var username = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_USER") ?? throw new InvalidOperationException("Configure the isolated broker user.");
+        var password = Environment.GetEnvironmentVariable("SMARTPARK_RABBITMQ_PASSWORD") ?? throw new InvalidOperationException("Configure the isolated broker password privately.");
 
         var services = new ServiceCollection();
         services.AddSingleton(collector);
@@ -149,10 +132,10 @@ public class RabbitMqLiveIntegrationTests
     {
         var collector = new LiveMessageCollector();
         var queueName = "smartpark-direct-publish-" + Guid.NewGuid().ToString("N")[..8];
-        var provider = BuildServiceProvider(collector, queueName);
+        await using var provider = BuildServiceProvider(collector, queueName);
         var busControl = provider.GetRequiredService<IBusControl>();
 
-        _output.WriteLine($"[SETUP] Connecting to RabbitMQ at 127.0.0.1:5672, Queue: {queueName}...");
+        _output.WriteLine($"[SETUP] Connecting to the isolated RabbitMQ fixture, Queue: {queueName}...");
         await busControl.StartAsync(new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
         try
@@ -207,10 +190,10 @@ public class RabbitMqLiveIntegrationTests
     {
         var collector = new LiveMessageCollector();
         var queueName = "smartpark-cash-publish-" + Guid.NewGuid().ToString("N")[..8];
-        var provider = BuildServiceProvider(collector, queueName);
+        await using var provider = BuildServiceProvider(collector, queueName);
         var busControl = provider.GetRequiredService<IBusControl>();
 
-        _output.WriteLine($"[SETUP] Connecting to RabbitMQ at 127.0.0.1:5672, Queue: {queueName}...");
+        _output.WriteLine($"[SETUP] Connecting to the isolated RabbitMQ fixture, Queue: {queueName}...");
         await busControl.StartAsync(new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
         try
@@ -312,10 +295,10 @@ public class RabbitMqLiveIntegrationTests
     {
         var collector = new LiveMessageCollector();
         var queueName = "smartpark-webhook-publish-" + Guid.NewGuid().ToString("N")[..8];
-        var provider = BuildServiceProvider(collector, queueName);
+        await using var provider = BuildServiceProvider(collector, queueName);
         var busControl = provider.GetRequiredService<IBusControl>();
 
-        _output.WriteLine($"[SETUP] Connecting to RabbitMQ at 127.0.0.1:5672, Queue: {queueName}...");
+        _output.WriteLine($"[SETUP] Connecting to the isolated RabbitMQ fixture, Queue: {queueName}...");
         await busControl.StartAsync(new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
         try

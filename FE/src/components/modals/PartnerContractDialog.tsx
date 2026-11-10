@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { useApp } from "../../context/AppContext"
 import contract from "../../lib/partnerContract.json"
 import type { ContractDraftRecord } from "../../lib/partnerContract"
 import "./partner-contract.css"
@@ -12,11 +14,13 @@ interface Props {
   signer: "owner" | "admin"
   signerName: string
   readOnly?: boolean
+  page?: boolean
   onClose: () => void
   onSign: (name: string) => void
 }
 
-export function PartnerContractDialog({ applicationId, ownerName, businessName, lotName, record, signer, signerName, readOnly = false, onClose, onSign }: Props) {
+export function PartnerContractDialog({ applicationId, ownerName, businessName, lotName, record, signer, signerName, readOnly = false, page = false, onClose, onSign }: Props) {
+  const { accentColor } = useApp()
   const [readToEnd, setReadToEnd] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [name, setName] = useState(signerName)
@@ -33,7 +37,7 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
     closeRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onCloseRef.current()
-      if (event.key !== "Tab") return
+      if (page || event.key !== "Tab") return
       const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled])') ?? [])]
       if (!focusable.length) return
       const first = focusable[0]
@@ -43,18 +47,18 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
     }
     document.addEventListener("keydown", onKeyDown)
     const scrollArea = contentRef.current
-    if (scrollArea && scrollArea.scrollHeight <= scrollArea.clientHeight + 8) setReadToEnd(true)
+    if (page || (scrollArea && scrollArea.scrollHeight <= scrollArea.clientHeight + 8)) setReadToEnd(true)
     return () => { document.removeEventListener("keydown", onKeyDown); previousFocus?.focus() }
-  }, [])
+  }, [page])
 
-  return <div className="partner-contract-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
-    <section ref={dialogRef} className="partner-contract-dialog partner-contract-dialog--agreement" role="dialog" aria-modal="true" aria-labelledby="partner-contract-title">
+  const content = <div className={page ? "dashboard-theme partner-contract-page" : "dashboard-theme partner-contract-backdrop"} data-accent={accentColor} onMouseDown={event => { if (!page && event.target === event.currentTarget) onClose() }}>
+    <section ref={dialogRef} className="partner-contract-dialog partner-contract-dialog--agreement" role={page ? undefined : "dialog"} aria-modal={page ? undefined : "true"} aria-labelledby="partner-contract-title">
       <header className="partner-contract-header">
         <div>
           <p className="partner-contract-eyebrow">SmartParking partnership · Local draft</p>
           <h2 id="partner-contract-title">Partnership agreement</h2>
         </div>
-        <button ref={closeRef} type="button" className="partner-contract-close" onClick={onClose} aria-label="Close agreement">×</button>
+        <button ref={closeRef} type="button" className={page ? "partner-contract-close partner-contract-page-back" : "partner-contract-close"} onClick={onClose} aria-label={page ? "Close contract tab" : "Close agreement"}>{page ? "← Close contract tab" : "×"}</button>
       </header>
       <div className="partner-contract-meta">
         <span><strong>Owner</strong> {ownerName}</span>
@@ -66,15 +70,21 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
         const node = event.currentTarget
         if (node.scrollTop + node.clientHeight >= node.scrollHeight - 12) setReadToEnd(true)
       }}>
-        <h3>{contract.title}</h3>
-        <p>{contract.intro}</p>
-        {contract.sections.map(section => <section key={section.heading}>
-          <h4>{section.heading}</h4>
-          {section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
-        </section>)}
-        <div className="partner-contract-signatures">
-          <div><span>Owner draft signature</span><strong>{record?.ownerAcknowledgedAt ? record.ownerName : "Awaiting Owner"}</strong>{record?.ownerAcknowledgedAt && <small>{new Date(record.ownerAcknowledgedAt).toLocaleString("en-GB")}</small>}</div>
-          <div><span>Admin draft signature</span><strong>{record?.adminAcknowledgedAt ? record.adminName : "Awaiting Admin"}</strong>{record?.adminAcknowledgedAt && <small>{new Date(record.adminAcknowledgedAt).toLocaleString("en-GB")}</small>}{record?.adminAcknowledgedAt && <b className="partner-contract-stamp">SMARTPARKING<br />REVIEWED</b>}</div>
+        <div className="partner-contract-document">
+          <h3 lang="vi">{contract.title}</h3>
+          <p lang="vi">{contract.intro}</p>
+          {contract.sections.map(section => <section lang="vi" key={section.heading}>
+            <h4>{section.heading}</h4>
+            {"review" in section && <aside className="partner-contract-review" aria-label={signer === "owner" ? "Owner review point" : "Admin review point"}>
+              <span lang="en">{signer === "owner" ? "Owner review" : "Admin review"}</span>
+              <p>{section.review?.[signer]}</p>
+            </aside>}
+            {section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
+          </section>)}
+          <div className="partner-contract-signatures">
+            <div><span>Owner draft signature</span><strong>{record?.ownerAcknowledgedAt ? record.ownerName.normalize("NFC") : "Awaiting Owner"}</strong>{record?.ownerAcknowledgedAt && <small>{new Date(record.ownerAcknowledgedAt).toLocaleString("en-GB")}</small>}</div>
+            <div><span>Admin draft signature</span><strong>{record?.adminAcknowledgedAt ? record.adminName?.normalize("NFC") : "Awaiting Admin"}</strong>{record?.adminAcknowledgedAt && <small>{new Date(record.adminAcknowledgedAt).toLocaleString("en-GB")}</small>}{record?.adminAcknowledgedAt && <b className="partner-contract-stamp">SMARTPARKING<br />REVIEWED</b>}</div>
+          </div>
         </div>
       </div>
       <footer className="partner-contract-footer">
@@ -84,7 +94,7 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
           <a className="btn-outline" href="/templates/smartparking-partnership-agreement-draft.docx" download>Download Word draft</a>
           {!readOnly && !signed && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> I have read this draft</label>}
           {!readOnly && <button type="button" className="btn-primary" disabled={signed || !readToEnd || !confirmed || !name.trim() || (signer === "admin" && !record?.ownerAcknowledgedAt)} onClick={() => {
-            try { onSign(name.trim()) } catch { setSignError("Could not save this acknowledgement in your browser. Check browser storage and try again.") }
+            try { onSign(name.trim().normalize("NFC")) } catch { setSignError("Could not save this acknowledgement in your browser. Check browser storage and try again.") }
           }}>
             {signed ? "Signed locally" : `Sign draft as ${signer === "owner" ? "Owner" : "Admin"}`}
           </button>}
@@ -96,4 +106,5 @@ export function PartnerContractDialog({ applicationId, ownerName, businessName, 
       </footer>
     </section>
   </div>
+  return page ? content : createPortal(content, document.body)
 }

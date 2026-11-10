@@ -6,6 +6,7 @@ import { adminData as store } from "../data/data"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { showUiToast } from "../../../lib/uiToast"
 import { authApi } from "../../../lib/authApi"
+import { PasswordVisibilityButton } from "../../../components/forms/PasswordVisibilityIcon"
 
 export function AdminSettings() {
   const { user, setUser } = useApp()
@@ -21,6 +22,7 @@ export function AdminSettings() {
 
   const [success, setSuccess] = useState("")
   const [saving, setSaving] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
@@ -75,6 +77,7 @@ export function AdminSettings() {
       setSuccess(message)
       showUiToast("Profile saved", message)
       setForm((f) => ({ ...f, name: confirmedName, currentPassword: "", newPassword: "", confirmPassword: "" }))
+      setShowConfirmPassword(false)
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to save your profile. Please try again.")
     } finally {
@@ -142,14 +145,18 @@ export function AdminSettings() {
             </div>
             <div>
               <label className="label">Confirm New Password</label>
-              <input
-                className="input"
-                type="password"
-                value={form.confirmPassword}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, confirmPassword: e.target.value }))
-                }
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className="input"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={form.confirmPassword}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, confirmPassword: e.target.value }))
+                  }
+                  style={{ paddingRight: "3.25rem" }}
+                />
+                <PasswordVisibilityButton visible={showConfirmPassword} onToggle={() => setShowConfirmPassword((value) => !value)} label="new password confirmation" />
+              </div>
             </div>
           </div>
         </div>

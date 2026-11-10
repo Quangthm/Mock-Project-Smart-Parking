@@ -64,6 +64,7 @@ export const ownerApi = {
     password?: string
     lotType: LotType
     agreedToPolicy: boolean
+    turnstileToken?: string
   }): Promise<OwnerApplicationRecord> {
     const r = await request<Response<OwnerApplicationRecord>>(
       "/register/owner",
@@ -146,6 +147,20 @@ export const ownerApi = {
     )
 
     if (!r.success || !Array.isArray(r.data))
+      throw new Error("Invalid application response.")
+
+    return r.data
+  },
+
+  async get(id: string): Promise<OwnerApplicationRecord> {
+    const r = await request<Response<OwnerApplicationRecord>>(
+      `/${encodeURIComponent(id)}`,
+      "GET",
+      undefined,
+      "/api/owner-applications",
+    )
+
+    if (!r.success || r.data?.id !== id)
       throw new Error("Invalid application response.")
 
     return r.data

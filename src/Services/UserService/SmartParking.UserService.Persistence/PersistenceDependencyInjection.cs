@@ -27,8 +27,9 @@ public static class PersistenceDependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IAuthSessionStore, PostgresAuthSessionStore>();
         services.AddScoped<IIdentityAccessRepository, IdentityAccessRepository>();
-        services.AddScoped<IAccessEventStore, AccessEventStore>();
         services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<IRegistrationClaimRepository, RegistrationClaimRepository>();
+        services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
 
         return services;
     }

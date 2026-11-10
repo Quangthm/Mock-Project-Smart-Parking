@@ -53,7 +53,7 @@ Suggested commit: `fix(profile): simplify authorized name updates and consolidat
 
 Historical pre-merge verification: solution build 0 warnings/errors; solution tests 293 passed, 43 skipped, 0 failed. These results do not verify the merged tree. See [pre-merge session](../../../../ai/tasks/completed/TASK-SPARK-248-SESSION-20261029.md) for that evidence. Current reconciliation results are recorded separately.
 
-## Develop merge reconciliation
+## Develop merge reconciliation (historical snapshot before SPARK-319)
 
 Reconciled against HEAD `fce8a2638e068404319aa54712a776323fef2d85`. Direct `Account.RoleCode` remains authoritative; incoming operator activation, owner registration, queries and feature SQL use it rather than restoring `account_roles`. Session creation and test clones retain the immutable AccountId. Login account selection belongs to Application; signing and JWT validation remain Infrastructure responsibilities. Operator login retains its verified-contact requirement; own-profile eligibility remains role-only.
 
@@ -63,7 +63,13 @@ There is one MassTransit registration. `SMARTPARK_MESSAGING_ENABLED` maps to `Me
 
 Host user-secrets now use the current `SMARTPARK_RABBITMQ_HOST/PORT/USER/PASSWORD/VHOST` keys. Run setup with `-SkipDatabase -SkipRestore` to synchronize configuration without starting databases/broker. The runner and app Compose use those same keys; the container host/port remain `rabbitmq:5672`.
 
-Fresh User setup executes consolidated base01, then the distinct incoming 05.13 MFA, 05.14 identity-hardening and 05.15 onboarding migrations. Scripts13/14 from the original profile feature are not restored or executed. An existing User base must pass the complete session/outbox verifier before incremental feature writers execute; incompatible/partial state fails without a fresh-schema reset. The incremental scripts remain rerunnable and may update legacy feature data; review them before applying to a populated database.
+At this historical snapshot, fresh User setup was described as a sequence of incremental schema patches; that setup direction is superseded below.
+
+## Current UserDb/access-event reconciliation (SPARK-319)
+
+Fresh User setup now applies canonical base01 only, followed by the read-only UserDb verifier. Existing/partial databases require a separately reviewed migration; no startup migration or guessed legacy-session backfill is performed.
+
+`OperatorAccessChanged` remains versioned and is published through the scoped MassTransit EF Bus Outbox in the same transaction as the originating mutation. The custom access event store, relay and access projection are no longer part of runtime persistence. When enabled, the existing endpoint uses MassTransit EF inbox middleware for message/consumer deduplication and sends only a SignalR invalidation hint; clients reload authoritative state. User/Account/session checks remain authoritative for authorization. Generic `users.onboarding_complete` state is removed; Owner status is represented by the application, account and provisioning records. OTP ownership and delivery are unchanged.
 
 ## Quick verification guide
 

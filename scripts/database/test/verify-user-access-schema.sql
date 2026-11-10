@@ -3,7 +3,9 @@
 -- psql --dbname=<reviewed-connection-or-service> -v ON_ERROR_STOP=1 -f scripts/database/verify-user-access-schema.sql
 -- This script creates, changes and deletes no schema or application data.
 -- Fresh install: consolidated 01-user-access-service-db.sql, then this check.
--- Historical 13/14 upgrades are separate reviewed operations on existing databases.
+-- Existing databases require a separately reviewed migration; this verifier is read-only.
+-- Media is additive: run this session/outbox preflight, then the canonical UserDb media section,
+-- then test/verify-user-media-schema.sql. Do not reject eligible pre-media volumes here.
 BEGIN READ ONLY;
 SET LOCAL search_path = public, pg_catalog;
 
@@ -21,6 +23,12 @@ BEGIN
             ('accounts', 'id', 'uuid', true, ''),
             ('accounts', 'user_id', 'uuid', true, ''),
             ('accounts', 'role_code', 'character varying(50)', true, ''),
+            ('accounts', 'status', 'character varying(50)', true, ''),
+            ('users', 'access_version', 'bigint', true, ''),
+            ('owner_applications', 'lot_setup', 'jsonb', false, ''),
+            ('owner_applications', 'setup_token_hash', 'text', false, ''),
+            ('owner_applications', 'setup_token_expires_at', 'timestamp with time zone', false, ''),
+            ('owner_applications', 'approval_requested_by', 'uuid', false, ''),
             ('user_refresh_tokens', 'id', 'uuid', true, ''),
             ('user_refresh_tokens', 'user_id', 'uuid', true, ''),
             ('user_refresh_tokens', 'account_id', 'uuid', false, ''),
@@ -30,9 +38,23 @@ BEGIN
             ('user_refresh_tokens', 'expires_at', 'timestamp with time zone', true, ''),
             ('user_refresh_tokens', 'access_token_id', 'uuid', true, ''),
             ('user_refresh_tokens', 'access_expires_at', 'timestamp with time zone', true, ''),
+            ('user_refresh_tokens', 'last_refreshed_at', 'timestamp with time zone', true, ''),
             ('user_refresh_tokens', 'is_revoked', 'boolean', true, ''),
             ('user_refresh_tokens', 'created_at', 'timestamp with time zone', true, ''),
             ('user_refresh_tokens', 'updated_at', 'timestamp with time zone', true, ''),
+            ('rotated_session_proofs', 'access_token_id', 'uuid', true, ''),
+            ('rotated_session_proofs', 'session_id', 'uuid', true, ''),
+            ('rotated_session_proofs', 'user_id', 'uuid', true, ''),
+            ('rotated_session_proofs', 'token_hash', 'character varying(255)', true, ''),
+            ('rotated_session_proofs', 'access_expires_at', 'timestamp with time zone', true, ''),
+            ('mfa_credentials', 'user_id', 'uuid', true, ''),
+            ('mfa_credentials', 'protected_secret', 'text', true, ''),
+            ('mfa_credentials', 'pending_protected_secret', 'text', false, ''),
+            ('mfa_credentials', 'pending_expires_at', 'timestamp with time zone', false, ''),
+            ('mfa_recovery_codes', 'id', 'uuid', true, ''),
+            ('mfa_recovery_codes', 'user_id', 'uuid', true, ''),
+            ('mfa_recovery_codes', 'code_hash', 'text', true, ''),
+            ('mfa_recovery_codes', 'used_at', 'timestamp with time zone', false, ''),
             ('InboxState', 'Id', 'bigint', true, 'd'),
             ('InboxState', 'MessageId', 'uuid', true, ''),
             ('InboxState', 'ConsumerId', 'uuid', true, ''),
@@ -92,6 +114,20 @@ BEGIN
     IF to_regclass('public.account_roles') IS NOT NULL THEN
         failures := array_append(failures, 'obsolete account_roles relation is still present');
     END IF;
+    IF EXISTS (
+        SELECT 1 FROM pg_attribute a
+        WHERE a.attrelid = to_regclass('public.users') AND a.attname = 'onboarding_complete'
+          AND a.attnum > 0 AND NOT a.attisdropped
+    ) THEN
+        failures := array_append(failures, 'obsolete users.onboarding_complete column is still present');
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        WHERE c.conrelid = to_regclass('public.accounts') AND c.contype = 'c' AND c.convalidated
+          AND position('PENDING_VERIFICATION' in pg_get_constraintdef(c.oid)) > 0
+    ) THEN
+        failures := array_append(failures, 'accounts status constraint does not permit PENDING_VERIFICATION');
+    END IF;
 
     -- Validate ownership and deletion semantics, not just constraint names.
     FOR expected IN
@@ -105,6 +141,13 @@ BEGIN
             ('user_refresh_tokens', 'p', ARRAY['id'], NULL, NULL, NULL),
             ('user_refresh_tokens', 'f', ARRAY['user_id'], 'users', ARRAY['id'], 'c'),
             ('user_refresh_tokens', 'f', ARRAY['account_id','user_id'], 'accounts', ARRAY['id','user_id'], 'r'),
+            ('rotated_session_proofs', 'p', ARRAY['access_token_id'], NULL, NULL, NULL),
+            ('rotated_session_proofs', 'f', ARRAY['session_id'], 'user_refresh_tokens', ARRAY['id'], 'c'),
+            ('rotated_session_proofs', 'f', ARRAY['user_id'], 'users', ARRAY['id'], 'c'),
+            ('mfa_credentials', 'p', ARRAY['user_id'], NULL, NULL, NULL),
+            ('mfa_credentials', 'f', ARRAY['user_id'], 'users', ARRAY['id'], 'c'),
+            ('mfa_recovery_codes', 'p', ARRAY['id'], NULL, NULL, NULL),
+            ('mfa_recovery_codes', 'f', ARRAY['user_id'], 'users', ARRAY['id'], 'a'),
             ('InboxState', 'p', ARRAY['Id'], NULL, NULL, NULL),
             ('InboxState', 'u', ARRAY['MessageId','ConsumerId'], NULL, NULL, NULL),
             ('OutboxState', 'p', ARRAY['OutboxId'], NULL, NULL, NULL),
@@ -134,14 +177,14 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- Token uniqueness is required for exact lookup/replay decisions. The
-    -- framework indexes below mirror script 14, including both ordering indexes.
+    -- Token uniqueness is required for exact lookup/replay decisions.
     FOR expected IN
         SELECT * FROM (VALUES
             ('accounts', 'idx_accounts_role_code', ARRAY['role_code'], false),
             ('user_refresh_tokens', 'IX_user_refresh_tokens_account_id_user_id', ARRAY['account_id','user_id'], false),
             ('user_refresh_tokens', NULL, ARRAY['token_hash'], true),
             ('user_refresh_tokens', NULL, ARRAY['access_token_id'], true),
+            ('mfa_recovery_codes', NULL, ARRAY['user_id','code_hash'], true),
             ('InboxState', 'IX_InboxState_Delivered', ARRAY['Delivered'], false),
             ('OutboxState', 'IX_OutboxState_Created', ARRAY['Created'], false),
             ('OutboxMessage', 'IX_OutboxMessage_EnqueueTime', ARRAY['EnqueueTime'], false),
@@ -187,9 +230,9 @@ BEGIN
         RAISE EXCEPTION USING
             MESSAGE = 'User & Access schema prerequisites are not satisfied',
             DETAIL = array_to_string(failures, E'\n'),
-            HINT = 'For an empty database initialize consolidated 01-user-access-service-db.sql once; rerun verify-user-access-schema.sql with ON_ERROR_STOP=1. Existing databases require operator review; do not rerun base/14 blindly or backfill legacy session accounts. This verifier made no changes.';
+            HINT = 'For an empty database initialize consolidated 01-user-access-service-db.sql once; rerun verify-user-access-schema.sql with ON_ERROR_STOP=1. Existing databases require operator review; do not rerun the canonical base script or backfill legacy session accounts. This verifier made no changes.';
     END IF;
-    RAISE NOTICE 'PASS: User & Access direct-role, session binding and outbox schema prerequisites verified; no changes made.';
+    RAISE NOTICE 'PASS: canonical User & Access schema, identity workflow, session binding and MassTransit outbox prerequisites verified; no changes made.';
 END
 $verify$;
 

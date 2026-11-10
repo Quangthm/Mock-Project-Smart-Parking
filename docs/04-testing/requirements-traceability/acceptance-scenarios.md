@@ -12,7 +12,7 @@
 | AC-006 | E01 | Online refund unsupported or timeout | Visible pending/reconciliation; no silent cash fallback or duplicate refund | NOT RUN |
 | AC-007 | E01 | Original cash overcollection | Audited cash return, payout proof independent of charge-covered settlement | NOT RUN |
 | AC-008 | E02; V11-06 | Owner invites Operator; Operator verifies email and completes mandatory simulation, with or without password setup | Activation only after verified contact and simulation; password optional; no Admin per-hire approval; assigned-lot access only; cross-owner/self-promotion rejected | NOT RUN |
-| AC-009 | E02 | Revoked Operator replays previous private request/command | No new protected access/effect; historical attribution retained | NOT RUN |
+| AC-009 | E02 + 2026-11-04 freshness amendment | Revoked Operator replays previous private request/command | Apply declared freshness and local scope: TOKEN may retain claims until expiry; REQUEST uses current Account authority at its gate; UserService local security checks remain current. No cross-resource bypass; preserve history. | NOT RUN |
 | AC-010 | E03 | Full monthly-covered booking under fixed-deposit mode | Explicit zero-payment confirmation; one compatible claim; no provider success fabrication | NOT RUN |
 | AC-011 | E03 | Partial monthly booking coverage | Covered ordinary fees excluded before minimum; positive balance uses chosen prepayment | NOT RUN |
 | AC-012 | A-01 | Cancel pass with future zero-priced dependent booking | List blockers; Driver must explicitly cancel booking before pass cancellation completes | NOT RUN |
@@ -105,7 +105,7 @@ Use a real local TOTP implementation with documented security settings and clock
 | AC-059 | Admin TOTP/BOTH reset; grant delivery failure | Old factor/codes/sessions revoked; REPLACEMENT_REQUIRED blocks all ordinary login; no success before required new proof/password completion. | NOT RUN |
 | AC-060 | Sole seeded Admin requests assisted self-reset, or Owner resets Operator | Reject application-level self-approval/Owner reset; seeded Admin uses controlled maintainer recovery. Ordinary own security operations retain their proof requirements. | NOT RUN |
 | AC-061 | No other Admin | Use controlled verified maintainer procedure; if unavailable or verification insufficient remain pending; no public bypass. | NOT RUN |
-| AC-062 | Login races reset; old JWT and refresh after change | Current security/factor version enforced; pre-change session cannot authorize APIs or SignalR. | NOT RUN |
+| AC-062 | Login races reset; old JWT and refresh after change | UserService rejects stale issuance/refresh/local security context. Resource TOKEN may remain usable until expiry; REQUEST evaluates current Account authority, not exact-session continuity. SignalR logout is best effort; test missed notification. | NOT RUN |
 | AC-063 | Duplicate Admin command or support timeout | One mutation; query same operation; approved ticket is not completed reset; durable recovery retains outcome. | NOT RUN |
 | AC-064 | Blocked account/Owner pending approval after recovery | Credential recovery does not unblock, approve or grant rights. | NOT RUN |
 | AC-065 | Evidence/notification export and log inspection | Scoped access and redaction; no secrets/QR/codes/tokens in log/event/export; delivery failure separate from mutation. | NOT RUN |
@@ -139,7 +139,7 @@ Technical design-pending values are prerequisites to execution, not invented fix
 | AC-075 | V11-06 | FR-AUTH-01 | Driver and Partner registration complete/decline/fail simulated VNeID | Explicit consent and simulated information required; decline/failure does not complete registration. No real government verification claim or email/review/MFA bypass. | NOT RUN |
 | AC-076 | V11-06 | FR-AUTH-04 | Invited Operator follows email activation with and without a password | Verified email and successful mandatory simulation gate activation; password setup optional. Eligible verified-channel OTP login remains available through shared login/MFA gates. | NOT RUN |
 | AC-077 | V11-06, D03 | FR-AUTH-05 | Seed exactly one Admin; attempt Admin registration and exempt other roles | Only seeded Admin exempt from simulation; no Admin registration route; Operators/Drivers/Owners cannot inherit exemption. | NOT RUN |
-| AC-078 | V11-02 | FR-AUTH-05, BR-PRIV-01 | Admin replaces initial pending agreement, then attempts non-document edit, additional-lot edit and finalized edit | Only initial pending uploaded documents replaceable. Preserve original and each replacement with actor/time/reason. Other edits rejected. | NOT RUN |
+| AC-078 | V11-02 | FR-AUTH-05, BR-PRIV-01 | Initial Partner draft has only one of agreement/policy; then submit both, complete setup before email OTP and verify email before review. Admin replaces initial pending document; attempts non-document/additional-lot/finalized edits. | Incomplete draft allowed; submission requires exactly one current readable PDF of each kind, max 10 MiB inclusive (scans accepted). Only initial-pending document replacement allowed; immutable original/replacements with actor/time/reason. | Partner runtime NOT RUN; policy approved 2026-11-06 |
 | AC-079 | V11-02 | FR-AUTH-05 | Concurrent agreement replacement and approval use an old reviewed revision | Approval binds reviewed document/application version; stale review conflicts rather than approving unseen replacement. Final state/version immutable. | NOT RUN |
 | AC-080 | V11-02, D10 | FR-AUTH-05, FR-RPT-01 | Approve after replacement; applicant does not perform in-app re-acceptance | Outcome is Approved and notification says “Your application was approved with some modifications”. No third outcome/corrections/re-acceptance workflow. | NOT RUN |
 | AC-081 | V11-04, V11-07, V11-09 | FR-AUTH-05, FR-LOT-01 | Approval commits; provisioning times out/fails, is retried and receives duplicate outcome | Keep approved review plus visible pending/failed/unknown provisioning; one tenant/first lot; retry uses same identity. Failed provisioning is not rejection and Owner need not recreate first lot. User owns identity/organization/membership/review, Facility configuration, Operations accepted occupancy/claims/discovery/plan coverage, Payment financial terms and IoT raw observations/integrations; application snapshots do not transfer authority. | NOT RUN |
@@ -172,7 +172,7 @@ Technical design-pending values are prerequisites to execution, not invented fix
 | AC-108 | V11-12 | FR-MAP-02, FR-MAP-03, FR-MAP-04 | Select discovery lot then internal 2D/3D booking; capacity changes during handoff | Preserve lot identity; distinguish physical/protection and requested/allocated positions, show only recorded precision; marker/slot selection grants no capacity; backend booking revalidates. | NOT RUN |
 | AC-109 | V11-08 | FR-AUTH-01, FR-LOT-01 | Review proposed development reset/seed plan before execution | Require approved documentation, named teammate, exact environments/databases, reviewed script versions and scheduled date, plus schema/seed alignment. This scenario is NOT RUN and this docs task performs no reset. | NOT RUN |
 | AC-110 | V11-11, D03, D07 | FR-AUTH-02, FR-BAS-08 | Exercise access expiry, refresh absolute/inactivity boundary and third failed OTP across roles | 15-minute access, absolute 7-day refresh and 24-hour inactivity remain; rotation cannot extend absolute expiry. Three OTP failures trigger 15-minute authentication lock, including seeded Admin; enabled TOTP cannot be bypassed. | NOT RUN |
-| AC-111 | V11-02 | BR-PRIV-01, BR-PRIV-02, BR-PRIV-03 | Request agreement originals/replacements as unrelated applicant, scoped reviewer and expired retention/hold workflow | Private domain-authorized media references; no arbitrary public URL or blanket Admin access; version audit preserved, retention classification reviewed, holds/deletion proof honored. | NOT RUN |
+| AC-111 | V11-02 | BR-PRIV-01, BR-PRIV-02, BR-PRIV-03 | Request all Partner PDF versions as unrelated applicant/scoped reviewer; exercise recorded closure, rejection, withdrawal, independent holds and final release. | Restricted owner-authorized reads. Active partnership + 12 months after closure; rejected/withdrawn + 90 days. Missing lifecycle event blocks deletion, inactivity never substitutes. Holds reviewed every 30 days; final release re-evaluates original due date; final decision/version metadata immutable independently of due byte deletion. | Partner runtime/provider proof NOT RUN; policy approved 2026-11-06 |
 | AC-112 | V11-03, D10 | FR-AUTH-01, FR-RPT-01 | Registration/setup commits but email queue or provider fails, then applicant resends | Persist pending account/application and saved setup; delivery status truthful; authorized retry issues/delivers challenge under approved OTP controls without duplicating business records or skipping setup. | NOT RUN |
 | AC-113 | V11-06 | FR-AUTH-01, FR-AUTH-04 | Fake VNeID API returns a GUID during successful consented Driver/Partner registration or Operator activation; reload from persisted identity data | Store the returned simulated GUID against the correct User in User-owned database persistence; it survives retrieval beyond browser state. Never treat it as a government ID or auth token, expose another user's binding, or mark declined/failed simulation complete. Concrete schema/retry/conflict semantics follow the reviewed contract; sole seeded Admin exemption remains. | NOT RUN |
 | AC-114 | RA-01 | FR-BAS-02, FR-RES-03, BR-RES-01 | Reservation starts 09:30 with no permitted lot override | Effective `ALLOCATION_LEAD_TIME` resolves to the 1-hour default; allocation point is 08:30; priority remains start then confirmation. | NOT RUN |
@@ -186,3 +186,40 @@ Technical design-pending values are prerequisites to execution, not invented fix
 | AC-122 | RA-06 | FR-BAS-03, UC-RES-02 | Reallocation limit and alternative-offer duration are resolved policies | Defaults are 2 accepted Driver requests and 5-minute offer duration; permitted overrides affect future commands/offers while retries/invalid/system recovery remain excluded and offer equality remains expired. | NOT RUN |
 | AC-123 | RA-06 | FR-BAS-04, FR-MAP-02 | Occupancy validity is resolved from configurable policy | Default is 4 hours; permitted override changes projection horizon only. Newer authoritative evidence may end/change projection earlier; expiry never releases physical occupancy. | NOT RUN |
 | AC-124 | RA-06 | FR-MON-03/09/10, M-02/M-03 | Monthly product resolves payment hold, renewal window, expiry notices and max prepaid terms | Defaults are 15 min / 7 days / 7+1 day reminders / 3 terms. Permitted Owner/product overrides within Admin bounds apply prospectively; strict A<H, no capacity hold, no automatic renewal and yearly separation remain. | NOT RUN |
+
+## Authorization freshness amendment — 2026-11-04
+
+[AF-001–AF-014](authorization-freshness-scenarios.md) are additional acceptance specifications, all NOT RUN. AC-009 and AC-062 above are revised unexecuted expectations; historical executed reports are unchanged.
+
+
+## User media scenarios
+
+The [user image contract](../../03-design/api/user-images-api-design.md) defines intake, ownership and retention behavior. Execution results and task history belong in the [test reports](../reports/). AC-079 remains the stale reviewed-version guard specification for Partner review.
+
+| Case | Input / action | Expected result |
+|---|---|---|
+| MEDIA-USER-01 | JPEG/PNG/WebP; disguised filename/MIME; malformed/truncated bytes; 5 MiB and +1; dimensions >8192, >25 MP; animated PNG | Real decoding and bounded intake; only valid images admitted. Validate through the public HTTP boundary and Domain rules. |
+| MEDIA-USER-02 | Same key same/different bytes/intent; lost provider response; restart; provider succeeds then DB finalization fails | Same logical asset or 409; durable pending row, fenced recovery and no duplicate logical upload. |
+| MEDIA-USER-03 | Foreign User; second Driver Account of same User; wrong purpose; concurrent stale replacement; identical replay | Denied foreign access, no implicit union of accounts; one winner/409; identical attach no-op. |
+| MEDIA-USER-04 | Unattached at 24h; attached at 30d; read/attach retry; independent holds | Expired ordinary reads blocked, timestamps never reset; vehicle identity retained. Automatic deletion/operational hold-delete race is DEFERRED, not a passing runtime claim. |
+| MEDIA-CONFIG-01 | Fresh/Keep/Team, rerun, rotation/blank/removal; four .NET hosts/two Python services | Optional credentials mapped without synthetic-secret output; User-only opt-in; private JWT signing remains User-only. Verify configured values without exposing credentials. |
+| MEDIA-PARTNER-01 | Both PDF kinds; exactly 10 MiB and +1; malformed, unreadable or password-protected PDF; readable scan | Future admission accepts readable unlocked PDF including scans, inclusive limit; invalid files rejected. Specification only, NOT RUN. |
+| MEDIA-PARTNER-02 | Replacement races approval; reject/withdraw/close events; holds and due deletion | AC-079/111 exact version and lifecycle rules. Partner runtime and provider PDF capability/deletion verification NOT RUN. |
+
+
+## Vehicle registration scenarios
+
+These scenarios supplement the existing acceptance identifiers. Execution results, task identifiers and implementation history belong in the [test reports](../reports/); this section defines expected product behavior.
+
+| Scenario | Required result |
+|---|---|
+| Active registration, raw text and CAR/MOTORCYCLE | Stable owned vehicle; preserve original plate input and derive canonical plate server-side; forged Account/status fields cannot assign ownership |
+| Different claimant submits incumbent plate | 409 after one durable private claim; incumbent ID/rights unchanged; owned photo attached to the claim |
+| Concurrent/repeated equivalent plates | One active binding; deduplicated claimant submission; retry preserves original claim/photo and never promotes it after incumbent removal |
+| Two Driver Accounts belonging to one User | Lists, writes, claim reads and vehicle photos stay scoped to the exact authenticated Account |
+| Binding revision and stale updates | Account/plate/category/removal changes advance revision through the supported write path; raw-format/image changes do not; a stale binding revision cannot authorize continued use |
+| Missing/wrong service credentials, foreign/removed/pending IDs | Reject unauthenticated callers; return a common scoped ineligible result; expose only active binding details and real category |
+| Storage failure | Roll back claim/image effects; an unrelated constraint failure is not reported as a saved pending claim or plate conflict |
+| UI/network/account switch and live storage | Both forms reload authoritative pending status; pending/motorcycle entries stay out of Specific Slot selection; no cross-Account photo or claim leak; uncertain saves are not confirmed |
+| Existing reservation/gate/payment state | A competing claim does not mutate the incumbent's accepted workflow |
+| AC-098 removal and UC-VEH-02 adjudication | Enforce dependency/history safeguards and explicitly authorized review/transfer; acceptance is separate from private claim intake |

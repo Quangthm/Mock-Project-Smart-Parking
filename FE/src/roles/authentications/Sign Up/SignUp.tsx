@@ -10,11 +10,12 @@ import type { LotType } from "../../../lib/types"
 
 import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 
-import { PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
+import { PasswordVisibilityButton, PasswordVisibilityIcon } from "../../../components/forms/PasswordVisibilityIcon"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 
-import { authApi, type DriverRegistration } from "../../../lib/authApi"
+import { authApi, AuthApiError, type DriverRegistration } from "../../../lib/authApi"
+import { TurnstileWidget, type TurnstileWidgetRef } from "../../../components/common/TurnstileWidget"
 
 import {
   DriverOtpForm,
@@ -339,10 +340,16 @@ export function SignUp() {
   const [error, setError] = useState("")
 
   const [showPassword, setShowPassword] = useState(false)
+  const [showDriverConfirmPassword, setShowDriverConfirmPassword] = useState(false)
+  const [showOwnerConfirmPassword, setShowOwnerConfirmPassword] = useState(false)
 
   const [showTnC, setShowTnC] = useState(false)
 
   const [registering, setRegistering] = useState(false)
+  const [driverTurnstileToken, setDriverTurnstileToken] = useState("")
+  const driverTurnstileRef = useRef<TurnstileWidgetRef>(null)
+  const [ownerTurnstileToken, setOwnerTurnstileToken] = useState("")
+  const ownerTurnstileRef = useRef<TurnstileWidgetRef>(null)
 
   const [registration, setRegistration] = useState<PendingDriverRegistration | null>(
     restoreDriverRegistration,
@@ -442,12 +449,21 @@ export function SignUp() {
           email: driverForm.email.trim() || undefined,
           phone: driverForm.phone.trim() || undefined,
           password: driverForm.password || undefined,
+          turnstileToken: driverTurnstileToken || undefined,
         }),
         driverForm.email.trim() || driverForm.phone.trim(),
       )
 
+      driverTurnstileRef.current?.reset()
+      setDriverTurnstileToken("")
       setDriverForm((f) => ({ ...f, password: "", confirmPassword: "" }))
     } catch (e) {
+      const isRateLimited = e instanceof AuthApiError && e.status === 429
+      const isBotRequired = e instanceof AuthApiError && e.code === "BOT_VERIFICATION_REQUIRED"
+      if (!isRateLimited && !isBotRequired) {
+        driverTurnstileRef.current?.reset()
+        setDriverTurnstileToken("")
+      }
       try {
         saveRegistration(
           await authApi.recoverDriver(
@@ -509,13 +525,22 @@ export function SignUp() {
 
         lotType: ownerForm.lotType,
         agreedToPolicy: ownerForm.agreedToPolicy,
+        turnstileToken: ownerTurnstileToken || undefined,
       })
 
+      ownerTurnstileRef.current?.reset()
+      setOwnerTurnstileToken("")
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
       saveOwnerRegistration({ ...application, lotSetupComplete: false })
       setView("parking-lot-setup")
     } catch (e) {
+      const isRateLimited = e instanceof AuthApiError && e.status === 429
+      const isBotRequired = e instanceof AuthApiError && e.code === "BOT_VERIFICATION_REQUIRED"
+      if (!isRateLimited && !isBotRequired) {
+        ownerTurnstileRef.current?.reset()
+        setOwnerTurnstileToken("")
+      }
       try {
         const recovered = await ownerApi.recover(ownerForm.email.trim())
         saveOwnerRegistration(recovered)
@@ -578,12 +603,12 @@ export function SignUp() {
               marginBottom: "1.5rem",
             }}
           >
-            <button style={tabStyle("driver")} onClick={() => setTab("driver")}>
+            <button style={tabStyle("driver")} onClick={() => { setError(""); setTab("driver") }}>
               <UntitledIcon name="car" size={16} /> Driver
             </button>
             <button
               style={tabStyle("business")}
-              onClick={() => setTab("business")}
+              onClick={() => { setError(""); setTab("business") }}
             >
               <UntitledIcon name="building" size={16} /> Business
             </button>
@@ -736,21 +761,29 @@ export function SignUp() {
               <PasswordStrength pw={driverForm.password} />
             </Field>
             <Field label="Confirm Password">
-              <input
-                className="input"
-                type="password"
-                value={driverForm.confirmPassword}
-                onChange={(e) =>
-                  setDriverForm((f) => ({
-                    ...f,
-                    confirmPassword: e.target.value,
-                  }))
-                }
-                placeholder="Repeat your password"
-                required={!!driverForm.password}
-                style={{ fontSize: "1rem" }}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className="input"
+                  type={showDriverConfirmPassword ? "text" : "password"}
+                  value={driverForm.confirmPassword}
+                  onChange={(e) =>
+                    setDriverForm((f) => ({
+                      ...f,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="Repeat your password"
+                  required={!!driverForm.password}
+                  style={{ fontSize: "1rem", paddingRight: "3.25rem" }}
+                />
+                <PasswordVisibilityButton visible={showDriverConfirmPassword} onToggle={() => setShowDriverConfirmPassword((value) => !value)} />
+              </div>
             </Field>
+            <TurnstileWidget
+              ref={driverTurnstileRef}
+              action="driver_register"
+              onTokenChange={setDriverTurnstileToken}
+            />
             {error && <Err>{error}</Err>}
             <button
               type="submit"
@@ -917,20 +950,23 @@ export function SignUp() {
               <PasswordStrength pw={ownerForm.password} />
             </Field>
             <Field label="Confirm Password">
-              <input
-                className="input"
-                type="password"
-                value={ownerForm.confirmPassword}
-                onChange={(e) =>
-                  setOwnerForm((f) => ({
-                    ...f,
-                    confirmPassword: e.target.value,
-                  }))
-                }
-                placeholder="Repeat password"
-                required={!!ownerForm.password}
-                style={{ fontSize: "1rem" }}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className="input"
+                  type={showOwnerConfirmPassword ? "text" : "password"}
+                  value={ownerForm.confirmPassword}
+                  onChange={(e) =>
+                    setOwnerForm((f) => ({
+                      ...f,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="Repeat password"
+                  required={!!ownerForm.password}
+                  style={{ fontSize: "1rem", paddingRight: "3.25rem" }}
+                />
+                <PasswordVisibilityButton visible={showOwnerConfirmPassword} onToggle={() => setShowOwnerConfirmPassword((value) => !value)} />
+              </div>
             </Field>
 
             {/* T&C — must click to read, shows modal, can't check until read */}
@@ -997,6 +1033,11 @@ export function SignUp() {
               </label>
             </div>
 
+            <TurnstileWidget
+              ref={ownerTurnstileRef}
+              action="owner_register"
+              onTokenChange={setOwnerTurnstileToken}
+            />
             {error && <Err>{error}</Err>}
             <button
               type="submit"
