@@ -4,7 +4,7 @@
 - Session gốc07/11, cập nhật08/11/2026; branch `AI-ChatBot`, mốc trước đợt chia commit là `3d3def76`.
 - **In Progress**; một nhật ký active cho chatbot backend, không tạo file mỗi prompt.
 - Review S02–S05/S09 và tổ chức tài liệu; frontend có owner riêng.
-- Trạng thái Git và kiểm chứng mới nhất: xem mục **Chia commit để leader review** ở cuối file. Các checkpoint phía trên giữ bối cảnh tại thời điểm ghi.
+- Trạng thái Git và kiểm chứng mới nhất nằm ở mục **Đồng bộ develop** cuối file. Các checkpoint trước giữ bối cảnh tại thời điểm ghi.
 
 ## 2. Mục tiêu
 - Settings/FAQ/history/recovery/reads chạy thật ổn định; chỉ mở draft khi đủ owner evidence/approval.
@@ -126,3 +126,10 @@ Theo yêu cầu người dùng, bỏ SESSION/ngày khỏi tên file chatbot; dù
 - **Kiểm chứng mới của đợt chia commit:** Bản sao source cô lập không có `.env` cá nhân. Backend nền đạt 230/230 test; mốc Settings đạt 270/270. Ứng viên cuối build toàn solution Release đạt, chỉ warning NU1510 đã có. IoT đạt 473, skip 6 ca opt-in/worker. Regression mới của User/Operation đạt 55, Facility discovery/publication đạt 13, Payment discovery pricing đạt 8. Frontend chatbot đạt 53/53 và `npm --prefix FE run build` đạt, còn cảnh báo bundle/dynamic import đã có. Harness Windows PowerShell 5.1 `test-setup.ps1` và `test-assistant-check.ps1` đạt.
 - Không chạy lại full solution test, Docker smoke, PostgreSQL opt-in hoặc provider thật trong đợt chia commit; bằng chứng các lượt đó giữ nguyên phạm vi ở trên. Bốn lỗi Facility operational-layout của lượt full suite trước vẫn cần owner xử lý, không gộp vào đợt này.
 - **Bước bàn giao:** Người dùng push branch khi sẵn sàng, gửi tester tài liệu nghiệm thu và gửi leader tài liệu tổng quan. Việc chia commit không đóng các dependency booking, capacity authority hoặc các cổng nghiệm thu môi trường đích còn mở.
+
+## Đồng bộ develop — 10/11/2026
+
+- Tích hợp `develop` tại `d5a10f0c` vào `AI-ChatBot` tại `2ff96f6b`. Ba reviewer độc lập rà trước merge và kiểm tra lại phần xử lý 7 conflict.
+- Giữ nghiệp vụ mới của `develop` cho Turnstile, media, phiên đăng nhập và Facility CQRS. Giữ cấu hình, route Discovery và tùy chọn HTTP riêng của Assistant. Sửa khai báo state trùng có sẵn trong form bãi xe và cập nhật fixture kiểm thử theo import hiện hành.
+- Build .NET và frontend thành công. Bộ .NET offline đạt 1.221 test, gồm 12 test kiến trúc. Frontend đạt 268 test. Năm script PowerShell offline kiểm tra setup, runner, listener, migration plan và readiness đạt.
+- Docker, PostgreSQL tích hợp, broker và provider thật vẫn chờ nghiệm thu môi trường. Các gate về đặt chỗ và availability giữ theo tài liệu owner.

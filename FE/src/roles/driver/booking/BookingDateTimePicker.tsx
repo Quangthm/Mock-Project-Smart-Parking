@@ -1,17 +1,7 @@
 import { useEffect, useState } from "react"
+import { localDate, ParkingCalendar, quarterHourTimes } from "../../../components/forms/ParkingDateField"
 
 type Field = "start" | "end"
-
-const quarterHourTimes = Array.from({ length: 96 }, (_, index) => {
-  const hour = Math.floor(index / 4)
-  const minute = (index % 4) * 15
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
-})
-const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-function localDate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-}
 
 function readableDateTime(value: string) {
   if (!value) return "Choose date and time"
@@ -56,10 +46,6 @@ export function BookingDateTimePicker({ start, end, onStartChange, onEndChange }
 
   const min = field === "end" && start ? new Date(start) : now
   const today = localDate(now)
-  const firstWeekday = (month.getDay() + 6) % 7
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
-  const dateCells = Array.from({ length: firstWeekday + daysInMonth }, (_, index) => index - firstWeekday + 1)
-
   function validChoice(date: string, time: string) {
     const candidate = new Date(`${date}T${time}`)
     return !Number.isNaN(candidate.getTime()) && candidate.getTime() > min.getTime()
@@ -76,8 +62,7 @@ export function BookingDateTimePicker({ start, end, onStartChange, onEndChange }
     }
   }
 
-  function chooseDay(day: number) {
-    const date = localDate(new Date(month.getFullYear(), month.getMonth(), day))
+  function chooseDay(date: string) {
     setDraftDate(date)
     if (draftTime && validChoice(date, draftTime)) commit(date, draftTime)
     else setDraftTime("")
@@ -103,23 +88,9 @@ export function BookingDateTimePicker({ start, end, onStartChange, onEndChange }
         </button>
       </div>
       <div className="booking-datetime-body">
-        <div className="booking-calendar">
-          <div className="booking-calendar-heading">
-            <strong>{new Intl.DateTimeFormat("en-VN", { month: "long", year: "numeric" }).format(month)}</strong>
-            <div>
-              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} disabled={month.getFullYear() === now.getFullYear() && month.getMonth() <= now.getMonth()} aria-label="Previous month">‹</button>
-              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} aria-label="Next month">›</button>
-            </div>
-          </div>
-          <div className="booking-calendar-grid">
-            {weekdays.map((day) => <span className="booking-calendar-weekday" key={day}>{day}</span>)}
-            {dateCells.map((day, index) => day > 0 ? (() => {
-              const date = localDate(new Date(month.getFullYear(), month.getMonth(), day))
-              const disabled = !quarterHourTimes.some((time) => new Date(`${date}T${time}`).getTime() > min.getTime())
-              return <button key={date} type="button" disabled={disabled} className={`${date === draftDate ? "is-selected " : ""}${date === today ? "is-today" : ""}`} onClick={() => chooseDay(day)} aria-label={new Intl.DateTimeFormat("en-VN", { dateStyle: "full" }).format(new Date(month.getFullYear(), month.getMonth(), day))} aria-pressed={date === draftDate}>{day}</button>
-            })() : <span key={`empty-${index}`} />)}
-          </div>
-        </div>
+        <ParkingCalendar month={month} onMonthChange={setMonth} selected={draftDate} today={today}
+          min={today} isDateDisabled={date => !quarterHourTimes.some(time => validChoice(date, time))}
+          onSelect={chooseDay} />
         <div className="booking-time-list">
           <strong>Time <small>(local)</small></strong>
           <div role="group" aria-label={`${field === "start" ? "Arrival" : "Departure"} time`}>

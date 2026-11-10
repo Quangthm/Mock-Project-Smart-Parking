@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Usecases.Layout.Queries.GetOperationalLayout;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Tests;
@@ -13,18 +15,14 @@ public sealed class OperationalLayoutReadPathTests
             BuildProjection(),
             14,
             new Dictionary<string, int>(StringComparer.Ordinal) { ["Zone_A"] = 10 });
-        var service = new ParkingStructureService(
-            repository: null!,
-            owners: null!,
-            operators: null!,
-            commitments: commitments,
-            synchronizationStore: null!,
-            synchronization: null!,
-            operationalLayouts: new StubReader(readResult),
-            callerResolver: new StubResolver());
 
-        var layout = await service.ReadOperationalAsync(
-            Guid.NewGuid(), vehicleType: null, floor: null, CancellationToken.None);
+        var handler = new GetOperationalLayoutQueryHandler(
+            callerResolver: new StubResolver(),
+            operationalLayouts: new StubReader(readResult),
+            logger: NullLogger<GetOperationalLayoutQueryHandler>.Instance);
+
+        var layout = await handler.Handle(
+            new GetOperationalLayoutQuery(Guid.NewGuid(), null, null), CancellationToken.None);
 
         Assert.Equal(0, commitments.ReadSnapshotCalls);
         Assert.Equal(0, commitments.AcquireCalls);

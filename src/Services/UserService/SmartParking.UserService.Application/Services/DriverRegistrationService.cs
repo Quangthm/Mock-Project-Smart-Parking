@@ -9,7 +9,7 @@ using UserService.Application.DTOs;
 namespace UserService.Application.Services;
 
 public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswordService passwords,
-    IOtpSender sender, TimeProvider clock) : IDriverRegistrationService
+    IOtpSender sender, TimeProvider clock, IBotVerificationService? botVerifier = null) : IDriverRegistrationService
 {
     private static AuthException Error(string code, string message, int status = 400) => new(code, message, status);
     private static string NewCode() => RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
@@ -24,6 +24,11 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
 
     public async Task<DriverRegistrationResult> RegisterAsync(DriverRegistrationDto request, CancellationToken ct)
     {
+        if (botVerifier is not null)
+        {
+            await botVerifier.VerifyAsync(request.TurnstileToken, "driver_register", ct);
+        }
+
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant();
         AccountWorkflowService.Validate(request);
         var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : AccountWorkflowService.Contact(request.Phone);

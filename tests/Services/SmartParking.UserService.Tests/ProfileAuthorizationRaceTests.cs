@@ -15,7 +15,7 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class ProfileAuthorizationRaceTests
 {
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task StaleTrackedAuthorityIsRefreshedAfterCommittedRevocation()
     {
         await using var fixture = await Database.CreateAsync();
@@ -51,7 +51,7 @@ public sealed class ProfileAuthorizationRaceTests
         Assert.Equal("Fresh Name", (await verify.Users.SingleAsync(u => u.Id == fixture.UserId)).FullName);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task InvalidatorsCommitFirstAndActualHandlerRefusesTheWrite()
     {
         foreach (var invalidation in Enum.GetValues<Invalidation>())
@@ -70,7 +70,7 @@ public sealed class ProfileAuthorizationRaceTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task PostCheckInvalidatorsMayCommitBeforeAuthorizedNameSave()
     {
         foreach (var invalidation in Enum.GetValues<Invalidation>())
@@ -92,7 +92,7 @@ public sealed class ProfileAuthorizationRaceTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task SharedUserAcrossAccountsUsesOrdinaryLastWriteWins()
     {
         await using var fixture = await Database.CreateAsync();
@@ -129,7 +129,7 @@ public sealed class ProfileAuthorizationRaceTests
             Assert.Equal("First Name", (await new CurrentAccessStore(verify).LoadCurrentAsync(pair.Item1, pair.Item2, default))!.User.FullName);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task SessionAccountBindingIsImmutableInDatabaseAndRotationPreservesIt()
     {
         await using var fixture = await Database.CreateAsync();

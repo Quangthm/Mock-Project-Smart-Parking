@@ -19,6 +19,7 @@ internal static class TestAuthorization
     // and unused feature services are substituted; an unexpected feature call fails loudly.
     public static void AddServices(IServiceCollection services, AuthTestFixture fixture)
     {
+        services.TryAddSingleton<IUserRepository>(fixture);
         services.TryAddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
         services.TryAddSingleton<IIdentityWorkflowStore>(UnsupportedFeature.Create<IIdentityWorkflowStore>());
         services.TryAddSingleton<IEventPublisher, RecordingEventPublisher>();
@@ -28,6 +29,10 @@ internal static class TestAuthorization
         services.TryAddSingleton<IUserManagementService>(UnsupportedFeature.Create<IUserManagementService>());
         services.TryAddSingleton<IOwnerRegistrationService>(UnsupportedFeature.Create<IOwnerRegistrationService>());
         services.TryAddSingleton<IAccountWorkflows>(UnsupportedFeature.Create<IAccountWorkflows>());
+        services.TryAddSingleton(new global::UserService.Application.Media.MediaSettings(false, ""));
+        services.TryAddSingleton<global::UserService.Application.Common.Interfaces.Persistence.IMediaAssetRepository>(UnsupportedFeature.Create<global::UserService.Application.Common.Interfaces.Persistence.IMediaAssetRepository>());
+        services.TryAddSingleton<global::UserService.Application.Media.IMediaProvider>(UnsupportedFeature.Create<global::UserService.Application.Media.IMediaProvider>());
+        services.TryAddSingleton<global::UserService.Application.Media.IImageInspector>(UnsupportedFeature.Create<global::UserService.Application.Media.IImageInspector>());
     }
 
     private sealed class MemoryScopes(AuthTestFixture fixture) : IAuthorizationScopeStore

@@ -1,6 +1,6 @@
 # Driver registration and verification API design
 
-SPARK-174 / SPARK-176 / SPARK-177 / SPARK-182 · SPARK-296 update, 21 October 2026. **v1.1 documentation review candidate based on approved decisions**; implementation and verification pending.
+SPARK-174 / SPARK-176 / SPARK-177 / SPARK-182 · SPARK-296 update, 21 October 2026. **v1.1 documentation review candidate based on approved decisions**; implementation and verification pending. SPARK-257 bot-protection addition (4 November 2026) is a **DRAFT** awaiting direction approval.
 
 Canonical behavior: [FR-AUTH-01/02/06 and FR-BAS-08](../../01-requirements/srs/modules/01-identity-access.md), [UC-AUTH-01](../../01-requirements/use-cases/uc-auth-01.md), [shared login/security contract](../../02-architecture/api/v1.1-contracts.md). This contract replaces the competing `/driver-register` route proposals and auto-login examples.
 
@@ -8,7 +8,7 @@ Canonical behavior: [FR-AUTH-01/02/06 and FR-BAS-08](../../01-requirements/srs/m
 
 | Operation | Existing method/path | Request and result |
 |---|---|---|
-| Register | `POST /api/auth/register/driver` | `fullName`, at least one of `email`/`phone`, optional `password`; persist pending identity and Driver account, require consented mandatory VNeID simulation. Return scoped registration/challenge metadata; no session. |
+| Register | `POST /api/auth/register/driver` | `fullName`, at least one of `email`/`phone`, optional `password`, and `turnstileToken` when bot verification is enabled; persist pending identity and Driver account, require consented mandatory VNeID simulation. Return scoped registration/challenge metadata; no session. |
 | Verify | `POST /api/auth/register/driver/verify` | `registrationId`, six-digit `code`, authorized verification context; valid contact proof plus completed simulation permits activation. Return verification result only, **no automatic login** (D06). |
 | Resend | `POST /api/auth/register/driver/resend` | Existing `registrationId`, authorized scoped context; replace OTP while preserving attempts/lock and cooldown. |
 | Recover | `POST /api/auth/register/driver/recover` | Existing `contact`; safe recovery only, no secret/session issued solely from contact or ID. Final recovery authorization/envelope pending V11-DES-03. |
@@ -28,6 +28,10 @@ Existing challenge metadata names: `registrationId`, `channel`, `expiresAt`, `re
 ```
 
 The Driver then uses shared login, current account-state and required MFA gates. Registration verification never returns access/refresh tokens or an unconditional profile.
+
+## Bot verification (SPARK-257)
+
+The public register call carries a Cloudflare Turnstile token as the additive body field `turnstileToken` (single-use, provider-issued, roughly five-minute validity). UserService validates it server-side through the Application bot-verification port **before** creating any identity, account, challenge or OTP delivery; verification never holds a database lock during the outbound provider call. The token is required when `Turnstile:Enabled=true` (production default) and omitted only under explicit non-production disablement. Outcomes are fail-closed: `BOT_VERIFICATION_REQUIRED` (missing), `BOT_VERIFICATION_FAILED` (malformed/invalid) and `BOT_VERIFICATION_EXPIRED` (expired/reused) are `400`; `BOT_VERIFICATION_UNAVAILABLE` (provider/network/misconfiguration) is `503`. The frontend must reset the widget on any `BOT_VERIFICATION_*` failure so the user can obtain a new token. Bot verification is additive and never replaces rate limiting or OTP lockout. See the [cross-cutting bot-protection design](bot-protection-spark-257-api-design.md).
 
 ## Sequence and concurrency
 
@@ -53,7 +57,7 @@ Simulation is labelled mock information-sharing with explicit consent, no real g
 
 ## Errors and delivery
 
-Retain safe `VALIDATION_FAILED`, `CONTACT_EXISTS`, `REGISTRATION_NOT_FOUND`, `REGISTRATION_CLOSED`, `OTP_INVALID`, `OTP_EXPIRED`, `OTP_LOCKED`, `OTP_COOLDOWN` outcomes as existing integration names. Framework validation and business envelopes require V11-DES-03 agreement; do not claim uniform RFC problem details. Invalid/expired credentials and incomplete simulation remain explicit safe errors, with final new codes pending. Failed delivery preserves the created account/challenge and records pending/failed state; retries do not roll back/recreate business records (D10).
+Retain safe `VALIDATION_FAILED`, `CONTACT_EXISTS`, `REGISTRATION_NOT_FOUND`, `REGISTRATION_CLOSED`, `OTP_INVALID`, `OTP_EXPIRED`, `OTP_LOCKED`, `OTP_COOLDOWN` outcomes as existing integration names. Framework validation and business envelopes require V11-DES-03 agreement; do not claim uniform RFC problem details. Invalid/expired credentials and incomplete simulation remain explicit safe errors, with final new codes pending. Failed delivery preserves the created account/challenge and records pending/failed state; retries do not roll back/recreate business records (D10). SPARK-257 adds fail-closed `BOT_VERIFICATION_REQUIRED`, `BOT_VERIFICATION_FAILED` and `BOT_VERIFICATION_EXPIRED` (400) plus `BOT_VERIFICATION_UNAVAILABLE` (503) to this register call, evaluated before the existing registration errors and before any identity/OTP side effect.
 
 ## Retained decision references
 

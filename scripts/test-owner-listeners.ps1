@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path $root ('.cache/listeners-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts') -Force | Out-Null
-foreach ($name in @('load-env.ps1','run-schema-service.ps1')) {
+foreach ($name in @('load-env.ps1','run-schema-service.ps1','jwt-environment.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $scratch 'scripts')
 }
 $previous = @{}

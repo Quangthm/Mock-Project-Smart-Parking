@@ -3,14 +3,15 @@ $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path $sourceRoot ('.cache/assistant-runner-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts') -Force | Out-Null
-foreach ($name in @('run-schema-service.ps1','load-env.ps1')) {
+foreach ($name in @('run-schema-service.ps1','load-env.ps1','jwt-environment.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $scratch "scripts/$name")
 }
 $previous = @{}
 foreach ($entry in Get-ChildItem Env:) { $previous[$entry.Name] = $entry.Value }
 $global:assistantRunnerTestLaunches = 0
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
 function dotnet {
-    if ($env:Jwt__PrivateKeyPem -or $env:SMARTPARK_JWT_PRIVATE_KEY_PEM -or $env:SMARTPARK_JWT_PRIVATE_KEY_FILE) { throw 'Assistant inherited signing material.' }
+    if ((Get-JwtSigningEnvironment).Count) { throw 'Assistant inherited signing material.' }
     $global:assistantRunnerTestLaunches++
     if ($env:ASPNETCORE_ENVIRONMENT -ne 'Development' -or $env:DOTNET_ENVIRONMENT -ne 'Development') { throw 'Demo environment leaked.' }
     if ($args -notcontains '--no-launch-profile' -or $args -notcontains 'https://localhost:5075') { throw 'Unexpected launch arguments.' }
@@ -43,6 +44,7 @@ try {
     $env:Jwt__PrivateKeyPem = 'synthetic-leaked-signing-key'
     $env:SMARTPARK_JWT_PRIVATE_KEY_PEM = 'synthetic-inline-signing-key'
     $env:SMARTPARK_JWT_PRIVATE_KEY_FILE = 'synthetic-signing-path'
+    $env:ASPNETCORE_Jwt__PrivateKeyPemBase64 = 'synthetic-prefixed-signing-key'
     Write-Fixture
     & (Join-Path $scratch 'scripts/run-schema-service.ps1') -Service Assistant
     if ($global:assistantRunnerTestLaunches -ne 1) { throw 'Normal host not launched once.' }

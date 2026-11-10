@@ -249,11 +249,12 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
               style={{
                 width: "100%",
 
-                maxWidth: profileSection === "vehicles" ? 760 : 480,
+                maxWidth: profileSection === "vehicles" ? 1120 : 480,
 
-                maxHeight: "min(90vh, 760px)",
+                maxHeight: profileSection === "vehicles" ? "min(calc(100dvh - 2rem), 920px)" : "min(90vh, 760px)",
 
                 overflowY: "auto",
+                overscrollBehavior: profileSection === "vehicles" ? "contain" : undefined,
 
                 border: "1px solid var(--border)",
 
@@ -267,12 +268,13 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
               }}
             >
               <div
+                className={profileSection === "vehicles" ? "px-4 pt-4 pb-4 sm:px-6 sm:pt-6" : undefined}
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "space-between",
                   gap: "1rem",
-                  padding: "1.5rem 1.5rem 1rem",
+                  padding: profileSection === "vehicles" ? undefined : "1.5rem 1.5rem 1rem",
                 }}
               >
                 <div>
@@ -302,6 +304,9 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
                         ? "Security Settings"
                         : "My Vehicles"}
                   </h2>
+                  {profileSection === "vehicles" && (
+                    <p className="mt-1 text-sm text-[var(--muted)]">Manage the vehicles you use to park.</p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -453,7 +458,9 @@ export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQue
                 <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
               )}
 
-              {profileSection === "vehicles" && <VehicleManager />}
+              {profileSection === "vehicles" && (
+                <div className="px-4 pb-4 sm:px-6 sm:pb-6"><VehicleManager /></div>
+              )}
             </section>
           </div>
         )}

@@ -22,11 +22,12 @@ import {
   ALLOWED_PARKING_MODELS,
   validateModelUpload,
 } from "../../../lib/3d/parking3DConfig"
-import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { useModelCarCapacity, useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { saveOwnerModel } from "../../../lib/3d/ownerModelStorage"
 import { contractDraftStorageKey, loadContractDraft, saveOwnerContractHandoff, type ContractDraftRecord } from "../../../lib/partnerContract"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { ParkingLocationPicker, validParkingCoordinates, type ParkingCoordinates } from "../../../components/ui/ParkingLocationPicker"
+import { WardField } from "../../../components/forms/WardField"
 
 type OnboardStep = 1 | 2 | 3 | 4 | 5
 
@@ -130,15 +131,15 @@ export function OnboardingWizard({
   const [lotConfig, setLotConfig] = useState({
     name: "",
     address: "",
-    totalSlots: "",
     floors: "",
   })
   const [provinceCode, setProvinceCode] = useState<string>(CITIES[0].code)
   const [district, setDistrict] = useState("")
+  const [ward, setWard] = useState("")
   const [selectedLocation, setSelectedLocation] = useState<ParkingCoordinates | null>(null)
   const [locationPickerOpen, setLocationPickerOpen] = useState(false)
   const [otherDistrict, setOtherDistrict] = useState(false)
-  const address = [lotConfig.address.trim(), district.trim(), CITIES.find(city => city.code === provinceCode)?.name].filter(Boolean).join(", ")
+  const address = [lotConfig.address.trim(), ward.trim(), district.trim(), CITIES.find(city => city.code === provinceCode)?.name].filter(Boolean).join(", ")
 
   const [devices, setDevices] = useState<Record<string, boolean>>({
     camera: false,
@@ -181,7 +182,7 @@ export function OnboardingWizard({
   const activeModelUrl = customModelUrl || activeModelDef.path
 
   const activeModelFileName = customModelFileName || activeModelDef.fileName
-  const setupFingerprint = JSON.stringify({ lotType, lotConfig, provinceCode, district, selectedLocation, devices, pricing, customModelFileName })
+  const setupFingerprint = JSON.stringify({ lotType, lotConfig, provinceCode, district, ward, selectedLocation, devices, pricing, customModelFileName })
   const activeContractDraft = contractDraft?.setupFingerprint === setupFingerprint ? contractDraft : null
 
   useEffect(() => {
@@ -223,6 +224,8 @@ export function OnboardingWizard({
 
   useEffect(() => () => { if (customModelUrl) URL.revokeObjectURL(customModelUrl) }, [customModelUrl])
   const modelCapacity = useModelCarCapacity(activeModelUrl)
+  const modelStructure = useModelStructure(activeModelUrl)
+  const modelFloors = modelStructure.analysis?.floors ?? []
 
   function handleLotTypeSelect(type: LotType) {
     setLotType(type)
@@ -233,6 +236,8 @@ export function OnboardingWizard({
     setCustomModelFile(null)
 
     setModelUploadError(null)
+    const defaultFloors = type === "basement" ? "2" : type === "multi-storey" ? "3" : "1"
+    setLotConfig((cur) => ({ ...cur, floors: defaultFloors }))
   }
 
   function handleModelFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -291,25 +296,23 @@ export function OnboardingWizard({
 
     try {
       const name = lotConfig.name.trim()
-      if (!name || !lotConfig.address.trim() || !district.trim()) {
-        throw new Error("Please enter the parking lot name, street address, and district.")
+      if (!name || !lotConfig.address.trim() || !ward.trim()) {
+        throw new Error("Please enter the parking lot name, street address, and current ward or commune.")
       }
       if (!validParkingCoordinates(selectedLocation)) {
         throw new Error("Confirm the parking entrance on the map before continuing.")
       }
 
-      const totalSlots = Number(lotConfig.totalSlots)
+      // Capacity is derived from the slots the Owner registers, not from this form.
+      // The 3D model's bay count is shown read-only, so it must never gate submission.
+      const totalSlots = modelCapacity.capacity ?? 0
 
       const floors = LOT_TYPE_INFO[lotType].hasFloors
         ? Number(lotConfig.floors)
         : 1
 
-      if (modelCapacity.capacity === null) {
-        throw new Error(modelCapacity.error || "Checking the selected 3D model's car bay capacity. Please wait.")
-      }
-      if (!Number.isInteger(totalSlots) || totalSlots < 1 || totalSlots > modelCapacity.capacity ||
-          !Number.isInteger(floors) || floors < 1 || floors > 20) {
-        throw new Error(`Enter 1–${modelCapacity.capacity} car spaces, matching the selected 3D model, and a valid floor count.`)
+      if (!Number.isInteger(floors) || floors < 1 || floors > 20) {
+        throw new Error("Enter a valid floor count between 1 and 20.")
       }
 
       const numericPricing = {
@@ -386,6 +389,21 @@ export function OnboardingWizard({
       })
       if (!site || typeof site.id !== "string" || !site.id.trim()) {
         throw new Error("The server did not return a valid site ID. Please try again.")
+      }
+
+      // Auto-create FLOOR units based on active floors
+      const targetFloors = modelFloors.slice(0, Math.min(floors, modelFloors.length))
+      for (const fl of targetFloors) {
+        try {
+          await parkingApi.unit(site.id, {
+            type: "FLOOR",
+            name: fl.displayName,
+            parentId: null,
+            capacity: fl.capacity,
+          })
+        } catch (unitErr) {
+          console.warn("Could not auto-create floor unit:", unitErr)
+        }
       }
 
       const savedModelUrl = customModelFile ? await saveOwnerModel(site.id, customModelFile).catch(() => null) : null
@@ -942,6 +960,7 @@ export function OnboardingWizard({
                   <RoundedSelect id="owner-setup-province" className="input" value={provinceCode} onChange={event => {
                     setProvinceCode(event.target.value)
                     setDistrict("")
+                    setWard("")
                     setOtherDistrict(false)
                     setSelectedLocation(null)
                     setLocationPickerOpen(false)
@@ -950,8 +969,8 @@ export function OnboardingWizard({
                   </RoundedSelect>
                 </div>
                 <div>
-                  <label className="label" htmlFor="owner-setup-district">District *</label>
-                  <RoundedSelect id="owner-setup-district" className="input" value={otherDistrict ? "__other__" : district} required onChange={event => {
+                  <label className="label" htmlFor="owner-setup-district">Former district / area (optional)</label>
+                  <RoundedSelect id="owner-setup-district" className="input" value={otherDistrict ? "__other__" : district} onChange={event => {
                     const custom = event.target.value === "__other__"
                     setOtherDistrict(custom)
                     setDistrict(custom ? "" : event.target.value)
@@ -962,17 +981,20 @@ export function OnboardingWizard({
                     {(DISTRICTS_BY_PROVINCE[provinceCode] ?? []).map(name => <option key={name} value={name}>{name}</option>)}
                     <option value="__other__">Other district / area</option>
                   </RoundedSelect>
-                  {otherDistrict && <input className="input mt-2" aria-label="Other district or area" value={district} onChange={event => { setDistrict(event.target.value); setSelectedLocation(null); setLocationPickerOpen(false) }} placeholder="Enter district or area" maxLength={120} required />}
+                  {otherDistrict && <input className="input mt-2" aria-label="Other district or area" value={district} onChange={event => { setDistrict(event.target.value); setSelectedLocation(null); setLocationPickerOpen(false) }} placeholder="Enter former district or area" maxLength={120} />}
                 </div>
               </div>
+              <WardField key={provinceCode} id="owner-setup-ward" provinceCode={provinceCode} value={ward} required
+                onChange={value => { setWard(value); setSelectedLocation(null); setLocationPickerOpen(false) }} />
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
                 <div className="space-y-1">
                   <p className="text-sm text-[var(--muted)]">{validParkingCoordinates(selectedLocation) ? `Entrance pin confirmed · ${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}` : "Confirm the exact parking entrance so the map pin matches this site."}</p>
                   {registration && <p className="text-xs text-[var(--muted)]">During registration, this pin is saved in this browser. Confirm it again in Owner Parking Lots after approval to save it to the parking service.</p>}
                 </div>
-                <button type="button" className="btn-outline" disabled={!lotConfig.address.trim() || !district.trim()} onClick={() => setLocationPickerOpen(open => !open)}>{locationPickerOpen ? "Close map" : selectedLocation ? "Move entrance pin" : "Set entrance pin"}</button>
+                <button type="button" className="btn-outline" disabled={!lotConfig.address.trim() || !ward.trim()} onClick={() => setLocationPickerOpen(open => !open)}>{locationPickerOpen ? "Close map" : selectedLocation ? "Move entrance pin" : "Set entrance pin"}</button>
               </div>
               {locationPickerOpen && <ParkingLocationPicker
+                name={lotConfig.name}
                 address={address}
                 center={{ lat: CITIES.find(city => city.code === provinceCode)?.defaultLat ?? CITIES[0].defaultLat, lng: CITIES.find(city => city.code === provinceCode)?.defaultLng ?? CITIES[0].defaultLng }}
                 initial={selectedLocation}
@@ -989,23 +1011,21 @@ export function OnboardingWizard({
                 }}
               >
                 <div>
-                  <label className="label">Planned Car Spaces *</label>
+                  <label className="label">Planned Car Spaces</label>
                   <input
                     className="input"
                     type="number"
-                    min={1}
-                    max={modelCapacity.capacity ?? undefined}
-                    value={lotConfig.totalSlots}
-                    placeholder="e.g. 50"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) =>
-                      setLotConfig((c) => ({
-                        ...c,
-                        totalSlots: e.target.value,
-                      }))
-                    }
+                    value={modelCapacity.capacity ?? ""}
+                    placeholder="—"
+                    readOnly
+                    aria-readonly="true"
                   />
-                  <p className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error || (modelCapacity.capacity === null ? "Checking car bays in the selected 3D model…" : `Maximum ${modelCapacity.capacity} car spaces in this model.`)}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Capacity is counted from the slots you register. Set per-area limits in Parking Structure.
+                  </p>
+                  {modelCapacity.error && (
+                    <p role="status" className="mt-1 text-xs text-[var(--muted)]">{modelCapacity.error}</p>
+                  )}
                 </div>
                 {LOT_TYPE_INFO[lotType].hasFloors && (
                   <div>
@@ -1022,7 +1042,7 @@ export function OnboardingWizard({
                         setLotConfig((c) => ({ ...c, floors: e.target.value }))
                       }
                     />
-                    {lotConfig.totalSlots &&
+                    {modelCapacity.capacity !== null &&
                       lotConfig.floors &&
                       parseInt(String(lotConfig.floors)) > 0 && (
                         <p
@@ -1034,7 +1054,7 @@ export function OnboardingWizard({
                         >
                           ~
                           {Math.ceil(
-                            parseInt(String(lotConfig.totalSlots)) /
+                            modelCapacity.capacity /
                               parseInt(String(lotConfig.floors)),
                           )}{" "}
                           slots per floor
@@ -1054,7 +1074,6 @@ export function OnboardingWizard({
                 disabled={
                   !lotConfig.name ||
                   !lotConfig.address || !district.trim() || !validParkingCoordinates(selectedLocation) ||
-                  !lotConfig.totalSlots ||
                   (LOT_TYPE_INFO[lotType].hasFloors && !lotConfig.floors)
                 }
               >
@@ -1368,7 +1387,7 @@ export function OnboardingWizard({
               <Row label="Address" value={address} />
               <Row
                 label="Total Slots"
-                value={String(parseInt(String(lotConfig.totalSlots)) || 0)}
+                value={modelCapacity.capacity !== null ? String(modelCapacity.capacity) : "—"}
               />
               {LOT_TYPE_INFO[lotType].hasFloors && (
                 <Row

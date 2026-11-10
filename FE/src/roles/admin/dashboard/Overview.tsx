@@ -148,9 +148,9 @@ export function Overview() {
       <div className="admin-kpi-strip">
         {[
           {
-            label: "Platform Revenue",
+            label: "Local booking revenue preview",
             value: `${totalRevenue.toLocaleString("vi-VN")} VND`,
-            sub: "All-time booking settlements",
+            sub: "Local booking records; not live settlements",
             icon: "banknote",
             badge: "Financial",
           },
@@ -243,8 +243,8 @@ export function Overview() {
             </div>
             <div
               style={{
-                fontSize: "0.75rem",
-                color: k.alert ? "#dc2626" : "var(--muted)",
+                  fontSize: "0.875rem",
+                  color: k.alert ? "var(--occupied)" : "var(--muted)",
                 display: "flex",
                 alignItems: "center",
                 gap: "0.35rem",
@@ -293,7 +293,7 @@ export function Overview() {
                   margin: 0,
                 }}
               >
-                Booking Activity (Last 7 Days)
+                Local Booking Activity (Last 7 Days)
               </h3>
               <p
                 style={{
@@ -302,10 +302,10 @@ export function Overview() {
                   color: "var(--muted)",
                 }}
               >
-                Completed and active driver reservations across all sites
+                Local booking records; not a live platform report
               </p>
             </div>
-            <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>
+            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>
               Daily aggregation
             </span>
           </div>
@@ -318,12 +318,12 @@ export function Overview() {
               />
               <XAxis
                 dataKey="day"
-                tick={{ fontSize: 11, fill: "var(--muted)" }}
+                tick={{ fontSize: 13, fill: "var(--muted)" }}
                 tickLine={false}
                 axisLine={{ stroke: "var(--border)" }}
               />
               <YAxis
-                tick={{ fontSize: 11, fill: "var(--muted)" }}
+                tick={{ fontSize: 13, fill: "var(--muted)" }}
                 allowDecimals={false}
                 tickLine={false}
                 axisLine={{ stroke: "var(--border)" }}
@@ -386,12 +386,12 @@ export function Overview() {
                 <BarChart data={userRoleData} barSize={28}>
                   <XAxis
                     dataKey="role"
-                    tick={{ fontSize: 11, fill: "var(--muted)" }}
+                    tick={{ fontSize: 13, fill: "var(--muted)" }}
                     tickLine={false}
                     axisLine={{ stroke: "var(--border)" }}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "var(--muted)" }}
+                    tick={{ fontSize: 13, fill: "var(--muted)" }}
                     allowDecimals={false}
                     tickLine={false}
                     axisLine={{ stroke: "var(--border)" }}
@@ -432,7 +432,7 @@ export function Overview() {
                       display: "flex",
                       alignItems: "center",
                       gap: "0.35rem",
-                      fontSize: "0.72rem",
+                      fontSize: "0.875rem",
                     }}
                   >
                     <div
@@ -503,7 +503,7 @@ export function Overview() {
             </div>
             <span
               style={{
-                fontSize: "0.72rem",
+                fontSize: "0.875rem",
                 padding: "0.15rem 0.5rem",
                 borderRadius: "4px",
                 background:
@@ -547,7 +547,7 @@ export function Overview() {
                   margin: 0,
                 }}
               >
-                Recent System Audit Events
+                Recent Local Audit Preview
               </h3>
               <p
                 style={{
@@ -556,11 +556,11 @@ export function Overview() {
                   color: "var(--muted)",
                 }}
               >
-                Authorized administrative audit record
+                Local audit records; not a live service feed
               </p>
             </div>
-            <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>
-              Live feed
+            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>
+              Local preview
             </span>
           </div>
 
@@ -592,7 +592,7 @@ export function Overview() {
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
-                    fontSize: "0.68rem",
+                    fontSize: "0.875rem",
                     fontWeight: 700,
                     color: ROLE_COLORS[log.userRole] || "var(--muted)",
                   }}
@@ -612,7 +612,7 @@ export function Overview() {
                   >
                     {log.details}
                   </div>
-                  <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
+                  <div style={{ fontSize: "0.875rem", color: "var(--muted)" }}>
                     <span
                       style={{
                         textTransform: "capitalize",

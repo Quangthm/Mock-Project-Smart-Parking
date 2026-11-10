@@ -49,10 +49,10 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 
 | Trường | Giá trị cần điền |
 | --- | --- |
-| `SMARTPARK_JWT_PRIVATE_KEY_FILE` | PEM riêng của UserService local |
+| `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` | Khóa riêng của UserService local theo mục 5.5 trong LOCAL-SETUP. Giữ khóa đang dùng nếu đã có |
 | `Assistant__Jwt__PublicKeyFile` | PEM công khai cùng cặp khóa JWT đó |
-| `Assistant__Jwt__Issuer` | Mặc định của UserService Docker Development là `SmartParking.UserService.Demo`, đối chiếu cấu hình thực |
-| `Assistant__Jwt__Audience` | Mặc định tương ứng là `SmartParking.Postman.Demo`, đối chiếu cấu hình thực |
+| `Assistant__Jwt__Issuer` | Mặc định của UserService Docker là `SmartParking.UserService`, đối chiếu cấu hình thực |
+| `Assistant__Jwt__Audience` | Mặc định tương ứng là `SmartParking`, đối chiếu cấu hình thực |
 | `Assistant__Management__KeyDirectory` | Thư mục riêng lưu keyring bền vững |
 | `Assistant__Management__KeyEncryptionCertificatePath` | Đường dẫn PFX RSA bảo vệ keyring |
 | `Assistant__Management__KeyEncryptionCertificatePassword` | Password PFX local |

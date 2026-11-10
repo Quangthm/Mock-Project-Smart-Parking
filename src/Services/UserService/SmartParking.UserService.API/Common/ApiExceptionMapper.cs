@@ -75,7 +75,18 @@ public sealed class ApiExceptionMapper
         Add("VALIDATION_FAILED", "Validation failed.", 400);
         Add("VEHICLE_NOT_FOUND", "Vehicle was not found.", 404);
         Add("PROFILE_NOT_FOUND", "Profile was not found.", 404);
+        Add("VEHICLE_DEPENDENCY_UNAVAILABLE", "Vehicle identity changes are unavailable until active dependencies can be checked.", 503);
+        Add("VEHICLE_RECONCILIATION_REQUIRED", "Vehicle binding requires reconciliation.", 409);
+        Add("VEHICLE_BINDING_STALE", "Vehicle binding changed; revalidate before continuing.", 409);
         Add("PLATE_EXISTS", "A vehicle with this plate is already registered.", 409);
+        Add("MEDIA_DISABLED", "Image uploads and reads are disabled.", 503);
+        Add("MEDIA_UNAVAILABLE", "Image storage is temporarily unavailable.", 503);
+        Add("MEDIA_NOT_FOUND", "Image was not found.", 404);
+        Add("MEDIA_INVALID_IMAGE", "Provide a valid JPEG, PNG or WebP within the image limits.", 400);
+        Add("MEDIA_EXPIRED", "Image has expired. Upload a new image.", 410);
+        Add("MEDIA_PENDING", "Image upload is pending. Check its status or retry the same upload.", 409);
+        Add("MEDIA_CONFLICT", "Image changed. Reload before retrying.", 409);
+        Add("MEDIA_IDEMPOTENCY_CONFLICT", "Idempotency key was already used for different input.", 409);
         // Preserve existing workflow outcomes while exposing only reviewed fixed text.
         // CONTACT_UNVERIFIED has two existing contexts: OTP sign-in and Owner approval.
         Add("CONTACT_UNVERIFIED", "Use a verified contact for OTP sign in.", 401);
@@ -109,6 +120,10 @@ public sealed class ApiExceptionMapper
         Add("ADMIN_ACCOUNT_PROTECTED", "Admin accounts cannot be changed through user management.", 409);
         Add("INVALID_STATUS_TRANSITION", "Verification or owner approval must complete before managing access.", 409);
         Add("PARKING_UNAVAILABLE", "Parking service is unavailable. Please retry.", 503);
+        Add("BOT_VERIFICATION_REQUIRED", "Bot verification token is required.", 400);
+        Add("BOT_VERIFICATION_FAILED", "Bot verification failed.", 400);
+        Add("BOT_VERIFICATION_EXPIRED", "Bot verification token has expired or was already used. Please try again.", 400);
+        Add("BOT_VERIFICATION_UNAVAILABLE", "Bot verification service is temporarily unavailable. Please retry.", 503);
         return errors.ToFrozenDictionary();
 
         void Add(string code, string message, int status) =>

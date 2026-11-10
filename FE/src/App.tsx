@@ -167,8 +167,8 @@ function AppContent() {
         {authReady && (
           <motion.div key={`${location.pathname}-${view}`} className="app-route-view"
             initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.12 : 0.26, ease: "easeOut" } }}
-            exit={{ opacity: 0, y: reduceMotion ? 0 : -6, transition: { duration: 0.14, ease: "easeOut" } }}>
+            animate={{ opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.08 : 0.2, ease: "easeOut" } }}
+            exit={{ opacity: 0, y: reduceMotion ? 0 : -6, transition: { duration: reduceMotion ? 0.05 : 0.08, ease: "easeOut" } }}>
             <Routes>
               <Route path="/" element={<LegacyView view={view} guestQuestion={guestQuestion} clearGuestQuestion={() => setGuestQuestion(undefined)} />} />
               <Route path="/sign-in/email-otp" element={<SignIn flow="email-otp" />} />

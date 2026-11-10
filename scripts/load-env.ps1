@@ -6,14 +6,16 @@
 #   $map = . .\scripts\load-env.ps1                  # reads <repo>\.env
 #   $map = . .\scripts\load-env.ps1 -EnvPath <path>  # explicit file
 #
-# Every KEY=VALUE line is exported as a process environment variable under its
-# original name (KEY=VALUE -> $env:KEY). Values are never written to the log.
+# Values are never written to the log. Signing secrets remain in the returned
+# map, but are excluded from the environment unless UserService opts in.
 # =============================================================================
 param(
     [string]$EnvPath,
-    [switch]$NoExport
+    [switch]$NoExport,
+    [switch]$IncludeUserServiceSigningSecrets
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
 
 if ([string]::IsNullOrWhiteSpace($EnvPath)) {
     $EnvPath = Join-Path (Split-Path $PSScriptRoot -Parent) '.env'
@@ -23,6 +25,7 @@ if (!(Test-Path -LiteralPath $EnvPath -PathType Leaf)) {
 }
 
 $envPairs = @{}
+if (!$NoExport -and !$IncludeUserServiceSigningSecrets) { Clear-JwtSigningEnvironment }
 foreach ($envRawLine in Get-Content -LiteralPath $EnvPath -Encoding UTF8) {
     $envLine = $envRawLine.Trim()
     if (!$envLine) { continue }
@@ -47,7 +50,13 @@ foreach ($envRawLine in Get-Content -LiteralPath $EnvPath -Encoding UTF8) {
     }
 
     $envPairs[$envKey] = $envValue
-    if (!$NoExport) { [Environment]::SetEnvironmentVariable($envKey, $envValue, 'Process') }
+    if (!$NoExport) {
+        if (Test-JwtSigningSecretName $envKey) {
+            if (!$IncludeUserServiceSigningSecrets) { continue }
+            if (!(Test-JwtConfiguredValue $envValue)) { $envValue = $null }
+        }
+        [Environment]::SetEnvironmentVariable($envKey, $envValue, 'Process')
+    }
 }
 
 return $envPairs

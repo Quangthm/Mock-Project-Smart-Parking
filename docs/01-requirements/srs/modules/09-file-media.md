@@ -12,10 +12,10 @@ Public only when facility photos/diagrams are explicitly published for public li
 | Avatar / vehicle image | JPEG, PNG, WebP | 5 MiB each |
 | LPR / incident / appeal image | JPEG, PNG | 10 MiB each; 5 per submission |
 | User video / SVG / HTML / archive | Not accepted in initial upload scope | No general upload endpoint for these types |
-| Initial Partner agreement/policy upload | Required upload scope; formats/limits design-pending (Q01) | User-owned versioned restricted assets; no arbitrary document URL |
+| Initial Partner agreement/policy upload | Readable PDF, including scanned PDF | 10 MiB (10,485,760 bytes) per file inclusive; exactly one current agreement and one current policy at submission |
 | Generated invoice PDF | Server-generated | Separate financial-document lifecycle; not arbitrary user PDF upload |
 
-Validate content, signature/decoding and size, not client filename/MIME alone. Initial Partner agreement/policy upload is now required scope under V11-02; exact formats, sizes/counts and retention classification remain Q01 technical design work owned by User/API/media leads. This does not enable general PDF evidence upload. No upload of the three fixed 3D deployment assets through this media flow.
+Validate content, signature/decoding and size, not client filename/MIME alone. Initial Partner agreement/policy is approved on 6 November 2026: reject password-protected/encrypted, unreadable, malformed or non-PDF files. Partner wire details and implementation remain deferred under Q01/V11-DES-01; no general PDF evidence upload is enabled. No upload of the three fixed 3D deployment assets through this media flow. User avatar/vehicle images additionally require dimensions at most 8,192 pixels per side and 25,000,000 pixels total; animated/multiframe images are rejected.
 
 Scoped Operator may request a hold for handled incident/appeal; Owner for escalated/monthly case; Admin for authorized platform investigation. Asset owner acknowledges before another service claims preservation. Authorized handler releases only the originating hold when its need ends; other active holds remain. Audit place/release and coordinate deletion races.
 
@@ -26,6 +26,8 @@ Accepted recommended operational target: provider deletion confirmation within 2
 | Data / action | Approved policy | Remaining precise specification |
 |---|---|---|
 | Images | Existing maximum 30 days, subject to authorized holds | Preserve existing class/scope; do not silently expand retention because an image is attached to a financial record. |
+| Submitted initial Partner documents — approved partnership | All submitted versions during active partnership and 12 months after recorded closure, subject to acknowledged holds | Approval time is not the retention anchor; missing authoritative closure blocks automated deletion. |
+| Submitted initial Partner documents — rejected/withdrawn | All submitted versions for 90 days from recorded rejection/withdrawal, subject to acknowledged holds | Missing lifecycle timestamp blocks automated deletion and is raised with Partner owner; inactivity is not withdrawal. |
 | Audit logs | Existing 7 years | Existing audit scope and protected access retained. |
 | Operational logs | Existing 90 days hot + 1 year cold | Preserve class distinction and existing lifecycle; production duration cannot be “tested” by a short demo. |
 | Financial documents | 7 years from issuance, subject to holds | Project-policy approval, not a conclusion about applicable law. Preserve issuance/version/adjustment links. |
@@ -37,13 +39,23 @@ Accepted recommended operational target: provider deletion confirmation within 2
 
 Preserve §14.4 upload limits, backend content validation, restricted proxy delivery, service-owned stable references and hold acknowledgement. Missing evidence keeps evidence-dependent action pending; approved emergency action can proceed with an audited missing-evidence incident. No blanket storage-outage free-exit or automatic binding-transfer policy.
 
+**User image rollout status — 6 November 2026:** automatic avatar/vehicle image deletion is explicitly deferred to [USER-MEDIA-CLEANUP-01](../../../05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md). Unattached User image drafts have a 24-hour lifetime. Persist timestamps and block expired ordinary reads in the foundation; attachment/retry does not reset the admission timestamp. This deferral does not extend the existing 30-day maximum or establish physical-retention enforcement. No runtime evidence is claimed by these requirements.
+
+## Vehicle registration claim images — approved 7 November 2026
+
+Associate the submitted owned vehicle photo with the pending registration claim, separately from active vehicle identity. The claimant may read their own submission; explicitly authorized reviewers receive scoped evidence access when UC-VEH-02 adjudication is implemented. No blanket role access or binding/booking right follows from the image. Use the existing attached-image deadline of admission + 30 days without resetting age; preserve independently acknowledged holds, but claim creation alone grants no hold. Claim and binding metadata remain independent of image availability; expiry does not resolve a dispute or transfer ownership.
+
+Claim-specific preservation beyond the normal deadline is **DEFERRED** under [VEH-CLAIM-HOLD-01](../../../05-project-management/decision-log/2026-11-07-vehicle-claim-images.md#backlog-veh-claim-hold-01). Define explicit authorized preservation, acknowledgement, review/release and deletion coordination before claiming extended preservation. Association implementation and review access are not claimed by this documentation amendment. Automatic deletion remains separately deferred.
+
 ## Initial Partner agreement lifecycle
 
 User owns application/document metadata and the original plus each replacement version, with actor, reason, time and stable owning-service asset references. Scoped applicants upload/read only their application evidence; authorized Admin review/replacement uses protected authenticated delivery. A public URL or application ID alone grants nothing. Admin replacement is allowed only for uploaded agreement/policy documents in the initial pending application, never other fields or additional-lot applications. Approved/rejected applications are immutable.
 
+Incomplete drafts are allowed. Exactly one current agreement and one current policy are required before submission. Save setup and required evidence before email OTP, then verify email before Admin review. An incomplete draft cannot advance as completed first-lot setup. Only current document versions count toward the two required files.
+
 Approval checks expected application/document versions so a concurrent replacement cannot silently alter the approved agreement. Persist the version approved and audit; approval after replacement sends the required modification notification without an in-app re-acceptance step. Upload failure or missing required evidence blocks evidence-dependent review, not truthful persistence of the pending application. Reconcile orphan uploads by stable identity.
 
-Retain original/replacement evidence under the existing media lifecycle and acknowledged holds; do not overwrite or destructively replace assets. Q01 must classify agreement retention and protected upload/download contracts before implementation acceptance; do not silently reuse invoice retention or extend the image maximum. Audit/version metadata and asset-content retention are separate. The fake VNeID API returns a GUID substitute associated with the user and persisted in the User & Access database; it is not government identity data or an authentication token. Additional simulation fields, consent/completion evidence encoding and retention remain Q02 design work; no database field name or wire route is inferred.
+Retain every submitted original/replacement version using the Partner retention rows above; do not overwrite assets or reuse invoice/image durations. Acknowledged holds protect affected versions beyond the deadline; review holds every 30 days and at case closure. Releasing one hold preserves other active holds; final release re-evaluates the original deadline. Immutable final decisions and version references survive according to their own policy while due, unheld PDF bytes follow the Partner retention policy. Audit/version metadata and content retention are separate. [Approved policy and rollout](../../../05-project-management/decision-log/2026-11-06-cloudinary-foundation-and-partner-policy.md): Q01 policy approved, Partner wire details/runtime deferred, provider verification pending. The fake VNeID API returns a GUID substitute associated with the user and persisted in User & Access; it is not government identity data or an authentication token. Additional simulation fields, consent/completion evidence encoding and retention remain Q02 design work; no database field name or wire route is inferred.
 
 ## Functional requirements
 

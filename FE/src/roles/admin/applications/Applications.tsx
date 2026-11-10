@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { useApp } from "../../../context/AppContext"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
+import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { ALLOWED_PARKING_MODELS } from "../../../lib/3d/parking3DConfig"
 import { loadOwnerModelUrl } from "../../../lib/3d/ownerModelStorage"
 import { contractDraftStorageKey, loadContractDraft, type ContractDraftRecord } from "../../../lib/partnerContract"
@@ -14,12 +15,14 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 import { request } from "../../../lib/authApi"
 import { showUiToast } from "../../../lib/uiToast"
 import { formatStatus } from "../../../lib/formatStatus"
+import { useDialogKeyboard } from "../../../components/ui/useDialogKeyboard"
 
 export function Applications() {
   const { accentColor } = useApp()
   const [apps, setApps] = useState<OwnerApplicationRecord[]>([])
   const [contractDrafts, setContractDrafts] = useState<Record<string, ContractDraftRecord | null>>({})
   const [modelApp, setModelApp] = useState<OwnerApplicationRecord | null>(null)
+  const modelDialogRef = useDialogKeyboard<HTMLElement>(modelApp?.id ?? null, () => setModelApp(null))
   const [modelUrl, setModelUrl] = useState<string | null>(null)
   const [modelLoading, setModelLoading] = useState(false)
   const [modelError, setModelError] = useState("")
@@ -406,7 +409,7 @@ export function Applications() {
         <button type="button" className="btn-outline" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next</button>
       </nav>}
       {modelApp && createPortal(<div className="dashboard-theme partner-contract-backdrop" data-accent={accentColor} onMouseDown={event => { if (event.target === event.currentTarget) setModelApp(null) }}>
-        <section className="partner-contract-dialog" role="dialog" aria-modal="true" aria-label="Parking lot 3D model">
+        <section ref={modelDialogRef} className="partner-contract-dialog" role="dialog" aria-modal="true" aria-label="Parking lot 3D model" tabIndex={-1}>
           <header className="partner-contract-header"><div><p className="partner-contract-eyebrow">Owner application</p><h2>{modelApp.lotSetup?.name || "Parking lot"} · 3D model</h2></div><button type="button" className="partner-contract-close" aria-label="Close 3D model" onClick={() => setModelApp(null)}>×</button></header>
           <div className="partner-contract-content">
             <p>{contractDrafts[modelApp.id]?.modelFileName ? `Owner import: ${contractDrafts[modelApp.id]?.modelFileName}` : `System model: ${modelApp.lotSetup?.modelFileName || "Not specified"}`}</p>
@@ -421,7 +424,7 @@ export function Applications() {
               event.target.value = ""
             }} /></label>
             {reviewFileName && <p>Previewing local file: {reviewFileName}</p>}
-            {modelLoading ? <p role="status">Loading 3D model…</p> : contractDrafts[modelApp.id]?.modelFileName && !modelUrl && !reviewFileUrl ? <p>The imported model is stored only in the Owner's browser. Ask the Owner for the GLB file to review it on this device.</p> : <Parking3DViewer modelUrl={reviewFileUrl || modelUrl || ALLOWED_PARKING_MODELS[modelApp.lotType].path} lotType={modelApp.lotType} interactive={false} showLegend={false} showControls={true} height={340} />}
+            {modelLoading ? <p role="status">Loading 3D model…</p> : contractDrafts[modelApp.id]?.modelFileName && !modelUrl && !reviewFileUrl ? <p>The imported model is stored only in the Owner's browser. Ask the Owner for the GLB file to review it on this device.</p> : <ErrorBoundary name="Parking 3D viewer"><Parking3DViewer modelUrl={reviewFileUrl || modelUrl || ALLOWED_PARKING_MODELS[modelApp.lotType].path} lotType={modelApp.lotType} interactive={false} showLegend={false} showControls={true} height={340} /></ErrorBoundary>}
           </div>
         </section>
       </div>, document.body)}

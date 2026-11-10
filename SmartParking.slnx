@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/scripts/architecture/">
+    <Project Path="scripts/architecture/SmartParking.Architecture.Tests/SmartParking.Architecture.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/Services/" />
   <Folder Name="/src/Services/FacilityService/">

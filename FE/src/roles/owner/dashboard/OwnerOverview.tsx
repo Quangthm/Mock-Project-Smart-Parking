@@ -60,7 +60,7 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
   }, [selectedSiteId, sites, operators]);
 
   const stats = [
-    { label: 'Total Revenue', value: `${overview.revenue.toLocaleString('vi-VN')} VND` },
+    { label: 'Local booking revenue preview', value: `${overview.revenue.toLocaleString('vi-VN')} VND` },
     { label: 'Available Slots', value: `${liveCapacity === null ? '—' : liveCapacity.available.toLocaleString('en-US')}/${(liveCapacity?.total ?? overview.capacity).toLocaleString('en-US')}` },
     { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US') },
   ];
@@ -77,8 +77,8 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
         </div>
         <section className="owner-revenue-panel rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
           <div className="mb-5">
-            <h2 className="text-lg font-semibold text-[var(--fg)]">Revenue Trend</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">Completed bookings over the last 6 months</p>
+            <h2 className="text-lg font-semibold text-[var(--fg)]">Local Revenue Preview</h2>
+            <p className="mt-1 text-base sm:text-sm text-[var(--muted)]">Local booking records over the last 6 months; these are not live payment settlements.</p>
           </div>
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={overview.revenueTrend}>
@@ -104,7 +104,7 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
           </div>
         </section>
       </div>
-      <p className="text-xs text-[var(--muted)]">Revenue uses completed bookings. Available slots come from the live site structure; the denominator is physical capacity.</p>
+      <p className="text-base sm:text-sm text-[var(--muted)]">Revenue is a local booking preview. Available slots come from the live site structure; the denominator is physical capacity.</p>
     </section>
   );
 }

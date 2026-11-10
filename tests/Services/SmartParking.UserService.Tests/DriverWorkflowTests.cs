@@ -34,7 +34,7 @@ public sealed class DriverWorkflowTests
         Assert.Equal(valid, System.ComponentModel.DataAnnotations.Validator.TryValidateObject(body, new(body), errors, true));
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ConcurrentWrongCodesLockForExactlyFifteenMinutesAndResendCannotResetAttempts()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -80,7 +80,7 @@ public sealed class DriverWorkflowTests
             Assert.Single(await db.Accounts.ToArrayAsync());
         }
     }
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task InvalidRegistrationLeavesNoUserAccountChallengeOrDelivery()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -122,7 +122,7 @@ public sealed class DriverWorkflowTests
         return Regex.Match(message.Body, @"\d{6}").Value;
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task PasswordlessNormalizedContactsConcurrentVerificationAndNoEarlySession()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -162,7 +162,7 @@ public sealed class DriverWorkflowTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ExactExpiryResendCancellationAndRecoverableProviderFailure()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
@@ -222,7 +222,7 @@ public sealed class DriverWorkflowTests
         }
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task RealHttpPrivilegeInjectionPasswordlessVerificationAndOtpLogin()
     {
         await using var fixture = await UserServiceDatabaseFixture.CreateAsync();

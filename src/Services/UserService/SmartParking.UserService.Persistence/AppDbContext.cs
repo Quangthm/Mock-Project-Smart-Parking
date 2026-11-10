@@ -28,6 +28,8 @@ namespace UserService.Persistence
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            ConfigureMedia(modelBuilder);
+            ConfigureVehicleClaims(modelBuilder);
             // Keep framework entities/mappings exact; the reviewed SQL script is generated from this model.
             modelBuilder.AddTransactionalOutboxEntities();
             modelBuilder.Entity<RotatedSessionProof>(entity =>
@@ -56,6 +58,8 @@ namespace UserService.Persistence
                 entity.Property(v=>v.CanonicalPlate).HasColumnName("normalized_plate").HasMaxLength(20);
                 entity.Property(v=>v.VehicleType).HasColumnName("vehicle_type");
                 entity.Property(v=>v.ImageReference).HasColumnName("image_url");
+                entity.Property(v=>v.ImageAssetId).HasColumnName("image_asset_id");
+                entity.HasOne<MediaAsset>().WithMany().HasForeignKey(v=>v.ImageAssetId).OnDelete(DeleteBehavior.Restrict);
                 entity.Property(v=>v.CreatedAt).HasColumnName("created_at");
                 entity.Property(v=>v.UpdatedAt).HasColumnName("updated_at");
                 entity.Property(v=>v.DeletedAt).HasColumnName("deleted_at");
@@ -124,6 +128,8 @@ namespace UserService.Persistence
                 entity.Property(e => e.FullName).HasColumnName("full_name");
                 entity.Property(e => e.AccessVersion).HasColumnName("access_version");
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
+                entity.Property(e => e.AvatarAssetId).HasColumnName("avatar_asset_id");
+                entity.HasOne<MediaAsset>().WithMany().HasForeignKey(e => e.AvatarAssetId).OnDelete(DeleteBehavior.Restrict);
                 // Preserve the stored, read-only avatar value without reinterpretation or conversion.
                 entity.Property(e => e.AvatarUrl)
                     .HasColumnName("avatar_url")

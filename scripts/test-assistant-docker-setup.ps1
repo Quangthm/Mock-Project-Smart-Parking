@@ -68,7 +68,8 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $scratch $directory) -Force | Out-Null
     }
     foreach ($file in @('compose.assistant.yml','compose.schema-integration.yml','scripts/setup-assistant-docker.ps1',
-        'scripts/apply-workflow-migrations.ps1','scripts/load-env.ps1','scripts/database/microservices/06-iot-recognition-service-db.sql',
+        'scripts/apply-workflow-migrations.ps1','scripts/load-env.ps1','scripts/jwt-environment.ps1',
+        'scripts/database/microservices/06-iot-recognition-service-db.sql',
         'scripts/database/migrations/20261103_iot_assistant_management.sql','scripts/database/migrations/20261105_iot_assistant_s02.sql',
         'scripts/database/migrations/20261105_iot_assistant_s05.sql')) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)

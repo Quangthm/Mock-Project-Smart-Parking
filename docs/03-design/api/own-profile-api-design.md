@@ -97,9 +97,9 @@ Both GET and PATCH return HTTP 200:
 | data.fullName | string | No | Persisted name |
 | data.email | string | No | Existing read-only contact; empty string if no stored email, preserving the earlier /me convention |
 | data.role | string | No | Exact authorized Account's current mapped role: driver/operator/owner/admin |
-| data.avatarUrl | string | Yes | Stored legacy value unchanged; no URL-to-asset conversion, ownership assertion or client write permission |
+| data.avatarUrl | string | Yes | Managed avatar: protected application content path. Otherwise stored legacy value unchanged; no automatic URL-to-asset conversion or ownership assertion. See [User images](user-images-api-design.md). |
 
-There is no `{ reference }` avatar shape, upload/delete success, or profile alias under `/api/profile/me`. Role and email are read-only response facts.
+There is no `{ reference }` avatar shape or profile alias under `/api/profile/me`. Role and email are read-only response facts. SPARK-373 adds separate upload, attach and protected-read routes under the [User image contract](user-images-api-design.md); this ordinary profile PATCH remains name-only. Avatar deletion is not exposed (unsupported DELETE on the attach route returns 405).
 
 ### Account/session compatibility
 
@@ -124,7 +124,7 @@ The validator supplies the fixed name message above; “characters” uses the a
 | 400 | VALIDATION_FAILED | Malformed JSON, wrong input type, missing/invalid name | Correct request |
 | 401 | INVALID_TOKEN | Missing, invalid, expired, revoked, unbound or currently ineligible Bearer session | Sign in again; `WWW-Authenticate: Bearer` is preserved |
 | 403 | FORBIDDEN | Account/User/role loses eligibility after initial Bearer validation but before the guarded operation; other authorization forbids | Do not retry unchanged credentials as if access were granted |
-| 404 | NOT_FOUND | Unknown route, including deferred avatar mutation route | Use documented routes |
+| 404 | NOT_FOUND | Unknown route | Use documented routes; avatar operations have their own image contract |
 | 405 | METHOD_NOT_ALLOWED | Unsupported method | Use documented method |
 | 415 | UNSUPPORTED_MEDIA_TYPE | Unsupported request media type | Send JSON |
 | 429 | TOO_MANY_REQUESTS | Existing configured rate limiter rejects a request | Observe limiter policy; no new profile limiter is added |

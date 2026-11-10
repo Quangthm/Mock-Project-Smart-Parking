@@ -64,14 +64,11 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
     setPosition({ x: clamp(x, edgeGap, viewport.width - launcherSize - edgeGap), y: clamp(y, edgeGap, viewport.height - launcherSize - edgeGap) })
   }, [open, parkingMode, parkingSheetOpen, parkingDetailsOpen, role, viewport])
 
-  const mobileParking = parkingMode && window.matchMedia("(max-width: 900px)").matches
-  const detailsRect = parkingMode && parkingDetailsOpen ? document.querySelector(".find-parking-details-wrap")?.getBoundingClientRect() : null
-  const searchRect = parkingMode ? document.querySelector(".find-parking-panel:not([hidden])")?.getBoundingClientRect() : null
-  const safeLeft = parkingMode && !mobileParking && searchRect ? searchRect.right + 12 : edgeGap
-  const safeRight = parkingMode && !mobileParking && detailsRect ? detailsRect.left - 12 : viewport.width - edgeGap
-  const safeTop = mobileParking ? searchRect ? searchRect.bottom + 12 : 118 : parkingMode ? 205 : 76
-  const driverMobile = role === "driver" && window.matchMedia("(max-width: 900px)").matches
-  const safeBottom = mobileParking && detailsRect ? detailsRect.top - 12 : driverMobile ? viewport.height - 96 : viewport.height - edgeGap
+  // The launcher avoids map controls, while the open panel uses the same viewport bounds for every role.
+  const safeLeft = edgeGap
+  const safeRight = viewport.width - edgeGap
+  const safeTop = 76
+  const safeBottom = viewport.height - edgeGap
   const chatWidth = Math.min(380, Math.max(180, safeRight - safeLeft))
   const chatHeight = Math.min(520, Math.max(160, safeBottom - safeTop))
   const chatLeft = clamp(position.x + launcherSize - chatWidth, safeLeft, Math.max(safeLeft, safeRight - chatWidth))

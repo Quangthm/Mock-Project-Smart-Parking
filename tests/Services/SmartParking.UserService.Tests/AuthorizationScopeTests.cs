@@ -1,3 +1,4 @@
+using UserService.Application.Usecase.Vehicles;
 using MediatR;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
@@ -172,7 +173,7 @@ public sealed class AuthorizationScopeTests
         Assert.IsType<AccountAuthorizationService>(services.GetRequiredService<IAccountAuthorizationService>());
         Assert.NotNull(services.GetRequiredService<IRequestHandler<CreateOperatorCommand, OperatorDto>>());
         Assert.NotNull(services.GetRequiredService<IRequestHandler<ReviewOwnerApplicationCommand, OwnerApplicationDto>>());
-        Assert.NotNull(services.GetRequiredService<IRequestHandler<SaveOwnVehicleCommand, RegisteredVehicle>>());
+        Assert.NotNull(services.GetRequiredService<IRequestHandler<SaveOwnVehicleCommand, VehicleSaveOutcome>>());
         Assert.NotNull(services.GetRequiredService<IRequestHandler<SetupOwnMfaCommand, object>>());
         Assert.NotNull(services.GetRequiredService<IRequestHandler<GetOwnerScopeQuery, IdentityScope>>());
     }

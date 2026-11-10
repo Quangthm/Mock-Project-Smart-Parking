@@ -13,6 +13,7 @@ public sealed partial class AuthenticatedChatTests
     private sealed record PendingChat(Guid Account, Guid User, Guid Conversation, Guid Message);
 
     [AssistantPostgresFact]
+    [Trait("Category", "AssistantPostgres")]
     public async Task AssistantPostgresHidesExpiredHistoryAndPurgesOnlyWithoutHold()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
@@ -101,6 +102,7 @@ public sealed partial class AuthenticatedChatTests
     }
 
     [AssistantPostgresFact]
+    [Trait("Category", "AssistantPostgres")]
     public async Task AssistantPostgresRestartsAfterKillingAProcessInsideGeneration()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(65));
@@ -174,6 +176,7 @@ public sealed partial class AuthenticatedChatTests
     }
 
     [InterruptedChatWorkerFact]
+    [Trait("Category", "AssistantPostgres")]
     public async Task InterruptedChatWorker()
     {
         var directory = Environment.GetEnvironmentVariable(CrashDirectoryVariable)!;

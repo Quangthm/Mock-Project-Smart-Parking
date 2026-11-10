@@ -27,6 +27,7 @@ using SmartParking.IoTService.Persistence;
 namespace SmartParking.IoTService.Tests;
 
 [Collection("Assistant PostgreSQL fixture")]
+[Trait("Category", "AssistantPostgres")]
 public sealed class AssistantPostgresTests
 {
     [AssistantPostgresFact]

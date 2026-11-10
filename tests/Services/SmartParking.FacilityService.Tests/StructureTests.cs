@@ -22,6 +22,24 @@ public sealed class StructureTests
     private static void Error(string code, Action action) => Assert.Equal(code, Assert.Throws<StructureException>(action).Code);
 
     [Fact]
+    public void CompatibilitySetIsAPredicateAndThePrimaryCategoryIsNeverInferred()
+    {
+        var site = Site(); var zone = site.AddUnit(UnitType.ZONE, "A");
+        var id = site.AddSlot(zone, "01", VehicleType.CAR, vehicleTypes: [VehicleType.CAR, VehicleType.MOTORCYCLE]);
+
+        var slot = site.Slots.Single();
+        Assert.Equal(VehicleType.CAR, slot.VehicleType);
+        Assert.Equal(new[] { VehicleType.CAR, VehicleType.MOTORCYCLE }, slot.VehicleTypes);
+        // Compatibility never multiplies stock: the slot is counted once, in its primary pool.
+        Assert.Equal(1, site.Site.TotalPhysicalCapacity);
+        Assert.Equal(1, site.CapacityViews.Single(v => v.UnitId is null && v.VehicleType == VehicleType.CAR).Total);
+        Assert.Equal(0, site.CapacityViews.Single(v => v.UnitId is null && v.VehicleType == VehicleType.MOTORCYCLE).Total);
+
+        Error("INVALID_STRUCTURE", () => site.AddSlot(zone, "02", VehicleType.CAR, vehicleTypes: []));
+        Error("INVALID_STRUCTURE", () => site.ConfigureSlot(id, VehicleType.MOTORCYCLE, SlotType.STANDARD, null, null, [VehicleType.CAR]));
+        Assert.Single(site.Slots);
+    }
+    [Fact]
     public void OutdoorZoneNeedsNoFloorAndMotorcyclesHaveIndependentSlots()
     {
         var site = Site(); var zone = site.AddUnit(UnitType.ZONE, "Outdoor", maxCapacity: 2);
@@ -140,5 +158,92 @@ public sealed class StructureTests
         Assert.Equal(1,pending.CapacityViews.Single(v=>v.UnitId==null && v.VehicleType==VehicleType.MOTORCYCLE).Available);
         var invalid=new ParkingStructure(site.Site,site.Units,site.Slots,claims:[new(null,"CAR",3,0)]);
         Error("CAPACITY_CONFLICT",()=>invalid.ValidateCapacity());
+    }
+    [Fact]
+    public void RestoreSlotIsIdempotentKeepsTheIdAndIsCountedOnce()
+    {
+        var site = Site(); var zone = site.AddUnit(UnitType.ZONE, "A");
+        var released = new ParkingSlot(Guid.NewGuid(), zone, "A01", VehicleType.CAR, SlotType.STANDARD)
+        { VehicleTypes = [VehicleType.CAR, VehicleType.MOTORCYCLE] };
+        var structure = new ParkingStructure(site.Site, site.Units, releasedSlots: [released]);
+
+        structure.RestoreSlot(released.Id);
+        structure.RestoreSlot(released.Id);
+
+        var slot = Assert.Single(structure.Slots);
+        Assert.Equal(released.Id, slot.Id);
+        Assert.Equal(OperationalStatus.OPERATIONAL, slot.OperationalStatus);
+        Assert.Equal(new[] { VehicleType.CAR, VehicleType.MOTORCYCLE }, slot.VehicleTypes);
+        Assert.Empty(structure.ReleasedSlots);
+        Assert.Equal(1, structure.Site.TotalPhysicalCapacity);
+        Assert.Equal(1, structure.CapacityViews.Single(v => v.UnitId is null && v.VehicleType == VehicleType.CAR).Total);
+        Assert.Equal(0, structure.CapacityViews.Single(v => v.UnitId is null && v.VehicleType == VehicleType.MOTORCYCLE).Total);
+    }
+    [Fact]
+    public void RestoringASlotWhoseUnitIsStillReleasedRequiresTheUnitFirst()
+    {
+        var site = Site();
+        var unitId = Guid.NewGuid();
+        var unit = new SpatialUnit(unitId, null, $"/{site.Site.Id}/{unitId}/", UnitType.ZONE, "A", 0);
+        var released = new ParkingSlot(Guid.NewGuid(), unitId, "A01", VehicleType.CAR, SlotType.STANDARD);
+        var structure = new ParkingStructure(site.Site, releasedSlots: [released], releasedUnits: [unit]);
+
+        Error("UNIT_NOT_FOUND", () => structure.RestoreSlot(released.Id));
+        Assert.Empty(structure.Slots);
+        Assert.Single(structure.ReleasedSlots);
+        Assert.Equal(0, structure.Site.TotalPhysicalCapacity);
+    }
+    [Fact]
+    public void RestoringAUnitWhoseNameIsHeldByALiveSiblingIsRejected()
+    {
+        var site = Site(); site.AddUnit(UnitType.ZONE, "A");
+        var unitId = Guid.NewGuid();
+        var released = new SpatialUnit(unitId, null, $"/{site.Site.Id}/{unitId}/", UnitType.ZONE, "a", 0);
+        var structure = new ParkingStructure(site.Site, site.Units, releasedUnits: [released]);
+
+        Error("DUPLICATE_IDENTIFIER", () => structure.RestoreUnit(unitId));
+        Assert.Single(structure.Units);
+        Assert.Single(structure.ReleasedUnits);
+    }
+    [Fact]
+    public void RestoringAPathWhoseEndpointIsReleasedIsRejected()
+    {
+        var site = Site(); var live = site.AddUnit(UnitType.ZONE, "A");
+        var releasedUnitId = Guid.NewGuid();
+        var releasedUnit = new SpatialUnit(releasedUnitId, null, $"/{site.Site.Id}/{releasedUnitId}/", UnitType.ZONE, "B", 0);
+        var releasedPath = new AccessPath(Guid.NewGuid(), "P1", live, releasedUnitId, null);
+        var structure = new ParkingStructure(site.Site, site.Units, releasedPaths: [releasedPath], releasedUnits: [releasedUnit]);
+
+        Error("UNIT_NOT_FOUND", () => structure.RestorePath(releasedPath.Id));
+        Assert.Empty(structure.Paths);
+        Assert.Single(structure.ReleasedPaths);
+    }
+    [Fact]
+    public void RestoringAnUnknownIdReportsTheMatchingNotFoundCode()
+    {
+        var site = Site();
+        Error("SLOT_NOT_FOUND", () => site.RestoreSlot(Guid.NewGuid()));
+        Error("UNIT_NOT_FOUND", () => site.RestoreUnit(Guid.NewGuid()));
+        Error("PATH_NOT_FOUND", () => site.RestorePath(Guid.NewGuid()));
+    }
+    [Fact]
+    public void RestoreUnitAndPathKeepTheirOriginalIdentity()
+    {
+        var site = Site();
+        var unitId = Guid.NewGuid();
+        var releasedUnit = new SpatialUnit(unitId, null, $"/{site.Site.Id}/{unitId}/", UnitType.ZONE, "A", 0);
+        var releasedPath = new AccessPath(Guid.NewGuid(), "P1", unitId, null, "{}");
+        var structure = new ParkingStructure(site.Site, releasedUnits: [releasedUnit], releasedPaths: [releasedPath]);
+
+        structure.RestoreUnit(unitId);
+        structure.RestorePath(releasedPath.Id);
+        structure.RestoreUnit(unitId);
+        structure.RestorePath(releasedPath.Id);
+
+        Assert.Equal(unitId, structure.Units.Single().Id);
+        Assert.Equal(releasedUnit.Path, structure.Units.Single().Path);
+        Assert.Equal(releasedPath.Id, structure.Paths.Single().Id);
+        Assert.Empty(structure.ReleasedUnits);
+        Assert.Empty(structure.ReleasedPaths);
     }
 }

@@ -27,7 +27,7 @@ public sealed class MfaLifecycleTests
         Assert.Equal(expected, AccountWorkflowService.Totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", step));
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task PasswordChallengeRequiresProofAndSingleUseRecoveryCodeBeforeIssuingSession()
     {
         await using var fixture = await CreateFixtureAsync();
@@ -74,7 +74,7 @@ public sealed class MfaLifecycleTests
         Assert.All(stored, code => Assert.DoesNotContain(code.CodeHash, setup.Codes));
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ReplacementKeepsOldAuthenticatorUntilConfirmedThenRevokesSessionsAndOldCodes()
     {
         await using var fixture = await CreateFixtureAsync();
@@ -137,7 +137,7 @@ public sealed class MfaLifecycleTests
         Assert.NotNull(ordinaryLogin.AccessToken);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task InvalidCodesPersistLockoutAndExpiredChallengesNeverCreateSessions()
     {
         await using var fixture = await CreateFixtureAsync();
@@ -175,7 +175,7 @@ public sealed class MfaLifecycleTests
         Assert.NotNull(recovered.AccessToken);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task ConcurrentRecoveryUseSucceedsOnceAndOtpSignInCannotBypassMfa()
     {
         await using var fixture = await CreateFixtureAsync();
@@ -215,7 +215,7 @@ public sealed class MfaLifecycleTests
         Assert.Equal(6, session.RecoveryCodesRemaining);
     }
 
-    [PostgresFact]
+    [PostgresFact, Trait("Category", "Postgres")]
     public async Task TotpLoginRejectsMalformedReplayAndExpiredChallengesWithoutServerErrors()
     {
         await using var fixture = await CreateFixtureAsync();

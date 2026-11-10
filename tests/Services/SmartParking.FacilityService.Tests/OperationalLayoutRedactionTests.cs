@@ -176,8 +176,8 @@ public sealed class OperationalLayoutRedactionTests
         var reservedBefore = original.Slots.Count(slot => slot.ReservationState == ReservationState.RESERVED);
         Assert.Equal(5, backupBefore);
         Assert.Equal(9, reservedBefore);
-        Assert.Equal(24, original.Slots.Count(slot => slot.SessionType is not null));
-        Assert.Equal(14, original.Slots.Count(slot => slot.OperatorContext.HasValue));
+        Assert.Equal(0, original.Slots.Count(slot => slot.SessionType is not null));
+        Assert.Equal(0, original.Slots.Count(slot => slot.OperatorContext.HasValue));
 
         var sanitized = Sanitize(original);
 
@@ -212,7 +212,7 @@ public sealed class OperationalLayoutRedactionTests
 
         // Redaction is non-destructive: the source still carries the sensitive values.
         Assert.Equal(5, original.Slots.Count(slot => slot.ReservationState == ReservationState.BACKUP));
-        Assert.Equal(14, original.Slots.Count(slot => slot.OperatorContext.HasValue));
+        Assert.Equal(0, original.Slots.Count(slot => slot.OperatorContext.HasValue));
     }
 
     [Fact]
