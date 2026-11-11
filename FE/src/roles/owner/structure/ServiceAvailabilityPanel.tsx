@@ -1,3 +1,4 @@
+import { useConfirmation } from "../../../components/ui/useConfirmation"
 import { ParkingDateField } from "../../../components/forms/ParkingDateField"
 import { useEffect, useState, type FormEvent } from "react"
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
@@ -58,6 +59,7 @@ function WindowRow({
   busy: boolean
   run: (action: () => Promise<unknown>, success?: string) => Promise<boolean>
 }) {
+  const { confirm, confirmation } = useConfirmation()
   const [end, setEnd] = useState(isoToLocalInput(defaultExtensionEnd(window.end)))
   const [error, setError] = useState("")
   const enforcement = enforcementCopy(window)
@@ -77,7 +79,7 @@ function WindowRow({
   }
 
   async function cancel() {
-    if (!confirm("Cancel this maintenance window? Reopening is refused if another live closure still covers now.")) return
+    if (!await confirm({ title: "Cancel maintenance?", description: "Reopening is refused if another live closure still covers now.", confirmLabel: "Cancel window", danger: true })) return
     setError("")
     await run(
       () => parkingApi.cancelMaintenanceWindow(siteId, window.id),
@@ -87,6 +89,7 @@ function WindowRow({
 
   return (
     <li className="space-y-2 px-3 py-3">
+      {confirmation}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 break-words">
           <p className="text-sm font-semibold text-[var(--fg)]">
@@ -253,6 +256,8 @@ export function ServiceAvailabilityPanel({
     }
   })()
 
+  const { confirm, confirmation } = useConfirmation()
+
   async function toggleLifecycle() {
     if (lifecycleInactive) {
       await run(
@@ -262,9 +267,7 @@ export function ServiceAvailabilityPanel({
       return
     }
     if (
-      !confirm(
-        "Deactivate the lot now? This changes lifecycle status only and is allowed only when no live commitment exists.",
-      )
+      !await confirm({ title: "Deactivate parking lot?", description: "This changes lifecycle status only and is allowed only when no live commitment exists.", confirmLabel: "Deactivate lot", danger: true })
     )
       return
     await run(
@@ -275,6 +278,7 @@ export function ServiceAvailabilityPanel({
 
   return (
     <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" aria-label="Deactivation and maintenance windows">
+      {confirmation}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

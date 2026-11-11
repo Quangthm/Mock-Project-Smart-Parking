@@ -44,8 +44,8 @@ export function AuditLogView() {
       />
       </div>
       <div className="audit-log-table-wrap">
-        <table
-          className="audit-log-table"
+        <table role="table"
+          className="sp-adaptive-table audit-log-table"
           style={{
             width: "100%",
             minWidth: 640,
@@ -54,9 +54,9 @@ export function AuditLogView() {
           }}
         >
           <thead>
-            <tr style={{ borderBottom: "2px solid var(--border)" }}>
+            <tr role="row" style={{ borderBottom: "2px solid var(--border)" }}>
               {["Timestamp", "User", "Role", "Action", "Details"].map((h) => (
-                <th
+                <th scope="col" role="columnheader"
                   key={h}
                   style={{
                     padding: "0.625rem 0.75rem",
@@ -73,11 +73,11 @@ export function AuditLogView() {
           </thead>
           <tbody>
             {filtered.slice(0, 100).map((log) => (
-              <tr
+              <tr role="row"
                 key={log.id}
                 style={{ borderBottom: "1px solid var(--border)" }}
               >
-                <td title={log.details}
+                <td role="cell" data-label="Timestamp" title={log.details}
                   style={{
                     padding: "0.5rem 0.75rem",
                     color: "var(--muted)",
@@ -89,7 +89,7 @@ export function AuditLogView() {
                     timeStyle: "short",
                   })}
                 </td>
-                <td
+                <td role="cell" data-label="User"
                   style={{
                     padding: "0.5rem 0.75rem",
                     fontWeight: 500,
@@ -98,7 +98,7 @@ export function AuditLogView() {
                 >
                   {log.userName}
                 </td>
-                <td style={{ padding: "0.5rem 0.75rem" }}>
+                <td role="cell" data-label="Role" style={{ padding: "0.5rem 0.75rem" }}>
                   <span
                     style={{
                       padding: "0.15rem 0.5rem",
@@ -113,7 +113,7 @@ export function AuditLogView() {
                     {log.userRole.toUpperCase()}
                   </span>
                 </td>
-                <td
+                <td role="cell" data-label="Action"
                   style={{
                     padding: "0.5rem 0.75rem",
                     fontFamily: "monospace",
@@ -123,7 +123,7 @@ export function AuditLogView() {
                 >
                   {log.action}
                 </td>
-                <td
+                <td role="cell" data-label="Details"
                   style={{
                     padding: "0.5rem 0.75rem",
                     color: "var(--muted)",

@@ -155,6 +155,7 @@ export interface OperatorSite {
   modelUrl?: string
   modelFileName?: string
   lotType?: LotType
+  assignmentPermissions?: string[]
   slots: OperatorSlot[]
   units: Structure["units"]
 }
@@ -456,7 +457,7 @@ async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
       if (projection && projection.siteId === assignment.siteId &&
           typeof projection.siteCode === "string" && typeof projection.siteName === "string" &&
           Array.isArray(projection.floors) && Array.isArray(projection.slots)) {
-        return siteFromOperationalLayout(projection, assignment.tenantId)
+        return { ...siteFromOperationalLayout(projection, assignment.tenantId), assignmentPermissions: assignment.permissions }
       }
 
       // shortcut: older Facility deployments can return an incomplete projection; use their scoped Operator layout until upgraded.
@@ -465,7 +466,7 @@ async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
           !Array.isArray(legacy.units) || !Array.isArray(legacy.slots) || !Array.isArray(legacy.capacityViews)) {
         throw new Error("The parking service returned an incomplete layout for this assigned site.")
       }
-      return siteFromStructure(legacy)
+      return { ...siteFromStructure(legacy), assignmentPermissions: assignment.permissions }
     }),
   )
   const available = projections.flatMap((result) =>

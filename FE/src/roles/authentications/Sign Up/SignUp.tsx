@@ -1,3 +1,5 @@
+import { rememberIdentityDemo } from "../../../lib/identityDemo"
+import { VNeIDSimulation } from "../../../components/ui/VNeIDSimulation"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useRef } from "react"
 
@@ -413,10 +415,13 @@ export function SignUp() {
     agreedToPolicy: false,
   })
 
+  const [simulation, setSimulation] = useState<"driver_registration" | "owner_registration" | null>(null)
+  const submitting = useRef(false)
+
   async function submitDriver(e: React.FormEvent) {
     e.preventDefault()
 
-    if (registering) return
+    if (submitting.current || simulation) return
 
     setError("")
 
@@ -439,6 +444,13 @@ export function SignUp() {
       return
     }
 
+    setSimulation("driver_registration")
+  }
+
+  async function registerDriver() {
+    if (submitting.current) return
+    submitting.current = true
+    setSimulation(null)
     setRegistering(true)
 
     try {
@@ -476,6 +488,7 @@ export function SignUp() {
         setError(e instanceof Error ? e.message : "Registration failed.")
       }
     } finally {
+      submitting.current = false
       setRegistering(false)
     }
   }
@@ -483,7 +496,7 @@ export function SignUp() {
   async function submitOwner(e: React.FormEvent) {
     e.preventDefault()
 
-    if (registering) return
+    if (submitting.current || simulation) return
 
     setError("")
 
@@ -512,6 +525,13 @@ export function SignUp() {
       return
     }
 
+    setSimulation("owner_registration")
+  }
+
+  async function registerOwner() {
+    if (submitting.current) return
+    submitting.current = true
+    setSimulation(null)
     setRegistering(true)
 
     try {
@@ -532,6 +552,7 @@ export function SignUp() {
       setOwnerTurnstileToken("")
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
+      rememberIdentityDemo(application.ownerId)
       saveOwnerRegistration({ ...application, lotSetupComplete: false })
       setView("parking-lot-setup")
     } catch (e) {
@@ -549,6 +570,7 @@ export function SignUp() {
         setError([e, recoveryError].map((error) => error instanceof Error ? error.message : "Registration failed.").join(" "))
       }
     } finally {
+      submitting.current = false
       setRegistering(false)
     }
   }
@@ -576,6 +598,10 @@ export function SignUp() {
     <div
       className="auth-page-background auth-stage auth-stage-sign-up"
     >
+      {simulation && <VNeIDSimulation context={simulation}
+        fullName={simulation === "driver_registration" ? driverForm.name : ownerForm.name}
+        onCancel={() => setSimulation(null)}
+        onComplete={simulation === "driver_registration" ? registerDriver : registerOwner} />}
       {showTnC && (
         <TermsModal
           onAccept={() => {
@@ -585,7 +611,7 @@ export function SignUp() {
           onClose={() => setShowTnC(false)}
         />
       )}
-      <div className="auth-panel">
+      <div className="auth-panel" inert={simulation !== null}>
         <div className="auth-panel-heading">
           <BrandLogo height={64} style={{ margin: "0 auto 0.5rem" }} />
           <BrandWordmark height={21} />

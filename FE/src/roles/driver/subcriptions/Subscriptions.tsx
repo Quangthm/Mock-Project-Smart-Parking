@@ -2,7 +2,7 @@ import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
 import "../../../booking-support.css"
 
-import { createPortal } from "react-dom"
+import { Modal } from "../../../components/ui/Modal"
 
 import { useApp } from "../../../context/AppContext"
 
@@ -23,31 +23,23 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
 import { formatVietnamesePlate, vehiclesApi, type RegisteredVehicle } from "../../../lib/vehiclesApi"
+import { distanceKm, validCoordinates, type LatLng } from "../../../lib/parkingCoordinates"
 
 function getLotEnterprise(lot: ParkingLot, users: User[]): string {
   const owner = users.find((u) => u.id === lot.ownerId)
 
   if (owner?.name && !owner.name.includes("demo")) return owner.name
 
-  const name = lot.name.toLowerCase()
-
   return "Parking operator"
-}
-
-function getLotDistance(lot: ParkingLot): number {
-  return lot.lat != null && lot.lng != null ? 0 : Number.POSITIVE_INFINITY
-}
-
-function isHotLot(lot: ParkingLot): boolean {
-  return lot.totalSlots > 0
-}
-
-function isNearLot(lot: ParkingLot): boolean {
-  return getLotDistance(lot) <= 3.0
 }
 
 type TabMode = "store" | "my-passes" | "orders"
 const passesPerPage = 12
+const nearbyRadiusKm = 3
+
+function hasPassPrice(price: unknown): price is number {
+  return typeof price === "number" && Number.isFinite(price) && price >= 0
+}
 
 export function Subscriptions() {
   const { user } = useApp()
@@ -59,7 +51,10 @@ export function Subscriptions() {
   const [searchQuery, setSearchQuery] = useState("")
 
   const [filterTag, setFilterTag] =
-    useState<"all" | "hot" | "near" | "recommended">("recommended")
+    useState<"all" | "near">("all")
+  const [location, setLocation] = useState<LatLng | null>(null)
+  const [locationError, setLocationError] = useState("")
+  const [locationRetry, setLocationRetry] = useState(0)
 
   const [selectedLotForDetail, setSelectedLotForDetail] =
     useState<ParkingLot | null>(null)
@@ -70,9 +65,9 @@ export function Subscriptions() {
 
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("momo")
 
-  const [selectedVehiclePlate, setSelectedVehiclePlate] = useState("")
-  const [vehicles, setVehicles] = useState<RegisteredVehicle[]>([])
-  const [vehicleError, setVehicleError] = useState("")
+  const [selectedVehicleId, setSelectedVehicleId] = useState("")
+  const [vehicleRetry, setVehicleRetry] = useState(0)
+  const [vehicleResult, setVehicleResult] = useState<{ scope: string; items: RegisteredVehicle[]; error?: string } | null>(null)
 
   const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null)
 
@@ -96,57 +91,57 @@ export function Subscriptions() {
     [user, checkoutSuccess],
   )
 
+  const vehicleScope = user && selectedLotForDetail ? JSON.stringify([user.id, selectedLotForDetail.id, vehicleRetry]) : ""
+  const currentVehicles = vehicleResult?.scope === vehicleScope ? vehicleResult : null
+  const vehicles = currentVehicles?.items ?? []
+  const selectedVehicle = vehicles.find(vehicle => vehicle.id === selectedVehicleId) ?? vehicles[0]
+
   useEffect(() => {
-    if (!user) return
+    if (!vehicleScope) return
     let active = true
-    setVehicleError("")
     vehiclesApi.list()
       .then((items) => {
-        if (!active) return
-        setVehicles(items)
-        setSelectedVehiclePlate((current) =>
-          items.some((vehicle) => vehicle.rawPlate === current)
-            ? current
-            : items[0]?.rawPlate ?? "",
-        )
+        if (active) setVehicleResult({ scope: vehicleScope, items })
       })
-      .catch((error) => {
-        if (active)
-          setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
+      .catch(() => {
+        if (active) setVehicleResult({ scope: vehicleScope, items: [], error: "Không tải được danh sách xe đã đăng ký." })
       })
     return () => { active = false }
-  }, [user?.id])
+  }, [vehicleScope])
 
-  // Filter lots based on store logic:
-
-  // Default: Only show "Near You" and "Hot" parking lots
-
-  // Search: Search exact matches by Enterprise name OR Lot name OR Address
+  useEffect(() => {
+    if (tabMode !== "store" || filterTag !== "near") return
+    let active = true
+    setLocation(null)
+    setLocationError("")
+    if (!navigator.geolocation) {
+      setLocationError("Location is unavailable in this browser.")
+      return
+    }
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (!active) return
+      const point = { lat: coords.latitude, lng: coords.longitude }
+      if (validCoordinates(point)) setLocation(point)
+      else setLocationError("Could not determine your location.")
+    }, error => {
+      if (!active) return
+      setLocationError(error.code === 1 ? "Allow location access in your browser to find nearby parking." : "Could not determine your location. Try again.")
+    }, { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 })
+    return () => { active = false }
+  }, [tabMode, filterTag, locationRetry, user?.id])
 
   const displayLots = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
 
-    if (q) {
-      return lots.filter((lot) => {
-        const enterprise = getLotEnterprise(lot, users).toLowerCase()
-
-        const lotName = lot.name.toLowerCase()
-
-        const address = lot.address.toLowerCase()
-
-        return (
-          lotName.includes(q) || enterprise.includes(q) || address.includes(q)
-        )
-      })
-    }
-
-    return lots.filter((lot) => {
-      if (filterTag === "hot") return isHotLot(lot)
-      if (filterTag === "near") return isNearLot(lot)
-      if (filterTag === "recommended") return isHotLot(lot) || isNearLot(lot)
-      return true
-    })
-  }, [lots, searchQuery, filterTag, users])
+    const matches = q ? lots.filter(lot => [lot.name, lot.address, getLotEnterprise(lot, users)].some(value => value.toLowerCase().includes(q))) : lots
+    if (filterTag !== "near") return matches
+    if (!location) return []
+    return matches.filter(validCoordinates)
+      .map(lot => ({ lot, distance: distanceKm(location, lot) }))
+      .filter(item => item.distance <= nearbyRadiusKm)
+      .sort((a, b) => a.distance - b.distance)
+      .map(item => item.lot)
+  }, [lots, searchQuery, filterTag, users, location])
   const storePageCount = Math.max(1, Math.ceil(displayLots.length / passesPerPage))
   const currentStorePage = Math.min(storePage, storePageCount)
   const visibleDisplayLots = displayLots.slice((currentStorePage - 1) * passesPerPage, currentStorePage * passesPerPage)
@@ -154,23 +149,25 @@ export function Subscriptions() {
   useEffect(() => setStorePage(1), [searchQuery, filterTag])
 
   function handleOpenLotDetail(lot: ParkingLot) {
+    setVehicleResult(null)
+    setSelectedVehicleId("")
     setSelectedLotForDetail(lot)
 
-    setSelectedPlan("monthly")
+    setSelectedPlan(hasPassPrice(lot.subscriptionYearly) && !hasPassPrice(lot.subscriptionMonthly) ? "annual" : "monthly")
 
     setSelectedMethod("momo")
 
     setCheckoutSuccess(null)
   }
 
+  const selectedPassPrice = selectedPlan === "monthly"
+    ? selectedLotForDetail?.subscriptionMonthly
+    : selectedLotForDetail?.subscriptionYearly
+
   function handlePurchasePass() {
-    if (!user || !selectedLotForDetail) return
+    if (!user || !selectedLotForDetail || !selectedVehicle || !hasPassPrice(selectedPassPrice)) return
 
-    const amount =
-      selectedPlan === "monthly"
-        ? selectedLotForDetail.subscriptionMonthly
-        : selectedLotForDetail.subscriptionYearly
-
+    const amount = selectedPassPrice
     const durationDays = selectedPlan === "monthly" ? 30 : 365
 
     const now = new Date()
@@ -207,111 +204,22 @@ export function Subscriptions() {
       amount,
 
       expiresAt: expires.toISOString(),
+      vehiclePlate: formatVietnamesePlate(selectedVehicle),
     })
 
     setCheckoutSuccess(
-      `Pass activated successfully for ${selectedLotForDetail.name}! Valid until ${expires.toLocaleDateString("en-GB")}.`,
+      `Gói gửi xe tại ${selectedLotForDetail.name} đã được kích hoạt. Có hiệu lực đến ${expires.toLocaleDateString("vi-VN")}.`,
     )
     showUiToast("Pass activated", `Your pass for ${selectedLotForDetail.name} is ready.`)
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      {/* STORE HERO BANNER (Style hàng online gây ấn tượng) */}
-      <section
-        style={{
-          borderRadius: "1rem",
-
-          background: "var(--card)",
-
-          border: "1px solid var(--border)",
-
-          padding: "1.75rem 2rem",
-
-          color: "var(--fg)",
-
-          boxShadow: "none",
-
-          position: "relative",
-
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ position: "relative", zIndex: 2, maxWidth: "780px" }}>
-          <PageHeader variant="default" title="Parking Passes" description="Compare monthly and annual passes from participating parking sites." />
-
-          {/* STORE VALUE PROPOSITION PILLS */}
-          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                background: "var(--raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "999px",
-                padding: "0.3rem 0.75rem",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-              }}
-            >
-              <UntitledIcon name="zap" size={14} style={{ color: "var(--accent)" }} />{" "}
-              24/7 Unlimited Access
-            </span>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                background: "var(--raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "999px",
-                padding: "0.3rem 0.75rem",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-              }}
-            >
-              <UntitledIcon name="tag" size={14} style={{ color: "var(--accent)" }} />{" "}
-              Save Up To 40%
-            </span>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                background: "var(--raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "999px",
-                padding: "0.3rem 0.75rem",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-              }}
-            >
-              <UntitledIcon name="car" size={14} style={{ color: "var(--accent)" }} />{" "}
-              Automated Gate Camera Scan
-            </span>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                background: "var(--raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "999px",
-                padding: "0.3rem 0.75rem",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-              }}
-            >
-              <UntitledIcon
-                name="shield"
-                size={14}
-                style={{ color: "var(--accent)" }}
-              />{" "}
-              Guaranteed Reserved Slot
-            </span>
-          </div>
+      <section className="driver-pass-header">
+        <div className="relative z-10 min-w-0">
+          <PageHeader title="Parking Passes" description="Choose a parking location to compare monthly and annual plans." />
         </div>
+        <span aria-hidden="true" className="driver-pass-header-mark"><UntitledIcon name="ticket" size={72} /></span>
       </section>
 
       {/* TOP NAVIGATION TABS */}
@@ -326,7 +234,7 @@ export function Subscriptions() {
           paddingBottom: "0.75rem",
         }}
       >
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className={tabMode === "store" ? "btn-primary" : "btn-outline"}
@@ -449,514 +357,44 @@ export function Subscriptions() {
                 )}
               </div>
 
-              {/* STORE FILTER PILLS */}
-              {!searchQuery && (
-                <div
-                  style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setFilterTag("recommended")}
-                    style={{
-                      padding: "0.4rem 0.8rem",
-
-                      borderRadius: "999px",
-
-                      fontSize: "0.78rem",
-
-                      fontWeight: 600,
-
-                      cursor: "pointer",
-
-                      background:
-                        filterTag === "recommended"
-                          ? "var(--primary)"
-                          : "var(--bg)",
-
-                      color:
-                        filterTag === "recommended" ? "#ffffff" : "var(--fg)",
-
-                      border: "1px solid var(--border)",
-
-                      display: "inline-flex",
-
-                      alignItems: "center",
-
-                      gap: "0.35rem",
-                    }}
-                  >
-                    <UntitledIcon name="sparkles" size={13} />
-                    <span>Recommended (Hot &amp; Near)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterTag("hot")}
-                    style={{
-                      padding: "0.4rem 0.8rem",
-
-                      borderRadius: "999px",
-
-                      fontSize: "0.78rem",
-
-                      fontWeight: 600,
-
-                      cursor: "pointer",
-
-                      background:
-                        filterTag === "hot" ? "var(--primary)" : "var(--bg)",
-
-                      color: filterTag === "hot" ? "#ffffff" : "var(--fg)",
-
-                      border: "1px solid var(--border)",
-
-                      display: "inline-flex",
-
-                      alignItems: "center",
-
-                      gap: "0.35rem",
-                    }}
-                  >
-                    <UntitledIcon name="flame" size={13} />
-                    <span>Hot Hubs</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterTag("near")}
-                    style={{
-                      padding: "0.4rem 0.8rem",
-
-                      borderRadius: "999px",
-
-                      fontSize: "0.78rem",
-
-                      fontWeight: 600,
-
-                      cursor: "pointer",
-
-                      background:
-                        filterTag === "near" ? "var(--primary)" : "var(--bg)",
-
-                      color: filterTag === "near" ? "#ffffff" : "var(--fg)",
-
-                      border: "1px solid var(--border)",
-
-                      display: "inline-flex",
-
-                      alignItems: "center",
-
-                      gap: "0.35rem",
-                    }}
-                  >
-                    <UntitledIcon name="map-pin" size={13} />
-                    <span>Near You (&lt; 2km)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterTag("all")}
-                    style={{
-                      padding: "0.4rem 0.8rem",
-
-                      borderRadius: "999px",
-
-                      fontSize: "0.78rem",
-
-                      fontWeight: 600,
-
-                      cursor: "pointer",
-
-                      background:
-                        filterTag === "all" ? "var(--primary)" : "var(--bg)",
-
-                      color: filterTag === "all" ? "#ffffff" : "var(--fg)",
-
-                      border: "1px solid var(--border)",
-
-                      display: "inline-flex",
-
-                      alignItems: "center",
-
-                      gap: "0.35rem",
-                    }}
-                  >
-                    <UntitledIcon name="grid" size={13} />
-                    <span>All Hubs</span>
-                  </button>
-                </div>
-              )}
             </div>
-
-            {/* RESULTS STATUS BAR */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                fontSize: "0.8rem",
-                color: "var(--muted)",
-              }}
-            >
-              <span>
-                {searchQuery ? (
-                  <>
-                    Showing exact matches for "<strong>{searchQuery}</strong>" (
-                    {displayLots.length} hubs found)
-                  </>
-                ) : filterTag === "recommended" ? (
-                  <>
-                    Showing{" "}
-                    <strong>Hot Hubs &amp; Parking Lots Near You</strong> (
-                    {displayLots.length} hubs)
-                  </>
-                ) : (
-                  <>Showing {displayLots.length} parking hubs</>
-                )}
-              </span>
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  color: "var(--primary)",
-                  fontWeight: 600,
-                }}
-              >
-                ● Click any parking hub to view detailed pass packages
-              </span>
-            </div>
+              <div role="group" aria-label="Filter parking locations" className="driver-pass-filters">
+                {([
+                  { id: "all", label: "All Hubs", icon: "grid" },
+                  { id: "near", label: "Near You", icon: "map-pin" },
+                ] as const).map(filter => (
+                  <button key={filter.id} type="button" aria-pressed={filterTag === filter.id}
+                    onClick={() => setFilterTag(filter.id)}>
+                    <UntitledIcon name={filter.icon} size={15} />
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            {filterTag === "near" && !location ? (
+              <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--muted)]">
+                <p role="status">{locationError || "Finding your location…"}</p>
+                {locationError && <button type="button" className="btn-outline" onClick={() => setLocationRetry(value => value + 1)}>Try again</button>}
+              </div>
+            ) : <p role="status" className="text-sm text-[var(--muted)]">
+              {displayLots.length} {displayLots.length === 1 ? "parking location" : "parking locations"}{filterTag === "near" ? " within 3 km, nearest first" : ""}
+            </p>}
           </div>
 
-          {/* STORE PRODUCT CATALOG (E-COMMERCE STORE GRID) */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              gap: "1.25rem",
-            }}
-          >
-            {visibleDisplayLots.map((lot) => {
-              const enterprise = getLotEnterprise(lot, users)
-
-              const distance = getLotDistance(lot)
-
-              const isHot = isHotLot(lot)
-
-              const isNear = isNearLot(lot)
-
-              const availableSlots = lot.slots.filter(
-                (s) => s.status === "available",
-              ).length
-
-              return (
-                <div
-                  key={lot.id}
-                  className="card animate-in"
-                  onClick={() => handleOpenLotDetail(lot)}
-                  style={{
-                    padding: 0,
-
-                    overflow: "hidden",
-
-                    cursor: "pointer",
-
-                    display: "flex",
-
-                    flexDirection: "column",
-
-                    transition:
-                      "transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease",
-
-                    border: "1.5px solid var(--border)",
-
-                    borderRadius: "1rem",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-4px)"
-
-                    e.currentTarget.style.boxShadow =
-                      "0 14px 28px -6px rgba(0, 0, 0, 0.15)"
-
-                    e.currentTarget.style.borderColor = "var(--primary)"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)"
-
-                    e.currentTarget.style.boxShadow = "none"
-
-                    e.currentTarget.style.borderColor = "var(--border)"
-                  }}
-                >
-                  {/* CARD STOREFRONT HEADER */}
-                  <div
-                    style={{
-                      padding: "1rem 1.15rem",
-
-                      background:
-                        "var(--raised)",
-
-                      borderBottom: "1px solid var(--border)",
-
-                      display: "flex",
-
-                      justifyContent: "space-between",
-
-                      alignItems: "flex-start",
-
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <div>
-                      <span
-                        style={{
-                          display: "inline-flex",
-
-                          alignItems: "center",
-
-                          gap: "0.35rem",
-
-                          fontSize: "0.72rem",
-
-                          fontWeight: 700,
-
-                          textTransform: "uppercase",
-
-                          letterSpacing: "0.04em",
-
-                          color: "var(--primary)",
-
-                          background: "var(--primary)15",
-
-                          padding: "0.15rem 0.5rem",
-
-                          borderRadius: "999px",
-
-                          marginBottom: "0.35rem",
-                        }}
-                      >
-                        <UntitledIcon name="building" size={12} />
-                        <span>{enterprise}</span>
-                      </span>
-                      <h3
-                        style={{
-                          fontFamily: "Be Vietnam Pro",
-                          fontWeight: 700,
-                          fontSize: "1.08rem",
-                          margin: 0,
-                          color: "var(--fg)",
-                        }}
-                      >
-                        {lot.name}
-                      </h3>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-end",
-                        gap: "0.3rem",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {isHot && (
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            fontWeight: 700,
-                            color: "#ea580c",
-                            background: "rgba(234, 88, 12, 0.12)",
-                            border: "1px solid rgba(234, 88, 12, 0.35)",
-                            padding: "0.15rem 0.45rem",
-                            borderRadius: "999px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.25rem",
-                          }}
-                        >
-                          <UntitledIcon name="flame" size={11} /> HOT
-                        </span>
-                      )}
-                      {isNear && (
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            fontWeight: 600,
-                            color: "#2563eb",
-                            background: "rgba(37, 99, 235, 0.1)",
-                            border: "1px solid rgba(37, 99, 235, 0.25)",
-                            padding: "0.15rem 0.45rem",
-                            borderRadius: "999px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.25rem",
-                          }}
-                        >
-                          <UntitledIcon name="map-pin" size={11} /> {distance}{" "}
-                          km
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* CARD BODY: Address, Features & Capacity */}
-                  <div
-                    style={{
-                      padding: "1.15rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.85rem",
-                      flex: 1,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.82rem",
-                        color: "var(--muted)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.4rem",
-                      }}
-                    >
-                      <UntitledIcon name="map-pin" size={15} />
-                      <span
-                        style={{
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {lot.address}
-                      </span>
-                    </div>
-
-                    {/* PERKS LIST */}
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "0.35rem",
-                        fontSize: "0.78rem",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                        padding: "0.65rem 0.85rem",
-                        borderRadius: "0.5rem",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.4rem",
-                          color: "var(--fg)",
-                        }}
-                      >
-                        <UntitledIcon
-                          name="check"
-                          size={13}
-                          style={{ color: "#22c55e", strokeWidth: 2.2 }}
-                        />{" "}
-                        24/7 Unlimited in &amp; out privileges
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.4rem",
-                          color: "var(--fg)",
-                        }}
-                      >
-                        <UntitledIcon
-                          name="check"
-                          size={13}
-                          style={{ color: "#22c55e", strokeWidth: 2.2 }}
-                        />{" "}
-                        License plate contactless barrier lift
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.4rem",
-                          color: "var(--fg)",
-                        }}
-                      >
-                        <UntitledIcon
-                          name="check"
-                          size={13}
-                          style={{ color: "#22c55e", strokeWidth: 2.2 }}
-                        />{" "}
-                        {availableSlots} available / {lot.totalSlots} total
-                        slots
-                      </div>
-                    </div>
-
-                    {/* PRICING STORE BANNER */}
-                    <div
-                      style={{
-                        marginTop: "auto",
-                        paddingTop: "0.6rem",
-                        borderTop: "1px dashed var(--border)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-end",
-                      }}
-                    >
-                      <div>
-                        <span
-                          style={{
-                            fontSize: "0.72rem",
-                            color: "var(--muted)",
-                            display: "block",
-                          }}
-                        >
-                          Starting from
-                        </span>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "baseline",
-                            gap: "0.25rem",
-                          }}
-                        >
-                          <strong
-                            style={{
-                              fontFamily: "Be Vietnam Pro",
-                              fontWeight: 800,
-                              fontSize: "1.25rem",
-                              color: "var(--primary)",
-                            }}
-                          >
-                            {lot.subscriptionMonthly.toLocaleString("vi-VN")} VND
-                          </strong>
-                          <span
-                            style={{
-                              fontSize: "0.75rem",
-                              color: "var(--muted)",
-                            }}
-                          >
-                            / mo
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        style={{
-                          padding: "0.45rem 0.85rem",
-                          fontSize: "0.8rem",
-                          fontWeight: 600,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.35rem",
-                        }}
-                      >
-                        <span>View Packages</span>
-                        <UntitledIcon name="arrow-right" size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+          <div className="driver-passes-grid">
+            {visibleDisplayLots.map((lot) => (
+              <button key={lot.id} type="button" className="driver-pass-location driver-pass-reveal"
+                aria-label={"View pass packages for " + lot.name} aria-haspopup="dialog"
+                onClick={() => handleOpenLotDetail(lot)}>
+                <span aria-hidden="true" className="driver-pass-location-band">
+                  <span className="driver-pass-location-icon"><UntitledIcon name="parking" size={23} /></span>
+                  <span className="driver-pass-location-arrow"><UntitledIcon name="arrow-right" size={18} /></span>
+                </span>
+                <span className="driver-pass-location-copy">
+                  <strong>{lot.name}</strong>
+                  <span><UntitledIcon name="map-pin" size={14} aria-hidden="true" />{lot.address}</span>
+                </span>
+              </button>
+            ))}
           </div>
 
           {storePageCount > 1 && <nav className="driver-passes-pagination" aria-label="Pass marketplace pages">
@@ -968,7 +406,7 @@ export function Subscriptions() {
             </div>
           </nav>}
 
-          {displayLots.length === 0 && (
+          {displayLots.length === 0 && (filterTag !== "near" || location) && (
             <div
               className="card"
               style={{
@@ -1001,18 +439,17 @@ export function Subscriptions() {
                   margin: "0 0 0.5rem",
                 }}
               >
-                No parking hubs matched your search
+                {filterTag === "near" ? "No matching parking locations within 3 km" : "No parking locations match your filters"}
               </h3>
               <p style={{ margin: "0 0 1rem", fontSize: "0.85rem" }}>
-                Try searching with a broader enterprise name (e.g. "Vingroup",
-                a different keyword or clear the search field to see available hubs.
+                Try another search or browse all parking locations.
               </p>
               <button
                 type="button"
                 className="btn-outline"
                 onClick={() => {
                   setSearchQuery("")
-                  setFilterTag("recommended")
+                  setFilterTag("all")
                 }}
               >
                 Reset Search
@@ -1034,7 +471,7 @@ export function Subscriptions() {
                 return (
                   <div
                     key={pass.id}
-                    className="card"
+                    className="card driver-pass-reveal"
                     style={{
                       padding: "1.25rem",
                       border: isExpired
@@ -1078,6 +515,7 @@ export function Subscriptions() {
                         >
                           {pass.lotName}
                         </h4>
+                        {pass.vehiclePlate && <p className="mt-1 text-sm text-[var(--muted)]">{pass.vehiclePlate}</p>}
                       </div>
                       <span
                         style={{
@@ -1368,648 +806,306 @@ export function Subscriptions() {
         </div>
       )}
 
-      {/* DETAIL MODAL: BẤM VÔ BÃI ĐỖ CỦA DOANH NGHIỆP/BÃI ĐỖ MỚI RA GÓI CHI TIẾT */}
-      {selectedLotForDetail &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            role="dialog"
-            aria-modal="true"
-            style={{
-              position: "fixed",
-
-              inset: 0,
-
-              background: "rgba(2, 6, 23, 0.85)",
-
-              backdropFilter: "blur(6px)",
-
-              zIndex: 99999,
-
-              display: "flex",
-
-              alignItems: "center",
-
-              justifyContent: "center",
-
-              padding: "1rem",
-            }}
-            onClick={() => setSelectedLotForDetail(null)}
-          >
+      {selectedLotForDetail && (
+        <Modal title={selectedLotForDetail.name + " — Gói gửi xe"} lang="vi" className="max-w-[820px]!" onClose={() => setSelectedLotForDetail(null)}>
+          <p className="mb-4 flex items-start gap-2 text-sm text-[var(--muted)]">
+            <UntitledIcon name="map-pin" size={16} /> {selectedLotForDetail.address}
+          </p>
+          {checkoutSuccess ? (
             <div
-              className="card animate-in"
               style={{
-                width: "100%",
-
-                maxWidth: 820,
-
-                maxHeight: "92vh",
-
-                overflowY: "auto",
-
-                background: "var(--card)",
-
-                borderRadius: "1rem",
-
-                border: "1px solid var(--border)",
-
-                padding: "1.75rem",
-
-                boxShadow: "0 25px 60px -15px rgba(0, 0, 0, 0.7)",
+                padding: "2rem",
+                textAlign: "center",
+                background: "rgba(34, 197, 94, 0.08)",
+                border: "1.5px solid rgba(34, 197, 94, 0.35)",
+                borderRadius: "0.75rem",
+                margin: "1rem 0",
               }}
-              onClick={(e) => e.stopPropagation()}
             >
-              {/* MODAL HEADER */}
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: "50%",
+                  background: "rgba(34, 197, 94, 0.15)",
+                  color: "#22c55e",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 0.75rem",
+                }}
+              >
+                <UntitledIcon name="award" size={30} />
+              </div>
+              <h4
+                style={{
+                  fontFamily: "Be Vietnam Pro",
+                  fontWeight: 700,
+                  fontSize: "1.3rem",
+                  color: "#22c55e",
+                  margin: "0 0 0.5rem",
+                }}
+              >
+                Đã kích hoạt gói gửi xe
+              </h4>
+              <p
+                style={{
+                  fontSize: "0.9rem",
+                  color: "var(--fg)",
+                  marginBottom: "1.5rem",
+                }}
+              >
+                {checkoutSuccess}
+              </p>
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  marginBottom: "1.25rem",
-                  gap: "1rem",
+                  gap: "0.75rem",
+                  justifyContent: "center",
                 }}
               >
-                <div>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      color: "var(--primary)",
-                      background: "var(--primary)15",
-                      padding: "0.15rem 0.55rem",
-                      borderRadius: "999px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.35rem",
-                    }}
-                  >
-                    <UntitledIcon name="building" size={12} />
-                    <span>{getLotEnterprise(selectedLotForDetail, users)}</span>
-                  </span>
-                  <h3
-                    style={{
-                      margin: "0.4rem 0 0.2rem",
-                      fontFamily: "Be Vietnam Pro",
-                      fontWeight: 800,
-                      fontSize: "1.4rem",
-                      color: "var(--fg)",
-                    }}
-                  >
-                    {selectedLotForDetail.name} — Pass Packages
-                  </h3>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.85rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    {selectedLotForDetail.address} • Type:{" "}
-                    <strong
-                      style={{
-                        textTransform: "capitalize",
-                        color: "var(--fg)",
-                      }}
-                    >
-                      {selectedLotForDetail.type}
-                    </strong>
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    setSelectedLotForDetail(null)
 
+                    setTabMode("my-passes")
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                  }}
+                >
+                  <span>Xem trong My Passes</span>
+                  <UntitledIcon name="arrow-right" size={14} />
+                </button>
                 <button
                   type="button"
                   className="btn-outline"
                   onClick={() => setSelectedLotForDetail(null)}
-                  style={{
-                    padding: "0.35rem 0.75rem",
-                    fontSize: "0.85rem",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.35rem",
-                  }}
                 >
-                  <UntitledIcon name="x" size={14} />
-                  <span>Close</span>
+                  Xong
                 </button>
               </div>
+            </div>
+          ) : (
+            <>
+              <fieldset className="driver-pass-plan-picker">
+                <legend>Chọn gói gửi xe</legend>
+                <div className="driver-pass-plan-list">
+                  {([
+                    { id: "monthly", label: "Gói tháng", description: "Phù hợp khi cần gửi xe trong thời gian ngắn.", days: 30, price: selectedLotForDetail.subscriptionMonthly },
+                    { id: "annual", label: "Gói năm", description: "Phù hợp khi gửi xe thường xuyên trong cả năm.", days: 365, price: selectedLotForDetail.subscriptionYearly },
+                  ] as const).map(plan => {
+                    const available = hasPassPrice(plan.price)
+                    const active = available && selectedPlan === plan.id
+                    const price = available ? plan.price.toLocaleString("vi-VN") + " VND" : "Chưa có giá"
+                    return <label key={plan.id} className="driver-pass-plan" data-selected={active}>
+                      <span className="driver-pass-plan-row">
+                        <input type="radio" name="parking-pass-plan" value={plan.id} checked={active}
+                          aria-label={plan.label + ", " + plan.days + " ngày, " + price}
+                          disabled={!available} onChange={() => setSelectedPlan(plan.id)} />
+                        <span className="driver-pass-plan-heading">
+                          <strong>{plan.label}</strong>
+                          <span>{plan.days} ngày kể từ khi kích hoạt</span>
+                        </span>
+                        <span className="driver-pass-plan-price">{price}{available && <small>mỗi gói</small>}</span>
+                      </span>
+                      <span className="driver-pass-plan-details" aria-hidden={!active}>
+                        <span className="driver-pass-plan-details-body">
+                          <span>{plan.description}</span>
+                          {available && <span><UntitledIcon name="banknote" size={15} /> Bình quân {Math.round(plan.price / plan.days).toLocaleString("vi-VN")} VND/ngày</span>}
+                          <span><UntitledIcon name="map-pin" size={15} /> Áp dụng tại {selectedLotForDetail.name}</span>
+                          <span><UntitledIcon name="car" size={15} /> Gắn với biển số xe bạn chọn khi thanh toán</span>
+                        </span>
+                      </span>
+                    </label>
+                  })}
+                </div>
+              </fieldset>
 
-              {/* IF CHECKOUT SUCCESS */}
-              {checkoutSuccess ? (
+              {/* CHECKOUT CONFIG: VEHICLE PLATE & PAYMENT METHOD */}
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "1.25rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                }}
+              >
+                {/* VEHICLE BINDING */}
+                <div>
+                  <label htmlFor="pass-registered-vehicle"
+                    style={{
+                      display: "block",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      color: "var(--fg)",
+                      marginBottom: "0.4rem",
+                    }}
+                  >
+                    Chọn biển số xe đã đăng ký
+                  </label>
+                  {!currentVehicles ? <p role="status" className="text-sm text-[var(--muted)]">Đang tải danh sách xe…</p>
+                    : currentVehicles.error ? <div className="flex flex-wrap items-center gap-3">
+                        <p role="alert" className="text-sm text-[var(--muted)]">{currentVehicles.error}</p>
+                        <button type="button" className="btn-outline" onClick={() => setVehicleRetry(value => value + 1)}>Thử lại</button>
+                      </div>
+                    : vehicles.length > 0 ? <RoundedSelect id="pass-registered-vehicle" className="input"
+                        aria-label="Biển số xe đã đăng ký" value={selectedVehicle?.id ?? ""}
+                        onChange={event => setSelectedVehicleId(event.target.value)}
+                        style={{ maxWidth: 360, fontSize: "0.85rem" }}>
+                        {vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>
+                          {formatVietnamesePlate(vehicle)} ({vehicle.vehicleType === "CAR" ? "Ô tô" : "Xe máy"})
+                        </option>)}
+                      </RoundedSelect>
+                    : <p className="text-sm text-[var(--muted)]">Bạn chưa có xe đã đăng ký. Hãy thêm xe trong My Vehicles rồi mở lại gói gửi xe.</p>}
+                </div>
+
+                {/* PAYMENT METHOD SELECTION */}
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      color: "var(--fg)",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    Chọn phương thức thanh toán
+                  </label>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(110px, 1fr))",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    {PAYMENT_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setSelectedMethod(opt.id)}
+                        style={{
+                          display: "flex",
+
+                          flexDirection: "column",
+
+                          alignItems: "center",
+
+                          gap: "0.45rem",
+
+                          padding: "0.75rem 0.4rem",
+
+                          borderRadius: "0.6rem",
+
+                          border:
+                            selectedMethod === opt.id
+                              ? "2px solid var(--primary)"
+                              : "1px solid var(--border)",
+
+                          background:
+                            selectedMethod === opt.id
+                              ? "color-mix(in srgb, var(--primary) 10%, var(--card))"
+                              : "var(--card)",
+
+                          cursor: "pointer",
+
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <PaymentMethodLogo method={opt.id} size="md" />
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            color: "var(--fg)",
+                            textAlign: "center",
+                          }}
+                        >
+                          {opt.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SUMMARY & SUBMIT */}
                 <div
                   style={{
-                    padding: "2rem",
-                    textAlign: "center",
-                    background: "rgba(34, 197, 94, 0.08)",
-                    border: "1.5px solid rgba(34, 197, 94, 0.35)",
+                    background: "var(--bg)",
+                    padding: "1rem 1.25rem",
                     borderRadius: "0.75rem",
-                    margin: "1rem 0",
+                    border: "1px solid var(--border)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "1rem",
+                    marginTop: "0.5rem",
                   }}
                 >
-                  <div
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: "50%",
-                      background: "rgba(34, 197, 94, 0.15)",
-                      color: "#22c55e",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      margin: "0 auto 0.75rem",
-                    }}
-                  >
-                    <UntitledIcon name="award" size={30} />
-                  </div>
-                  <h4
-                    style={{
-                      fontFamily: "Be Vietnam Pro",
-                      fontWeight: 700,
-                      fontSize: "1.3rem",
-                      color: "#22c55e",
-                      margin: "0 0 0.5rem",
-                    }}
-                  >
-                    Pass Activated Successfully!
-                  </h4>
-                  <p
-                    style={{
-                      fontSize: "0.9rem",
-                      color: "var(--fg)",
-                      marginBottom: "1.5rem",
-                    }}
-                  >
-                    {checkoutSuccess}
-                  </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "0.75rem",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => {
-                        setSelectedLotForDetail(null)
-
-                        setTabMode("my-passes")
-                      }}
+                  <div>
+                    <span
                       style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.4rem",
+                        fontSize: "0.78rem",
+                        color: "var(--muted)",
+                        display: "block",
                       }}
                     >
-                      <span>View in My Passes</span>
-                      <UntitledIcon name="arrow-right" size={14} />
-                    </button>
+                      Tổng tiền phải trả (
+                      {selectedPlan === "monthly" ? "30 ngày" : "365 ngày"}
+                      ):
+                    </span>
+                    <strong
+                      style={{
+                        fontFamily: "Be Vietnam Pro",
+                        fontWeight: 800,
+                        fontSize: "1.4rem",
+                        color: "var(--primary)",
+                      }}
+                    >
+                      {hasPassPrice(selectedPassPrice) ? selectedPassPrice.toLocaleString("vi-VN") + " VND" : "Chưa có giá"}
+                    </strong>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2.5">
                     <button
                       type="button"
                       className="btn-outline"
                       onClick={() => setSelectedLotForDetail(null)}
                     >
-                      Done
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={handlePurchasePass}
+                        disabled={!selectedVehicle || !hasPassPrice(selectedPassPrice)}
+                      style={{
+                        padding: "0.55rem 1.25rem",
+                        fontSize: "0.85rem",
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                      }}
+                    >
+                      <span>Thanh toán và kích hoạt gói</span>
+                      <UntitledIcon name="arrow-right" size={14} />
                     </button>
                   </div>
                 </div>
-              ) : (
-                <>
-                  {/* PACKAGE SELECTION TIERS (GÓI CHI TIẾT) */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fit, minmax(260px, 1fr))",
-                      gap: "1rem",
-                      marginBottom: "1.5rem",
-                    }}
-                  >
-                    {/* MONTHLY PASS */}
-                    <div
-                      onClick={() => setSelectedPlan("monthly")}
-                      style={{
-                        padding: "1.25rem",
-
-                        borderRadius: "0.85rem",
-
-                        cursor: "pointer",
-
-                        border:
-                          selectedPlan === "monthly"
-                            ? "2px solid var(--primary)"
-                            : "1.5px solid var(--border)",
-
-                        background:
-                          selectedPlan === "monthly"
-                            ? "var(--primary)08"
-                            : "var(--bg)",
-
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: "0.5rem",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            fontWeight: 700,
-                            color: "var(--primary)",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          Flexible 30-Day
-                        </span>
-                        <input
-                          type="radio"
-                          checked={selectedPlan === "monthly"}
-                          onChange={() => setSelectedPlan("monthly")}
-                        />
-                      </div>
-                      <h4
-                        style={{
-                          fontFamily: "Be Vietnam Pro",
-                          fontWeight: 800,
-                          fontSize: "1.2rem",
-                          margin: "0 0 0.35rem",
-                          color: "var(--fg)",
-                        }}
-                      >
-                        Monthly Pass
-                      </h4>
-                      <div
-                        style={{
-                          fontFamily: "Be Vietnam Pro",
-                          fontWeight: 800,
-                          fontSize: "1.35rem",
-                          color: "var(--primary)",
-                          marginBottom: "0.75rem",
-                        }}
-                      >
-                        {selectedLotForDetail.subscriptionMonthly.toLocaleString(
-                          "vi-VN",
-                        )}
-                        {" "}VND
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "var(--muted)",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {" "}
-                          / 30 days
-                        </span>
-                      </div>
-                      <ul
-                        style={{
-                          paddingLeft: "1.2rem",
-                          margin: 0,
-                          fontSize: "0.8rem",
-                          color: "var(--muted)",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.35rem",
-                        }}
-                      >
-                        <li>30 days unlimited parking</li>
-                        <li>Contactless license plate gate open</li>
-                        <li>In &amp; out multiple times daily</li>
-                        <li>Renew or cancel anytime</li>
-                      </ul>
-                    </div>
-
-                    {/* ANNUAL PASS */}
-                    <div
-                      onClick={() => setSelectedPlan("annual")}
-                      style={{
-                        padding: "1.25rem",
-
-                        borderRadius: "0.85rem",
-
-                        cursor: "pointer",
-
-                        border:
-                          selectedPlan === "annual"
-                            ? "2px solid #22c55e"
-                            : "1.5px solid var(--border)",
-
-                        background:
-                          selectedPlan === "annual"
-                            ? "rgba(34, 197, 94, 0.08)"
-                            : "var(--bg)",
-
-                        transition: "all 0.15s ease",
-
-                        position: "relative",
-                      }}
-                    >
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: "-10px",
-                          right: "12px",
-                          background: "#22c55e",
-                          color: "#ffffff",
-                          fontSize: "0.68rem",
-                          fontWeight: 800,
-                          padding: "0.15rem 0.5rem",
-                          borderRadius: "999px",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        <UntitledIcon name="tag" size={11} />
-                        <span>SAVE 2 MONTHS</span>
-                      </span>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: "0.5rem",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            fontWeight: 700,
-                            color: "#22c55e",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          VIP 365-Day Plan
-                        </span>
-                        <input
-                          type="radio"
-                          checked={selectedPlan === "annual"}
-                          onChange={() => setSelectedPlan("annual")}
-                        />
-                      </div>
-                      <h4
-                        style={{
-                          fontFamily: "Be Vietnam Pro",
-                          fontWeight: 800,
-                          fontSize: "1.2rem",
-                          margin: "0 0 0.35rem",
-                          color: "var(--fg)",
-                        }}
-                      >
-                        Annual Pass
-                      </h4>
-                      <div
-                        style={{
-                          fontFamily: "Be Vietnam Pro",
-                          fontWeight: 800,
-                          fontSize: "1.35rem",
-                          color: "#22c55e",
-                          marginBottom: "0.75rem",
-                        }}
-                      >
-                        {selectedLotForDetail.subscriptionYearly.toLocaleString(
-                          "vi-VN",
-                        )}
-                        {" "}VND
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "var(--muted)",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {" "}
-                          / 365 days
-                        </span>
-                      </div>
-                      <ul
-                        style={{
-                          paddingLeft: "1.2rem",
-                          margin: 0,
-                          fontSize: "0.8rem",
-                          color: "var(--muted)",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.35rem",
-                        }}
-                      >
-                        <li>365 days VIP parking access</li>
-                        <li>Guaranteed reserved parking space</li>
-                        <li>Save 2 full months (~17% discount)</li>
-                        <li>Priority hotline concierge support</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* CHECKOUT CONFIG: VEHICLE PLATE & PAYMENT METHOD */}
-                  <div
-                    style={{
-                      borderTop: "1px solid var(--border)",
-                      paddingTop: "1.25rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "1rem",
-                    }}
-                  >
-                    {/* VEHICLE BINDING */}
-                    <div>
-                      <label
-                        style={{
-                          display: "block",
-                          fontSize: "0.82rem",
-                          fontWeight: 700,
-                          color: "var(--fg)",
-                          marginBottom: "0.4rem",
-                        }}
-                      >
-                        Select Registered Vehicle Plate:
-                      </label>
-                      {vehicles.length > 0 ? (
-                        <RoundedSelect
-                          className="input"
-                          value={selectedVehiclePlate}
-                          onChange={(e) =>
-                            setSelectedVehiclePlate(e.target.value)
-                          }
-                          style={{ maxWidth: 360, fontSize: "0.85rem" }}
-                        >
-                          {vehicles.map((v) => (
-                            <option key={v.id} value={v.rawPlate}>
-                              {formatVietnamesePlate(v)} (
-                              {v.vehicleType === "CAR" ? "Car" : "Motorcycle"})
-                            </option>
-                          ))}
-                        </RoundedSelect>
-                      ) : (
-                        <input
-                          className="input"
-                          value={selectedVehiclePlate}
-                          onChange={(e) =>
-                            setSelectedVehiclePlate(
-                              e.target.value.toUpperCase(),
-                            )
-                          }
-                          placeholder="e.g. 51A-12345"
-                          style={{ maxWidth: 360, fontSize: "0.85rem" }}
-                        />
-                      )}
-                      {vehicleError && <p role="alert" className="text-sm text-red-600">{vehicleError}</p>}
-                    </div>
-
-                    {/* PAYMENT METHOD SELECTION */}
-                    <div>
-                      <label
-                        style={{
-                          display: "block",
-                          fontSize: "0.82rem",
-                          fontWeight: 700,
-                          color: "var(--fg)",
-                          marginBottom: "0.5rem",
-                        }}
-                      >
-                        Choose Payment Method:
-                      </label>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns:
-                            "repeat(auto-fit, minmax(110px, 1fr))",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        {PAYMENT_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setSelectedMethod(opt.id)}
-                            style={{
-                              display: "flex",
-
-                              flexDirection: "column",
-
-                              alignItems: "center",
-
-                              gap: "0.45rem",
-
-                              padding: "0.75rem 0.4rem",
-
-                              borderRadius: "0.6rem",
-
-                              border:
-                                selectedMethod === opt.id
-                                  ? "2px solid var(--primary)"
-                                  : "1px solid var(--border)",
-
-                              background:
-                                selectedMethod === opt.id
-                                  ? "color-mix(in srgb, var(--primary) 10%, var(--card))"
-                                  : "var(--card)",
-
-                              cursor: "pointer",
-
-                              transition: "all 0.15s ease",
-                            }}
-                          >
-                            <PaymentMethodLogo method={opt.id} size="md" />
-                            <span
-                              style={{
-                                fontSize: "0.72rem",
-                                fontWeight: 600,
-                                color: "var(--fg)",
-                                textAlign: "center",
-                              }}
-                            >
-                              {opt.name}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* SUMMARY & SUBMIT */}
-                    <div
-                      style={{
-                        background: "var(--bg)",
-                        padding: "1rem 1.25rem",
-                        borderRadius: "0.75rem",
-                        border: "1px solid var(--border)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                        gap: "1rem",
-                        marginTop: "0.5rem",
-                      }}
-                    >
-                      <div>
-                        <span
-                          style={{
-                            fontSize: "0.78rem",
-                            color: "var(--muted)",
-                            display: "block",
-                          }}
-                        >
-                          Total Amount Due (
-                          {selectedPlan === "monthly" ? "30 Days" : "365 Days"}
-                          ):
-                        </span>
-                        <strong
-                          style={{
-                            fontFamily: "Be Vietnam Pro",
-                            fontWeight: 800,
-                            fontSize: "1.4rem",
-                            color: "var(--primary)",
-                          }}
-                        >
-                          {(selectedPlan === "monthly"
-                            ? selectedLotForDetail.subscriptionMonthly
-                            : selectedLotForDetail.subscriptionYearly
-                          ).toLocaleString("vi-VN")}
-                          {" "}VND
-                        </strong>
-                      </div>
-
-                      <div style={{ display: "flex", gap: "0.6rem" }}>
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          onClick={() => setSelectedLotForDetail(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={handlePurchasePass}
-                          style={{
-                            padding: "0.55rem 1.25rem",
-                            fontSize: "0.85rem",
-                            fontWeight: 700,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.4rem",
-                          }}
-                        >
-                          <span>Complete &amp; Activate Pass</span>
-                          <UntitledIcon name="arrow-right" size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>,
-
-          document.body,
-        )}
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
     </div>
   )
 }

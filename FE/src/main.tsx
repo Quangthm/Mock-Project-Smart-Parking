@@ -9,6 +9,7 @@ import "./theme.css"
 import "./workspace-layout.css"
 import "./ui-refinement.css"
 import "./motion.css"
+import "./adaptive-ui.css"
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

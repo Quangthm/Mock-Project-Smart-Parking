@@ -11,10 +11,10 @@ import { UntitledIcon } from "../icon/UntitledIcon"
 type OwnerSection = "general" | OwnerPolicySectionId
 type PlatformSection = "terms" | "privacy" | "payment-refund"
 
-export function LotPolicyModal({ lot, onClose, initialSource = "owner", initialPlatformSection = "terms" }: { lot: ParkingLot; onClose: () => void; initialSource?: "owner" | "platform"; initialPlatformSection?: PlatformSection }) {
-  const [source, setSource] = useState<"owner" | "platform">(initialSource)
+export function LotPolicyModal({ lot, onClose, initialSource = "owner", initialPlatformSection = "terms" }: { lot?: ParkingLot; onClose: () => void; initialSource?: "owner" | "platform"; initialPlatformSection?: PlatformSection }) {
+  const [source, setSource] = useState<"owner" | "platform">(lot ? initialSource : "platform")
   const [ownerSection, setOwnerSection] = useState<OwnerSection>(() => {
-    if (store.getLotPolicyPdf(lot.id, lot.ownerId)?.fileData) return "general"
+    if (!lot || store.getLotPolicyPdf(lot.id, lot.ownerId)?.fileData) return "general"
     const texts = getOwnerPolicySectionTexts(lot.ownerId, lot.id)
     const documents = getOwnerPolicySectionDocuments(lot.ownerId, lot.id)
     return ownerPolicySections.find(section => texts[section.id]?.content || documents[section.id]?.fileData)?.id ?? "general"
@@ -22,11 +22,11 @@ export function LotPolicyModal({ lot, onClose, initialSource = "owner", initialP
   const [platformSection, setPlatformSection] = useState<PlatformSection>(initialPlatformSection)
   const closeRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const ownerDocuments = getOwnerPolicySectionDocuments(lot.ownerId, lot.id)
-  const ownerTexts = getOwnerPolicySectionTexts(lot.ownerId, lot.id)
-  const generalDocument = store.getLotPolicyPdf(lot.id, lot.ownerId)
-  const selectedDocument = ownerSection === "general" ? generalDocument : ownerDocuments[ownerSection]
-  const selectedText = ownerSection === "general" ? null : ownerTexts[ownerSection]
+  const ownerDocuments = lot ? getOwnerPolicySectionDocuments(lot.ownerId, lot.id) : undefined
+  const ownerTexts = lot ? getOwnerPolicySectionTexts(lot.ownerId, lot.id) : undefined
+  const generalDocument = lot ? store.getLotPolicyPdf(lot.id, lot.ownerId) : undefined
+  const selectedDocument = ownerSection === "general" ? generalDocument : ownerDocuments?.[ownerSection]
+  const selectedText = ownerSection === "general" ? null : ownerTexts?.[ownerSection]
   const selectedTitle = ownerSection === "general" ? "General owner policy" : ownerPolicySections.find(section => section.id === ownerSection)?.title
 
   useEffect(() => {
@@ -49,15 +49,15 @@ export function LotPolicyModal({ lot, onClose, initialSource = "owner", initialP
   return createPortal(<div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="policy-modal-title" onKeyDown={handleKeyDown} className="flex max-h-[92dvh] w-full max-w-5xl min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] shadow-2xl">
       <header className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5">
-        <div className="min-w-0"><h2 id="policy-modal-title" className="text-xl font-semibold">Parking policies</h2><p className="mt-1 break-words text-sm text-[var(--muted)]">{lot.name} · Owner documents and SmartParking platform documents</p></div>
+        <div className="min-w-0"><h2 id="policy-modal-title" className="text-xl font-semibold">Parking policies</h2><p className="mt-1 break-words text-sm text-[var(--muted)]">{lot ? `${lot.name} · Owner documents and SmartParking platform documents` : "SmartParking platform documents"}</p></div>
         <button ref={closeRef} type="button" className="icon-button shrink-0" aria-label="Close parking policies" onClick={onClose}><UntitledIcon name="x" size={20} /></button>
       </header>
-      <div className="flex flex-wrap gap-2 border-b border-[var(--border)] px-5 py-3" role="group" aria-label="Policy source">
+      {lot && <div className="flex flex-wrap gap-2 border-b border-[var(--border)] px-5 py-3" role="group" aria-label="Policy source">
         <button type="button" className={source === "owner" ? "btn-primary" : "btn-outline"} aria-pressed={source === "owner"} onClick={() => setSource("owner")}>Owner Policies</button>
         <button type="button" className={source === "platform" ? "btn-primary" : "btn-outline"} aria-pressed={source === "platform"} onClick={() => setSource("platform")}>Platform Policies</button>
-      </div>
+      </div>}
       <div className="min-h-0 overflow-y-auto overscroll-contain p-5">
-        {source === "owner" ? <div className="grid min-w-0 gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
+        {source === "owner" && lot ? <div className="grid min-w-0 gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
           <nav className="flex flex-wrap content-start gap-2 md:flex-col" aria-label="Owner policy sections">
             {([{ id: "general", title: "General policy" }, ...ownerPolicySections] as const).map(section => <button key={section.id} type="button" className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-semibold ${ownerSection === section.id ? "border-[var(--primary)] bg-[var(--active)] text-[var(--fg)]" : "border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]"}`} aria-current={ownerSection === section.id ? "true" : undefined} onClick={() => setOwnerSection(section.id)}>{section.title}</button>)}
           </nav>

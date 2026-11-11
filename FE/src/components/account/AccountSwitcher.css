@@ -231,8 +231,8 @@
 .account-switcher-error { max-width: 420px; margin: 0; color: var(--occupied); font-size: 14px; }
 
 .account-switcher-overlay :is(button, a):focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 4px;
+  outline: 2px solid var(--focus-ink, var(--focus));
+  outline-offset: -3px;
 }
 
 .settings-role-row {
