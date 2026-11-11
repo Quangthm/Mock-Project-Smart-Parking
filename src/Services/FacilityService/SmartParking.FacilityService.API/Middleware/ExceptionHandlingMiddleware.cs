@@ -137,8 +137,8 @@ public sealed class ExceptionHandlingMiddleware
                 await context.Response.WriteAsJsonAsync(new
                 {
                     success = false,
-                    code = "INTERNAL_SERVER_ERROR",
-                    message = "An unexpected error occurred. Please contact system administrator.",
+                    code = "INTERNAL_ERROR",
+                    message = "An unexpected error occurred.",
                     traceId
                 });
                 break;

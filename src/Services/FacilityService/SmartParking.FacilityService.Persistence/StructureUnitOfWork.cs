@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SmartParking.FacilityService.Application.Common.Helpers;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
@@ -11,7 +12,8 @@ public sealed class StructureUnitOfWork(
     ISlotOperatorAuthorizer operators,
     IStructureCommitments commitments,
     IStructureSynchronizationStore synchronizationStore,
-    IStructureSynchronizationService synchronization) : IStructureUnitOfWork
+    IStructureSynchronizationService synchronization,
+    ILogger<StructureUnitOfWork>? logger = null) : IStructureUnitOfWork
 {
     public async Task<IStructureEditSession> BeginEditAsync(
         OwnerScope owner, Guid siteId, CancellationToken ct,
@@ -71,7 +73,8 @@ public sealed class StructureUnitOfWork(
             pending,
             synchronization,
             markedSlot,
-            reason);
+            reason,
+            logger);
     }
 
     public async Task RecoverAsync(OwnerScope owner, Guid siteId, CancellationToken ct)
@@ -90,6 +93,8 @@ public sealed class StructureUnitOfWork(
 
         if (!allowed)
         {
+            logger?.LogWarning("Structure authorization rejected for User {UserId}, Tenant {TenantId}, Site {SiteId}",
+                actor.UserId, actor.TenantId, operationalSite);
             throw new StructureException("FORBIDDEN", "Current parking management access is required.");
         }
     }
@@ -103,8 +108,9 @@ public sealed class StructureUnitOfWork(
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Failed to publish structure synchronization abort state for Token {Token}", pending.Token);
         }
     }
 
@@ -118,6 +124,7 @@ public sealed class StructureUnitOfWork(
         private readonly string? _reason;
         private readonly HashSet<Guid> _originalSlots;
         private readonly HashSet<Guid> _originalUnits;
+        private readonly ILogger<StructureUnitOfWork>? _logger;
         private bool _committed;
         private bool _disposed;
 
@@ -127,7 +134,8 @@ public sealed class StructureUnitOfWork(
             StructureSynchronization pending,
             IStructureSynchronizationService synchronization,
             Guid? markedSlot,
-            string? reason)
+            string? reason,
+            ILogger<StructureUnitOfWork>? logger = null)
         {
             _edit = edit;
             _gate = gate;
@@ -135,6 +143,7 @@ public sealed class StructureUnitOfWork(
             _synchronization = synchronization;
             _markedSlot = markedSlot;
             _reason = reason;
+            _logger = logger;
             Structure = edit.Structure;
             _originalSlots = edit.Structure.Slots.Select(s => s.Id).ToHashSet();
             _originalUnits = edit.Structure.Units.Select(u => u.Id).ToHashSet();
@@ -168,16 +177,18 @@ public sealed class StructureUnitOfWork(
                 {
                     await _edit.DisposeAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger?.LogDebug(ex, "Error disposing parking structure edit transaction.");
                 }
 
                 try
                 {
                     await _synchronization.PublishAsync(_pending, CancellationToken.None);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger?.LogWarning(ex, "Failed to publish structure synchronization pending state on uncommitted dispose.");
                 }
             }
 
@@ -185,8 +196,9 @@ public sealed class StructureUnitOfWork(
             {
                 await _gate.DisposeAsync();
             }
-            catch
+            catch (Exception ex)
             {
+                _logger?.LogDebug(ex, "Error disposing site gate lock.");
             }
         }
     }
