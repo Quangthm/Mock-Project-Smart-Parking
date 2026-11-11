@@ -16,8 +16,8 @@ Facility owns configuration and model/resource identity. Review, provisioning, a
 |---|---|
 | Database vật lý | `smartpark_facility` (PostgreSQL 16, port `5442`) |
 | Base DDL | [`02-facility-service-db.sql`](../../../../scripts/database/microservices/02-facility-service-db.sql) + [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) |
-| Overlays | `parking-tenants.sql`, `parking-structure-synchronizations.sql`, `parking-operator-tables.sql`, `parking-slot-constraints.sql` |
-| Deployment status | Base `02` khớp arch `9a13499` + 2 cột runtime D4/P1; 4 overlay bổ sung cho runtime |
+| SQL overlays | Không; clean setup chỉ mount các base file microservice |
+| Deployment status | Base `02` + `03a` chứa schema runtime, gồm các phần D4/P1 |
 | Runtime deviation | `parking_slots.supported_vehicle_type`, `parking_slots.reservation_state` |
 | Phạm vi tài liệu | Chỉ các bảng của base `02`; bảng của `03a` xem tài liệu `03` |
 
@@ -217,8 +217,8 @@ Bản triển khai bổ sung hai cột runtime `supported_vehicle_type` và `res
 | `chk_slot_physical_state` | `CHECK (physical_state IN ('AVAILABLE', 'OCCUPIED', 'UNKNOWN', 'MAINTENANCE', 'UNAVAILABLE'))` | Trạng thái vật lý hợp lệ |
 | `ck_deleted_slot_not_occupied` | `CHECK (deleted_at IS NULL OR physical_state NOT IN ('OCCUPIED','UNKNOWN'))` | Base `02`: không cho soft-delete ô đang OCCUPIED/UNKNOWN |
 | `uq_active_slot_code_ci` | `UNIQUE(spatial_unit_id, upper(slot_code)) WHERE deleted_at IS NULL` | Base `02`: mã ô duy nhất trong unit đang hoạt động |
-| `uq_site_slot_code_ci` | `UNIQUE(tenant_id, site_id, upper(slot_code))` (overlay `parking-slot-constraints.sql`) | Giữ lịch sử định danh: mã ô duy nhất trong site kể cả sau soft-delete |
-| `ck_deleted_slot_safe` | `CHECK (deleted_at IS NULL OR (physical_state NOT IN ('OCCUPIED','UNKNOWN') AND reservation_state IS NULL)) NOT VALID` (overlay) | Không xóa ô đang có cam kết; `NOT VALID` để không quét dữ liệu cũ, vẫn enforce cho INSERT/UPDATE mới |
+| `uq_site_slot_code_ci` | `UNIQUE(tenant_id, site_id, upper(slot_code))` (base `02-facility-service-db.sql`) | Giữ lịch sử định danh: mã ô duy nhất trong site kể cả sau soft-delete |
+| `ck_deleted_slot_safe` | `CHECK (deleted_at IS NULL OR (physical_state NOT IN ('OCCUPIED','UNKNOWN') AND reservation_state IS NULL))` (base `02-facility-service-db.sql`) | Không xóa ô đang có cam kết |
 | `idx_parking_slots_spatial_unit_id` | `spatial_unit_id` | Truy vấn các ô đỗ trong khu vực |
 | `idx_parking_slots_physical_state` | `physical_state` | Lọc nhanh ô đỗ trống/đang đỗ |
 
@@ -323,15 +323,13 @@ structure_operations (1) ──── (0..N) structure_change_audit [operation_i
 
 ---
 
-## 12. Deployment overlays cho `smartpark_facility`
+## 12. Schema runtime đã hợp nhất vào base cho `smartpark_facility`
 
-Bốn overlay được mount sau base `02` + `03a` (thứ tự trong `compose.schema-integration.yml`):
+Các đối tượng dưới đây được khai báo trực tiếp trong base; clean setup chỉ mount các file `microservices/`:
 
-| Overlay | Đối tượng | Mục đích |
+| Base file | Đối tượng | Mục đích |
 |---|---|---|
-| `parking-tenants.sql` | `tenants` | Bản sao local của `tenants` (canonical ở UserDb) để FacilityService JOIN trong cùng transaction; D5 |
-| `parking-structure-synchronizations.sql` | `structure_synchronizations` | Hàng đợi/trạng thái đồng bộ cấu trúc giữa Parking và Reservation; D1/Q2 |
-| `parking-operator-tables.sql` | `support_tickets`, `operator_notifications`, `operator_audit_logs` | Shape BE tạm thời cho các endpoint `/api/operator/*`; `operator_incident_events` nằm ở `03a`; D3/D6 |
-| `parking-slot-constraints.sql` | `ck_deleted_slot_safe`, `uq_site_slot_code_ci` | Ràng buộc xóa an toàn + uniqueness mã ô theo site; D4 |
+| `02-facility-service-db.sql` | `tenants`, `structure_synchronizations`, `support_tickets`, `operator_notifications`, `operator_audit_logs`, `ck_deleted_slot_safe`, `uq_site_slot_code_ci` | Runtime tables, safety and uniqueness constraints |
+| `03a-parking-structure-ops-service-db.sql` | `operator_incident_events` | Operator incident events |
 
-Các overlay dùng `IF NOT EXISTS`/`NOT VALID` để chạy lại trên DB dev. Chúng không thay thế base DDL; chi tiết quyết định xem `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md` và report 10.
+Các thay đổi đối với schema hiện tại phải đi qua base file cho clean setup hoặc một migration được review riêng cho database đã khởi tạo. Không có overlay SQL nào được tự động áp dụng.

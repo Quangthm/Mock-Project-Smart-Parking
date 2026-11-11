@@ -13,8 +13,8 @@ import { useApp } from "../../../context/AppContext"
 import { searchDiscoveryLots, type DiscoveryLotItem, type OriginSource } from "../../../lib/driverDiscoveryApi"
 import { parkingApi } from "../../../lib/parkingApi"
 import { mapOperationalLayoutSlots } from "../../../lib/driverSlotMapping"
+import { distanceKm, validCoordinates, type LatLng } from "../../../lib/parkingCoordinates"
 
-type LatLng = { lat: number; lng: number }
 type MapState = "loading" | "ready" | "missing-key" | "error"
 type MapStyleName = "streets" | "satellite" | "hybrid"
 const mapStyleIds: Record<MapStyleName, string> = { streets: "streets-v4", satellite: "satellite-v4", hybrid: "hybrid-v4" }
@@ -24,16 +24,6 @@ function mapStyleUrl(style: MapStyleName, apiKey: string, theme: "light" | "dark
 }
 const lotTypeLabels: Record<LotType, string> = { outdoor: "Outdoor", basement: "Underground", "multi-storey": "Indoor (Multi-storey)" }
 
-function validCoordinates(point: LatLng) {
-  return Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180 && !(point.lat === 0 && point.lng === 0)
-}
-function distanceKm(from: LatLng, to: LatLng) {
-  const radians = (degrees: number) => degrees * Math.PI / 180
-  const latDistance = radians(to.lat - from.lat)
-  const lngDistance = radians(to.lng - from.lng)
-  const a = Math.sin(latDistance / 2) ** 2 + Math.cos(radians(from.lat)) * Math.cos(radians(to.lat)) * Math.sin(lngDistance / 2) ** 2
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
 function availableSpaces(lot: ParkingLot) { return Array.isArray(lot.slots) ? lot.slots.filter((slot) => slot.status === "available").length : 0 }
 function hasAvailabilityData(lot: ParkingLot) { return Array.isArray(lot.slots) }
 function availabilityLevel(lot: ParkingLot) {

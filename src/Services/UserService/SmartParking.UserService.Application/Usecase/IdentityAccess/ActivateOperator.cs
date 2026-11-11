@@ -22,20 +22,17 @@ public sealed class ActivateOperatorValidator : AbstractValidator<ActivateOperat
         {
             RuleFor(x => x.Body.ChallengeId).NotEmpty();
             RuleFor(x => x.Body.Token).NotEmpty().Length(64).Matches("^[0-9A-Fa-f]{64}$");
-            When(x => !string.IsNullOrEmpty(x.Body.Password), () =>
-            {
-                RuleFor(x => x.Body.Password).Length(8, 15)
-                    .Matches(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$");
-            });
+            RuleFor(x => x.Body.Password).NotEmpty().Length(8, 15)
+                .Matches(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$");
         });
     }
 }
-public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository, IIdentityWorkflowStore workflowStore, IUnitOfWork unitOfWork,
+public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository, IUnitOfWork unitOfWork,
     IPasswordService passwords, TimeProvider clock, IEventPublisher events) : IRequestHandler<ActivateOperatorCommand>
 {
     public async Task Handle(ActivateOperatorCommand request, CancellationToken cancellationToken)
     {
-        var passwordHash = string.IsNullOrEmpty(request.Body.Password) ? null : passwords.Hash(request.Body.Password);
+        var passwordHash = passwords.Hash(request.Body.Password);
         await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
         var invitation = await repository.LockInvitationAsync(request.Body.ChallengeId, cancellationToken);
         var now = clock.GetUtcNow();
@@ -43,11 +40,6 @@ public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository
             !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(value.Challenge.CodeHash),
                 Encoding.UTF8.GetBytes(AuthSessionService.HashRefreshToken(request.Body.Token))))
             throw new AuthException("INVALID_TOKEN", "Activation link is invalid or expired.", 401);
-
-        var simulated = await workflowStore.FindSimulatedIdentityAsync(value.User.Id!.Value, cancellationToken);
-        if (simulated is null || simulated.SimulationStatus != "COMPLETED")
-            throw new AuthException("VNEID_SIMULATION_REQUIRED", "Mandatory simulated VNeID information-sharing must be completed before activating operator account.", 422);
-
         OperatorActivation.Activate(value.User, value.Challenge, passwordHash, now);
         await repository.RevokeSessionsAsync(value.User.Id!.Value, cancellationToken);
         await events.PublishAsync(new OperatorAccessChanged(Guid.NewGuid(), 1, value.User.Id.Value, value.User.AccessVersion, now,

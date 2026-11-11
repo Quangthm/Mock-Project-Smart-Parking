@@ -56,8 +56,6 @@ public interface IIdentityWorkflowStore
     Task<Guid[]> ReadOwnerTenantsAsync(Guid actor, string permission, CancellationToken ct);
     Guid PendingOtpRecipient(string destination);
     Task<int> CancelDriverOtpDeliveriesAsync(Guid userId, CancellationToken ct);
-    Task<UserSimulatedIdentity?> FindSimulatedIdentityAsync(Guid userId, CancellationToken ct);
-    Task<UserSimulatedIdentity?> LockSimulatedIdentityAsync(Guid userId, CancellationToken ct);
     Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct);
     Task CommitCurrentTransactionAsync(CancellationToken ct);
     Task<int> SaveChangesAsync(CancellationToken ct);

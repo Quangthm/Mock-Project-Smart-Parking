@@ -16,7 +16,7 @@ import { PlateScanPanel } from "./PlateScanPanel"
 import type { Booking } from "../../../lib/types"
 
 type GateAction = "check-in" | "check-out"
-type CheckoutPayment = "CASH" | "PAYOS" | "DEMO"
+type CheckoutPayment = "CASH" | "PAYOS" | "DEMO" | "PAYOS_TEST"
 const historyDateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
 type QuickGateResult =
   | { kind: "reservation"; booking: Booking; action: GateAction }
@@ -193,6 +193,7 @@ export function CheckInOut({
     setQuickError("")
     setQuickResult(null)
     setCheckoutPrice(null)
+    setPaymentMessage("")
     const term = (inputToUse ?? quickInput).trim()
 
     if (!lot) {
@@ -300,7 +301,7 @@ export function CheckInOut({
     try {
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
       if (action === "check-out") {
-        await settleCheckout(payment, {
+        const settlement = await settleCheckout(payment, {
           referenceId: booking.id,
           accountId: booking.driverId,
           vehicleType: booking.vehicleType ?? "CAR",
@@ -308,10 +309,11 @@ export function CheckInOut({
           reservationId: booking.id,
           plateNumber: booking.licensePlate,
         })
+        if (settlement === "PENDING") return
       }
       const updatedBooking = action === "check-in"
         ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
-        : await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate, imageData)
+        : booking
 
       setHistoryRefresh((current) => current + 1)
       setActionFeedback({
@@ -380,23 +382,34 @@ export function CheckInOut({
     plateNumber?: string
     sessionId?: string
     reservationId?: string
-  }) {
+  }): Promise<"PAID" | "PENDING"> {
     if (!lot) throw new Error("Select a parking site before processing payment.")
-    setPaymentMessage("Calculating parking fee...")
-    const prepared = await paymentApi.prepare({
-      siteId: lot.id,
-      referenceId: input.referenceId,
-      vehicleType: input.vehicleType || "CAR",
-      entryTime: input.entryTime,
-      sessionId: input.sessionId,
-      reservationId: input.reservationId,
-      plateNumber: input.plateNumber,
-    })
-    setPaymentMessage(`Amount due: ${prepared.pricing.finalAmountVnd.toLocaleString("vi-VN")} VND`)
-    const key = `checkout:${lot.id}:${input.referenceId}`
+    const isTestPayOs = payment === "PAYOS_TEST"
+    setPaymentMessage(isTestPayOs ? "Preparing a 2,000 VND PayOS test payment..." : "Calculating parking fee...")
+    let prepared: Awaited<ReturnType<typeof paymentApi.prepare>>
+    try {
+      prepared = await paymentApi.prepare({
+        siteId: lot.id,
+        referenceId: input.referenceId,
+        vehicleType: input.vehicleType || "CAR",
+        entryTime: input.entryTime,
+        sessionId: input.sessionId,
+        reservationId: input.reservationId,
+        plateNumber: input.plateNumber,
+        developmentTestPayOs: isTestPayOs,
+      })
+    } catch (error) {
+      if (isTestPayOs && error instanceof AuthApiError && error.status === 404)
+        throw new Error("The test checkout route is unavailable. Ensure OperationService is running the updated Development build.")
+      throw error
+    }
+    setPaymentMessage(isTestPayOs
+      ? "Test amount: 2,000 VND. The session completes only after PayOS confirms payment."
+      : `Amount due: ${prepared.pricing.finalAmountVnd.toLocaleString("vi-VN")} VND`)
+    const key = `checkout:${lot.id}:${input.referenceId}${isTestPayOs ? ":development-test-2000" : ""}`
     const order = prepared.order
     localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
-      orderId: order.orderId, referenceId: input.referenceId, siteId: lot.id, paymentMethod: payment,
+      orderId: order.orderId, referenceId: input.referenceId, siteId: lot.id, paymentMethod: isTestPayOs ? "PAYOS" : payment,
     }))
     if (payment === "CASH") {
       await paymentApi.cash(order.orderId, key)
@@ -408,21 +421,14 @@ export function CheckInOut({
       const checkout = await paymentApi.initiate(order.orderId, key)
       localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
         orderId: order.orderId, transactionId: checkout.paymentTransactionId,
-        referenceId: input.referenceId, siteId: lot.id, paymentMethod: payment,
+        referenceId: input.referenceId, siteId: lot.id, paymentMethod: isTestPayOs ? "PAYOS" : payment,
       }))
       window.open(checkout.checkoutUrl, "_blank", "noopener,noreferrer")
-      setPaymentMessage("Waiting for payOS confirmation...")
-      const deadline = Date.now() + 5 * 60_000
-      let status: Awaited<ReturnType<typeof paymentApi.status>>
-      do {
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-        status = await paymentApi.status(checkout.paymentTransactionId)
-      } while (status.status !== "SUCCESS" && Date.now() < deadline)
-      if (status.status !== "SUCCESS")
-        throw new Error("Payment is still pending. Refresh and continue from the pending checkout.")
-      setPaymentMessage("Online payment confirmed.")
+      setPaymentMessage("PayOS is pending. You can still choose Confirm to collect cash instead.")
+      return "PENDING"
     }
     localStorage.removeItem("smartpark.pendingCheckout")
+    return "PAID"
   }
 
   async function executeWalkInAction(
@@ -447,14 +453,15 @@ export function CheckInOut({
         )
       } else {
         if (!result.session) throw new Error("The active walk-in session was not found.")
-        await settleCheckout(payment, {
+        const settlement = await settleCheckout(payment, {
           referenceId: result.session.id,
           vehicleType: result.session.vehicleType,
           entryTime: result.session.entryTime,
           sessionId: result.session.id,
           plateNumber: result.plate,
         })
-        session = await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
+        if (settlement === "PENDING") return
+        session = result.session
       }
       setHistoryRefresh((current) => current + 1)
       setActionFeedback({
@@ -734,6 +741,7 @@ export function CheckInOut({
                       ? "Unavailable"
                       : `${checkoutPrice.toLocaleString("vi-VN")} VND`}
                 </div>
+                {paymentMessage && <p className="mt-2 text-xs text-[var(--muted)]">{paymentMessage}</p>}
               </div>
             )}
 
@@ -782,6 +790,16 @@ export function CheckInOut({
                   >
                     Demo payOS
                   </button>
+                  {import.meta.env.DEV && (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-violet-500 px-4 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-500/10"
+                      disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice === null}
+                      onClick={() => void executeWalkInAction(quickResult, "check-out", latestScanImage || undefined, quickResult.vehicleType, "PAYOS_TEST")}
+                    >
+                      Test PayOS · 2,000 VND
+                    </button>
+                  )}
                 </>
               ) : (
                 <button

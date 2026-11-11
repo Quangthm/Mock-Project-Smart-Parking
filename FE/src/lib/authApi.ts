@@ -482,34 +482,4 @@ export const authApi = {
     if (token === sessionStorage.getItem(tokenKey)) clearSession()
     logoutInProgress = false
   },
-
-  async simulateDriverVNeId(registrationId: string, consentConfirmed: boolean): Promise<{ simulatedVNeIdGuid: string; simulationStatus: string }> {
-    const res = await request<ApiResponse<{ simulatedVNeIdGuid: string; simulationStatus: string }>>(
-      "/register/driver/simulate-vneid",
-      "POST",
-      { registrationId, consentConfirmed, consentVersion: "v1.1-simulated" }
-    )
-    if (!res?.data) throw new Error("VNeID simulation failed.")
-    return res.data
-  },
-
-  async simulateOwnerVNeId(registrationId: string, consentConfirmed: boolean): Promise<{ simulatedVNeIdGuid: string; simulationStatus: string }> {
-    const res = await request<ApiResponse<{ simulatedVNeIdGuid: string; simulationStatus: string }>>(
-      "/register/owner/simulate-vneid",
-      "POST",
-      { registrationId, consentConfirmed, consentVersion: "v1.1-simulated" }
-    )
-    if (!res?.data) throw new Error("VNeID simulation failed.")
-    return res.data
-  },
-
-  async simulateOperatorVNeId(registrationId: string, consentConfirmed: boolean): Promise<{ simulatedVNeIdGuid: string; simulationStatus: string }> {
-    const res = await request<ApiResponse<{ simulatedVNeIdGuid: string; simulationStatus: string }>>(
-      "/operators/simulate-vneid",
-      "POST",
-      { registrationId, consentConfirmed, consentVersion: "v1.1-simulated" }
-    )
-    if (!res?.data) throw new Error("VNeID simulation failed.")
-    return res.data
-  },
 }

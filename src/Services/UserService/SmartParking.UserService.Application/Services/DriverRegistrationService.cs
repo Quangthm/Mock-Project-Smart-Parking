@@ -79,10 +79,6 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
     {
         await using var tx = await db.BeginTransactionAsync(ct);
         var (r, user) = await LoadAsync(request.RegistrationId, ct);
-        var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
-        if (simulated is null || simulated.SimulationStatus != "COMPLETED")
-            throw Error("VNEID_SIMULATION_REQUIRED", "Mandatory simulated VNeID information-sharing must be completed before verifying registration.", 422);
-
         if (r.ExpiresAt <= clock.GetUtcNow()) throw Error("OTP_EXPIRED", "Code has expired. Request a new code.");
         if (!passwords.Verify(request.Code, r.CodeHash))
         {

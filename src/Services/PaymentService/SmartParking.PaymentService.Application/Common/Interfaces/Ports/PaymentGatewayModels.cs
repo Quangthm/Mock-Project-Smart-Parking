@@ -40,3 +40,11 @@ public record PaymentVerificationResult(
     string? GatewayTransactionId,
     DateTimeOffset? PaidAt
 );
+
+public record PaymentCancellationResult(
+    bool IsSuccess,
+    string PaymentStatus,
+    string? GatewayTransactionId,
+    string? ErrorCode,
+    string? ErrorMessage
+);

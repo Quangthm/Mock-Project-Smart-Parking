@@ -73,10 +73,6 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         application.User = user;
         if (application.Status != "pending" || application.ApprovalRequestedBy is not null || user.DeletedOn is not null || user.Status != UserStatus.PendingVerification)
             throw Error("APPLICATION_CLOSED", "Setup is no longer editable.", 409);
-
-        var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
-        if (simulated is null || simulated.SimulationStatus != "COMPLETED")
-            throw Error("VNEID_SIMULATION_REQUIRED", "Mandatory simulated VNeID information-sharing must be completed before submitting lot setup.", 422);
         // Serialize a typed payload for stable comparison, independent of incoming JSON property order.
         var json = JsonSerializer.Serialize(body.Lot);
         ChallengeResult challenge;

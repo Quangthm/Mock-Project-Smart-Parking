@@ -44,7 +44,7 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
         var tx = await _transactionRepository.GetByIdAsync(request.TransactionId, cancellationToken);
         if (tx == null)
         {
-            throw new PaymentDomainException("TRANSACTION_NOT_FOUND", $"Không tìm thấy giao dịch thanh toán {request.TransactionId}.");
+            throw new PaymentDomainException("TRANSACTION_NOT_FOUND", $"Payment transaction {request.TransactionId} was not found.");
         }
 
         var order = tx.PaymentOrder ?? (tx.PaymentOrderId != Guid.Empty ? await _orderRepository.GetByIdAsync(tx.PaymentOrderId, cancellationToken) : null);

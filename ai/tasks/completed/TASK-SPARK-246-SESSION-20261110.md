@@ -125,10 +125,11 @@
   - Chuẩn hóa Persistence Layer: Đổi tên interface `IVehicleLocationReadStore` thành `IVehicleLocationRepository`, chuyển implementation `VehicleLocationReadStore.cs` thành `Repositories/VehicleLocationRepository.cs`, cập nhật DI và handler injection.
   - Chuẩn hóa Auth & Actor Claims: Thêm `[Authorize]` lên action `GetCurrentVehicleLocation`, loại bỏ fallback `sub`, áp dụng fail-closed chỉ nhận `account_id` / `NameIdentifier` (Guid hợp lệ != Guid.Empty).
   - Verification: `dotnet build SmartParking.slnx` 0 warnings / 0 errors; `dotnet test` FacilityService & OperationService 160/160 pass; Frontend find-my-car & discovery tests 13/13 pass.
-- [x] **Fix CI/CD DI Failure in UserService.Tests:**
-  - Nguyên nhân: Merge commit `74c8ff38` (`feat(auth): implement simulated vneid integration and persistence [SPARK-296]`) từ develop bổ sung `IIdentityWorkflowStore` vào constructor `ActivateOperatorHandler`, khiến `builder.Build()` validate DI thất bại trong 52 integration tests của `UserService.Tests`.
-  - Khắc phục: Đăng ký `services.TryAddSingleton<IIdentityWorkflowStore>(UnsupportedFeature.Create<IIdentityWorkflowStore>());` trong `TestAuthorization.AddServices`.
-  - Verification: Toàn bộ test suite `SmartParking.slnx` (1,018 tests) vượt qua 100% với 0 errors, 0 failures.
+- [x] **Sync Develop & Purge Obsolete VNeID Simulation Changes:**
+  - Pull origin/develop (commit `0cc18fa6`).
+  - Giải quyết xung đột merge tại `ParkingSessionsController.cs` (giữ cả `ScanLocation` từ develop và `GetCurrentVehicleLocation` từ SPARK-246) và `FindParking.tsx` (import `parkingCoordinates` từ develop và discovery/slot-mapping từ SPARK-246).
+  - Loại bỏ hoàn toàn các file và thay đổi thuộc commit VNeID simulation đã bị gỡ bỏ khỏi branch develop.
+  - Verification: Toàn bộ build solution và test suite hoạt động hoàn hảo.
 
 ---
 

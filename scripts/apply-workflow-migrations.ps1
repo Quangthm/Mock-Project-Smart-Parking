@@ -47,17 +47,17 @@ $required = @{
     Notification = @()
     Iot = @()
 }[$Service]
-# Sentinel relation created only by the canonical scripts (base or overlay) for
-# this database. Index for User (partial unique on normalized_plate), table elsewhere.
+# Sentinel relation created by the canonical microservice base script for this
+# database. Index for User (partial unique on normalized_plate), table elsewhere.
 $sentinel = @{ User='uq_active_vehicle_plate'; Parking='tenants'; Reservation='site_capacity_pools'; Payment='payment_orders'; Notification='notification_templates'; Iot='devices' }[$Service]
 
 # Block list: remaining legacy 05.1–05.12 workflow scripts and integration/* alignment scripts are
-# superseded by the new base files + overlays; applying them would double-apply or conflict.
+# superseded by the canonical microservice base files; applying them would conflict.
 $blockedPattern = '(^|[\\/])05\.(?:[1-9]|1[0-2])[-.][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
 foreach ($script in $scripts) {
     $relative = "scripts/database/$script"
     if ($relative -match $blockedPattern) {
-        throw "Blocked migration script '$relative': its content is superseded by the new base files and overlays. Use the canonical microservices/overlay scripts only."
+        throw "Blocked migration script '$relative': its content is superseded by the canonical microservice base files. Use scripts/database/microservices only."
     }
     if (!(Test-Path -LiteralPath (Join-Path $codeRoot $relative) -PathType Leaf)) {
         throw "Migration script not found: $relative."
@@ -108,6 +108,12 @@ if ($Service -eq 'User') {
     Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-media-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
 }
+if ($Service -eq 'Reservation') {
+    $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name='location_scanned_at')"
+    if ($LASTEXITCODE -ne 0 -or ($columnExists -join '').Trim() -ne 't') {
+        throw 'Operation schema is missing parking_sessions.location_scanned_at. The canonical microservice base defines this column; no existing data was changed. Use a separately reviewed migration or an explicitly authorized clean database rebuild.'
+    }
+}
 foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
     if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') {
@@ -122,7 +128,11 @@ if ($Service -eq 'User') {
     if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. Preserve data and pending messages; use a reviewed migration or explicitly authorized reset.' }
     Write-Output 'User schema already current; full session and outbox verifier passed. Consolidated base skipped; incremental features verified/applied.'
 } elseif ($state -eq 'current') {
-    Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    if ($Service -eq 'Reservation') {
+        Write-Output 'Operation schema already current; required relations and parking_sessions.location_scanned_at verified, nothing applied.'
+    } else {
+        Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    }
 } else {
     Write-Output "$Service workflow migrations applied."
 }

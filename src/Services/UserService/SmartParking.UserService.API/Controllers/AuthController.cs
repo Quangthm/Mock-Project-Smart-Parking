@@ -31,25 +31,12 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
         [FromServices] IOwnerRegistrationService registrations, CancellationToken ct) =>
         Ok(new { success = true, data = await registrations.SaveLotSetupAsync(body, ct) });
 
-    [AllowAnonymous, HttpPost("register/owner/simulate-vneid")]
-    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
-    public async Task<IActionResult> SimulateOwnerVNeId([FromBody] SimulatedVNeIdRequest body,
-        [FromServices] IVNeIdSimulationService vneid, CancellationToken ct) =>
-        Ok(new { success = true, data = await vneid.CompleteOwnerSimulationAsync(body, ct) });
-
     [AllowAnonymous]
     [HttpPost("register/driver")]
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("RegistrationRateLimit")]
     public async Task<IActionResult> RegisterDriver([FromBody] DriverRegistrationDto body,
         [FromServices] IDriverRegistrationService registrations, CancellationToken ct) =>
         StatusCode(201, new { success = true, data = await registrations.RegisterAsync(body, ct) });
-
-    [AllowAnonymous, HttpPost("register/driver/simulate-vneid")]
-    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
-    public async Task<IActionResult> SimulateDriverVNeId([FromBody] SimulatedVNeIdRequest body,
-        [FromServices] IVNeIdSimulationService vneid, CancellationToken ct) =>
-        Ok(new { success = true, data = await vneid.CompleteDriverSimulationAsync(body, ct) });
-
     [AllowAnonymous,HttpPost("register/driver/recover"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> RecoverDriver(OtpLoginDto body,[FromServices] IDriverRegistrationService registrations,CancellationToken ct)=>
         Ok(new{success=true,data=await registrations.RecoverAsync(body.Contact,ct)});

@@ -1,10 +1,11 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ownerData as store } from '../data/data';
 import type { Booking } from '../../../lib/types';
 import { parkingApi, type Site, type Operator } from '../../../lib/parkingApi';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { useServerRefresh } from '../../../lib/serverRefresh';
 
 function buildRevenueTrend(bookings: Booking[]) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -27,13 +28,20 @@ function buildRevenueTrend(bookings: Booking[]) {
 
 export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }: { selectedSiteId: string; onSiteChange: (siteId: string) => void; sites: Site[]; operators: Operator[] }) {
   const [liveCapacity, setLiveCapacity] = useState<{ available: number; total: number } | null>(null);
+  const refreshCapacity = useRef<(() => Promise<void>) | null>(null);
   const visibleSiteIds = useMemo(() => (selectedSiteId === 'all' ? sites : sites.filter(site => site.id === selectedSiteId)).map(site => site.id), [selectedSiteId, sites]);
+  const capacityScope = visibleSiteIds.join(',');
 
   useEffect(() => {
     let active = true;
+    let pending = false;
     setLiveCapacity(null);
     if (!visibleSiteIds.length) { setLiveCapacity({ available: 0, total: 0 }); return; }
-    Promise.allSettled(visibleSiteIds.map(id => parkingApi.structure(id))).then(results => {
+    const refresh = async () => {
+      if (!active || pending) return;
+      pending = true;
+      const results = await Promise.allSettled(visibleSiteIds.map(id => parkingApi.structure(id)));
+      pending = false;
       if (!active) return;
       const values = results.map(result => {
         if (result.status !== 'fulfilled') return null;
@@ -43,9 +51,12 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
           : null;
       });
       setLiveCapacity(values.every(value => value !== null) ? values.reduce((sum, value) => ({ available: sum.available + (value?.available ?? 0), total: sum.total + (value?.total ?? 0) }), { available: 0, total: 0 }) : null);
-    });
+    };
+    refreshCapacity.current = refresh;
+    void refresh();
     return () => { active = false; };
   }, [visibleSiteIds]);
+  useServerRefresh(capacityScope || undefined, () => refreshCapacity.current?.());
 
   // Build the view data from the owner's sites, then apply the global site selection before aggregating stats.
   const overview = useMemo(() => {

@@ -22,7 +22,8 @@ public interface ICheckoutPaymentClient
         DateTimeOffset pricingCutoffAt,
         string plateNumber,
         Guid? accountId,
-        CancellationToken ct);
+        CancellationToken ct,
+        decimal? developmentTestAmount = null);
 
     Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct);
     Task<CheckoutPaymentStatus> ConfirmCashAsync(Guid orderId, string idempotencyKey, CancellationToken ct);

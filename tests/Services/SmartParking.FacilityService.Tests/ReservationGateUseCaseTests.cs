@@ -129,7 +129,7 @@ public sealed class ReservationGateUseCaseTests
     public async Task CheckOutWalkInCommandHandler_ValidatesAndChecksOut()
     {
         var (identity, store) = CreateMocks();
-        var handler = new CheckOutWalkInCommandHandler(identity, store);
+        var handler = new CheckOutWalkInCommandHandler(identity, store, new FakeGateSlotClaims());
 
         var validImage = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
         var result = await handler.Handle(new CheckOutWalkInCommand(siteId, Guid.NewGuid(), "29A-12345", validImage), CancellationToken.None);
@@ -141,7 +141,7 @@ public sealed class ReservationGateUseCaseTests
     {
         var (identity, store) = CreateMocks();
         var checkInHandler = new CheckInReservationCommandHandler(identity, store);
-        var checkOutHandler = new CheckOutReservationCommandHandler(identity, store);
+        var checkOutHandler = new CheckOutReservationCommandHandler(identity, store, new FakeGateSlotClaims());
 
         var resId = Guid.NewGuid();
         var validImage = "data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==";
@@ -172,6 +172,24 @@ public sealed class ReservationGateUseCaseTests
         }
     }
 
+    private sealed class FakeGateSlotClaims : IOperatorGateSlotClaims
+    {
+        public Task<IOperatorGateSlotLease> ClaimAvailableAsync(
+            Guid tenantId, Guid siteId, string vehicleType, Guid? preferredSlotId,
+            Guid? targetUnitId, bool allowReservedSlot, CancellationToken ct) =>
+            Task.FromResult<IOperatorGateSlotLease>(new FakeGateSlotLease(
+                new ClaimedParkingSlot(preferredSlotId ?? Guid.NewGuid(), "A01", vehicleType)));
+
+        public Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class FakeGateSlotLease(ClaimedParkingSlot slot) : IOperatorGateSlotLease
+    {
+        public ClaimedParkingSlot Slot => slot;
+        public void Commit() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     private sealed class FakeGateStore : IReservationGateStore
     {
         public ReservationGateEntry? FoundReservation { get; set; }
@@ -182,6 +200,12 @@ public sealed class ReservationGateUseCaseTests
 
         public Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(Guid tenantId, Guid siteId, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<ParkingSessionHistoryEntry>>([]);
+
+        public Task<ParkingSessionScanTarget?> FindScanTargetAsync(Guid tenantId, Guid siteId, Guid referenceId, CancellationToken ct)
+            => Task.FromResult<ParkingSessionScanTarget?>(null);
+
+        public Task<ParkingSessionHistoryEntry> RecordScannedSlotAsync(Guid tenantId, Guid siteId, Guid sessionId, Guid slotId, CancellationToken ct)
+            => Task.FromException<ParkingSessionHistoryEntry>(new NotSupportedException());
 
         public Task<ReservationGateEntry?> FindAsync(Guid tenantId, Guid siteId, string query, CancellationToken ct)
             => Task.FromResult(FoundReservation);
@@ -200,5 +224,14 @@ public sealed class ReservationGateUseCaseTests
 
         public Task<ReservationGateEntry> CheckOutAsync(Guid tenantId, Guid siteId, Guid actorId, Guid reservationId, string? recognizedPlate, string? imageData, CancellationToken ct)
             => Task.FromResult(CreateSampleReservationEntry());
+
+        public Task MarkWalkInPaymentPendingAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task MarkReservationPaymentPendingAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<Guid>> CompletePaymentAsync(Guid tenantId, Guid siteId, string referenceType, Guid referenceId, DateTimeOffset completedAt, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<Guid>>([]);
     }
 }

@@ -32,12 +32,6 @@ public sealed class AccountWorkflowController(IAccountWorkflows workflows,AuthSe
     [AllowAnonymous,HttpPost("bootstrap-password"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> ChangePassword(ChangeBootstrapPasswordDto body,[FromServices] ISender sender,CancellationToken ct)
     {await sender.Send(new ActivateOperatorCommand(body),ct);return Ok(new{success=true});}
-    [AllowAnonymous, HttpPost("operators/simulate-vneid"), Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
-    public async Task<IActionResult> SimulateOperatorVNeId([FromBody] SimulatedVNeIdRequest body, [FromServices] IVNeIdSimulationService vneid, CancellationToken ct) =>
-        Ok(new { success = true, data = await vneid.CompleteOperatorSimulationAsync(body.RegistrationId, body.ConsentConfirmed, body.ConsentVersion, ct) });
-    [Authorize, HttpGet("vneid/status")]
-    public async Task<IActionResult> VNeIdStatus([FromServices] IVNeIdSimulationService vneid, CancellationToken ct) =>
-        Ok(new { success = true, data = await vneid.GetStatusByUserIdAsync(Actor, ct) });
     [Authorize, HttpGet("mfa/status")]
     public async Task<IActionResult> MfaStatus(CancellationToken ct) =>
         Ok(new { success = true, data = await workflows.MfaStatusAsync(Actor, ct) });

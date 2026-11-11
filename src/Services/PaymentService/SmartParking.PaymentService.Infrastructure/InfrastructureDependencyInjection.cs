@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using QuestPDF.Infrastructure;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
+using SmartParking.PaymentService.Application.Common.Interfaces.Services;
 using SmartParking.PaymentService.Infrastructure.Adapters;
 using SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
+using SmartParking.PaymentService.Infrastructure.Messaging;
 using SmartParking.PaymentService.Infrastructure.Options;
 
 namespace SmartParking.PaymentService.Infrastructure;
@@ -27,6 +29,7 @@ public static class InfrastructureDependencyInjection
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
+        services.AddScoped<IPaymentSucceededPublisher, PaymentSucceededPublisher>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentActor, CurrentActorAdapter>();
@@ -62,6 +65,8 @@ public static class InfrastructureDependencyInjection
             {
                 x.UsingRabbitMq((context, cfg) =>
                 {
+                    cfg.Message<SmartParking.PaymentService.Domain.Events.PaymentSucceededV1>(message =>
+                        message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                     var options = configuration.GetSection(RabbitMqOptions.SectionName).Get<RabbitMqOptions>()
                                   ?? new RabbitMqOptions();
 

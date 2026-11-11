@@ -8,6 +8,109 @@ namespace SmartParking.OperationService.Persistence;
 
 public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork unitOfWork) : IReservationGateStore
 {
+    public async Task MarkWalkInPaymentPendingAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken ct)
+    {
+        var session = await db.ParkingSessions.SingleOrDefaultAsync(
+            s => s.Id == sessionId && s.TenantId == tenantId && s.SiteId == siteId && s.ReservationId == null, ct)
+            ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
+        if (session.SessionStatus == "COMPLETED")
+            throw new ReservationGateException(409, "SESSION_ALREADY_COMPLETED", "Parking session is already completed.");
+        session.SessionStatus = "PENDING_PAYMENT";
+        await unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkReservationPaymentPendingAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken ct)
+    {
+        var reservation = await db.Reservations.SingleOrDefaultAsync(
+            r => r.Id == reservationId && r.TenantId == tenantId && r.SiteId == siteId, ct)
+            ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
+        if (reservation.Status == "COMPLETED")
+            throw new ReservationGateException(409, "RESERVATION_ALREADY_COMPLETED", "Reservation is already completed.");
+        reservation.Status = "PENDING_PAYMENT";
+        var session = await db.ParkingSessions.FirstOrDefaultAsync(
+            s => s.ReservationId == reservationId && s.TenantId == tenantId && s.SiteId == siteId &&
+                 s.SessionStatus == "ACTIVE", ct);
+        if (session is not null)
+            session.SessionStatus = "PENDING_PAYMENT";
+        await unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Guid>> CompletePaymentAsync(
+        Guid tenantId, Guid siteId, string referenceType, Guid referenceId,
+        DateTimeOffset completedAt, CancellationToken ct)
+    {
+        var slotsToRelease = new HashSet<Guid>();
+        if (referenceType == "PARKING_SESSION")
+        {
+            var session = await db.ParkingSessions.SingleOrDefaultAsync(
+                s => s.Id == referenceId && s.TenantId == tenantId && s.SiteId == siteId, ct);
+            if (session is null)
+                return [];
+            if (session.LocationScannedAt is not null)
+            {
+                if (session.CurrentSlotId is { } currentSlotId)
+                    slotsToRelease.Add(currentSlotId);
+                foreach (var allocation in await db.SlotAllocations.Where(
+                    a => a.ParkingSessionId == referenceId &&
+                        (a.AllocationStatus == "OCCUPIED" || a.AllocationStatus == "RELEASED")).ToListAsync(ct))
+                    slotsToRelease.Add(allocation.SlotId);
+            }
+            if (session.SessionStatus == "COMPLETED")
+                return slotsToRelease.ToArray();
+            if (session.SessionStatus != "PENDING_PAYMENT")
+                throw new ReservationGateException(409, "INVALID_SESSION_STATE", "Parking session is not awaiting payment.");
+            session.ExitTime = completedAt;
+            session.SessionStatus = "COMPLETED";
+            foreach (var allocation in await db.SlotAllocations.Where(
+                a => a.ParkingSessionId == referenceId && a.AllocationStatus == "OCCUPIED").ToListAsync(ct))
+            {
+                allocation.AllocationStatus = "RELEASED";
+                allocation.AllocatedEndTime = completedAt;
+            }
+        }
+        else if (referenceType == "RESERVATION")
+        {
+            var reservation = await db.Reservations.SingleOrDefaultAsync(
+                r => r.Id == referenceId && r.TenantId == tenantId && r.SiteId == siteId, ct);
+            if (reservation is null)
+                return [];
+            var completedSession = await db.ParkingSessions.FirstOrDefaultAsync(
+                s => s.ReservationId == referenceId && s.TenantId == tenantId && s.SiteId == siteId, ct);
+            if (completedSession?.LocationScannedAt is not null)
+            {
+                if (completedSession.CurrentSlotId is { } reservationSlotId)
+                    slotsToRelease.Add(reservationSlotId);
+                foreach (var allocation in await db.SlotAllocations.Where(
+                    a => a.ReservationId == referenceId &&
+                        (a.AllocationStatus == "OCCUPIED" || a.AllocationStatus == "RELEASED")).ToListAsync(ct))
+                    slotsToRelease.Add(allocation.SlotId);
+            }
+            if (reservation.Status == "COMPLETED")
+                return slotsToRelease.ToArray();
+            if (reservation.Status != "PENDING_PAYMENT")
+                throw new ReservationGateException(409, "INVALID_RESERVATION_STATE", "Reservation is not awaiting payment.");
+            reservation.Status = "COMPLETED";
+            var session = await db.ParkingSessions.FirstOrDefaultAsync(
+                s => s.ReservationId == referenceId && s.SessionStatus == "PENDING_PAYMENT", ct);
+            if (session is not null)
+            {
+                session.ExitTime = completedAt;
+                session.SessionStatus = "COMPLETED";
+            }
+            foreach (var allocation in await db.SlotAllocations.Where(
+                a => a.ReservationId == referenceId && a.AllocationStatus == "OCCUPIED").ToListAsync(ct))
+            {
+                allocation.AllocationStatus = "RELEASED";
+                allocation.AllocatedEndTime = completedAt;
+            }
+        }
+        else
+        {
+            throw new ReservationGateException(400, "INVALID_REFERENCE_TYPE", "Payment reference type is invalid.");
+        }
+        await unitOfWork.SaveChangesAsync(ct);
+        return slotsToRelease.ToArray();
+    }
     public async Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(
         Guid tenantId, Guid siteId, CancellationToken ct)
     {
@@ -26,8 +129,77 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
             return new ParkingSessionHistoryEntry(
                 s.Id, s.ReservationId, s.TenantId, s.SiteId, s.AccessItemId, s.AccountId,
                 slotId, null, s.OriginalPlate, s.NormalizedPlate, s.VehicleType, s.TicketReference,
-                s.EntryTime, s.EntryImageUrl, s.ExitTime, s.ExitImageUrl, s.SessionStatus, s.Version, s.CreatedAt);
+                s.EntryTime, s.EntryImageUrl, s.ExitTime, s.ExitImageUrl, s.SessionStatus, s.Version, s.CreatedAt,
+                s.LocationScannedAt);
         }).ToArray();
+    }
+
+    public async Task<ParkingSessionScanTarget?> FindScanTargetAsync(
+        Guid tenantId, Guid siteId, Guid referenceId, CancellationToken ct)
+    {
+        var session = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.TenantId == tenantId && s.SiteId == siteId &&
+                (s.Id == referenceId || s.ReservationId == referenceId) &&
+                (s.SessionStatus == "ACTIVE" || s.SessionStatus == "PENDING_PAYMENT"))
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        return session is null
+            ? null
+            : new ParkingSessionScanTarget(
+                session.Id, session.ReservationId, session.CurrentSlotId, session.VehicleType,
+                session.LocationScannedAt is not null);
+    }
+
+    public async Task<ParkingSessionHistoryEntry> RecordScannedSlotAsync(
+        Guid tenantId, Guid siteId, Guid sessionId, Guid slotId, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, ct);
+        var session = await db.ParkingSessions.SingleOrDefaultAsync(
+            s => s.Id == sessionId && s.TenantId == tenantId && s.SiteId == siteId &&
+                (s.SessionStatus == "ACTIVE" || s.SessionStatus == "PENDING_PAYMENT"), ct)
+            ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Active parking session was not found.");
+
+        if (session.LocationScannedAt is null)
+        {
+            session.CurrentSlotId = slotId;
+            session.LocationScannedAt = DateTimeOffset.UtcNow;
+            var allocation = session.ReservationId is { } reservationId
+                ? await db.SlotAllocations.FirstOrDefaultAsync(a =>
+                    a.ReservationId == reservationId && a.TenantId == tenantId && a.SiteId == siteId &&
+                    a.SlotId == slotId &&
+                    (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED"), ct)
+                : await db.SlotAllocations.FirstOrDefaultAsync(a =>
+                    a.ParkingSessionId == sessionId && a.TenantId == tenantId && a.SiteId == siteId &&
+                    (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED"), ct);
+
+            if (allocation is null)
+            {
+                var now = DateTimeOffset.UtcNow;
+                db.SlotAllocations.Add(new SlotAllocationRow
+                {
+                    Id = Guid.NewGuid(), ReservationId = session.ReservationId, ParkingSessionId = session.Id,
+                    TenantId = tenantId, SiteId = siteId, SlotId = slotId,
+                    AllocatedStartTime = session.EntryTime,
+                    AllocatedEndTime = DateTimeOffset.MaxValue,
+                    AllocationStatus = "OCCUPIED", CreatedAt = now
+                });
+            }
+            else
+            {
+                allocation.ParkingSessionId = session.Id;
+                allocation.AllocationStatus = "OCCUPIED";
+            }
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        await transaction.CommitAsync(ct);
+        return new ParkingSessionHistoryEntry(
+            session.Id, session.ReservationId, session.TenantId, session.SiteId, session.AccessItemId,
+            session.AccountId, session.CurrentSlotId, null, session.OriginalPlate, session.NormalizedPlate,
+            session.VehicleType, session.TicketReference, session.EntryTime, session.EntryImageUrl,
+            session.ExitTime, session.ExitImageUrl, session.SessionStatus, session.Version, session.CreatedAt,
+            session.LocationScannedAt);
     }
 
     public async Task<IReadOnlyList<ReservationGateEntry>> ListAsync(Guid tenantId, Guid siteId, CancellationToken ct)
@@ -59,7 +231,8 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
         var normalizedPlate = NormalizePlate(plate);
         var session = await db.ParkingSessions.AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ReservationId == null &&
-                s.SessionStatus == "ACTIVE" && s.NormalizedPlate == normalizedPlate)
+                (s.SessionStatus == "ACTIVE" || s.SessionStatus == "PENDING_PAYMENT") &&
+                s.NormalizedPlate == normalizedPlate)
             .OrderByDescending(s => s.EntryTime)
             .FirstOrDefaultAsync(ct);
         if (session is null)
@@ -274,7 +447,8 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
             return new ReservationGateEntry(r.Id, r.AccountId, r.SiteId, r.SiteId.ToString(),
                 slotId, slotId?.ToString() ?? "Unassigned", r.OriginalPlate ?? r.NormalizedPlate ?? "",
                 MapStatus(r.Status), null, null, null, r.ExpectedStartTime, r.ExpectedEndTime,
-                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt);
+                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt,
+                r.VehicleType, session?.LocationScannedAt);
         }).ToArray();
     }
 
@@ -289,7 +463,7 @@ public sealed class ReservationGateStore(ReservationDbContext db, IUnitOfWork un
         "CONFIRMED" or "ALLOCATED" => "confirmed",
         "PARKING" => "checked-in",
         "COMPLETED" => "completed",
-        "PENDING_PAYMENT" => "pending",
+        "PENDING_PAYMENT" or "PAYMENT_PENDING" => "pending",
         "CANCELLED" or "EXPIRED" or "NO_SHOW" or "UNFULFILLABLE" => "cancelled",
         _ => status.ToLowerInvariant()
     };

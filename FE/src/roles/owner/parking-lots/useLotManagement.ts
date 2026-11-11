@@ -39,6 +39,7 @@ export function useLotManagement(siteFilterId = "all") {
   const { user, authReady } = useApp()
   const [data, setData] = useState<SiteWithStructure[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [reload, setReload] = useState(0)
 
@@ -71,7 +72,8 @@ export function useLotManagement(siteFilterId = "all") {
       }
     }
 
-    setLoading(true)
+    if (!data.length) setLoading(true)
+    setRefreshing(true)
     setError("")
 
     parkingApi
@@ -107,7 +109,7 @@ export function useLotManagement(siteFilterId = "all") {
         if (current) setError(describeLoadFailure(err))
       })
       .finally(() => {
-        if (current) setLoading(false)
+        if (current) { setLoading(false); setRefreshing(false) }
       })
 
     return () => {
@@ -231,7 +233,7 @@ export function useLotManagement(siteFilterId = "all") {
   return {
     data, loading, error, searchTerm, setSearchTerm, statusFilter, setStatusFilter,
     sortBy, setSortBy, detailSite, setDetailSite, editSite, setEditSite,
-    filteredData, totals, summaryValue, handleNavigateToStructure, refresh, saveSite,
+    filteredData, totals, summaryValue, handleNavigateToStructure, refresh, refreshing, saveSite,
   }
 }
 

@@ -12,8 +12,8 @@ Canonical behavior: [FR-AUTH-04/06](../../01-requirements/srs/modules/01-identit
 | Owner list | `GET /api/operators` | Current Owner action/tenant scope; safe Operator identity, assignments, activation and delivery state. |
 | Self assignments | `GET /api/operators/me` | Activated Operator full session; current active lot grants only. |
 | Slot-scope lookup | `GET /api/operators/slot-scope?siteId={id}` | Current Operator with explicit `SLOT_OVERRIDE` at the site. Role alone grants no scope. |
-| Simulate VNeID | `POST /api/auth/operators/simulate-vneid` | `registrationId` (challenge ID), `consentConfirmed: true`, optional `consentVersion`. Fake API returns a GUID substitute tied to the user and persists it in `UserDb`. |
-| Activate | `POST /api/auth/bootstrap-password` | Purpose-bound email activation credential, verified contact and mandatory consented simulation. Optional password. No ordinary session before completion. |
+| Activate | Method/path and schema pending V11-DES-02 | Purpose-bound email activation credential, verified contact and mandatory consented simulation. No ordinary session before completion. |
+| Optional password setup | Existing `POST /api/auth/bootstrap-password` is a compatibility reference | Optional password choice during/after activation; final scoped token/activation composition pending V11-DES-02. Password setup cannot substitute for verified contact/simulation. |
 | Delivery lookup/retry | `GET /api/auth/deliveries/{id}`, `POST /api/auth/deliveries/{id}/retry` | Original authorized actor plus current action/resource scope; metadata only, retry same delivery. |
 
 Retain `fullName` (1–255), valid normalized `email` (up to 255), `siteIds` (1–100 distinct nonempty IDs), and distinct allowlisted `permissions`. Reject foreign/nonexistent/ineligible lots atomically, arbitrary role/status/owner injection, wildcard access and duplicate identity races. Server derives Owner and tenant membership; Facility validates site configuration/existence via service contract, not a cross-service database query. Existing per-site differences must follow the separate grant-management contract; new lots are never implicitly added.

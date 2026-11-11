@@ -35,11 +35,68 @@
 .driver-history-list .parking-history-card .parking-history-details { width: auto; margin: 0; }
 .driver-passes-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; }
 .driver-passes-grid > * { min-width: 0; overflow-wrap: anywhere; }
+.driver-pass-header { position: relative; display: grid; align-items: center; min-height: 132px; overflow: hidden; padding: clamp(18px, 3vw, 32px); border: 1px solid var(--border); border-radius: 20px; background: linear-gradient(115deg, var(--card) 45%, var(--active)); }
+.driver-pass-header-mark { position: absolute; right: clamp(18px, 5vw, 64px); color: var(--primary); opacity: .18; transform: rotate(-18deg); }
+.driver-pass-location { display: flex; flex-direction: column; align-items: stretch; width: 100%; min-height: 156px; padding: 6px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); color: var(--fg); text-align: left; cursor: pointer; }
+.driver-pass-location-band { display: flex; justify-content: space-between; align-items: center; min-height: 66px; padding: 10px; border-radius: 12px; background: repeating-linear-gradient(120deg, transparent 0 20px, color-mix(in srgb, var(--primary) 10%, transparent) 20px 21px), var(--active); }
+.driver-pass-location-icon, .driver-pass-location-arrow { display: grid; place-items: center; border-radius: 10px; }
+.driver-pass-location-icon { width: 42px; height: 42px; background: var(--card); color: var(--primary); }
+.driver-pass-location-arrow { width: 34px; height: 34px; background: var(--card); color: var(--fg); border-radius: 50%; }
+.driver-pass-location-copy { display: grid; min-width: 0; gap: 6px; padding: 12px 10px; }
+.driver-pass-location-copy strong { font-size: 1rem; font-weight: 700; line-height: 1.35; }
+.driver-pass-location-copy > span { display: flex; align-items: baseline; gap: 5px; color: var(--muted); font-size: .875rem; line-height: 1.45; }
+.driver-pass-location-copy svg { flex: none; align-self: flex-start; margin-top: 3px; }
+.driver-pass-location:hover { border-color: var(--control); background: var(--raised); }
+.driver-pass-location:hover .driver-pass-location-arrow { color: var(--primary); }
+.driver-pass-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.driver-pass-filters button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--fg); font-size: .875rem; font-weight: 600; }
+.driver-pass-filters button:hover { background: var(--raised); }
+.driver-pass-filters button[aria-pressed="true"] { --focus-ink: var(--primary-fg); border-color: var(--primary); background: var(--primary); color: var(--primary-fg); }
+.driver-pass-plan-picker { min-width: 0; margin-bottom: 20px; padding: 0 12px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); }
+.driver-pass-plan-picker legend { padding: 0 6px; margin-bottom: 8px; font-weight: 700; }
+.driver-pass-plan-list { display: grid; gap: 8px; }
+.driver-pass-plan { display: block; min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); cursor: pointer; }
+.driver-pass-plan:hover { border-color: var(--control); }
+.driver-pass-plan:has(:disabled) { cursor: default; border-color: var(--border); }
+.driver-pass-plan[data-selected="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--active) 45%, var(--card)); }
+.driver-pass-plan:has(:focus-visible) { outline: 2px solid var(--focus); outline-offset: -4px; }
+.driver-pass-plan-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, auto); align-items: start; gap: 10px; padding: 12px; }
+.driver-pass-plan-row > input { width: 16px; height: 16px; margin-top: 3px; accent-color: var(--primary); }
+.driver-pass-plan-row > input:focus-visible { outline: 0; }
+.driver-pass-plan-heading { display: grid; gap: 2px; }
+.driver-pass-plan-heading > span { color: var(--muted); font-size: .8125rem; }
+.driver-pass-plan-price { text-align: right; font-size: clamp(.875rem, 2vw, 1.125rem); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.driver-pass-plan-price small { display: block; color: var(--muted); font-size: .75rem; font-weight: 500; }
+.driver-pass-plan-details { display: grid; grid-template-rows: 0fr; opacity: 0; }
+.driver-pass-plan[data-selected="true"] .driver-pass-plan-details { grid-template-rows: 1fr; opacity: 1; }
+.driver-pass-plan-details-body { display: block; min-height: 0; overflow: hidden; }
+.driver-pass-plan-details-body > span { display: flex; align-items: center; gap: 8px; margin: 0 12px; padding: 4px 0; color: var(--muted); font-size: .8125rem; }
+.driver-pass-plan-details-body > span:first-child { padding-top: 9px; border-top: 1px dashed var(--border); }
+.driver-pass-plan-details-body > span:last-child { padding-bottom: 12px; }
+.driver-pass-plan-details-body svg { color: var(--primary); }
+@media (max-width: 420px) {
+  .driver-pass-plan-row { grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; }
+  .driver-pass-plan-price { grid-column: 2; text-align: left; }
+  .driver-pass-plan-price small { display: inline; margin-left: 6px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .driver-pass-reveal { animation: driver-pass-reveal 220ms cubic-bezier(.23, 1, .32, 1); }
+  .driver-pass-location { transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease; }
+  .driver-pass-location:active { transform: scale(.98); }
+  .driver-pass-location-arrow { transition: transform 160ms ease, color 160ms ease; }
+  .driver-pass-location:hover .driver-pass-location-arrow { transform: translateX(3px); }
+  .driver-pass-plan { transition: background-color 160ms ease, border-color 160ms ease; }
+  .driver-pass-plan-details { transition: grid-template-rows 220ms cubic-bezier(.23, 1, .32, 1), opacity 160ms ease; }
+}
+@keyframes driver-pass-reveal {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .driver-passes-grid .card > div:first-child, .driver-passes-grid .card > div:last-child { flex-wrap: wrap; gap: 8px; }
 .driver-passes-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
 .driver-passes-pagination > div { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .driver-passes-pagination button { min-height: 44px; border-radius: 999px; }
-.driver-passes-pagination button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.driver-passes-pagination button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .driver-support-page { display: grid; gap: 22px; min-width: 0; }
 .driver-support-layout { display: grid; grid-template-columns: minmax(280px, .82fr) minmax(0, 1.18fr); align-items: start; gap: 20px; }
 .driver-support-form, .driver-ticket-history { display: grid; align-content: start; gap: 12px; min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); }
@@ -71,7 +128,7 @@
 .operator-ticket-existing-response { display: grid; gap: 7px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
 .operator-ticket-existing-response p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875rem; }
 .operator-ticket-management button, .operator-ticket-management input:not([type="radio"]), .operator-ticket-management select { min-height: 44px; }
-.operator-ticket-management button:focus-visible, .operator-ticket-management input:focus-visible, .operator-ticket-management textarea:focus-visible, .operator-ticket-management select:focus-visible, .driver-support-form :is(button, input, select, textarea):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.operator-ticket-management button:focus-visible, .operator-ticket-management input:focus-visible, .operator-ticket-management textarea:focus-visible, .operator-ticket-management select:focus-visible, .driver-support-form :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 @media (max-width: 1100px) {
   .driver-passes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .driver-booking-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }

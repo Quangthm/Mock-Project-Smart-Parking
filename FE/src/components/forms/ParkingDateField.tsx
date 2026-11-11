@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react"
+import { Modal } from "../ui/Modal"
 
 export const quarterHourTimes = Array.from({ length: 96 }, (_, index) =>
   `${String(Math.floor(index / 4)).padStart(2, "0")}:${String((index % 4) * 15).padStart(2, "0")}`)
@@ -53,7 +54,7 @@ export function ParkingCalendar({ month, onMonthChange, selected, today, min, ma
   </div>
 }
 
-export function ParkingDateField({ label, value, onChange, min, max, withTime = false, disabled = false }: {
+export function ParkingDateField({ label, value, onChange, min, max, withTime = false, disabled = false, popup = true }: {
   label: string
   value: string
   onChange: (value: string) => void
@@ -61,6 +62,7 @@ export function ParkingDateField({ label, value, onChange, min, max, withTime = 
   max?: string
   withTime?: boolean
   disabled?: boolean
+  popup?: boolean
 }) {
   const id = useId()
   const trigger = useRef<HTMLButtonElement>(null)
@@ -90,40 +92,46 @@ export function ParkingDateField({ label, value, onChange, min, max, withTime = 
   function finish(next: string) {
     onChange(next)
     setOpen(false)
-    trigger.current?.focus()
+    trigger.current?.focus({ preventScroll: true })
   }
+
+  const calendar = open && !disabled && <>
+    <ParkingCalendar month={month} onMonthChange={setMonth} selected={withTime ? draftDate : selected}
+      today={localDate(new Date())} min={min} max={max} onSelect={day => {
+        if (withTime) setDraftDate(day)
+        else finish(day)
+      }} />
+    {withTime ? <div className="flex flex-wrap items-end gap-2 px-3 pb-3">
+      <label className="label min-w-0 flex-1">
+        Time (local)
+        <input type="time" className="input mt-1 w-full" value={draftTime}
+          onChange={event => setDraftTime(event.target.value)} />
+      </label>
+      <button type="button" className="btn-primary" disabled={!canApply}
+        onClick={() => { if (canApply) finish(combined) }}>Apply</button>
+    </div> : value && <div className="px-3 pb-3">
+      <button type="button" className="btn-ghost" onClick={() => finish("")}>Clear date</button>
+    </div>}
+  </>
 
   return <div className="min-w-0 space-y-2">
     <span id={`${id}-label`} className="block text-sm font-medium text-[var(--fg)]">{label}</span>
     <div className="booking-datetime-picker" onKeyDown={event => {
-      if (!open || event.key !== "Escape") return
+      if (popup || !open || event.key !== "Escape") return
       event.preventDefault()
       event.stopPropagation()
       setOpen(false)
       trigger.current?.focus()
     }}>
       <button ref={trigger} type="button" className="booking-datetime-field w-full text-left" aria-expanded={open && !disabled}
-        aria-controls={id} aria-labelledby={`${id}-label ${id}-value`} disabled={disabled} onClick={toggle}>
+        aria-haspopup={popup ? "dialog" : undefined} aria-controls={!popup || calendar ? id : undefined}
+        aria-labelledby={`${id}-label ${id}-value`} disabled={disabled} onClick={toggle}>
         <strong id={`${id}-value`}>{summary}{withTime && selected && value.slice(11, 16) ? ` · ${value.slice(11, 16)}` : ""}</strong>
       </button>
-      <div id={id} hidden={!open || disabled}>
-        {open && <ParkingCalendar month={month} onMonthChange={setMonth} selected={withTime ? draftDate : selected}
-          today={localDate(new Date())} min={min} max={max} onSelect={day => {
-            if (withTime) setDraftDate(day)
-            else finish(day)
-          }} />}
-        {withTime ? <div className="flex flex-wrap items-end gap-2 px-3 pb-3">
-          <label className="label min-w-0 flex-1">
-            Time (local)
-            <input type="time" className="input mt-1 w-full" value={draftTime}
-              onChange={event => setDraftTime(event.target.value)} />
-          </label>
-          <button type="button" className="btn-primary" disabled={!canApply}
-            onClick={() => { if (canApply) finish(combined) }}>Apply</button>
-        </div> : value && <div className="px-3 pb-3">
-          <button type="button" className="btn-ghost" onClick={() => finish("")}>Clear date</button>
-        </div>}
-      </div>
+      {!popup && <div id={id} hidden={!open || disabled}>{calendar}</div>}
     </div>
+    {popup && calendar && <Modal id={id} title={label} className="max-w-sm!" onClose={() => setOpen(false)}>
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]">{calendar}</div>
+    </Modal>}
   </div>
 }

@@ -172,10 +172,6 @@ public partial class AppDbContext : IIdentityWorkflowStore
             ORDER BY a.id FOR SHARE OF u,a
             """).ToListAsync(ct);
     }
-    Task<UserSimulatedIdentity?> IIdentityWorkflowStore.FindSimulatedIdentityAsync(Guid userId, CancellationToken ct) =>
-        db.UserSimulatedIdentities.SingleOrDefaultAsync(i => i.UserId == userId, ct);
-    Task<UserSimulatedIdentity?> IIdentityWorkflowStore.LockSimulatedIdentityAsync(Guid userId, CancellationToken ct) =>
-        db.UserSimulatedIdentities.FromSqlInterpolated($"SELECT * FROM user_simulated_identities WHERE user_id={userId} FOR UPDATE").SingleOrDefaultAsync(ct);
     Task<Guid[]> IIdentityWorkflowStore.ReadOwnerTenantsAsync(Guid actor, string permission, CancellationToken ct) => new Repositories.IdentityAccessRepository(db).OwnerTenantsAsync(actor, permission, ct);
     async Task<IUnitOfWorkTransaction> IIdentityWorkflowStore.BeginTransactionAsync(CancellationToken ct) => new WorkflowTransaction(await Database.BeginTransactionAsync(ct));
     Task IIdentityWorkflowStore.CommitCurrentTransactionAsync(CancellationToken ct) => Database.CurrentTransaction!.CommitAsync(ct);

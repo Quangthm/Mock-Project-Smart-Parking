@@ -37,7 +37,6 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IDriverRegistrationService, DriverRegistrationService>();
         services.AddScoped<DriverRegistrationService>();
         services.AddScoped<IOwnerRegistrationService, OwnerRegistrationService>();
-        services.AddScoped<IVNeIdSimulationService, VNeIdSimulationService>();
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<AccountWorkflowService>();
         services.AddScoped<IAccountWorkflows>(sp=>sp.GetRequiredService<AccountWorkflowService>());

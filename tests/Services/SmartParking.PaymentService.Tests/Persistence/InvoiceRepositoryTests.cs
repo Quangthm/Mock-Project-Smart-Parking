@@ -431,6 +431,8 @@ public class InvoiceRepositoryTests
 
             actor,
 
+            new FakePaymentGatewayPort(),
+
             NullLogger<SmartParking.PaymentService.Application.Usecase.CollectCashPayment.CollectCashPaymentCommandHandler>.Instance
 
         );

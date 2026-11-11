@@ -209,10 +209,6 @@ select:not([multiple]):not([size]) {
   border: 1.5px solid var(--border);
   color: var(--fg);
 }
-.dark .input:focus {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
-}
 .dark select option {
   background: var(--card);
   color: var(--fg);
@@ -482,13 +478,11 @@ select:not([multiple]):not([size]) {
 
 /* Keep chat below the map's top control area; mobile sheets move its launcher upward. */
 .smartparking-chat-launcher { position: fixed; z-index: 40; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom)); display: grid; width: 52px; height: 52px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 70%, white); border-radius: 50%; background: var(--primary); color: var(--primary-fg); box-shadow: 0 7px 22px #0003 !important; cursor: pointer; transition: transform 180ms ease, box-shadow 180ms ease; }
-.smartparking-chat-launcher:not(.is-open) svg { animation: smartparking-chat-breathe 4s ease-in-out infinite; }
 .smartparking-chat-launcher:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 11px 26px #0004 !important; }
 .smartparking-chat-launcher:active { transform: scale(.95); }
 .smartparking-chat-window { position: fixed; z-index: 40; right: 24px; bottom: calc(88px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; width: min(380px, calc(100vw - 32px)); height: min(480px, calc(100dvh - 430px)); min-height: 180px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--fg); box-shadow: 0 16px 42px #0003; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(9px) scale(.98); transform-origin: bottom right; transition: opacity 240ms ease, transform 240ms ease, visibility 0s linear 240ms; }
 .smartparking-chat-window.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0) scale(1); transition: opacity 240ms ease, transform 240ms ease, visibility 0s; }
 .smartparking-chat-window .smartparking-chat-message { animation: smartparking-message-in 200ms ease-out both; }
-@keyframes smartparking-chat-breathe { 50% { transform: scale(1.08); } }
 @keyframes smartparking-message-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 1100px) {
@@ -564,7 +558,7 @@ select:not([multiple]):not([size]) {
   cursor: grab; user-select: none;
 }
 .smartparking-chat-launcher:active { cursor: grabbing; }
-.smartparking-chat-launcher:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.smartparking-chat-launcher:focus-visible { outline: 2px solid var(--primary-fg); outline-offset: -6px; }
 .smartparking-chat-window, .smartparking-chat-window.is-parking {
   position: fixed; z-index: 40; min-height: 0; border-radius: 50%;
   opacity: 0; visibility: hidden; pointer-events: none;
@@ -618,7 +612,7 @@ select:not([multiple]):not([size]) {
 .find-parking-policy-button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; flex: none; padding: 0 2px; border: 0; border-radius: 999px; background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
 .find-parking-policy-button-label { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); font-size: .72rem; font-weight: 650; white-space: nowrap; transition: border-color 160ms ease, background-color 160ms ease; }
 .find-parking-policy-button:hover .find-parking-policy-button-label { border-color: var(--primary); background: var(--active); }
-.find-parking-policy-button:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.find-parking-policy-button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .find-parking-icon-button { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); cursor: pointer; }
 .find-parking-details-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 16px 20px 20px; }
 .find-parking-details-address { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
@@ -735,7 +729,7 @@ select:not([multiple]):not([size]) {
 .booking-time-list button:disabled { color: var(--muted); opacity: .4; cursor: not-allowed; }
 .booking-time-list p { margin: 5px; color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .booking-datetime-hint { margin: 0; padding: 10px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .73rem; line-height: 1.45; }
-.booking-datetime-picker button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.booking-datetime-picker button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 @media (max-width: 1100px) { .booking-time-vehicle-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) {
   .booking-datetime-body { grid-template-columns: minmax(0, 1fr); }
@@ -772,6 +766,42 @@ select:not([multiple]):not([size]) {
   transition: opacity 100ms ease, visibility 0s;
 }
 .smartparking-chat-shell .smartparking-chat-launcher:hover { transform: none; box-shadow: none !important; }
+.smartparking-chat-shell .smartparking-chat-launcher {
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.smartparking-chat-orbit {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(transparent 68%, #77e8c933 80%, #77e8c9 90%, #d5fff2 95%, transparent 99%);
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - 2px), black calc(100% - 1px), black 99%, transparent);
+}
+.smartparking-chat-shell:not(.is-open) .smartparking-chat-orbit {
+  animation: smartparking-chat-orbit 3.2s linear infinite;
+}
+@keyframes smartparking-chat-orbit {
+  to { transform: rotate(1turn); }
+}
+.smartparking-chat-launcher-symbol {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  transition: transform 150ms cubic-bezier(.23, 1, .32, 1);
+}
+.smartparking-chat-launcher:active .smartparking-chat-launcher-symbol { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  .smartparking-chat-orbit { display: none; }
+  .smartparking-chat-launcher .smartparking-chat-launcher-symbol,
+  .smartparking-chat-launcher:active .smartparking-chat-launcher-symbol {
+    transform: none;
+    transition: none;
+  }
+}
 .smartparking-chat-shell.is-open .smartparking-chat-launcher {
   opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity 100ms ease, visibility 0s linear 100ms;

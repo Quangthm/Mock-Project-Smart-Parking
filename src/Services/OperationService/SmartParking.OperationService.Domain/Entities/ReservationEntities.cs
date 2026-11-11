@@ -37,6 +37,7 @@ public sealed class ParkingSessionRow
     public string? EntryImageUrl { get; set; }
     public DateTimeOffset? ExitTime { get; set; }
     public string? ExitImageUrl { get; set; }
+    public DateTimeOffset? LocationScannedAt { get; set; }
     public string SessionStatus { get; set; } = "";
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

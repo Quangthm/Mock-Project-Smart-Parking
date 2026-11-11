@@ -469,25 +469,4 @@ DO $$ BEGIN
     END IF;
 END $$;
 -- END SPARK-373 media schema
-
--- ======================================================================================
--- VNeID SIMULATION PERSISTENCE (V11-06 / V11-DES-02 / DB26)
--- ======================================================================================
-CREATE TABLE IF NOT EXISTS user_simulated_identities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    simulated_vneid_guid UUID NOT NULL,
-    consent_given BOOLEAN NOT NULL DEFAULT TRUE,
-    consent_timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    consent_version VARCHAR(50) NOT NULL,
-    simulation_status VARCHAR(30) NOT NULL DEFAULT 'COMPLETED',
-    mock_document_number VARCHAR(50),
-    mock_full_name VARCHAR(255),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_user_simulated_identities_user_id ON user_simulated_identities(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_simulated_identities_guid ON user_simulated_identities(simulated_vneid_guid);
-
 COMMIT;
