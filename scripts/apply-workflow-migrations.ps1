@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,

@@ -22,8 +22,17 @@ public class GetMyPaymentInvoicesQueryHandlerTests
         );
     }
 
-    private static Invoice CreateInvoice(Guid id, Guid orderId, Guid accountId, DateTimeOffset createdAt, string orderCode = "ORD-001")
+    private static Invoice CreateInvoice(
+        Guid id,
+        Guid orderId,
+        Guid accountId,
+        DateTimeOffset createdAt,
+        string orderCode = "ORD-001",
+        PaymentOrderStatus orderStatus = PaymentOrderStatus.PAID)
     {
+        var statusStr = orderStatus == PaymentOrderStatus.PAID ? "PAID" : "PENDING";
+        var isSettled = orderStatus == PaymentOrderStatus.PAID;
+
         var order = new PaymentOrder
         {
             Id = orderId,
@@ -31,7 +40,7 @@ public class GetMyPaymentInvoicesQueryHandlerTests
             SiteId = Guid.NewGuid(),
             AccountId = accountId,
             OrderCode = orderCode,
-            Status = PaymentOrderStatus.PAID,
+            Status = orderStatus,
             Amount = 30000m,
             FinalAmount = 30000m,
             CreatedAt = createdAt,
@@ -57,8 +66,8 @@ public class GetMyPaymentInvoicesQueryHandlerTests
                 CustomerType = "REGISTERED_DRIVER",
                 PlateNumber = "51A-123.45",
                 Currency = "VND",
-                Status = "PAID",
-                IsSettled = true,
+                Status = statusStr,
+                IsSettled = isSettled,
                 SubtotalParkingFee = 30000m,
                 FinalTotalAmount = 30000m,
                 EntryTime = createdAt.AddHours(-2),
@@ -92,8 +101,12 @@ public class GetMyPaymentInvoicesQueryHandlerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(2, result.Count);
-        Assert.All(result, r => Assert.Equal(driverId, r.CustomerReference.AccountId));
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(2, result.Items.Count);
+        Assert.Equal(1, result.PageNumber);
+        Assert.Equal(10, result.PageSize);
+        Assert.Equal(1, result.TotalPages);
+        Assert.All(result.Items, r => Assert.Equal(driverId, r.CustomerReference.AccountId));
     }
 
     [Fact]
@@ -118,8 +131,9 @@ public class GetMyPaymentInvoicesQueryHandlerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Single(result);
-        Assert.Equal(customerId, result[0].CustomerReference.AccountId);
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(customerId, result.Items[0].CustomerReference.AccountId);
     }
 
     [Fact]
@@ -141,7 +155,9 @@ public class GetMyPaymentInvoicesQueryHandlerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Empty(result);
+        Assert.Empty(result.Items);
+        Assert.Equal(0, result.TotalCount);
+        Assert.Equal(0, result.TotalPages);
     }
 
     [Fact]
@@ -163,9 +179,9 @@ public class GetMyPaymentInvoicesQueryHandlerTests
         var resultA = await handlerA.Handle(new GetMyPaymentInvoicesQuery(), CancellationToken.None);
 
         // Assert
-        Assert.Single(resultA);
-        Assert.Equal(driverA, resultA[0].CustomerReference.AccountId);
-        Assert.DoesNotContain(resultA, r => r.CustomerReference.AccountId == driverB);
+        Assert.Single(resultA.Items);
+        Assert.Equal(driverA, resultA.Items[0].CustomerReference.AccountId);
+        Assert.DoesNotContain(resultA.Items, r => r.CustomerReference.AccountId == driverB);
     }
 
     [Fact]
@@ -271,9 +287,160 @@ public class GetMyPaymentInvoicesQueryHandlerTests
         var result = await handler.Handle(new GetMyPaymentInvoicesQuery(), CancellationToken.None);
 
         // Assert
-        Assert.Equal(3, result.Count);
-        Assert.Equal("ORD-NEWEST", result[0].InvoiceIdentity.OrderCode);
-        Assert.Equal("ORD-MIDDLE", result[1].InvoiceIdentity.OrderCode);
-        Assert.Equal("ORD-OLD", result[2].InvoiceIdentity.OrderCode);
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(3, result.Items.Count);
+        Assert.Equal("ORD-NEWEST", result.Items[0].InvoiceIdentity.OrderCode);
+        Assert.Equal("ORD-MIDDLE", result.Items[1].InvoiceIdentity.OrderCode);
+        Assert.Equal("ORD-OLD", result.Items[2].InvoiceIdentity.OrderCode);
+    }
+
+    [Fact]
+    public async Task Handle_StatusFilter_ReturnsOnlyMatchingStatusInvoices()
+    {
+        // Arrange
+        var driverId = Guid.NewGuid();
+        var actor = new FakeCurrentActor { IsAuthenticated = true, UserId = driverId, Role = "DRIVER" };
+
+        var paid1 = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, DateTimeOffset.UtcNow.AddHours(-3), "ORD-P1", PaymentOrderStatus.PAID);
+        var paid2 = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, DateTimeOffset.UtcNow.AddHours(-2), "ORD-P2", PaymentOrderStatus.PAID);
+        var pending = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, DateTimeOffset.UtcNow.AddHours(-1), "ORD-PEND", PaymentOrderStatus.PENDING);
+
+        _invoiceRepo.Invoices.AddRange(new[] { paid1, paid2, pending });
+
+        var handler = CreateHandler(actor);
+
+        // Act: Filter PAID
+        var resultPaid = await handler.Handle(new GetMyPaymentInvoicesQuery(Status: "PAID"), CancellationToken.None);
+
+        // Assert PAID
+        Assert.Equal(2, resultPaid.TotalCount);
+        Assert.Equal(2, resultPaid.Items.Count);
+        Assert.All(resultPaid.Items, r => Assert.Equal("PAID", r.FinancialStatus.Status));
+
+        // Act: Filter PENDING
+        var resultPending = await handler.Handle(new GetMyPaymentInvoicesQuery(Status: "PENDING"), CancellationToken.None);
+
+        // Assert PENDING
+        Assert.Equal(1, resultPending.TotalCount);
+        Assert.Single(resultPending.Items);
+        Assert.Equal("PENDING", resultPending.Items[0].FinancialStatus.Status);
+    }
+
+    [Fact]
+    public async Task Handle_DateRangeFilter_ReturnsInvoicesWithinRange()
+    {
+        // Arrange
+        var driverId = Guid.NewGuid();
+        var actor = new FakeCurrentActor { IsAuthenticated = true, UserId = driverId, Role = "DRIVER" };
+
+        var t1 = DateTimeOffset.Parse("2026-11-01T10:00:00+00:00");
+        var t2 = DateTimeOffset.Parse("2026-11-05T10:00:00+00:00");
+        var t3 = DateTimeOffset.Parse("2026-11-10T10:00:00+00:00");
+
+        var inv1 = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, t1, "ORD-NOV01");
+        var inv2 = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, t2, "ORD-NOV05");
+        var inv3 = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, t3, "ORD-NOV10");
+
+        _invoiceRepo.Invoices.AddRange(new[] { inv1, inv2, inv3 });
+
+        var handler = CreateHandler(actor);
+
+        // Act: Query between Nov 03 and Nov 07
+        var fromDate = DateTimeOffset.Parse("2026-11-03T00:00:00+00:00");
+        var toDate = DateTimeOffset.Parse("2026-11-07T23:59:59+00:00");
+        var query = new GetMyPaymentInvoicesQuery(FromDate: fromDate, ToDate: toDate);
+        var result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("ORD-NOV05", result.Items[0].InvoiceIdentity.OrderCode);
+    }
+
+    [Fact]
+    public async Task Handle_Pagination_ReturnsCorrectSliceAndMetadata()
+    {
+        // Arrange
+        var driverId = Guid.NewGuid();
+        var actor = new FakeCurrentActor { IsAuthenticated = true, UserId = driverId, Role = "DRIVER" };
+
+        var baseTime = DateTimeOffset.UtcNow;
+        for (int i = 1; i <= 5; i++)
+        {
+            _invoiceRepo.Invoices.Add(CreateInvoice(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                driverId,
+                baseTime.AddHours(-i),
+                $"ORD-{i:D2}"));
+        }
+
+        var handler = CreateHandler(actor);
+
+        // Act: Page 2 with PageSize 2
+        var query = new GetMyPaymentInvoicesQuery(PageNumber: 2, PageSize: 2);
+        var result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(5, result.TotalCount);
+        Assert.Equal(2, result.PageNumber);
+        Assert.Equal(2, result.PageSize);
+        Assert.Equal(3, result.TotalPages);
+        Assert.Equal(2, result.Items.Count);
+        Assert.Equal("ORD-03", result.Items[0].InvoiceIdentity.OrderCode);
+        Assert.Equal("ORD-04", result.Items[1].InvoiceIdentity.OrderCode);
+    }
+
+    [Fact]
+    public async Task Handle_PageNumberExceedsTotalPages_ReturnsEmptyItems()
+    {
+        // Arrange
+        var driverId = Guid.NewGuid();
+        var actor = new FakeCurrentActor { IsAuthenticated = true, UserId = driverId, Role = "DRIVER" };
+
+        for (int i = 1; i <= 3; i++)
+        {
+            _invoiceRepo.Invoices.Add(CreateInvoice(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                driverId,
+                DateTimeOffset.UtcNow.AddHours(-i),
+                $"ORD-{i}"));
+        }
+
+        var handler = CreateHandler(actor);
+
+        // Act: Page 5 with PageSize 2
+        var query = new GetMyPaymentInvoicesQuery(PageNumber: 5, PageSize: 2);
+        var result = await handler.Handle(query, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(2, result.TotalPages);
+        Assert.Equal(5, result.PageNumber);
+        Assert.Empty(result.Items);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnedInvoicesIncludePdfUrl()
+    {
+        // Arrange
+        var driverId = Guid.NewGuid();
+        var actor = new FakeCurrentActor { IsAuthenticated = true, UserId = driverId, Role = "DRIVER" };
+
+        var inv = CreateInvoice(Guid.NewGuid(), Guid.NewGuid(), driverId, DateTimeOffset.UtcNow, "ORD-PDF-CHECK");
+        _invoiceRepo.Invoices.Add(inv);
+
+        var handler = CreateHandler(actor);
+
+        // Act
+        var result = await handler.Handle(new GetMyPaymentInvoicesQuery(), CancellationToken.None);
+
+        // Assert
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.NotNull(item.PdfUrl);
+        Assert.Equal($"/api/v1/payments/invoices/{inv.Id}/download", item.PdfUrl);
+        Assert.Equal($"/api/v1/payments/invoices/{inv.Id}/download", item.InvoiceIdentity.PdfUrl);
     }
 }
