@@ -23,7 +23,25 @@ dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserServi
 
 Add `FullyQualifiedName~ReservationEvaluationCheckpointTests` to the focused Operations/Facility test filter for the new checkpoint rules. Run the updated Gate handler tests too: they now expect plate guard before site guard. These tests are authored/updated but NOT RUN; pure Domain tests cannot establish guarded checkpoint/commit recovery or cross-process locking.
 
-Also include `FullyQualifiedName~ReservationFacilityDependencyTests`. The Operations reverse handshake draft has Domain state, repository/UoW, MediatR continuation and recovery independent of receipt completion. See [Facility dependency checkpoint](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md#operations-implementation-checkpoint--10-november). Joint deployment must verify exact-token abort fencing, lost replies, deletion races and no reciprocal hold deadlock. Dedicated Operations credential is approved; its producer transport is not yet delivered/configured.
+Also include `ReservationFacilityDependencyTests`, `ReservationAvailabilityTests` and `FacilityStructureEndpointTests` in the focused filter. The Facility v1 producer and Operations adapter are in the Commit 1 draft. Use the dedicated service JWT and verify exact-token abort fencing, lost replies, concurrent deletion and recovery. See [the Facility and event handoff](../../05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
+
+### Manual checklist for Commit 1 and the Payment handoff
+
+**On the current branch**
+
+- [ ] Build the current checkout and run the focused tests above. Record the SHA plus working-tree diff and any skipped checks.
+- [ ] Follow [local setup sections 5.6–5.7](../../../LOCAL-SETUP.md). Use isolated aligned schemas, the existing policy seed, an explicit site late-tolerance choice, and an active CAR quota for the test site. Bind test subscriber queues before enabling the Operations outbox relay.
+- [ ] Start User, Facility and Operation with `scripts/run-schema-service.ps1 -Service <name>` in separate terminals. Prepare an active tenant/site, live unit, two compatible operational slots and an active Driver with an eligible CAR.
+- [ ] From an authorized service test client, call Facility's v1 read and acquire routes. Verify active and unavailable slot facts, wrong credentials returning 401/403, exact-token replay, changed payload returning 409, edit blocked while HELD, complete/abort replay and delayed acquire after abort staying ABORTED. Use the [route, request and response examples](../../03-design/api/reservation-facility-dependency-api-design.md).
+- [ ] Make a compatible Facility structure change. Verify one Operations applied event reaches a bound queue. Replay the same completion and verify no second fact. Pause delivery, make another compatible edit, then resume and verify retained delivery.
+- [ ] With admission enabled, call `POST /api/reservation-price-previews` and `POST /api/reservation-terms` with the [valid Driver payload](../../03-design/api/reservation-first-slice-api-design.md). Once local validation and Facility/policy checks pass, expect 503 `OWNER_UNAVAILABLE` from the commercial adapter. There is no real order or committed payment hold to pay on this branch.
+
+**After Payment delivery and Operations Commit 2**
+
+- [ ] Deploy Payment's authoritative preview, quote/coverage acceptance, order, collection and reconciliation contracts. Wire the matching Operations adapter and durable commercial stages before attempting a real payment.
+- [ ] With the same Driver, preview the price, review terms, submit exact terms to `POST /api/reservation-requests` with a fresh `Idempotency-Key`, and poll the returned Location. Expect 202, authorization and preparation, then receipt `BOOKING` and own reservation `PENDING_PAYMENT`. Read `GET /api/me/reservations/{reservationId}` until an authoritative order ID appears.
+- [ ] Before paying, submit an overlapping request from another eligible Driver/plate for the same selected slot. Expect one committed hold and one `SLOT_TIME_CONFLICT` even with another free slot. Repeat separately for quota, cross-site plate conflict and a payment hold that has expired. Compare durable events with committed state.
+- [ ] Pay the first order through the configured test provider. Resume the same receipt and own reservation. Expect receipt `COMPLETED` and reservation `CONFIRMED` only after the guarded pre-T evaluation commits. Verify the persisted collection and confirmation event. Repeat with provider replay, no browser return, expiry and late/additional collection using the cases below.
 
 ### Through-confirmation deployment acceptance additions
 
@@ -35,7 +53,7 @@ Use an isolated, aligned database and actual restricted application role. Preser
 4. For T=11:00, pause after successful guarded evaluation at 10:59:59 and commit at 11:00:02: confirmation must succeed and remain invisible until commit. Separately hold a competing lock until T so evaluation starts at/after T: reject. Verify exact equality and microsecond boundaries. No second deadline check or commit metadata lookup may be needed.
 5. Roll back a pre-T evaluation and retry after T: reject using a fresh timestamp. Lose the successful commit acknowledgement and restart after T: recover the same committed receipt/effect, with one outgoing fact and no extra charge. Verify booking, receipt, Facility READY and outbox rollback/commit atomically.
 6. Test paid and genuine zero-price paths with commit tracking off. Gate/read APIs must not expose uncommitted confirmation. After successful commit, expiry must preserve the confirmed booking. Test database outage and ambiguous commit recovery; never retry a new effect solely because the original response was lost.
-7. Race two sites for the same canonical plate, two holds, an existing guest visit, structure changes and physical entry. Verify guard order and database/UoW paths; a future reservation by itself must **not** reject walk-in. Validate capacity by distinct resource identities and half-open interval segments once R-ARCH-05 is resolved, not just aggregate counters.
+7. Race two sites for the same canonical plate, two holds, an existing guest visit, structure changes and physical entry. Verify guard order and database/UoW paths; a future reservation by itself must **not** reject walk-in. Validate capacity by distinct resource identities and half-open interval segments using the implemented R-ARCH-05 Facility snapshot and actual claims/visits.
 8. Exercise created/unknown/definitively-no-order outcomes at H; exact-payload replay; contradictory collection payload; additional collection after receipt completion; late collection at/after T; producer outage during reconciliation. The current terminal-notification gap must be closed before this check can pass. Reconciliation acceptance is not refund payout evidence.
 
 Record Git SHA plus uncommitted diff identity, commands, pass/fail/skip counts, actual producer versions, server settings and redacted evidence. Raw SQL, bulk updates, direct DbContext saves, cascades and uncoordinated writers can bypass C# guard/history checks; include every supported writer, and disclose any unverified bypass. Frontend is not modified by this task; [frontend handoff](../../05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md) is the client backlog.
@@ -132,7 +150,7 @@ Deployment checks that still require real PostgreSQL/RabbitMQ:
 3. Stop the broker after successful startup and repeat a write: configured capture should succeed durably. Restart Operations and broker; the same EventId must reach the prebound audit queue. Consumer deduplication must yield one audit record after redelivery.
 4. Replay departure: no additional transition or audit event. Rejected/mismatched plate/absent allocation must produce neither.
 5. Race Gate writes and structure holds on separate connections. The site guard must precede reads; immutable tenant/site and original confirmation/snapshot fields must be enforced through UoW. Verify optimistic-version conflicts do not get silently retried as new actions.
-6. Confirm requested-slot fallback cannot admit a vehicle or show it as an observed location. Live Facility compatibility and cross-site verified identity remain unresolved integration gates.
+6. Confirm requested-slot fallback cannot admit a vehicle or show it as an observed location. Verify current Facility compatibility and global canonical plate conflicts on both participating write paths.
 
 ## Safeguard bypasses and release conditions
 

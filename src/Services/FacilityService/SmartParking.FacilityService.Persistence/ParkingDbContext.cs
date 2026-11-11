@@ -23,6 +23,24 @@ public sealed class ParkingDbContext(DbContextOptions<ParkingDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ReservationDependency>(e =>
+        {
+            e.ToTable("reservation_dependencies"); e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.WorkflowId).HasColumnName("workflow_id");
+            e.Property(x => x.TenantId).HasColumnName("tenant_id");
+            e.Property(x => x.SiteId).HasColumnName("site_id");
+            e.Property(x => x.SlotId).HasColumnName("slot_id");
+            e.Property(x => x.Purpose).HasColumnName("purpose");
+            e.Property(x => x.IntentFingerprint).HasColumnName("intent_fingerprint");
+            e.Property(x => x.Deadline).HasColumnName("deadline");
+            e.Property(x => x.State).HasColumnName("state");
+            e.Property(x => x.SnapshotJson).HasColumnName("snapshot_json").HasColumnType("jsonb");
+            e.Property(x => x.OutcomeFingerprint).HasColumnName("outcome_fingerprint");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(x => new { x.WorkflowId, x.Purpose }).IsUnique();
+        });
         modelBuilder.Entity<TenantEntity>(e =>
         {
             e.ToTable("tenants"); e.HasKey(x => x.Id);

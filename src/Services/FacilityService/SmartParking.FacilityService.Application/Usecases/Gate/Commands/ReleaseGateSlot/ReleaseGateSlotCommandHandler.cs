@@ -1,18 +1,18 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 
 namespace SmartParking.FacilityService.Application.Usecases.Gate.Commands.ReleaseGateSlot;
 
 public sealed class ReleaseGateSlotCommandHandler(
-    IOperatorGateSlotStore store,
-    ILogger<ReleaseGateSlotCommandHandler> logger)
+    IOperatorGateSlotRepository repository,
+    IUnitOfWork work)
     : IRequestHandler<ReleaseGateSlotCommand>
 {
     public async Task Handle(ReleaseGateSlotCommand request, CancellationToken ct)
     {
-        logger.LogInformation("Releasing gate slot {SlotId} at site {SiteId} for tenant {TenantId}",
-            request.SlotId, request.SiteId, request.TenantId);
-        await store.ReleaseAsync(request.TenantId, request.SiteId, request.SlotId, ct);
+        await using var transaction = await work.BeginTransactionAsync(ct);
+        await repository.ReleaseAsync(request.TenantId, request.SiteId, request.SlotId, ct);
+        await work.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
     }
 }

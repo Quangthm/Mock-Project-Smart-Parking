@@ -35,9 +35,13 @@ public static class InfrastructureDependencyInjection
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
         services.TryAddScoped<IReservationCommercialOwner, UnavailableReservationCommercialOwner>();
-        services.TryAddScoped<IReservationFacilityOwner, UnavailableReservationFacilityOwner>();
-        services.TryAddScoped<IReservationFacilityDependencyOwner, UnavailableReservationFacilityDependencyOwner>();
-        services.TryAddScoped<IReservationCapacityAcceptance, UnavailableReservationCapacityAcceptance>();
+        services.AddHttpClient<ReservationFacilityClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<IReservationFacilityOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
+        services.AddScoped<IReservationFacilityDependencyOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
         services.AddHttpClient<ParkingGateSlotClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Facility"] ?? "http://localhost:5045/");

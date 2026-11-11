@@ -2,17 +2,27 @@ using SmartParking.FacilityService.Application.Common.Helpers;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 using SmartParking.FacilityService.Domain;
+using SmartParking.FacilityService.Application.Reservations;
+using MediatR;
 
-namespace SmartParking.FacilityService.Persistence;
+namespace SmartParking.FacilityService.Application.Common.Synchronization;
 
-public sealed class StructureUnitOfWork(
+public sealed class StructureEditHandlers(
     IParkingStructureRepository repository,
     IOwnerAuthorizer owners,
     ISlotOperatorAuthorizer operators,
     IStructureCommitments commitments,
-    IStructureSynchronizationStore synchronizationStore,
-    IStructureSynchronizationService synchronization) : IStructureUnitOfWork
+    IStructureSynchronizationRepository synchronizationStore,
+    IMediator synchronization,
+    IReservationDependencyRepository reservationDependencies)
+    : IRequestHandler<BeginStructureEditCommand, IStructureEditSession>, IRequestHandler<RecoverAuthorizedStructureCommand>
 {
+    public Task<IStructureEditSession> Handle(BeginStructureEditCommand command, CancellationToken ct) =>
+        BeginEditAsync(command.Owner, command.SiteId, ct, command.OperationId, command.MarkedSlot, command.Reason);
+
+    public Task Handle(RecoverAuthorizedStructureCommand command, CancellationToken ct) =>
+        RecoverAsync(command.Owner, command.SiteId, ct);
+
     public async Task<IStructureEditSession> BeginEditAsync(
         OwnerScope owner, Guid siteId, CancellationToken ct,
         Guid? operationId = null, Guid? markedSlot = null, string? reason = null)
@@ -26,11 +36,18 @@ public sealed class StructureUnitOfWork(
         var gate = await synchronizationStore.TryLockSiteAsync(siteId, ct)
             ?? throw new StructureException("STRUCTURE_BUSY", "Another request is managing this site.");
 
-        await synchronization.RecoverSiteAsync(siteId, ct);
+        try
+        {
+            if (await reservationDependencies.HasHeldAsync(siteId, ct))
+                throw new StructureException("STRUCTURE_BUSY", "Reservation acceptance is using this site's configuration.");
+            await synchronization.Send(new RecoverStructureSiteCommand(siteId), ct);
+        }
+        catch { await gate.DisposeAsync(); throw; }
 
         var pending = new StructureSynchronization(
             Guid.NewGuid(), owner.TenantId, siteId, operationId, "preparing", null);
-        await synchronizationStore.PrepareAsync(pending, ct);
+        try { await synchronizationStore.PrepareAsync(pending, ct); }
+        catch { await gate.DisposeAsync(); throw; }
 
         CommitmentSnapshot snapshot;
         try
@@ -79,7 +96,7 @@ public sealed class StructureUnitOfWork(
         await AuthorizeAsync(owner, null, ct);
         await using var gate = await synchronizationStore.TryLockSiteAsync(siteId, ct)
             ?? throw new StructureException("STRUCTURE_BUSY", "Another request is managing this site.");
-        await synchronization.RecoverSiteAsync(siteId, ct);
+        await synchronization.Send(new RecoverStructureSiteCommand(siteId), ct);
     }
 
     private async Task AuthorizeAsync(OwnerScope actor, Guid? operationalSite, CancellationToken ct)
@@ -98,7 +115,7 @@ public sealed class StructureUnitOfWork(
     {
         try
         {
-            await synchronization.PublishAsync(pending, ct);
+            await synchronization.Send(new PublishStructureOutcomeCommand(pending), ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -113,7 +130,7 @@ public sealed class StructureUnitOfWork(
         private readonly IParkingStructureEdit _edit;
         private readonly IAsyncDisposable _gate;
         private readonly StructureSynchronization _pending;
-        private readonly IStructureSynchronizationService _synchronization;
+        private readonly IMediator _synchronization;
         private readonly Guid? _markedSlot;
         private readonly string? _reason;
         private readonly HashSet<Guid> _originalSlots;
@@ -125,7 +142,7 @@ public sealed class StructureUnitOfWork(
             IParkingStructureEdit edit,
             IAsyncDisposable gate,
             StructureSynchronization pending,
-            IStructureSynchronizationService synchronization,
+            IMediator synchronization,
             Guid? markedSlot,
             string? reason)
         {
@@ -154,7 +171,7 @@ public sealed class StructureUnitOfWork(
             _committed = true;
             await _edit.DisposeAsync();
 
-            await _synchronization.PublishAsync(_pending with { State = "ready", Outcome = outcome }, ct);
+            await _synchronization.Send(new PublishStructureOutcomeCommand(_pending with { State = "ready", Outcome = outcome }), ct);
         }
 
         public async ValueTask DisposeAsync()
@@ -174,7 +191,7 @@ public sealed class StructureUnitOfWork(
 
                 try
                 {
-                    await _synchronization.PublishAsync(_pending, CancellationToken.None);
+                    await _synchronization.Send(new PublishStructureOutcomeCommand(_pending), CancellationToken.None);
                 }
                 catch
                 {

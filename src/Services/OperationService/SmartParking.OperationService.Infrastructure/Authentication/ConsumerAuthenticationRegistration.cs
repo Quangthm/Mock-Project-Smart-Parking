@@ -11,6 +11,7 @@ namespace SmartParking.OperationService.Infrastructure.Authentication;
 public static class ConsumerAuthenticationRegistration
 {
     private const string DependencyFailure = "SmartParking.Authentication.KeysUnavailable";
+    public static bool KeysUnavailable(HttpContext context) => context.Items.ContainsKey(DependencyFailure);
 
     public static IServiceCollection AddConsumerAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
@@ -59,17 +60,7 @@ public static class ConsumerAuthenticationRegistration
                         for (Exception? error = context.Exception; error is not null; error = error.InnerException)
                             if (error is JwksUnavailableException) context.HttpContext.Items[DependencyFailure] = true;
                         return Task.CompletedTask;
-                    },
-                    OnChallenge = async context =>
-                    {
-                        context.HandleResponse();
-                        context.Response.Headers.WWWAuthenticate = "Bearer";
-                        var unavailable = context.HttpContext.Items.ContainsKey(DependencyFailure);
-                        await WriteError(context.HttpContext, unavailable ? 503 : 401,
-                            unavailable ? "AUTHENTICATION_KEYS_UNAVAILABLE" : "UNAUTHENTICATED",
-                            unavailable ? "Authentication is temporarily unavailable." : "Authentication is required.");
-                    },
-                    OnForbidden = context => WriteError(context.HttpContext, 403, "FORBIDDEN", "Access is denied.")
+                    }
                 };
             });
         services.AddAuthorization();
@@ -83,12 +74,4 @@ public static class ConsumerAuthenticationRegistration
     private static bool HasGuid(ClaimsPrincipal principal, string type) =>
         principal.FindAll(type).Count() == 1 && Guid.TryParse(principal.FindFirst(type)?.Value, out var id) && id != Guid.Empty;
 
-    private static async Task WriteError(HttpContext context, int status, string code, string message)
-    {
-        if (context.Response.HasStarted) return;
-        context.Response.StatusCode = status;
-        context.Response.Headers.CacheControl = "no-store";
-        if (!HttpMethods.IsHead(context.Request.Method))
-            await context.Response.WriteAsJsonAsync(new { success = false, code, message, traceId = context.TraceIdentifier }, context.RequestAborted);
-    }
 }

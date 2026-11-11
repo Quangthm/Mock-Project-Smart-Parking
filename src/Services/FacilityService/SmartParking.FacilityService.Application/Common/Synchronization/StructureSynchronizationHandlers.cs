@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MediatR;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 
 namespace SmartParking.FacilityService.Application.Common.Synchronization;
@@ -11,9 +12,15 @@ public static class StructureSynchronizationJson
 // Both the foreground request and the worker call this use case under the same
 // site gate. A preparing row means there was no committed physical change:
 // the transition to ready was atomic with the Parking transaction.
-public sealed class StructureSynchronizationService(
-    IStructureSynchronizationStore store, IStructureCommitments commitments) : IStructureSynchronizationService
+public sealed class StructureSynchronizationHandlers(
+    IStructureSynchronizationRepository store, IStructureCommitments commitments)
+    : IRequestHandler<RecoverStructureSiteCommand>, IRequestHandler<PublishStructureOutcomeCommand>,
+      IRequestHandler<RecoverPendingStructuresCommand, IReadOnlyList<(Guid SiteId, Exception Error)>>
 {
+    public Task Handle(RecoverStructureSiteCommand command, CancellationToken ct) => RecoverSiteAsync(command.SiteId, ct);
+    public Task Handle(PublishStructureOutcomeCommand command, CancellationToken ct) => PublishAsync(command.Synchronization, ct);
+    public Task<IReadOnlyList<(Guid SiteId, Exception Error)>> Handle(RecoverPendingStructuresCommand command, CancellationToken ct) =>
+        RecoverPendingAsync(ct);
     public async Task RecoverSiteAsync(Guid siteId, CancellationToken cancellationToken)
     {
         var pending = await store.PendingAsync(siteId, cancellationToken);

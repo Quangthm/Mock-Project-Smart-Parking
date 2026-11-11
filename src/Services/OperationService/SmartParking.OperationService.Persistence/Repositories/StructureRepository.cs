@@ -31,7 +31,7 @@ public sealed class StructureRepository(ReservationDbContext db) : IStructureRep
     private IQueryable<ReservationRow> Live(Guid tenantId, Guid siteId, DateTimeOffset now) =>
         db.Reservations.AsNoTracking().Where(r => r.TenantId == tenantId && r.SiteId == siteId &&
             (r.Status == "PARKING" || r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now) ||
-                (r.Status == "CONFIRMED" || r.Status == "ALLOCATED") && r.ExpectedEndTime > now));
+                (r.Status == "CONFIRMED" || r.Status == "ALLOCATED") && (r.ClaimEndTime ?? r.ExpectedEndTime) > now));
 
     public async Task<HoldSnapshot> SnapshotAsync(Guid tenantId, Guid siteId, DateTimeOffset now, CancellationToken ct)
     {

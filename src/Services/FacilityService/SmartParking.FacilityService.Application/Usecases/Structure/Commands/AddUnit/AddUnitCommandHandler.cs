@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.A
 
 public sealed class AddUnitCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<AddUnitCommandHandler> logger)
     : IRequestHandler<AddUnitCommand, Guid>
 {
@@ -15,7 +15,7 @@ public sealed class AddUnitCommandHandler(
     {
         logger.LogInformation("Adding unit {UnitName} to site {SiteId}", request.Name, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         var id = session.Structure.AddUnit(request.Type, request.Name, request.ParentId, request.Capacity);
         await session.CommitAsync(ct);
         return id;

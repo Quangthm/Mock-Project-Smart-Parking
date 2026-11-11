@@ -45,27 +45,19 @@ public sealed class UnavailableReservationCommercialOwner : IReservationCommerci
     public Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct) => throw Missing();
     public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct) => throw Missing();
 }
-public sealed class UnavailableReservationFacilityOwner : IReservationFacilityOwner
-{
-    public Task<FacilityBookingFacts> ReadAsync(Guid siteId, Guid slotId, CancellationToken ct) =>
-        throw new ReservationGateException(503, "OWNER_UNAVAILABLE", "Reservation Facility acceptance is not integrated.");
-}
-public sealed class UnavailableReservationCapacityAcceptance : IReservationCapacityAcceptance
-{
-    public Task RequireAvailableAsync(ReservationRow proposed, FacilityResourceSnapshot resources, DateTimeOffset evaluatedAt, CancellationToken ct) =>
-        throw new ReservationGateException(503, "CAPACITY_COORDINATION_UNAVAILABLE",
-            "Plate occupancy and capacity writer coordination is not ready.");
-}
-public sealed class UnavailableReservationFacilityDependencyOwner : IReservationFacilityDependencyOwner
-{
-    private static ReservationGateException Missing() => new(503, "OWNER_UNAVAILABLE",
-        "The dedicated Operations-to-Facility handshake is not integrated.");
-    public Task<FacilityDependencyResult> AcquireAsync(FacilityDependencyIntent intent, CancellationToken ct) => throw Missing();
-    public Task<FacilityDependencyAcknowledgement> CompleteAsync(FacilityDependencyIntent intent, string outcomeJson, CancellationToken ct) => throw Missing();
-    public Task<FacilityDependencyAcknowledgement> AbortAsync(FacilityDependencyIntent intent, CancellationToken ct) => throw Missing();
-}
 public sealed class ReservationFactsPublisher(IPublishEndpoint publisher) : IReservationFactsPublisher
 {
+    public Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct) =>
+        publisher.Publish(fact, context => { context.MessageId = fact.EventId; context.CorrelationId = fact.SynchronizationToken; }, ct);
+    public async Task HoldChangedAsync(ReservationHoldChangedV1 fact, CancellationToken ct)
+    {
+        await publisher.Publish(fact, context =>
+        { context.MessageId = fact.EventId; context.CorrelationId = fact.WorkflowId; }, ct);
+        await AvailabilityChangedAsync(new ReservationAvailabilityChangedV1(Guid.NewGuid(), fact.OccurredAt,
+            fact.TenantId, fact.SiteId, fact.SlotId, fact.Start, fact.End, fact.State), ct);
+    }
+    public Task AvailabilityChangedAsync(ReservationAvailabilityChangedV1 fact, CancellationToken ct) =>
+        publisher.Publish(fact, context => { context.MessageId = fact.EventId; }, ct);
     public Task ConfirmedAsync(ReservationConfirmedV1 fact, CancellationToken ct) => publisher.Publish(fact, context =>
     { context.MessageId = fact.EventId; context.CorrelationId = fact.ReservationId; }, ct);
 }

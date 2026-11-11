@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.R
 
 public sealed class RenameUnitCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<RenameUnitCommandHandler> logger)
     : IRequestHandler<RenameUnitCommand>
 {
@@ -15,7 +15,7 @@ public sealed class RenameUnitCommandHandler(
     {
         logger.LogInformation("Renaming unit {UnitId} to {Name} in site {SiteId}", request.UnitId, request.Name, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.RenameUnit(request.UnitId, request.Name);
         await session.CommitAsync(ct);
     }

@@ -27,7 +27,7 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
-        if (context.Response.HasStarted || exception is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+        if (context.Response.HasStarted || context.RequestAborted.IsCancellationRequested)
             return false;
         var result = (Status: 500, Code: "INTERNAL_ERROR", Message: "An unexpected error occurred.");
         object? errors = null;
@@ -44,13 +44,23 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))
             result = (503, "PROTOTYPE_SCHEMA_NOT_READY", "Reservation data is unavailable until database reconciliation is complete.");
-        else if (Known.TryGetValue(exception.GetType(), out var map)) result = map(exception);
-        else logger.LogError("Operations request failed ({FailureType}); trace {TraceId}.", exception.GetType().Name, context.TraceIdentifier);
+        else if (FindMapping(exception.GetType()) is { } map) result = map(exception);
+        else if (exception is BadHttpRequestException bad)
+            result = (bad.StatusCode, "INVALID_REQUEST", "The request body or parameters are invalid.");
+        else if ((exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException)
+            is { SqlState: PostgresErrorCodes.ExclusionViolation or PostgresErrorCodes.UniqueViolation })
+            result = (409, "RESOURCE_CONFLICT", "A conflicting write has already claimed this resource.");
+        else logger.LogError("Operations request failed ({FailureType}); correlation {CorrelationId}.",
+            exception.GetType().Name, ApiErrors.Correlation(context));
 
-        context.Response.StatusCode = result.Status;
-        context.Response.Headers.CacheControl = "no-store";
-        if (!HttpMethods.IsHead(context.Request.Method))
-            await context.Response.WriteAsJsonAsync(new { success = false, code = result.Code, message = result.Message, errors, traceId = context.TraceIdentifier }, cancellationToken);
-        return true;
+        return await ApiErrors.WriteAsync(context, result.Status, result.Code, result.Message,
+            errors, ct: cancellationToken);
+    }
+
+    private static Func<Exception, (int Status, string Code, string Message)>? FindMapping(Type type)
+    {
+        for (Type? current = type; current is not null; current = current.BaseType)
+            if (Known.TryGetValue(current, out var mapping)) return mapping;
+        return null;
     }
 }

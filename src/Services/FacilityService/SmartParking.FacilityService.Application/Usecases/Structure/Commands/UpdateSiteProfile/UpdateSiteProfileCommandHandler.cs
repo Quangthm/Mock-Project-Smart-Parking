@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.U
 
 public sealed class UpdateSiteProfileCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<UpdateSiteProfileCommandHandler> logger)
     : IRequestHandler<UpdateSiteProfileCommand>
 {
@@ -15,7 +15,7 @@ public sealed class UpdateSiteProfileCommandHandler(
     {
         logger.LogInformation("Updating site profile for SiteId {SiteId}", request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.UpdateProfile(request.Code, request.Name, request.Address, request.Latitude, request.Longitude);
         await session.CommitAsync(ct);
     }

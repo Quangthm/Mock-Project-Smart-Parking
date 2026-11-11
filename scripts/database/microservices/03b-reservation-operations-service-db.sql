@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS operational_capacity_configs (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (site_id, spatial_unit_id, vehicle_type)
+    UNIQUE NULLS NOT DISTINCT (site_id, spatial_unit_id, vehicle_type)
 );
 CREATE INDEX IF NOT EXISTS idx_op_capacity_site ON operational_capacity_configs(site_id, vehicle_type);
 
@@ -302,16 +302,29 @@ CREATE TABLE IF NOT EXISTS reservations (
         (confirmation_evaluated_at IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_at = confirmation_evaluated_at AND confirmed_at < expected_start_time AND confirmation_effect_id IS NOT NULL)),
     CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL)),
     CONSTRAINT no_overlapping_reservations_per_vehicle EXCLUDE USING gist (
-        tenant_id WITH =,
-        site_id WITH =,
         normalized_plate WITH =,
-        tstzrange(expected_start_time, expected_end_time) WITH &&
+        tstzrange(expected_start_time, COALESCE(claim_end_time, expected_end_time), '[)') WITH &&
     ) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))
 );
 CREATE INDEX IF NOT EXISTS idx_reservations_tenant_site ON reservations(tenant_id, site_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_account ON reservations(account_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status_times ON reservations(status, expected_start_time, expected_end_time);
 CREATE INDEX IF NOT EXISTS idx_reservations_plate ON reservations(normalized_plate);
+
+-- Business enforcement evidence, not an audit repository. Future cancellation handlers
+-- write this atomically with cancellation under reservation-account:<account_id>.
+CREATE TABLE IF NOT EXISTS reservation_cancellation_evidence (
+    id UUID PRIMARY KEY,
+    reservation_id UUID NOT NULL UNIQUE REFERENCES reservations(id),
+    account_id UUID NOT NULL,
+    cancelled_at TIMESTAMPTZ NOT NULL,
+    reason TEXT NOT NULL CHECK (reason IN ('VOLUNTARY','FACILITY_FAILURE','ADMIN_CORRECTION')),
+    restricted_until TIMESTAMPTZ NULL,
+    policy_snapshot JSONB NOT NULL,
+    CHECK (restricted_until IS NULL OR (reason='VOLUNTARY' AND restricted_until > cancelled_at))
+);
+CREATE INDEX IF NOT EXISTS ix_reservation_cancellation_evidence_account
+    ON reservation_cancellation_evidence(account_id,cancelled_at);
 
 -- 5. BẢNG PHIÊN ĐỖ XE THỰC TẾ (PARKING SESSIONS)
 CREATE TABLE IF NOT EXISTS parking_sessions (
@@ -345,6 +358,8 @@ CREATE INDEX IF NOT EXISTS idx_parking_sessions_tenant_site ON parking_sessions(
 CREATE INDEX IF NOT EXISTS idx_parking_sessions_account ON parking_sessions(account_id);
 CREATE INDEX IF NOT EXISTS idx_parking_sessions_status ON parking_sessions(session_status);
 CREATE INDEX IF NOT EXISTS idx_parking_sessions_plate ON parking_sessions(normalized_plate);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_parking_sessions_live_plate
+    ON parking_sessions(normalized_plate) WHERE exit_time IS NULL AND normalized_plate IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_parking_sessions_active_ticket ON parking_sessions(ticket_reference) WHERE session_status = 'ACTIVE' AND ticket_reference IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_parking_sessions_active_access ON parking_sessions(access_item_id) WHERE session_status = 'ACTIVE' AND access_item_id IS NOT NULL;
 

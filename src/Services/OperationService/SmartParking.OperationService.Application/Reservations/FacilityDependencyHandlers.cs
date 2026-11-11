@@ -134,7 +134,9 @@ public static class FacilityDependencyProtocol
             snapshot.Booking.TenantId != intent.TenantId || snapshot.Booking.SiteId != intent.SiteId ||
             snapshot.Booking.SlotId != intent.SlotId || string.IsNullOrWhiteSpace(snapshot.Booking.Version) ||
             !snapshot.Booking.ParticipatesInStructureGuard ||
-            snapshot.Resources.Any(r => r is null || r.SlotId == Guid.Empty || r.SpatialUnitId == Guid.Empty || string.IsNullOrWhiteSpace(r.VehicleType)) ||
+            snapshot.Resources.Any(r => r is null || r.SlotId == Guid.Empty || r.SpatialUnitId == Guid.Empty ||
+                string.IsNullOrWhiteSpace(r.VehicleType) || r.AncestorUnitIds is null || r.CompatibleVehicleTypes is null ||
+                r.AncestorUnitIds.Any(id => id == Guid.Empty)) ||
             snapshot.Resources.Select(r => r.SlotId).Distinct().Count() != snapshot.Resources.Count ||
             snapshot.DynamicBackups.Any(b => b is null || b.SpatialUnitId == Guid.Empty || string.IsNullOrWhiteSpace(b.VehicleType) || b.Count < 0) ||
             snapshot.DynamicBackups.Select(b => (b.SpatialUnitId, b.VehicleType)).Distinct().Count() != snapshot.DynamicBackups.Count)

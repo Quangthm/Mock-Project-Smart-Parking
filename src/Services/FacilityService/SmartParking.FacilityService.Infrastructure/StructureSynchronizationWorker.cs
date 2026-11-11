@@ -3,14 +3,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SmartParking.FacilityService.Application;
+using MediatR;
 
 namespace SmartParking.FacilityService.Infrastructure;
 
-// Scoped stores/services are resolved per pass. No request identity is needed:
+// Scoped handlers/repositories are resolved per pass. No request identity is needed:
 // the worker only replays a payload that was saved by an authorized use case.
 // Live user operations automatically trigger on-demand lazy recovery during
-// StructureUnitOfWork.BeginEditAsync. The background worker serves purely as a
-// low-overhead 24-hour safety net for abandoned sites in mock/internship environments.
+// BeginStructureEditCommand. The background worker serves purely as a
+// recovery path for abandoned sites; reservation deadlines require a short cadence.
 public sealed class StructureSynchronizationWorker(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
@@ -18,7 +19,9 @@ public sealed class StructureSynchronizationWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalSeconds = configuration.GetValue("Synchronization:RecoveryIntervalSeconds", 86400); // 1 ngày = 86400 giây
+        var intervalSeconds = configuration.GetValue("Synchronization:RecoveryIntervalSeconds", 1);
+        if (intervalSeconds <= 0)
+            throw new InvalidOperationException("Synchronization recovery interval must be positive.");
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalSeconds));
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
@@ -26,12 +29,11 @@ public sealed class StructureSynchronizationWorker(
             try
             {
                 using var scope = scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<IStructureSynchronizationService>();
-                var failures = await service.RecoverPendingAsync(stoppingToken);
+                var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                var failures = await mediator.Send(new RecoverPendingStructuresCommand(), stoppingToken);
                 foreach (var failure in failures)
                 {
-                    logger.LogWarning(failure.Error,
-                        "Structure synchronization for site {SiteId} will be retried.", failure.SiteId);
+                    logger.LogWarning("Structure synchronization will be retried ({FailureType}).", failure.Error.GetType().Name);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -41,7 +43,7 @@ public sealed class StructureSynchronizationWorker(
             catch (Exception error)
             {
                 // Leave the durable row unchanged; the next pass retries.
-                logger.LogWarning(error, "Structure synchronization failed and will be retried.");
+                logger.LogWarning("Structure synchronization failed and will be retried ({FailureType}).", error.GetType().Name);
             }
         }
     }

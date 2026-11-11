@@ -4,8 +4,8 @@ using SmartParking.FacilityService.Application;
 
 namespace SmartParking.FacilityService.Persistence;
 
-public sealed class PostgresStructureSynchronizationStore(NpgsqlDataSource source, ParkingGateConnectionPool gates)
-    : IStructureSynchronizationStore
+public sealed class PostgresStructureSynchronizationRepository(NpgsqlDataSource source, ParkingGateConnectionPool gates)
+    : IStructureSynchronizationRepository
 {
     public async Task<IAsyncDisposable?> TryLockSiteAsync(Guid siteId, CancellationToken ct)
     {

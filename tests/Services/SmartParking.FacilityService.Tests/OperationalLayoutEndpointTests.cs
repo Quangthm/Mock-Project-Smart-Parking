@@ -168,7 +168,7 @@ public sealed class OperationalLayoutEndpointTests
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(JsonValueKind.False, body.GetProperty("success").ValueKind);
-        Assert.Equal("INTERNAL_ERROR", body.GetProperty("code").GetString());
+        Assert.Equal("INTERNAL_SERVER_ERROR", body.GetProperty("code").GetString());
         Assert.Equal("An unexpected error occurred.", body.GetProperty("message").GetString());
     }
 

@@ -6,7 +6,8 @@ namespace SmartParking.OperationService.Application.Reservations;
 public sealed record FacilityDependencyIntent(Guid Token, Guid WorkflowId, string Purpose,
     Guid TenantId, Guid SiteId, Guid SlotId, string IntentFingerprint, DateTimeOffset Deadline);
 public sealed record FacilityResourceFact(Guid SlotId, Guid? SpatialUnitId, string VehicleType,
-    bool Active, bool Reachable, bool FixedBackup);
+    bool Active, bool Reachable, bool FixedBackup, IReadOnlyList<Guid>? AncestorUnitIds = null,
+    IReadOnlyList<string>? CompatibleVehicleTypes = null);
 public sealed record FacilityDynamicBackupFact(Guid? SpatialUnitId, string VehicleType, int Count);
 public sealed record FacilityResourceSnapshot(FacilityBookingFacts Booking,
     IReadOnlyList<FacilityResourceFact> Resources, IReadOnlyList<FacilityDynamicBackupFact> DynamicBackups,

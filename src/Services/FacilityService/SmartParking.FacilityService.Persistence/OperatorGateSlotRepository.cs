@@ -1,10 +1,12 @@
 using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Persistence;
 
-public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGateSlotStore
+public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOperatorGateSlotRepository
 {
     public async Task<OperatorGateSlot> ClaimAvailableAsync(
         Guid tenantId,
@@ -15,8 +17,8 @@ public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGa
         bool allowReservedSlot,
         CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(ct);
+        var (db, tx) = OwningTransaction();
+        await ReservationDependencyGuard.RequireAvailableAsync(db, tx, siteId, ct);
         await using var command = new NpgsqlCommand("""
             WITH candidate AS (
                 SELECT id
@@ -74,22 +76,30 @@ public sealed class OperatorGateSlotStore(NpgsqlDataSource source) : IOperatorGa
         var slot = new OperatorGateSlot(reader.GetGuid(0), reader.GetString(1),
             reader.IsDBNull(2) ? string.Empty : reader.GetString(2));
         await reader.CloseAsync();
-        await tx.CommitAsync(ct);
         return slot;
     }
 
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
+        var (db, tx) = OwningTransaction();
+        await ReservationDependencyGuard.RequireAvailableAsync(db, tx, siteId, ct);
         await using var command = new NpgsqlCommand("""
             UPDATE parking_slots
             SET physical_state = 'AVAILABLE', updated_at = now()
             WHERE tenant_id = $1 AND site_id = $2 AND id = $3
               AND physical_state = 'OCCUPIED'
-            """, db);
+            """, db, tx);
         command.Parameters.AddWithValue(tenantId);
         command.Parameters.AddWithValue(siteId);
         command.Parameters.AddWithValue(slotId);
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private (NpgsqlConnection, NpgsqlTransaction) OwningTransaction()
+    {
+        var transaction = context.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("Gate changes require the owning UoW transaction.");
+        return ((NpgsqlConnection)context.Database.GetDbConnection(),
+            (NpgsqlTransaction)transaction.GetDbTransaction());
     }
 }

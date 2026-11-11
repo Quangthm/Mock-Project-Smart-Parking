@@ -317,7 +317,7 @@ JWT/JWKS không sửa technical debt đã được [ADR 2026-11-04](docs/02-arch
 
 ### 5.6 Reservation admission và Gate audit (SPARK-273)
 
-**Phạm vi hiện tại (cập nhật 9/11):** bản nháp đã có preview/review, đọc booking của Account, kiểm tra binding một lần và confirmation checkpoint. Tuy nhiên producer Payment/Facility và kiểm tra capacity chưa hoàn chỉnh, nên **chưa đặt chỗ thành công được**. Allowed chuyển sang `PREPARING`; không còn kết thúc cố định bằng `RESERVATION_FINALIZATION_NOT_READY`. Preview/review thiếu producer trả `503 OWNER_UNAVAILABLE`; workflow thiếu dependency giữ trạng thái chờ hoặc từ chối khi terms/deadline hết hạn. Bật RabbitMQ không tự hoàn thiện booking. Frontend chưa tích hợp; xem [API design](docs/03-design/api/reservation-first-slice-api-design.md), [producer handoff](docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md) và [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md). User yêu cầu hoãn chạy test tới khi workflow sẵn sàng; hướng dẫn dưới đây dành cho lần kiểm chứng đó.
+**Phạm vi hiện tại (cập nhật 11/11):** bản nháp đã có preview/review, đọc booking của Account, kiểm tra binding một lần và confirmation checkpoint. Facility producer/adapter và kiểm tra capacity/quota đã có trong bản nháp Commit 1 (chưa build/runtime verify). Producer Payment và durable commercial recovery vẫn chưa hoàn chỉnh, nên **chưa đặt chỗ thành công được**. Allowed chuyển sang `PREPARING`; không còn kết thúc cố định bằng `RESERVATION_FINALIZATION_NOT_READY`. Preview/review thiếu producer trả `503 OWNER_UNAVAILABLE`; workflow thiếu dependency giữ trạng thái chờ hoặc từ chối khi terms/deadline hết hạn. Bật RabbitMQ không tự hoàn thiện booking. Frontend chưa tích hợp; xem [API design](docs/03-design/api/reservation-first-slice-api-design.md), [producer handoff](docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md) và [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md). User yêu cầu hoãn chạy test tới khi workflow sẵn sàng; hướng dẫn dưới đây dành cho lần kiểm chứng đó.
 
 **Confirmation checkpoint (10/11):** Dùng một `clock_timestamp()` tại checkpoint cuối sau khi giữ guard và đọc dữ liệu hiện tại; phải `< T`. Transaction có thể commit sau T, nhưng chỉ công bố confirmed sau durable commit. Không còn candidate/evidence stage, không cần `track_commit_timestamp` hoặc quyền đọc commit metadata. Compose đã bỏ setting này; agent không restart server/đổi dữ liệu. `synchronous_commit=on` vẫn áp dụng cho transaction confirmation. `CREATE IF NOT EXISTS` không nâng cấp volume cũ; nếu từng chạy schema candidate cũ, deployment owner cần kiểm kê/reconcile trước khi dùng bản mới. Xem [quyết định mới](docs/05-project-management/decision-log/2026-11-10-reservation-evaluation-checkpoint.md).
 
@@ -391,6 +391,95 @@ Chọn cách chạy đang sử dụng; không cần reset database chỉ để �
 Với Driver JWT hợp lệ, request body hợp lệ và `Idempotency-Key` mới, `POST /api/reservation-requests` dự kiến trả `202` sau khi lưu receipt/outbox; dùng cùng Account để `GET` Location trả về. Timely Allowed kết thúc tại gate finalization nói trên, không tạo booking/payment. Admission tắt trả `503 / RESERVATION_ADMISSION_DISABLED`; broker credentials trống khi bắt buộc gây lỗi startup; queue/quyền/relay thiếu có thể khiến authorization timeout. Kiểm tra schema, broker connection và public JWKS nếu chưa đạt bước này; không chia sẻ credentials/JWT trong báo cáo lỗi.
 
 **Trạng thái kiểm chứng:** hướng dẫn dựa trên wiring hiện tại; build và PostgreSQL/RabbitMQ/runtime của slice vẫn **UNVERIFIED**. Chạy và ghi kết quả theo [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md); không coi service healthy hoặc response `202` là booking confirmed.
+
+### 5.7 Dedicated Operations → Facility service JWT (reservation)
+
+This capability is separate from Driver JWT/JWKS and `SMARTPARK_SERVICE_KEY`. UserService's private key stays in UserService. Operations signs short-lived service JWTs with its own RSA key; Facility receives only the matching public key. No custom encryption or shared signing secret is introduced.
+
+Generate once, outside the repository (PowerShell 7; these commands are instructions, not executed by the agent):
+
+```powershell
+$reservationKeyDirectory = Join-Path $env:LOCALAPPDATA 'SmartPark/reservation-service-keys'
+New-Item -ItemType Directory -Path $reservationKeyDirectory -Force | Out-Null
+$reservationPrivatePath = Join-Path $reservationKeyDirectory 'operations-private.pem'
+$reservationPublicPath = Join-Path $reservationKeyDirectory 'operations-public.pem'
+if ((Test-Path -LiteralPath $reservationPrivatePath) -or (Test-Path -LiteralPath $reservationPublicPath)) {
+    throw 'Keys already exist. Reuse them; do not rotate an active integration accidentally.'
+}
+$reservationRsa = [System.Security.Cryptography.RSA]::Create(3072)
+try {
+    [IO.File]::WriteAllText($reservationPrivatePath, $reservationRsa.ExportPkcs8PrivateKeyPem())
+    [IO.File]::WriteAllText($reservationPublicPath, $reservationRsa.ExportSubjectPublicKeyInfoPem())
+} finally { $reservationRsa.Dispose() }
+```
+
+If `ExportPkcs8PrivateKeyPem` is missing, check `$PSVersionTable.PSVersion`. Windows PowerShell 5.1 uses .NET Framework and lacks that API. You can run the preceding block in PowerShell 7, or use OpenSSL from Windows PowerShell. Keep the directory, path variables and existing-file check above, then replace the RSA export block with:
+
+```powershell
+$openssl = 'C:\Program Files\Git\mingw64\bin\openssl.exe'
+if (!(Test-Path -LiteralPath $openssl)) {
+    $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
+}
+& $openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out $reservationPrivatePath
+if ($LASTEXITCODE -ne 0) { throw 'Private key generation failed.' }
+& $openssl pkey -in $reservationPrivatePath -pubout -out $reservationPublicPath
+if ($LASTEXITCODE -ne 0) { throw 'Public key export failed.' }
+```
+
+If you already have the matching PEM pair, reuse it. For the host runner with pasted PEM text, set `SMARTPARK_RESERVATION_FACILITY_ENABLED=true` and, for local HTTP, `SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP=true` in the private root `.env`. Leave both Facility integration key-path settings blank. Clear any stale `ReservationIntegration:OperationsPrivateKeyPath` or `ReservationIntegration:OperationsPublicKeyPath` in the corresponding Development user-secrets, because a configured path takes precedence. Keep multiline PEM text out of `.env`; the PowerShell loader reads one line at a time.
+
+Copy the full private PEM, including its BEGIN and END lines, and use a dedicated Operations terminal:
+
+```powershell
+$env:ReservationIntegration__OperationsPrivateKeyPem = Get-Clipboard -Raw
+try { ./scripts/run-schema-service.ps1 -Service Operation }
+finally { Remove-Item Env:ReservationIntegration__OperationsPrivateKeyPem -ErrorAction SilentlyContinue }
+```
+
+Copy the matching public PEM and use a separate Facility terminal:
+
+```powershell
+$env:ReservationIntegration__OperationsPublicKeyPem = Get-Clipboard -Raw
+try { ./scripts/run-schema-service.ps1 -Service Facility }
+finally { Remove-Item Env:ReservationIntegration__OperationsPublicKeyPem -ErrorAction SilentlyContinue }
+```
+
+For Docker with pasted PEM text, use the same copy-and-start sequence with `SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM` for Operations and `SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM` for Facility. Run `./scripts/run-app-service.ps1 -Service Operation` or `-Service Facility` respectively, and remove the corresponding temporary environment variable afterward. For Visual Studio Development, paste into the respective project's **Manage User Secrets** JSON using `ReservationIntegration:OperationsPrivateKeyPem` or `ReservationIntegration:OperationsPublicKeyPem`. Represent line breaks as `\n` inside the JSON string, sync the feature flags through setup, then restart the project.
+
+For host development using file paths, fill these values in your private root `.env`:
+
+```dotenv
+SMARTPARK_RESERVATION_FACILITY_ENABLED=true
+SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP=true
+SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH=C:/Users/YOUR_USER/AppData/Local/SmartPark/reservation-service-keys/operations-private.pem
+SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH=C:/Users/YOUR_USER/AppData/Local/SmartPark/reservation-service-keys/operations-public.pem
+```
+
+Use your actual absolute paths. Only Operations is configured with the private-key path; give the Facility teammate the public PEM only. On separate machines the public-key path is local to Facility. Run `./setup.ps1 -SkipDatabase -SkipRestore` to sync Visual Studio/direct-run user-secrets, then restart Facility and Operations. The host runner also maps these keys on startup. Existing database/broker settings remain required.
+
+For Docker development, host file paths do not resolve inside containers. In the same PowerShell session used to invoke the app runner, supply PEM values through process environment (do not print them or paste them into Git):
+
+```powershell
+$env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM = [IO.File]::ReadAllText($reservationPrivatePath)
+$env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM = [IO.File]::ReadAllText($reservationPublicPath)
+try {
+    ./scripts/run-app-service.ps1 -Service Facility
+    ./scripts/run-app-service.ps1 -Service Operation
+} finally {
+    Remove-Item Env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM -ErrorAction SilentlyContinue
+    Remove-Item Env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM -ErrorAction SilentlyContinue
+}
+```
+
+Compose passes the private PEM only to Operations and the public PEM only to Facility. For a protected deployment prefer service-specific secret-file mounts using `ReservationIntegration__OperationsPrivateKeyPath` / `OperationsPublicKeyPath`; keep HTTP opt-in false and configure HTTPS. The local Docker network uses HTTP, so the explicit local opt-in above is necessary. Tokens are signed, not encrypted; transport protection is separate.
+
+Accepted JWT: RS256, issuer/sub/sender `SmartParking.OperationService`, audience `SmartParking.FacilityService`, permission `reservation:facility-dependency`, 60-second lifetime, 5-second validation skew. No browser token or sender/audience header alone grants access. Rotation is coordinated: replace the Operations key and Facility trust together, restart affected hosts, and expect old tokens to fail; a multi-key rollover endpoint is not implemented.
+
+Prepare the original Facility/Operations schemas, explicit site/category quotas, reservation policy seed and per-site late-tolerance choice. Existing tables are not upgraded by `CREATE IF NOT EXISTS`; no automatic reset or SQL overlay is supplied. Reconcile legacy cancellation history before sales.
+
+For durable hold/availability/Facility-applied events, configure the existing Operations bus and outbox, bind consumer queues, then enable `Messaging__OutboxDeliveryEnabled`. Facility's committed structure outcome is already durably replayed to Operations; Operations emits the applied fact in its own outbox transaction. This does not require a second Facility bus. Unconfigured messaging prevents successful structure completion; pending synchronization must recover after configuration is restored.
+
+See the [event/SignalR and deployment handoff](docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md). SignalR relay, frontend changes, Payment producers and the next Operations commercial-recovery commit remain separate work. Enabling this capability does not make paid reservation confirmation ready for production.
 
 ## 6. Troubleshooting
 

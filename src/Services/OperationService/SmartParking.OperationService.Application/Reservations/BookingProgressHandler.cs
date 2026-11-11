@@ -11,7 +11,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
     IReservationTermsRepository reviews, IReservationBookingRepository bookings,
     IReservationVehicleOwner vehicles, IReservationCommercialOwner commercial,
     IReservationFacilityDependencyRepository dependencies, IReservationWorkflowConcurrency workers,
-    IReservationCapacityAcceptance capacity, IReservationFactsPublisher publisher,
+    IReservationAvailabilityRepository availability, IReservationFactsPublisher publisher,
     IOperationsConcurrency guards, IUnitOfWork work, IMediator mediator)
     : IRequestHandler<ProgressReservationCommand>
 {
@@ -88,6 +88,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         if (dependency is null) return;
         var resourceFacts = JsonSerializer.Deserialize<FacilityResourceSnapshot>(dependency.SnapshotJson!)
             ?? throw new InvalidOperationException("Stored Facility facts are invalid.");
+        await availability.LockAccountAsync(request.AccountId, ct);
         await guards.LockVehicleAsync(request.VehiclePlate!, ct);
         await guards.LockSiteAsync(input.SiteId, ct);
         var current = resourceFacts.Booking;
@@ -98,6 +99,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
             policy.Site.Version != accepted.SitePolicyVersion)
         { request.Reject("TERMS_CHANGED_OR_EXPIRED"); return; }
         now = await bookings.DatabaseNowAsync(ct);
+        await mediator.Send(new RequireBookingPermissionCommand(request.AccountId, policy, now), ct);
         if (now >= request.OverallDeadline || !review.CanAccept(request.AccountId, BookingContracts.Fingerprint(selection),
             input.TermsVersion, request.Id, now) || !policy.AllowsWindow(new(input.Start, input.End), now))
         { request.Reject("TERMS_CHANGED_OR_EXPIRED"); return; }
@@ -111,7 +113,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         booking.OriginalPlate = request.VehiclePlate;
         booking.NormalizedPlate = request.VehiclePlate;
         await bookings.RequirePlateAvailableAsync(booking, now, ct);
-        await capacity.RequireAvailableAsync(booking, resourceFacts, now, ct);
+        await mediator.Send(new RequireReservationAvailabilityCommand(booking, resourceFacts, now), ct);
         if (!await commercial.AcceptAsync(request.Id, accepted.Commercial, ct))
         { request.Reject("TERMS_CHANGED_OR_EXPIRED"); return; }
         // The owner accepts by stable workflow ID. A lost local commit replays that same acceptance.
@@ -121,6 +123,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         review.Accept(request.Id);
         await bookings.AddAsync(booking, ct);
         request.AttachBooking(booking.Id);
+        await PublishHoldAsync(booking, now, "PENDING_PAYMENT", booking.Version, ct);
         dependency.MarkReady(JsonSerializer.Serialize(new { reservationId = booking.Id, outcome = "HOLD_COMMITTED" }), now);
     }
 
@@ -134,7 +137,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         var booking = await bookings.FindForUpdateAsync(own.TenantId, own.SiteId, own.Id, ct)
             ?? throw new InvalidOperationException("Workflow booking is missing.");
         now = await bookings.DatabaseNowAsync(ct);
-        booking.ReleaseExpiredHold(now);
+        await ReleaseExpiredHoldAsync(booking, now, ct);
         var quote = JsonSerializer.Deserialize<CommercialTerms>(booking.AcceptedPricingSnapshot!)!;
         if (booking.DepositAmount == 0)
         {
@@ -156,7 +159,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
             {
                 now = await bookings.DatabaseNowAsync(ct);
                 if (now < booking.HoldExpiresAt) throw BookingContracts.InvalidOwner();
-                booking.ReleaseExpiredHold(now);
+                await ReleaseExpiredHoldAsync(booking, now, ct);
                 request.FinishBooking("EXPIRED", "PAYMENT_HOLD_EXPIRED");
                 return;
             }
@@ -221,21 +224,38 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         var evaluatedAt = await bookings.DatabaseNowAsync(ct);
         if (evaluatedAt >= booking.ExpectedStartTime || evaluatedAt >= dependency.Deadline)
         {
-            booking.ReleaseExpiredHold(evaluatedAt);
+            await ReleaseExpiredHoldAsync(booking, evaluatedAt, ct);
             request.Defer(evaluatedAt.AddSeconds(1), "BOOKING_START_REACHED");
             return;
         }
         await bookings.RequirePlateAvailableAsync(booking, evaluatedAt, ct);
-        await capacity.RequireAvailableAsync(booking, resourceFacts, evaluatedAt, ct);
+        await mediator.Send(new RequireReservationAvailabilityCommand(booking, resourceFacts, evaluatedAt), ct);
         booking.ConfirmAtEvaluation(collectionId, evaluatedAt);
         dependency.MarkReady(JsonSerializer.Serialize(new { reservationId = booking.Id, outcome = "CONFIRMED",
             evaluatedAt, confirmationEventId = booking.ConfirmationEffectId }), evaluatedAt);
         await publisher.ConfirmedAsync(new(booking.ConfirmationEffectId!.Value, booking.Id, booking.AccountId,
             booking.TenantId, booking.SiteId, evaluatedAt), ct);
+        await publisher.AvailabilityChangedAsync(new(Guid.NewGuid(), evaluatedAt, booking.TenantId,
+            booking.SiteId, booking.TargetSlotId!.Value, booking.ExpectedStartTime,
+            booking.ClaimEndTime ?? booking.ExpectedEndTime, "CONFIRMED"), ct);
         request.FinishBooking("COMPLETED", null);
         // Outbox, receipt and confirmed state become visible only after the owning commit.
         // Lost acknowledgement replays these durable identities; rollback requires a new evaluation.
     }
+
+    private async Task ReleaseExpiredHoldAsync(ReservationRow booking, DateTimeOffset now, CancellationToken ct)
+    {
+        var previous = booking.Status;
+        booking.ReleaseExpiredHold(now);
+        if (previous == "PENDING_PAYMENT" && booking.Status == "EXPIRED")
+            await PublishHoldAsync(booking, now, "EXPIRED", checked(booking.Version + 1), ct);
+    }
+
+    private Task PublishHoldAsync(ReservationRow booking, DateTimeOffset now, string state, int version, CancellationToken ct) =>
+        publisher.HoldChangedAsync(new(Guid.NewGuid(), now, booking.RequestId!.Value, booking.Id,
+            booking.AccountId, booking.TenantId, booking.SiteId, booking.TargetSlotId!.Value,
+            booking.ExpectedStartTime, booking.ClaimEndTime ?? booking.ExpectedEndTime,
+            booking.HoldExpiresAt!.Value, state, version), ct);
 
     private async Task<ReservationFacilityDependency?> RequireDependencyAsync(ReservationRequest request, string purpose,
         Guid tenant, Guid site, Guid slot, DateTimeOffset deadline, DateTimeOffset now, CancellationToken ct)

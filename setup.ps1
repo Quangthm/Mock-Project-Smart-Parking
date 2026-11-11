@@ -770,6 +770,15 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
             $desired['SMARTPARK_RABBITMQ_VHOST'] = $settings['SMARTPARK_RABBITMQ_VHOST']
         }
     }
+    if ($service -in @('Parking', 'Reservation')) {
+        $desired['ReservationIntegration:Enabled'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ENABLED']) { $settings['SMARTPARK_RESERVATION_FACILITY_ENABLED'] } else { 'false' }
+        if ($service -eq 'Reservation') {
+            $desired['ReservationIntegration:AllowHttp'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP']) { $settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP'] } else { 'false' }
+            $desired['ReservationIntegration:OperationsPrivateKeyPath'] = if ($settings['SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH']) { $settings['SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH'] } else { '' }
+        } else {
+            $desired['ReservationIntegration:OperationsPublicKeyPath'] = if ($settings['SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH']) { $settings['SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH'] } else { '' }
+        }
+    }
     $toSync = @{}
     foreach ($name in $desired.Keys) {
         if (!$existingByService[$service].ContainsKey($name) -or $existingByService[$service][$name] -cne $desired[$name]) {

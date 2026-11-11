@@ -4,10 +4,12 @@ using SmartParking.OperationService.Domain;
 using SmartParking.OperationService.Domain.Entities;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using SmartParking.OperationService.Application.Reservations;
 
 namespace SmartParking.OperationService.Application.Usecase.Structure.Commands.CompleteStructureEdit;
 
-public sealed class CompleteStructureEditCommandHandler(IStructureRepository repository, IOperationsConcurrency guards, IUnitOfWork work, TimeProvider clock)
+public sealed class CompleteStructureEditCommandHandler(IStructureRepository repository, IOperationsConcurrency guards, IUnitOfWork work, TimeProvider clock,
+    IReservationFactsPublisher facts)
     : IRequestHandler<CompleteStructureEditCommand>
 {
     public async Task Handle(CompleteStructureEditCommand request, CancellationToken ct)
@@ -44,6 +46,8 @@ public sealed class CompleteStructureEditCommandHandler(IStructureRepository rep
                 var capacity = outcome.Capacities.FirstOrDefault(c => c.UnitId == pool.SpatialUnitId && c.VehicleType == pool.VehicleType);
                 pool.ApplyStructureCapacity(capacity?.Capacity ?? 0, capacity?.Backup ?? 0, clock.GetUtcNow());
             }
+            await facts.FacilityAppliedAsync(new(Guid.NewGuid(), clock.GetUtcNow(), request.Token,
+                request.TenantId, request.SiteId, outcome.SiteActive, outcome.RemovedSlots, outcome.RemovedUnits), ct);
         }
         repository.AddReceipt(new() { Token = request.Token, TenantId = request.TenantId, SiteId = request.SiteId,
             Outcome = payload, CompletedAt = clock.GetUtcNow() });

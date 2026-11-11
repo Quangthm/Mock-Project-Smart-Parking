@@ -8,7 +8,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.C
 
 public sealed class ConfigureBackupPolicyCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<ConfigureBackupPolicyCommandHandler> logger)
     : IRequestHandler<ConfigureBackupPolicyCommand>
 {
@@ -17,7 +17,7 @@ public sealed class ConfigureBackupPolicyCommandHandler(
         logger.LogInformation("Configuring backup policy for unit {UnitId} in site {SiteId}", request.UnitId, request.SiteId);
         // Requires BACKUP_CONFIGURE permission
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct, "BACKUP_CONFIGURE");
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.ConfigureBackup(
             request.UnitId == Guid.Empty ? null : request.UnitId,
             request.VehicleType ?? throw new StructureException("INVALID_STRUCTURE", "Vehicle type is required."),

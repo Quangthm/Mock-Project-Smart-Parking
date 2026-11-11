@@ -25,11 +25,29 @@ public static class OperationHost
         if (admissionEnabled)
         {
             builder.Services.AddConsumerAuthentication(builder.Configuration);
+            builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
+                Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.Events.OnChallenge = async context =>
+                    {
+                        context.HandleResponse();
+                        context.Response.Headers.WWWAuthenticate = "Bearer";
+                        var unavailable = ConsumerAuthenticationRegistration.KeysUnavailable(context.HttpContext);
+                        await ApiErrors.WriteAsync(context.HttpContext, unavailable ? 503 : 401,
+                            unavailable ? "AUTHENTICATION_KEYS_UNAVAILABLE" : "UNAUTHENTICATED",
+                            unavailable ? "Authentication is temporarily unavailable." : "Authentication is required.",
+                            ct: context.HttpContext.RequestAborted);
+                    };
+                    options.Events.OnForbidden = async context =>
+                    {
+                        await ApiErrors.WriteAsync(context.HttpContext, 403, "FORBIDDEN", "Access is denied.",
+                            ct: context.HttpContext.RequestAborted);
+                    };
+                });
         }
         builder.Services.AddReservationMessaging(builder.Configuration);
         builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
-        builder.Services.Configure<ApiBehaviorOptions>(options => options.InvalidModelStateResponseFactory = context =>
-            new BadRequestObjectResult(new { success = false, code = "INVALID_REQUEST", message = "The request body or parameters are invalid.", traceId = context.HttpContext.TraceIdentifier }));
+        ApiErrors.Configure(builder.Services);
         builder.Services.AddControllers().AddApplicationPart(typeof(ReservationsController).Assembly);
         var origins = builder.Configuration["Cors:AllowedOrigins"]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             ?? builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -40,10 +58,7 @@ public static class OperationHost
         var app = builder.Build();
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.UseCors();
-        app.UseExceptionHandler(new ExceptionHandlerOptions
-        {
-            SuppressDiagnosticsCallback = context => context.Exception is not OperationCanceledException
-        });
+        ApiErrors.Use(app);
         app.Use(async (context, next) =>
         {
             context.Response.Headers.CacheControl = "no-store";
@@ -52,9 +67,8 @@ public static class OperationHost
                 context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations")))
             {
-                context.Response.StatusCode = 503;
-                if (!HttpMethods.IsHead(context.Request.Method))
-                    await context.Response.WriteAsJsonAsync(new { success = false, code = "RESERVATION_ADMISSION_DISABLED", message = "Reservation admission is not enabled.", traceId = context.TraceIdentifier });
+                await ApiErrors.WriteAsync(context, 503, "RESERVATION_ADMISSION_DISABLED",
+                    "Reservation admission is not enabled.", ct: context.RequestAborted);
                 return;
             }
             await next(context);

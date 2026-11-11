@@ -105,6 +105,15 @@ if ($Service -in @('User', 'Reservation')) {
     }
 }
 
+if ($Service -in @('Parking', 'Reservation')) {
+    $env:ReservationIntegration__Enabled = if ($env:SMARTPARK_RESERVATION_FACILITY_ENABLED) { $env:SMARTPARK_RESERVATION_FACILITY_ENABLED } else { 'false' }
+    if ($Service -eq 'Reservation') {
+        $env:ReservationIntegration__AllowHttp = if ($env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP) { $env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP } else { 'false' }
+        $env:ReservationIntegration__OperationsPrivateKeyPath = if ($env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH) { $env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH } else { '' }
+    } else {
+        $env:ReservationIntegration__OperationsPublicKeyPath = if ($env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH) { $env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH } else { '' }
+    }
+}
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
 $defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444' }
 $apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065' }

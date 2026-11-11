@@ -5,7 +5,7 @@
 | Metadata | Value |
 |---|---|
 | Owner | Parking Operations; User & Access, Facility/Gate and Payment supply authoritative facts |
-| Status | WORK IN PROGRESS: admission, preview/review, own reads and evaluation-checkpoint confirmation in source; missing owner/capacity integration prevents live booking. Current build/runtime UNVERIFIED |
+| Status | WORK IN PROGRESS: admission, preview/review, own reads and evaluation-checkpoint confirmation in source; missing Payment delivery and commercial recovery prevent live booking. Current build/runtime UNVERIFIED |
 | Task | SPARK-273 / US-D01, US-D05, US-D10; implementation evidence in the [session](../../../ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md) |
 | Reviewed checkout | 7c47755d83cbe4eea2d2e887a2abc49e6decd203; old handoff SHA is historical |
 | Requirements | [Reservation SRS](../../01-requirements/srs/modules/04-reservations-allocation.md), [BR-RES](../../01-requirements/business-rules/04-reservations-allocation.md), [UC-RES-01](../../01-requirements/use-cases/uc-res-01.md), [UC-RES-02](../../01-requirements/use-cases/uc-res-02.md), [UC-RES-03](../../01-requirements/use-cases/uc-res-03.md) |
@@ -14,7 +14,7 @@
 
 ## API Specification
 
-The table distinguishes current source routes from proposed cancellation work. All current Driver routes require admission enabled and validated Driver JWTs. Commercial/Facility producers and Operations capacity checks are not integrated; preview/review currently fail closed, not fake a price or valid booking. Use `success/data` success and `success/code/message/errors/traceId` error envelopes; status is HTTP-only. Return `Cache-Control: no-store`. Absent/foreign own IDs return indistinguishable 404. No end-user endpoint accepts an Account/User identity as authority. [9 November decisions](../../05-project-management/decision-log/2026-11-09-reservation-confirmation-and-arrival.md) supersede older identity/cutoff proposals; [producer handoff](../../05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md) lists current integration gates.
+The table distinguishes current source routes from proposed cancellation work. All current Driver routes require admission enabled and validated Driver JWTs. Facility producer/transport and Operations capacity/quota/restriction checks are implemented in the unverified Commit 1 draft; the commercial owner remains unavailable, so preview/review currently fail closed, not fake a price or valid booking. Use `success/data` success and `success/code/message/errors/traceId` error envelopes; status is HTTP-only. Return `Cache-Control: no-store`. Absent/foreign own IDs return indistinguishable 404. No end-user endpoint accepts an Account/User identity as authority. [9 November decisions](../../05-project-management/decision-log/2026-11-09-reservation-confirmation-and-arrival.md) supersede older identity/cutoff proposals; [producer handoff](../../05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md) lists current integration gates.
 
 | Method / URL | Freshness / authentication | Scope and purpose |
 |---|---|---|
@@ -89,7 +89,8 @@ List response: `{"success":true,"data":[]}`. Items use the current booking summa
 | 503 | PROTOTYPE_SCHEMA_NOT_READY | Preserve existing affected schema-readiness contract; initialization is not an upgrade. |
 | 503 | OWNER_UNAVAILABLE / OWNER_CONTRACT_INVALID | Required owner absent or its response violates the bound contract; no synthetic free quote/sellable slot. |
 | 503 | RESERVATION_POLICY_UNAVAILABLE | Missing/ambiguous database policy or missing explicit site late-tolerance choice. |
-| 503 | CAPACITY_COORDINATION_UNAVAILABLE | Capacity implementation unavailable; current workflow defers safely. |
+| 409 | SLOT_TIME_CONFLICT / CAPACITY_UNAVAILABLE / RESERVATION_QUOTA_EXCEEDED / VEHICLE_TIME_CONFLICT / BOOKING_RESTRICTED | Selected slot, compatible capacity, quota, canonical plate or cancellation restriction rejects acceptance. Admission reports the code through its receipt. |
+| 503 | CAPACITY_CONFIGURATION_REQUIRED / OCCUPANCY_RECONCILIATION_REQUIRED / CANCELLATION_HISTORY_RECONCILIATION_REQUIRED | Explicit quota or reliable retained history is missing; fix/reconcile deployment data, never guess or bypass. |
 | 500 | INTERNAL_ERROR | Sanitized unexpected failure with trace ID; unknown commit requires same-key observation, not a new payment attempt. |
 
 Example: `{"success":false,"code":"IDEMPOTENCY_KEY_REUSED","message":"The key is already bound to another request.","traceId":"example-trace"}`. MVC parsing, authentication challenge/forbid and exception producers use the shared envelope; HEAD/204 remain bodyless. Request-abort after durable commit does not undo admission.
@@ -115,13 +116,13 @@ Required completion behavior: after Allowed, obtain external facts outside locks
 
 ## Cross-owner interfaces to agree
 
-Wire contracts below are PROPOSED, not claims of producer availability. Use separately versioned messages; a service may not reference another service's Application assembly as a contract library.
+Account and Facility contracts are implemented drafts; Payment contracts below remain delivery requirements, not claims of available producers. Use separately versioned messages; a service may not reference another service's Application assembly as a contract library.
 
 | Boundary / owner | Required request and response | Unresolved dependency |
 |---|---|---|
 | Account-current / UserService | CREATE_RESERVATION request/decision with workflow and delivery attempt identity, actor and deadlines; one durable workflow evaluation replayed in later envelopes. | Service-local DTOs and restricted broker queues are approved and implemented in the foundation; deployment proof remains required. Cancellation is future work. |
 | Vehicle binding / UserService | Reuse [exact binding API](vehicle-registration-api-design.md): Account, stable vehicle and expected revision → ACTIVE CAR + revision or ineligible/stale; no raw JWT persisted. | Existing shared service-key exception covers this lookup only. No removal/transfer handshake is inferred; scope new writes if a binding writer cannot participate. |
-| Structure / Facility and Operations | Tenant/site/slot, active/readiness, vehicle compatibility, resource/config version, zone/fallback/backup and coordinates; absent distinct from unavailable. | Extend the existing structure prepare/complete guard to every competing closure/retirement/config writer. A remote read alone does not fence later changes. |
+| Structure / Facility and Operations | Tenant/site/slot, active/readiness, vehicle compatibility, resource/config version, zone/fallback/backup and coordinates; absent distinct from unavailable. | The reverse [durable dependency v1](reservation-facility-dependency-api-design.md) and dedicated Operations JWT are implemented. Verify all participating writers and recovery in deployment; a remote read alone does not fence later changes. |
 | Quote/coverage / Payment and Operations | Quote ID/version, bound Account/vehicle/site/slot/interval, validity, currency, booked/deposit values, FULL/PERCENTAGE/FIXED, rounding, coverage references/version, immutable terms. | Current parking-fee calculation is not an accepted reservation quote. Define issuance/consumption and coverage-cancellation handshake before sale. |
 | Deposit order / Payment | Stable operation ID, reservation/tenant/site/Account, RESERVATION_FEE, exact H, money/currency, accepted terms version. Identical replay returns same order; mismatched payload conflicts. | Provider deadline support cannot extend Operations eligibility; Payment owner must supply actual order/status adapter. |
 | Verified money/refund / Payment | Authenticated financial event ID and transaction/order/operation/reservation scope, amount/currency/terms version and verified state; query by operation ID with Succeeded/RejectedNoEffect/Processing/NotFound/Unknown. Refund has its own ID, cause, original effect and eligible remaining value. | Outcome transport authentication and reconciliation/refund ownership/retention must be agreed; NotFound alone is inconclusive. |

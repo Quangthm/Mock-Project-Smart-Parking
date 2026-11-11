@@ -63,6 +63,9 @@ public interface IReservationVehicleOwner
 public interface IReservationFactsPublisher
 {
     Task ConfirmedAsync(ReservationConfirmedV1 fact, CancellationToken ct);
+    Task HoldChangedAsync(ReservationHoldChangedV1 fact, CancellationToken ct);
+    Task AvailabilityChangedAsync(ReservationAvailabilityChangedV1 fact, CancellationToken ct);
+    Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct);
 }
 // A specialized port on the SAME ReservationRepository/aggregate, not a second persistence store.
 public interface IReservationBookingRepository : Common.Interfaces.Persistence.IReservationRepository
@@ -73,14 +76,6 @@ public interface IReservationBookingRepository : Common.Interfaces.Persistence.I
     Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct);
     Task RequireDurableConfirmationAsync(CancellationToken ct);
     Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct);
-}
-// Admission capacity includes quotas, cross-site canonical plate exclusion, physical occupancy,
-// protection/backup accounting and every competing writer. No unchecked local snapshot fallback.
-public interface IReservationCapacityAcceptance
-{
-    // Load current facts under the caller's guards; evaluate every time-dependent condition
-    // using this checkpoint value. Do not fetch a new clock or make remote calls here.
-    Task RequireAvailableAsync(ReservationRow proposed, FacilityResourceSnapshot resources, DateTimeOffset evaluatedAt, CancellationToken ct);
 }
 public interface IReservationTermsRepository
 {

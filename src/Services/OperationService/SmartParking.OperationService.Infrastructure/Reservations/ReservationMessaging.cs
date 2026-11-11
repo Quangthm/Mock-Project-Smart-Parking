@@ -34,6 +34,12 @@ public sealed class DisabledAccountAccessRequester : IAccountAccessRequester
 
 public sealed class DisabledReservationFactsPublisher : IReservationFactsPublisher
 {
+    public Task AvailabilityChangedAsync(ReservationAvailabilityChangedV1 fact, CancellationToken ct) =>
+        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
+    public Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct) =>
+        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
+    public Task HoldChangedAsync(ReservationHoldChangedV1 fact, CancellationToken ct) =>
+        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
     public Task ConfirmedAsync(ReservationConfirmedV1 fact, CancellationToken ct) =>
         throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
 }
@@ -89,6 +95,15 @@ public static class ReservationMessaging
                     });
                 bus.Message<OperationsGateAuditV1>(message => message.SetEntityName(OperationsAuditTopology.Exchange));
                 bus.Message<ReservationConfirmedV1>(message => message.SetEntityName("smartpark.operations.reservation-confirmed.v1"));
+                bus.Message<ReservationHoldChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));
+                bus.Message<ReservationAvailabilityChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-availability-changed.v1"));
+                bus.Message<FacilityStructureAppliedV1>(message => message.SetEntityName("smartpark.operations.facility-structure-applied.v1"));
+                bus.Publish<FacilityStructureAppliedV1>(publish =>
+                { publish.Durable = true; publish.AutoDelete = false; publish.ExchangeType = "fanout"; });
+                bus.Publish<ReservationHoldChangedV1>(publish =>
+                { publish.Durable = true; publish.AutoDelete = false; publish.ExchangeType = "fanout"; });
+                bus.Publish<ReservationAvailabilityChangedV1>(publish =>
+                { publish.Durable = true; publish.AutoDelete = false; publish.ExchangeType = "fanout"; });
                 bus.Publish<ReservationConfirmedV1>(publish =>
                 { publish.Durable = true; publish.AutoDelete = false; publish.ExchangeType = "fanout"; });
                 bus.Publish<OperationsGateAuditV1>(publish =>

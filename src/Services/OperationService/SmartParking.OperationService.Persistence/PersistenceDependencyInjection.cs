@@ -28,6 +28,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<Application.Reservations.IReservationRequestRepository, ReservationRequestRepository>();
         services.AddScoped<Application.Reservations.IReservationWorkflowConcurrency, ReservationWorkflowConcurrency>();
         services.AddScoped<Application.Reservations.IReservationPolicyRepository, ReservationPolicyRepository>();
+        services.AddScoped<Application.Reservations.IReservationAvailabilityRepository, ReservationAvailabilityRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped<IStructureRepository, StructureRepository>();
         services.AddScoped<OperationsConcurrency>();

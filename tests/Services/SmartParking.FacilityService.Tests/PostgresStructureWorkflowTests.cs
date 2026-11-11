@@ -60,8 +60,8 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal(new[] { slotId }, pending.Outcome!.RemovedSlots);
 
         // Recreate both store and Application service as on a process restart.
-        var restartedStore = new PostgresStructureSynchronizationStore(fixture.Parking, fixture.Gates);
-        var restarted = new StructureSynchronizationService(restartedStore, fixture.Transport);
+        var restartedStore = new PostgresStructureSynchronizationRepository(fixture.Parking, fixture.Gates);
+        var restarted = new StructureSynchronizationHandlers(restartedStore, fixture.Transport);
         Assert.Empty(await restarted.RecoverPendingAsync(CancellationToken.None));
         Assert.Empty(await restartedStore.PendingAsync(fixture.SiteId, CancellationToken.None));
         Assert.Equal(1L, await fixture.ScalarAsync(fixture.Parking,
@@ -312,7 +312,7 @@ public sealed class PostgresStructureWorkflowTests
         };
         await using var querySource = NpgsqlDataSource.Create(settings.ConnectionString);
         await using var gates = new ParkingGateConnectionPool(settings.ConnectionString, 2);
-        var store = new PostgresStructureSynchronizationStore(querySource, gates);
+        var store = new PostgresStructureSynchronizationRepository(querySource, gates);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await using var first = await store.TryLockSiteAsync(Guid.NewGuid(), deadline.Token);
@@ -410,7 +410,7 @@ public sealed class PostgresStructureWorkflowTests
             vehicle: null, type: SlotType.STANDARD,
             vehicleTypes: [VehicleType.CAR, VehicleType.MOTORCYCLE],
             primaryVehicleType: VehicleType.CAR, ct: CancellationToken.None);
-        var claims = new OperatorGateSlotStore(fixture.Parking);
+        var claims = new GateCommandFixture(fixture.Parking);
 
         // The table wins for eligibility: the secondary category can claim the slot.
         var secondary = await claims.ClaimAvailableAsync(fixture.Owner.TenantId, fixture.SiteId, "MOTORCYCLE",
@@ -440,7 +440,7 @@ public sealed class PostgresStructureWorkflowTests
     public async Task LegacyProjectionIsTheClaimFallbackAndANullProjectionNeverThrows()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
-        var claims = new OperatorGateSlotStore(fixture.Parking);
+        var claims = new GateCommandFixture(fixture.Parking);
 
         // Legacy row: no compatibility rows, non-null projection column.
         var legacy = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "LEGACY",
@@ -546,7 +546,7 @@ public sealed class PostgresStructureWorkflowTests
         Assert.Equal("DUPLICATE_IDENTIFIER", duplicate.Code);
 
         // The compatibility set survived the soft delete: the restored slot is claimable for its secondary type.
-        var claims = new OperatorGateSlotStore(fixture.Parking);
+        var claims = new GateCommandFixture(fixture.Parking);
         var claimed = await claims.ClaimAvailableAsync(fixture.Owner.TenantId, fixture.SiteId, "MOTORCYCLE",
             null, null, false, CancellationToken.None);
         Assert.Equal(slotId, claimed.Id);
@@ -850,7 +850,7 @@ public sealed class PostgresStructureWorkflowTests
     private sealed class PostgresStructureOperationTestFacade(
         IStructureOperationStore store,
         IStructureImpactPlanner planner,
-        IStructureUnitOfWork unitOfWork,
+        StructureEditHandlers unitOfWork,
         IOwnerAuthorizer owners)
     {
         public async Task<StructureOperation> ReadAsync(
@@ -928,7 +928,7 @@ public sealed class PostgresStructureWorkflowTests
 
     private sealed class PostgresStructureTestFacade(
         IParkingStructureRepository repository,
-        IStructureUnitOfWork unitOfWork)
+        StructureEditHandlers unitOfWork)
     {
         public async Task<SiteProfile> CreateAsync(
             OwnerScope owner, string code, string name, string address,
@@ -996,12 +996,12 @@ public sealed class PostgresStructureWorkflowTests
         public OwnerScope Owner { get; } = new(Guid.NewGuid(), Guid.NewGuid());
         public Guid SiteId { get; private set; }
         public Guid UnitId { get; private set; }
-        public PostgresStructureSynchronizationStore Store { get; }
+        public PostgresStructureSynchronizationRepository Store { get; }
         public ParkingGateConnectionPool Gates { get; }
         public OperationStructureTestHarness ReservationService { get; }
         public ReservationBridge Transport { get; }
         public IParkingStructureRepository Repository { get; }
-        public IStructureUnitOfWork UnitOfWork { get; }
+        public StructureEditHandlers UnitOfWork { get; }
         public PostgresStructureTestFacade Service { get; }
 
         private DatabaseFixture(string admin, string parking, string reservation)
@@ -1020,9 +1020,10 @@ public sealed class PostgresStructureWorkflowTests
             Store = new(Parking, Gates);
             ReservationService = new(ReservationContext);
             Transport = new(ReservationService);
-            var synchronization = new StructureSynchronizationService(Store, Transport);
+            var synchronization = new StructureSynchronizationHandlers(Store, Transport);
             Repository = new PostgresParkingStructureRepository(Parking);
-            UnitOfWork = new StructureUnitOfWork(Repository, this, this, Transport, Store, synchronization);
+            UnitOfWork = new StructureEditHandlers(Repository, this, this, Transport, Store, StructureTestMediator.Create(synchronization),
+                new ReservationDependencyRepository(new ParkingDbContext(new DbContextOptionsBuilder<ParkingDbContext>().UseNpgsql(Parking).Options)));
             Service = new PostgresStructureTestFacade(Repository, UnitOfWork);
         }
 

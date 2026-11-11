@@ -29,6 +29,10 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationTerms>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedPricingSnapshot).HasColumnType("jsonb");
         Map<OperationalPolicyRow>(modelBuilder, "operational_policies");
+        Map<OperationalCapacityConfig>(modelBuilder, "operational_capacity_configs");
+        Map<ReservationCancellationEvidence>(modelBuilder, "reservation_cancellation_evidence");
+        modelBuilder.Entity<ReservationCancellationEvidence>().Property(x => x.PolicySnapshot).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationCancellationEvidence>().HasIndex(x => x.ReservationId).IsUnique();
         modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.OverrideBounds).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedOperationalPolicySnapshot).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRequest>().Property(x => x.IntentJson).HasColumnType("jsonb");

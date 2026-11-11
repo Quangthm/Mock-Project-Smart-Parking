@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.R
 
 public sealed class RemoveAccessPathCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<RemoveAccessPathCommandHandler> logger)
     : IRequestHandler<RemoveAccessPathCommand>
 {
@@ -15,7 +15,7 @@ public sealed class RemoveAccessPathCommandHandler(
     {
         logger.LogInformation("Removing access path {PathId} from site {SiteId}", request.PathId, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.RemoveAccessPath(request.PathId);
         await session.CommitAsync(ct);
     }

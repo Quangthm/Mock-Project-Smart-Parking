@@ -3,7 +3,7 @@ namespace SmartParking.FacilityService.Application.Common.Interfaces.Persistence
 public sealed record StructureSynchronization(
     Guid Token, Guid TenantId, Guid SiteId, Guid? OperationId, string State, StructureOutcome? Outcome);
 
-public interface IStructureSynchronizationStore
+public interface IStructureSynchronizationRepository
 {
     // This is a session lock, not an open transaction. It also excludes the recovery worker.
     Task<IAsyncDisposable?> TryLockSiteAsync(Guid siteId, CancellationToken cancellationToken);
