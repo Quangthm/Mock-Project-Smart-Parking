@@ -7,23 +7,23 @@ public class InitiatePaymentCheckoutCommandValidator : AbstractValidator<Initiat
     public InitiatePaymentCheckoutCommandValidator()
     {
         RuleFor(x => x.OrderId)
-            .NotEmpty().WithMessage("Mã đơn hàng (orderId) là bắt buộc.");
+            .NotEmpty().WithMessage("The orderId is required.");
 
         RuleFor(x => x.PaymentMethod)
-            .IsInEnum().WithMessage("Phương thức thanh toán không hợp lệ.");
+            .IsInEnum().WithMessage("The payment method is invalid.");
 
         When(x => !string.IsNullOrEmpty(x.ReturnUrl), () =>
         {
             RuleFor(x => x.ReturnUrl)
                 .Must(url => Uri.TryCreate(url, UriKind.Absolute, out _))
-                .WithMessage("ReturnUrl phải là một URL hợp lệ.");
+                .WithMessage("ReturnUrl must be a valid URL.");
         });
 
         When(x => !string.IsNullOrEmpty(x.CancelUrl), () =>
         {
             RuleFor(x => x.CancelUrl)
                 .Must(url => Uri.TryCreate(url, UriKind.Absolute, out _))
-                .WithMessage("CancelUrl phải là một URL hợp lệ.");
+                .WithMessage("CancelUrl must be a valid URL.");
         });
     }
 }

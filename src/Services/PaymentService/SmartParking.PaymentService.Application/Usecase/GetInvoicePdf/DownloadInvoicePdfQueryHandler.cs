@@ -48,7 +48,7 @@ public sealed class DownloadInvoicePdfQueryHandler : IRequestHandler<DownloadInv
             _logger.LogWarning("Invoice {InvoiceId} not found for PDF download.", request.InvoiceId);
             throw new PaymentDomainException(
                 PaymentDomainException.InvoiceNotFound,
-                "Không tìm thấy hóa đơn tài chính tương ứng với định danh yêu cầu.");
+                "No invoice was found for the requested identifier.");
         }
 
         var order = invoice.PaymentOrder ?? (_orderRepository != null

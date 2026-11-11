@@ -257,6 +257,7 @@ public class RabbitMqLiveIntegrationTests
                 uow,
                 publisher,
                 actor,
+                new FakePaymentGatewayPort(),
                 NullLogger<CollectCashPaymentCommandHandler>.Instance
             );
 

@@ -59,6 +59,7 @@ export interface OperatorSlot extends ParkingSlot {
 
 export interface DemoSlotSession {
   id: string
+  reservationId?: string | null
   originalPlate: string
   normalizedPlate: string
   vehicleType: string
@@ -212,6 +213,7 @@ export interface ParkingSessionHistoryEntry {
   status: string
   version: number
   createdAt: string
+  locationScannedAt?: string | null
 }
 
 export interface OperatorIncident {
@@ -644,12 +646,13 @@ export const paymentApi = {
     sessionId?: string
     reservationId?: string
     plateNumber?: string
+    developmentTestPayOs?: boolean
   }) => {
     const referenceId = body.reservationId ?? body.sessionId
     if (!referenceId) throw new Error("A reservation or session is required.")
     const path = body.reservationId
       ? `/reservations/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
-      : `/sessions/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
+      : `/sessions/${encodeURIComponent(referenceId)}${body.developmentTestPayOs ? "/prepare-test-payos" : "/prepare"}?siteId=${encodeURIComponent(body.siteId)}`
     return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
       path,
       "POST",
@@ -714,6 +717,14 @@ export const reservationApi = {
   listParkingSessions(siteId: string) {
     return parkingSessionRequest<ParkingSessionHistoryEntry[]>(
       `?siteId=${encodeURIComponent(siteId)}`,
+    )
+  },
+
+  scanParkingSession(siteId: string, referenceId: string, slotId: string) {
+    return parkingSessionRequest<ParkingSessionHistoryEntry>(
+      `/${encodeURIComponent(referenceId)}/scan?siteId=${encodeURIComponent(siteId)}`,
+      "POST",
+      { slotId },
     )
   },
 

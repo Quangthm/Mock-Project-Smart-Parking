@@ -50,7 +50,8 @@ public sealed class CheckoutPaymentClient(
         DateTimeOffset pricingCutoffAt,
         string plateNumber,
         Guid? accountId,
-        CancellationToken ct)
+        CancellationToken ct,
+        decimal? developmentTestAmount = null)
     {
         var result = await SendAsync<PaymentEnvelope<PreparedPaymentOrder>>(
             HttpMethod.Post,
@@ -69,7 +70,8 @@ public sealed class CheckoutPaymentClient(
                 accountId,
                 penaltyAmount = 0,
                 penaltyReason = (string?)null,
-                idempotencyKey = $"checkout:{referenceType.ToLowerInvariant()}:{referenceId:N}"
+                idempotencyKey = $"checkout:{referenceType.ToLowerInvariant()}:{referenceId:N}{(developmentTestAmount.HasValue ? ":development-test-2000" : string.Empty)}",
+                developmentTestAmount
             },
             ct);
 

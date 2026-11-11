@@ -8,6 +8,7 @@ namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 public sealed record ListReservationsQuery(Guid SiteId) : IRequest<IReadOnlyList<ReservationGateEntry>>;
 public sealed record ListParkingSessionsQuery(Guid SiteId) : IRequest<IReadOnlyList<ParkingSessionHistoryEntry>>;
+public sealed record ScanParkingSessionCommand(Guid SiteId, Guid ReferenceId, Guid SlotId) : IRequest<ParkingSessionHistoryEntry>;
 public sealed record FindReservationQuery(Guid SiteId, string Query) : IRequest<ReservationGateEntry>;
 public sealed record FindWalkInSessionQuery(Guid SiteId, string Plate) : IRequest<WalkInParkingSession>;
 public sealed record CheckInWalkInCommand(Guid SiteId, string PlateNumber, string? ImageData, string? VehicleType)
@@ -32,7 +33,8 @@ public sealed record PrepareReservationCheckoutCommand(
 public sealed record PrepareSessionCheckoutCommand(
     Guid SiteId,
     Guid SessionId,
-    string? PlateNumber) : IRequest<CheckoutPaymentPreparation>;
+    string? PlateNumber,
+    decimal? DevelopmentTestAmount = null) : IRequest<CheckoutPaymentPreparation>;
 
 public sealed class CalculateCheckoutPricingQueryHandler(
     IOperatorIdentityClient identity,
@@ -119,7 +121,8 @@ public sealed class PrepareSessionCheckoutCommandHandler(
             DateTimeOffset.UtcNow,
             request.PlateNumber ?? session.LicensePlate,
             null,
-            ct);
+            ct,
+            request.DevelopmentTestAmount);
     }
 }
 
@@ -191,17 +194,62 @@ public sealed class CheckInWalkInCommandHandler(
     }
 }
 
+public sealed class ScanParkingSessionCommandHandler(
+    IOperatorIdentityClient identity,
+    IReservationGateStore store,
+    IOperatorGateSlotClaims gateSlots) : IRequestHandler<ScanParkingSessionCommand, ParkingSessionHistoryEntry>
+{
+    public async Task<ParkingSessionHistoryEntry> Handle(ScanParkingSessionCommand request, CancellationToken ct)
+    {
+        if (request.ReferenceId == Guid.Empty || request.SlotId == Guid.Empty)
+            throw new ReservationGateException(400, "INVALID_SCAN_TARGET", "A session and slot are required for scanning.");
+
+        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
+        var target = await store.FindScanTargetAsync(scope.TenantId, request.SiteId, request.ReferenceId, ct)
+            ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Active parking session was not found.");
+
+        if (target.IsScanned)
+        {
+            var existing = await store.ListSessionsAsync(scope.TenantId, request.SiteId, ct);
+            return existing.FirstOrDefault(session => session.Id == target.SessionId)
+                ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Active parking session was not found.");
+        }
+
+        var preferredSlotId = target.ReservationId is null ? request.SlotId : target.CurrentSlotId;
+        if (preferredSlotId is null)
+            throw new ReservationGateException(409, "RESERVATION_SLOT_NOT_FOUND", "The reservation has no assigned parking slot.");
+
+        await using var lease = await gateSlots.ClaimAvailableAsync(
+            scope.TenantId,
+            request.SiteId,
+            target.VehicleType,
+            preferredSlotId,
+            null,
+            target.ReservationId is not null,
+            ct);
+
+        var scanned = await store.RecordScannedSlotAsync(
+            scope.TenantId, request.SiteId, target.SessionId, lease.Slot.Id, ct);
+        lease.Commit();
+        return scanned;
+    }
+}
+
 public sealed class CheckOutWalkInCommandHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<CheckOutWalkInCommand, WalkInParkingSession>
+    IReservationGateStore store,
+    IOperatorGateSlotClaims gateSlots) : IRequestHandler<CheckOutWalkInCommand, WalkInParkingSession>
 {
     public async Task<WalkInParkingSession> Handle(CheckOutWalkInCommand request, CancellationToken ct)
     {
         GateRequestValidation.ValidatePlate(request.PlateNumber, "Enter a valid vehicle plate.");
         GateRequestValidation.ValidateImageData(request.ImageData);
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.CheckOutWalkInAsync(
+        var session = await store.CheckOutWalkInAsync(
             scope.TenantId, request.SiteId, request.SessionId, request.PlateNumber, request.ImageData, ct);
+        if (session.SlotId is { } slotId)
+            await gateSlots.ReleaseAsync(scope.TenantId, request.SiteId, slotId, ct);
+        return session;
     }
 }
 
@@ -220,14 +268,18 @@ public sealed class CheckInReservationCommandHandler(
 
 public sealed class CheckOutReservationCommandHandler(
     IOperatorIdentityClient identity,
-    IReservationGateStore store) : IRequestHandler<CheckOutReservationCommand, ReservationGateEntry>
+    IReservationGateStore store,
+    IOperatorGateSlotClaims gateSlots) : IRequestHandler<CheckOutReservationCommand, ReservationGateEntry>
 {
     public async Task<ReservationGateEntry> Handle(CheckOutReservationCommand request, CancellationToken ct)
     {
         GateRequestValidation.ValidateReservationAction(request.PlateNumber, request.ImageData);
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        return await store.CheckOutAsync(
+        var reservation = await store.CheckOutAsync(
             scope.TenantId, request.SiteId, scope.UserId, request.ReservationId, request.PlateNumber, request.ImageData, ct);
+        if (reservation.LocationScannedAt is not null && reservation.SlotId is { } slotId)
+            await gateSlots.ReleaseAsync(scope.TenantId, request.SiteId, slotId, ct);
+        return reservation;
     }
 }
 

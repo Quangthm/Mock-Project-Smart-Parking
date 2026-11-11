@@ -49,6 +49,19 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
             new CheckOutWalkInCommand(siteId, sessionId, body.PlateNumber, body.ImageData), ct);
         return Ok(new { success = true, data = session });
     }
+
+    [HttpPost("{referenceId:guid}/scan")]
+    public async Task<IActionResult> ScanLocation(
+        [FromRoute] Guid referenceId,
+        [FromQuery] Guid siteId,
+        [FromBody] ScanParkingLocationRequest body,
+        CancellationToken ct)
+    {
+        var session = await Mediator.Send(
+            new ScanParkingSessionCommand(siteId, referenceId, body.SlotId), ct);
+        return Ok(new { success = true, data = session });
+    }
 }
 
 public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null);
+public sealed record ScanParkingLocationRequest(Guid SlotId);

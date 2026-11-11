@@ -108,6 +108,20 @@ if ($Service -eq 'User') {
     Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-media-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
 }
+if ($Service -eq 'Reservation') {
+    $scanMigration = Join-Path $codeRoot 'scripts/database/overlay/operation-session-location-scan.sql'
+    if (!(Test-Path -LiteralPath $scanMigration -PathType Leaf)) {
+        throw 'Operation session scan migration is missing; no schema update applied.'
+    }
+    Get-Content -LiteralPath $scanMigration -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Operation session scan migration failed; preserve the database and reconcile before retrying.'
+    }
+    $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name='location_scanned_at')"
+    if ($LASTEXITCODE -ne 0 -or ($columnExists -join '').Trim() -ne 't') {
+        throw 'Operation session scan schema verification failed.'
+    }
+}
 foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('$table') IS NOT NULL"
     if ($LASTEXITCODE -ne 0 -or ($exists -join '').Trim() -ne 't') {
@@ -122,7 +136,11 @@ if ($Service -eq 'User') {
     if ($LASTEXITCODE -ne 0) { throw 'User schema incompatible. Preserve data and pending messages; use a reviewed migration or explicitly authorized reset.' }
     Write-Output 'User schema already current; full session and outbox verifier passed. Consolidated base skipped; incremental features verified/applied.'
 } elseif ($state -eq 'current') {
-    Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    if ($Service -eq 'Reservation') {
+        Write-Output 'Operation schema verified; session scan migration applied and column confirmed.'
+    } else {
+        Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    }
 } else {
     Write-Output "$Service workflow migrations applied."
 }

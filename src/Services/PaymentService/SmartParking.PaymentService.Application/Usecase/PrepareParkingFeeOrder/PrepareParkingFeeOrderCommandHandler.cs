@@ -47,7 +47,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             _logger.LogWarning("Unauthorized prepare order attempt from caller role {Role}.", _currentActor.Role);
             throw new PaymentDomainException(
                 PaymentDomainException.Unauthorized,
-                "Yêu cầu định danh dịch vụ nội bộ (X-Internal-Service-Key hoặc Mutual S2S JWT) hoặc quyền hạn quản trị viên.");
+                "An internal service identity or an administrator role is required to prepare this payment order.");
         }
 
         // 1. Validate Cutoff Time
@@ -58,7 +58,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
 
             throw new PaymentDomainException(
                 PaymentDomainException.InvalidCutoffTime,
-                "Thời điểm chốt cước pricingCutoffAt không thể nhỏ hơn thời điểm xe vào bãi entryTime.",
+                "The pricing cutoff time cannot be earlier than the vehicle entry time.",
                 nameof(request.PricingCutoffAt));
         }
 
@@ -75,7 +75,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
 
                 throw new PaymentDomainException(
                     PaymentDomainException.IdempotencyPayloadMismatch,
-                    "Cùng idempotencyKey nhưng nội dung request khác nhau.",
+                    "The same idempotency key cannot be reused with a different request payload.",
                     nameof(request.IdempotencyKey));
             }
 
@@ -128,7 +128,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
         // 3. Retrieve Tariff Policy
         if (!Enum.TryParse<PricingVehicleType>(request.VehicleType, ignoreCase: true, out var vehicleType))
         {
-            throw new PaymentDomainException("UNSUPPORTED_VEHICLE_TYPE", $"Loại phương tiện '{request.VehicleType}' không được hỗ trợ.", nameof(request.VehicleType));
+            throw new PaymentDomainException("UNSUPPORTED_VEHICLE_TYPE", $"Vehicle type '{request.VehicleType}' is not supported.", nameof(request.VehicleType));
         }
 
         var activePolicy = await _tariffPort.GetActivePolicyAsync(request.TenantId, request.SiteId, vehicleType, cancellationToken);
@@ -137,7 +137,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             _logger.LogWarning("No active tariff found for SiteId: {SiteId}, VehicleType: {VehicleType}", request.SiteId, vehicleType);
             throw new PaymentDomainException(
                 PaymentDomainException.TariffNotFound,
-                $"Không tìm thấy biểu giá hiệu lực cho bãi xe '{request.SiteId}' và loại phương tiện '{request.VehicleType}'.",
+                $"No active tariff was found for parking site '{request.SiteId}' and vehicle type '{request.VehicleType}'.",
                 nameof(request.VehicleType));
         }
 
@@ -161,6 +161,15 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
         var depositDeducted = Math.Min(deposit, grossTotal);
         var finalAmount = Math.Max(0, grossTotal - depositDeducted);
         var surplusRefund = Math.Max(0, deposit - grossTotal);
+        var developmentTestAdjustment = 0m;
+        if (request.DevelopmentTestAmount.HasValue)
+        {
+            if (request.DevelopmentTestAmount.Value <= 0)
+                throw new PaymentDomainException("INVALID_TEST_AMOUNT", "Development test amount must be greater than zero.");
+
+            developmentTestAdjustment = request.DevelopmentTestAmount.Value - finalAmount;
+            finalAmount = request.DevelopmentTestAmount.Value;
+        }
 
         // 5. Generate Order and Invoice
         var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString() + Random.Shared.Next(100, 999).ToString();
@@ -179,9 +188,9 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             OrderType = OrderType.PARKING_FEE,
             ReferenceType = ReferenceType.PARKING_SESSION,
             ReferenceId = request.SessionId,
-            Amount = grossTotal,
+            Amount = request.DevelopmentTestAmount ?? grossTotal,
             DiscountAmount = 0,
-            DepositDeducted = depositDeducted,
+            DepositDeducted = request.DevelopmentTestAmount.HasValue ? 0 : depositDeducted,
             FinalAmount = finalAmount,
             Status = PaymentOrderStatus.PENDING,
             ExpiresAt = expiresAt,
@@ -198,7 +207,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             lineItems.Add(new InvoiceLineItem
             {
                 ItemType = "PARKING_TIME_BLOCK",
-                Description = $"Đỗ xe khung giờ {seg.BlockCode}",
+                Description = $"Parking time block {seg.BlockCode}",
                 StartTime = seg.SegmentStart,
                 EndTime = seg.SegmentEnd,
                 DurationMinutes = (int)Math.Round(seg.OverlapMinutes),
@@ -215,7 +224,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             lineItems.Add(new InvoiceLineItem
             {
                 ItemType = "PENALTY_OVERSTAY",
-                Description = request.PenaltyReason ?? "Phí phạt vi phạm",
+                Description = request.PenaltyReason ?? "Violation penalty",
                 StartTime = null,
                 EndTime = null,
                 DurationMinutes = 0,
@@ -232,7 +241,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             lineItems.Add(new InvoiceLineItem
             {
                 ItemType = "DEPOSIT_DEDUCTION",
-                Description = "Khấu trừ tiền cọc đặt trước",
+                Description = "Reservation deposit deduction",
                 StartTime = null,
                 EndTime = null,
                 DurationMinutes = 0,
@@ -249,7 +258,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             lineItems.Add(new InvoiceLineItem
             {
                 ItemType = "SURPLUS_REFUND",
-                Description = "Tiền cọc dư cần hoàn trả",
+                Description = "Surplus deposit refund",
                 StartTime = null,
                 EndTime = null,
                 DurationMinutes = 0,
@@ -258,6 +267,23 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
                 UnitRate = surplusRefund,
                 Unit = "SURPLUS_REFUND",
                 Amount = surplusRefund
+            });
+        }
+
+        if (request.DevelopmentTestAmount.HasValue)
+        {
+            lineItems.Add(new InvoiceLineItem
+            {
+                ItemType = "DEVELOPMENT_TEST_ADJUSTMENT",
+                Description = $"Development test adjustment to {finalAmount:N0} VND",
+                StartTime = null,
+                EndTime = null,
+                DurationMinutes = 0,
+                CoveredMinutes = 0,
+                ChargeableMinutes = 0,
+                UnitRate = developmentTestAdjustment,
+                Unit = "DEVELOPMENT_TEST_OVERRIDE",
+                Amount = developmentTestAdjustment
             });
         }
 

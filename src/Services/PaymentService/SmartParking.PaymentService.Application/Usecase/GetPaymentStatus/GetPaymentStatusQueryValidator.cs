@@ -7,6 +7,6 @@ public class GetPaymentStatusQueryValidator : AbstractValidator<GetPaymentStatus
     public GetPaymentStatusQueryValidator()
     {
         RuleFor(x => x.TransactionId)
-            .NotEmpty().WithMessage("Mã giao dịch (transactionId) là bắt buộc.");
+            .NotEmpty().WithMessage("The transactionId is required.");
     }
 }

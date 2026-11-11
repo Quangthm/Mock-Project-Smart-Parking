@@ -27,7 +27,7 @@ public sealed class CreatePaymentOrderCommandHandler(
     {
         var request = command.Request;
         if (request.Amount < 0)
-            throw new PaymentDomainException("INVALID_AMOUNT", "Số tiền thanh toán không hợp lệ.");
+            throw new PaymentDomainException("INVALID_AMOUNT", "The payment amount is invalid.");
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {

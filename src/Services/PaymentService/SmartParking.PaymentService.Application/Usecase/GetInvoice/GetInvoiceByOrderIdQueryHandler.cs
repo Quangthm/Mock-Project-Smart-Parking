@@ -34,7 +34,7 @@ public sealed class GetInvoiceByOrderIdQueryHandler : IRequestHandler<GetInvoice
         if (order == null)
         {
             _logger.LogWarning("PaymentOrder {OrderId} not found.", request.OrderId);
-            throw new PaymentDomainException(PaymentDomainException.OrderNotFound, $"Không tìm thấy đơn hàng thanh toán {request.OrderId}.");
+            throw new PaymentDomainException(PaymentDomainException.OrderNotFound, $"Payment order {request.OrderId} was not found.");
         }
 
         if (order.Status == PaymentOrderStatus.PENDING)
@@ -42,14 +42,14 @@ public sealed class GetInvoiceByOrderIdQueryHandler : IRequestHandler<GetInvoice
             _logger.LogWarning("Order {OrderId} is still PENDING. Cannot retrieve final authoritative invoice.", order.Id);
             throw new PaymentDomainException(
                 PaymentDomainException.UnsettledPaymentOrder,
-                "Yêu cầu đọc hóa đơn chính thức khi đơn hàng vẫn đang PENDING. Tiếp tục chờ Webhook hoặc tra cứu trạng thái thanh toán.");
+                "The order is still pending. Wait for the webhook or check the payment status before reading the official invoice.");
         }
 
         var invoice = await _invoiceRepository.GetByPaymentOrderIdAsync(order.Id, cancellationToken);
         if (invoice == null)
         {
             _logger.LogWarning("Invoice for order {OrderId} not found.", request.OrderId);
-            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "Không tìm thấy hóa đơn tài chính tương ứng với đơn hàng.");
+            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "No invoice was found for this payment order.");
         }
 
         InvoiceAuthorizationValidator.ValidateAccess(invoice, order, _currentActor);

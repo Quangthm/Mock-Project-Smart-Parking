@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Application.Common.Mappings;
 using SmartParking.PaymentService.Application.DTOs.Invoices;
 using SmartParking.PaymentService.Domain.Entities;
@@ -19,6 +20,7 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEventPublisher _eventPublisher;
     private readonly ICurrentActor _currentActor;
+    private readonly IPaymentGatewayPort _paymentGateway;
     private readonly ILogger<CollectCashPaymentCommandHandler> _logger;
 
     public CollectCashPaymentCommandHandler(
@@ -28,6 +30,7 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
         IUnitOfWork unitOfWork,
         IEventPublisher eventPublisher,
         ICurrentActor currentActor,
+        IPaymentGatewayPort paymentGateway,
         ILogger<CollectCashPaymentCommandHandler> logger)
     {
         _orderRepository = orderRepository;
@@ -36,6 +39,7 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
         _unitOfWork = unitOfWork;
         _eventPublisher = eventPublisher;
         _currentActor = currentActor;
+        _paymentGateway = paymentGateway;
         _logger = logger;
     }
 
@@ -46,13 +50,13 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
         if (order == null)
         {
             _logger.LogWarning("Payment order {OrderId} not found for cash collection.", request.OrderId);
-            throw new PaymentDomainException(PaymentDomainException.OrderNotFound, $"Không tìm thấy đơn hàng thanh toán {request.OrderId}.");
+            throw new PaymentDomainException(PaymentDomainException.OrderNotFound, $"Payment order {request.OrderId} was not found.");
         }
 
         // Authentication & Role-based Authorization check: Only OPERATOR or ADMIN or S2S
         if (!_currentActor.IsAuthenticated)
         {
-            throw new PaymentDomainException(PaymentDomainException.Unauthorized, "Thiếu token xác thực hoặc token không hợp lệ.");
+            throw new PaymentDomainException(PaymentDomainException.Unauthorized, "The authentication token is missing or invalid.");
         }
 
         if (!_currentActor.IsInternalService)
@@ -63,7 +67,7 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
                 {
                     throw new PaymentDomainException(
                         PaymentDomainException.CrossTenantAccessDenied,
-                        "Quản trị viên không có quyền thu tiền mặt cho đơn hàng của tenant khác.");
+                        "An administrator cannot collect cash for an order belonging to another tenant.");
                 }
             }
             else if (string.Equals(_currentActor.Role, "OPERATOR", StringComparison.OrdinalIgnoreCase))
@@ -72,14 +76,14 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
                 {
                     throw new PaymentDomainException(
                         PaymentDomainException.OperatorSiteMismatch,
-                        "Nhân viên cổng không có quyền thu tiền mặt ngoài bãi trực được phân công.");
+                        "An operator cannot collect cash outside their assigned parking site.");
                 }
             }
             else
             {
                 throw new PaymentDomainException(
                     PaymentDomainException.ForbiddenInvoiceAccess,
-                    "Chỉ nhân viên vận hành bốt trực (OPERATOR) hoặc quản trị viên (ADMIN) mới có quyền thu tiền mặt.");
+                    "Only parking operators and administrators can collect cash payments.");
             }
         }
 
@@ -102,22 +106,63 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
                     await PublishCashPaymentSucceededAsync(
                         order, invoice, successfulCashTransaction, cancellationToken);
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
+                    return InvoiceDtoMapper.MapToDto(invoice, order);
                 }
 
-                return InvoiceDtoMapper.MapToDto(invoice, order);
+                throw new PaymentDomainException(
+                    "ORDER_ALREADY_PAID_ONLINE",
+                    "This order has already been paid online. Cash was not collected.");
             }
         }
 
         if (order.Status == PaymentOrderStatus.CANCELLED || order.Status == PaymentOrderStatus.FAILED)
         {
             _logger.LogWarning("Cannot collect cash for order {OrderId} in status {Status}.", order.Id, order.Status);
-            throw new PaymentDomainException("ORDER_INVALID_STATUS", $"Đơn hàng ở trạng thái {order.Status} không thể thu tiền mặt.");
+            throw new PaymentDomainException("ORDER_INVALID_STATUS", $"Cash cannot be collected while the order is {order.Status}.");
         }
 
         if (invoice == null)
         {
             _logger.LogWarning("Invoice for order {OrderId} not found before cash collection.", order.Id);
-            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "Không tìm thấy hóa đơn tài chính tương ứng với đơn hàng.");
+            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "No invoice was found for this payment order.");
+        }
+
+        foreach (var pendingPayOsTransaction in order.Transactions.Where(
+                     transaction => transaction.Status == PaymentStatus.PENDING &&
+                                    transaction.PaymentMethod == PaymentMethod.PAYOS))
+        {
+            if (!long.TryParse(order.OrderCode, out var orderCode))
+            {
+                throw new PaymentDomainException("INVALID_ORDER_CODE", "The pending PayOS checkout cannot be safely cancelled.");
+            }
+
+            var cancellation = await _paymentGateway.CancelPaymentAsync(
+                orderCode,
+                pendingPayOsTransaction.Id,
+                pendingPayOsTransaction.GatewayTransactionId,
+                cancellationToken);
+
+            if (cancellation.PaymentStatus == "PAID")
+            {
+                throw new PaymentDomainException(
+                    "ORDER_ALREADY_PAID_ONLINE",
+                    "PayOS has already completed this payment. Cash was not collected.");
+            }
+
+            if (!cancellation.IsSuccess || cancellation.PaymentStatus != "CANCELLED")
+            {
+                _logger.LogWarning(
+                    "Could not cancel pending PayOS transaction {TransactionId} for cash switch: {Status} {ErrorCode}",
+                    pendingPayOsTransaction.Id,
+                    cancellation.PaymentStatus,
+                    cancellation.ErrorCode);
+                throw new PaymentDomainException(
+                    "PAYOS_CHECKOUT_CANCELLATION_FAILED",
+                    "The pending PayOS checkout could not be cancelled. Cash was not collected; check the PayOS status and try again.");
+            }
+
+            pendingPayOsTransaction.MarkCancelled();
+            _transactionRepository.Update(pendingPayOsTransaction);
         }
 
         var transactionId = Guid.NewGuid();

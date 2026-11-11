@@ -25,7 +25,7 @@ public sealed class ConfirmCashPaymentCommandHandler(
         CancellationToken cancellationToken)
     {
         var order = await orders.GetByIdAsync(request.OrderId, cancellationToken)
-            ?? throw new PaymentDomainException("ORDER_NOT_FOUND", "Không tìm thấy đơn thanh toán.");
+            ?? throw new PaymentDomainException("ORDER_NOT_FOUND", "Payment order was not found.");
 
         var successful = order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.SUCCESS);
         if (successful is not null)

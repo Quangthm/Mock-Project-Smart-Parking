@@ -129,6 +129,7 @@ public class PaymentOutboxTests
                 uow,
                 publisher,
                 actor,
+                new FakePaymentGatewayPort(),
                 NullLogger<CollectCashPaymentCommandHandler>.Instance
             );
 

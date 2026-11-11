@@ -29,7 +29,9 @@ public static class InfrastructureDependencyInjection
             ?? throw new InvalidOperationException("Configure Services:Key.");
         services.AddHttpClient<ParkingGateSlotClient>(client =>
         {
-            client.BaseAddress = new(configuration["Services:Facility"] ?? "http://localhost:5045/");
+            client.BaseAddress = new(configuration["Services:Parking"]
+                ?? configuration["Services:Facility"]
+                ?? "http://localhost:5045/");
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });

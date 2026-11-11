@@ -17,6 +17,7 @@ public class CollectCashPaymentCommandHandlerTests
     private readonly FakeUnitOfWork _uow = new();
     private readonly FakeEventPublisher _eventPublisher = new();
     private readonly FakeCurrentActor _actor = new();
+    private readonly FakePaymentGatewayPort _paymentGateway = new();
 
     private CollectCashPaymentCommandHandler CreateHandler()
     {
@@ -27,6 +28,7 @@ public class CollectCashPaymentCommandHandlerTests
             _uow,
             _eventPublisher,
             _actor,
+            _paymentGateway,
             NullLogger<CollectCashPaymentCommandHandler>.Instance
         );
     }
