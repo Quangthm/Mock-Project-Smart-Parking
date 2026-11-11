@@ -5,7 +5,7 @@ Thư mục này là tài liệu database của **profile triển khai đã ghi n
 ## Baseline
 
 - **6 DB vật lý:** `smartpark_user`, `smartpark_facility`, `smartpark_operations`, `smartpark_payment`, `smartpark_notification`, `smartpark_iot`.
-- **7 base DDL + 8 overlay:** `scripts/database/microservices/*.sql` + `scripts/database/overlay/*.sql`.
+- **7 base DDL, no overlays:** `scripts/database/microservices/*.sql` is the only schema source for clean setup.
 - **Runtime truth:** `compose.schema-integration.yml`, `scripts/apply-workflow-migrations.ps1`, `setup.ps1`.
 - **Design baseline:** `arch/database-schema` @ `9a13499`; các deviation D1–D7 được ghi rõ trong tài liệu service và report 10.
 
@@ -14,11 +14,11 @@ Thư mục này là tài liệu database của **profile triển khai đã ghi n
 | File / thư mục | Nội dung |
 |---|---|
 | `database-architecture.md` | Kiến trúc 6 DB, invariants, state, deployment artifacts |
-| `data-dictionary.md` | Từ điển dữ liệu theo DB, gồm các cột runtime/overlay |
-| `schema-integration.md` | Topology, thứ tự mount, chạy local, fence/recovery |
+| `data-dictionary.md` | Từ điển dữ liệu theo DB, gồm các cột và constraints runtime trong base |
+| `schema-integration.md` | Historical profile trước SPARK-296; không dùng làm hướng dẫn setup hiện tại |
 | `microservices/` | Tài liệu chi tiết 01–06; `03` tách 03a/03b |
 | `db-update-log/` | Workflow/template change log database (arch copy) |
-| `workflow-upgrades-2026-10-08.md` | Historical arch workflow `05.8–05.10`; superseded by base + overlay, không chạy trên branch này |
+| `workflow-upgrades-2026-10-08.md` | Historical arch workflow `05.8–05.10`; superseded by microservice base scripts, không chạy trên branch này |
 | [alignment-backlog.md](alignment-backlog.md) | DB25–DB33: v1.1 target work; DB01–DB24: retained historical findings |
 | `drawdb-schema.sql` | Snapshot lịch sử cho drawDB, **không phải runtime schema** |
 

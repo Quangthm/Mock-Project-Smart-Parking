@@ -7,9 +7,9 @@ public class ProcessPayOsWebhookCommandValidator : AbstractValidator<ProcessPayO
     public ProcessPayOsWebhookCommandValidator()
     {
         RuleFor(x => x.RawPayload)
-            .NotEmpty().WithMessage("Payload webhook không được để trống.");
+            .NotEmpty().WithMessage("The webhook payload is required.");
 
         RuleFor(x => x.Signature)
-            .NotEmpty().WithMessage("Chữ ký webhook (signature) là bắt buộc.");
+            .NotEmpty().WithMessage("The webhook signature is required.");
     }
 }

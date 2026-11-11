@@ -1,0 +1,25 @@
+✔ name, email and site submit through the real API serializer without a password (374.8364ms)
+✔ missing name, malformed email, and unknown site still prevent requests (846.4698ms)
+✔ duplicate email from loaded operators prevents a request (178.1923ms)
+✔ server rejection keeps operator form editable: Email is already registered. (244.0997ms)
+✔ server rejection keeps operator form editable: Cannot reach the authentication server. Please try again. (243.242ms)
+✔ server rejection keeps operator form editable: Every assigned site must be active and owned by this Owner. (126.5383ms)
+✔ operator form permits retry after correcting an invalid email (120.2819ms)
+✔ operator screen loads backend accounts and active sites, then displays a committed account (99.1743ms)
+✔ Create Operator opens with zero backend sites and passes an empty list to its form (45.6101ms)
+✔ site management waits for backend sites and filters the committed list (18.609ms)
+✔ site management shows a backend failure without inventing fixture sites (14.2388ms)
+✔ Sites screen displays backend site address and assigned operator, and opens site creation (37.6422ms)
+✔ Owner dashboard shares backend sites with overview and refreshes after site creation (45.4651ms)
+✔ Parking Structure reads persisted layout and exposes live slot details without creation controls (220.4524ms)
+✔ failed structure load reports the backend error and shows no saved state (172.973ms)
+✔ empty backend site list never displays mock parking structure (149.591ms)
+✔ structure site selector changes the selected site (100.6351ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3625.2021

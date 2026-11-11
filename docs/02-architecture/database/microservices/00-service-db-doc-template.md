@@ -3,7 +3,7 @@
 > **Service**: [Tên Service, VD: User Service]  
 > **Database file**: `scripts/database/microservices/[tên-file-db.sql]`  
 > **Database vật lý**: [Tên DB, VD: `smartpark_user`]  
-> **Overlays**: [Danh sách overlay hoặc "Không"]  
+> **SQL overlays**: Không — clean setup chỉ dùng base file microservice.  
 > **Deployment status**: [Khớp arch/SRS hoặc mô tả deviation + mã D1–D7]  
 > **SRS baseline**: [Phiên bản SRS, VD: v1.0 RC3 (Commit 6165024)]  
 > **Scope**: [Mô tả ngắn gọn phạm vi và chức năng chính của database này, liệt kê các bảng chính]
@@ -16,7 +16,7 @@
 |---|---|
 | Database vật lý | [Tên DB + port] |
 | Base DDL | `scripts/database/microservices/[tên-file-db.sql]` |
-| Overlays | [Danh sách overlay hoặc "Không"] |
+| SQL overlays | Không — mọi schema clean setup thuộc base file microservice |
 | Deployment status | [Khớp arch/SRS hoặc deviation + mã D1–D7] |
 
 ---

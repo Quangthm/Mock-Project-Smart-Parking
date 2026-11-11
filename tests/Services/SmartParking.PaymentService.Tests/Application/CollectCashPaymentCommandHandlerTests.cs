@@ -17,6 +17,7 @@ public class CollectCashPaymentCommandHandlerTests
     private readonly FakeUnitOfWork _uow = new();
     private readonly FakeEventPublisher _eventPublisher = new();
     private readonly FakeCurrentActor _actor = new();
+    private readonly FakePaymentGatewayPort _paymentGateway = new();
 
     private CollectCashPaymentCommandHandler CreateHandler()
     {
@@ -27,6 +28,7 @@ public class CollectCashPaymentCommandHandlerTests
             _uow,
             _eventPublisher,
             _actor,
+            _paymentGateway,
             NullLogger<CollectCashPaymentCommandHandler>.Instance
         );
     }
@@ -210,7 +212,23 @@ public class CollectCashPaymentCommandHandlerTests
             SiteId = siteId,
             OrderCode = "20261102001",
             Status = PaymentOrderStatus.PAID,
-            FinalAmount = 65000
+            FinalAmount = 65000,
+            ReferenceId = Guid.NewGuid(),
+            ReferenceType = ReferenceType.PARKING_SESSION,
+            Transactions = new List<PaymentTransaction>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    PaymentOrderId = orderId,
+                    PaymentMethod = PaymentMethod.CASH,
+                    GatewayTransactionId = "CASH-20261102001",
+                    Amount = 65000,
+                    Status = PaymentStatus.SUCCESS,
+                    PaidAt = DateTimeOffset.UtcNow
+                }
+            }
         };
 
         var invoice = new Invoice
@@ -244,9 +262,12 @@ public class CollectCashPaymentCommandHandlerTests
 
         Assert.NotNull(result);
         Assert.Equal("PAID", result.FinancialStatus.Status);
-        // Ensure no new transaction and NO outbox event published on replay!
+        // Replay does not create another transaction, but re-stages the success event.
         Assert.Empty(_txRepo.Transactions);
-        Assert.Empty(_eventPublisher.PublishedEvents);
+        var replayedEvent = Assert.IsType<PaymentSucceededV1>(Assert.Single(_eventPublisher.PublishedEvents));
+        Assert.Equal(orderId, replayedEvent.PaymentOrderId);
+        Assert.Equal(order.Transactions.Single().Id, replayedEvent.PaymentTransactionId);
+        Assert.Equal("CASH", replayedEvent.PaymentMethod);
     }
 
     [Fact]

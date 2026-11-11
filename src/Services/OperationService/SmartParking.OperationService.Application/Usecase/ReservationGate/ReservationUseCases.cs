@@ -10,6 +10,7 @@ namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 public sealed record ListReservationsQuery(Guid SiteId) : IRequest<IReadOnlyList<ReservationGateEntry>>;
 public sealed record ListParkingSessionsQuery(Guid SiteId) : IRequest<IReadOnlyList<ParkingSessionHistoryEntry>>;
+public sealed record ScanParkingSessionCommand(Guid SiteId, Guid ReferenceId, Guid SlotId) : IRequest<ParkingSessionHistoryEntry>;
 public sealed record FindReservationQuery(Guid SiteId, string Query) : IRequest<ReservationGateEntry>;
 public sealed record FindWalkInSessionQuery(Guid SiteId, string Plate) : IRequest<WalkInParkingSession>;
 public sealed record CheckInWalkInCommand(Guid SiteId, string PlateNumber, string? ImageData, string? VehicleType)
@@ -34,7 +35,8 @@ public sealed record PrepareReservationCheckoutCommand(
 public sealed record PrepareSessionCheckoutCommand(
     Guid SiteId,
     Guid SessionId,
-    string? PlateNumber) : IRequest<CheckoutPaymentPreparation>;
+    string? PlateNumber,
+    decimal? DevelopmentTestAmount = null) : IRequest<CheckoutPaymentPreparation>;
 
 public sealed class CalculateCheckoutPricingQueryHandler(
     IOperatorIdentityClient identity,
@@ -62,62 +64,83 @@ public sealed class CalculateCheckoutPricingQueryHandler(
 
 public sealed class PrepareReservationCheckoutCommandHandler(
     IOperatorIdentityClient identity,
-    IReservationRepository repository,
-    ICheckoutPaymentClient payment) : IRequestHandler<PrepareReservationCheckoutCommand, CheckoutPaymentPreparation>
+    ICheckoutPaymentClient payment,
+    IParkingSessionRepository sessions,
+    IOperationsConcurrency guards,
+    IUnitOfWork work,
+    TimeProvider clock) : IRequestHandler<PrepareReservationCheckoutCommand, CheckoutPaymentPreparation>
 {
     public async Task<CheckoutPaymentPreparation> Handle(
         PrepareReservationCheckoutCommand request,
         CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        var reservation = await repository.FindAsync(scope.TenantId, request.SiteId, request.ReservationId.ToString(), ct)
-            ?? throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
-        if (reservation.Id != request.ReservationId)
-            throw new ReservationGateException(404, "RESERVATION_NOT_FOUND", "Reservation was not found.");
-
-        return await payment.PrepareAsync(
+        var session = await sessions.FindByReservationAsync(scope.TenantId, request.SiteId, request.ReservationId, true, ct)
+            ?? throw new ReservationGateException(404, "ACTIVE_SESSION_NOT_FOUND", "No active parking session was found for this reservation.");
+        GateRules.VerifyPlate(session.OriginalPlate ?? session.NormalizedPlate ?? "", request.PlateNumber);
+        var result = await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,
-            reservation.Id,
+            request.ReservationId,
             "RESERVATION",
-            reservation.VehicleType,
-            reservation.EntryTime ?? reservation.StartTime,
-            DateTimeOffset.UtcNow,
-            request.PlateNumber ?? reservation.LicensePlate,
-            reservation.AccountId,
+            session.VehicleType,
+            session.EntryTime,
+            clock.GetUtcNow(),
+            session.OriginalPlate ?? session.NormalizedPlate ?? "",
+            session.AccountId,
             ct);
+        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, ct);
+        return result;
     }
 }
 
 public sealed class PrepareSessionCheckoutCommandHandler(
     IOperatorIdentityClient identity,
-    IParkingSessionRepository repository,
-    ICheckoutPaymentClient payment) : IRequestHandler<PrepareSessionCheckoutCommand, CheckoutPaymentPreparation>
+    IParkingSessionRepository sessions,
+    ICheckoutPaymentClient payment,
+    IOperationsConcurrency guards,
+    IUnitOfWork work,
+    TimeProvider clock) : IRequestHandler<PrepareSessionCheckoutCommand, CheckoutPaymentPreparation>
 {
     public async Task<CheckoutPaymentPreparation> Handle(
         PrepareSessionCheckoutCommand request,
         CancellationToken ct)
     {
         var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        var session = await repository.FindActiveWalkInAsync(
-            scope.TenantId,
-            request.SiteId,
-            request.PlateNumber ?? string.Empty,
-            ct);
-        if (session is null || session.Id != request.SessionId)
+        var session = await sessions.FindForUpdateAsync(scope.TenantId, request.SiteId, request.SessionId, ct);
+        if (session is null || session.ReservationId is not null || session.ExitTime is not null)
             throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
-
-        return await payment.PrepareAsync(
+        GateRules.VerifyPlate(session.OriginalPlate ?? session.NormalizedPlate ?? "", request.PlateNumber);
+        var result = await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,
             session.Id,
             "PARKING_SESSION",
             session.VehicleType,
             session.EntryTime,
-            DateTimeOffset.UtcNow,
-            request.PlateNumber ?? session.LicensePlate,
+            clock.GetUtcNow(),
+            session.OriginalPlate ?? session.NormalizedPlate ?? "",
             null,
-            ct);
+            ct,
+            request.DevelopmentTestAmount);
+        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, ct);
+        return result;
+    }
+}
+
+internal static class GateCheckout
+{
+    public static async Task BindOrderAsync(IParkingSessionRepository sessions, IOperationsConcurrency guards,
+        IUnitOfWork work, ParkingSessionRow observed, Guid orderId, CancellationToken ct)
+    {
+        await using var transaction = await work.BeginTransactionAsync(ct);
+        await guards.LockVehicleAsync(observed.NormalizedPlate!, ct);
+        await guards.LockSiteAsync(observed.SiteId, ct);
+        var session = await sessions.FindForUpdateAsync(observed.TenantId, observed.SiteId, observed.Id, ct)
+            ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
+        session.AwaitCheckoutPayment(orderId);
+        await work.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
     }
 }
 

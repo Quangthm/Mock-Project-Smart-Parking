@@ -142,6 +142,14 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
         PaidAt: DateTimeOffset.UtcNow
     );
 
+    public PaymentCancellationResult CancellationResult { get; set; } = new(
+        IsSuccess: true,
+        PaymentStatus: "CANCELLED",
+        GatewayTransactionId: "LINK-123",
+        ErrorCode: null,
+        ErrorMessage: null
+    );
+
     public int QueryTransactionCallCount { get; private set; }
 
     public Task<PaymentInitiateResult> InitiatePaymentAsync(PaymentInitiateRequest request, CancellationToken cancellationToken = default)
@@ -158,6 +166,11 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
     {
         QueryTransactionCallCount++;
         return Task.FromResult(VerificationResult);
+    }
+
+    public Task<PaymentCancellationResult> CancelPaymentAsync(long orderCode, Guid transactionId, string? gatewayTransactionId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(CancellationResult);
     }
 }
 

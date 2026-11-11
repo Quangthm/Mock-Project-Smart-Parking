@@ -347,6 +347,7 @@ CREATE TABLE IF NOT EXISTS parking_sessions (
     
     exit_time TIMESTAMPTZ,
     exit_image_url TEXT,
+    location_scanned_at TIMESTAMPTZ,
     
     session_status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' 
         CHECK (session_status IN ('ACTIVE', 'PENDING_PAYMENT', 'COMPLETED', 'OVERSTAYED', 'DISPUTED')),

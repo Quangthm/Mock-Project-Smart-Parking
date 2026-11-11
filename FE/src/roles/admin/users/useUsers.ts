@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useApp } from "../../../context/AppContext"
 import { usersApi, type UserDetail, type UsersPage } from "../../../lib/usersApi"
+import { useServerRefresh } from "../../../lib/serverRefresh"
 
 export function useUsers() {
   const { user: admin } = useApp()
@@ -17,6 +18,12 @@ export function useUsers() {
   const [notice, setNotice] = useState("")
   const [reload, setReload] = useState(0)
   const [detailReload, setDetailReload] = useState(0)
+  const [backgroundRevision, setBackgroundRevision] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const appliedBackgroundRevision = useRef(0)
+  useServerRefresh(admin?.role === "admin" ? admin.id : undefined, () => {
+    if (!saving && !loading && !detailLoading && !refreshing) setBackgroundRevision(value => value + 1)
+  }, 20_000)
 
   useEffect(() => {
     if (admin?.role !== "admin") return
@@ -31,17 +38,17 @@ export function useUsers() {
   }, [query, reload, admin?.id, admin?.role])
 
   useEffect(() => {
-    if (admin?.role !== "admin") return
+    if (admin?.role !== "admin" || backgroundRevision === appliedBackgroundRevision.current || saving) return
+    appliedBackgroundRevision.current = backgroundRevision
     let current = true
-    const refresh = () => {
-      if (document.visibilityState !== "visible") return
-      void usersApi.list(query).then(result => { if (current) setPage(result) }).catch(() => {})
-      if (selectedId) void usersApi.get(selectedId).then(result => { if (current) setDetail(result) }).catch(() => {})
-    }
-    const timer = window.setInterval(refresh, 20_000)
-    document.addEventListener("visibilitychange", refresh)
-    return () => { current = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh) }
-  }, [query, selectedId, admin?.role])
+    setRefreshing(true)
+    const requests = [
+      usersApi.list(query).then(result => { if (current) setPage(result) }),
+      ...(selectedId ? [usersApi.get(selectedId).then(result => { if (current) setDetail(result) })] : []),
+    ]
+    void Promise.allSettled(requests).finally(() => { if (current) setRefreshing(false) })
+    return () => { current = false; setRefreshing(false) }
+  }, [backgroundRevision, query, selectedId, reload, detailReload, saving, admin?.id, admin?.role])
 
   useEffect(() => {
     setDetail(null)

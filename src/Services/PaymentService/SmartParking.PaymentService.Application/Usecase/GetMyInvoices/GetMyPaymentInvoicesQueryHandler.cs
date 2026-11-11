@@ -31,7 +31,7 @@ public sealed class GetMyPaymentInvoicesQueryHandler : IRequestHandler<GetMyPaym
             _logger.LogWarning("Unauthenticated or missing actor UserId when querying driver invoice history.");
             throw new PaymentDomainException(
                 PaymentDomainException.Unauthorized,
-                "Thiếu token xác thực hoặc token không hợp lệ.");
+                "The authentication token is missing or invalid.");
         }
 
         if (!string.Equals(_currentActor.Role, "DRIVER", StringComparison.OrdinalIgnoreCase) &&
@@ -40,7 +40,7 @@ public sealed class GetMyPaymentInvoicesQueryHandler : IRequestHandler<GetMyPaym
             _logger.LogWarning("Actor role {Role} not permitted to access driver invoice history.", _currentActor.Role);
             throw new PaymentDomainException(
                 PaymentDomainException.ForbiddenInvoiceAccess,
-                "Chỉ tài xế hoặc khách hàng mới có quyền truy cập lịch sử hóa đơn cá nhân.");
+                "Only drivers and customers can access their personal invoice history.");
         }
 
         var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;

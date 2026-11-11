@@ -1,3 +1,5 @@
+import { VNeIDSimulation } from "../ui/VNeIDSimulation"
+import { hasCompletedIdentityDemo, rememberIdentityDemo } from "../../lib/identityDemo"
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useApp } from "../../context/AppContext"
@@ -40,7 +42,6 @@ const rolePages: Record<string, { id: string; label: string }[]> = {
     { id: "overview", label: "Dashboard overview" },
     { id: "checkin", label: "Check-in and check-out" },
     { id: "status", label: "Lot status & structure" },
-    { id: "slots", label: "Backup & slot operations" },
     { id: "tickets", label: "Driver tickets" },
     { id: "emergency", label: "Emergency & incidents" },
     { id: "assignments", label: "My assignments" },
@@ -79,7 +80,10 @@ export function DashboardNavbar() {
   const settingsCloseRef = useRef<HTMLButtonElement>(null)
 
   // Universal Account & Security Modal state
-  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | null>(null)
+  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | "identity" | null>(null)
+  const [identityDemoUser, setIdentityDemoUser] = useState<string | null>(null)
+  const [identityDemoSaveError, setIdentityDemoSaveError] = useState(false)
+  const identityDemoComplete = Boolean(user && hasCompletedIdentityDemo(user.id))
   const [securityDismissBlocked, setSecurityDismissBlocked] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" })
   const [profileMsg, setProfileMsg] = useState("")
@@ -106,6 +110,7 @@ export function DashboardNavbar() {
     if (!settingsOpen) return
     settingsCloseRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[role="dialog"]') !== settingsDialogRef.current)) return
       if (event.key === "Escape") {
         event.preventDefault()
         if (!securityDismissBlocked) {
@@ -459,6 +464,7 @@ export function DashboardNavbar() {
                     ...(user?.role === "admin" ? [] : [["roles", "My Roles", "switch-account"] as const]),
                     ...(user?.role === "owner" ? [["contracts", "Agreements", "file"] as const] : []),
                     ["security", "Security", "shield"],
+                    ...(user && user.role !== "admin" ? [["identity", "VNeID Simulation", "file"] as const] : []),
                   ] as const).map(([id, label, icon]) => (
                     <button
                       key={id}
@@ -620,6 +626,34 @@ export function DashboardNavbar() {
                     <div className="settings-section-heading"><h3>Security</h3><p>Manage extra protection for your account.</p></div>
                     <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
                   </div>
+                )}
+                {accountModalTab === "identity" && user && user.role !== "admin" && (
+                  <section aria-labelledby="settings-identity-title">
+                    <div className="settings-section-heading">
+                      <h3 id="settings-identity-title">VNeID Simulation</h3>
+                      <p>Demo identity information for your current account.</p>
+                    </div>
+                    <dl className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
+                      <dt className="text-sm text-[var(--muted)]">Full name</dt>
+                      <dd className="mt-1 break-words font-semibold">{user.name || "Unavailable"}</dd>
+                    </dl>
+                    <p role="status" className="mt-4 text-sm font-semibold">
+                      {identityDemoComplete ? "Demo completed on this browser. Applies to all roles on this account." : "No demo completion saved on this browser."}
+                    </p>
+                    {!identityDemoComplete && <button type="button" className="btn-outline mt-3" onClick={() => {
+                      setIdentityDemoSaveError(false)
+                      setIdentityDemoUser(user.id)
+                    }}>Start identity demo</button>}
+                    {identityDemoSaveError && <p role="alert" className="mt-2 text-sm">Browser storage is unavailable. Demo completion could not be saved.</p>}
+                    {identityDemoUser === user.id && !identityDemoComplete && <VNeIDSimulation context="account_settings"
+                      fullName={user.name}
+                      onCancel={() => setIdentityDemoUser(null)}
+                      onComplete={() => {
+                        setIdentityDemoSaveError(!rememberIdentityDemo(user.id))
+                        setIdentityDemoUser(null)
+                      }} />}
+                    <p className="mt-4 text-sm text-[var(--muted)]">The document and face scans are simulations. They do not establish an official VNeID verification status.</p>
+                  </section>
                 )}
                 {accountModalTab === "contracts" && user?.role === "owner" && (
                   <div className="settings-contracts">

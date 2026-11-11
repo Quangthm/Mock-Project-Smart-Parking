@@ -70,7 +70,7 @@ Quản lý toàn bộ tiến trình gửi tin từ hàng đợi: `originating_ev
 
 ## 5. Bảng `support_tickets` — Tiếp nhận hỗ trợ & Account Recovery
 
-> **Deployment note (D6):** `smartpark_facility` có bảng `support_tickets` shape BE (`user_id`, `message`, `status` open/in-progress/resolved) do overlay `parking-operator-tables.sql` tạo, phục vụ các endpoint `/api/operator/*`. Bảng trong tài liệu này là shape SRS canonical ở `smartpark_notification`; hai bảng nằm ở hai DB khác nhau, không xung đột vật lý. Khi BE migrate sang shape SRS, bỏ bản parking.
+> **Deployment note (D6):** `smartpark_facility` có bảng `support_tickets` shape BE (`user_id`, `message`, `status` open/in-progress/resolved) được khai báo trong base `02-facility-service-db.sql` để phục vụ các endpoint `/api/operator/*`. Bảng trong tài liệu này là shape SRS canonical ở `smartpark_notification`; hai bảng nằm ở hai DB khác nhau, không xung đột vật lý. Khi BE migrate sang shape SRS, bỏ bản parking.
 
 Tiếp nhận các yêu cầu hỗ trợ người dùng theo các danh mục: `GENERAL_INQUIRY`, `PAYMENT_DISPUTE`, `ACCOUNT_RECOVERY`, `FACILITY_COMPLAINT`, `SYSTEM_BUG`. Quản lý trạng thái từ `OPEN` -> `IN_PROGRESS` -> `RESOLVED` -> `CLOSED`.
 

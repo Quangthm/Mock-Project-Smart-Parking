@@ -15,7 +15,7 @@ public static class InvoiceAuthorizationValidator
         {
             throw new PaymentDomainException(
                 PaymentDomainException.UnsettledPaymentOrder,
-                "Yêu cầu đọc hóa đơn chính thức khi đơn hàng vẫn đang PENDING. Tiếp tục chờ Webhook hoặc tra cứu trạng thái thanh toán.");
+                "The order is still pending. Wait for the webhook or check the payment status before reading the official invoice.");
         }
 
         // 2. S2S / Internal Service has full access
@@ -27,7 +27,7 @@ public static class InvoiceAuthorizationValidator
         // If not authenticated, throw Unauthorized
         if (!actor.IsAuthenticated)
         {
-            throw new PaymentDomainException(PaymentDomainException.Unauthorized, "Thiếu token xác thực hoặc token không hợp lệ.");
+            throw new PaymentDomainException(PaymentDomainException.Unauthorized, "The authentication token is missing or invalid.");
         }
 
         // 3. Admin Check: must match tenant
@@ -37,7 +37,7 @@ public static class InvoiceAuthorizationValidator
             {
                 throw new PaymentDomainException(
                     PaymentDomainException.CrossTenantAccessDenied,
-                    "Quản trị viên không có quyền truy cập hóa đơn của tenant khác.");
+                        "An administrator cannot access invoices belonging to another tenant.");
             }
             return;
         }
@@ -49,7 +49,7 @@ public static class InvoiceAuthorizationValidator
             {
                 throw new PaymentDomainException(
                     PaymentDomainException.OperatorSiteMismatch,
-                    "Nhân viên cổng không có quyền truy cập hóa đơn ngoài bãi trực được phân công.");
+                        "An operator cannot access invoices outside their assigned parking site.");
             }
             return;
         }
@@ -63,7 +63,7 @@ public static class InvoiceAuthorizationValidator
             {
                 throw new PaymentDomainException(
                     PaymentDomainException.ForbiddenInvoiceAccess,
-                    "Tài xế không có quyền truy cập hóa đơn của tài khoản khác.");
+                        "A driver cannot access invoices belonging to another account.");
             }
             return;
         }
@@ -71,6 +71,6 @@ public static class InvoiceAuthorizationValidator
         // Default Deny: Unrecognized role or insufficient privileges
         throw new PaymentDomainException(
             PaymentDomainException.ForbiddenInvoiceAccess,
-            "Người dùng không có quyền truy cập hóa đơn này.");
+            "You are not allowed to access this invoice.");
     }
 }

@@ -7,6 +7,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { useSiteManagement } from "./useSiteManagement"
 import { SiteManagementDialogs } from "./SiteManagementDialogs"
+import { LotActionMenu } from "./LotActionMenu"
 import { OnboardingWizard } from "./CreateParkingLotForOwner"
 
 export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, created: boolean) => void }) {
@@ -126,7 +127,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
                 <th className="px-3 py-3 font-semibold text-center">Status</th>
                 <th className="px-3 py-3 font-semibold text-right">Physical Capacity</th>
                 <th className="px-4 py-3 font-semibold">Assigned Operators</th>
-                <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                <th scope="col" className="w-20 px-3 py-3 text-center font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -197,44 +198,13 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
                     </td>
 
                     {/* Actions */}
-                    <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          className="btn-outline text-[11px] py-1 px-2.5"
-                          onClick={() => handleOpenAssignModal(site)}
-                          title="Assign or dispatch an operator to this facility"
-                        >
-                          Dispatch Staff
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-outline text-[11px] py-1 px-2.5"
-                          onClick={() => setInspectSite(site)}
-                          title="View facility details and full personnel roster"
-                        >
-                          Roster
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-outline text-[11px] py-1 px-2.5"
-                          onClick={() => handleNavigateToStructure(site.id)}
-                          title="Configure physical floor layout"
-                        >
-                          Layout
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-outline text-[11px] py-1 px-2"
-                          onClick={() => {
-                            setEditingSite(site)
-                            setShowFormModal(true)
-                          }}
-                          title="Edit site details"
-                        >
-                          Edit
-                        </button>
-                      </div>
+                    <td className="px-3 py-2.5 text-center align-middle!">
+                      <LotActionMenu name={site.name} actions={[
+                        { label: "Dispatch Staff", icon: "users", run: () => handleOpenAssignModal(site) },
+                        { label: "Roster", icon: "file", run: () => setInspectSite(site) },
+                        { label: "Layout", icon: "grid", run: () => handleNavigateToStructure(site.id) },
+                        { label: "Edit", icon: "clipboard", run: () => { setEditingSite(site); setShowFormModal(true) } },
+                      ]} />
                     </td>
                   </tr>
                 )
@@ -252,11 +222,11 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
 
       <SiteManagementDialogs model={model} />
       {showCreateWizard && typeof document !== "undefined" && createPortal(
-        <div role="dialog" aria-modal="true" aria-label="Add parking site" className="fixed inset-0 z-[1000] overflow-y-auto bg-black/75 p-3 sm:p-6">
-          <div className="card mx-auto w-full max-w-[800px] p-3 sm:p-5">
-            <div className="flex justify-end"><button type="button" className="btn-outline" onClick={() => setShowCreateWizard(false)} aria-label="Close add site form">Close</button></div>
+        <div role="dialog" aria-modal="true" aria-label="Add parking site" className="fixed inset-0 z-[1000] flex items-start justify-center bg-black/75 p-3 sm:p-6">
+          <div className="card flex max-h-full w-full max-w-[800px] flex-col overflow-hidden p-3 sm:p-5">
+            <div className="flex shrink-0 justify-end"><button type="button" className="btn-outline" onClick={() => setShowCreateWizard(false)} aria-label="Close add site form">Close</button></div>
             {createError && <p role="alert" className="mx-4 mt-4 text-[var(--badge-danger-strong)]">{createError}</p>}
-            <OnboardingWizard onComplete={(lot) => {
+            <OnboardingWizard scrollInside onComplete={(lot) => {
               void parkingApi.list().then((freshSites) => {
                 const created = freshSites.find(site => site.id === lot.id)
                 if (!created) throw new Error("Site was created, but the server list has not refreshed yet. Use Refresh to load it.")

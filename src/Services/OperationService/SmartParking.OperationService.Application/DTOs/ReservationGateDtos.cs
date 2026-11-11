@@ -19,7 +19,8 @@ public sealed record ReservationGateEntry(
     string? EntryImageUrl,
     string? ExitImageUrl,
     DateTimeOffset CreatedAt,
-    string VehicleType = "CAR");
+    string VehicleType = "CAR",
+    DateTimeOffset? LocationScannedAt = null);
 
 public sealed record WalkInParkingSession(
     Guid Id,
@@ -52,4 +53,5 @@ public sealed record ParkingSessionHistoryEntry(
     string? ExitImageUrl,
     string Status,
     int Version,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? LocationScannedAt = null);
