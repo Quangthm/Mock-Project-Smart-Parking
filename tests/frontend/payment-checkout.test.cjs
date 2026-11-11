@@ -12,7 +12,7 @@ function fixture(data = {}) {
   const storage = new Map();
   const calls = [];
   const source = fs.readFileSync(path.join(__dirname, '../../FE/src/lib/paymentApi.ts'), 'utf8')
-    .replace('import.meta.env.VITE_PAYMENT_API_BASE_URL', 'undefined');
+    .replace('import.meta.env.VITE_PAYMENT_API_BASE_URL', '"/payment-api"');
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
