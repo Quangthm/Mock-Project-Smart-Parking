@@ -9,7 +9,7 @@ Tài liệu onboarding chi tiết cho môi trường local. Happy path nằm ở
 git branch --show-current          # nhánh làm việc mặc định: develop
 .\setup.ps1                        # dựng DB + credential + SonarQube + restore
 # Cấu hình RSA/JWT ổn định theo mục 5.5 trước khi chạy shared JWT
-.\scripts\run-app-service.ps1 -Service All   # chạy 5 container BE + FE
+.\scripts\run-app-service.ps1 -Service All   # chạy 6 container BE + FE
 # Mở http://localhost:5173
 ```
 
@@ -21,7 +21,7 @@ Checklist trước khi setup:
 - [ ] **Docker Desktop đang chạy**, Docker Compose hỗ trợ `up --wait` (v2.17+).
 - [ ] **Node.js + npm** nếu chạy frontend trực tiếp trên host. Docker app stack dùng Node 22 trong image, không cần cài Node trên host.
 - [ ] **Git** và đúng branch: `git branch --show-current` (mặc định `develop`).
-- [ ] **Port rảnh:** API `5035/5045/5055/5065`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
+- [ ] **Port rảnh:** API `5035/5045/5055/5065/5068`, FE `5173`, SonarQube `9000`, DB `5441–5446`, AI (tùy chọn) `5001/5002`.
 
 `setup.ps1` được lưu trong Git và **không chứa mật khẩu cố định**. Dùng trực tiếp `.\setup.ps1` ở repo root.
 
@@ -82,7 +82,7 @@ Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner
 
 ## 3. Run Application
 
-Chọn **một** trong hai cách; không chạy đồng thời vì cùng dùng port `5035/5045/5055/5065`.
+Chọn **một** trong hai cách; không chạy đồng thời vì cùng dùng port `5035/5045/5055/5065/5068`.
 
 ### 3.1 Docker app stack (BE + FE)
 
@@ -93,8 +93,9 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 .\scripts\run-app-service.ps1 -Service Facility
 .\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Payment
+.\scripts\run-app-service.ps1 -Service Notification
 .\scripts\run-app-service.ps1 -Service Frontend
-.\scripts\run-app-service.ps1 -Service All        # cả 5 container
+.\scripts\run-app-service.ps1 -Service All        # cả 6 container
 ```
 
 | Container | Host URL | Ghi chú |
@@ -103,6 +104,7 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 | `smartpark-app-facility-service-1` | http://localhost:5045 | `/health`; dùng `facility-db` |
 | `smartpark-app-operation-service-1` | http://localhost:5055 | `/health`; dùng `operations-db` |
 | `smartpark-app-payment-service-1` | http://localhost:5065 | `/health`; dùng `payment-db`; PayOS rỗng = sandbox emulation |
+| `smartpark-app-notification-service-1` | http://localhost:5068 | `/health`; dùng `notification-db` |
 | `smartpark-app-frontend-1` | http://localhost:5173 | Vite dev + HMR, bind mount `FE/` |
 
 > **Lưu ý chuyển tiếp v1.1 / Fix2FA:** Mã nguồn trên branch `Fix2FA` đã dùng `FacilityService` tại `src/Services/FacilityService/` (dùng `facility-db` trên port 5442) theo SRS v1.1 (quyết định V11-09). `OperationService` tại `src/Services/OperationService/` dùng `operations-db` trên port 5443 và triển khai luồng Parking Operations. Các port và contract API vẫn giữ nguyên tính tương thích.
@@ -113,9 +115,9 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 - Dừng stack (giữ volume): `.\scripts\stop-app-service.ps1 -Service All`.
 - Log một service: `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml logs --tail 200 <service>`.
 
-Compose file là `compose.app.yml`; image backend dùng `docker/Dockerfile.backend` với build arg `SERVICE` (`UserService`/`FacilityService`/`OperationService`/`PaymentService`).
+Compose file là compose.app.yml; image backend dùng docker/Dockerfile.backend với build arg SERVICE (UserService/FacilityService/OperationService/PaymentService/NotificationAuditService).
 
-> **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055/5065` đang bị runner host chiếm, dừng runner host trước khi chạy container.
+> **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055/5065/5068` đang bị runner host chiếm, dừng runner host trước khi chạy container.
 
 ### 3.2 Runner trên host (Visual Studio / `dotnet run`)
 
@@ -137,7 +139,7 @@ Mở bốn terminal PowerShell riêng tại repo:
 .\scripts\run-schema-service.ps1 -Service Payment
 ```
 
-Runner dùng `.env` cho connection string, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; các API giữ port `5035/5045/5055/5065`.
+Runner dùng `.env` cho connection string, shared service key, Admin/owner/operator và tùy chọn SMTP/JWT/workflow keys. Khi chạy trực tiếp bằng Visual Studio, user-secrets đã được `[5/7]` đồng bộ theo `.env`; nếu tự sửa secrets sau đó, chạy lại `.\setup.ps1` (hoặc dùng runner) để đồng bộ lại. DB port đổi bằng `SMARTPARK_DB_*_PORT` trong `.env`; các API giữ port `5035/5045/5055/5065/5068`.
 
 | Service | HTTP API | PostgreSQL host port | Database |
 | --- | --- | --- | --- |
@@ -145,7 +147,7 @@ Runner dùng `.env` cho connection string, shared service key, Admin/owner/opera
 | Facility | http://localhost:5045 | 5442 | smartpark_facility |
 | Operation | http://localhost:5055 | 5443 | smartpark_operations |
 | Payment | http://localhost:5065 | 5444 | smartpark_payment |
-| Notification | — | 5445 | smartpark_notification |
+| Notification | http://localhost:5068 | 5445 | smartpark_notification |
 | IoT | — | 5446 | smartpark_iot |
 
 `FacilityService` là tên mới của `ParkingService`. Runner vẫn nhận `-Service Parking` để tương thích lệnh cũ. Giữ nguyên các khóa `ConnectionStrings:Parking`, `Services:Parking`, biến `SMARTPARK_*PARKING*` và UserSecretsId cũ. Database theo baseline develop là `smartpark_facility` / `smartpark_operations`; API routes và port không đổi.
@@ -177,6 +179,7 @@ Checklist sau khi setup và chạy app:
   Invoke-WebRequest http://localhost:5045/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5055/health -UseBasicParsing
   Invoke-WebRequest http://localhost:5065/health -UseBasicParsing
+  Invoke-WebRequest http://localhost:5068/health -UseBasicParsing
   ```
 
 - [ ] **FE mở được** tại http://localhost:5173.
@@ -323,8 +326,8 @@ JWT/JWKS không sửa technical debt đã được [ADR 2026-11-04](docs/02-arch
 
 **Lỗi `Invalid port` ở `[3/7]` hoặc DB/API không lên**
 
-- **Nguyên nhân:** port `5441–5446`, `5035/5045/5055/5065` bị chiếm.
-- **Cách xử lý:** kiểm tra process đang giữ port; đổi port DB bằng `SMARTPARK_DB_*_PORT` trong `.env` (các API giữ `5035/5045/5055/5065`).
+- **Nguyên nhân:** port `5441–5446`, `5035/5045/5055/5065/5068` bị chiếm.
+- **Cách xử lý:** kiểm tra process đang giữ port; đổi port DB bằng `SMARTPARK_DB_*_PORT` trong `.env` (các API giữ `5035/5045/5055/5065/5068`).
 
 **`authentication failed` khi probe DB hoặc chạy API**
 

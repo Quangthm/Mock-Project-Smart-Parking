@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using QuestPDF.Infrastructure;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Infrastructure.Adapters;
@@ -16,6 +17,12 @@ public static class InfrastructureDependencyInjection
         IConfiguration configuration,
         Action<IBusRegistrationConfigurator>? configureOutbox = null)
     {
+        QuestPDF.Settings.License = LicenseType.Community;
+        QuestPDF.Settings.UseSystemFonts = true;
+        QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
+
+        services.AddSingleton<IPdfInvoiceGenerator, QuestPdfInvoiceGenerator>();
+
         var reservationServiceBaseUrl = configuration["Services:OperationService:BaseUrl"] ?? "http://localhost:5002/";
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));

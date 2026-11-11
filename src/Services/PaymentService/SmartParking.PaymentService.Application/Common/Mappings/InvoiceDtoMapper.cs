@@ -13,6 +13,7 @@ public static class InvoiceDtoMapper
         var isSettled = snapshot.IsSettled || (order != null && order.Status == PaymentOrderStatus.PAID);
         var status = isSettled ? "PAID" : snapshot.Status;
         var paidAt = snapshot.PaidAt ?? (isSettled ? order?.UpdatedAt : null);
+        var pdfUrl = $"/api/v1/payments/invoices/{invoice.Id}/download";
 
         return new CustomerInvoiceResponseDto(
             InvoiceIdentity: new InvoiceIdentityDto(
@@ -20,7 +21,8 @@ public static class InvoiceDtoMapper
                 InvoiceNumber: invoice.InvoiceNumber,
                 PaymentOrderId: invoice.PaymentOrderId,
                 OrderCode: orderCode,
-                IssuedAt: invoice.CreatedAt
+                IssuedAt: invoice.CreatedAt,
+                PdfUrl: pdfUrl
             ),
             CustomerReference: new CustomerReferenceDto(
                 AccountId: snapshot.AccountId,
@@ -75,7 +77,8 @@ public static class InvoiceDtoMapper
                 UnitRate: item.UnitRate,
                 Unit: item.Unit,
                 Amount: item.Amount
-            )).ToList()
+            )).ToList(),
+            PdfUrl: pdfUrl
         );
     }
 }

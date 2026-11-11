@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.PaymentService.Application.DTOs.Invoices;
 using SmartParking.PaymentService.Application.Usecase.GetInvoice;
+using SmartParking.PaymentService.Application.Usecase.GetInvoicePdf;
 using SmartParking.PaymentService.Application.Usecase.GetMyInvoices;
 
 namespace SmartParking.PaymentService.API.Controllers;
@@ -80,16 +81,41 @@ public class InvoicesController : ControllerBase
     }
 
     /// <summary>
-    /// Driver Invoice History: Tra cứu lịch sử hóa đơn của tài xế hiện tại
+    /// Authoritative Customer Invoice PDF Download: Tải file hóa đơn điện tử PDF chính thức
+    /// </summary>
+    [HttpGet("{invoiceId:guid}/download")]
+    [Authorize(Roles = "DRIVER,CUSTOMER,OPERATOR,ADMIN")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> DownloadInvoicePdf(
+        [FromRoute] Guid invoiceId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DownloadInvoicePdfQuery(invoiceId), cancellationToken);
+        return File(result.Content, result.ContentType, result.FileName);
+    }
+
+    /// <summary>
+    /// Driver Invoice History: Tra cứu lịch sử hóa đơn của tài xế hiện tại kèm lọc và phân trang
     /// </summary>
     [HttpGet("my-history")]
     [Authorize(Roles = "DRIVER,CUSTOMER")]
-    [ProducesResponseType(typeof(IReadOnlyList<CustomerInvoiceResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResult<CustomerInvoiceResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetMyHistory(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetMyHistory(
+        [FromQuery] string? status,
+        [FromQuery] DateTimeOffset? fromDate,
+        [FromQuery] DateTimeOffset? toDate,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new GetMyPaymentInvoicesQuery(), cancellationToken);
+        var query = new GetMyPaymentInvoicesQuery(status, fromDate, toDate, pageNumber, pageSize);
+        var result = await _mediator.Send(query, cancellationToken);
         return Ok(result);
     }
 }
