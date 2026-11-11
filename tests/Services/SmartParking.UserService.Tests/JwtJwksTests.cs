@@ -112,6 +112,29 @@ public sealed class JwtJwksTests
 
         using var operatorsNegotiate = await client.PostAsync("/hubs/operators/negotiate?negotiateVersion=1", null);
         Assert.Equal(HttpStatusCode.Unauthorized, operatorsNegotiate.StatusCode);
+
+        // Authenticated non-owner (driver/operator) can negotiate with /hubs/access (200 OK), but is forbidden from /hubs/operators (403 Forbidden)
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email = fixture.User.Email, password = "Password@123" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        using var loginBody = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        var token = loginBody.RootElement.GetProperty("data").GetProperty("accessToken").GetString()!;
+
+        using var authedAccess = new HttpRequestMessage(HttpMethod.Post, "/hubs/access/negotiate?negotiateVersion=1");
+        authedAccess.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var accessResponse = await client.SendAsync(authedAccess);
+        Assert.Equal(HttpStatusCode.OK, accessResponse.StatusCode);
+
+        using var authedOperators = new HttpRequestMessage(HttpMethod.Post, "/hubs/operators/negotiate?negotiateVersion=1");
+        authedOperators.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var operatorsResponse = await client.SendAsync(authedOperators);
+        Assert.Equal(HttpStatusCode.Forbidden, operatorsResponse.StatusCode);
+
+        // SignalR WebSocket handshake authentication passes token via query string (?access_token=)
+        using var queryAuthAnonymous = await client.GetAsync("/hubs/access");
+        Assert.Equal(HttpStatusCode.Unauthorized, queryAuthAnonymous.StatusCode);
+
+        using var queryAuthValid = await client.GetAsync($"/hubs/access?access_token={token}");
+        Assert.NotEqual(HttpStatusCode.Unauthorized, queryAuthValid.StatusCode);
     }
 
     [Theory]
