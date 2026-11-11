@@ -6,8 +6,8 @@
 - **Agent:** Lead Implementation & Coordinator Agent (Antigravity) with Execution Agent (OpenCode)
 - **Branch:** `feat/SPARK-244-realtime-monitoring` (Target PR: `#68`)
 - **Related Task:** SPARK-244: [US-O03] Operator — Monitor assigned parking lots and current operations / Architecture Reconciliation with SPARK-273
-- **Commit:** `5c308cc1`
-- **Status:** Completed
+- **Commit:** `5c308cc1` (initial handoff) -> `eae99576` (merge develop resolution)
+- **Status:** Completed & Pushed to Remote
 
 ---
 
@@ -62,21 +62,42 @@
 
 ## 6. Validation Results
 - **Facility API Build:** Pass (`dotnet build .../SmartParking.FacilityService.API.csproj`: 0 Warning, 0 Error)
-- **Facility Tests:** Pass (`dotnet test .../SmartParking.FacilityService.Tests.csproj`: 153 Passed, 0 Failed, 29 Skipped)
+- **Facility Tests:** Pass (`dotnet test .../SmartParking.FacilityService.Tests.csproj`: 199 Passed, 0 Failed, 29 Skipped, Total 228)
 - **Operation Tests:** Pass (`dotnet test .../SmartParking.OperationService.Tests.csproj`: 1 Passed, 0 Failed)
-- **Solution Build:** Pass (`dotnet build SmartParking.slnx`: 0 Error, 10 Warning)
-- **Frontend Tests:** Pass (`node --test tests/frontend/*.test.cjs`: 216 Passed, 0 Failed)
+- **Solution Build:** Pass (`dotnet build SmartParking.slnx`: 0 Error, 12 Warning NU1900/1902/1903/CS9107)
+- **Frontend Tests:** Pass (`node --test tests/frontend/*.test.cjs`: 229 Passed, 0 Failed)
 
 ---
 
-## 7. Git Status & Tracking
+## 7. Develop Merge Reconciliation (Conflict Resolution)
+- **Merged Branch:** `origin/develop` (`9f63f515`) into `feat/SPARK-244-realtime-monitoring`.
+- **Merge Commit:** `eae99576`
+- **Conflicts Resolved:**
+  1. `FE/src/lib/operatorApi.ts`: Reconciled `assignmentPermissions` (develop) with `operationalLayout` and `layout` (HEAD).
+  2. `FE/src/roles/operator/dashboard/OperatorDashboard.tsx`: Merged `watchOperatorLayout` listener, `refreshKey`, and `userScope`.
+  3. `FE/src/roles/operator/parking-lot/useLotStatus.ts`: Kept robust timestamp comparison and fallback to `fetchedLayout ?? siteLayout`.
+  4. `src/Services/FacilityService/SmartParking.FacilityService.API/Middleware/ApiErrors.cs`: Retained LIFO `OnStarting` hook ensuring `Cache-Control: no-store, no-cache, must-revalidate` for `/api/parking-lots/*/operational-layout`.
+  5. `src/Services/FacilityService/SmartParking.FacilityService.Infrastructure/SmartParking.FacilityService.Infrastructure.csproj` & `OperationService.Infrastructure.csproj`: Reconciled `RabbitMQ.Client` to `7.2.0` (matching `MassTransit.RabbitMQ 8.5.7` requirements from develop) alongside `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.12.
+  6. `src/Services/OperationService/SmartParking.OperationService.API/Middleware/ReservationExceptionMiddleware.cs`: Removed (superseded by develop's `ReservationExceptionHandler`).
+  7. `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`: Combined develop's reservation admission authentication and exception handler with SPARK-244's SignalR layout hub mapping and CORS configuration.
+  8. `src/Services/OperationService/SmartParking.OperationService.Persistence/PersistenceDependencyInjection.cs`: Preserved develop's reservation DI and retained `services.AddScoped<IOccupancyOutboxStore, OccupancyOutboxStore>();`.
+  9. `src/Services/OperationService/SmartParking.OperationService.Persistence/ReservationDbContext.cs`: Reconciled `ReservationRequest` and `OutboxEvents` DbSets + model mappings (removed obsolete `AuditLogRow` type).
+  10. `tests/Services/SmartParking.FacilityService.Tests/PostgresStructureWorkflowTests.cs`: Used develop's real `ReservationDependencyRepository(new ParkingDbContext(...))` with `StructureTestMediator`.
+  11. `tests/Services/SmartParking.FacilityService.Tests/ReservationDependencyTestDoubles.cs`: Added `AddLogging()` and `AddMediatR(...)` in `StructureTestMediator`, retained `EmptyReservationDependencies` and `CapturingReservationFacts`.
+  12. `tests/Services/SmartParking.FacilityService.Tests/ReservationGateUseCaseTests.cs`: Added `AuthorizeSiteAsync` to `FakeRepositories` to fulfill `IOperatorIdentityClient`.
+  13. `tests/frontend/operator-provisioning.test.cjs`: Staged with develop's UI mocks and proxy.
+  14. `tests/frontend/payment-checkout.test.cjs`: Reconciled URL parsing.
+
+---
+
+## 8. Git Status & Tracking
 - **Branch:** `feat/SPARK-244-realtime-monitoring`
 - **Remote Tracking:** `origin/feat/SPARK-244-realtime-monitoring` (in sync, up to date)
-- **Head Commit:** `5c308cc1`
+- **Head Commit:** `eae99576`
 - **Working Tree:** Clean (0 unstaged, 0 untracked)
 
 ---
 
-## 8. Next Steps
-- Update Pull Request #68 description on GitHub with the verification evidence and 8-point handoff compliance.
-- Unblock merge of PR #68 into `develop`.
+## 9. Next Steps
+- PR #68 is now mergeable with 0 conflicts and passes all CI checks.
+- Proceed to GitHub PR review / merge.
