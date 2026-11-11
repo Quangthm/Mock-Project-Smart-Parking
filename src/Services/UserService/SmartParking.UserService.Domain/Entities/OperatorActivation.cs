@@ -45,10 +45,13 @@ public static class OperatorActivation
         user.Accounts.Any(a => a.DeletedOn is null && a.Status == "PENDING_VERIFICATION" &&
             a.RoleCode == "SITE_OPERATOR");
 
-    public static void Activate(User user, AuthChallenge challenge, string passwordHash, DateTimeOffset now)
+    public static void Activate(User user, AuthChallenge challenge, string? passwordHash, DateTimeOffset now)
     {
         if (!CanActivate(user, challenge, now)) throw new InvalidOperationException("Operator invitation is not eligible for activation.");
-        user.PasswordHash = passwordHash;
+        if (!string.IsNullOrEmpty(passwordHash))
+        {
+            user.PasswordHash = passwordHash;
+        }
         user.EmailVerifiedAt = now;
         user.Status = UserStatus.Active;
         user.ModifiedOn = now;
