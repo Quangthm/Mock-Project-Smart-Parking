@@ -38,7 +38,7 @@ public sealed class ParkingSessionRepository(ReservationDbContext db)
             return new ParkingSessionHistoryEntry(
                 s.Id, s.ReservationId, s.TenantId, s.SiteId, s.AccessItemId, s.AccountId,
                 slotId, null, s.OriginalPlate, s.NormalizedPlate, s.VehicleType, s.TicketReference,
-                s.EntryTime, s.EntryImageUrl, s.ExitTime, s.ExitImageUrl, s.SessionStatus, s.Version, s.CreatedAt);
+                s.EntryTime, s.EntryImageUrl, s.ExitTime, s.ExitImageUrl, s.SessionStatus, s.Version, s.CreatedAt, s.LocationScannedAt);
         }).ToArray();
     }
 
@@ -48,7 +48,7 @@ public sealed class ParkingSessionRepository(ReservationDbContext db)
         var normalizedPlate = GateRules.NormalizePlate(plate);
         var session = await db.ParkingSessions.AsNoTracking()
             .Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ReservationId == null &&
-                s.SessionStatus == "ACTIVE" && s.NormalizedPlate == normalizedPlate)
+                (s.SessionStatus == "ACTIVE" || s.SessionStatus == "PENDING_PAYMENT") && s.NormalizedPlate == normalizedPlate)
             .OrderByDescending(s => s.EntryTime)
             .FirstOrDefaultAsync(ct);
         if (session is null)

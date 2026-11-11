@@ -13,6 +13,8 @@ using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using ReservationDomain = SmartParking.OperationService.Domain;
 
+using OperationsUnitOfWorkTransaction = SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWorkTransaction;
+
 namespace SmartParking.UserService.Tests;
 
 public sealed class StructureHttpContractTests
@@ -169,7 +171,7 @@ public sealed class StructureHttpContractTests
     // Only the SQL boundary is replaced. Requests still pass through the real
     // HTTP adapter, service-key middleware, JSON DTOs, Application and Domain.
     private sealed class MemoryReservationStore : IStructureRepository, IOperationsConcurrency,
-        SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork, IUnitOfWorkTransaction
+        SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork, OperationsUnitOfWorkTransaction
     {
         private readonly Dictionary<Guid, SmartParking.OperationService.Domain.Entities.StructureReleaseReceiptRow> receipts = [];
         private SmartParking.OperationService.Domain.Entities.StructureEditHoldRow? hold;
@@ -204,7 +206,7 @@ public sealed class StructureHttpContractTests
         public IReservationRepository Reservations => throw new NotSupportedException();
         public IParkingSessionRepository ParkingSessions => throw new NotSupportedException();
         public ISlotAllocationRepository SlotAllocations => throw new NotSupportedException();
-        public Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct) => Task.FromResult<IUnitOfWorkTransaction>(this);
+        public Task<OperationsUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct) => Task.FromResult<OperationsUnitOfWorkTransaction>(this);
         public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(1);
         public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

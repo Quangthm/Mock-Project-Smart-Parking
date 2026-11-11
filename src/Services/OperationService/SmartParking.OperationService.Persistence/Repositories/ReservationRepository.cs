@@ -72,8 +72,8 @@ public sealed partial class ReservationRepository(ReservationDbContext db)
             var slotId = session?.CurrentSlotId ?? allocation?.SlotId;
             return new ReservationGateEntry(r.Id, r.AccountId, r.SiteId, r.SiteId.ToString(),
                 slotId, slotId?.ToString() ?? "Unassigned", r.OriginalPlate ?? r.NormalizedPlate ?? "",
-                MapStatus(r.Status), null, null, null, r.ExpectedStartTime, r.ExpectedEndTime,
-                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt);
+                MapStatus(r.Status), session?.CheckoutPaidAt is not null ? "paid" : session?.CheckoutPaymentOrderId is not null ? "pending" : null, null, null, r.ExpectedStartTime, r.ExpectedEndTime,
+                session?.EntryTime, session?.ExitTime, session?.EntryImageUrl, session?.ExitImageUrl, r.CreatedAt, r.VehicleType, session?.LocationScannedAt);
         }).ToArray();
     }
 

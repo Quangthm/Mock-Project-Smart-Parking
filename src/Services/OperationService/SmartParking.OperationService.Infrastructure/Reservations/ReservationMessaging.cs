@@ -10,6 +10,7 @@ using SmartParking.Contracts.AccountAccess;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Persistence;
+using SmartParking.OperationService.Infrastructure.Messaging;
 
 namespace SmartParking.OperationService.Infrastructure.Reservations;
 
@@ -56,6 +57,7 @@ public static class ReservationMessaging
     {
         var admissionEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var auditEnabled = configuration.GetValue<bool>("Messaging:AuditEnabled");
+        var gateCheckoutEnabled = configuration.GetValue<bool>("Messaging:Enabled");
         if (auditEnabled) services.AddScoped<IOperationsAuditPublisher, OperationsAuditPublisher>();
         else services.AddScoped<IOperationsAuditPublisher, UnconfiguredOperationsAuditPublisher>();
         if (!admissionEnabled && !auditEnabled)
@@ -64,18 +66,25 @@ public static class ReservationMessaging
             // fail closed even if an internal caller attempts dispatch without the HTTP gate.
             services.AddScoped<IAccountAccessRequester, DisabledAccountAccessRequester>();
             services.AddScoped<IReservationFactsPublisher, DisabledReservationFactsPublisher>();
-            return services;
+            if (!gateCheckoutEnabled) return services;
         }
-        var brokerUser = configuration["ReservationAdmission:BrokerUser"];
-        var brokerPassword = configuration["ReservationAdmission:BrokerPassword"];
+        else
+        {
+            services.AddScoped<IAccountAccessRequester, AccountAccessRequester>();
+            services.AddScoped<IReservationFactsPublisher, ReservationFactsPublisher>();
+        }
+        var restrictedBroker = admissionEnabled || auditEnabled;
+        var brokerUser = restrictedBroker ? configuration["ReservationAdmission:BrokerUser"] :
+            configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark";
+        var brokerPassword = restrictedBroker ? configuration["ReservationAdmission:BrokerPassword"] :
+            configuration["SMARTPARK_RABBITMQ_PASSWORD"];
         if (string.IsNullOrWhiteSpace(brokerUser) || string.IsNullOrWhiteSpace(brokerPassword))
-            throw new InvalidOperationException("Configure Operations restricted broker credentials for durable messaging.");
-        services.AddScoped<IAccountAccessRequester, AccountAccessRequester>();
-        services.AddScoped<IReservationFactsPublisher, ReservationFactsPublisher>();
+            throw new InvalidOperationException("Configure Operations broker credentials for enabled messaging.");
         services.AddMassTransit(registration =>
         {
             if (admissionEnabled) registration.AddConsumer<AccountAccessDecisionConsumer>();
-            registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
+            if (gateCheckoutEnabled) registration.AddConsumer<PaymentSucceededConsumer>();
+            if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
                 outbox.UsePostgres();
                 outbox.QueryDelay = TimeSpan.FromSeconds(1);
@@ -93,6 +102,16 @@ public static class ReservationMessaging
                         host.Username(brokerUser);
                         host.Password(brokerPassword);
                     });
+                if (gateCheckoutEnabled)
+                {
+                    bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
+                    bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<PaymentSucceededConsumer>(context);
+                    });
+                }
                 bus.Message<OperationsGateAuditV1>(message => message.SetEntityName(OperationsAuditTopology.Exchange));
                 bus.Message<ReservationConfirmedV1>(message => message.SetEntityName("smartpark.operations.reservation-confirmed.v1"));
                 bus.Message<ReservationHoldChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));

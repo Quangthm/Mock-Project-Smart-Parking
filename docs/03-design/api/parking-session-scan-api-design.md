@@ -11,13 +11,13 @@
 
 ## Overview
 
-Records the parking slot confirmed by an operator scan. OperationService validates the active session and its site scope, claims the slot through FacilityService, then persists the session location and occupied allocation. Checkout completion releases the Facility slot and marks the Operation allocation released.
+Records the parking slot confirmed by an operator scan. Check-in opens the session and attaches any existing reserved allocation. The allocation stays `RESERVED` until the simulated scan. OperationService validates the active session and its site scope, claims the slot through FacilityService, then persists the session location and occupied allocation. A future vehicle simulation can supply the slot to the same scan command.
 
 | Traceability | Reference |
 | --- | --- |
 | Applicable FR / BR / UC / US | User request on 2026-11-11: check-in photo assignment becomes authoritative only after Space scan; checkout releases the slot |
 | Permission / service ownership | OperationService owns parking session/allocation; FacilityService owns physical slot state |
-| Approved decisions | User approved adding the scan/session API on 2026-11-11 |
+| Approved decisions | Check-in and scan are separate. Verified checkout payment triggers simulated gate departure. |
 
 ## API Specification
 
@@ -69,19 +69,29 @@ The actual response includes the parking-session history fields returned by `Par
 
 | HTTP status | Machine code | Trigger | Client recovery |
 | --- | --- | --- | --- |
-| 400 | `INVALID_SCAN_TARGET` | Missing/empty session or slot identifier | Correct the scan request |
+| 400 | Validation error | Missing/empty site, session or slot identifier | Correct the scan request |
 | 404 | `PARKING_SESSION_NOT_FOUND` | No active session in the operator's tenant/site | Refresh session list and scan again if still active |
 | 409 | `NO_AVAILABLE_SLOT` | Preferred slot is no longer available | Refresh Space and select an available slot |
 | 503 | `PARKING_SLOT_UNAVAILABLE` | FacilityService cannot safely claim the slot | Retry after the FacilityService recovers |
 
-Repeated scans return the already persisted session location. If OperationService cannot persist after FacilityService claims a slot, the claim lease releases the slot. Payment completion is idempotent and retries the Facility release if the first release attempt fails.
+Repeated scans of an open session return its persisted location. If Operations fails to persist a Facility claim, the existing lease attempts to release the slot.
+
+## Simulated departure after checkout payment
+
+PaymentService owns financial settlement. Operations binds the prepared checkout order to the parking session. When the payment success event matches that order and session scope, Operations records the settlement and automatically invokes the simulated gate departure. The departure uses the event timestamp as the exit time, completes the session, releases its local allocation, and requests Facility release for the scanned slot after the Operations commit. The simulated gate has no device integration. A booking deposit event does not match the session's bound checkout order.
+
+### Deferred claim-scoped release
+
+The Facility release endpoint identifies occupancy by site and slot ID. If Facility releases a slot, the response is lost, and another vehicle occupies it before a retry, the retry can release the newer occupancy. The same gap applies to scan compensation. Persisted departure prevents a repeat event from rewriting the original exit time, but cannot fence the Facility request. Claim-scoped release and recovery are deferred. The existing Facility API and schema are unchanged.
+
+For an existing Operations database, verify that `parking_sessions` has `location_scanned_at`, `checkout_payment_order_id`, and `checkout_paid_at` before enabling the merged flow. The owning schema script declares these columns for newly provisioned databases. Existing databases require a separately reviewed schema transition.
 
 ## State outcomes
 
 | Case | Observable contract |
 | --- | --- |
-| Before scan | Check-in session and image exist; no scanned location is recorded; photo remains a pending UI assignment |
+| Before scan | Check-in session and image exist; any reservation allocation remains `RESERVED`; photo remains a pending UI assignment |
 | Successful scan | `currentSlotId`, `locationScannedAt`, and occupied slot allocation are persisted; Facility physical state becomes `OCCUPIED` |
 | Repeated scan | Returns existing active session assignment |
-| Checkout complete | Session becomes `COMPLETED` and Operation allocation becomes `RELEASED`; a slot previously confirmed by scan also becomes `AVAILABLE` in FacilityService |
+| Checkout complete | Gate departure sets the session to `COMPLETED`, releases its Operations allocation, and requests Facility release for a previously scanned slot |
 

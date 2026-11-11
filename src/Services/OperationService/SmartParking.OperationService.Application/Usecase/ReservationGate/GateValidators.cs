@@ -2,6 +2,16 @@ using FluentValidation;
 using SmartParking.OperationService.Domain;
 namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 
+public sealed class ScanParkingSessionValidator : AbstractValidator<ScanParkingSessionCommand>
+{
+    public ScanParkingSessionValidator()
+    {
+        RuleFor(x => x.SiteId).NotEmpty();
+        RuleFor(x => x.ReferenceId).NotEmpty();
+        RuleFor(x => x.SlotId).NotEmpty();
+    }
+}
+
 internal static class GateInput
 {
     public static bool ValidPlate(string? value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 50 && GateRules.NormalizePlate(value).Length >= 2;

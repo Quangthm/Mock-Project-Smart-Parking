@@ -1,5 +1,6 @@
 using MassTransit;
-using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using MediatR;
+using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.OperationService.Infrastructure.Messaging;
 
@@ -26,25 +27,13 @@ public sealed record PaymentSucceededV1
     public string Currency { get; init; } = "VND";
 }
 
-public sealed class PaymentSucceededConsumer(IPaymentSucceededHandler handler)
-    : IConsumer<PaymentSucceededV1>
+public sealed class PaymentSucceededConsumer(IMediator mediator) : IConsumer<PaymentSucceededV1>
 {
-    public Task Consume(ConsumeContext<PaymentSucceededV1> context) =>
-        handler.HandleAsync(new(
-            context.Message.PaymentOrderId,
-            context.Message.PaymentTransactionId,
-            context.Message.PaymentMethod,
-            context.Message.GatewayReference,
-            context.Message.TenantId,
-            context.Message.SiteId,
-            context.Message.ReferenceType,
-            context.Message.ReferenceId,
-            context.Message.PlateNumber,
-            context.Message.AccountId,
-            context.Message.Amount,
-            context.Message.ParkingFee,
-            context.Message.PenaltyFee,
-            context.Message.PenaltyReason,
-            context.Message.Currency,
-            context.Message.OccurredAt), context.CancellationToken);
+    public Task Consume(ConsumeContext<PaymentSucceededV1> context)
+    {
+        var payment = context.Message;
+        return mediator.Send(new SimulatePaidGateDepartureCommand(
+            payment.TenantId, payment.SiteId, payment.ReferenceType, payment.ReferenceId,
+            payment.PaymentOrderId, payment.OccurredAt), context.CancellationToken);
+    }
 }

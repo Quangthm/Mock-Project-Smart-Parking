@@ -41,10 +41,34 @@ public sealed partial class ReservationRow
 
 public sealed class ParkingSessionRow
 {
+    public void AwaitCheckoutPayment(Guid orderId)
+    {
+        if (ExitTime is not null || SessionStatus is not ("ACTIVE" or "PENDING_PAYMENT"))
+            throw new GateTransitionException("INVALID_SESSION_STATE", "Only open sessions can await checkout payment.");
+        CheckoutPaymentOrderId = orderId;
+        SessionStatus = "PENDING_PAYMENT";
+    }
+
+    public bool RecordCheckoutSettlement(Guid orderId, DateTimeOffset occurredAt)
+    {
+        if (CheckoutPaymentOrderId != orderId || occurredAt < EntryTime)
+            return false;
+        CheckoutPaidAt ??= occurredAt;
+        return true;
+    }
+
+    public void RecordSlotScan(Guid slotId, DateTimeOffset scannedAt)
+    {
+        if (ExitTime is not null)
+            throw new GateTransitionException("INVALID_SESSION_STATE", "Only open sessions can record a slot scan.");
+        CurrentSlotId = slotId;
+        LocationScannedAt = scannedAt;
+    }
+
     public void RecordDeparture(DateTimeOffset now, string? image)
     {
         if (ExitTime is not null) return;
-        if (SessionStatus != "ACTIVE" || now < EntryTime) throw new GateTransitionException("INVALID_SESSION_STATE", "Only active parking sessions can depart.");
+        if (SessionStatus is not ("ACTIVE" or "PENDING_PAYMENT") || now < EntryTime) throw new GateTransitionException("INVALID_SESSION_STATE", "Only active parking sessions can depart.");
         ExitTime = now;
         ExitImageUrl = image;
         SessionStatus = "COMPLETED";
@@ -66,6 +90,8 @@ public sealed class ParkingSessionRow
     public DateTimeOffset? ExitTime { get; set; }
     public string? ExitImageUrl { get; set; }
     public DateTimeOffset? LocationScannedAt { get; set; }
+    public Guid? CheckoutPaymentOrderId { get; private set; }
+    public DateTimeOffset? CheckoutPaidAt { get; private set; }
     public string SessionStatus { get; set; } = "";
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -73,17 +99,25 @@ public sealed class ParkingSessionRow
 
 public sealed class SlotAllocationRow
 {
+    public void AttachToSession(Guid sessionId)
+    {
+        if (AllocationStatus != "RESERVED" || ParkingSessionId is not null && ParkingSessionId != sessionId)
+            throw new GateTransitionException("ALLOCATION_UNAVAILABLE", "A reserved allocation is required.");
+        ParkingSessionId = sessionId;
+    }
+
     public void Occupy(Guid sessionId)
     {
-        if (AllocationStatus != "RESERVED") throw new GateTransitionException("ALLOCATION_UNAVAILABLE", "A reserved allocation is required.");
+        AttachToSession(sessionId);
         AllocationStatus = "OCCUPIED";
-        ParkingSessionId = sessionId;
     }
     public void Release(DateTimeOffset now)
     {
-        if (AllocationStatus != "OCCUPIED") throw new GateTransitionException("INVALID_ALLOCATION_STATE", "Only occupied allocations can depart.");
+        if (AllocationStatus is not ("OCCUPIED" or "RESERVED"))
+            throw new GateTransitionException("INVALID_ALLOCATION_STATE", "Only active allocations can be released.");
         AllocationStatus = "RELEASED";
-        AllocatedEndTime = now;
+        if (now > AllocatedStartTime)
+            AllocatedEndTime = now;
     }
 
     public Guid Id { get; set; }

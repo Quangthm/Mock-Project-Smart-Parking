@@ -6,12 +6,14 @@ using SmartParking.OperationService.Application.Usecase.Structure.Commands.Prepa
 using SmartParking.OperationService.Application.Usecase.Structure.Commands.CompleteStructureEdit;
 using SmartParking.OperationService.Application.Usecase.Structure.Commands.ForceReleaseStructureHolds;
 using SmartParking.OperationService.Application.Usecase.Structure.Queries.ReadStructureSnapshot;
+using OperationsUnitOfWork = SmartParking.OperationService.Persistence.Repositories.UnitOfWork;
+
 namespace SmartParking.FacilityService.Tests;
 
 internal sealed class OperationStructureTestHarness(ReservationDbContext db)
 {
     public CapturingReservationFacts Facts { get; } = new();
-    public static UnitOfWork Work(ReservationDbContext db, OperationsConcurrency guards) =>
+    public static OperationsUnitOfWork Work(ReservationDbContext db, OperationsConcurrency guards) =>
         new(db, new ReservationRepository(db), new ParkingSessionRepository(db), new SlotAllocationRepository(db), guards, TimeProvider.System);
     // Each call models a new request scope, including a clean tracker after rolled-back writes.
     public Task<HoldSnapshot> PrepareAsync(Guid tenant, Guid site, Guid token, CancellationToken ct)

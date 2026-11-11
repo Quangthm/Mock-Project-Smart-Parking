@@ -57,6 +57,18 @@ Use independently versioned service-local DTOs or published schemas. Do not refe
 
 Retain useful existing provider signature checking and EF outbox infrastructure. Fix the actual producer path using direct MediatR handlers, repositories/UoW and Domain state; do not wrap the old handler with a service that silently preserves the unsafe contract. Changes to Payment schemas remain the Payment owner's work in its original script.
 
+### Open defect — reserved-session exit checkout reference
+
+This affects the parking fee collected at exit for a vehicle that entered on a reservation. It is separate from the deposit collected before arrival.
+
+1. [Operations checkout preparation](../../../src/Services/OperationService/SmartParking.OperationService.Application/Usecase/ReservationGate/ReservationUseCases.cs#L78) finds the active parking session by reservation ID. The [checkout client](../../../src/Services/OperationService/SmartParking.OperationService.Infrastructure/Clients/CheckoutPaymentClient.cs#L63) sends that reservation ID as `sessionId` alongside `referenceType=RESERVATION`.
+2. The [Payment prepare endpoint](../../../src/Services/PaymentService/SmartParking.PaymentService.API/Controllers/PaymentsController.cs#L84) forwards `SessionId`. The [order handler](../../../src/Services/PaymentService/SmartParking.PaymentService.Application/Usecase/PrepareParkingFeeOrder/PrepareParkingFeeOrderCommandHandler.cs#L188) stores it as the ID of a `PARKING_SESSION` reference. `PaymentSucceededV1` then carries the stored type and ID.
+3. The [Operations consumer workflow](../../../src/Services/OperationService/SmartParking.OperationService.Application/Usecase/ReservationGate/SimulatePaidGateDepartureCommandHandler.cs#L20) resolves a `PARKING_SESSION` reference by session ID before checking the bound checkout order. It receives a reservation ID, so payment can settle while the session remains open and the scanned slot remains occupied.
+
+**Payment and Operations follow-up:** Agree on the reference that identifies the exit checkout target. One option is for Operations to send the actual parking-session ID for every `PARKING_FEE` order. Another is for Payment to accept and preserve a validated `RESERVATION` reference for reserved exit checkout. In either case, keep the stored order and emitted event consistent, and have Operations verify that the paid order is bound to the resolved session. Review outstanding orders with the old reference before changing replay behavior.
+
+**Acceptance evidence:** Exercise reserved and walk-in checkout through cash and payOS. Verify the stored order reference, the published event, and the session resolved by Operations. A matching checkout event should record settlement, trigger simulated departure at the event timestamp, and release the scanned slot. Verify that a booking deposit or an unrelated checkout order leaves the session open and that redelivery preserves the original exit timestamp. Source-reviewed only. Live verification is pending.
+
 ## Operations work still required before live sales
 
 The local draft contains review/preview/receipt/own-booking routes, persisted binding, guarded evaluation-time confirmation. Facility producer/transport, quota/capacity and booking-restriction checks are implemented in the unverified Commit 1 draft. The commercial adapter still returns explicit unavailable errors; no live paid booking is enabled. The following are **Operations work**, not delegated Payment fixes:

@@ -2,8 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Infrastructure.Clients;
-using SmartParking.OperationService.Infrastructure.Messaging;
-using MassTransit;
 using SmartParking.OperationService.Persistence;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
@@ -62,35 +60,6 @@ public static class InfrastructureDependencyInjection
         });
         services.AddScoped<ICheckoutPaymentClient>(provider =>
             provider.GetRequiredService<CheckoutPaymentClient>());
-
-        if (configuration.GetValue<bool>("Messaging:Enabled"))
-        {
-            services.AddMassTransit(registration =>
-            {
-                registration.AddConsumer<PaymentSucceededConsumer>();
-                registration.UsingRabbitMq((context, bus) =>
-                {
-                    bus.Message<PaymentSucceededV1>(message =>
-                        message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
-                    bus.Host(
-                        configuration["SMARTPARK_RABBITMQ_HOST"] ?? "127.0.0.1",
-                        configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
-                        configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark",
-                        host =>
-                        {
-                            host.Username(configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark");
-                            host.Password(configuration["SMARTPARK_RABBITMQ_PASSWORD"]
-                                ?? throw new InvalidOperationException("Configure SMARTPARK_RABBITMQ_PASSWORD."));
-                        });
-                    bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
-                    {
-                        endpoint.UseMessageRetry(retry => retry.Intervals(
-                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<PaymentSucceededConsumer>(context);
-                    });
-                });
-            });
-        }
 
         return services;
     }
