@@ -34,6 +34,7 @@ public static class PersistenceDependencyInjection
         services.TryAddScoped<IStructureRepository, StructureRepository>();
         services.AddScoped<OperationsConcurrency>();
         services.TryAddScoped<IOperationsConcurrency>(provider => provider.GetRequiredService<OperationsConcurrency>());
+        services.AddScoped<IVehicleLocationRepository, VehicleLocationRepository>();
         return services;
     }
 }

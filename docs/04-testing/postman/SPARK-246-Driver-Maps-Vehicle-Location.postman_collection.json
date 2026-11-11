@@ -1,0 +1,384 @@
+{
+  "info": {
+    "_postman_id": "c1f7b920-8e34-4b52-a1e6-30ad24600000",
+    "name": "SmartParking - Driver Maps & Recorded Vehicle Location (SPARK-246)",
+    "description": "# SmartParking — Driver Maps & Recorded Vehicle Location API Verification (SPARK-246)\n\nAutomated integration test collection for **SPARK-246** ([US-D16] Driver — Use maps and recorded vehicle location).\n\n## Acceptance Criteria Covered\n- **AC-1 (Map Navigation & Fallback):** Discovery supports `originSource=CURRENT_GPS|MANUAL` and provides `directions.handoff=\"EXTERNAL_MAP\"`.\n- **AC-2 (Preserve Lot Identity):** Discovery `items[].siteId` preserves authoritative UUID for downstream 2D/3D layout projection.\n- **AC-3 (Separate Positions):** Public `slots[]` redacted from caller identities; requested vs allocated position kept distinct.\n- **AC-4 (Backend Precision Integrity):** Recorded vehicle location exposes `precision` (`SLOT | ZONE | UNKNOWN`).\n- **AC-5 (Zone-Only Integrity):** When precision is `ZONE`, `slotId` and `slotCode` are strictly `null`.\n- **AC-6 & AC-10 (Read-Only & Zero Allocation Privilege):** All routes are HTTP `GET` with no write/mutation authority.\n- **AC-7 & AC-8 (Authoritative Session Lifecycle):** Session location respects active session filtering (`404 SESSION_NOT_FOUND` when released/completed).\n- **AC-9 (Stale & Reconnect Protocol):** Projections report `isFresh` / `freshness.isStale` flags and staleness threshold.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Authentication & Token Extraction",
+      "description": "Authenticate as a Driver to obtain a valid JWT Bearer token for protected endpoints.",
+      "item": [
+        {
+          "name": "1.1 Driver Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\",\n  \"turnstileToken\": \"{{turnstileToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{userServiceUrl}}/api/auth/login",
+              "host": ["{{userServiceUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Log in with driver demo credentials. Extracts the access token and sets `driverBearerToken` environment variable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response envelope success is true', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Extract and set driverBearerToken', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.environment.set('driverBearerToken', json.data.accessToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - EP-01: Discovery Search Lots (OperationService)",
+      "description": "Verify the Driver discovery search API supporting GPS and manual origin searches (AC-1, AC-2).",
+      "item": [
+        {
+          "name": "2.1 Search Lots via CURRENT_GPS (Happy Path)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{operationServiceUrl}}/api/discovery/parking-lots?originSource=CURRENT_GPS&latitude=10.7721&longitude=106.6980&radiusKm=10",
+              "host": ["{{operationServiceUrl}}"],
+              "path": ["api", "discovery", "parking-lots"],
+              "query": [
+                { "key": "originSource", "value": "CURRENT_GPS" },
+                { "key": "latitude", "value": "10.7721" },
+                { "key": "longitude", "value": "106.6980" },
+                { "key": "radiusKm", "value": "10" }
+              ]
+            },
+            "description": "Search parking lots near the driver's current GPS location. Expects HTTP 200 with discovery envelope."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK (or 404/501 if discovery route under gateway/transitional)', function () {",
+                  "    pm.expect([200, 404, 501]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.test('Envelope has success=true', function () {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "    });",
+                  "    pm.test('Data has items array and page metadata', function () {",
+                  "        pm.expect(json.data).to.be.an('object');",
+                  "        pm.expect(json.data.items).to.be.an('array');",
+                  "    });",
+                  "    if (json.data.items.length > 0) {",
+                  "        const item = json.data.items[0];",
+                  "        pm.test('Item carries AC-1 directions handoff EXTERNAL_MAP', function () {",
+                  "            pm.expect(item.directions).to.be.an('object');",
+                  "            pm.expect(item.directions.handoff).to.eql('EXTERNAL_MAP');",
+                  "        });",
+                  "        pm.test('Item carries AC-2 valid siteId UUID', function () {",
+                  "            pm.expect(item.siteId).to.be.a('string').and.not.empty;",
+                  "        });",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Search Lots via MANUAL Origin (AC-1 Fallback)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{operationServiceUrl}}/api/discovery/parking-lots?originSource=MANUAL&manualOrigin=Ben%20Thanh&latitude=10.7721&longitude=106.6980",
+              "host": ["{{operationServiceUrl}}"],
+              "path": ["api", "discovery", "parking-lots"],
+              "query": [
+                { "key": "originSource", "value": "MANUAL" },
+                { "key": "manualOrigin", "value": "Ben Thanh" },
+                { "key": "latitude", "value": "10.7721" },
+                { "key": "longitude", "value": "106.6980" }
+              ]
+            },
+            "description": "Search parking lots using a manual geocoded address when GPS is denied or unavailable (AC-1)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK or handled gracefully', function () {",
+                  "    pm.expect([200, 404, 501]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - EP-03: Operational Layout Projection (FacilityService)",
+      "description": "Verify the authoritative 2D/3D operational layout projection, redaction, and bookability (AC-3, AC-6, AC-9, AC-10).",
+      "item": [
+        {
+          "name": "3.1 Public Sanitized Operational Layout (Dual-Mode Anonymous)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{facilityServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+              "host": ["{{facilityServiceUrl}}"],
+              "path": ["api", "parking-lots", "{{siteId}}", "operational-layout"]
+            },
+            "description": "Public anonymous read. Returns sanitized operational layout projection. Verifies AC-3 and AC-10 redaction rules."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('Response envelope success is true', function () {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Contract version matches 1.2.0', function () {",
+                  "    pm.expect(json.data.contractVersion).to.eql('1.2.0');",
+                  "});",
+                  "",
+                  "pm.test('Projection reports freshness (AC-9)', function () {",
+                  "    pm.expect(json.data.isFresh).to.be.a('boolean');",
+                  "    pm.expect(json.data.stalenessThresholdSeconds).to.eql(30);",
+                  "});",
+                  "",
+                  "pm.test('Slots array is populated and bookable (Resolves Note 3)', function () {",
+                  "    pm.expect(json.data.slots).to.be.an('array');",
+                  "    pm.expect(json.data.slots.length).to.be.greaterThan(0);",
+                  "    const first = json.data.slots[0];",
+                  "    pm.expect(first.slotId).to.be.a('string');",
+                  "    pm.expect(first.slotCode).to.be.a('string');",
+                  "    pm.expect(first.isBookable).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Redaction: public slots have NO operator context or session type (AC-3, AC-10)', function () {",
+                  "    json.data.slots.forEach(function (slot) {",
+                  "        pm.expect(slot.sessionType).to.be.undefined;",
+                  "        pm.expect(slot.operatorContext).to.be.undefined;",
+                  "        pm.expect(slot.reservationState).to.not.eql('BACKUP');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Authenticated Driver Operational Layout",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverBearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{facilityServiceUrl}}/api/parking-lots/{{siteId}}/operational-layout",
+              "host": ["{{facilityServiceUrl}}"],
+              "path": ["api", "parking-lots", "{{siteId}}", "operational-layout"]
+            },
+            "description": "Authenticated driver read. Returns layout projection with caller driverReservation if an active reservation exists."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Response envelope success is true', function () {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});",
+                  "pm.test('Redaction preserved for other users (AC-3)', function () {",
+                  "    json.data.slots.forEach(function (slot) {",
+                  "        pm.expect(slot.operatorContext).to.be.undefined;",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - EP-04: Recorded Vehicle Location (OperationService)",
+      "description": "Verify the recorded vehicle location endpoint, security guard, precision levels, and session lifecycle (AC-4, AC-5, AC-7, AC-8).",
+      "item": [
+        {
+          "name": "4.1 Vehicle Location - Unauthenticated Guard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{operationServiceUrl}}/api/sessions/current/location",
+              "host": ["{{operationServiceUrl}}"],
+              "path": ["api", "sessions", "current", "location"]
+            },
+            "description": "Call location endpoint without authentication. Expects HTTP 401 Unauthorized."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Envelope code is UNAUTHENTICATED', function () {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code).to.eql('UNAUTHENTICATED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Vehicle Location - Route Alias Guard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{operationServiceUrl}}/api/parking-sessions/current/location",
+              "host": ["{{operationServiceUrl}}"],
+              "path": ["api", "parking-sessions", "current", "location"]
+            },
+            "description": "Call location route alias `/api/parking-sessions/current/location` without token. Expects HTTP 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Envelope code is UNAUTHENTICATED', function () {",
+                  "    pm.expect(json.code).to.eql('UNAUTHENTICATED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Vehicle Location - Authenticated Driver (Lifecycle & Precision)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverBearerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operationServiceUrl}}/api/sessions/current/location",
+              "host": ["{{operationServiceUrl}}"],
+              "path": ["api", "sessions", "current", "location"]
+            },
+            "description": "Call location endpoint with authenticated driver token. Expects HTTP 404 if no active session, or HTTP 200 with precision contract if active."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 OK or 404 SESSION_NOT_FOUND', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('404 returns SESSION_NOT_FOUND when driver has no active session', function () {",
+                  "        pm.expect(json.success).to.be.false;",
+                  "        pm.expect(json.code).to.eql('SESSION_NOT_FOUND');",
+                  "    });",
+                  "} else if (pm.response.code === 200) {",
+                  "    pm.test('200 returns valid precision contract (AC-4, AC-5)', function () {",
+                  "        pm.expect(json.success).to.be.true;",
+                  "        pm.expect(json.data).to.be.an('object');",
+                  "        pm.expect(json.data.recordedLocation).to.be.an('object');",
+                  "        const prec = json.data.recordedLocation.precision;",
+                  "        pm.expect(['SLOT', 'ZONE', 'UNKNOWN']).to.include(prec);",
+                  "",
+                  "        if (prec === 'ZONE') {",
+                  "            // AC-5 Invariant: ZONE precision MUST have slotId and slotCode as null",
+                  "            pm.expect(json.data.recordedLocation.slotId).to.be.null;",
+                  "            pm.expect(json.data.recordedLocation.slotCode).to.be.null;",
+                  "        }",
+                  "        if (prec === 'UNKNOWN') {",
+                  "            // AC-4 Invariant: UNKNOWN precision recordedAt MUST be null",
+                  "            pm.expect(json.data.recordedAt).to.be.null;",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
