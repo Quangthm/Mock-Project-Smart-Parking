@@ -33,7 +33,7 @@ public sealed class GetInvoiceBySessionIdQueryHandler : IRequestHandler<GetInvoi
         if (invoice == null)
         {
             _logger.LogWarning("Invoice for SessionId {SessionId} not found.", request.SessionId);
-            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "Không tìm thấy hóa đơn tài chính tương ứng với phiên đỗ xe yêu cầu.");
+            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "No invoice was found for the requested parking session.");
         }
 
         var order = await _orderRepository.GetByIdAsync(invoice.PaymentOrderId, cancellationToken);

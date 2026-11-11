@@ -205,3 +205,7 @@ Durable offline queue replay and reconciliation are Post-MVP; BR-FAIL-02. No pro
 **Stories:** US-O05
 
 On online-service failure, report unavailable automation and use a recorded local incident/reconciliation procedure (BR-FAIL-03); do not claim remote commands succeeded. This does not establish a general offline authorization engine.
+
+## Reservation first-slice boundary
+
+See [D1–D4c](../../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md) and the [owner interface contract](../../../03-design/api/reservation-first-slice-api-design.md#cross-owner-interfaces-to-agree). Reservation payment deadline H is capped by start T; confirmation eligibility must be evaluated strictly before T under the required guards; expose the result only after durable commit (10 November amendment), and later verified collections reconcile/refund without entitlement. Earned facility-failure eligibility survives recovery; payout is separate and limited to eligible collected value. Arrival alone leaves the right exercisable; accepted actual entry ends it. Commercial checkout/payment alone does not release occupancy; verified physical departure does. Preserve unrelated session/payment rules. Producer integration and deployment evidence are pending.

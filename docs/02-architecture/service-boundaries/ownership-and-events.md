@@ -1,5 +1,12 @@
 # Service boundaries and durable contracts — v1.1 review candidate
 
+## Reservation first-slice integration boundary
+
+[Contracts](../../03-design/api/reservation-first-slice-api-design.md#cross-owner-interfaces-to-agree): UserService owns versioned Account-current decisions and exact verified vehicle binding. Operations owns durable receipts, attempt scheduling, interval claims, physical allocation, earned rights and cancellation/refund intents. Payment owns commercial quote/deposit/verified-money/refund producers; their integration remains owner work. Facility owns versioned resource facts and must participate in coordinated structure changes. Gate supplies distinct arrival, entry and physical departure evidence. Notification owns delivery, not eligibility.
+
+UserService consumes `user-account-access-v1`; Operations consumes `operations-account-access-results-v1`. Approved service-restricted broker ACLs are required, and durable queue provisioning precedes relay enablement. No blanket shared-service-key trust is implied. Domain has no broker dependency; business/receipt changes and outgoing messages share their owning EF outbox transaction. Live broker acceptance remains unverified.
+
+
 Derived from the approved baseline decision record and the [v1.1 decision register](../../05-project-management/decision-log/2026-10-20-approved-v1.1-changes.md). Historical code/schema findings describe the previously reviewed commit; this document update does not implement repository changes.
 
 | Confirmed deployable service | Authoritative ownership | Logical persistence boundary |
@@ -90,3 +97,11 @@ Unified React role-based routing, Tailwind CSS, Material UI and three.js remain 
 ## SEC-02 identity/support coordination
 
 General Support in Notification & Audit owns ACCOUNT_RECOVERY case intake/routing/review history and scoped references. User & Access authorizes and executes credential changes; no support database can directly update password/factor tables. Suggested outcomes: AccountRecoveryReviewed, RecoveryGrantIssued, PasswordResetCompleted, TotpResetRequired, TotpReplaced, SecuritySessionsRevoked; payloads contain operation/ticket/account/version references and minimal result, never secret/code/token. Use authenticated commands, local atomic writes/outbox and deduped projections. Timeout queries same operation; ticket approval is not proof of successful reset. UserService security/session-version checks remain authoritative locally. Resource enforcement follows the [freshness matrix](../../01-requirements/srs/authorization-operation-classification.md): TOKEN accepts the remaining stale window; REQUEST uses async Account-current authorization. SignalR notifications are best-effort UX, not enforcement.
+
+## Gate audit ownership — approved 9 November
+
+Operations produces `OperationsGateAuditV1` through its scoped EF Bus Outbox in the same UoW transaction as observed entry/departure. The separate audit service consumes and retains history; Operations has no audit repository or fresh-schema audit-history table. The shared contract contains event/time/actor/tenant/site/action/reservation/session IDs and no plate/image. Consumers deduplicate EventId. Provision the durable audit queue and binding before relay; disabled capture fails effectful Gate writes with 503. The consumer is teammate-owned, not part of this task.
+
+Reservation-specific authorization amendment (9 November): one durable UserService decision per WorkflowId; delivery retries replay it without fresh evaluation. Attempt IDs still correlate/fence individual deliveries and the original overall deadline remains. This overrides the global fresh-evaluation retry default for the reservation slice only; see the implementation decision.
+
+Service-independence amendment (9 November): remove shared integration projects. Operations owns JWT/JWKS code and its message DTOs; UserService owns separate compatible authorization DTOs. Keep versioned wire namespace/type names stable without sharing code, linking source or referencing another service's Application assembly. Audit consumption remains separately owned.

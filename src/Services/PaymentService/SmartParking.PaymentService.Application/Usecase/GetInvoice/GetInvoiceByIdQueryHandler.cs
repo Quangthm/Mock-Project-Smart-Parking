@@ -33,7 +33,7 @@ public sealed class GetInvoiceByIdQueryHandler : IRequestHandler<GetInvoiceByIdQ
         if (invoice == null)
         {
             _logger.LogWarning("Invoice {InvoiceId} not found.", request.InvoiceId);
-            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "Không tìm thấy hóa đơn tài chính tương ứng với định danh yêu cầu.");
+            throw new PaymentDomainException(PaymentDomainException.InvoiceNotFound, "No invoice was found for the requested identifier.");
         }
 
         var order = await _orderRepository.GetByIdAsync(invoice.PaymentOrderId, cancellationToken);

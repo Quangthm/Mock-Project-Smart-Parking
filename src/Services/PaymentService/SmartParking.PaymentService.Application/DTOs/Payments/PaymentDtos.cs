@@ -16,7 +16,8 @@ public record CreatePaymentOrderRequestDto(
     ReferenceType ReferenceType,
     decimal Amount,
     Guid? AccountId = null,
-    string? IdempotencyKey = null
+    string? IdempotencyKey = null,
+    string? PlateNumber = null
 );
 
 public record PaymentCheckoutResponseDto(

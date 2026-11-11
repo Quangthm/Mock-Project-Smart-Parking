@@ -33,6 +33,14 @@ namespace UserService.Persistence
             ConfigureVehicleClaims(modelBuilder);
             // Keep framework entities/mappings exact; the reviewed SQL script is generated from this model.
             modelBuilder.AddTransactionalOutboxEntities();
+            modelBuilder.Entity<AccountAccessDecision>(entity =>
+            {
+                entity.ToTable("account_access_decisions");
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.WorkflowId).IsUnique();
+                foreach (var property in entity.Metadata.GetProperties())
+                    property.SetColumnName(System.Text.RegularExpressions.Regex.Replace(property.Name, "(?<!^)([A-Z])", "_$1").ToLowerInvariant());
+            });
             modelBuilder.Entity<RotatedSessionProof>(entity =>
             {
                 entity.ToTable("rotated_session_proofs");

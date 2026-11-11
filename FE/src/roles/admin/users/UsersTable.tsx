@@ -60,14 +60,14 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
 
             {!loading && page && (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-left text-sm">
+                <table role="table" className="sp-adaptive-table w-full min-w-[620px] text-left text-sm">
                   <thead className="border-b border-[var(--border)] text-sm text-[var(--muted)]">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">User</th>
-                      <th className="px-4 py-3 font-semibold">Contact</th>
-                      <th className="px-4 py-3 font-semibold">Role</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold text-right">
+                    <tr role="row">
+                      <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">User</th>
+                      <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">Contact</th>
+                      <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">Role</th>
+                      <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">Status</th>
+                      <th scope="col" role="columnheader" className="px-4 py-3 font-semibold text-right">
                         Action
                       </th>
                     </tr>
@@ -77,14 +77,14 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                       const isSelected = selectedId === account.id
                       
                       return (
-                        <tr
+                        <tr role="row"
                           key={account.id}
                           className={`transition-colors hover:bg-[var(--bg)]/40 ${
                             isSelected ? "bg-blue-500/5 font-medium" : ""
                           }`}
                         >
                           {/* User info */}
-                          <td className="px-4 py-3.5">
+                          <td role="cell" data-label="User" className="px-4 py-3.5">
                             <div className="flex items-center gap-2.5">
                               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/15 font-['Be_Vietnam_Pro'] text-xs font-bold text-[var(--primary)]">
                                 {account.fullName?.charAt(0).toUpperCase() ||
@@ -102,7 +102,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                           </td>
 
                           {/* Contact */}
-                          <td className="px-4 py-3.5 text-xs text-[var(--fg)]">
+                          <td role="cell" data-label="Contact" className="px-4 py-3.5 text-xs text-[var(--fg)]">
                             <div>{account.email || "—"}</div>
                             <div className="text-[var(--muted)]">
                               {account.phone || "—"}
@@ -110,7 +110,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                           </td>
 
                           {/* Roles */}
-                          <td className="px-4 py-3.5">
+                          <td role="cell" data-label="Role" className="px-4 py-3.5">
                             <div className="flex flex-wrap gap-1">
                               {account.roles.map((r) => {
                                 
@@ -124,14 +124,14 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                           </td>
 
                           {/* Status */}
-                          <td className="px-4 py-3.5">
+                          <td role="cell" data-label="Status" className="px-4 py-3.5">
                             <Badge tone={statusTone(account.status)} className={account.status === "locked" ? "!text-[var(--badge-danger-strong)]" : ""}>
                               {statusLabel(account.status)}
                             </Badge>
                           </td>
 
                           {/* Action Button */}
-                          <td className="px-4 py-3.5 text-right">
+                          <td role="cell" data-label="Actions" className="px-4 py-3.5 text-right">
                             <button
                               type="button"
                               className={`btn-outline text-xs px-3 py-1.5 transition-[transform,background-color,border-color] duration-150 motion-safe:active:scale-[0.97] ${
@@ -149,8 +149,8 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
                     })}
 
                     {!page.items.length && (
-                      <tr>
-                        <td
+                      <tr role="row">
+                        <td role="cell"
                           colSpan={5}
                           className="py-12 text-center text-sm text-[var(--muted)]"
                         >
@@ -183,7 +183,7 @@ export function UsersTable({ model }: { model: UsersViewModel }) {
               </div>
 
               {/* Page Number & Navigation Controls */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-1 text-[var(--muted)]">
                   Page{" "}
                   <strong className="text-[var(--fg)]">{currentPage}</strong> of{" "}

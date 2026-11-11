@@ -26,6 +26,6 @@ public sealed class ResolveVehicleBindingQueryHandler(IVehicleRepository vehicle
         if (binding is null) return new("INELIGIBLE");
         if (request.ExpectedRevision is { } revision && binding.Revision != revision)
             throw new AuthException("VEHICLE_BINDING_STALE", "Vehicle binding changed; revalidate before continuing.", 409);
-        return new("ACTIVE", binding.VehicleId, binding.AccountId, binding.VehicleType, binding.Revision);
+        return new("ACTIVE", binding.VehicleId, binding.AccountId, binding.VehicleType, binding.Revision, binding.CanonicalPlate);
     }
 }

@@ -8,7 +8,7 @@ namespace SmartParking.OperationService.API.Controllers;
 
 [Route("api/checkout")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(mediator)
+public sealed class CheckoutController(IMediator mediator, IHostEnvironment environment) : ApiControllerBase(mediator)
 {
     [HttpPost("pricing")]
     public async Task<IActionResult> Pricing([FromBody] PricingRequest body, CancellationToken ct) =>
@@ -45,6 +45,22 @@ public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(m
             data = await Mediator.Send(
                 new PrepareSessionCheckoutCommand(siteId, sessionId, body.PlateNumber), ct)
         });
+
+    [HttpPost("sessions/{sessionId:guid}/prepare-test-payos")]
+    public async Task<IActionResult> PrepareSessionTestPayOs(
+        Guid sessionId,
+        [FromQuery] Guid siteId,
+        [FromBody] CheckoutRequest body,
+        CancellationToken ct)
+    {
+        if (!environment.IsDevelopment()) return NotFound();
+        return Ok(new
+        {
+            success = true,
+            data = await Mediator.Send(
+                new PrepareSessionCheckoutCommand(siteId, sessionId, body.PlateNumber, 2000m), ct)
+        });
+    }
 
     [HttpPost("orders/{orderId:guid}/payos")]
     public async Task<IActionResult> PayOs(Guid orderId, [FromBody] IdempotencyRequest body, CancellationToken ct) =>

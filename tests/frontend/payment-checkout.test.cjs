@@ -12,20 +12,22 @@ function fixture(data = {}) {
   const storage = new Map();
   const calls = [];
   const source = fs.readFileSync(path.join(__dirname, '../../FE/src/lib/paymentApi.ts'), 'utf8')
-    .replace('import.meta.env.VITE_PAYMENT_API_BASE_URL', 'undefined');
+    .replace('import.meta.env.VITE_PAYMENT_API_BASE_URL', JSON.stringify('/payment-api'));
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const context = {
     exports: {}, URL, Date, Error,
     require: name => name === './authApi' ? { ensureAccessToken: async () => 'test-token' } : null,
-    sessionStorage: {
-      getItem: key => storage.get(key) ?? null,
-      setItem: (key, value) => storage.set(key, value),
-      removeItem: key => storage.delete(key),
-    },
     crypto: { randomUUID: () => 'c9b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d' },
-    window: { location: { origin: 'http://localhost:5173' } },
+    window: {
+      location: { origin: 'http://localhost:5173' },
+      localStorage: {
+        getItem: key => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+        removeItem: key => storage.delete(key),
+      },
+    },
     fetch: async (url, init) => {
       calls.push({ url, init });
       return {

@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.M
 
 public sealed class MoveSlotCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<MoveSlotCommandHandler> logger)
     : IRequestHandler<MoveSlotCommand>
 {
@@ -16,7 +16,7 @@ public sealed class MoveSlotCommandHandler(
         logger.LogInformation("Moving slot {SlotId} to unit {TargetUnitId} with code {Code} in site {SiteId}",
             request.SlotId, request.TargetUnitId, request.Code, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.MoveSlot(request.SlotId, request.TargetUnitId, request.Code);
         await session.CommitAsync(ct);
     }

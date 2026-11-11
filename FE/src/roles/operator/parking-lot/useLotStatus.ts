@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { DemoSlotSession, OperatorSite, OperatorSlot } from "../../../lib/operatorApi"
+import {
+  reservationApi,
+  type DemoSlotSession,
+  type OperatorSite,
+  type OperatorSlot,
+  type ParkingSessionHistoryEntry,
+} from "../../../lib/operatorApi"
+import { AuthApiError } from "../../../lib/authApi"
 import { parkingApi } from "../../../lib/parkingApi"
 import type { LotType, SlotStatus } from "../../../lib/types"
 import {
@@ -48,6 +55,31 @@ type DemoVehicle = {
   plate: string
   imageUrl: string
   session: DemoSlotSession
+}
+
+type PendingCheckIn = {
+  plate: string
+  imageUrl?: string
+  vehicleType?: string
+  session?: DemoSlotSession
+  slotId?: string
+}
+
+function toDemoSession(session: ParkingSessionHistoryEntry): DemoSlotSession {
+  const plate = session.originalPlate ?? session.normalizedPlate ?? ""
+  return {
+    id: session.id,
+    reservationId: session.reservationId,
+    originalPlate: plate,
+    normalizedPlate: session.normalizedPlate ?? plate.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(),
+    vehicleType: session.vehicleType,
+    ticketReference: session.ticketReference ?? `SESSION-${session.id.slice(0, 8).toUpperCase()}`,
+    entryTime: session.entryTime,
+    exitTime: session.exitTime,
+    status: session.status,
+    entryImageUrl: session.entryImageUrl,
+    exitImageUrl: session.exitImageUrl,
+  }
 }
 
 function pendingCheckInStorageKey(siteId: string) {
@@ -117,6 +149,7 @@ export interface UseLotStatusOptions {
    * existing `sp-operator-refresh` data-loading event.
    */
   refreshLayout?: () => Promise<OperationalLayoutProjection | null | void>
+  refreshOnResume?: boolean
 }
 
 export type SlotProjectionLookup = (
@@ -247,6 +280,7 @@ export function useLotStatus(
   const [demoAssignments, setDemoAssignments] = useState<Record<string, DemoVehicle>>({})
   const [pendingDemoAssignments, setPendingDemoAssignments] = useState<Record<string, DemoVehicle>>({})
   const [isScanning, setIsScanning] = useState(false)
+  const [scanError, setScanError] = useState("")
   const [lastScanAt, setLastScanAt] = useState<number | null>(null)
 
   // Keep the last known site and snapshot so a failed reconnect refetch never
@@ -259,7 +293,9 @@ export function useLotStatus(
   const siteLayout = resolveLotLayout(site)
   const [fetchedLayout, setFetchedLayout] = useState<OperationalLayoutProjection | null>(null)
   const propLayout = useMemo(
-    () => options.layout ?? siteLayout ?? fetchedLayout,
+    () => options.layout ?? (fetchedLayout && siteLayout
+      ? Date.parse(fetchedLayout.generatedAt) > Date.parse(siteLayout.generatedAt) ? fetchedLayout : siteLayout
+      : siteLayout ?? fetchedLayout),
     [options.layout, siteLayout, fetchedLayout],
   )
   useEffect(() => {
@@ -327,6 +363,7 @@ export function useLotStatus(
   }, [site])
 
   useEffect(() => {
+    if (options.refreshOnResume === false) return
     const onOnline = () => {
       void refreshLayout()
     }
@@ -341,7 +378,7 @@ export function useLotStatus(
       window.removeEventListener("online", onOnline)
       document.removeEventListener("visibilitychange", onVisibilityChange)
     }
-  }, [refreshLayout])
+  }, [refreshLayout, options.refreshOnResume])
 
   const isOutdoor = (site?.floors ?? 1) <= 1
   const availableZones = useMemo(() => {
@@ -356,31 +393,88 @@ export function useLotStatus(
       })
   }, [site, isOutdoor, selectedFloor])
 
-  const scanSlots = useCallback(() => {
-    if (!site || isScanning) return
+  const scanSlots = useCallback(async () => {
+    if (!site || isScanning || Object.keys(pendingDemoAssignments).length === 0) return
     setIsScanning(true)
-    window.setTimeout(() => {
-      setDemoAssignments((current) => ({ ...current, ...pendingDemoAssignments }))
-      setPendingDemoAssignments({})
-      window.localStorage.removeItem(pendingCheckInStorageKey(site.id))
-      setLastScanAt(Date.now())
-      setIsScanning(false)
-    }, 850)
-  }, [isScanning, pendingDemoAssignments, site])
+    setScanError("")
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 850))
+
+    const failed: Record<string, DemoVehicle> = {}
+    const completedIds: string[] = []
+    const staleIds: string[] = []
+    const errors: string[] = []
+    for (const [slotId, vehicle] of Object.entries(pendingDemoAssignments)) {
+      const referenceId = vehicle.session.reservationId ?? vehicle.session.id
+      try {
+        const session = await reservationApi.scanParkingSession(site.id, referenceId, slotId)
+        const assignedSlotId = session.currentSlotId ?? slotId
+        setDemoAssignments((current) => ({
+          ...current,
+          [assignedSlotId]: { ...vehicle, session: toDemoSession(session) },
+        }))
+        completedIds.push(vehicle.session.id)
+      } catch (error) {
+        if (error instanceof AuthApiError && error.status === 404 &&
+            error.code === "PARKING_SESSION_NOT_FOUND") {
+          // This local pending item has no active session in OperationService. Drop the
+          // stale browser-only assignment so every later scan does not retry the same 404.
+          staleIds.push(vehicle.session.id)
+          errors.push(`${vehicle.plate}: active parking session was not found; check in the vehicle again.`)
+          continue
+        }
+        failed[slotId] = vehicle
+        errors.push(`${vehicle.plate}: ${error instanceof Error ? error.message : "Could not save the scanned parking slot."}`)
+      }
+    }
+
+    setPendingDemoAssignments(failed)
+    if (errors.length > 0) setScanError(errors.join(" "))
+    const storageKey = pendingCheckInStorageKey(site.id)
+    const pending = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as PendingCheckIn[]
+    window.localStorage.setItem(storageKey, JSON.stringify(
+      pending.filter((item) => !completedIds.includes(item.session?.id ?? "") &&
+        !staleIds.includes(item.session?.id ?? "")),
+    ))
+    setLastScanAt(Date.now())
+    if (completedIds.length > 0) await refreshLayout()
+    setIsScanning(false)
+  }, [isScanning, pendingDemoAssignments, refreshLayout, site])
 
   useEffect(() => {
     if (!site) return
     setDemoAssignments({})
     setPendingDemoAssignments({})
     setLastScanAt(null)
+
+    let active = true
+    void reservationApi.listParkingSessions(site.id).then((sessions) => {
+      if (!active) return
+      const assignments: Record<string, DemoVehicle> = {}
+      for (const session of sessions) {
+        if (!session.currentSlotId || !session.locationScannedAt ||
+            !(session.status === "ACTIVE" || session.status === "PENDING_PAYMENT")) continue
+        const vehicle = toDemoSession(session)
+        assignments[session.currentSlotId] = {
+          plate: vehicle.originalPlate,
+          imageUrl: vehicle.entryImageUrl ?? "",
+          session: vehicle,
+        }
+      }
+      setDemoAssignments(assignments)
+    }).catch(() => undefined)
+
     const stored = JSON.parse(
       window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]",
-    ) as Array<{ plate: string; imageUrl?: string; vehicleType?: string; session?: DemoSlotSession }>
-    if (stored.length === 0) return
+    ) as PendingCheckIn[]
+    if (stored.length === 0) return () => { active = false }
     const assignments: Record<string, DemoVehicle> = {}
     const availableSlots = site.slots.filter((slot) => slot.status === "available")
     stored.forEach((checkIn, index) => {
-      const slot = availableSlots.splice(Math.floor(Math.random() * availableSlots.length), 1)[0]
+      let slot = checkIn.slotId
+        ? availableSlots.find((candidate) => candidate.id === checkIn.slotId)
+        : undefined
+      if (slot) availableSlots.splice(availableSlots.indexOf(slot), 1)
+      else slot = availableSlots.splice(Math.floor(Math.random() * availableSlots.length), 1)[0]
       if (!slot) return
       const imageUrl = checkIn.imageUrl || demoVehicleImage(Date.now() + index)
       assignments[slot.id] = {
@@ -388,8 +482,11 @@ export function useLotStatus(
         imageUrl,
         session: checkIn.session ?? createDemoSession(checkIn.plate, checkIn.vehicleType ?? "CAR", imageUrl),
       }
+      checkIn.slotId = slot.id
     })
     setPendingDemoAssignments(assignments)
+    window.localStorage.setItem(pendingCheckInStorageKey(site.id), JSON.stringify(stored))
+    return () => { active = false }
   }, [site?.id])
 
   useEffect(() => {
@@ -404,19 +501,23 @@ export function useLotStatus(
         imageUrl,
         session: detail.session ?? createDemoSession(detail.plate, detail.vehicleType ?? "CAR", imageUrl),
       }
-      setPendingDemoAssignments((current) => {
-        const occupiedIds = new Set(Object.keys(demoAssignments))
-        const pendingIds = new Set(Object.keys(current))
-        const availableSlots = site.slots.filter((slot) =>
-          slot.status === "available" && !occupiedIds.has(slot.id) && !pendingIds.has(slot.id),
-        )
-        const slot = availableSlots[Math.floor(Math.random() * availableSlots.length)]
-        return slot ? { ...current, [slot.id]: vehicle } : current
-      })
-      const stored = JSON.parse(window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]") as Array<{ plate: string }>
-      if (!stored.some((checkIn) => checkIn.plate === detail.plate)) {
-        stored.push(detail)
-        window.localStorage.setItem(pendingCheckInStorageKey(site.id), JSON.stringify(stored))
+      const occupiedIds = new Set(Object.keys(demoAssignments))
+      const pendingIds = new Set(Object.keys(pendingDemoAssignments))
+      const availableSlots = site.slots.filter((slot) =>
+        slot.status === "available" && !occupiedIds.has(slot.id) && !pendingIds.has(slot.id),
+      )
+      const slot = availableSlots[Math.floor(Math.random() * availableSlots.length)]
+      if (!slot) return
+      setPendingDemoAssignments((current) => ({ ...current, [slot.id]: vehicle }))
+      const storageKey = pendingCheckInStorageKey(site.id)
+      const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as PendingCheckIn[]
+      const existingIndex = stored.findIndex((checkIn) => checkIn.session?.id === vehicle.session.id)
+      if (existingIndex >= 0) {
+        stored[existingIndex] = { ...stored[existingIndex], ...vehicle, slotId: slot.id }
+        window.localStorage.setItem(storageKey, JSON.stringify(stored))
+      } else {
+        stored.push({ ...vehicle, slotId: slot.id })
+        window.localStorage.setItem(storageKey, JSON.stringify(stored))
       }
     }
     const handleCheckOut = (event: Event) => {
@@ -426,8 +527,10 @@ export function useLotStatus(
         Object.fromEntries(Object.entries(assignments).filter(([, vehicle]) => vehicle.plate !== detail.plate))
       setDemoAssignments(removePlate)
       setPendingDemoAssignments(removePlate)
-      const stored = JSON.parse(window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]") as Array<{ plate: string }>
-      window.localStorage.setItem(pendingCheckInStorageKey(site.id), JSON.stringify(stored.filter((checkIn) => checkIn.plate !== detail.plate)))
+      const storageKey = pendingCheckInStorageKey(site.id)
+      const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as PendingCheckIn[]
+      window.localStorage.setItem(storageKey, JSON.stringify(stored.filter((checkIn) => checkIn.plate !== detail.plate)))
+      void refreshLayout()
     }
     window.addEventListener("smartpark:demo-check-in", handleCheckIn)
     window.addEventListener("smartpark:demo-check-out", handleCheckOut)
@@ -435,7 +538,7 @@ export function useLotStatus(
       window.removeEventListener("smartpark:demo-check-in", handleCheckIn)
       window.removeEventListener("smartpark:demo-check-out", handleCheckOut)
     }
-  }, [demoAssignments, site])
+  }, [demoAssignments, pendingDemoAssignments, refreshLayout, site])
 
   useEffect(() => {
     const timer = window.setInterval(scanSlots, 300000)
@@ -557,6 +660,6 @@ export function useLotStatus(
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
     site, allSlots, filteredSlots, counts, slotView, layout: activeLayout,
     isStale, staleAgeSeconds, isRefreshing: refreshing, refreshFailed, refreshLayout,
-    scanSlots, isScanning, lastScanAt,
+    scanSlots, isScanning, lastScanAt, scanError,
   }
 }

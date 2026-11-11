@@ -32,7 +32,7 @@ Checklist trước khi setup:
 | **Schema volume** | Named volume Docker giữ dữ liệu PostgreSQL. Xóa volume = mất dữ liệu dev. |
 | **Runner** | `scripts/run-schema-service.ps1` chạy một API với biến môi trường nạp từ `.env`. |
 | **user-secrets** | Kho secret .NET cho Visual Studio/`dotnet run`; setup đồng bộ từ `.env` ở `[5/7]`. |
-| **Canonical script** | SQL baseline trong `scripts/database/microservices` (các script overlay trước đây đã được gộp hoàn toàn vào các file này). |
+| **Canonical script** | Chỉ các file SQL trong `scripts/database/microservices`; Compose không mount hoặc chạy thư mục overlay. |
 | **Sentinel** | Bảng/cột đánh dấu schema đã đúng để runner biết có cần áp migration hay không. |
 | **Block-list** | Danh sách script legacy bị runner chặn, không được áp lại. |
 
@@ -238,7 +238,7 @@ Xem [QUICK_START.md](QUICK_START.md) để dùng `-CredentialMode Team -TeamEnvP
 
 ### 5.5 JWT ổn định và JWKS (SPARK-327)
 
-UserService là nơi duy nhất giữ RSA private key và phát access JWT **RS256, 900 giây**. Các service khác chỉ nhận issuer, audience và địa chỉ JWKS chứa public key. Consumer JWT middleware, cache/refetch và fail-closed validation sẽ được triển khai ở task riêng; cấu hình trust này chưa bật xác thực JWT cho các service đó.
+UserService là nơi duy nhất giữ RSA private key và phát access JWT **RS256, 900 giây**. Các service khác chỉ nhận issuer, audience và địa chỉ JWKS chứa public key. Reservation first slice bổ sung JWT/JWKS middleware riêng trong Operations; xem mục 5.6 để bật HTTP JWKS cho local. Không suy ra Facility/Payment đã có middleware tương đương chỉ từ cấu hình trust. Build/runtime của reservation slice vẫn cần kiểm chứng theo checklist bên dưới.
 
 Thêm thủ công các khóa sau vào `.env` đã có, hoặc điền placeholder sau khi setup tạo `.env` mới:
 
@@ -315,6 +315,172 @@ Consumer host nhận JWKS URI từ `SMARTPARK_SERVICE_USER_URL` + `SMARTPARK_JWT
 
 JWT/JWKS không sửa technical debt đã được [ADR 2026-11-04](docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) chấp thuận: TOKEN có thể giữ claims/session stale đến hết thời hạn; REQUEST Account-current Saga, authorization-to-effect race và exact-session continuity là các giới hạn riêng. UserService vẫn kiểm tra session/Account/User/role hiện tại tại các điểm bảo mật hiện có; không bỏ MFA, refresh rotation hoặc revocation.
 
+### 5.6 Reservation admission và Gate audit (SPARK-273)
+
+**Phạm vi hiện tại (cập nhật 11/11):** bản nháp đã có preview/review, đọc booking của Account, kiểm tra binding một lần và confirmation checkpoint. Facility producer/adapter và kiểm tra capacity/quota đã có trong bản nháp Commit 1 (chưa build/runtime verify). Producer Payment và durable commercial recovery vẫn chưa hoàn chỉnh, nên **chưa đặt chỗ thành công được**. Allowed chuyển sang `PREPARING`; không còn kết thúc cố định bằng `RESERVATION_FINALIZATION_NOT_READY`. Preview/review thiếu producer trả `503 OWNER_UNAVAILABLE`; workflow thiếu dependency giữ trạng thái chờ hoặc từ chối khi terms/deadline hết hạn. Bật RabbitMQ không tự hoàn thiện booking. Frontend chưa tích hợp; xem [API design](docs/03-design/api/reservation-first-slice-api-design.md), [producer handoff](docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md) và [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md). User yêu cầu hoãn chạy test tới khi workflow sẵn sàng; hướng dẫn dưới đây dành cho lần kiểm chứng đó.
+
+**Confirmation checkpoint (10/11):** Dùng một `clock_timestamp()` tại checkpoint cuối sau khi giữ guard và đọc dữ liệu hiện tại; phải `< T`. Transaction có thể commit sau T, nhưng chỉ công bố confirmed sau durable commit. Không còn candidate/evidence stage, không cần `track_commit_timestamp` hoặc quyền đọc commit metadata. Compose đã bỏ setting này; agent không restart server/đổi dữ liệu. `synchronous_commit=on` vẫn áp dụng cho transaction confirmation. `CREATE IF NOT EXISTS` không nâng cấp volume cũ; nếu từng chạy schema candidate cũ, deployment owner cần kiểm kê/reconcile trước khi dùng bản mới. Xem [quyết định mới](docs/05-project-management/decision-log/2026-11-10-reservation-evaluation-checkpoint.md).
+
+#### Chuẩn bị và điền `.env`
+
+Thêm thủ công các key còn thiếu từ `.env.example` vào **`.env` ở root repository**. Setup không tự merge key mới vào `.env` đã tồn tại. Không đưa broker credentials vào `FE/.env`, `VITE_*`, Git hoặc log. Giữ các flag `false` và credentials trống nếu chưa thử tính năng.
+
+Khi workflow sẵn sàng và user bắt đầu đợt kiểm chứng, thực hiện fresh build/focused tests và kiểm tra schema theo deployment checklist. Schema User/Operations phải có các bảng decision, admission, terms, confirmation checkpoint và outbox đúng phiên bản. `CREATE IF NOT EXISTS` không nâng cấp bảng cũ; thay đổi `.env` không sửa schema. Không dùng các bước dưới đây để reset/upgrade volume đang có dữ liệu. Policy defaults có seed riêng trong checklist; arrival late tolerance cần lựa chọn rõ ràng của site.
+
+| Key | Ý nghĩa | Giá trị khi thử local |
+|---|---|---|
+| `SMARTPARK_RESERVATION_ADMISSION_ENABLED` | Bật admission ở Operations và consumer Account-current ở UserService. | `true` |
+| `SMARTPARK_OPERATION_AUDIT_ENABLED` | Capture Gate audit event cùng transaction vào Operations outbox. | `false` nếu chỉ thử admission; xem phần Gate audit trước khi bật. |
+| `SMARTPARK_RESERVATION_USER_BROKER_USER` | Username RabbitMQ cho UserService khi bật admission. | Username broker đã provision. |
+| `SMARTPARK_RESERVATION_USER_BROKER_PASSWORD` | Password của broker account trên. | Password tương ứng. |
+| `SMARTPARK_RESERVATION_OPERATION_BROKER_USER` | Username RabbitMQ cho Operations khi bật admission hoặc audit. | Username broker đã provision. |
+| `SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD` | Password của broker account trên. | Password tương ứng. |
+| `SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS` | Cho phép Operations tải public verification keys qua HTTP; vẫn kiểm tra chữ ký, issuer, audience và lifetime JWT. | `true` với HTTP local/protected Compose; `false` với HTTPS production. |
+| `Messaging__OutboxDeliveryEnabled` | Cho phép relay message đã lưu trong outbox của UserService và Operations. | `true` sau khi topology sẵn sàng. `false` giữ message chờ, admission có thể timeout. |
+
+**Personal development cô lập:** có thể dùng lại giá trị thực của `SMARTPARK_RABBITMQ_USER` và `SMARTPARK_RABBITMQ_PASSWORD` cho cả hai cặp credentials mới, nếu account đó có quyền trên vhost/queues tương ứng. Đây là tài khoản RabbitMQ, không phải tài khoản Driver. Các biến chỉ chọn credentials để kết nối, **không tạo broker user**; setup không tự provision hai service account này.
+
+Ví dụ cho admission-only trên máy cá nhân; thay toàn bộ placeholder trước khi chạy. Nếu key đã tồn tại, sửa dòng đó, không thêm dòng trùng:
+
+```dotenv
+SMARTPARK_RESERVATION_ADMISSION_ENABLED=true
+SMARTPARK_OPERATION_AUDIT_ENABLED=false
+SMARTPARK_RESERVATION_USER_BROKER_USER=<existing-broker-username>
+SMARTPARK_RESERVATION_USER_BROKER_PASSWORD=<existing-broker-password>
+SMARTPARK_RESERVATION_OPERATION_BROKER_USER=<existing-broker-username>
+SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD=<existing-broker-password>
+SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS=true
+Messaging__OutboxDeliveryEnabled=true
+```
+
+Điền **giá trị thực**, không viết `${SMARTPARK_RABBITMQ_PASSWORD}` hay tham chiếu biến khác: `scripts/load-env.ps1` không expand chúng. Broker host/port/vhost vẫn dùng cấu hình `SMARTPARK_RABBITMQ_*` hiện có. JWKS local mặc định là `http://localhost:5035/.well-known/jwks.json` trên host và `http://user-service:8080/.well-known/jwks.json` trong Compose; chỉ UserService giữ signing private key như mục 5.5.
+
+**Môi trường dùng chung/deployment:** dùng credentials riêng và permissions giới hạn theo service như deployment checklist. Dùng chung một account local không chứng minh service isolation. Khi admission bật, credentials mới của UserService áp dụng cho **toàn bộ bus hiện có**, nên cần giữ quyền cho profile/access messaging, không chỉ reservation. `Messaging__OutboxDeliveryEnabled` cũng bật relay cho các event UserService đang chờ; kiểm tra topology profile audit hiện có trước khi bật.
+
+#### Topology và Gate audit
+
+Kiểm tra topology sẵn sàng trước khi gửi request và bật relay:
+
+| Destination | Vai trò |
+|---|---|
+| `user-account-access-v1` | Operations gửi yêu cầu; UserService nhận. |
+| `operations-account-access-results-v1` | UserService gửi kết quả; Operations nhận. |
+| `smartpark.operations.gate-audit.v1` | Durable fanout exchange cho Gate audit. |
+| `smartpark.notification-audit.operations-gate.v1` | Durable queue do audit owner provision và bind vào exchange trên. |
+
+MassTransit khai báo receive endpoints khi service kết nối với đủ quyền; shared/deployed topology và ACLs phải được owner kiểm tra, gồm exchanges/bindings/error/skipped queues. Xem deployment checklist để kiểm chứng quyền gửi/nhận.
+
+Audit owner phải tạo/bind queue **trước khi publish/relay Gate audit**, dù consumer chưa chạy. Exchange durable không giữ event cho queue được tạo sau. Script `scripts/messaging/provision-profile-audit-topology.ps1` hiện chỉ provision **profile audit**, không tạo Gate audit queue này.
+
+Sau khi topology Gate audit sẵn sàng, đặt `SMARTPARK_OPERATION_AUDIT_ENABLED=true`, điền Operations broker credentials và restart/recreate Operations. Audit có thể bật độc lập với admission. Khi audit tắt, Gate writes có thay đổi trạng thái trả `503 / AUDIT_PUBLISHING_UNAVAILABLE`; reads và completed replay không tạo hiệu ứng vẫn có thể dùng. Broker outage sau startup giữ event đã capture trong outbox để gửi lại; audit service khác sở hữu consumption/deduplication/retention. Outbox không thay thế audit log lâu dài.
+
+#### Áp dụng cấu hình và kiểm tra
+
+Chọn cách chạy đang sử dụng; không cần reset database chỉ để áp dụng các giá trị `.env`:
+
+- **Host runner:** dừng/restart User và Operations trong hai terminal; runner đọc lại `.env` mỗi lần chạy:
+
+  ```powershell
+  .\scripts\run-schema-service.ps1 -Service User
+  .\scripts\run-schema-service.ps1 -Service Operation
+  ```
+
+- **Visual Studio / direct `dotnet run`:** chạy `.\setup.ps1 -SkipDatabase -SkipRestore` để sync user-secrets, rồi restart hai service. Plain `dotnet run` không tự đọc root `.env`.
+- **Docker:** nếu image đã build từ source hiện tại, chạy `.\scripts\run-app-service.ps1 -Service User -NoBuild` và `.\scripts\run-app-service.ps1 -Service Operation -NoBuild` để recreate với env mới. Bỏ `-NoBuild` khi source/image chưa cập nhật. Docker Desktop Start / `docker start` không cập nhật env của container cũ.
+
+Với Driver JWT hợp lệ, request body hợp lệ và `Idempotency-Key` mới, `POST /api/reservation-requests` dự kiến trả `202` sau khi lưu receipt/outbox; dùng cùng Account để `GET` Location trả về. Timely Allowed kết thúc tại gate finalization nói trên, không tạo booking/payment. Admission tắt trả `503 / RESERVATION_ADMISSION_DISABLED`; broker credentials trống khi bắt buộc gây lỗi startup; queue/quyền/relay thiếu có thể khiến authorization timeout. Kiểm tra schema, broker connection và public JWKS nếu chưa đạt bước này; không chia sẻ credentials/JWT trong báo cáo lỗi.
+
+**Trạng thái kiểm chứng:** hướng dẫn dựa trên wiring hiện tại; build và PostgreSQL/RabbitMQ/runtime của slice vẫn **UNVERIFIED**. Chạy và ghi kết quả theo [deployment checklist](docs/04-testing/reports/SPARK-273-deployment-checklist.md); không coi service healthy hoặc response `202` là booking confirmed.
+
+### 5.7 Dedicated Operations → Facility service JWT (reservation)
+
+This capability is separate from Driver JWT/JWKS and `SMARTPARK_SERVICE_KEY`. UserService's private key stays in UserService. Operations signs short-lived service JWTs with its own RSA key; Facility receives only the matching public key. No custom encryption or shared signing secret is introduced.
+
+Generate once, outside the repository (PowerShell 7; these commands are instructions, not executed by the agent):
+
+```powershell
+$reservationKeyDirectory = Join-Path $env:LOCALAPPDATA 'SmartPark/reservation-service-keys'
+New-Item -ItemType Directory -Path $reservationKeyDirectory -Force | Out-Null
+$reservationPrivatePath = Join-Path $reservationKeyDirectory 'operations-private.pem'
+$reservationPublicPath = Join-Path $reservationKeyDirectory 'operations-public.pem'
+if ((Test-Path -LiteralPath $reservationPrivatePath) -or (Test-Path -LiteralPath $reservationPublicPath)) {
+    throw 'Keys already exist. Reuse them; do not rotate an active integration accidentally.'
+}
+$reservationRsa = [System.Security.Cryptography.RSA]::Create(3072)
+try {
+    [IO.File]::WriteAllText($reservationPrivatePath, $reservationRsa.ExportPkcs8PrivateKeyPem())
+    [IO.File]::WriteAllText($reservationPublicPath, $reservationRsa.ExportSubjectPublicKeyInfoPem())
+} finally { $reservationRsa.Dispose() }
+```
+
+If `ExportPkcs8PrivateKeyPem` is missing, check `$PSVersionTable.PSVersion`. Windows PowerShell 5.1 uses .NET Framework and lacks that API. You can run the preceding block in PowerShell 7, or use OpenSSL from Windows PowerShell. Keep the directory, path variables and existing-file check above, then replace the RSA export block with:
+
+```powershell
+$openssl = 'C:\Program Files\Git\mingw64\bin\openssl.exe'
+if (!(Test-Path -LiteralPath $openssl)) {
+    $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
+}
+& $openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out $reservationPrivatePath
+if ($LASTEXITCODE -ne 0) { throw 'Private key generation failed.' }
+& $openssl pkey -in $reservationPrivatePath -pubout -out $reservationPublicPath
+if ($LASTEXITCODE -ne 0) { throw 'Public key export failed.' }
+```
+
+If you already have the matching PEM pair, reuse it. For the host runner with pasted PEM text, set `SMARTPARK_RESERVATION_FACILITY_ENABLED=true` and, for local HTTP, `SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP=true` in the private root `.env`. Leave both Facility integration key-path settings blank. Clear any stale `ReservationIntegration:OperationsPrivateKeyPath` or `ReservationIntegration:OperationsPublicKeyPath` in the corresponding Development user-secrets, because a configured path takes precedence. Keep multiline PEM text out of `.env`; the PowerShell loader reads one line at a time.
+
+Copy the full private PEM, including its BEGIN and END lines, and use a dedicated Operations terminal:
+
+```powershell
+$env:ReservationIntegration__OperationsPrivateKeyPem = Get-Clipboard -Raw
+try { ./scripts/run-schema-service.ps1 -Service Operation }
+finally { Remove-Item Env:ReservationIntegration__OperationsPrivateKeyPem -ErrorAction SilentlyContinue }
+```
+
+Copy the matching public PEM and use a separate Facility terminal:
+
+```powershell
+$env:ReservationIntegration__OperationsPublicKeyPem = Get-Clipboard -Raw
+try { ./scripts/run-schema-service.ps1 -Service Facility }
+finally { Remove-Item Env:ReservationIntegration__OperationsPublicKeyPem -ErrorAction SilentlyContinue }
+```
+
+For Docker with pasted PEM text, use the same copy-and-start sequence with `SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM` for Operations and `SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM` for Facility. Run `./scripts/run-app-service.ps1 -Service Operation` or `-Service Facility` respectively, and remove the corresponding temporary environment variable afterward. For Visual Studio Development, paste into the respective project's **Manage User Secrets** JSON using `ReservationIntegration:OperationsPrivateKeyPem` or `ReservationIntegration:OperationsPublicKeyPem`. Represent line breaks as `\n` inside the JSON string, sync the feature flags through setup, then restart the project.
+
+For host development using file paths, fill these values in your private root `.env`:
+
+```dotenv
+SMARTPARK_RESERVATION_FACILITY_ENABLED=true
+SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP=true
+SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH=C:/Users/YOUR_USER/AppData/Local/SmartPark/reservation-service-keys/operations-private.pem
+SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH=C:/Users/YOUR_USER/AppData/Local/SmartPark/reservation-service-keys/operations-public.pem
+```
+
+Use your actual absolute paths. Only Operations is configured with the private-key path; give the Facility teammate the public PEM only. On separate machines the public-key path is local to Facility. Run `./setup.ps1 -SkipDatabase -SkipRestore` to sync Visual Studio/direct-run user-secrets, then restart Facility and Operations. The host runner also maps these keys on startup. Existing database/broker settings remain required.
+
+For Docker development, host file paths do not resolve inside containers. In the same PowerShell session used to invoke the app runner, supply PEM values through process environment (do not print them or paste them into Git):
+
+```powershell
+$env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM = [IO.File]::ReadAllText($reservationPrivatePath)
+$env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM = [IO.File]::ReadAllText($reservationPublicPath)
+try {
+    ./scripts/run-app-service.ps1 -Service Facility
+    ./scripts/run-app-service.ps1 -Service Operation
+} finally {
+    Remove-Item Env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM -ErrorAction SilentlyContinue
+    Remove-Item Env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM -ErrorAction SilentlyContinue
+}
+```
+
+Compose passes the private PEM only to Operations and the public PEM only to Facility. For a protected deployment prefer service-specific secret-file mounts using `ReservationIntegration__OperationsPrivateKeyPath` / `OperationsPublicKeyPath`; keep HTTP opt-in false and configure HTTPS. The local Docker network uses HTTP, so the explicit local opt-in above is necessary. Tokens are signed, not encrypted; transport protection is separate.
+
+Accepted JWT: RS256, issuer/sub/sender `SmartParking.OperationService`, audience `SmartParking.FacilityService`, permission `reservation:facility-dependency`, 60-second lifetime, 5-second validation skew. No browser token or sender/audience header alone grants access. Rotation is coordinated: replace the Operations key and Facility trust together, restart affected hosts, and expect old tokens to fail; a multi-key rollover endpoint is not implemented.
+
+Prepare the original Facility/Operations schemas, explicit site/category quotas, reservation policy seed and per-site late-tolerance choice. Existing tables are not upgraded by `CREATE IF NOT EXISTS`; no automatic reset or SQL overlay is supplied. Reconcile legacy cancellation history before sales.
+
+For durable hold/availability/Facility-applied events, configure the existing Operations bus and outbox, bind consumer queues, then enable `Messaging__OutboxDeliveryEnabled`. Facility's committed structure outcome is already durably replayed to Operations; Operations emits the applied fact in its own outbox transaction. This does not require a second Facility bus. Unconfigured messaging prevents successful structure completion; pending synchronization must recover after configuration is restored.
+
+See the [event/SignalR and deployment handoff](docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md). SignalR relay, frontend changes, Payment producers and the next Operations commercial-recovery commit remain separate work. Enabling this capability does not make paid reservation confirmation ready for production.
+
 ## 6. Troubleshooting
 
 ### 6.1 Lỗi thường gặp — Triệu chứng → Nguyên nhân → Cách xử lý
@@ -376,25 +542,25 @@ Khi chạy `.\setup.ps1`, dòng `[n/7]` cuối cùng trên màn hình cho biết
 
 > **CẢNH BÁO — trước khi chạy `-RecreateDb`:** flag này xóa schema volume và làm mất toàn bộ dữ liệu dev trong 6 DB. Sao lưu trước nếu cần giữ dữ liệu.
 
-### 7.2 Schema baseline, overlay và script legacy
+### 7.2 Schema baseline và script legacy
 
-- Database mới chạy SQL baseline trong `scripts/database/microservices` (`01`–`06` theo từng service). Toàn bộ các overlay trước đây đã được hợp nhất trực tiếp vào các file canonical này theo đúng thứ tự khởi tạo của `compose.schema-integration.yml`.
-- Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.9` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
+- Database mới chỉ chạy SQL trong `scripts/database/microservices` (`01`–`06` theo từng service). `parking_sessions.location_scanned_at` đã nằm trong base `03b-reservation-operations-service-db.sql`; không còn overlay schema.
+- Runner chỉ áp bộ file canonical này. Script legacy `05.1`–`05.12` và `integration/01–03` đã bị thay thế và bị block-list chặn bởi `apply-workflow-migrations.ps1`.
 - `docker-compose.yml` (compose monolith cũ, port `5433`, container `smartparking_db`) và `scripts/database/docker-compose-smartpark.yml` **đã bị xoá** khỏi repo. Database được tạo bằng `compose.schema-integration.yml` thông qua `setup.ps1`.
 
-### 7.3 Volume và migration
+### 7.3 Volume và schema verification
 
 PostgreSQL chỉ chạy init SQL khi volume **mới hoàn toàn**. Với volume đã tồn tại, `scripts/apply-workflow-migrations.ps1` probe trạng thái DB trước khi áp script:
 
 | Trạng thái | Hành vi |
 | --- | --- |
-| Schema đã đúng (sentinel có mặt) | Bỏ qua, chỉ kiểm tra bảng bắt buộc |
+| Schema đã đúng (sentinel có mặt) | Bỏ qua base SQL, kiểm tra các bảng bắt buộc và cột scan Operation |
 | DB trống | Áp trọn bộ canonical |
 | Schema cũ (có bảng cũ nhưng thiếu sentinel) | Dừng và yêu cầu `.\setup.ps1 -RecreateDb` |
 
 Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ liệu đang dùng. Volume đã init theo baseline mới chạy lại `.\setup.ps1` là an toàn (migration skip và chỉ verify).
 
-**Sau khi `git pull` một branch có thay đổi SQL:** volume đã tồn tại **không** tự nhận script mới — phải chạy lại bước migration. Runner probe trạng thái và verify bảng bắt buộc (Parking hiện gồm `structure_maintenance_windows`, Reservation gồm `site_capacity_pools`):
+**Sau khi `git pull` một branch có thay đổi SQL:** volume đã tồn tại **không** tự nhận script mới. Chạy setup/runner để kiểm tra schema; runner chỉ áp file base cho DB trống, còn DB đã khởi tạo thì chỉ verify (và có thể áp phần cập nhật User đã được giới hạn riêng). Operation cần có `parking_sessions.location_scanned_at`:
 
 ```powershell
 .\setup.ps1 -SkipRestore                                        # cả 6 DB + đồng bộ user-secrets
@@ -403,9 +569,9 @@ Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ
 
 Rebuild image app là bước **riêng** (migration không build lại service): xem [QUICK_START.md](QUICK_START.md#8-pull-branch-mới--cập-nhật-image-service-và-schema-db).
 
-#### Volume cũ thiếu bảng overlay
+#### Volume cũ thiếu schema canonical
 
-Volume tạo trước baseline mới ở trạng thái legacy — thiếu các bảng như `structure_synchronizations`, `structure_release_receipts`, `tenants`, … Runner sẽ dừng và yêu cầu dựng lại:
+Volume tạo trước baseline mới ở trạng thái legacy — thiếu các bảng như `structure_synchronizations`, `structure_release_receipts`, `tenants`, … hoặc thiếu cột scan trong Operation. Runner sẽ dừng, không tự ALTER hay reset dữ liệu:
 
 > **CẢNH BÁO — mất dữ liệu:** lệnh dưới đây xóa schema volumes và init lại cả 6 DB từ script canonical. Toàn bộ dữ liệu dev trong volume đó sẽ mất; sao lưu trước nếu cần giữ.
 

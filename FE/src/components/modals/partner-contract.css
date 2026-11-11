@@ -37,7 +37,7 @@
 .partner-contract-actions label{display:inline-flex;align-items:center;gap:8px;font-size:.85rem;color:var(--fg)}
 .partner-contract-actions input{width:18px;height:18px;accent-color:var(--primary)}
 .partner-contract-hint{display:block;margin-top:8px;font-size:.78rem;color:var(--muted)}
-.partner-contract-dialog :focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+.partner-contract-dialog :focus-visible{outline: 2px solid var(--focus-ink, var(--focus));outline-offset: -3px}
 @media(max-width:600px){.partner-contract-backdrop{padding:8px}.partner-contract-dialog{max-height:96dvh;border-radius:18px}.partner-contract-dialog--agreement{max-height:calc(100dvh - 16px)}.partner-contract-header,.partner-contract-meta,.partner-contract-footer{padding-left:18px;padding-right:18px}.partner-contract-content,.partner-contract-dialog--agreement .partner-contract-content{padding:22px 18px}.partner-contract-content p{text-align:left;line-height:1.65}.partner-contract-signatures{grid-template-columns:1fr}.partner-contract-actions>*{width:100%}}
 .partner-contract-page .partner-contract-dialog--agreement{max-height:none}
 .partner-contract-page-notice{max-width:1120px;margin:0 auto 24px;padding:12px 18px;color:var(--fg);background:var(--raised);border:1px solid var(--border);border-radius:16px;text-align:center}

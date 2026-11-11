@@ -406,6 +406,44 @@ public sealed class OperationalLayoutRedactionTests
             result.Slots[0].Features.GetValueOrDefault().GetRawText());
     }
 
+    [Fact]
+    public void Sanitized_WithDriverReservation_IncludesReservationAndCleansPublicSlots()
+    {
+        var dto = BuildProjection();
+        var driverReservation = new DriverReservationDto(
+            Guid.Parse("5d1f2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a5b"),
+            true,
+            new PositionScopeDto(
+                "SLOT",
+                Guid.Parse("00000000-0000-0000-0000-000000000004"),
+                null),
+            new AllocatedPositionDto(
+                "SLOT",
+                Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                Guid.Parse("6e2f3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c"),
+                "RESERVED"));
+
+        var result = OperationalLayoutRedaction.Apply(
+            dto, LayoutVisibility.Sanitized, 2, EmptyCounts, driverReservation);
+
+        Assert.Equal(driverReservation, result.DriverReservation);
+        Assert.All(result.Slots, slot => Assert.Null(slot.SessionType));
+        Assert.All(result.Slots, slot => Assert.False(slot.OperatorContext.HasValue));
+        Assert.DoesNotContain(result.Slots, slot => slot.ReservationState == ReservationState.BACKUP);
+    }
+
+    [Fact]
+    public void Sanitized_WhenStale_ForcesIsBookableFalseAcrossAllSlots()
+    {
+        var stale = BuildProjection() with { IsFresh = false };
+
+        var result = OperationalLayoutRedaction.Apply(
+            stale, LayoutVisibility.Sanitized, 2, EmptyCounts);
+
+        Assert.All(result.Slots, slot => Assert.False(slot.IsBookable));
+        Assert.False(result.IsFresh);
+    }
+
     private static void AssertFeaturesSanitized(JsonElement? original, JsonElement? sanitized)
     {
         if (original is null)

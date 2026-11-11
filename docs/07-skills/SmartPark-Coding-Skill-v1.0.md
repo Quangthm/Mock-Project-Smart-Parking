@@ -155,6 +155,14 @@ public interface ICurrentActor
 
 Actual names/types must match the real token contract. Do not infer that `sub` is AccountId or `jti` is a GUID session key. Fail closed on missing/malformed required actor claims. This adapter exposes token-time identity only: no automatic account/session fetch, JWT validation, UserService call or current-access authorization. Never trust body-selected actor IDs or spoofable headers. User data can be shared across Accounts; another active Account does not legitimize acting as the bound Account.
 
+### Service-to-service authentication
+
+Use a signed, short-lived service JWT in the `Authorization: Bearer` header for new internal HTTP capabilities. At API ingress, validate the signature against a trusted key, the signing algorithm, issuer, sender identity, audience for the receiving service, lifetime, and permission for the specific capability. Bind the sender to the authenticated JWT claims. A standalone sender or audience header carries no authentication authority. Keep machine identity separate from Driver identity and use protected transport outside explicitly configured local development.
+
+The approved Operations → Facility implementation is the reference. Operations holds its own RSA private signing key. Facility receives the matching public key and restricts access to the reservation dependency capability. Keep existing exceptions limited to their approved endpoints. Changes to existing integrations need their own migration plan. See the [Facility service JWT contract](../03-design/api/reservation-facility-dependency-api-design.md).
+
+**Deferred:** Pairwise service keys or encryption for service traffic, including possible broker payload encryption, require a separate design and approval covering key distribution, rotation and recovery. JWT signing authenticates the sender and protects token integrity. TLS protects HTTP traffic in transit.
+
 ### UserService public signing keys and startup order (SPARK-327)
 
 **Current implementation:** UserService issues RS256 access tokens and anonymously publishes its active public key at `GET /.well-known/jwks.json` (configurable `Jwt:JwksPath`). Only UserService receives the RSA private PEM/Base64. FacilityService, OperationService and PaymentService receive public trust configuration but **do not yet implement JWKS-backed JWT authentication**. Payment's Development authentication handler is not JWT validation. Do not interpret populated configuration or a healthy container as proof that consumer JWT protection exists. Consumer middleware remains a separate implementation task, as confirmed on 2026-11-06.

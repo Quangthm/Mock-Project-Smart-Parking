@@ -17,6 +17,13 @@ public static class ProfileMessagingRegistration
         Action<IReceiveEndpointConfigurator, IBusRegistrationContext>? configureAccessEndpoint = null)
     {
         var accessEnabled = configuration.GetValue<bool>("Messaging:Enabled");
+        var reservationEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
+        if (reservationEnabled && (string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerUser"]) ||
+            string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerPassword"])))
+            throw new InvalidOperationException("Configure UserService restricted broker credentials for Account-current decisions.");
+        if (reservationEnabled && configureAccessEndpoint is null)
+            throw new InvalidOperationException("Account-current consumer requires its owning EF outbox.");
+        services.AddScoped<UserService.Application.Authorization.IAccountAccessDecisionPublisher, AccountAccessDecisionPublisher>();
         if (accessEnabled && configureAccessEndpoint is null)
             throw new InvalidOperationException("Configure the access consumer with its owning EF outbox.");
         services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
@@ -24,6 +31,7 @@ public static class ProfileMessagingRegistration
         {
             configureOutbox(registration);
             if (accessEnabled) registration.AddConsumer<OperatorAccessChangedConsumer>();
+            if (reservationEnabled) registration.AddConsumer<AccountCurrentConsumer>();
             registration.UsingRabbitMq((context, bus) =>
             {
                 // Host setup uses loopback/published port; app Compose uses broker DNS/internal port.
@@ -31,8 +39,10 @@ public static class ProfileMessagingRegistration
                     configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
                     configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark", host =>
                     {
-                        host.Username(configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark");
-                        host.Password(configuration["SMARTPARK_RABBITMQ_PASSWORD"]
+                        host.Username(reservationEnabled ? configuration["ReservationAdmission:BrokerUser"]
+                            ?? throw new InvalidOperationException("Configure the UserService restricted broker user.")
+                            : configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark");
+                        host.Password((reservationEnabled ? configuration["ReservationAdmission:BrokerPassword"] : configuration["SMARTPARK_RABBITMQ_PASSWORD"])
                             ?? throw new InvalidOperationException("Configure SMARTPARK_RABBITMQ_PASSWORD."));
                     });
                 bus.Message<UserProfileNameChanged>(message => message.SetEntityName(ProfileNameChangedExchange));
@@ -43,6 +53,17 @@ public static class ProfileMessagingRegistration
                     publish.ExchangeType = "fanout";
                 });
                 // Profile audit routing is provisioned independently; no audit consumer is required.
+                if (reservationEnabled)
+                    bus.ReceiveEndpoint(SmartParking.Contracts.AccountAccess.AccountAccessEndpoints.Requests, endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry =>
+                        {
+                            retry.Handle<System.Data.Common.DbException>(error => error.IsTransient);
+                            retry.Interval(1, TimeSpan.FromMilliseconds(250));
+                        });
+                        configureAccessEndpoint?.Invoke(endpoint, context);
+                        endpoint.ConfigureConsumer<AccountCurrentConsumer>(context);
+                    });
                 if (accessEnabled)
                     bus.ReceiveEndpoint("smartpark-user-access-projection-v1", endpoint =>
                     {

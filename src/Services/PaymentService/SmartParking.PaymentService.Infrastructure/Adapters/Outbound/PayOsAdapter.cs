@@ -26,6 +26,74 @@ public class PayOsAdapter : IPaymentGatewayPort
 
     public string ProviderCode => "PAYOS";
 
+    public async Task<PaymentCancellationResult> CancelPaymentAsync(
+        long orderCode,
+        Guid transactionId,
+        string? gatewayTransactionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsMockTransactionId(gatewayTransactionId, transactionId))
+        {
+            return new PaymentCancellationResult(true, "CANCELLED", gatewayTransactionId, null, null);
+        }
+
+        if (!HasLiveCredentials())
+        {
+            return new PaymentCancellationResult(
+                false,
+                "UNKNOWN",
+                gatewayTransactionId,
+                "PAYOS_CREDENTIALS_NOT_CONFIGURED",
+                "Live PayOS credentials are not configured; the pending checkout could not be cancelled.");
+        }
+
+        var paymentRequestId = string.IsNullOrWhiteSpace(gatewayTransactionId)
+            ? orderCode.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : gatewayTransactionId;
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"/v2/payment-requests/{Uri.EscapeDataString(paymentRequestId)}/cancel")
+            {
+                Content = JsonContent.Create(new { cancellationReason = "Customer selected cash payment." })
+            };
+            httpRequest.Headers.Add("x-client-id", _options.ClientId);
+            httpRequest.Headers.Add("x-api-key", _options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var root = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            var code = root.RootElement.TryGetProperty("code", out var codeElement) ? codeElement.GetString() : null;
+            var desc = root.RootElement.TryGetProperty("desc", out var descElement) ? descElement.GetString() : null;
+            var status = root.RootElement.TryGetProperty("data", out var data) &&
+                         data.TryGetProperty("status", out var statusElement)
+                ? statusElement.GetString() ?? "UNKNOWN"
+                : "UNKNOWN";
+
+            if (!response.IsSuccessStatusCode || code != "00")
+            {
+                _logger.LogWarning("PayOS cancellation failed for OrderCode {OrderCode}: {StatusCode} {Description}",
+                    orderCode, response.StatusCode, desc);
+                return new PaymentCancellationResult(false, status, gatewayTransactionId,
+                    $"PAYOS_{code ?? ((int)response.StatusCode).ToString(System.Globalization.CultureInfo.InvariantCulture)}", desc);
+            }
+
+            return new PaymentCancellationResult(
+                status is "CANCELLED" or "PAID",
+                status,
+                gatewayTransactionId,
+                status is "CANCELLED" or "PAID" ? null : "PAYOS_CANCELLATION_UNCONFIRMED",
+                status is "CANCELLED" or "PAID" ? null : desc);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Error cancelling PayOS checkout for OrderCode {OrderCode}", orderCode);
+            return new PaymentCancellationResult(false, "UNKNOWN", gatewayTransactionId, "PAYOS_CANCELLATION_UNKNOWN", ex.Message);
+        }
+    }
+
     public async Task<PaymentInitiateResult> InitiatePaymentAsync(
         PaymentInitiateRequest request,
         CancellationToken cancellationToken = default)
@@ -39,10 +107,10 @@ public class PayOsAdapter : IPaymentGatewayPort
         {
             _logger.LogInformation("PayOS credentials not configured or sandbox mode. Emulating payment link for OrderCode {OrderCode}.", request.OrderCode);
 
-            var mockPaymentLinkId = Guid.NewGuid().ToString("N");
+            var mockPaymentLinkId = $"MOCK-{request.TransactionId:N}";
             return new PaymentInitiateResult(
                 IsSuccess: true,
-                CheckoutUrl: $"https://pay.payos.vn/web/{mockPaymentLinkId}",
+                CheckoutUrl: $"http://localhost:5173/payment/success?transactionId={request.TransactionId}",
                 QrCode: $"00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540{request.AmountVnd}5802VN62230819{request.Description}6304ABCD",
                 AccountNumber: "0123456789",
                 AccountName: "SMARTPARKING CORP",
@@ -244,13 +312,14 @@ public class PayOsAdapter : IPaymentGatewayPort
             _options.ClientId.StartsWith("replace-with") ||
             _options.ClientId.StartsWith("mock"))
         {
-            // Sandbox fallback
+            // Sandbox fallback: an initiated checkout remains pending until the
+            // explicit demo-pay flow or a webhook marks it successful.
             return new PaymentVerificationResult(
                 IsFound: true,
-                PaymentStatus: "SUCCESS",
-                AmountVnd: 25000,
-                GatewayTransactionId: gatewayTransactionId ?? "MOCK-GW-TX",
-                PaidAt: DateTimeOffset.UtcNow
+                PaymentStatus: "PENDING",
+                AmountVnd: 0,
+                GatewayTransactionId: gatewayTransactionId,
+                PaidAt: null
             );
         }
 
@@ -307,4 +376,17 @@ public class PayOsAdapter : IPaymentGatewayPort
             );
         }
     }
+
+    private bool HasLiveCredentials() =>
+        !string.IsNullOrWhiteSpace(_options.ClientId) &&
+        !string.IsNullOrWhiteSpace(_options.ApiKey) &&
+        !string.IsNullOrWhiteSpace(_options.ChecksumKey) &&
+        !_options.ClientId.StartsWith("replace-with", StringComparison.OrdinalIgnoreCase) &&
+        !_options.ClientId.StartsWith("mock", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMockTransactionId(string? gatewayTransactionId, Guid transactionId) =>
+        gatewayTransactionId?.StartsWith("MOCK-", StringComparison.Ordinal) == true ||
+        (gatewayTransactionId is not null &&
+         Guid.TryParseExact(gatewayTransactionId, "N", out var parsedId) &&
+         parsedId == transactionId);
 }

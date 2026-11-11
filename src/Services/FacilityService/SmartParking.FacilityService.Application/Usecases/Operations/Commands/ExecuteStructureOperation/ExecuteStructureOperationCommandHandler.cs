@@ -11,7 +11,7 @@ public sealed class ExecuteStructureOperationCommandHandler(
     IOwnerScopeResolver scopeResolver,
     IStructureOperationStore store,
     IStructureImpactPlanner planner,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     IOwnerAuthorizer owners,
     ILogger<ExecuteStructureOperationCommandHandler> logger)
     : IRequestHandler<ExecuteStructureOperationCommand, StructureOperation>
@@ -44,7 +44,7 @@ public sealed class ExecuteStructureOperationCommandHandler(
 
         // A previous attempt may have committed physically but lost its response.
         // Recovery publishes the durable outcome before we plan any new changes.
-        await unitOfWork.RecoverAsync(owner, request.SiteId, ct);
+        await mediator.Send(new RecoverAuthorizedStructureCommand(owner, request.SiteId), ct);
         operation = await store.ReadAsync(owner, request.SiteId, operation.Id, ct);
         if (operation.Status == "completed") return operation;
 
@@ -65,8 +65,7 @@ public sealed class ExecuteStructureOperationCommandHandler(
         {
             // The Domain rechecks the change under the normal hold and local row
             // locks. A planner response by itself does not authorize eviction.
-            await using (var session = await unitOfWork.BeginEditAsync(
-                owner, request.SiteId, ct, operationId: operation.Id))
+            await using (var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId, OperationId: operation.Id), ct))
             {
                 StructureEditHandler.Apply(session.Structure, request.Edit);
                 await session.CommitAsync(ct);

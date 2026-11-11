@@ -1,3 +1,4 @@
+import { useConfirmation } from "../../../components/ui/useConfirmation"
 import { motion, useReducedMotion } from "motion/react"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -16,6 +17,7 @@ import { Badge } from "../../../components/ui/Badge"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
 import { useApp } from "../../../context/AppContext"
+import { useServerRefresh } from "../../../lib/serverRefresh"
 import { showUiToast } from "../../../lib/uiToast"
 import { ownerData as store } from "../data/data"
 import type { LotType } from "../../../lib/types"
@@ -149,6 +151,7 @@ function categoriesOf(slot: Slot) {
 
 export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: ParkingStructureProps) {
   const { user } = useApp()
+  const { confirm, confirmation } = useConfirmation()
   const [siteId, setSiteId] = useState("")
   const [structure, setStructure] = useState<Structure | null>(null)
   const [loading, setLoading] = useState(false)
@@ -165,6 +168,11 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [compatibilitySlotId, setCompatibilitySlotId] = useState<string | null>(null)
   const [backupBusy, setBackupBusy] = useState(false)
+  const [backgroundRevision, setBackgroundRevision] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  useServerRefresh(user?.id && siteId ? user.id + ":" + siteId : undefined, () => {
+    if (!loading && !refreshing && !backupBusy && !registerMode && !compatibilitySlotId) setBackgroundRevision(value => value + 1)
+  })
   const loadedSiteRef = useRef<string | null>(null)
   // Signature of the last (requested site + available site ids) pair the site effect
   // resolved. It lets the effect bail out — without touching state at all — when the
@@ -210,13 +218,14 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
       setLoading(false)
       return () => { current = false }
     }
-    setLoading(true)
+    if (siteChanged || !structure) setLoading(true)
+    setRefreshing(true)
     parkingApi.structure(siteId)
       .then((data) => { if (current) setStructure(data) })
       .catch((cause) => { if (current) setError(structureErrorMessage(cause, "Cannot load parking structure.")) })
-      .finally(() => { if (current) setLoading(false) })
+      .finally(() => { if (current) { setLoading(false); setRefreshing(false) } })
     return () => { current = false }
-  }, [siteId, reload])
+  }, [siteId, reload, backgroundRevision])
 
   const units = structure?.units ?? EMPTY_UNITS
   const slots = structure?.slots ?? EMPTY_SLOTS
@@ -380,7 +389,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
   async function changeSelectedSlotBackup(slot: Slot) {
     if (backupBusy) return
     const marked = slot.reservationState === "BACKUP"
-    if (!confirm(`${marked ? "Release backup designation" : "Designate as backup"} for slot ${formatSlotLabel(slot.code)}?`)) return
+    if (!await confirm({ title: "Change backup designation?", description: `${marked ? "Release backup designation" : "Designate as backup"} for slot ${formatSlotLabel(slot.code)}?`, confirmLabel: "Confirm" })) return
     setBackupBusy(true)
     setError("")
     try {
@@ -400,6 +409,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
 
   return (
     <section className="min-w-0 space-y-6 text-[var(--fg)]">
+      {confirmation}
       <PageHeader
         title="Parking Structure"
         variant="compact"

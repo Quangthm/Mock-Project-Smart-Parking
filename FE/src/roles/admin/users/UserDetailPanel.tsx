@@ -178,7 +178,7 @@ export function UserDetailPanel({ model }: { model: UsersViewModel }) {
                                   { dateStyle: "short", timeStyle: "short" },
                                 )}
                               </div>
-                              <div className="text-[10px] text-[var(--muted)]">
+                              <div className="text-xs text-[var(--muted)]">
                                 Expires:{" "}
                                 {new Date(
                                   activity.expiresAt,
@@ -189,7 +189,7 @@ export function UserDetailPanel({ model }: { model: UsersViewModel }) {
                               </div>
                             </div>
                             <span
-                              className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                              className={`text-xs font-semibold uppercase px-1.5 py-0.5 rounded ${
                                 sessionState === "Active"
                                   ? "bg-green-500/15 text-green-600"
                                   : sessionState === "Revoked"

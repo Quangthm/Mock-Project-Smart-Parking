@@ -31,18 +31,19 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
   const dragRef = useRef<{ pointerId: number; x: number; y: number; start: Position; moved: boolean } | null>(null)
   const suppressClickRef = useRef(false)
   const wasDraggedRef = useRef(false)
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight }))
   const [position, setPosition] = useState<Position>(() => ({ x: window.innerWidth - launcherSize - 24, y: window.innerHeight - launcherSize - 24 }))
 
   useEffect(() => {
     const resize = () => {
-      setViewport({ width: window.innerWidth, height: window.innerHeight })
+      setViewport({ width: window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight })
       const driverMobile = role === "driver" && window.matchMedia("(max-width: 900px)").matches
       const bottomGap = driverMobile ? parkingMode ? 88 : 96 : edgeGap
       if (!open) setPosition((current) => ({ x: clamp(current.x, edgeGap, Math.max(edgeGap, window.innerWidth - launcherSize - edgeGap)), y: clamp(current.y, parkingMode ? edgeGap : 76, Math.max(parkingMode ? edgeGap : 76, window.innerHeight - launcherSize - bottomGap)) }))
     }
     window.addEventListener("resize", resize)
-    return () => window.removeEventListener("resize", resize)
+    window.visualViewport?.addEventListener("resize", resize)
+    return () => { window.removeEventListener("resize", resize); window.visualViewport?.removeEventListener("resize", resize) }
   }, [open, parkingMode, role])
   useEffect(() => {
     if (open) return
@@ -194,7 +195,7 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
 
           <form onSubmit={submit} className="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--bg)] p-3">
             <label htmlFor="smartparking-ai-input" className="sr-only">Message SmartParking AI</label>
-            <input id="smartparking-ai-input" ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} maxLength={500} placeholder="Ask a question…" className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--primary)]" />
+            <input id="smartparking-ai-input" ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} maxLength={500} placeholder="Ask a question…" className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]" />
             <button type="submit" disabled={!input.trim() || pending} aria-label="Send message" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-fg)] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"><UntitledIcon name="arrow-right" size={18} /></button>
           </form>
         </section>
@@ -212,7 +213,8 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
         className="smartparking-chat-launcher"
         style={{ touchAction: "none" }}
       >
-        <UntitledIcon name="sparkles" size={23} />
+        <span className="smartparking-chat-orbit" aria-hidden="true" />
+        <span className="smartparking-chat-launcher-symbol" aria-hidden="true"><UntitledIcon name="sparkles" size={23} /></span>
       </button>
     </div>
   )
