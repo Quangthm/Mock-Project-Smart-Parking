@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -46,13 +46,14 @@ if ($config.ExitCode -ne 0) { throw "compose.app.yml is invalid.`n$($config.Text
 
 $map = @{
     User        = 'user-service'
-    Facility    = 'facility-service'
-    Operation   = 'operation-service'
-    Payment     = 'payment-service'
-    Frontend    = 'frontend'
+    Facility     = 'facility-service'
+    Operation    = 'operation-service'
+    Payment      = 'payment-service'
+    Notification = 'notification-service'
+    Frontend     = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','facility-service','operation-service','payment-service','frontend')
+    @('user-service','facility-service','operation-service','payment-service','notification-service','frontend')
 } else {
     @($map[$Service])
 }
@@ -126,6 +127,7 @@ Write-Host '  User        http://localhost:5035/health'
 Write-Host '  Facility    http://localhost:5045/health'
 Write-Host '  Operation   http://localhost:5055/health'
 Write-Host '  Payment     http://localhost:5065/health'
+Write-Host '  Notification http://localhost:5068/health'
 Write-Host '  Frontend    http://localhost:5173'
 Write-Host ''
 

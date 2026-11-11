@@ -1,6 +1,6 @@
 import { ensureAccessToken } from "./authApi"
 
-const paymentBase = (import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "/payment-api").replace(/\/$/, "")
+const paymentBase = (import.meta.env.VITE_PAYMENT_API_BASE_URL ?? "http://localhost:5065").replace(/\/$/, "")
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const checkoutKey = (orderId: string) => `sp_payos_checkout_${orderId}`
 const idempotencyKey = (orderId: string) => `sp_payos_idempotency_${orderId}`

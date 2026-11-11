@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment')][string]$Service
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
 # Parking remains an alias so existing scripts and configuration continue to work.
@@ -60,45 +60,24 @@ $env:Services__User = 'http://localhost:5035/'
 $env:Services__Parking = 'http://localhost:5045/'
 $env:Services__Reservation = 'http://localhost:5055/'
 $env:Services__Payment = 'http://localhost:5065/'
-foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
+$env:Services__Notification = 'http://localhost:5068/'
+foreach ($remoteService in @('User','Parking','Reservation','Payment','Notification')) {
     $url = [Environment]::GetEnvironmentVariable('SMARTPARK_SERVICE_' + $remoteService.ToUpperInvariant() + '_URL')
     if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
 }
 
-$jwtIssuer = if ($env:SMARTPARK_JWT_ISSUER) { $env:SMARTPARK_JWT_ISSUER } else { 'SmartParking.UserService' }
-$jwtAudience = if ($env:SMARTPARK_JWT_AUDIENCE) { $env:SMARTPARK_JWT_AUDIENCE } else { 'SmartParking' }
-$jwtPath = if ($env:SMARTPARK_JWT_JWKS_PATH) { $env:SMARTPARK_JWT_JWKS_PATH } else { '/.well-known/jwks.json' }
-if ($Service -eq 'User') {
-    $env:Jwt__Issuer = $jwtIssuer
-    $env:Jwt__Audience = $jwtAudience
-    $env:Jwt__JwksPath = $jwtPath
-    # A blank environment value disappears on Windows PowerShell 5.1. A space
-    # explicitly overrides stale user-secrets while remaining unconfigured.
-    $env:Jwt__KeyId = if ($env:SMARTPARK_JWT_KEY_ID) { $env:SMARTPARK_JWT_KEY_ID } else { ' ' }
-    foreach ($field in @('PrivateKeyPem','PrivateKeyPemBase64')) {
-        $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
-        $value = [Environment]::GetEnvironmentVariable($sourceName, 'Process')
-        if (!(Test-JwtConfiguredValue $value)) { $value = ' ' }
-        [Environment]::SetEnvironmentVariable('Jwt__' + $field, $value, 'Process')
-    }
-} else {
-    $env:JwtValidation__Issuer = $jwtIssuer
-    $env:JwtValidation__Audience = $jwtAudience
-    $env:JwtValidation__JwksUri = ([Uri]::new([Uri]$env:Services__User, $jwtPath)).AbsoluteUri
-}
-
-$dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
-$defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444' }
-$apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065' }
 
 $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }
 $apiPort = $apiPortByService[$Service]
 
-$dbName = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment' }[$Service]
+$dbName = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification' }[$Service]
 # Quote the password for Npgsql syntax so ';' inside a password is safe.
 $quotedPassword = $env:SMARTPARK_DEV_PASSWORD.Replace('"', '""')
 [Environment]::SetEnvironmentVariable('ConnectionStrings__' + $Service, "Host=127.0.0.1;Port=$dbPort;Database=$dbName;Username=$dbName;Password=`"$quotedPassword`"", 'Process')
+if ($Service -eq 'Notification') {
+    [Environment]::SetEnvironmentVariable('ConnectionStrings__NotificationAudit', "Host=127.0.0.1;Port=$dbPort;Database=$dbName;Username=$dbName;Password=`"$quotedPassword`"", 'Process')
+}
 
 if ($Service -eq 'User' -and $env:SMARTPARK_ADMIN_PASSWORD) {
     $adminEmail = $env:SMARTPARK_ADMIN_EMAIL
@@ -160,10 +139,16 @@ if ($Service -eq 'User') {
         $env:Workflow__KeyDirectory = $keyDirectory
     }
 }
-$projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $Service } }
-$projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
+if ($Service -eq 'Notification') {
+    $projectDir = Join-Path $taskRoot "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
+    $serviceDisplay = 'NotificationAuditService'
+} else {
+    $projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $Service } }
+    $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
+    $serviceDisplay = "${projectService}Service"
+}
 dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
-if ($LASTEXITCODE -ne 0) { throw "${projectService}Service exited with code $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "$serviceDisplay exited with code $LASTEXITCODE" }
 } finally {
     # Do not leave UserService .env signing secrets in the launching shell.
     Restore-JwtSigningEnvironment $previousSigningEnvironment
