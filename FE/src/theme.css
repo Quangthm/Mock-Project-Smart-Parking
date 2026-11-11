@@ -17,7 +17,7 @@
   --action-fg: #fcfdfc;
   --accent: #146b61;
   --accent-fg: #fcfdfc;
-  --focus: #146b61;
+  --focus: #526063;
   --available: #0e6850;
   --occupied: #8d3540;
   --reserved: #7a4b00;
@@ -59,7 +59,7 @@
   --action-fg: #151c1b;
   --accent: #69d7b2;
   --accent-fg: #151c1b;
-  --focus: #69d7b2;
+  --focus: #c2cccf;
   --available: #8be0b8;
   --occupied: #ffadb4;
   --reserved: #f4ce78;
@@ -120,13 +120,14 @@ select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible,
 [role="button"]:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  outline: 2px solid var(--focus-ink, var(--focus));
+  outline-offset: -3px;
 }
-.input:focus-visible { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 24%, transparent); }
-.dark .input:focus-visible { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 24%, transparent); }
 .input { background: var(--card); color: var(--fg); font-size: 1rem; }
 select, option { background-color: var(--card); color: var(--fg); }
+input[type="number"] { appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
 .btn-primary,
@@ -165,7 +166,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .btn-accent:hover { background: color-mix(in srgb, var(--accent) 85%, var(--bg)); opacity: 1; transform: translateY(-1px); }
 .btn-primary:active, .btn-secondary:active, .btn-outline:active, .btn-ghost:active, .btn-danger:active, .btn-accent:active { transform: translateY(1px); box-shadow: inset 0 2px 4px #0002; }
 .btn-primary:disabled, .btn-secondary:disabled, .btn-outline:disabled, .btn-ghost:disabled, .btn-danger:disabled, .btn-accent:disabled { transform: none; }
-.btn-primary:focus-visible, .btn-secondary:focus-visible, .btn-outline:focus-visible, .btn-ghost:focus-visible, .btn-danger:focus-visible, .btn-accent:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.btn-primary, .btn-accent, .btn-danger, .skip-link { --focus-ink: currentColor; }
 .btn-icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; }
 .btn-loading::before { content: ""; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: button-spin .7s linear infinite; }
 @keyframes button-spin { to { transform: rotate(360deg); } }
@@ -350,16 +351,11 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
 .parking-status[data-status="occupied"] { background: var(--status-occupied-bg); color: var(--occupied); }
 .parking-status[data-status="reserved"] { background: var(--status-reserved-bg); color: var(--reserved); }
 .parking-status[data-status="maintenance"] { background: var(--status-maintenance-bg); color: var(--maintenance); }
-/* The strip carries seven states, so it wraps instead of assuming a fixed count.
-   Dividers come from a 1px gap over the border colour, which keeps every row and
-   column ruled — including the row-start item — with no adjacency selector and
-   therefore no stray edge dividers at any wrap point. Inside the dashboard theme
-   the strip is re-skinned to separate cards (workspace-layout.css), so the 1px
-   gap and border-coloured backing simply yield to that gap and background. */
-.parking-kpi-strip { display: flex; flex-wrap: wrap; gap: 1px; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: 8px; }
-.parking-kpi { display: flex; flex: 1 1 calc(25% - 13px); flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 16px 20px; background: var(--card); }
+/* Use the available workspace width and keep the last row aligned. */
+.parking-kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: 12px; }
+.parking-kpi { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; padding: 12px; background: var(--card); }
 .parking-kpi .parking-status { padding: 0; background: transparent; }
-.parking-kpi strong { color: var(--fg); font-size: 1.75rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.parking-kpi strong { color: var(--fg); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .parking-kpi:first-child strong { color: var(--available); }
 .parking-space { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 72px; padding: 7px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--fg); font-variant-numeric: tabular-nums; cursor: pointer; }
 .parking-space[data-status="available"] { border: 2px solid var(--available); background: var(--status-available-bg); color: var(--available); }
@@ -372,7 +368,7 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
 .parking-space[data-status="maintenance"] { background: var(--status-maintenance-bg); color: var(--maintenance); }
 .parking-space .parking-status { max-width: 100%; padding: 0; background: transparent; font-size: .7rem; }
 .parking-space .parking-status svg { flex: 0 0 auto; }
-.parking-space[aria-pressed="true"] { outline: 3px solid var(--focus); outline-offset: 2px; }
+.parking-space[aria-pressed="true"] { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .slot-available { background: var(--status-available-bg); border-color: var(--available); color: var(--available); }
 .slot-occupied { background: var(--status-occupied-bg); border-color: var(--occupied); color: var(--occupied); }
 .slot-reserved { background: var(--status-reserved-bg); border-color: var(--reserved); color: var(--reserved); }
@@ -425,7 +421,7 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
 .carousel-pause { min-width: 58px; min-height: 44px; margin-left: 6px; padding: 0 8px; border: 1px solid #ffffff8c; border-radius: 999px; background: #0b16286b; color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color 180ms ease, transform 180ms ease; }
 .carousel-pause:hover { background: #0b1628d9; transform: translateY(-1px); }
 .carousel-pause:active { transform: scale(.97); }
-.carousel-pause:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.carousel-pause:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 @media (prefers-reduced-motion: reduce) {
   .smartparking-hero .hero-carousel-image { animation: none; }
   .carousel-control::after { transition: none; }
@@ -458,14 +454,6 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
   .dashboard-scrim { position: fixed; z-index: 110; inset: 60px 0 0; display: block; border: 0; background: #09120e80; }
 }
 
-@media (max-width: 767px) {
-  /* Between sm and md the page content is 585-711px wide. At the low end of that
-     band four 1/4 cells would leave ~86px of text space, which the "Maintenance"
-     KPI label (icon + 11 characters) already exceeds, so the band uses three
-     cells; md and above get the design's four columns back. */
-  .parking-kpi { flex-basis: calc(33.333% - 13px); }
-}
-
 @media (max-width: 640px) {
   .admin-kpi-strip { grid-template-columns: 1fr; }
   .admin-kpi { border-right: 0; border-top: 1px solid var(--border); }
@@ -490,7 +478,6 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
   .owner-finance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .owner-finance-kpi:nth-child(3) { border-left: 0; }
   .owner-finance-kpi:nth-child(n+3) { border-top: 1px solid var(--border); }
-  .parking-kpi { flex-basis: calc(50% - 13px); }
   .dashboard-content { margin: 0; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
   .smartparking-hero { grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .smartparking-hero .hero-actions > button { flex: 1 1 100%; }
@@ -500,14 +487,6 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
   .find-parking-result-top strong, .find-parking-detail-grid strong { font-size: 1rem; }
   .find-parking-address, .find-parking-result-bottom, .find-parking-map-status p { font-size: .875rem; }
   .booking-time-list button { font-size: 1rem; }
-}
-
-/* Below ~352px the page content is under 320px wide, so a half-width KPI cell
-   cannot hold the longest state label ("Maintenance") next to its icon and the
-   text would spill into the gutter. One full-width row per state keeps the strip
-   readable without truncating or hiding a label. */
-@media (max-width: 359px) {
-  .parking-kpi { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -605,7 +584,7 @@ button[aria-label="Show password"], button[aria-label="Hide password"] { width: 
 .public-theme-icon { animation: public-theme-icon-enter 320ms cubic-bezier(.16,1,.3,1) both; }
 @keyframes public-theme-icon-enter { from { opacity: .25; transform: rotate(-35deg) scale(.76); } to { opacity: 1; transform: rotate(0) scale(1); } }
 .public-theme-toggle:hover { transform: rotate(25deg); background: var(--raised) !important; border-color: var(--primary) !important; }
-.public-theme-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.public-theme-toggle:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .dashboard-brand .brand-logo { max-width: 42px; max-height: 42px; }
 
 /* Shared micro-interactions reach every role without changing business state. */

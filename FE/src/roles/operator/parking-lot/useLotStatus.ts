@@ -117,6 +117,7 @@ export interface UseLotStatusOptions {
    * existing `sp-operator-refresh` data-loading event.
    */
   refreshLayout?: () => Promise<OperationalLayoutProjection | null | void>
+  refreshOnResume?: boolean
 }
 
 export type SlotProjectionLookup = (
@@ -259,7 +260,9 @@ export function useLotStatus(
   const siteLayout = resolveLotLayout(site)
   const [fetchedLayout, setFetchedLayout] = useState<OperationalLayoutProjection | null>(null)
   const propLayout = useMemo(
-    () => options.layout ?? siteLayout ?? fetchedLayout,
+    () => options.layout ?? (fetchedLayout && siteLayout
+      ? Date.parse(fetchedLayout.generatedAt) > Date.parse(siteLayout.generatedAt) ? fetchedLayout : siteLayout
+      : siteLayout ?? fetchedLayout),
     [options.layout, siteLayout, fetchedLayout],
   )
   useEffect(() => {
@@ -327,6 +330,7 @@ export function useLotStatus(
   }, [site])
 
   useEffect(() => {
+    if (options.refreshOnResume === false) return
     const onOnline = () => {
       void refreshLayout()
     }
@@ -341,7 +345,7 @@ export function useLotStatus(
       window.removeEventListener("online", onOnline)
       document.removeEventListener("visibilitychange", onVisibilityChange)
     }
-  }, [refreshLayout])
+  }, [refreshLayout, options.refreshOnResume])
 
   const isOutdoor = (site?.floors ?? 1) <= 1
   const availableZones = useMemo(() => {

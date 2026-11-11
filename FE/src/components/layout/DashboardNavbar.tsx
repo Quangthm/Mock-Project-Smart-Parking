@@ -40,7 +40,6 @@ const rolePages: Record<string, { id: string; label: string }[]> = {
     { id: "overview", label: "Dashboard overview" },
     { id: "checkin", label: "Check-in and check-out" },
     { id: "status", label: "Lot status & structure" },
-    { id: "slots", label: "Backup & slot operations" },
     { id: "tickets", label: "Driver tickets" },
     { id: "emergency", label: "Emergency & incidents" },
     { id: "assignments", label: "My assignments" },
@@ -106,6 +105,7 @@ export function DashboardNavbar() {
     if (!settingsOpen) return
     settingsCloseRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[role="dialog"]') !== settingsDialogRef.current)) return
       if (event.key === "Escape") {
         event.preventDefault()
         if (!securityDismissBlocked) {

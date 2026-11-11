@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -20,6 +20,7 @@ import {
 } from "../../../lib/operationalLayout"
 import { SlotInspectionModal } from "./SlotInspectionModal"
 import type { OperatorSite } from "../../../lib/operatorApi"
+import { SlotManagement } from "../parking-slots/SlotManagement"
 import { useLotStatus, floorKeyFor, type LotVisualFilter } from "./useLotStatus"
 
 interface LotStatusProps {
@@ -28,6 +29,7 @@ interface LotStatusProps {
   initialStatusFilter?: LotVisualFilter
   layout?: OperationalLayoutProjection | null
   onRefreshLayout?: () => Promise<OperationalLayoutProjection | null | void>
+  refreshOnResume?: boolean
 }
 
 const KPI_ORDER: SlotVisualState[] = [
@@ -87,7 +89,7 @@ function VisualStateChip({ state }: { state: SlotVisualState }) {
   const hex = SLOT_VISUAL_STATE_HEX[state]
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+      className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide"
       style={{ color: hex, backgroundColor: `${hex}1f` }}
       aria-label={SLOT_VISUAL_STATE_LABELS[state]}
     >
@@ -117,7 +119,9 @@ export function LotStatus({
   initialStatusFilter = "all",
   layout: layoutProp,
   onRefreshLayout,
+  refreshOnResume,
 }: LotStatusProps) {
+  const [slotOperations, setSlotOperations] = useState(initialStatusFilter === "maintenance" ? "maintenance" : "backup")
   const {
     viewMode, setViewMode, selectedFloor, setSelectedFloor, selectedZone, setSelectedZone,
     vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
@@ -128,15 +132,16 @@ export function LotStatus({
   } = useLotStatus(lot, initialSlotCode, initialStatusFilter, {
     layout: layoutProp,
     refreshLayout: onRefreshLayout,
+    refreshOnResume,
   })
 
-  // A filter can hide the bay that is currently being inspected. Drop the
-  // selection instead of keeping an id that is no longer on screen.
+  // A live status change can move a slot out of the current filter while its
+  // details are open. Keep the inspection until that slot actually disappears.
   useEffect(() => {
     if (!inspectedSlot) return
-    if (filteredSlots.some((slot) => slot.id === inspectedSlot.id)) return
+    if (allSlots.some((slot) => slot.id === inspectedSlot.id)) return
     setInspectedSlot(null)
-  }, [filteredSlots, inspectedSlot, setInspectedSlot])
+  }, [allSlots, inspectedSlot, setInspectedSlot])
 
   if (!site) {
     return (
@@ -151,6 +156,9 @@ export function LotStatus({
     : undefined
 
   const activeFloorKey = floorKeyFor(site?.lotType, selectedFloor)
+  const maintenanceSlots = allSlots.filter(slot => slotView(slot).physicalState === "MAINTENANCE")
+  const inspectedLiveSlot = inspectedSlot ? allSlots.find(slot => slot.id === inspectedSlot.id) : undefined
+  const inspectedLiveView = inspectedLiveSlot ? slotView(inspectedLiveSlot) : undefined
 
   return (
     <div className="space-y-6">
@@ -377,7 +385,7 @@ export function LotStatus({
                 <span className="text-xs font-semibold text-[var(--muted)]">
                   Three.js Real-time View · Click any slot mesh to inspect or highlight
                 </span>
-                <span className="text-[11px] text-[var(--primary)] font-mono">
+                <span className="text-xs text-[var(--primary)] font-mono">
                   {site.modelFileName || "Procedural Lot Engine"}
                 </span>
               </div>
@@ -463,21 +471,21 @@ export function LotStatus({
       {viewMode === "list" && (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 transition-opacity duration-300" style={dimStyle}>
           <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg)]">
-            <table className="w-full text-left text-xs min-w-[650px]">
+            <table role="table" className="sp-adaptive-table w-full text-left text-xs min-w-[650px]">
               <thead className="border-b border-[var(--border)] bg-[var(--card)] text-[var(--muted)] font-semibold">
-                <tr>
-                  <th className="px-4 py-3">Slot Code</th>
-                  <th className="px-4 py-3">Level / Zone</th>
-                  <th className="px-4 py-3">Vehicle Type</th>
-                  <th className="px-4 py-3">Physical State</th>
-                  <th className="px-4 py-3">Reservation State</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                <tr role="row">
+                  <th scope="col" role="columnheader" className="px-4 py-3">Slot Code</th>
+                  <th scope="col" role="columnheader" className="px-4 py-3">Level / Zone</th>
+                  <th scope="col" role="columnheader" className="px-4 py-3">Vehicle Type</th>
+                  <th scope="col" role="columnheader" className="px-4 py-3">Physical State</th>
+                  <th scope="col" role="columnheader" className="px-4 py-3">Reservation State</th>
+                  <th scope="col" role="columnheader" className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {filteredSlots.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">
+                  <tr role="row">
+                    <td role="cell" colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">
                       No slots found matching the criteria.
                     </td>
                   </tr>
@@ -490,27 +498,27 @@ export function LotStatus({
                       : "Unknown"
 
                     return (
-                      <tr key={slot.id} className="hover:bg-[var(--card)]/50 transition">
-                        <td className="px-4 py-3 font-mono font-bold text-[var(--fg)]">
+                      <tr role="row" key={slot.id} className="hover:bg-[var(--card)]/50 transition">
+                        <td role="cell" data-label="Slot code" className="px-4 py-3 font-mono font-bold text-[var(--fg)]">
                           {formatSlotLabel(slot.number)}
                         </td>
-                        <td className="px-4 py-3 text-[var(--muted)]">
+                        <td role="cell" data-label="Level / zone" className="px-4 py-3 text-[var(--muted)]">
                           {isOutdoor ? "Ground Area" : `Floor ${slot.floor}`}
                         </td>
-                        <td className="px-4 py-3 font-medium">
+                        <td role="cell" data-label="Vehicle type" className="px-4 py-3 font-medium">
                           {slot.vehicleType}
                         </td>
-                        <td className="px-4 py-3">
+                        <td role="cell" data-label="Physical state" className="px-4 py-3">
                           <span
-                            className="rounded px-2 py-0.5 text-[10px] uppercase font-semibold"
+                            className="rounded px-2 py-0.5 text-xs uppercase font-semibold"
                             style={{ color: hex, backgroundColor: `${hex}1f` }}
                           >
                             {PHYSICAL_LABELS[view.physicalState]}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td role="cell" data-label="Reservation state" className="px-4 py-3">
                           <span
-                            className={`rounded px-2 py-0.5 text-[10px] uppercase font-medium ${
+                            className={`rounded px-2 py-0.5 text-xs uppercase font-medium ${
                               view.reservationState
                                 ? RESERVATION_TONE[view.reservationState]
                                 : "text-[var(--muted)]"
@@ -520,10 +528,10 @@ export function LotStatus({
                             {reservationLabel}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td role="cell" data-label="Actions" className="px-4 py-3 text-right">
                           <button
                             type="button"
-                            className="btn-outline text-[11px] py-1 px-2.5"
+                            className="btn-outline text-xs py-1 px-2.5"
                             onClick={() => setInspectedSlot(slot)}
                           >
                             Inspect
@@ -539,7 +547,52 @@ export function LotStatus({
         </div>
       )}
 
-      <SlotInspectionModal lot={site} inspectedSlot={inspectedSlot} isOutdoor={isOutdoor} onClose={() => setInspectedSlot(null)} />
+      <details open={initialStatusFilter === "backup" || initialStatusFilter === "maintenance"} className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 hover:bg-[var(--raised)] [&::-webkit-details-marker]:hidden">
+          <h2 className="text-base font-semibold">Backup Slots &amp; Maintenance</h2>
+          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--border)] text-[var(--muted)] motion-safe:transition-transform group-open:rotate-180">
+            <UntitledIcon name="chevron-down" size={16} />
+          </span>
+        </summary>
+        <div className="grid gap-4 border-t border-[var(--border)] p-4">
+          <div role="group" aria-label="Slot operations" className="flex flex-wrap gap-2">
+            <button type="button" className={slotOperations === "backup" ? "btn-primary" : "btn-outline"} aria-pressed={slotOperations === "backup"} onClick={() => setSlotOperations("backup")}>Backup Slots</button>
+            <button type="button" className={slotOperations === "maintenance" ? "btn-primary" : "btn-outline"} aria-pressed={slotOperations === "maintenance"} onClick={() => setSlotOperations("maintenance")}>Maintenance</button>
+          </div>
+          <div hidden={slotOperations !== "backup"}>
+            <SlotManagement key={site.id} siteId={site.id} siteName={site.name} slots={allSlots} slotView={slotView}
+              hasOverridePermission={site.assignmentPermissions?.some(permission => permission === "SLOT_OVERRIDE" || permission === "ADMIN") ?? false} />
+          </div>
+          {slotOperations === "maintenance" && <section className="grid gap-3" aria-label="Slots under maintenance">
+            <p className="text-sm text-[var(--muted)]">Review bays reported under maintenance. The parking owner manages maintenance schedules.</p>
+            {maintenanceSlots.length === 0 ? <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted)]">No bays are reported under maintenance.</p> :
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {maintenanceSlots.map(slot => <li key={slot.id}>
+                  <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] p-3 text-left hover:bg-[var(--raised)]"
+                    onClick={() => {
+                      setSelectedFloor("all")
+                      setSelectedZone("all")
+                      setVehicleTypeFilter("all")
+                      setStatusFilter("maintenance")
+                      setSearchQuery("")
+                      setInspectedSlot(slot)
+                    }}>
+                    <span className="min-w-0 break-words text-sm font-semibold">{formatSlotLabel(slot.number)}</span>
+                    <ParkingStatus status="maintenance" />
+                  </button>
+                </li>)}
+              </ul>}
+          </section>}
+        </div>
+      </details>
+
+      <SlotInspectionModal lot={site}
+        inspectedSlot={inspectedLiveSlot && inspectedLiveView ? {
+          ...inspectedLiveSlot,
+          physicalState: inspectedLiveView.physicalState,
+          reservationState: inspectedLiveView.reservationState ?? inspectedLiveSlot.reservationState,
+        } : null}
+        isOutdoor={isOutdoor} onClose={() => setInspectedSlot(null)} />
     </div>
   )
 }

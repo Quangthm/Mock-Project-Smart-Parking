@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react"
+import { VNeIDSimulation } from "../../components/ui/VNeIDSimulation"
+import { useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
 import { request } from "../../lib/authApi"
@@ -14,10 +15,12 @@ export function BootstrapPassword() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [complete, setComplete] = useState(false)
+  const [activation, setActivation] = useState<"password" | "simulation" | "paused">("password")
+  const complete = activation !== "password"
   const [message, setMessage] = useState("")
-  const redirectTimer = useRef<number | null>(null)
+  const submitting = useRef(false)
   const params = new URLSearchParams(window.location.search)
+  const hasInvitation = Boolean(params.get("challengeId") && params.get("token"))
   const passwordChecks = [
     { label: "At least 8 characters", passed: password.length >= 8 },
     { label: "Maximum 15 characters", passed: password.length <= 15 },
@@ -31,18 +34,25 @@ export function BootstrapPassword() {
   const strengthColor = passedChecks <= 2 ? "#ef4444" : passedChecks <= 4 ? "#f59e0b" : "#22c55e"
   const currentStep = complete ? 3 : passwordReady || busy ? 2 : 1
 
-  useEffect(() => () => {
-    if (redirectTimer.current !== null) window.clearTimeout(redirectTimer.current)
-  }, [])
+  function goToSignIn() {
+    setView("sign-in")
+    navigate("/", { replace: true })
+  }
+
+  function finishOnboarding() {
+    showUiToast("Account activated", "Your email is verified. You can sign in with your new password.")
+    goToSignIn()
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (busy || complete) return
+    if (submitting.current || complete || !hasInvitation) return
     if (!passwordReady) {
       setMessage("Use 8–15 characters with uppercase and lowercase letters, a number, and a special character.")
       return
     }
     setMessage("")
+    submitting.current = true
     setBusy(true)
     try {
       await request("/bootstrap-password", "POST", {
@@ -51,22 +61,20 @@ export function BootstrapPassword() {
         password,
       })
       window.history.replaceState(null, "", "/change-password")
-      showUiToast("Account activated", "Your email is verified. You can sign in with your new password.")
       setPassword("")
-      setComplete(true)
-      redirectTimer.current = window.setTimeout(() => {
-        setView("sign-in")
-        navigate("/", { replace: true })
-      }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650)
+      setActivation("simulation")
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Password change failed.")
     } finally {
+      submitting.current = false
       setBusy(false)
     }
   }
 
   return (
     <main className="operator-activation-page">
+      {activation === "simulation" && <VNeIDSimulation context="operator_activation"
+        onComplete={finishOnboarding} onCancel={() => setActivation("paused")} />}
       <section className="card operator-activation-card" aria-labelledby="operator-activation-title">
         <div className="operator-activation-brand">
           <BrandLogo height={42} />
@@ -85,7 +93,13 @@ export function BootstrapPassword() {
             </li>
           })}
         </ol>
-        <form onSubmit={submit} className="operator-activation-form">
+        {complete ? <div className="space-y-4" inert={activation === "simulation"}>
+          <p role="status">Your password was created and your email was verified. Complete the demo to continue to Sign In.</p>
+          <button type="button" className="btn-primary" onClick={() => setActivation("simulation")}>Resume identity demo</button>
+        </div> : !hasInvitation ? <div className="space-y-4">
+          <p role="status">Open the invitation link to activate your account. If you already created your password, sign in to continue.</p>
+          <button type="button" className="btn-outline" onClick={goToSignIn}>Back to Sign In</button>
+        </div> : <form onSubmit={submit} className="operator-activation-form">
           <label className="label" htmlFor="bootstrap-password">New password</label>
           <div className="operator-activation-password-field">
             <input
@@ -117,7 +131,7 @@ export function BootstrapPassword() {
               {busy ? "Activating…" : complete ? "Account activated" : "Verify email and activate"}
             </button>
           </div>
-        </form>
+        </form>}
         <p className="operator-activation-footnote">Your invitation is linked to this email. You can sign in after activation.</p>
       </section>
     </main>

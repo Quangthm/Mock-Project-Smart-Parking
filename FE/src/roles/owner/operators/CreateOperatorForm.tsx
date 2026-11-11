@@ -1,6 +1,7 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useEffect, type FormEvent } from "react"
-import { createPortal } from "react-dom"
+import { Modal } from "../../../components/ui/Modal"
+import { useConfirmation } from "../../../components/ui/useConfirmation"
 import { operatorsApi, type Operator, type Site } from "../../../lib/parkingApi"
 import { isValidAccountEmail } from "../../../lib/signInContact"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
@@ -33,6 +34,7 @@ export function CreateOperatorForm({
     email: "",
     siteId: sites[0]?.id ?? "",
   })
+  const { confirm, confirmation } = useConfirmation()
   const [busy, setBusy] = useState(false)
   const [generalError, setGeneralError] = useState("")
   const [emailError, setEmailError] = useState("")
@@ -53,12 +55,10 @@ export function CreateOperatorForm({
 
   const isDirty = Boolean(form.name.trim() || form.email.trim())
 
-  function handleAttemptClose() {
+  async function handleAttemptClose() {
     if (busy) return
     if (isDirty) {
-      const confirmDiscard = window.confirm(
-        "You have unsaved operator information. Are you sure you want to close?",
-      )
+      const confirmDiscard = await confirm({ title: "Discard operator details?", description: "You have unsaved operator information. Close without saving?", confirmLabel: "Discard changes", danger: true })
       if (!confirmDiscard) return
     }
     onClose()
@@ -136,45 +136,10 @@ export function CreateOperatorForm({
     }
   }
 
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="operator-modal-title"
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleAttemptClose()
-      }}
-    >
-      <div className="relative w-full max-w-lg max-h-[92vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl text-[var(--fg)] animate-in">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)]">
-              <UntitledIcon name="users" size={20} />
-            </div>
-            <div>
-              <h2 id="operator-modal-title" className="text-lg font-bold text-[var(--fg)]">
-                Create Operator
-              </h2>
-              <p className="text-xs text-[var(--muted)]">
-                Invite an operator to a work site. They must verify their email and set their password before signing in.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--fg)] transition-colors cursor-pointer"
-            onClick={handleAttemptClose}
-            aria-label="Close dialog"
-            disabled={busy}
-          >
-            <UntitledIcon name="x" size={16} />
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4.5">
+  return <>
+    <Modal title="Create Operator" onClose={() => void handleAttemptClose()}>
+      <p className="mb-5 text-sm leading-relaxed text-[var(--muted)]">Invite an operator to a work site. They must verify their email and set their password before signing in.</p>
+        <form onSubmit={handleSubmit} className="space-y-5">
           {generalError && (
             <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
               <span className="mt-0.5 shrink-0">
@@ -263,7 +228,7 @@ export function CreateOperatorForm({
           </div>
 
           {/* Modal Footer Controls */}
-          <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] pt-4">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-4">
             <button
               type="button"
               className="btn-outline text-xs px-4 py-2"
@@ -286,8 +251,7 @@ export function CreateOperatorForm({
             </button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body,
-  )
+    </Modal>
+    {confirmation}
+  </>
 }

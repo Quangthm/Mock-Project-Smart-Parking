@@ -5,7 +5,6 @@
 .parking-history-total { flex: none; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .parking-history-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 24px 20px; }
 .parking-history-search { display: flex; flex: 1 1 240px; align-items: center; gap: 9px; min-width: 0; min-height: 44px; padding: 0 13px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--muted); }
-.parking-history-select:focus-within { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 2px; }
 .parking-history-search input { min-width: 0; width: 100%; height: 42px; border: 0; outline: 0; background: transparent; color: var(--fg); font: inherit; font-size: .875rem; }
 .parking-history-search input::placeholder { color: var(--muted); opacity: 1; }
 .parking-history-select { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--muted); font-size: .8125rem; }
@@ -32,7 +31,7 @@
 .parking-history-status.is-neutral { color: var(--muted); background: var(--raised); }
 .parking-history-details { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: .8125rem; font-weight: 650; white-space: nowrap; cursor: pointer; }
 .parking-history-details:hover { border-color: var(--primary); color: var(--primary); }
-.parking-history-details:focus-visible, .parking-history-pagination button:focus-visible, .parking-history-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.parking-history-details:focus-visible, .parking-history-pagination button:focus-visible, .parking-history-close:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .parking-history-cards { display: none; }
 .parking-history-empty, .parking-history-message { display: flex; align-items: center; gap: 10px; margin: 0 24px 24px; padding: 20px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); font-size: .875rem; }
 .parking-history-empty { flex-direction: column; gap: 7px; padding: 38px 20px; text-align: center; }
@@ -40,7 +39,7 @@
 .parking-history-empty p { margin: 0; }
 .parking-history-message.is-error { border-style: solid; border-color: var(--badge-danger-strong); color: var(--badge-danger-strong); }
 .parking-history-message.is-error button { flex: none; min-height: 44px; margin-left: auto; padding: 0 12px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 650; cursor: pointer; }
-.parking-history-message.is-error button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.parking-history-message.is-error button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .parking-history-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .parking-history-pagination > div { display: flex; gap: 8px; }
 .parking-history-pagination button { min-height: 44px; padding: 0 15px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-weight: 650; cursor: pointer; }

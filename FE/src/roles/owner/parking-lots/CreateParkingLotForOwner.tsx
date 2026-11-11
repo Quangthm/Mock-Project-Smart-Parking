@@ -108,8 +108,10 @@ function Row({ label, value }: { label: string; value: string }) {
 export function OnboardingWizard({
   onComplete,
   registration,
+  scrollInside = false,
 }: {
   onComplete?: (lot: ParkingLot) => void
+  scrollInside?: boolean
   registration?: {
     id: string
     email: string
@@ -511,8 +513,10 @@ export function OnboardingWizard({
   }
 
   return (
-    <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1rem" }}>
-      <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+    <div className={scrollInside ? "mx-auto flex min-h-0 w-full max-w-[680px] flex-col" : undefined}
+      style={scrollInside ? undefined : { maxWidth: "680px", margin: "0 auto", padding: "2rem 1rem" }}>
+      <div className={scrollInside ? "shrink-0 px-2 pt-2 sm:px-4" : undefined}>
+      <div style={{ textAlign: "center", marginBottom: scrollInside ? "1rem" : "2rem" }}>
         <PageHeader title="Set Up Your Parking Lot" variant="compact" align="center" description={registration
           ? "Set up your lot before verifying your email and submitting it for Admin review."
           : "Complete setup to start accepting bookings."} />
@@ -520,7 +524,7 @@ export function OnboardingWizard({
       </div>
 
       {/* Step progress */}
-      <div style={{ display: "flex", gap: "0.25rem", marginBottom: "2rem" }}>
+      <div style={{ display: "flex", gap: "0.25rem", marginBottom: scrollInside ? "1rem" : "2rem" }}>
         {stepLabels.map((label, i) => {
           const idx = i + 1
 
@@ -569,7 +573,9 @@ export function OnboardingWizard({
           )
         })}
       </div>
+      </div>
 
+      <div key={scrollInside ? step : undefined} className={scrollInside ? "min-h-0 overflow-y-auto overscroll-contain px-2 pb-1 sm:px-4" : undefined}>
       <div className="card animate-in">
         {step === 1 && (
           <div>
@@ -1301,6 +1307,7 @@ export function OnboardingWizard({
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   )
