@@ -25,16 +25,15 @@ This image migration does not implement Partner PDF versions, terms replacement,
 | `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
-| `overlay/operation-session-location-scan.sql` | Add `parking_sessions.location_scanned_at` to an existing OperationDb |
 | `seeds/` | demo data only, never schema |
 
 The database is created by `compose.schema-integration.yml` (six databases, one per
-service, canonical base scripts mounted as init scripts) and driven by `setup.ps1`.
-For an existing OperationDb, apply the additive scan-location migration with
-`.\scripts\apply-workflow-migrations.ps1 -Service Operation -SchemaRoot .` after
-reviewing the target environment. The script verifies the canonical Operation
-schema, applies the idempotent overlay, and confirms the new column. This task did
-not run the migration or connect to a database.
+service, canonical microservice base scripts mounted as init scripts) and driven by
+`setup.ps1`. `parking_sessions.location_scanned_at` is part of the initial
+`microservices/03b-reservation-operations-service-db.sql` schema. There is no
+Operation scan overlay. For an existing OperationDb, the workflow script only
+verifies this column; it does not alter an initialized database. A missing column
+requires a separately reviewed migration or an explicitly authorized clean rebuild.
 - User & Access MFA, refresh/replay, and Owner lot-setup requirements are part of `microservices/01-user-access-service-db.sql`.
 - Facility owner-onboarding, structure synchronizations, slot constraints, maintenance windows, and operator support tables are consolidated directly into `microservices/02-facility-service-db.sql`.
 - Operation capacity pools, structure safety holds, edit guards, release receipts, and reservation confirmation triggers are consolidated directly into `microservices/03b-reservation-operations-service-db.sql`.
@@ -50,8 +49,8 @@ schema is consolidated into `microservices/01-user-access-service-db.sql`.
 Facility schema is consolidated into `microservices/02-facility-service-db.sql`.
 Operation/Reservation schema is consolidated into `microservices/03b-reservation-operations-service-db.sql`.
 
-`integration/01..03` are the originals of the structure-safety guards. The **applied**
-copies were migrated to `overlay/` and are now consolidated into the base scripts.
+`integration/01..03` are legacy alignment scripts; their current schema statements
+are consolidated into the canonical microservice base scripts.
 
 Rules:
 

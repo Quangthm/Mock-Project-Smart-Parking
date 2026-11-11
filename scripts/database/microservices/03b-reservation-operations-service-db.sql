@@ -134,7 +134,6 @@ CREATE TABLE IF NOT EXISTS parking_sessions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (exit_time IS NULL OR exit_time > entry_time)
 );
-ALTER TABLE parking_sessions ADD COLUMN IF NOT EXISTS location_scanned_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_parking_sessions_tenant_site ON parking_sessions(tenant_id, site_id);
 CREATE INDEX IF NOT EXISTS idx_parking_sessions_account ON parking_sessions(account_id);
 CREATE INDEX IF NOT EXISTS idx_parking_sessions_status ON parking_sessions(session_status);

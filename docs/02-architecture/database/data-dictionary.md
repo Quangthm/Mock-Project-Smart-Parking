@@ -1,6 +1,6 @@
 # SmartPark Data Dictionary — Recorded Deployment Profile
 
-This dictionary records the canonical deployment profile: 6 physical databases, 7 base DDL files, and 8 deployment overlays, including T4-approved deviations. The User & Access section reflects the one-role-per-Account clean-install schema and the consolidated UserDb base, including session/replay, MFA, Owner setup and MassTransit persistence. These are repository definitions, not a claim that a development database has been reset. Other v1.1 gaps remain [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending).
+This dictionary records the canonical deployment profile: 6 physical databases and 7 base DDL files, with no SQL overlays. T4-approved runtime deviations are consolidated into their service-owned base scripts. The User & Access section reflects the one-role-per-Account clean-install schema and the consolidated UserDb base, including session/replay, MFA, Owner setup and MassTransit persistence. These are repository definitions, not a claim that a development database has been reset. Other v1.1 gaps remain [DB25–DB33](alignment-backlog.md#v11-schema-and-seed-alignment-pending).
 
 ## 1. Global persistence strategies
 
@@ -55,7 +55,7 @@ Base: `02-facility-service-db.sql` + `03a-parking-structure-ops-service-db.sql`.
 | `structure_backup_policies` (03a) | `unit_id` (arch name `spatial_unit_id`), `vehicle_type`, `count` (arch name `backup_count`); unique site/unit policy indexes |
 | `operator_incident_events` (03a) | `tenant_id`, `site_id`, `actor_id`, `incident_type`, `details`, `status` (`reported`, `resolved`) |
 
-Deployment overlays: `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), and slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4). Facility base `02-facility-service-db.sql` defines `owner_onboarding_provisions` for idempotent owner provisioning.
+Facility base `02-facility-service-db.sql` defines the `tenants` local copy (D5), `structure_synchronizations` (D1/Q2), `support_tickets`/`operator_notifications`/`operator_audit_logs` (D3/D6), slot constraints `ck_deleted_slot_safe` + `uq_site_slot_code_ci` (D4), and `owner_onboarding_provisions` for idempotent owner provisioning.
 
 ## 4. Reservation & Operations DB (`smartpark_operations`)
 
@@ -66,7 +66,7 @@ Base: `03b-reservation-operations-service-db.sql`.
 | `operational_capacity_configs` | `site_id`, `spatial_unit_id`, `vehicle_type`, `total_physical_capacity`, `max_reservation_quota`, `is_active` |
 | `operational_policies` | Arrival tolerance, payment hold, min/max reservation duration, protection window, allocation lead time |
 | `reservations` | `tenant_id`, `site_id`, `account_id`, target unit/slot, plate, time range, `status` (incl. `UNFULFILLABLE`), `confirmed_at`, `hold_expires_at`, `version`; GiST exclusion per vehicle |
-| `parking_sessions` | `reservation_id`, `access_item_id`, `current_slot_id`, plate, entry/exit times, `session_status` (`ACTIVE`, `PENDING_PAYMENT`, `COMPLETED`, `OVERSTAYED`, `DISPUTED`) |
+| `parking_sessions` | `reservation_id`, `access_item_id`, `current_slot_id`, `location_scanned_at`, plate, entry/exit times, `session_status` (`ACTIVE`, `PENDING_PAYMENT`, `COMPLETED`, `OVERSTAYED`, `DISPUTED`) |
 | `slot_allocations` | `reservation_id`, `parking_session_id`, `slot_id`, allocated time range; GiST exclusion on slot + time |
 | `access_items` | Card/QR/LicensePlate/RFID; `status` (`AVAILABLE`, `IN_USE`, `LOST`, `DISABLED`) |
 | `monthly_passes` | `entitlement_type` only `WHEN_SPACE_AVAILABLE`; validity range; GiST exclusion per vehicle |
@@ -74,7 +74,7 @@ Base: `03b-reservation-operations-service-db.sql`.
 | `search_facility_projections` | Search/read model: coordinates, operational status, open flag |
 | `audit_logs` | Gate/operator audit; append-only |
 
-Overlays: `site_capacity_pools` (D7) with `total_capacity`, `max_reservation_quota`, `current_reserved_count`, `pending_payment_count`, `occupied_count`, `protected_count`, `backup_count`; `structure_edit_holds`, `structure_site_state` + guard triggers; `structure_release_receipts`; `confirmed_at` trigger.
+Base `03b-reservation-operations-service-db.sql` defines `site_capacity_pools` (D7) with `total_capacity`, `max_reservation_quota`, `current_reserved_count`, `pending_payment_count`, `occupied_count`, `protected_count`, `backup_count`; `structure_edit_holds`, `structure_site_state` + guard triggers; `structure_release_receipts`; the `confirmed_at` trigger; and `parking_sessions.location_scanned_at`.
 
 ## 5. Payment & Pricing DB (`smartpark_payment`)
 
@@ -95,8 +95,8 @@ Base: `06-iot-recognition-service-db.sql`; 6 tables: `devices`, `lpr_events`, `s
 | D1 | `03a` → `smartpark_facility`; `03b` → `smartpark_operations` |
 | D4 | 7 role seeds; 2 `parking_slots` runtime columns; `unit_id`/`count` renames |
 | D5 | `tenants` canonical in User DB, local copy in parking |
-| D6 | BE-shape `support_tickets` in parking overlay (temporary) |
-| D7 | `site_capacity_pools` recreated in reservation overlay |
+| D6 | BE-shape `support_tickets` in Facility base (temporary) |
+| D7 | `site_capacity_pools` defined in Reservation base |
 
 See `docs/04-testing/reports/refactor-Docker Setup & Function Test/10-db-docs-deployment-alignment.md` for the full decision record.
 
