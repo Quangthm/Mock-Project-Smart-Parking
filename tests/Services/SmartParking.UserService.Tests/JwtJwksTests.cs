@@ -97,6 +97,23 @@ public sealed class JwtJwksTests
         Assert.False(await scope.ServiceProvider.GetRequiredService<IAccessTokenService>().ValidateAccessTokenAsync(token));
     }
 
+    [Fact]
+    public async Task AccessRealtimeHubsAreMappedAndRequireAuthentication()
+    {
+        using var rsa = RSA.Create(3072);
+        var options = Options(rsa.ExportPkcs8PrivateKeyPem());
+        var fixture = new AuthTestFixture();
+        await using var host = await StartHostAsync(options, fixture);
+        using var client = host.GetTestClient();
+
+        // Verifies SPARK-244: /hubs/access is mapped (not 404) and enforces SignalR auth (returns 401 Unauthorized)
+        using var accessNegotiate = await client.PostAsync("/hubs/access/negotiate?negotiateVersion=1", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, accessNegotiate.StatusCode);
+
+        using var operatorsNegotiate = await client.PostAsync("/hubs/operators/negotiate?negotiateVersion=1", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, operatorsNegotiate.StatusCode);
+    }
+
     [Theory]
     [InlineData("key")]
     [InlineData("issuer")]

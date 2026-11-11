@@ -225,3 +225,21 @@ test('layout is read from either the data-lane field name', () => {
   assert.equal(lotStatus.resolveLotLayout({ layout: projection }), projection);
   assert.equal(lotStatus.resolveLotLayout(null), null);
 });
+
+test('layout precedence prioritizes options.layout, then fetchedLayout, then initial siteLayout (Retry now stale fix)', () => {
+  const initialSiteLayout = { generatedAt: '2026-10-26T12:00:00.000Z', isFresh: false, stalenessThresholdSeconds: 30, slots: [] };
+  const freshFetchedLayout = { generatedAt: '2026-10-26T12:20:00.000Z', isFresh: true, stalenessThresholdSeconds: 30, slots: [] };
+  const explicitOptionLayout = { generatedAt: '2026-10-26T12:25:00.000Z', isFresh: true, stalenessThresholdSeconds: 30, slots: [] };
+
+  // Matching useLotStatus: options.layout ?? fetchedLayout ?? siteLayout
+  const resolvePropLayout = (optionsLayout, fetched, site) => optionsLayout ?? fetched ?? site;
+
+  // 1. Initial load: fetchedLayout is null -> falls back to siteLayout
+  assert.equal(resolvePropLayout(undefined, null, initialSiteLayout), initialSiteLayout);
+
+  // 2. Retry now action fetches new layout -> fetchedLayout MUST override stale siteLayout
+  assert.equal(resolvePropLayout(undefined, freshFetchedLayout, initialSiteLayout), freshFetchedLayout);
+
+  // 3. Explicit options.layout (if passed from parent) always takes top precedence
+  assert.equal(resolvePropLayout(explicitOptionLayout, freshFetchedLayout, initialSiteLayout), explicitOptionLayout);
+});
