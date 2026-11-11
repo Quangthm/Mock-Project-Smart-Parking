@@ -1,3 +1,4 @@
+import { rememberIdentityDemo } from "../../../lib/identityDemo"
 import { VNeIDSimulation } from "../../../components/ui/VNeIDSimulation"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useRef } from "react"
@@ -551,6 +552,7 @@ export function SignUp() {
       setOwnerTurnstileToken("")
       setOwnerForm((f) => ({ ...f, password: "", confirmPassword: "" }))
 
+      rememberIdentityDemo(application.ownerId)
       saveOwnerRegistration({ ...application, lotSetupComplete: false })
       setView("parking-lot-setup")
     } catch (e) {
@@ -597,6 +599,7 @@ export function SignUp() {
       className="auth-page-background auth-stage auth-stage-sign-up"
     >
       {simulation && <VNeIDSimulation context={simulation}
+        fullName={simulation === "driver_registration" ? driverForm.name : ownerForm.name}
         onCancel={() => setSimulation(null)}
         onComplete={simulation === "driver_registration" ? registerDriver : registerOwner} />}
       {showTnC && (

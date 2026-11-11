@@ -575,6 +575,7 @@ function setupSignUpFixture(options = {}) {
 
   const signUpModule = loadModule('roles/authentications/Sign Up/SignUp.tsx', {
     react,
+    '../../../lib/identityDemo': { rememberIdentityDemo() {} },
     '../../../components/ui/VNeIDSimulation': { VNeIDSimulation: 'vneid-simulation' },
     'react/jsx-runtime': { jsx, jsxs: jsx },
     '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
