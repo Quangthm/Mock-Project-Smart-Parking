@@ -8,7 +8,7 @@ using SmartParking.PaymentService.Domain.Exceptions;
 
 namespace SmartParking.PaymentService.Application.Usecase.GetMyInvoices;
 
-public sealed class GetMyPaymentInvoicesQueryHandler : IRequestHandler<GetMyPaymentInvoicesQuery, IReadOnlyList<CustomerInvoiceResponseDto>>
+public sealed class GetMyPaymentInvoicesQueryHandler : IRequestHandler<GetMyPaymentInvoicesQuery, PagedResult<CustomerInvoiceResponseDto>>
 {
     private readonly IInvoiceRepository _invoiceRepository;
     private readonly ICurrentActor _currentActor;
@@ -24,7 +24,7 @@ public sealed class GetMyPaymentInvoicesQueryHandler : IRequestHandler<GetMyPaym
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<CustomerInvoiceResponseDto>> Handle(GetMyPaymentInvoicesQuery request, CancellationToken cancellationToken)
+    public async Task<PagedResult<CustomerInvoiceResponseDto>> Handle(GetMyPaymentInvoicesQuery request, CancellationToken cancellationToken)
     {
         if (!_currentActor.IsAuthenticated || !_currentActor.UserId.HasValue || _currentActor.UserId.Value == Guid.Empty)
         {
@@ -43,13 +43,31 @@ public sealed class GetMyPaymentInvoicesQueryHandler : IRequestHandler<GetMyPaym
                 "Chỉ tài xế hoặc khách hàng mới có quyền truy cập lịch sử hóa đơn cá nhân.");
         }
 
+        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
+        var pageSize = request.PageSize < 1 ? 10 : (request.PageSize > 100 ? 100 : request.PageSize);
         var accountId = _currentActor.UserId.Value;
-        var invoices = await _invoiceRepository.GetByAccountIdAsync(accountId, cancellationToken);
 
-        _logger.LogInformation("Retrieved {Count} invoices for driver account {AccountId}.", invoices.Count, accountId);
+        var (items, totalCount) = await _invoiceRepository.GetByAccountIdPagedAsync(
+            accountId,
+            request.Status,
+            request.FromDate,
+            request.ToDate,
+            pageNumber,
+            pageSize,
+            cancellationToken);
 
-        return invoices
-            .Select(inv => InvoiceDtoMapper.MapToDto(inv, inv.PaymentOrder))
-            .ToList();
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        var dtos = items.Select(inv => InvoiceDtoMapper.MapToDto(inv, inv.PaymentOrder)).ToList();
+
+        _logger.LogInformation("Retrieved page {Page}/{TotalPages} ({Count}/{TotalCount} items) for driver account {AccountId}.",
+            pageNumber, totalPages, dtos.Count, totalCount, accountId);
+
+        return new PagedResult<CustomerInvoiceResponseDto>(
+            Items: dtos,
+            TotalCount: totalCount,
+            PageNumber: pageNumber,
+            PageSize: pageSize,
+            TotalPages: totalPages
+        );
     }
 }
