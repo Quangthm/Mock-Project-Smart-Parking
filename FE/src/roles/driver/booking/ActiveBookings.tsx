@@ -5,6 +5,7 @@ import type { Booking } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { canonicalVietnamesePlate, vehiclesApi, type RegisteredVehicle } from "../../../lib/vehiclesApi"
 import { driverData as store } from "../data/data"
+import { FindMyCarCard } from "../parking/FindMyCarCard"
 import "../../../booking-support.css"
 
 const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
@@ -72,6 +73,7 @@ export function ActiveBookings() {
   const vehicles = user ? store.getVehiclesByDriver(user.id) : []
 
   return <div className="current-bookings driver-current-bookings">
+    {parking.length > 0 && <FindMyCarCard />}
     {([
       { id: "parking", title: "Parking now", description: "Vehicles currently checked in", records: parking, icon: "parking" as const },
       { id: "upcoming", title: "Upcoming bookings", description: "Confirmed and pending reservations", records: upcoming, icon: "calendar" as const },

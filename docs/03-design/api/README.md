@@ -22,6 +22,7 @@ All new API endpoint specifications and refactors must follow the standard templ
 | Vehicle Registration / Private Claims (SPARK-243); Removal Deferred | [vehicle-registration-api-design.md](vehicle-registration-api-design.md) | UserService |
 | 3D Digital Twin & Operational Layout Projection (hub) | [3d-digital-twin-api-design.md](3d-digital-twin-api-design.md) | FacilityService (transitional: ParkingService) |
 | Own Normal Profile & Name Update | [own-profile-api-design.md](own-profile-api-design.md) | UserService |
+| Driver Maps & Recorded Vehicle Location | [driver-maps-vehicle-location-api-design.md](driver-maps-vehicle-location-api-design.md) | OperationService (discovery/location) + FacilityService (layout projection) |
 | Driver Payment History & Server-Side PDF Invoices | [driver-payment-history-and-pdf-invoice-api-design.md](driver-payment-history-and-pdf-invoice-api-design.md) | PaymentService |
 
 > **Machine-Readable Specifications:** The OpenAPI 3.1 contract for the 3D Digital Twin subsystem is located at [3d-digital-twin-openapi.yaml](3d-digital-twin-openapi.yaml).

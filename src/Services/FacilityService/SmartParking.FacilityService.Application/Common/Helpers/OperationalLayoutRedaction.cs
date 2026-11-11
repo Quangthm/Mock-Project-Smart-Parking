@@ -14,18 +14,30 @@ public static class OperationalLayoutRedaction
         OperationalLayoutProjectionDto dto,
         LayoutVisibility visibility,
         int maskedReservedCount,
-        IReadOnlyDictionary<string, int> maskedZoneReservedCounts)
+        IReadOnlyDictionary<string, int> maskedZoneReservedCounts,
+        DriverReservationDto? driverReservation = null)
     {
-        if (visibility == LayoutVisibility.Telemetry) return dto;
+        if (visibility == LayoutVisibility.Telemetry)
+            // Preserve reference identity for fresh projections (existing contract).
+            return dto.IsFresh
+                ? dto
+                : dto with { Slots = dto.Slots.Select(ForceNotBookable).ToArray() };
 
         return dto with
         {
             Metrics = SanitizeMetrics(dto.Metrics, maskedReservedCount, maskedZoneReservedCounts),
-            Slots = dto.Slots.Select(SanitizeSlot).ToArray()
+            Slots = dto.Slots.Select(slot => SanitizeSlot(slot, dto.IsFresh)).ToArray(),
+            DriverReservation = driverReservation
         };
     }
 
-    private static SlotVisualStateDto SanitizeSlot(SlotVisualStateDto slot) => slot with
+    // Stale telemetry must not advertise bookability anywhere.
+    private static SlotVisualStateDto ForceNotBookable(SlotVisualStateDto slot) => slot with
+    {
+        IsBookable = false
+    };
+
+    private static SlotVisualStateDto SanitizeSlot(SlotVisualStateDto slot, bool isFresh) => slot with
     {
         // BACKUP is operationally sensitive. Mask it as RESERVED while carrying the
         // pre-mask IsBookable value so masking can never turn false into true.
@@ -35,7 +47,7 @@ public static class OperationalLayoutRedaction
         SessionType = null,
         OperatorContext = null,
         Features = SanitizeFeatures(slot.Features),
-        IsBookable = slot.IsBookable
+        IsBookable = isFresh && slot.IsBookable
     };
 
     private static LayoutMetricsDto SanitizeMetrics(
