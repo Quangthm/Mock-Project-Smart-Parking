@@ -47,7 +47,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         if (!parseResult.IsValidSignature)
         {
             _logger.LogWarning("Webhook signature verification failed for payOS callback.");
-            return new ProcessPayOsWebhookResult(false, "Chữ ký webhook không hợp lệ.", "INVALID_WEBHOOK_SIGNATURE");
+            return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
         var eventId = parseResult.BankReference ?? parseResult.GatewayTransactionId ?? parseResult.OrderCode.ToString();
@@ -57,7 +57,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         if (existingWebhook != null && existingWebhook.ProcessingState == WebhookProcessingState.PROCESSED)
         {
             _logger.LogInformation("PayOS webhook event {EventId} was already processed. Replaying success response.", eventId);
-            return new ProcessPayOsWebhookResult(true, "Webhook đã được xử lý thành công trước đó (Idempotent).");
+            return new ProcessPayOsWebhookResult(true, "The webhook was already processed successfully (Idempotent replay).");
         }
 
         if (existingWebhook == null)
@@ -81,7 +81,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return new ProcessPayOsWebhookResult(false, $"Không tìm thấy đơn hàng tương ứng với orderCode {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
+            return new ProcessPayOsWebhookResult(false, $"No payment order was found for order code {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
         }
 
         // 4. Validate amount
@@ -93,7 +93,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return new ProcessPayOsWebhookResult(false, "Số tiền thanh toán không khớp với đơn hàng (AMOUNT_MISMATCH).", "AMOUNT_MISMATCH");
+            return new ProcessPayOsWebhookResult(false, "The payment amount does not match the order amount.", "AMOUNT_MISMATCH");
         }
 
         // 5. Update state on SUCCESS

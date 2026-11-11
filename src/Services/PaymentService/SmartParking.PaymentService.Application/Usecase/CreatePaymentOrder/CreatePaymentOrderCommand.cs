@@ -27,7 +27,7 @@ public sealed class CreatePaymentOrderCommandHandler(
     {
         var request = command.Request;
         if (request.Amount < 0)
-            throw new PaymentDomainException("INVALID_AMOUNT", "Số tiền thanh toán không hợp lệ.");
+            throw new PaymentDomainException("INVALID_AMOUNT", "The payment amount is invalid.");
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
@@ -43,6 +43,7 @@ public sealed class CreatePaymentOrderCommandHandler(
             TenantId = request.TenantId,
             SiteId = request.SiteId,
             AccountId = request.AccountId,
+            PlateNumber = request.PlateNumber,
             OrderCode = $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
             IdempotencyKey = request.IdempotencyKey,
             ReferenceType = request.ReferenceType,

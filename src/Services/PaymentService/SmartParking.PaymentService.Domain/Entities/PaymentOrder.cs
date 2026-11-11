@@ -8,6 +8,7 @@ public class PaymentOrder
     public Guid TenantId { get; set; }
     public Guid SiteId { get; set; }
     public Guid? AccountId { get; set; }
+    public string? PlateNumber { get; set; }
 
     public string OrderCode { get; set; } = string.Empty;
     public string? IdempotencyKey { get; set; }

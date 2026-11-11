@@ -12,6 +12,7 @@ export function PaymentResultPage() {
   const { user, setView } = useApp()
   const navigate = useNavigate()
   const orderId = new URLSearchParams(window.location.search).get("orderId") ?? ""
+  const transactionId = new URLSearchParams(window.location.search).get("transactionId") ?? ""
   const [result, setResult] = useState<ResultState>("checking")
   const [detail, setDetail] = useState<PaymentStatusResponse | null>(null)
   const [error, setError] = useState("")
@@ -20,8 +21,11 @@ export function PaymentResultPage() {
   useEffect(() => {
     let active = true
     let timeout: number | undefined
-    const checkout = paymentApi.rememberedCheckout(orderId)
-    if (!isPaymentOrderId(orderId) || !checkout) {
+    const checkout = isPaymentOrderId(orderId) ? paymentApi.rememberedCheckout(orderId) : null
+    const statusTransactionId = isPaymentOrderId(transactionId)
+      ? transactionId
+      : checkout?.paymentTransactionId ?? ""
+    if (!isPaymentOrderId(statusTransactionId)) {
       setResult("unavailable")
       setError("This browser has no matching checkout reference. Payment status cannot be confirmed here.")
       return
@@ -31,9 +35,10 @@ export function PaymentResultPage() {
     let attempts = 0
     async function check() {
       try {
-        const status = await paymentApi.status(checkout!.paymentTransactionId)
+        const status = await paymentApi.status(statusTransactionId)
         if (!active) return
-        if (status.orderId.toLowerCase() !== orderId.toLowerCase()) throw new Error("Payment Service returned a different order.")
+        if (isPaymentOrderId(orderId) && status.orderId.toLowerCase() !== orderId.toLowerCase())
+          throw new Error("Payment Service returned a different order.")
         setDetail(status)
         const outcome = classifyPaymentStatus(status)
         if (outcome === "success" || outcome === "failed") { setResult(outcome); return }
@@ -47,7 +52,7 @@ export function PaymentResultPage() {
     }
     void check()
     return () => { active = false; if (timeout !== undefined) window.clearTimeout(timeout) }
-  }, [orderId, refresh])
+  }, [orderId, refresh, transactionId])
 
   const title = result === "success" ? "Payment successful" : result === "failed" ? "Payment not completed" : result === "checking" ? "Checking your payment" : result === "pending" ? "Payment is still processing" : "Payment status unavailable"
   const description = result === "success" ? "Payment Service confirmed your transaction with payOS." : result === "failed" ? "Payment Service reported that this transaction was cancelled or failed." : result === "checking" ? "We are asking Payment Service for the confirmed result. This may take a moment." : result === "pending" ? "The payment has not been confirmed yet. Please check again before trying to pay." : error
@@ -57,9 +62,9 @@ export function PaymentResultPage() {
     <span className={`payment-result-icon is-${result}`} aria-hidden="true">{result === "success" ? "✓" : result === "failed" ? "×" : "·"}</span>
     <h1>{title}</h1><p>{description}</p>
     {detail && <dl className="payment-result-facts"><div><dt>Order code</dt><dd>{detail.orderCode}</dd></div><div><dt>Amount</dt><dd>{detail.amount.toLocaleString("vi-VN")} VND</dd></div><div><dt>Status</dt><dd>{formatStatus(detail.status)}</dd></div></dl>}
-    {orderId && <p className="payment-result-reference">Payment order: {orderId}</p>}
+    {(orderId || transactionId) && <p className="payment-result-reference">Payment reference: {orderId || transactionId}</p>}
     <div className="payment-result-actions">
-      {(result === "pending" || (result === "unavailable" && !!paymentApi.rememberedCheckout(orderId))) && <button type="button" className="btn-primary" onClick={() => setRefresh(value => value + 1)}>Check status again</button>}
+      {(result === "pending" || (result === "unavailable" && (!!paymentApi.rememberedCheckout(orderId) || isPaymentOrderId(transactionId)))) && <button type="button" className="btn-primary" onClick={() => setRefresh(value => value + 1)}>Check status again</button>}
       <button type="button" className="btn-outline" onClick={() => { setView(user?.role === "driver" ? "driver" : "sign-in"); navigate("/") }}>Back to SmartParking</button>
     </div>
   </section></main>

@@ -123,7 +123,7 @@ export function LotStatus({
     vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
     site, allSlots, filteredSlots, counts, slotView, layout,
-    scanSlots, isScanning, lastScanAt,
+    scanSlots, isScanning, lastScanAt, scanError,
     isStale, staleAgeSeconds, isRefreshing, refreshLayout,
   } = useLotStatus(lot, initialSlotCode, initialStatusFilter, {
     layout: layoutProp,
@@ -198,6 +198,7 @@ export function LotStatus({
           Check-in camera events remain pending until the next scan.
           {lastScanAt ? ` Last scan ${new Date(lastScanAt).toLocaleTimeString()}.` : ""}
         </p>
+        {scanError && <p role="alert" className="w-full text-xs text-[var(--danger)]">{scanError}</p>}
         <button
           type="button"
           className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-3"

@@ -15,5 +15,6 @@ public sealed record PrepareParkingFeeOrderCommand(
     decimal? PenaltyAmount,
     string? PenaltyReason,
     string IdempotencyKey,
-    decimal? DepositAmount = 0
+    decimal? DepositAmount = 0,
+    decimal? DevelopmentTestAmount = null
 ) : IRequest<PrepareParkingFeeOrderResponseDto>;

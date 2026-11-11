@@ -5,12 +5,12 @@
 ---
 
 ## Các tài nguyên đầu vào (Inputs)
-1. **File DDL SQL**: base files trong `scripts/database/microservices/*.sql` (7 file: `01`, `02`, `03a`, `03b`, `04`, `05`, `06`) **và** overlay trong `scripts/database/overlay/*.sql` (8 file). Base + overlay là schema thực tế được deploy.
+1. **File DDL SQL**: bảy file base trong `scripts/database/microservices/*.sql` (`01`, `02`, `03a`, `03b`, `04`, `05`, `06`). Đây là nguồn SQL duy nhất cho clean setup; không có deployment overlay.
 2. **File Template chuẩn**: `docs/02-architecture/database/microservices/00-service-db-doc-template.md` (Tuyệt đối tuân thủ cấu trúc trong file này).
 3. **SRS (System Requirements Specification)**: `docs/01-requirements/srs/smartpark-srs-v1.0.md` (v1.0 RC3, commit `6165024`).
-4. **Deployment truth**: `compose.schema-integration.yml`, `scripts/apply-workflow-migrations.ps1`, `setup.ps1` — dùng để xác nhận DB vật lý, thứ tự mount base/overlay và tên cột runtime.
+4. **Deployment truth**: `compose.schema-integration.yml`, `scripts/apply-workflow-migrations.ps1`, `setup.ps1` — dùng để xác nhận DB vật lý, thứ tự chạy base files và tên cột runtime.
 
-**Nguyên tắc nguồn chân lý:** Tài liệu mô tả **schema đang triển khai** (base + overlay), không chỉ file arch. Mọi deviation so với arch/SRS phải được ghi rõ trong mục `Deployment profile`/`Deviations` của tài liệu service; không âm thầm chuẩn hóa hoặc xóa deviation.
+**Nguyên tắc nguồn chân lý:** Tài liệu mô tả schema được dựng từ các microservice base files và đối chiếu với deployment truth, không chỉ file arch. Mọi deviation so với arch/SRS phải được ghi rõ trong mục `Deployment profile`/`Deviations` của tài liệu service; không âm thầm chuẩn hóa hoặc xóa deviation.
 
 ---
 
@@ -18,7 +18,7 @@
 **Không được phép tự sáng tạo Microservice mới.**
 Danh sách và số lượng các microservices được phép tồn tại được giới hạn **tuyệt đối** bởi kiến trúc đã chốt trong file SRS. Agent **bắt buộc** phải đối chiếu với SRS để biết chính xác có bao nhiêu service đang được định nghĩa. Nếu file SQL hoặc context yêu cầu viết doc cho một service nằm ngoài danh sách chuẩn của SRS (ví dụ: tự nghĩ ra service thứ 7, thứ 8), Agent phải **từ chối** tạo file doc mới, và tiến hành cảnh báo để gộp (merge) hoặc xóa bỏ service thừa đó theo đúng ranh giới của SRS.
 
-**Lưu ý deployment:** `03a` và `03b` không phải service thứ 7; chúng là hai phần vật lý của cùng logical Parking Operations Service (D1). Tài liệu `03` phải mô tả cả hai DB đích và overlay tương ứng.
+**Lưu ý deployment:** `03a` và `03b` không phải service thứ 7; chúng là hai phần vật lý của cùng logical Parking Operations Service (D1). Tài liệu `03` phải mô tả cả hai DB đích và base file tương ứng.
 
 ---
 
@@ -28,13 +28,13 @@ Danh sách và số lượng các microservices được phép tồn tại đư�
 - Đọc nội dung của file SQL tương ứng với Service cần làm.
 - Quét các phần liên quan đến miền nghiệp vụ (domain) của Service đó trong file SRS. Bắt buộc kiểm tra **Quy tắc tối thượng** để xác nhận service này hợp lệ theo kiến trúc hệ thống.
 - Bắt buộc đọc file `00-service-db-doc-template.md` để nhớ lại cấu trúc cần viết.
-- Đọc cả overlay liên quan (`scripts/database/overlay/*.sql`) và đối chiếu `compose.schema-integration.yml`/`setup.ps1` để biết DB đích và thứ tự mount.
+- Đối chiếu `compose.schema-integration.yml`/`setup.ps1` để xác nhận base file được mount vào đúng DB đích và theo đúng thứ tự.
 - Xác định đúng DB vật lý (6 DB; `03` tách `03a`/`03b`).
 
 ### Bước 2: Viết tài liệu (Drafting)
 - Viết file tài liệu `[tên-service]-db-docs.md` mới (chỉ khi vượt qua kiểm tra ranh giới ở Bước 1).
-- **Yêu cầu Zero Omissions**: Phải vét cạn 100% số bảng và 100% số cột/constraints có trong **base SQL + overlay** của DB đích.
-- **Deployment profile bắt buộc**: mỗi file doc phải có mục `## 0. Deployment profile` ghi DB vật lý, base DDL, overlay, trạng thái khớp/deviation.
+- **Yêu cầu Zero Omissions**: Phải vét cạn 100% số bảng và 100% số cột/constraints có trong base SQL của DB đích.
+- **Deployment profile bắt buộc**: mỗi file doc phải có mục `## 0. Deployment profile` ghi DB vật lý, base DDL, xác nhận không có overlay, và trạng thái khớp/deviation.
 - **Deviation bắt buộc**: nếu schema khác arch/SRS (ví dụ 7 role codes, 2 cột slot runtime, rename `unit_id`/`count`), phải có mục `Deviations` nêu mã quyết định (D1–D7) và lý do.
 - **Yêu cầu Traceability**: Mapping chính xác với các mã FR, BR, US trong SRS, không được phép hallucination.
 - **Yêu cầu Format**:
@@ -48,7 +48,7 @@ Danh sách và số lượng các microservices được phép tồn tại đư�
 ### Bước 4: Triệu hồi Kiểm toán viên (Invoking Independent Auditor)
 - Hệ thống duy trì một Subagent có tên `db_doc_auditor` (Independent Database Documentation Auditor). Nếu chưa được định nghĩa trong conversation hiện tại, Agent chính phải định nghĩa (define_subagent) nó với các quyền đọc file (read tools).
 - Nhiệm vụ của Auditor: 
-  - Dò chéo base SQL + overlay, file `.md`, `SRS`, và deployment truth (`compose.schema-integration.yml`, `setup.ps1`).
+  - Dò chéo base SQL, file `.md`, `SRS`, và deployment truth (`compose.schema-integration.yml`, `setup.ps1`).
   - Check Zero Omissions.
   - Check tuân thủ Template.
   - Check Hallucinations trong SRS mapping.
@@ -68,7 +68,7 @@ Danh sách và số lượng các microservices được phép tồn tại đư�
 Quy trình này định nghĩa luồng "cập nhật cục bộ" (Delta Update) nhằm tối ưu thời gian và nguồn lực. Kịch bản này được kích hoạt khi:
 1. Phiên bản SRS có sự cập nhật (version mới).
 2. Khi có chỉ định/điều chỉnh thiết kế trực tiếp từ Người dùng (User/Architect), dù SRS chưa phản ánh thay đổi đó.
-3. Khi thay đổi deployment (thêm/xóa overlay, đổi DB đích, đổi `setup.ps1`/compose) dù SRS không đổi.
+3. Khi thay đổi deployment (sửa base SQL, đổi DB đích, đổi `setup.ps1`/compose) dù SRS không đổi. Clean setup không dùng overlay SQL.
 
 ### Bước 1: Phân tích tác động (Impact Analysis)
 - Khi nhận được thông báo thay đổi (từ SRS mới hoặc yêu cầu trực tiếp của User), Agent **bắt buộc** phải phân tích và khoanh vùng chính xác các Service, các bảng, cột hoặc ràng buộc (constraints) bị ảnh hưởng.

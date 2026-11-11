@@ -114,6 +114,12 @@ services:
     environment:
       <<: [*backend-env, *jwt-validation]
       Services__Payment: http://payment-service:8080/
+      Messaging__Enabled: ${SMARTPARK_MESSAGING_ENABLED:-true}
+      SMARTPARK_RABBITMQ_HOST: rabbitmq
+      SMARTPARK_RABBITMQ_PORT: "5672"
+      SMARTPARK_RABBITMQ_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
+      SMARTPARK_RABBITMQ_PASSWORD: ${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}
+      SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       ConnectionStrings__Reservation: "Host=operations-db;Port=5432;Database=smartpark_operations;Username=smartpark_operations;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
     ports:
       - "127.0.0.1:5055:8080"

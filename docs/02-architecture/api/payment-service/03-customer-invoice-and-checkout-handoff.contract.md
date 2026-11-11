@@ -348,6 +348,7 @@ Hai máy trạng thái sau đây hoàn toàn độc lập và chỉ đồng bộ
 1. **Chuẩn bị đơn hàng Idempotent (`POST /orders/prepare`):**
    - Sử dụng khóa duy nhất: `Scope = (tenantId, sessionId, idempotencyKey)`.
    - Nếu gọi lại với cùng `sessionId` và `idempotencyKey` khi đơn hàng đang `PENDING`: Hệ thống trả về đơn hàng hiện tại kèm `orderId` cũ, **không tính toán lại và không tạo ra bản ghi mới**.
+   - Nếu order `PENDING` đã hết hạn và không có transaction `PENDING`/`UNKNOWN`: đóng order cũ, giữ nguyên lịch sử order/invoice, giải phóng idempotency key rồi tính giá và tạo order mới. Nếu có transaction chưa đối soát, không tạo order mới cho tới khi kết quả được xác định.
 2. **Đối soát giao dịch trùng lặp (Duplicate Webhook / Cash Collection):**
    - Nếu Webhook payOS hoặc hành động thu tiền mặt được gọi nhiều lần cho một đơn hàng đã `PAID`: Hệ thống bỏ qua bước ghi DB, trả về ngay HTTP 200 OK và **không đẩy thêm sự kiện `PaymentSucceededV1` trùng lặp vào Outbox**.
 3. **Tính bất biến của Hóa đơn (Immutable Financial Record):**
