@@ -1,3 +1,4 @@
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
 using MassTransit;
 using SmartParking.Contracts.Audit;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
@@ -64,8 +65,8 @@ public static class ReservationMessaging
         {
             // MediatR handlers remain registered when routes are disabled. Keep DI valid and
             // fail closed even if an internal caller attempts dispatch without the HTTP gate.
-            services.AddScoped<IAccountAccessRequester, DisabledAccountAccessRequester>();
-            services.AddScoped<IReservationFactsPublisher, DisabledReservationFactsPublisher>();
+            services.TryAddScoped<IAccountAccessRequester, DisabledAccountAccessRequester>();
+            services.TryAddScoped<IReservationFactsPublisher, DisabledReservationFactsPublisher>();
             if (!gateCheckoutEnabled) return services;
         }
         else
