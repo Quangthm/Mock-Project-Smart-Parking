@@ -54,8 +54,9 @@ public static class InvoiceAuthorizationValidator
             return;
         }
 
-        // 5. Driver Check: must match accountId
-        if (string.Equals(actor.Role, "DRIVER", StringComparison.OrdinalIgnoreCase))
+        // 5. Driver / Customer Check: must match accountId
+        if (string.Equals(actor.Role, "DRIVER", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actor.Role, "CUSTOMER", StringComparison.OrdinalIgnoreCase))
         {
             var invoiceAccountId = invoice.PricingSnapshot?.AccountId ?? order?.AccountId;
             if (!actor.UserId.HasValue || actor.UserId.Value == Guid.Empty || !invoiceAccountId.HasValue || actor.UserId.Value != invoiceAccountId.Value)

@@ -41,7 +41,8 @@ public sealed record CustomerInvoiceResponseDto(
     TariffPolicyDto TariffPolicy,
     FinancialSummaryDto FinancialSummary,
     FinancialStatusDto FinancialStatus,
-    IReadOnlyList<InvoiceLineItemDto> LineItems
+    IReadOnlyList<InvoiceLineItemDto> LineItems,
+    string? PdfUrl = null
 );
 
 public sealed record InvoiceIdentityDto(
@@ -49,7 +50,8 @@ public sealed record InvoiceIdentityDto(
     string InvoiceNumber,
     Guid PaymentOrderId,
     string OrderCode,
-    DateTimeOffset IssuedAt
+    DateTimeOffset IssuedAt,
+    string? PdfUrl = null
 );
 
 public sealed record CustomerReferenceDto(
@@ -118,3 +120,26 @@ public sealed record CashPaymentRequestDto(
     string? Notes = null,
     string? IdempotencyKey = null
 );
+
+public sealed record InvoicePdfResultDto(
+    byte[] Content,
+    string ContentType,
+    string FileName
+);
+
+public sealed record PagedResult<T>(
+    IReadOnlyList<T> Items,
+    int TotalCount,
+    int PageNumber,
+    int PageSize,
+    int TotalPages
+);
+
+public sealed record DriverInvoiceHistoryFilterDto(
+    string? Status = null,
+    DateTimeOffset? FromDate = null,
+    DateTimeOffset? ToDate = null,
+    int PageNumber = 1,
+    int PageSize = 10
+);
+
