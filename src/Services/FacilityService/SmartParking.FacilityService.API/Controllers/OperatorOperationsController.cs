@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using SmartParking.FacilityService.Application;
 
 namespace SmartParking.FacilityService.API.Controllers;
@@ -9,13 +8,11 @@ namespace SmartParking.FacilityService.API.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class OperatorOperationsController(
     IOperatorSiteAuthorizer identity,
-    OperatorOperationsService operations,
-    ILogger<OperatorOperationsController>? logger = null) : ControllerBase
+    OperatorOperationsService operations) : ControllerBase
 {
     [HttpGet("tickets")]
     public async Task<IActionResult> Tickets(Guid siteId, CancellationToken ct)
     {
-        logger?.LogInformation("Listing operator tickets for site {SiteId}", siteId);
         await identity.ScopeAsync(siteId, ct);
         return Ok(new { success = true, data = await operations.ListTicketsAsync(siteId, ct) });
     }
@@ -27,7 +24,6 @@ public sealed class OperatorOperationsController(
             string.IsNullOrWhiteSpace(body.Message) || body.Message.Trim().Length > 10_000)
             return BadRequest(new { success = false, code = "INVALID_TICKET", message = "A subject and message are required." });
         var scope = await identity.ScopeAsync(siteId, ct);
-        logger?.LogInformation("Creating operator ticket for site {SiteId} by user {UserId}", siteId, scope.UserId);
         var ticket = await operations.CreateTicketAsync(scope.TenantId, siteId, scope.UserId,
             body.Subject, body.Message, body.BookingId, ct);
         return Created($"/api/operator/sites/{siteId}/tickets/{ticket.Id}",
@@ -43,7 +39,6 @@ public sealed class OperatorOperationsController(
         var scope = await identity.ScopeAsync(siteId, ct);
         if (body.ResolutionNote?.Length > 2_000)
             return BadRequest(new { success = false, code = "INVALID_RESOLUTION_NOTE", message = "Resolution notes must be 2,000 characters or fewer." });
-        logger?.LogInformation("Updating ticket {TicketId} status to {Status} for site {SiteId} by user {UserId}", ticketId, body.Status, siteId, scope.UserId);
         var updated = await operations.UpdateTicketStatusAsync(scope.TenantId, siteId, scope.UserId,
             ticketId, body.Status, body.ResolutionNote, ct);
         return updated is null
@@ -54,7 +49,6 @@ public sealed class OperatorOperationsController(
     [HttpGet("incidents")]
     public async Task<IActionResult> Incidents(Guid siteId, CancellationToken ct)
     {
-        logger?.LogInformation("Listing operator incidents for site {SiteId}", siteId);
         await identity.ScopeAsync(siteId, ct);
         return Ok(new { success = true, data = await operations.ListIncidentsAsync(siteId, ct) });
     }
@@ -66,7 +60,6 @@ public sealed class OperatorOperationsController(
             string.IsNullOrWhiteSpace(body.Details) || body.Details.Trim().Length > 2_000)
             return BadRequest(new { success = false, code = "INVALID_INCIDENT", message = "Incident type and details are required." });
         var scope = await identity.ScopeAsync(siteId, ct);
-        logger?.LogInformation("Creating operator incident for site {SiteId} (Type: {IncidentType}) by user {UserId}", siteId, body.Type, scope.UserId);
         var incident = await operations.CreateIncidentAsync(scope.TenantId, siteId, scope.UserId,
             body.Type, body.Details, ct);
         return Created($"/api/operator/sites/{siteId}/incidents/{incident.Id}",
@@ -77,7 +70,6 @@ public sealed class OperatorOperationsController(
     public async Task<IActionResult> ResolveIncident(Guid siteId, Guid incidentId, CancellationToken ct)
     {
         var scope = await identity.ScopeAsync(siteId, ct);
-        logger?.LogInformation("Resolving operator incident {IncidentId} for site {SiteId} by user {UserId}", incidentId, siteId, scope.UserId);
         var resolved = await operations.ResolveIncidentAsync(scope.TenantId, siteId, incidentId,
             scope.UserId, ct);
         return resolved is null
@@ -88,7 +80,6 @@ public sealed class OperatorOperationsController(
     [HttpGet("audit")]
     public async Task<IActionResult> Audit(Guid siteId, CancellationToken ct)
     {
-        logger?.LogInformation("Listing operator audit logs for site {SiteId}", siteId);
         await identity.ScopeAsync(siteId, ct);
         return Ok(new { success = true, data = await operations.ListAuditLogsAsync(siteId, ct) });
     }
@@ -100,7 +91,6 @@ public sealed class OperatorOperationsController(
             string.IsNullOrWhiteSpace(body.Details) || body.Details.Trim().Length > 2_000)
             return BadRequest(new { success = false, code = "INVALID_AUDIT_EVENT", message = "Action and details are required." });
         var scope = await identity.ScopeAsync(siteId, ct);
-        logger?.LogInformation("Creating operator audit log for site {SiteId} (Action: {AuditAction}) by user {UserId}", siteId, body.Action, scope.UserId);
         await operations.RecordAuditAsync(scope.TenantId, siteId, scope.UserId,
             body.Action, body.Details, ct);
         return NoContent();
@@ -110,7 +100,6 @@ public sealed class OperatorOperationsController(
     public async Task<IActionResult> Notifications(Guid siteId, CancellationToken ct)
     {
         var scope = await identity.ScopeAsync(siteId, ct);
-        logger?.LogInformation("Listing operator notifications for site {SiteId} for user {UserId}", siteId, scope.UserId);
         return Ok(new { success = true, data = await operations.ListNotificationsAsync(siteId, scope.UserId, ct) });
     }
 
@@ -118,7 +107,6 @@ public sealed class OperatorOperationsController(
     public async Task<IActionResult> MarkNotificationRead(Guid siteId, Guid notificationId, CancellationToken ct)
     {
         var scope = await identity.ScopeAsync(siteId, ct);
-        logger?.LogInformation("Marking notification {NotificationId} read for site {SiteId} by user {UserId}", notificationId, siteId, scope.UserId);
         return await operations.MarkNotificationReadAsync(siteId, scope.UserId, notificationId, ct)
             ? NoContent()
             : NotFound(new { success = false, code = "NOTIFICATION_NOT_FOUND", message = "Notification was not found." });

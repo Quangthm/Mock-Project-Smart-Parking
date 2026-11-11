@@ -46,7 +46,8 @@ namespace SmartParking.FacilityService.API.Controllers;
 [ApiController]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class FacilityController(
-    IMediator mediator) : ControllerBase
+    IMediator mediator,
+    ILogger<FacilityController> logger) : ControllerBase
 {
     [HttpGet("/health")]
     public IActionResult Health() => Ok(new { status = "ok" });
@@ -154,8 +155,29 @@ public sealed class FacilityController(
                     message = "vehicleType must be CAR, MOTORCYCLE, or OVERSIZED." });
             filter = parsed;
         }
-        var result = await mediator.Send(new GetOperationalLayoutQuery(id, filter, floor), ct);
-        return Ok(new { success = true, data = result });
+        try
+        {
+            var result = await mediator.Send(new GetOperationalLayoutQuery(id, filter, floor), ct);
+            return Ok(new { success = true, data = result });
+        }
+        catch (StructureException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error retrieving operational layout for site {SiteId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                code = "INTERNAL_SERVER_ERROR",
+                message = "An unexpected error occurred."
+            });
+        }
     }
 
     [HttpPost("/api/parking-lots/{id:guid}/slots/{slot:guid}/backup")]

@@ -17,10 +17,7 @@ public sealed class CreateParkingLotCommandHandler(
         logger.LogInformation("Creating parking lot with Code {SiteCode}", request.Code);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
         if (!await owners.IsOwnerAsync(owner, ct))
-        {
-            logger.LogWarning("Owner access denied for TenantId {TenantId} when creating parking lot {SiteCode}", owner.TenantId, request.Code);
             throw new StructureException("FORBIDDEN", "Current parking management access is required.");
-        }
 
         var structure = new ParkingStructure(
             new SiteProfile(Guid.NewGuid(), owner.TenantId, "", "", "", null, null, true, 0));

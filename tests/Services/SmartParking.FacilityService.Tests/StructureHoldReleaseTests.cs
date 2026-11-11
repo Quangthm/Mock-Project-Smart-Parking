@@ -113,7 +113,7 @@ public sealed class StructureHoldReleaseTests
     private static HttpClient Client(HttpStatusCode status) =>
         new(new StatusHandler(status)) { BaseAddress = new Uri("http://localhost/") };
 
-    private sealed class StructureTestHelper(IStructureUnitOfWork unitOfWork)
+    private sealed class StructureTestHelper(StructureEditHandlers unitOfWork)
     {
         public async Task ChangeAsync(OwnerScope owner, Guid siteId, Action<ParkingStructure> change, CancellationToken ct)
         {
@@ -130,7 +130,7 @@ public sealed class StructureHoldReleaseTests
         public ParkingStructure Structure { get; }
         public FakeStore Store { get; } = new();
         public FakeCommitments Commitments { get; } = new();
-        public IStructureUnitOfWork UnitOfWork { get; }
+        public StructureEditHandlers UnitOfWork { get; }
         public StructureTestHelper Service { get; }
 
         public Fixture()
@@ -138,8 +138,8 @@ public sealed class StructureHoldReleaseTests
             Structure = new(new SiteProfile(SiteId, Owner.TenantId, "TEST", "Test", "Address", null, null, true, 0));
             var zone = Structure.AddUnit(UnitType.ZONE, "A", maxCapacity: 1);
             Structure.AddSlot(zone, "A01", VehicleType.CAR);
-            UnitOfWork = new StructureUnitOfWork(this, this, this, Commitments, Store,
-                new StructureSynchronizationService(Store, Commitments));
+            UnitOfWork = new StructureEditHandlers(this, this, this, Commitments, Store,
+                StructureTestMediator.Create(new StructureSynchronizationHandlers(Store, Commitments)), new EmptyReservationDependencies());
             Service = new StructureTestHelper(UnitOfWork);
         }
 
@@ -188,7 +188,7 @@ public sealed class StructureHoldReleaseTests
         public FakeStore Store { get; } = new();
         public FakeCommitments Commitments { get; } = new();
         public StructureSynchronization Row { get; }
-        public StructureSynchronizationService Service { get; }
+        public StructureSynchronizationHandlers Service { get; }
 
         public SynchronizationFixture(string state, StructureOutcome? outcome)
         {
@@ -198,7 +198,7 @@ public sealed class StructureHoldReleaseTests
         }
     }
 
-    private sealed class FakeStore : IStructureSynchronizationStore
+    private sealed class FakeStore : IStructureSynchronizationRepository
     {
         public List<StructureSynchronization> Rows { get; } = [];
         public string? FencedState { get; private set; }

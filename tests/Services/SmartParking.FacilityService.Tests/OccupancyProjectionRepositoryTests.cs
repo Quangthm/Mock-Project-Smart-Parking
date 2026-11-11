@@ -107,6 +107,30 @@ public sealed class OccupancyProjectionRepositoryTests
         Assert.Equal(10L, await fixture.WatermarkAsync());
     }
 
+    // SPARK-244 reservation safety: the realtime projection owns only physical_state. A reservation
+    // flow may have flagged the slot (BACKUP/RESERVED/PROTECTED) and neither a SlotStateChanged
+    // projection nor an OccupancyReleased projection may clear that reservation flag to NULL.
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task SlotStateAndReleaseChangesPreserveExistingReservationState()
+    {
+        await using var fixture = await OccupancyProjectionFixture.CreateAsync();
+        var store = new OccupancyProjectionRepository(fixture.DataSource);
+        var session = Guid.NewGuid();
+
+        await fixture.SetReservationStateAsync("BACKUP");
+        Assert.Equal("BACKUP", await fixture.ReservationStateAsync());
+
+        // SlotStateChanged (-> OCCUPIED) must not erase the reservation flag.
+        Assert.True(await store.ApplyAsync(Change(fixture, "OCCUPIED", 1), CancellationToken.None));
+        Assert.Equal("OCCUPIED", await fixture.SlotStateAsync());
+        Assert.Equal("BACKUP", await fixture.ReservationStateAsync());
+
+        // OccupancyReleased (-> AVAILABLE) must not erase the reservation flag either.
+        Assert.True(await store.ApplyAsync(Release(fixture, session, sequenceNumber: 2), CancellationToken.None));
+        Assert.Equal("AVAILABLE", await fixture.SlotStateAsync());
+        Assert.Equal("BACKUP", await fixture.ReservationStateAsync());
+    }
+
     private static OccupancyProjectionEvent Change(OccupancyProjectionFixture fixture, string physicalState, long sequenceNumber)
         => new(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, sequenceNumber,
             fixture.SiteId, fixture.SlotId, null, physicalState);
@@ -217,6 +241,13 @@ public sealed class OccupancyProjectionRepositoryTests
         public Task<string?> SlotStateAsync()
             => ScalarStringAsync("SELECT physical_state FROM parking_slots WHERE id = @id",
                 parameters => parameters.AddWithValue("id", SlotId));
+
+        public Task<string?> ReservationStateAsync()
+            => ScalarStringAsync("SELECT reservation_state FROM parking_slots WHERE id = @id",
+                parameters => parameters.AddWithValue("id", SlotId));
+
+        public Task SetReservationStateAsync(string reservationState)
+            => ExecuteAsync($"UPDATE parking_slots SET reservation_state = '{reservationState}' WHERE id = '{SlotId}'");
 
         public Task<long> WatermarkAsync()
             => ScalarLongAsync("SELECT last_sequence_number FROM slot_sequence_watermarks WHERE slot_id = @id",

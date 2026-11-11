@@ -76,7 +76,7 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
         var state = string.IsNullOrWhiteSpace(physicalState) ? "OCCUPIED" : physicalState;
         await using var command = new NpgsqlCommand("""
             UPDATE parking_slots
-            SET physical_state = $2, reservation_state = NULL, updated_at = now()
+            SET physical_state = $2, updated_at = now()
             WHERE id = $1 AND site_id = $3 AND deleted_at IS NULL
             """, db, tx);
         command.Parameters.AddWithValue(slotId);
@@ -106,7 +106,7 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
                 RETURNING event_id
             )
             UPDATE parking_slots slot
-            SET physical_state = 'AVAILABLE', reservation_state = NULL, updated_at = now()
+            SET physical_state = 'AVAILABLE', updated_at = now()
             FROM ledger
             WHERE slot.id = $3 AND slot.site_id = $5
               AND slot.physical_state = 'OCCUPIED' AND slot.deleted_at IS NULL
