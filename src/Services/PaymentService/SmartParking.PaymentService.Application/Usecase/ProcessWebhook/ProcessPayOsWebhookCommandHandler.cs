@@ -57,7 +57,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         if (existingWebhook != null && existingWebhook.ProcessingState == WebhookProcessingState.PROCESSED)
         {
             _logger.LogInformation("PayOS webhook event {EventId} was already processed. Replaying success response.", eventId);
-            return new ProcessPayOsWebhookResult(true, "The webhook was already processed successfully.");
+            return new ProcessPayOsWebhookResult(true, "The webhook was already processed successfully (Idempotent replay).");
         }
 
         if (existingWebhook == null)
