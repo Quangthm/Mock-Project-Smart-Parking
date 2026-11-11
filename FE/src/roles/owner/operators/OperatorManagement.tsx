@@ -1,7 +1,8 @@
+import { useConfirmation } from "../../../components/ui/useConfirmation"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { Button } from "../../../components/ui/Button"
 import { useEffect, useState, useMemo } from "react"
-import { createPortal } from "react-dom"
+import { Modal } from "../../../components/ui/Modal"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { useApp } from "../../../context/AppContext"
 import {
@@ -24,6 +25,7 @@ export function OperatorManagement({
   onOperatorsChanged: () => void
 }) {
   const { user } = useApp()
+  const { confirm, confirmation } = useConfirmation()
   const [operators, setOperators] = useState<Operator[]>([])
   const [sites, setSites] = useState<Site[]>([])
   const [showCreate, setShowCreate] = useState(false)
@@ -102,7 +104,7 @@ export function OperatorManagement({
   }
 
   async function handleDeleteOperator(operator: Operator) {
-    if (!window.confirm(`Delete the operator account for ${operator.fullName}?`)) return
+    if (!await confirm({ title: "Remove operator?", description: `Delete the operator account for ${operator.fullName}?`, confirmLabel: "Remove operator", danger: true })) return
 
     setError("")
     setMessage("")
@@ -252,13 +254,13 @@ export function OperatorManagement({
         </div>
       ) : visibleOperators.length > 0 ? (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
-          <table className="w-full text-left text-xs min-w-[640px]">
-            <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-[11px] uppercase tracking-wider text-[var(--muted)]">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Operator</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Assigned Facilities</th>
-                <th className="px-4 py-3 font-semibold text-right">Actions</th>
+          <table role="table" className="sp-adaptive-table w-full text-left text-xs min-w-[640px]">
+            <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-xs uppercase tracking-wider text-[var(--muted)]">
+              <tr role="row">
+                <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">Operator</th>
+                <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">Status</th>
+                <th scope="col" role="columnheader" className="px-4 py-3 font-semibold">Assigned Facilities</th>
+                <th scope="col" role="columnheader" className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -268,8 +270,8 @@ export function OperatorManagement({
                   .join(", ")
 
                 return (
-                  <tr key={op.id} className="hover:bg-[var(--bg)]/50 transition-colors">
-                    <td className="px-4 py-3.5">
+                  <tr role="row" key={op.id} className="hover:bg-[var(--bg)]/50 transition-colors">
+                    <td role="cell" data-label="Operator" className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/10 font-bold text-[var(--primary)] text-xs">
                           {op.fullName.charAt(0).toUpperCase()}
@@ -285,32 +287,32 @@ export function OperatorManagement({
                       </div>
                     </td>
 
-                    <td className="px-4 py-3.5">
+                    <td role="cell" data-label="Status" className="px-4 py-3.5">
                       <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${op.status === "active" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>
                         {formatStatus(op.status)}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3.5">
+                    <td role="cell" data-label="Assigned facilities" className="px-4 py-3.5">
                       <div className="max-w-xs truncate text-[var(--fg)] font-medium" title={assignedNames}>
                         {assignedNames || "None"}
                       </div>
-                      <div className="text-[10px] text-[var(--muted)]">
+                      <div className="text-xs text-[var(--muted)]">
                         {op.siteIds.length} site(s) assigned
                       </div>
                     </td>
 
-                    <td className="px-4 py-3.5 text-right">
+                    <td role="cell" data-label="Actions" className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {op.status === "pending_verification" && (
-                          <button type="button" className="btn-outline text-[11px] py-1 px-2.5"
+                          <button type="button" className="btn-outline text-xs py-1 px-2.5"
                             disabled={inviting !== null} onClick={() => void resendInvitation(op.id)}>
                             {inviting === op.id ? "Sending…" : "Resend invitation"}
                           </button>
                         )}
                         <button
                           type="button"
-                          className="btn-outline text-[11px] py-1 px-2.5"
+                          className="btn-outline text-xs py-1 px-2.5"
                           onClick={() => openTransferModal(op)}
                           title="Change assigned parking site for this operator"
                         >
@@ -341,6 +343,7 @@ export function OperatorManagement({
         </div>
       )}
 
+      {confirmation}
       {/* Modal 1: Create Operator Form Popup */}
       <CreateOperatorForm
         isOpen={showCreate}
@@ -351,38 +354,9 @@ export function OperatorManagement({
       />
 
       {/* Modal 3: Transfer / Reassign Site Confirmation Modal (Requirement C) */}
-      {transferOp &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="transfer-title"
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeTransferModal()
-            }}
-          >
-            <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-[var(--fg)] space-y-4 animate-in">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 id="transfer-title" className="text-base font-bold text-[var(--fg)]">
-                    Change Site
-                  </h3>
-                  <p className="text-xs text-[var(--muted)] mt-0.5">
-                    Update facility assignment for operator account.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="grid size-11 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--fg)] cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                  aria-label="Close site assignment"
-                  onClick={closeTransferModal}
-                >
-                  <UntitledIcon name="x" size={16} />
-                </button>
-              </div>
-
+      {transferOp && <Modal title="Change Site" onClose={closeTransferModal}>
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--muted)]">Update facility assignment for operator account.</p>
               {transferError && (
                 <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
                   {transferError}
@@ -394,7 +368,7 @@ export function OperatorManagement({
                 <div>
                   <span className="text-[var(--muted)] block">Operator:</span>
                   <span className="font-semibold text-[var(--fg)] text-sm">{transferOp.fullName}</span>
-                  <span className="text-[var(--muted)] text-[11px] block">{transferOp.email}</span>
+                  <span className="text-[var(--muted)] text-xs block">{transferOp.email}</span>
                 </div>
 
                 <div className="border-t border-[var(--border)] pt-2">
@@ -429,7 +403,7 @@ export function OperatorManagement({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   className="btn-outline text-xs px-3.5 py-2"
@@ -446,10 +420,8 @@ export function OperatorManagement({
                   Confirm Changes
                 </button>
               </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+        </div>
+      </Modal>}
     </div>
   )
 }

@@ -40,7 +40,7 @@ public sealed class VehicleRepository(AppDbContext db) : IVehicleRepository
     public Task<VehicleBinding?> ResolveBindingAsync(Guid accountId, Guid vehicleId, CancellationToken ct) =>
         db.RegisteredVehicles.AsNoTracking().Where(v => v.Id == vehicleId && v.AccountId == accountId && v.DeletedAt == null
             && v.CanonicalPlate != "" && (v.VehicleType == "CAR" || v.VehicleType == "MOTORCYCLE"))
-            .Select(v => new VehicleBinding(v.Id, accountId, v.VehicleType, v.BindingRevision)).SingleOrDefaultAsync(ct);
+            .Select(v => new VehicleBinding(v.Id, accountId, v.VehicleType, v.BindingRevision, v.CanonicalPlate)).SingleOrDefaultAsync(ct);
 
     public async Task<RegisteredVehicle?> FindOwnedAsync(Guid id, Guid accountId, bool forUpdate, CancellationToken ct)
     {

@@ -79,24 +79,26 @@ public sealed class PostgresStructureWorkflowTests
     }
 
     [StructurePostgresFact, Trait("Category", "Postgres")]
-    public async Task ReservationTriggerBlocksCapacityWritesUntilTheHoldCompletes()
+    public async Task UnitOfWorkBlocksCapacityWritesUntilTheHoldCompletes()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
         var token = Guid.NewGuid();
         await fixture.ReservationService.PrepareAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
-
-        var error = await Assert.ThrowsAsync<PostgresException>(() => fixture.ExecuteAsync(fixture.Reservation, $"""
-            INSERT INTO site_capacity_pools(tenant_id,site_id,vehicle_type,total_capacity,max_reservation_quota)
-            VALUES ('{fixture.Owner.TenantId}','{fixture.SiteId}','CAR',1,1)
-            """));
-        Assert.Equal(PostgresErrorCodes.LockNotAvailable, error.SqlState);
-
-        await fixture.ReservationService.CompleteAsync(
-            fixture.Owner.TenantId, fixture.SiteId, token, null, CancellationToken.None);
-        await fixture.ExecuteAsync(fixture.Reservation, $"""
-            INSERT INTO site_capacity_pools(tenant_id,site_id,vehicle_type,total_capacity,max_reservation_quota)
-            VALUES ('{fixture.Owner.TenantId}','{fixture.SiteId}','CAR',1,1)
-            """);
+        async Task WriteCapacity()
+        {
+            await using var db = fixture.CreateReservationContext();
+            var guards = new SmartParking.OperationService.Persistence.Repositories.OperationsConcurrency(db);
+            var work = OperationStructureTestHarness.Work(db, guards);
+            await using var transaction = await work.BeginTransactionAsync(CancellationToken.None);
+            await guards.LockSiteAsync(fixture.SiteId, CancellationToken.None);
+            db.SiteCapacityPools.Add(new() { Id = Guid.NewGuid(), TenantId = fixture.Owner.TenantId, SiteId = fixture.SiteId,
+                VehicleType = "CAR", TotalCapacity = 1, MaxReservationQuota = 1, UpdatedAt = DateTimeOffset.UtcNow });
+            await work.SaveChangesAsync();
+            await transaction.CommitAsync(CancellationToken.None);
+        }
+        await Assert.ThrowsAsync<OperationDomain.HoldConflictException>(WriteCapacity);
+        await fixture.ReservationService.CompleteAsync(fixture.Owner.TenantId, fixture.SiteId, token, null, CancellationToken.None);
+        await WriteCapacity();
     }
 
     [StructurePostgresFact, Trait("Category", "Postgres")]
@@ -133,18 +135,18 @@ public sealed class PostgresStructureWorkflowTests
         await using var secondContext = fixture.CreateReservationContext();
         await firstContext.Database.OpenConnectionAsync();
         await secondContext.Database.OpenConnectionAsync();
-        var firstStore = new StructureSafetyStore(firstContext);
-        var secondStore = new StructureSafetyStore(secondContext);
+        var firstStore = new OperationStructureTestHarness(firstContext);
+        var secondStore = new OperationStructureTestHarness(secondContext);
 
         using var barrier = new Barrier(2);
-        Task<(Guid Token, bool Won, Exception? Error)> Attempt(Guid token, StructureSafetyStore store) =>
+        Task<(Guid Token, bool Won, Exception? Error)> Attempt(Guid token, OperationStructureTestHarness store) =>
             Task.Run(async () =>
             {
-                // Release both attempts together so they overlap inside serializable transactions.
+                // Release both attempts together so they overlap while acquiring transaction-scoped site guards.
                 barrier.SignalAndWait();
                 try
                 {
-                    await store.AcquireAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
+                    await store.PrepareAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
                     return (token, true, (Exception?)null);
                 }
                 catch (Exception error)
@@ -181,8 +183,8 @@ public sealed class PostgresStructureWorkflowTests
         await using var acquireContext = fixture.CreateReservationContext();
         await releaseContext.Database.OpenConnectionAsync();
         await acquireContext.Database.OpenConnectionAsync();
-        var releaseStore = new StructureSafetyStore(releaseContext);
-        var acquireStore = new StructureSafetyStore(acquireContext);
+        var releaseStore = new OperationStructureTestHarness(releaseContext);
+        var acquireStore = new OperationStructureTestHarness(acquireContext);
 
         using var barrier = new Barrier(2);
         Task<(bool Won, Exception? Error)> Release() => Task.Run(async () =>
@@ -190,7 +192,7 @@ public sealed class PostgresStructureWorkflowTests
             barrier.SignalAndWait();
             try
             {
-                await releaseStore.ReleaseAsync(
+                await releaseStore.CompleteAsync(
                     fixture.Owner.TenantId, fixture.SiteId, releasing, null, CancellationToken.None);
                 return (true, (Exception?)null);
             }
@@ -204,7 +206,7 @@ public sealed class PostgresStructureWorkflowTests
             barrier.SignalAndWait();
             try
             {
-                await acquireStore.AcquireAsync(
+                await acquireStore.PrepareAsync(
                     fixture.Owner.TenantId, fixture.SiteId, claiming, CancellationToken.None);
                 return (true, (Exception?)null);
             }
@@ -345,17 +347,13 @@ public sealed class PostgresStructureWorkflowTests
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
         await fixture.ExecuteAsync(fixture.Reservation, $"""
-            INSERT INTO site_capacity_pools(tenant_id,site_id,vehicle_type,total_capacity,max_reservation_quota)
-            VALUES ('{fixture.Owner.TenantId}','{fixture.SiteId}','CAR',1,1);
-            CREATE FUNCTION reject_test_capacity() RETURNS trigger LANGUAGE plpgsql AS $$
-            BEGIN RAISE EXCEPTION 'Simulated projection failure' USING ERRCODE='23514'; END $$;
-            CREATE TRIGGER reject_test_capacity BEFORE UPDATE ON site_capacity_pools
-            FOR EACH ROW EXECUTE FUNCTION reject_test_capacity();
+            INSERT INTO site_capacity_pools(tenant_id,site_id,vehicle_type,total_capacity,max_reservation_quota,current_reserved_count)
+            VALUES ('{fixture.Owner.TenantId}','{fixture.SiteId}','CAR',1,1,1);
             """);
         var token = Guid.NewGuid();
         var removed = Guid.NewGuid();
         await fixture.ReservationService.PrepareAsync(fixture.Owner.TenantId, fixture.SiteId, token, CancellationToken.None);
-        await Assert.ThrowsAsync<PostgresException>(() => fixture.ReservationService.CompleteAsync(
+        await Assert.ThrowsAsync<OperationDomain.InvalidStructureEditException>(() => fixture.ReservationService.CompleteAsync(
             fixture.Owner.TenantId, fixture.SiteId, token,
             new(false, [removed], [], [new(null, "CAR", 0)]), CancellationToken.None));
 
@@ -363,16 +361,15 @@ public sealed class PostgresStructureWorkflowTests
             "SELECT count(*) FROM structure_edit_holds"));
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation,
             $"SELECT count(*) FROM structure_release_receipts WHERE token='{token}'"));
-        // Rollback is proven by the receipt and pool asserts below; the removed-resource
-        // tombstone table no longer exists, so guard on the function body instead.
+        // The supported path protects commitments without a database guard function.
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation,
-            "SELECT count(*) FROM pg_proc WHERE proname='guard_structure_edit' AND pg_get_functiondef(oid) LIKE '%structure_removed_resources%'"));
+            "SELECT count(*) FROM pg_proc WHERE proname='guard_structure_edit'"));
         Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
             $"SELECT count(*) FROM structure_site_state WHERE site_id='{fixture.SiteId}' AND active"));
         Assert.Equal(1L, await fixture.ScalarAsync(fixture.Reservation,
             "SELECT count(*) FROM site_capacity_pools WHERE total_capacity=1 AND max_reservation_quota=1"));
 
-        await fixture.ExecuteAsync(fixture.Reservation, "DROP TRIGGER reject_test_capacity ON site_capacity_pools");
+        await fixture.ExecuteAsync(fixture.Reservation, "UPDATE site_capacity_pools SET current_reserved_count=0");
         await fixture.ReservationService.CompleteAsync(fixture.Owner.TenantId, fixture.SiteId, token,
             new(false, [removed], [], [new(null, "CAR", 0)]), CancellationToken.None);
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Reservation, "SELECT count(*) FROM structure_edit_holds"));
@@ -1001,7 +998,7 @@ public sealed class PostgresStructureWorkflowTests
         public Guid UnitId { get; private set; }
         public PostgresStructureSynchronizationRepository Store { get; }
         public ParkingGateConnectionPool Gates { get; }
-        public OperationApplication.StructureSafetyService ReservationService { get; }
+        public OperationStructureTestHarness ReservationService { get; }
         public ReservationBridge Transport { get; }
         public IParkingStructureRepository Repository { get; }
         public StructureEditHandlers UnitOfWork { get; }
@@ -1021,11 +1018,12 @@ public sealed class PostgresStructureWorkflowTests
                 .UseNpgsql(Reservation).Options);
             Gates = new(parkingConnection);
             Store = new(Parking, Gates);
-            ReservationService = new(new StructureSafetyStore(ReservationContext));
+            ReservationService = new(ReservationContext);
             Transport = new(ReservationService);
             var synchronization = new StructureSynchronizationHandlers(Store, Transport);
             Repository = new PostgresParkingStructureRepository(Parking);
-            UnitOfWork = new StructureEditHandlers(Repository, this, this, Transport, Store, StructureTestMediator.Create(synchronization), new EmptyReservationDependencies());
+            UnitOfWork = new StructureEditHandlers(Repository, this, this, Transport, Store, StructureTestMediator.Create(synchronization),
+                new ReservationDependencyRepository(new ParkingDbContext(new DbContextOptionsBuilder<ParkingDbContext>().UseNpgsql(Parking).Options)));
             Service = new PostgresStructureTestFacade(Repository, UnitOfWork);
         }
 
@@ -1119,7 +1117,7 @@ public sealed class PostgresStructureWorkflowTests
         }
     }
 
-    private sealed class ReservationBridge(OperationApplication.StructureSafetyService service) : IStructureCommitments
+    private sealed class ReservationBridge(OperationStructureTestHarness service) : IStructureCommitments
     {
         public bool FailAfterRelease { get; set; }
         public async Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenant, Guid site, CancellationToken ct)

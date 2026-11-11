@@ -54,6 +54,13 @@ function isAvailable(slot: ParkingSlot) {
   )
 }
 
+// Owner-created lots can be persisted with `slots: []` while the real bays live
+// in FacilityService, so a populated record always wins over an empty one and a
+// populated incoming lot is never clobbered by an empty store record.
+function preferPopulatedLot(stored: ParkingLot | undefined, fallback: ParkingLot): ParkingLot {
+  return stored && Array.isArray(stored.slots) && stored.slots.length > 0 ? stored : fallback
+}
+
 function formatDuration(hours: number) {
   const totalMinutes = Math.round(hours * 60)
   const wholeHours = Math.floor(totalMinutes / 60)
@@ -82,7 +89,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const [activeFloor3D, setActiveFloor3D] = useState<number | "all">("all")
 
   const [lotSnapshot, setLotSnapshot] = useState(
-    () => store.getLots().find((item) => item.id === lot.id) ?? lot,
+    () => preferPopulatedLot(store.getLots().find((item) => item.id === lot.id), lot),
   )
 
   const [selectedSlot, setSelectedSlot] = useState<ParkingSlot | null>(() =>
@@ -161,7 +168,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
     function refreshLots(event: StorageEvent) {
       if (!event.key || event.key === "sp_lots") {
         setLotSnapshot(
-          store.getLots().find((item) => item.id === lot.id) ?? lot,
+          preferPopulatedLot(store.getLots().find((item) => item.id === lot.id), lot),
         )
       }
     }
@@ -193,8 +200,10 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   )
 
   function chooseSlot(slot: ParkingSlot) {
-    const latest =
-      store.getLots().find((item) => item.id === lot.id) ?? lotSnapshot
+    const latest = preferPopulatedLot(
+      store.getLots().find((item) => item.id === lot.id),
+      lotSnapshot,
+    )
 
     const latestSlot = latest.slots.find((item) => item.id === slot.id)
 
@@ -222,8 +231,10 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   function continueToDetails() {
     if (!selectedSlot) return
 
-    const latest =
-      store.getLots().find((item) => item.id === lot.id) ?? lotSnapshot
+    const latest = preferPopulatedLot(
+      store.getLots().find((item) => item.id === lot.id),
+      lotSnapshot,
+    )
 
     const latestSlot = latest.slots.find((item) => item.id === selectedSlot.id)
 

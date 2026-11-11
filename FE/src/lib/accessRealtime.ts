@@ -10,7 +10,7 @@ export function watchAccessRevocation(onRevoked: (reason: AccessRevokedReason) =
   let retry: ReturnType<typeof setTimeout> | undefined
   let starting: Promise<void> | undefined
   const connection = new HubConnectionBuilder()
-    .withUrl(`${serverUrl}/hubs/access`, { accessTokenFactory: ensureAccessToken, withCredentials: false })
+    .withUrl(`${serverUrl}/hubs/operators`, { accessTokenFactory: ensureAccessToken, withCredentials: false })
     .withAutomaticReconnect()
     .configureLogging(LogLevel.None)
     .build()

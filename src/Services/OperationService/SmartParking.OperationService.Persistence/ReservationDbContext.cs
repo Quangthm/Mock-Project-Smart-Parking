@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using MassTransit;
+using SmartParking.OperationService.Domain.Reservations;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Persistence.Entities;
 
@@ -13,20 +15,40 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<StructureEditHoldRow> StructureEditHolds => Set<StructureEditHoldRow>();
     public DbSet<StructureSiteStateRow> StructureSiteStates => Set<StructureSiteStateRow>();
     public DbSet<StructureReleaseReceiptRow> StructureReleaseReceipts => Set<StructureReleaseReceiptRow>();
+    public DbSet<ReservationRequest> ReservationRequests => Set<ReservationRequest>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
-    public DbSet<AuditLogRow> AuditLogs => Set<AuditLogRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.AddTransactionalOutboxEntities();
+        Map<ReservationRequest>(modelBuilder, "reservation_requests");
+        Map<ReservationTerms>(modelBuilder, "reservation_terms");
+        Map<ReservationFacilityDependency>(modelBuilder, "reservation_facility_dependencies");
+        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.OutcomeJson).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.Version).IsConcurrencyToken();
+        modelBuilder.Entity<ReservationFacilityDependency>().HasIndex(x => new { x.WorkflowId, x.Purpose }).IsUnique();
+        modelBuilder.Entity<ReservationTerms>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedPricingSnapshot).HasColumnType("jsonb");
+        Map<OperationalPolicyRow>(modelBuilder, "operational_policies");
+        Map<OperationalCapacityConfig>(modelBuilder, "operational_capacity_configs");
+        Map<ReservationCancellationEvidence>(modelBuilder, "reservation_cancellation_evidence");
+        modelBuilder.Entity<ReservationCancellationEvidence>().Property(x => x.PolicySnapshot).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationCancellationEvidence>().HasIndex(x => x.ReservationId).IsUnique();
+        modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.OverrideBounds).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedOperationalPolicySnapshot).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationRequest>().Property(x => x.IntentJson).HasColumnType("jsonb");
+        modelBuilder.Entity<ReservationRequest>().HasIndex(x => new { x.AccountId, x.Operation, x.IdempotencyKey }).IsUnique();
         Map<ReservationRow>(modelBuilder, "reservations");
+        modelBuilder.Entity<ReservationRow>().Property(x => x.Version).IsConcurrencyToken();
         Map<ParkingSessionRow>(modelBuilder, "parking_sessions");
+        modelBuilder.Entity<ParkingSessionRow>().Property(x => x.Version).IsConcurrencyToken();
         Map<SlotAllocationRow>(modelBuilder, "slot_allocations");
         Map<SiteCapacityPoolRow>(modelBuilder, "site_capacity_pools");
         Map<StructureEditHoldRow>(modelBuilder, "structure_edit_holds");
         Map<StructureSiteStateRow>(modelBuilder, "structure_site_state");
         Map<StructureReleaseReceiptRow>(modelBuilder, "structure_release_receipts");
         Map<OutboxEventRow>(modelBuilder, "outbox_events");
-        Map<AuditLogRow>(modelBuilder, "audit_logs");
         modelBuilder.Entity<StructureEditHoldRow>().HasKey(x => x.SiteId);
         modelBuilder.Entity<StructureEditHoldRow>().HasIndex(x => x.Token).IsUnique();
         modelBuilder.Entity<StructureSiteStateRow>().HasKey(x => x.SiteId);

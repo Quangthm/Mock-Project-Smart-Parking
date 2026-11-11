@@ -66,7 +66,7 @@ public class InvoicesController : ControllerBase
             {
                 success = false,
                 errorCode = "MISSING_SESSION_ID",
-                message = "Tham số truy vấn sessionId là bắt buộc."
+                message = "The sessionId query parameter is required."
             });
         }
 

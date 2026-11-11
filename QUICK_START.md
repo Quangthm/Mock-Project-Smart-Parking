@@ -18,7 +18,7 @@ git branch --show-current          # xác nhận đang ở branch làm việc
 
 ```powershell
 # Đã có checkout cũ, vừa pull branch mới về:
-.\setup.ps1 -SkipRestore                     # schema/overlay mới vào volume cũ (không mất dữ liệu)
+.\setup.ps1 -SkipRestore                     # kiểm tra schema volume hiện có + đồng bộ user-secrets
 .\scripts\run-app-service.ps1 -Service All   # build lại image từ code vừa pull rồi recreate container
 ```
 
@@ -425,7 +425,7 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 | Branch mới thay đổi | Việc phải làm | Lệnh |
 | --- | --- | --- |
 | Code service BE (`.cs`, `Program.cs`, `docker/Dockerfile.backend`, `compose.app.yml`) | Build lại image + recreate container | `.\scripts\run-app-service.ps1 -Service All` (một service thì `-Service Parking` / `-Service User` / `-Service Operation` / `-Service Payment`) |
-| Schema SQL: `scripts/database/microservices/*.sql`, hoặc danh sách `$scripts` / `$required` trong `scripts/apply-workflow-migrations.ps1` | Áp migration lên volume hiện có; **không** cần build image | `.\setup.ps1 -SkipRestore` (cả 6 DB) hoặc `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .` (một DB) |
+| Schema SQL: `scripts/database/microservices/*.sql` | Clean DB được tạo từ base file; DB đã khởi tạo không bị chạy lại base. Runner chỉ có phần User media upgrade đã giới hạn; các thay đổi schema khác cần migration được review riêng | `.\setup.ps1 -SkipRestore` (kiểm tra cả 6 DB) hoặc `.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot .` (verify một DB) |
 | FE source (`FE/src/**`) | Không cần làm gì — container chạy Vite dev + HMR và bind mount trực tiếp `FE/` | Hard reload trang (`Ctrl+Shift+R`) |
 | FE dependency (`FE/package.json`, `FE/package-lock.json`) | Cài lại package trong container (volume `fe-node-modules` giữ cache cũ) | `docker exec -it smartpark-app-frontend-1 npm install` — chi tiết ở [mục 6.2](#62-lỗi-đã-biết--triệu-chứng--nguyên-nhân--cách-xử-lý) |
 | `.env` / `.env.example` | Xem [mục 7.5](#75-cập-nhật-env--chạy-lại-script-gì) và [mục 7.6](#76-thêm-key-mới-vào-envexample-và-env) | — |
@@ -434,7 +434,7 @@ Thứ tự khuyến nghị khi không chắc branch đổi gì:
 
 ```powershell
 git pull
-.\setup.ps1 -SkipRestore                    # đồng bộ schema/overlay mới vào volume cũ + user-secrets (không xóa dữ liệu)
+.\setup.ps1 -SkipRestore                    # kiểm tra schema volume hiện có + đồng bộ user-secrets (không xóa dữ liệu)
 .\scripts\run-app-service.ps1 -Service All  # build lại image từ code vừa pull rồi recreate container
 ```
 

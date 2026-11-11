@@ -161,6 +161,108 @@ public class PrepareParkingFeeOrderCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ExpiredOrderWithoutUnresolvedTransactions_RetiresAndCreatesFreshOrder()
+    {
+        var handler = CreateHandler();
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var key = $"checkout:session:{sessionId}";
+        var oldOrder = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            ReferenceId = sessionId,
+            OrderCode = "expired-order",
+            IdempotencyKey = key,
+            Status = PaymentOrderStatus.PENDING,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            FinalAmount = 0
+        };
+        _orderRepo.Orders.Add(oldOrder);
+        var oldInvoice = new Invoice { Id = Guid.NewGuid(), PaymentOrderId = oldOrder.Id };
+        _invoiceRepo.Invoices.Add(oldInvoice);
+
+        var now = DateTimeOffset.UtcNow;
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: tenantId,
+            SiteId: siteId,
+            SessionId: sessionId,
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: now.AddMinutes(-30),
+            PricingCutoffAt: now,
+            AccountId: null,
+            PenaltyAmount: null,
+            PenaltyReason: null,
+            IdempotencyKey: key
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.NotEqual(oldOrder.Id, result.OrderId);
+        Assert.Equal(PaymentOrderStatus.CANCELLED, oldOrder.Status);
+        Assert.Null(oldOrder.IdempotencyKey);
+        Assert.Equal(2, _orderRepo.Orders.Count);
+        Assert.Equal(2, _invoiceRepo.Invoices.Count);
+        Assert.Equal(key, _orderRepo.Orders.Single(order => order.Id == result.OrderId).IdempotencyKey);
+        Assert.True(result.FinalAmount > 0);
+        Assert.Equal(2, _uow.SaveCount);
+    }
+
+    [Fact]
+    public async Task Handle_ExpiredOrderWithPendingTransaction_DoesNotCreateReplacement()
+    {
+        var handler = CreateHandler();
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var key = $"checkout:session:{sessionId}";
+        var oldOrder = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            SiteId = siteId,
+            ReferenceId = sessionId,
+            OrderCode = "expired-order",
+            IdempotencyKey = key,
+            Status = PaymentOrderStatus.PENDING,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            Transactions =
+            {
+                new PaymentTransaction { Status = PaymentStatus.PENDING }
+            }
+        };
+        _orderRepo.Orders.Add(oldOrder);
+
+        var now = DateTimeOffset.UtcNow;
+        var command = new PrepareParkingFeeOrderCommand(
+            TenantId: tenantId,
+            SiteId: siteId,
+            SessionId: sessionId,
+            VehicleType: "CAR",
+            PlateNumber: "51A-123.45",
+            EntryTime: now.AddMinutes(-30),
+            PricingCutoffAt: now,
+            AccountId: null,
+            PenaltyAmount: null,
+            PenaltyReason: null,
+            IdempotencyKey: key
+        );
+
+        var exception = await Assert.ThrowsAsync<PaymentDomainException>(
+            () => handler.Handle(command, CancellationToken.None));
+
+        Assert.Equal(PaymentDomainException.OrderExpired, exception.Code);
+        Assert.Single(_orderRepo.Orders);
+        Assert.Empty(_invoiceRepo.Invoices);
+        Assert.Equal(PaymentOrderStatus.PENDING, oldOrder.Status);
+        Assert.Equal(key, oldOrder.IdempotencyKey);
+        Assert.Equal(0, _uow.SaveCount);
+    }
+
+    [Fact]
     public async Task Handle_IdempotencyMismatch_ThrowsPaymentDomainException()
     {
         var handler = CreateHandler();

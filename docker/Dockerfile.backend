@@ -10,9 +10,7 @@ COPY src/Services/${SERVICE}/ ./src/Services/${SERVICE}/
 RUN dotnet restore \
     "src/Services/${SERVICE}/SmartParking.${SERVICE}.API/SmartParking.${SERVICE}.API.csproj"
 
-# Project references live inside each service folder. Copying all source keeps
-# the build context deterministic for the publish stage.
-COPY src/ ./src/
+# All project references and source dependencies are inside the selected service.
 RUN dotnet publish \
     "src/Services/${SERVICE}/SmartParking.${SERVICE}.API/SmartParking.${SERVICE}.API.csproj" \
     -c Release -o /app/publish --no-restore /p:UseAppHost=false

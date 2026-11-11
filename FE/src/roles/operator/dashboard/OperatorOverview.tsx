@@ -94,9 +94,9 @@ export function OperatorOverview({
             <span>Total Capacity</span>
             <UntitledIcon name="building" size={16} />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-semibold tabular-nums text-[var(--fg)]">{totalSlots}</div>
-            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Configured spaces</div>
+          <div className="mt-1">
+            <div className="text-xl leading-tight font-semibold tabular-nums text-[var(--fg)]">{totalSlots}</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">Configured spaces</div>
           </div>
         </button>
 
@@ -110,9 +110,9 @@ export function OperatorOverview({
             <span>Available Vacant</span>
             <UntitledIcon name="check-circle" size={16} />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-semibold tabular-nums">{availableSlots}</div>
-            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Ready for walk-in/booking</div>
+          <div className="mt-1">
+            <div className="text-xl leading-tight font-semibold tabular-nums">{availableSlots}</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">Ready for walk-in/booking</div>
           </div>
         </button>
 
@@ -126,9 +126,9 @@ export function OperatorOverview({
             <span>In Use / Parked</span>
             <UntitledIcon name="car" size={16} />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-semibold tabular-nums">{occupiedSlots}</div>
-            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Vehicles physically in lot</div>
+          <div className="mt-1">
+            <div className="text-xl leading-tight font-semibold tabular-nums">{occupiedSlots}</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">Vehicles physically in lot</div>
           </div>
         </button>
 
@@ -142,15 +142,15 @@ export function OperatorOverview({
             <span>Reserved / Holds</span>
             <UntitledIcon name="clock" size={16} />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-semibold tabular-nums">{reservedSlots}</div>
-            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Incoming & payment holds</div>
+          <div className="mt-1">
+            <div className="text-xl leading-tight font-semibold tabular-nums">{reservedSlots}</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">Incoming & payment holds</div>
           </div>
         </button>
 
         <button
           type="button"
-          onClick={() => onNavigateTab("slots")}
+          onClick={() => onNavigateTab("status", "backup")}
           className="operator-kpi"
           data-status="backup"
         >
@@ -158,9 +158,9 @@ export function OperatorOverview({
             <span>Backup Designated</span>
             <UntitledIcon name="shield" size={16} />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-semibold tabular-nums">{backupSlots}</div>
-            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">Emergency / overflow pool</div>
+          <div className="mt-1">
+            <div className="text-xl leading-tight font-semibold tabular-nums">{backupSlots}</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">Emergency / overflow pool</div>
           </div>
         </button>
 
@@ -174,9 +174,9 @@ export function OperatorOverview({
             <span>Maintenance / Off</span>
             <UntitledIcon name="wrench" size={16} />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-semibold tabular-nums">{maintenanceSlots}</div>
-            <div className="mt-0.5 text-base sm:text-sm text-[var(--muted)]">
+          <div className="mt-1">
+            <div className="text-xl leading-tight font-semibold tabular-nums">{maintenanceSlots}</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">
               Unavailable slots
               {failClosedSlots > 0 ? ` · ${failClosedSlots} bays with no reliable state` : ''}
             </div>
@@ -210,7 +210,7 @@ export function OperatorOverview({
             <button
               type="button"
               className="btn-outline text-xs py-1.5 px-3"
-              onClick={() => onNavigateTab("slots")}
+              onClick={() => onNavigateTab("status", "backup")}
             >
               <UntitledIcon name="shield" size={14} /> Manage Backup Slots
             </button>

@@ -1,10 +1,19 @@
 # Parking Operations Service — Database Documentation
 
+## Reservation first-slice schema status — 9 November 2026
+
+Only the original `scripts/database/microservices/03b-reservation-operations-service-db.sql` is modified. New declarations include durable `reservation_requests`, MassTransit inbox/outbox, versioned platform/site `operational_policies`, and nullable `reservations.accepted_operational_policy_snapshot` / `active_claim_slot_id`. Platform policies contain all required values; nullable site values inherit. Effective-range exclusions and revision uniqueness reject ambiguous active histories. Values and applied revision references must be captured at acceptance; finalization/snapshot writes are gated pending commercial producers and D4c proof.
+
+The separately authorized [reservation default seed](../../../../scripts/database/seeds/03b-reservation-policy-defaults.sql) inserts one fixed platform revision without overwriting existing revisions. It contains approved defaults, no tariffs/quotas/sites, no invented Owner bounds, and no default late-tolerance enablement. Every site must explicitly choose enabled or disabled. Override bounds use minutes except count/limit keys; only the approved 15–30 minute arrival bound is seeded. The full policy-management API/catalogue remains teammate work.
+
+CREATE IF NOT EXISTS is fresh-install/replay only: it cannot upgrade old tables or remove installed triggers. Historical overlay/trigger descriptions below do not authorize new overlays or prove current checkout/deployment state. Existing shared-volume transition needs explicit owner review. No database has been changed by this task. See [implementation gates](../../architecture-decisions/reservation-first-slice-implementation-proposal.md) and [deployment checks](../../../04-testing/reports/SPARK-273-deployment-checklist.md).
+
+
 > **Service**: Parking Operations Service (`OperationsDb` — logical, triển khai trên 2 DB vật lý)  
 > **Database files**: [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) → `smartpark_facility`; [`03b-reservation-operations-service-db.sql`](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) → `smartpark_operations`<br>
 > **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB27–DB30/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
-> **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và audit (`audit_logs`).
+> **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và sự kiện audit qua transactional outbox.
 
 ---
 
@@ -18,9 +27,9 @@ Operations remains authoritative for accepted occupancy, claims, discovery and m
 |---|---|
 | Database vật lý | `smartpark_facility` (03a, port `5442`) + `smartpark_operations` (03b, port `5443`) |
 | Base DDL | `03a-parking-structure-ops-service-db.sql` + `03b-reservation-operations-service-db.sql` |
-| Overlays | Parking: `parking-tenants`, `parking-structure-synchronizations`, `parking-operator-tables`, `parking-slot-constraints`; Reservation: `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` |
-| Deployment status | Tách 03 theo D1; 03a dùng `unit_id`/`count` (D4/P2); 03b khớp arch |
-| Runtime deviation | Tên cột 03a khác arch; `site_capacity_pools` tạo lại bằng overlay (D7); `confirmed_at` do trigger stamp |
+| SQL overlays | Không; clean setup chỉ mount các base file microservice |
+| Deployment status | Tách 03 theo D1; 03a dùng `unit_id`/`count` (D4/P2); runtime schema nằm trong các base file |
+| Runtime deviation | Tên cột 03a khác arch; `site_capacity_pools` nằm trong base (D7); `confirmed_at` do trigger stamp |
 
 ---
 
@@ -44,7 +53,7 @@ smartpark_facility (03a)                              smartpark_operations (03b)
                                                      │ monthly_passes               │
                                                      │ operational_incidents        │
                                                      │ search_facility_projections  │
-                                                     │ audit_logs                   │
+                                                     │ transactional audit outbox   │
                                                      └──────────────────────────────┘
 ```
 
@@ -70,7 +79,7 @@ $$\text{Available}(t) = \text{Total} - |\text{Unavailable}(t)|$$
 | Structure backup + operator incidents | `smartpark_facility` | `structure_backup_policies`, `operator_incident_events` |
 | Reservations, sessions, allocations, access, passes, incidents, search, audit | `smartpark_operations` | 10 bảng còn lại |
 
-Hai DB không có FK vật lý xuyên database; `tenant_id`, `site_id`, `slot_id`, `account_id` là Logical ID. Overlay của mỗi DB được mount riêng bởi `compose.schema-integration.yml`.
+Hai DB không có FK vật lý xuyên database; `tenant_id`, `site_id`, `slot_id`, `account_id` là Logical ID. Các base file tương ứng được mount riêng bởi `compose.schema-integration.yml`.
 
 ---
 
@@ -164,7 +173,7 @@ Quản lý yêu cầu đặt chỗ trước của tài xế. Ngăn đặt trùng
 | `original_plate`, `normalized_plate` | `VARCHAR(50)` | Biển số gốc và đã chuẩn hóa |
 | `vehicle_type` | `VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (CAR/MOTORCYCLE/OVERSIZED)` | Loại xe |
 | `expected_start_time`, `expected_end_time` | `TIMESTAMPTZ NOT NULL` | Khung thời gian đặt chỗ; CHECK end > start |
-| `confirmed_at` | `TIMESTAMPTZ NULL` | Thời điểm xác nhận; được stamp bởi trigger overlay `reservation_confirmation_time` |
+| `confirmed_at` | `TIMESTAMPTZ NULL` | Thời điểm xác nhận; được stamp bởi trigger trong base `03b` |
 | `status` | `VARCHAR(50) NOT NULL` | PENDING_PAYMENT, CONFIRMED, ALLOCATED, PARKING, COMPLETED, EXPIRED, NO_SHOW, CANCELLED, UNFULFILLABLE |
 | `hold_expires_at`, `cancelled_at` | `TIMESTAMPTZ NULL` | Hạn giữ chỗ / thời điểm hủy |
 | `accepted_pricing_snapshot` | `JSONB NULL` | Snapshot giá đã chấp nhận |
@@ -187,7 +196,7 @@ Quản lý yêu cầu đặt chỗ trước của tài xế. Ngăn đặt trùng
 
 ## 6. Bảng `parking_sessions` — Phiên đỗ xe thực tế
 
-Lưu thông tin xe thực tế đỗ tại bãi: `entry_time`, `entry_image_url`, `exit_time`, `exit_image_url`, `access_item_id`, `ticket_reference`, `current_slot_id`, `normalized_plate`, và `session_status` (`ACTIVE`, `PENDING_PAYMENT`, `COMPLETED`, `OVERSTAYED`, `DISPUTED`). Unique index bảo đảm một ticket/access item chỉ gắn với một session `ACTIVE`.
+Lưu thông tin xe thực tế đỗ tại bãi: `entry_time`, `entry_image_url`, `exit_time`, `exit_image_url`, `access_item_id`, `ticket_reference`, `current_slot_id`, `location_scanned_at`, `normalized_plate`, và `session_status` (`ACTIVE`, `PENDING_PAYMENT`, `COMPLETED`, `OVERSTAYED`, `DISPUTED`). `location_scanned_at` ghi nhận lúc operator xác nhận slot thực tế; cột được khai báo trong base `03b-reservation-operations-service-db.sql`. Unique index bảo đảm một ticket/access item chỉ gắn với một session `ACTIVE`.
 
 ---
 
@@ -236,9 +245,11 @@ Bảng chiếu dữ liệu phục vụ tìm kiếm bãi xe theo tọa độ GPS 
 
 ---
 
-## 12. Bảng `audit_logs` — Nhật ký kiểm toán cổng (Zero Cascade)
+## 12. Durable audit events
 
-Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái phiên đỗ của Operator. Append-only, không CASCADE. Index `(site_id, created_at DESC)` và `(actor_id)`.
+Audit history belongs to the separate audit service. Operations captures `OperationsGateAuditV1` in its existing PostgreSQL outbox in the same transaction as Gate state changes. The new audit repository/entity/mapping and fresh-schema `audit_logs` declaration are removed. Existing deployed rows are not dropped or migrated. Consumer implementation and seven-year audit retention from the policy catalogue belong to the audit owner, not an Operations audit table.
+
+Audit-disabled effectful Gate writes return 503. Broker unavailability with configured capture retains outbox work. The audit queue must exist and be bound before delivery starts; durable exchange alone does not retain events without a queue. See the deployment checklist above.
 
 ---
 
@@ -258,23 +269,17 @@ Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái 
 
 ---
 
-## 14. Deployment overlays
+## 14. Consolidated deployment schema
+
+Schema triển khai được dựng từ các file base trong `scripts/database/microservices/`; không có file overlay SQL cần áp dụng riêng.
 
 ### 14.1 `smartpark_facility` (03a)
 
-- `parking-tenants.sql` — `tenants` local copy (D5).
-- `parking-structure-synchronizations.sql` — `structure_synchronizations` (D1/Q2).
-- `parking-operator-tables.sql` — `support_tickets`, `operator_notifications`, `operator_audit_logs` (D3/D6).
-- `parking-slot-constraints.sql` — `ck_deleted_slot_safe`, `uq_site_slot_code_ci` (D4).
-
-`operator_incident_events` nằm trong base 03a, không lặp lại trong overlay.
+Tenants, structure synchronizations, operator tables, slot constraints và `operator_incident_events` đều nằm trong base `02-facility-service-db.sql` / `03a-parking-structure-ops-service-db.sql`.
 
 ### 14.2 `smartpark_operations` (03b)
 
-- `reservation-site-capacity-pools.sql` — tạo `site_capacity_pools` đúng shape BE (D7); phải chạy trước safety overlay.
-- `reservation-structure-safety.sql` — `structure_edit_holds`, `structure_site_state` + guard trigger trên `reservations`, `parking_sessions`, `slot_allocations`, `site_capacity_pools`.
-- `reservation-structure-receipts.sql` — `structure_release_receipts`.
-- `reservation-confirmation-time.sql` — trigger stamp `confirmed_at`; không ADD COLUMN vì cột đã có trong base 03b.
+Capacity pools, structure safety holds and triggers, release receipts, confirmation timestamp trigger, and `parking_sessions.location_scanned_at` đều được khai báo trong `03b-reservation-operations-service-db.sql`.
 
 ---
 
@@ -284,7 +289,7 @@ Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái 
 |---|---|---|
 | D1 | Tách `03` thành 03a (parking) + 03b (reservation) | 6-DB BE-first mapping |
 | D4/P2 | 03a: `spatial_unit_id`→`unit_id`, `backup_count`→`count` | BE đang dùng tên cột này |
-| D7 | `site_capacity_pools` tạo lại bằng overlay | Shape BE bị mất khi split arch |
+| D7 | `site_capacity_pools` được đưa vào base 03b | Shape BE bị mất khi split arch |
 | — | `confirmed_at` do trigger stamp | Base có cột nhưng không có writer |
 
 Chi tiết quyết định: `docs/04-testing/reports/refactor-Docker Setup & Function Test/01-approved-decisions-D1-D7.md` và report 10.
@@ -297,3 +302,9 @@ Chi tiết quyết định: `docs/04-testing/reports/refactor-Docker Setup & Fun
 |---|---|
 | `uuid-ossp` | Hàm `uuid_generate_v4()` sinh khóa chính |
 | `btree_gist` | Hỗ trợ `EXCLUDE USING gist` cho reservations/slot_allocations/monthly_passes |
+
+## Application safeguard replacement
+
+The original Operations declaration script no longer creates `guard_structure_edit` or `record_reservation_confirmation`. Direct handlers take the transaction-scoped site lock before reads. UoW verifies that lock, rejects held/inactive commitments and scope changes, preserves the first confirmation timestamp and accepted policy snapshot, and increments aggregate concurrency versions. No current confirmation workflow is exposed: the timestamp does not prove D4c.
+
+These guards and transactional audit capture apply only to the supported repository/UoW handlers. Direct SQL, bulk writes, direct DbContext saves, cascades and uncoordinated writers bypass them. PostgreSQL concurrency/rollback verification remains pending; the source refactor is not evidence of deployment correctness.

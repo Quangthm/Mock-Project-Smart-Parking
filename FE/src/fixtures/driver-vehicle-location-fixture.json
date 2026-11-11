@@ -1,0 +1,78 @@
+{
+  "slotPrecision": {
+    "success": true,
+    "data": {
+      "sessionId": "9d8c7b6a-5f4e-4d3c-2b1a-0f9e8d7c6b5a",
+      "siteId": "8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70",
+      "siteCode": "LOT-BT-01",
+      "allocationStatus": "OCCUPIED",
+      "recordedLocation": {
+        "precision": "SLOT",
+        "slotId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "slotCode": "B1-A-101",
+        "zoneId": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+        "zoneCode": "Zone_A",
+        "floorCode": "Floor_B1"
+      },
+      "recordedAt": "2026-11-02T09:13:58Z",
+      "freshness": { "generatedAt": "2026-11-02T09:14:03Z", "isStale": false, "stalenessThresholdSeconds": 30, "source": "OPERATIONS" }
+    }
+  },
+  "zonePrecision": {
+    "success": true,
+    "data": {
+      "sessionId": "9d8c7b6a-5f4e-4d3c-2b1a-0f9e8d7c6b5a",
+      "siteId": "8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70",
+      "siteCode": "LOT-BT-01",
+      "allocationStatus": "OCCUPIED",
+      "recordedLocation": {
+        "precision": "ZONE",
+        "slotId": null,
+        "slotCode": null,
+        "zoneId": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+        "zoneCode": "Zone_Moto_01",
+        "floorCode": "Floor_G"
+      },
+      "recordedAt": "2026-11-02T09:13:58Z",
+      "freshness": { "generatedAt": "2026-11-02T09:14:03Z", "isStale": false, "stalenessThresholdSeconds": 30, "source": "OPERATIONS" }
+    }
+  },
+  "unknownPrecision": {
+    "success": true,
+    "data": {
+      "sessionId": "9d8c7b6a-5f4e-4d3c-2b1a-0f9e8d7c6b5a",
+      "siteId": "8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70",
+      "siteCode": "LOT-BT-01",
+      "allocationStatus": null,
+      "recordedLocation": {
+        "precision": "UNKNOWN",
+        "slotId": null,
+        "slotCode": null,
+        "zoneId": null,
+        "zoneCode": null,
+        "floorCode": null
+      },
+      "recordedAt": null,
+      "freshness": { "generatedAt": "2026-11-02T09:14:03Z", "isStale": false, "stalenessThresholdSeconds": 30, "source": "OPERATIONS" }
+    }
+  },
+  "staleVariant": {
+    "success": true,
+    "data": {
+      "sessionId": "9d8c7b6a-5f4e-4d3c-2b1a-0f9e8d7c6b5a",
+      "siteId": "8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70",
+      "siteCode": "LOT-BT-01",
+      "allocationStatus": "OCCUPIED",
+      "recordedLocation": {
+        "precision": "SLOT",
+        "slotId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "slotCode": "B1-A-101",
+        "zoneId": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+        "zoneCode": "Zone_A",
+        "floorCode": "Floor_B1"
+      },
+      "recordedAt": "2026-11-02T09:13:58Z",
+      "freshness": { "generatedAt": "2026-11-02T09:14:03Z", "isStale": true, "stalenessThresholdSeconds": 30, "source": "OPERATIONS" }
+    }
+  }
+}

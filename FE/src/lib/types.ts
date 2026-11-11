@@ -296,6 +296,7 @@ export interface OwnerPolicyConfig {
 
 export interface ParkingPass {
   id: string
+  vehiclePlate?: string
 
   driverId: string
 

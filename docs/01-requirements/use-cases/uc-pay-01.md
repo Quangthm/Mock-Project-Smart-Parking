@@ -23,7 +23,7 @@ Accepted order/charge and current authorized operation.
 
 ## Alternatives and failures
 
-Late ordinary money reacquires capacity or refunds; monthly money commits rights only A<H. No blind provider/cash switch on UNKNOWN. Genuine duplicate collection reconciles separately, never grants a second entitlement.
+Late ordinary money may reacquire compatible capacity only when confirmation commits strictly before reservation start T; at/after T reconcile/refund without entitlement; monthly money commits rights only A<H. No blind provider/cash switch on UNKNOWN. Genuine duplicate collection reconciles separately, never grants a second entitlement.
 
 ## Postconditions
 

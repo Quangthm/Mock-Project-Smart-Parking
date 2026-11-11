@@ -20,6 +20,8 @@ public static class PersistenceDependencyInjection
 
         services.AddScoped<IIdentityWorkflowStore>(sp => sp.GetRequiredService<AppDbContext>());
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<UserService.Application.Authorization.IAccountAuthorityRepository, AccountAuthorityRepository>();
+        services.AddScoped<UserService.Application.Authorization.IAccountAccessDecisionRepository, AccountAccessDecisionRepository>();
         services.AddScoped<ICurrentAccessStore, CurrentAccessStore>();
         services.AddScoped<IAuthorizationScopeStore, AuthorizationScopeStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

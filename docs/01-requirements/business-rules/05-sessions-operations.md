@@ -121,3 +121,7 @@ Durable offline replay/reconciliation is future work and must prevent duplicate 
 A service/hardware outage is not proof of payment or fee waiver. MVP stops claiming successful automatic processing, uses an approved local incident procedure, then records actual events and reconciles when connected.
 
 **Trace:** FR-OPS-06, FR-PAY-05; UC-LOT-02, UC-OPS-01, UC-NOT-01, UC-SIM-01
+
+## Reservation first-slice boundary
+
+See [D1–D4c](../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md) and the [owner interface contract](../../03-design/api/reservation-first-slice-api-design.md#cross-owner-interfaces-to-agree). Reservation payment deadline H is capped by start T; confirmation eligibility must be evaluated strictly before T under the required guards; expose the result only after durable commit (10 November amendment), and later verified collections reconcile/refund without entitlement. Earned facility-failure eligibility survives recovery; payout is separate and limited to eligible collected value. Arrival alone leaves the right exercisable; accepted actual entry ends it. Commercial checkout/payment alone does not release occupancy; verified physical departure does. Preserve unrelated session/payment rules. Producer integration and deployment evidence are pending.

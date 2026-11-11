@@ -17,4 +17,10 @@ public interface IPaymentGatewayPort
         long orderCode, 
         string? gatewayTransactionId, 
         CancellationToken cancellationToken = default);
+
+    Task<PaymentCancellationResult> CancelPaymentAsync(
+        long orderCode,
+        Guid transactionId,
+        string? gatewayTransactionId,
+        CancellationToken cancellationToken = default);
 }

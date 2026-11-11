@@ -1,0 +1,745 @@
+{
+  "results": [
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 320,
+      "scroll": 320,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 375,
+      "scroll": 375,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 390,
+      "scroll": 390,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 430,
+      "scroll": 430,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 768,
+      "scroll": 768,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 820,
+      "scroll": 820,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 1024,
+      "scroll": 1024,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 1280,
+      "scroll": 1280,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 1366,
+      "scroll": 1366,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 1440,
+      "scroll": 1440,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 1920,
+      "scroll": 1920,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "light",
+      "width": 2560,
+      "scroll": 2560,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 320,
+      "scroll": 320,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 375,
+      "scroll": 375,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 390,
+      "scroll": 390,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 430,
+      "scroll": 430,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 768,
+      "scroll": 768,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 820,
+      "scroll": 820,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 1024,
+      "scroll": 1024,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 1280,
+      "scroll": 1280,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 1366,
+      "scroll": 1366,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 1440,
+      "scroll": 1440,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 1920,
+      "scroll": 1920,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Shared/Admin fixture",
+      "theme": "dark",
+      "width": 2560,
+      "scroll": 2560,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "check": "Nested calendar opens",
+      "pass": true
+    },
+    {
+      "check": "Escape closes only top dialog; draft retained",
+      "pass": true
+    },
+    {
+      "check": "Cancel keeps parent and does not confirm",
+      "pass": true
+    },
+    {
+      "check": "Body scroll restored",
+      "pass": true
+    },
+    {
+      "check": "Select Escape closes",
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 320,
+      "scroll": 320,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 375,
+      "scroll": 375,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 390,
+      "scroll": 390,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 430,
+      "scroll": 430,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 768,
+      "scroll": 758,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 820,
+      "scroll": 810,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 1024,
+      "scroll": 1014,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 1280,
+      "scroll": 1270,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 1366,
+      "scroll": 1356,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 1440,
+      "scroll": 1430,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 1920,
+      "scroll": 1910,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Landing",
+      "width": 2560,
+      "scroll": 2550,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 320,
+      "scroll": 320,
+      "inputs": 3,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 375,
+      "scroll": 375,
+      "inputs": 3,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 390,
+      "scroll": 390,
+      "inputs": 3,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 430,
+      "scroll": 430,
+      "inputs": 3,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 768,
+      "scroll": 758,
+      "inputs": 3,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 820,
+      "scroll": 810,
+      "inputs": 3,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 1024,
+      "scroll": 1014,
+      "inputs": 3,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 1280,
+      "scroll": 1270,
+      "inputs": 3,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 1366,
+      "scroll": 1356,
+      "inputs": 3,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 1440,
+      "scroll": 1430,
+      "inputs": 3,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 1920,
+      "scroll": 1910,
+      "inputs": 3,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "light",
+      "width": 2560,
+      "scroll": 2550,
+      "inputs": 3,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 320,
+      "scroll": 320,
+      "inputs": 3,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 375,
+      "scroll": 375,
+      "inputs": 3,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 390,
+      "scroll": 390,
+      "inputs": 3,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 430,
+      "scroll": 430,
+      "inputs": 3,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 768,
+      "scroll": 758,
+      "inputs": 3,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 820,
+      "scroll": 810,
+      "inputs": 3,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 1024,
+      "scroll": 1014,
+      "inputs": 3,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 1280,
+      "scroll": 1270,
+      "inputs": 3,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 1366,
+      "scroll": 1356,
+      "inputs": 3,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 1440,
+      "scroll": 1430,
+      "inputs": 3,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 1920,
+      "scroll": 1910,
+      "inputs": 3,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Sign In",
+      "theme": "dark",
+      "width": 2560,
+      "scroll": 2550,
+      "inputs": 3,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 320,
+      "scroll": 320,
+      "inputs": 6,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 375,
+      "scroll": 375,
+      "inputs": 6,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 390,
+      "scroll": 390,
+      "inputs": 6,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 430,
+      "scroll": 430,
+      "inputs": 6,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 768,
+      "scroll": 758,
+      "inputs": 6,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 820,
+      "scroll": 810,
+      "inputs": 6,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 1024,
+      "scroll": 1014,
+      "inputs": 6,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 1280,
+      "scroll": 1270,
+      "inputs": 6,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 1366,
+      "scroll": 1356,
+      "inputs": 6,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 1440,
+      "scroll": 1430,
+      "inputs": 6,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 1920,
+      "scroll": 1910,
+      "inputs": 6,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "light",
+      "width": 2560,
+      "scroll": 2550,
+      "inputs": 6,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 320,
+      "scroll": 320,
+      "inputs": 6,
+      "height": 568,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 375,
+      "scroll": 375,
+      "inputs": 6,
+      "height": 667,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 390,
+      "scroll": 390,
+      "inputs": 6,
+      "height": 844,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 430,
+      "scroll": 430,
+      "inputs": 6,
+      "height": 932,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 768,
+      "scroll": 758,
+      "inputs": 6,
+      "height": 1024,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 820,
+      "scroll": 810,
+      "inputs": 6,
+      "height": 1180,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 1024,
+      "scroll": 1014,
+      "inputs": 6,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 1280,
+      "scroll": 1270,
+      "inputs": 6,
+      "height": 800,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 1366,
+      "scroll": 1356,
+      "inputs": 6,
+      "height": 768,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 1440,
+      "scroll": 1430,
+      "inputs": 6,
+      "height": 900,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 1920,
+      "scroll": 1910,
+      "inputs": 6,
+      "height": 1080,
+      "pass": true
+    },
+    {
+      "screen": "Sign Up",
+      "theme": "dark",
+      "width": 2560,
+      "scroll": 2550,
+      "inputs": 6,
+      "height": 1440,
+      "pass": true
+    },
+    {
+      "check": "Landscape dialog fits viewport",
+      "pass": true
+    },
+    {
+      "check": "Tab wraps inside dialog",
+      "pass": true
+    },
+    {
+      "check": "Reduced motion dialog remains usable",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

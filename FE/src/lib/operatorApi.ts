@@ -59,6 +59,7 @@ export interface OperatorSlot extends ParkingSlot {
 
 export interface DemoSlotSession {
   id: string
+  reservationId?: string | null
   originalPlate: string
   normalizedPlate: string
   vehicleType: string
@@ -154,6 +155,7 @@ export interface OperatorSite {
   modelUrl?: string
   modelFileName?: string
   lotType?: LotType
+  assignmentPermissions?: string[]
   operationalLayout?: OperationalLayoutProjection | null
   layout?: OperationalLayoutProjection | null
   slots: OperatorSlot[]
@@ -214,6 +216,7 @@ export interface ParkingSessionHistoryEntry {
   status: string
   version: number
   createdAt: string
+  locationScannedAt?: string | null
 }
 
 export interface OperatorIncident {
@@ -458,7 +461,7 @@ async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
       if (projection && projection.siteId === assignment.siteId &&
           typeof projection.siteCode === "string" && typeof projection.siteName === "string" &&
           Array.isArray(projection.floors) && Array.isArray(projection.slots)) {
-        return siteFromOperationalLayout(projection, assignment.tenantId)
+        return { ...siteFromOperationalLayout(projection, assignment.tenantId), assignmentPermissions: assignment.permissions }
       }
 
       // shortcut: older Facility deployments can return an incomplete projection; use their scoped Operator layout until upgraded.
@@ -467,7 +470,7 @@ async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
           !Array.isArray(legacy.units) || !Array.isArray(legacy.slots) || !Array.isArray(legacy.capacityViews)) {
         throw new Error("The parking service returned an incomplete layout for this assigned site.")
       }
-      return siteFromStructure(legacy)
+      return { ...siteFromStructure(legacy), assignmentPermissions: assignment.permissions }
     }),
   )
   const available = projections.flatMap((result) =>
@@ -648,12 +651,13 @@ export const paymentApi = {
     sessionId?: string
     reservationId?: string
     plateNumber?: string
+    developmentTestPayOs?: boolean
   }) => {
     const referenceId = body.reservationId ?? body.sessionId
     if (!referenceId) throw new Error("A reservation or session is required.")
     const path = body.reservationId
       ? `/reservations/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
-      : `/sessions/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
+      : `/sessions/${encodeURIComponent(referenceId)}${body.developmentTestPayOs ? "/prepare-test-payos" : "/prepare"}?siteId=${encodeURIComponent(body.siteId)}`
     return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
       path,
       "POST",
@@ -718,6 +722,14 @@ export const reservationApi = {
   listParkingSessions(siteId: string) {
     return parkingSessionRequest<ParkingSessionHistoryEntry[]>(
       `?siteId=${encodeURIComponent(siteId)}`,
+    )
+  },
+
+  scanParkingSession(siteId: string, referenceId: string, slotId: string) {
+    return parkingSessionRequest<ParkingSessionHistoryEntry>(
+      `/${encodeURIComponent(referenceId)}/scan?siteId=${encodeURIComponent(siteId)}`,
+      "POST",
+      { slotId },
     )
   },
 

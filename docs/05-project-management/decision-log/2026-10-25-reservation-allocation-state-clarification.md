@@ -161,6 +161,8 @@ It must not expose another Driver's identity merely to explain that the current 
 
 ### Amendment 2026-10-27 — protection-first ordering during the allocation window
 
+**Partial supersession, 5 November:** [D1–D4c](2026-11-05-reservation-first-slice.md) replace the fixed T−15→T−5 window, T−5 backup trigger and T−5 cancellation below. Recovery begins in the allocation window; F establishes a persistent refund right and T closes unfulfilled confirmed bookings. Keep protection-first projection and distinct-resource accounting. The trigger/guard implementation note below is historical; the user's 8 November schema convention requires C# replacements in the affected path, not new triggers or overlays.
+
 PM decision recorded 2026-10-27: the projection must **not** flip `PROTECTED` → `RESERVED` at the allocation point while the current occupant is still physically present.
 
 - Stage 2 (allocation window, `T_start − ALLOCATION_LEAD_TIME`): the slot stays `OCCUPIED + PROTECTED` and no `RESERVED` is emitted on it. When a replacement slot is found, it is locked **immediately** by a `slot_allocations` row with `allocation_status = 'RESERVED'` over the beneficiary's time range, and the reservation moves `CONFIRMED → ALLOCATED`.
