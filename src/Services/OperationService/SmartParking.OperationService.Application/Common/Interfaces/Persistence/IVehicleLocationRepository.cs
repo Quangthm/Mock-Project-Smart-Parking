@@ -13,7 +13,7 @@ public sealed record ActiveVehicleLocation(
     string? FloorCode,
     DateTimeOffset? RecordedAt);
 
-public interface IVehicleLocationReadStore
+public interface IVehicleLocationRepository
 {
     Task<ActiveVehicleLocation?> FindActiveForAccountAsync(Guid accountId, CancellationToken ct);
 }

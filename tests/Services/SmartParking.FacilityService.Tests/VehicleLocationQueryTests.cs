@@ -23,7 +23,7 @@ public sealed class VehicleLocationQueryTests
 
     private static async Task<VehicleLocationResponseDto?> HandleAsync(ActiveVehicleLocation? fact)
     {
-        var handler = new GetCurrentVehicleLocationQueryHandler(new FakeVehicleLocationReadStore(fact));
+        var handler = new GetCurrentVehicleLocationQueryHandler(new FakeVehicleLocationRepository(fact));
         return await handler.Handle(new GetCurrentVehicleLocationQuery(Guid.NewGuid()), CancellationToken.None);
     }
 
@@ -105,7 +105,7 @@ public sealed class VehicleLocationQueryTests
         Assert.Null(response.AllocationStatus);
     }
 
-    private sealed class FakeVehicleLocationReadStore(ActiveVehicleLocation? result) : IVehicleLocationReadStore
+    private sealed class FakeVehicleLocationRepository(ActiveVehicleLocation? result) : IVehicleLocationRepository
     {
         public Task<ActiveVehicleLocation?> FindActiveForAccountAsync(Guid accountId, CancellationToken ct) =>
             Task.FromResult(result);

@@ -120,7 +120,11 @@
 - [x] **Test Plan & Verification Artifacts Created:**
   - Test Guide: `docs/04-testing/test-plans/SPARK-246-branch-verification-test-guide.md` (bao gồm ma trận 10 ACs, hướng dẫn kiểm thử tự động và 4 kịch bản thủ công).
   - Postman Suite: `docs/04-testing/postman/SPARK-246-Driver-Maps-Vehicle-Location.postman_collection.json` và `docs/04-testing/postman/SPARK-246.postman_environment.example.json`.
-- [x] **Phase 5 (DoD & PR Packaging):** Move session log to completed, push branch `feat/SPARK-246-driver-maps-vehicle-location` to remote, prepare Pull Request description for `develop`.
+- [x] **Phase 5 (DoD & PR Packaging):** Move session log to completed, push branch `feat/SPARK-246-driver-maps-vehicle-location` to remote, prepare Pull Request description for `develop` (PR #77).
+- [x] **Refactor: Align Persistence & Auth Claims with Coding Skill v1.0:**
+  - Chuẩn hóa Persistence Layer: Đổi tên interface `IVehicleLocationReadStore` thành `IVehicleLocationRepository`, chuyển implementation `VehicleLocationReadStore.cs` thành `Repositories/VehicleLocationRepository.cs`, cập nhật DI và handler injection.
+  - Chuẩn hóa Auth & Actor Claims: Thêm `[Authorize]` lên action `GetCurrentVehicleLocation`, loại bỏ fallback `sub`, áp dụng fail-closed chỉ nhận `account_id` / `NameIdentifier` (Guid hợp lệ != Guid.Empty).
+  - Verification: `dotnet build SmartParking.slnx` 0 warnings / 0 errors; `dotnet test` FacilityService & OperationService 160/160 pass; Frontend find-my-car & discovery tests 13/13 pass.
 
 ---
 

@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 
-namespace SmartParking.OperationService.Persistence;
+namespace SmartParking.OperationService.Persistence.Repositories;
 
-public sealed class VehicleLocationReadStore(ReservationDbContext db) : IVehicleLocationReadStore
+public sealed class VehicleLocationRepository(ReservationDbContext db) : IVehicleLocationRepository
 {
     public async Task<ActiveVehicleLocation?> FindActiveForAccountAsync(Guid accountId, CancellationToken ct)
     {

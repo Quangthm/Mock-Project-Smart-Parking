@@ -3,13 +3,13 @@ using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 
 namespace SmartParking.OperationService.Application.Usecase.ParkingSessions.Queries.GetCurrentVehicleLocation;
 
-public sealed class GetCurrentVehicleLocationQueryHandler(IVehicleLocationReadStore store)
+public sealed class GetCurrentVehicleLocationQueryHandler(IVehicleLocationRepository repository)
     : IRequestHandler<GetCurrentVehicleLocationQuery, VehicleLocationResponseDto?>
 {
     public async Task<VehicleLocationResponseDto?> Handle(
         GetCurrentVehicleLocationQuery request, CancellationToken ct)
     {
-        var fact = await store.FindActiveForAccountAsync(request.AccountId, ct);
+        var fact = await repository.FindActiveForAccountAsync(request.AccountId, ct);
         if (fact is null)
             return null;
 

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
 using SmartParking.OperationService.Application;
@@ -52,14 +53,15 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
         return Ok(new { success = true, data = session });
     }
 
+    [Authorize]
     [HttpGet("current/location")]
     [HttpGet("/api/sessions/current/location")]
     public async Task<IActionResult> GetCurrentVehicleLocation(CancellationToken ct)
     {
         var raw = User.FindFirst("account_id")?.Value
-            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User.FindFirst("sub")?.Value;
-        if (!Guid.TryParse(raw, out var accountId))
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(raw, out var accountId) || accountId == Guid.Empty)
             return Unauthorized(new { success = false, code = "UNAUTHENTICATED", message = "Authentication is required." });
 
         var result = await Mediator.Send(new GetCurrentVehicleLocationQuery(accountId), ct);
