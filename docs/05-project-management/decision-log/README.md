@@ -22,3 +22,5 @@ Approved decisions must be integrated into canonical requirements, rather than l
 Earlier dated decision/review records remain historical sources. v1.0 was an unsigned review candidate. The current package is a **v1.1 documentation review candidate based on approved decisions**; requirements approval does not prove API approval, implementation or product acceptance.
 
 - [10 November confirmation evaluation checkpoint](2026-11-10-reservation-evaluation-checkpoint.md): replaces commit-time cutoff and candidate proof with one guarded database evaluation timestamp; durable commit still required for exposure.
+
+- [**11 November reservation event-driven confirmation architecture**](2026-11-11-reservation-event-driven-confirmation.md): creation ends at committed `PENDING_PAYMENT` hold; separate Payment event consumer; immutable versioned reviewed pricing and combined `EnsureOrder`; live-hold aggregate-only confirmation after proved Facility/writer invariants, otherwise existing confirmation guard; expired-hold reacquisition before T or reconciliation. This does not supersede the approved 10 November timestamp cutoff.

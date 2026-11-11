@@ -1,5 +1,7 @@
 # Reservation first slice — deployment verification
 
+> **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
+
 Status update on 9 November 2026: **First-slice build success reported by the user; test execution explicitly deferred by the user until booking-through-confirmation is ready for frontend/Postman verification.** The observed committed baseline is `0a2383bdfedf34058c4a2bae99c1ae9087162da0`. Build command/output was not supplied; the agent has not independently run it. Earlier agent build attempts and approval-system failures are historical. Database/broker/runtime checks below remain unverified and are instructions for the later deployment acceptance, not tasks to run now. A later source change requires fresh build evidence.
 
 ## Current scope and gates
@@ -165,3 +167,35 @@ Record checkout SHA plus dirty diff, test summaries, deployment versions and sce
 The user removed the shared-project direction. Operations now contains the JWT/JWKS implementation and local message contracts; UserService contains its own compatible Account-current DTOs. The production project references stay inside each service folder. The test harness's cross-service references are not production dependencies.
 
 Restore after this relocation; stale obj/assets files from the removed projects are not build evidence. In deployment CI, publish each API project separately (or use the existing Dockerfile with SERVICE=OperationService / UserService) with only that service's source available. No src/Shared copy or shared assembly should be needed. Run ServiceLocalAccountAccessContractTests and real request/reply replay before release. Preserved wire namespace/type names are intentional; schema/property changes still require consumer compatibility review.
+
+## 11 November architecture acceptance — additional cases (NOT EXECUTED)
+
+**Status:** unverified; this is an updated **test plan**, not a run report. [Architecture decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md), [cross-team handoff](../../05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md). Test the new workflow as designed before declaring SPARK-273 end-to-end ready. Retain and re-run the existing 10 November checkpoint tests.
+
+### Request completion and payment preparation
+
+- [ ] On an authorized reservation with confirmed capacity, record creation request terminal **at durable `PENDING_PAYMENT` hold**, with matching request receipt, exclusive claim, H and hold/outbox fact. Ensure `PENDING_PAYMENT` is not lifecycle `COMPLETED` or `CONFIRMED`. Preserve once-per-workflow Account-current auth and exact same-key replay.
+- [ ] Immediately after hold commit, stop/restart Operations. The request remains terminal, and a stable independent order intent resumes without a multi-minute Saga or lost effect. Payment HTTP call occurs **outside** Operations guarded UoW/plate/site locks. Outage does not silently extend H.
+- [ ] Review a specific versioned tariff/deposit, change active tariff before order preparation, then fail closed/release hold/request fresh review; do not silently charge new tariff. Test genuine configured zero amount, FULL/PERCENTAGE/FIXED with policy-catalogue bounds, changed/expired coverage evidence and missing tariff (not free).
+- [ ] `EnsureOrder` identical concurrent `operationId`+payload returns one order/accepted quote. Same key with amount/account/quote/reservation/H mismatch → conflict. Lost response → `UNKNOWN`/same-ID recovery; at H with no order → durable `CLOSED_NO_ORDER`; already-created order remains replayable after H, with **no new checkout**. Payment order expiry exactly Operations H, never 15 minutes for reservations.
+- [ ] Driver can initiate real payOS checkout only for their own order; wrong Account/role/order ID rejected. Persist attempted provider payment before external effect and replay genuine saved provider QR/URL. UNKNOWN cannot initiate another charge; only definitive retryable FAILED counts toward four total attempts. Check equality `now == H`.
+
+### Event-driven confirmation and money handling
+
+- [ ] Verified provider webhook creates one provider-correlated collection record + outbox event atomically. Duplicate same event/collection has no duplicate entitlement; distinct extra collections after order already PAID, terminal receipt or H expiry are separately recorded and notified; conflicting ID/payload fails closed.
+- [ ] Operations consumer authenticates versioned broker message and checks immutable order/reservation/Account/tenant/site/quote/terms/amount/currency binding before any confirmation; fail closed for forgery/mismatch, out-of-order event and stale/foreign order. Consumer crash/redelivery after commit yields one `CONFIRMED` transition, one confirmation effect/outbox fact; no multiple claims or refund intents.
+- [ ] Confirm no per-second backend polling for normal pending payment. During broker interruption or lost event, targeted collection lookup replays authoritative financial facts. Unverified redirect/QR/frontend event never confirms.
+- [ ] H expires without worker running: `Status=PENDING_PAYMENT` alone does not authorize late unguarded confirmation. Expired-H money at `evaluatedAt < T` attempts fresh Facility+Operations claim; success if compatible, reconciliation if a competitor owns it. At/after T no ordinary new confirmation, even if provider reports earlier payment. Distinguish collection accepted/reconciliation accepted/refund payout.
+- [ ] Zero-price valid owner terms confirm without Payment order or simulated provider collection, under the same 10 November guarded checkpoint and capacity guarantees.
+
+### Live-hold aggregate-only fast-path proof gate (must pass **before** omitting Facility confirmation acquire)
+
+- [ ] Enumerate **every** supported claim-affecting mutation path: Operations claim/plate/site/quota/expiry/cancellation, Facility structural/site/unit/slot activation/closure/deletion, Gate physical entry and releases, maintenance activation, tenant writers, direct SQL and bulk EF calls. Record each writer's guard/coordination and supported deployment write policy.
+- [ ] Under a **live** `PENDING_PAYMENT` hold, race Facility closure/deletion and Gate occupancy against the proposed aggregate-only confirmation. Prove no successful confirmation against silently invalidated eligibility. A delayed `FacilityStructureApplied` event must not make stale aggregate status appear authoritative. Test crash/replay, two-way network isolation, opposite-direction synchronization and token abort fencing.
+- [ ] If and only if all supported writer tests/coverage succeed, validate locked aggregate-only confirmation with persisted claim/invariants, one DB evaluation timestamp and atomic outbox. Until then, leave current confirmation Facility dependency and full capacity/plate checks enabled. Record a signed-off gate result; documents alone are not evidence.
+- [ ] Test expiry/reacquisition separately: expired hold cannot inherit prior slot exclusivity; a competing claim wins by existing guards. Before T a newly compatible claim may confirm with correct Facility dependency; after T must reconcile, not confirm.
+
+### Cutoff, rollback and deploy proof
+
+- [ ] At T=11:00, guarded DB `evaluatedAt=10:59:59`, durable commit=11:00:02 qualifies but only exposes committed state afterward. Lock wait reaching T before evaluation, equality at T, rollback then retry after T all fail. Lost commit acknowledgment uses the same effect/receipt identity, not a second collection/confirmation.
+- [ ] Obtain actual build, focused integration tests, schema inventory and live payOS fixture evidence. Required Payment routes/event schema and separate machine trust must be deployed; configured environment alone does not prove it. Do not modify production/shared data or reset existing volumes as a shortcut.

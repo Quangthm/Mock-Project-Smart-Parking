@@ -1,5 +1,7 @@
 # Reservation Facility dependency — API design
 
+> **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
+
 | Metadata | Value |
 | --- | --- |
 | Status | Approved direction; implemented draft, build/runtime UNVERIFIED |
@@ -117,3 +119,11 @@ A timeout is an unknown result. Operations owns durable retries and sends exact 
 - [ ] SignalR relay and post-confirmation allocation/refund/maintenance enforcement remain teammate/next-phase work.
 
 See [the deployment cases and durable event handoff](../../05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
+
+## 11 November 2026 — conditional confirmation dependency retirement (design note)
+
+[Architecture decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) approves a **target** aggregate-only fast path for an unexpired held claim. This **does not change or remove** the current `/internal/reservation-dependencies/v1` `CONFIRMATION` acquire/complete/abort contract today. In the current flow, `ADMISSION` dependency finishes when Operations commits `PENDING_PAYMENT`, and the Facility lock is released during Driver payment. Existing Facility changes may be coordinated with Operations without immediately mutating reservation status; therefore `PENDING_PAYMENT` alone is not evidence that all external facts remain valid.
+
+For a future `CONFIRMATION`-free fast path, Facility and Operations must demonstrate that **every supported Facility structure/site/slot/unit mutation and physical Gate claim** either serializes against the live Operations claim or causes a durable, timely invalidation visible under the guarded Operations aggregate transition. Prove delayed/out-of-order Facility synchronization, callback loss/replay, crash/restart, same-slot concurrent edit/entry, maintenance and future writer behavior; document excluded direct-write bypasses. Only after the gate passes may Operations skip the redundant confirmation dependency for a **still-valid protected hold**. `CONFIRMATION` acquire and fresh capacity checks continue for expired/invalidated-hold reacquisition strictly before reservation start T.
+
+The 10 November single guarded database evaluation timestamp and no-entitlement-after-T rule remain unchanged. This note authorizes no new Facility endpoint, key reuse, schema reset or production behavior claim.

@@ -12,3 +12,6 @@ Handoffs identify baseline, current evidence, known gaps and owning next actions
 
 - [Reservation completion checklist — 10 November](2026-11-10-reservation-completion-checklist.md): current confirmation blockers, owning teams and full lifecycle follow-up.
 - [Availability, Facility integration and event/SignalR handoff](2026-11-10-reservation-events-and-facility-integration.md): first-write rules, dedicated service JWT, durable events, client behavior and post-confirmation backlog.
+
+- [**11 November SPARK-273 cross-team implementation alignment**](2026-11-11-SPARK-273-implementation-alignment.md): **current** workflow boundary, Payment quote/order integration, independent payment-event confirmation, conditional Facility fast path and targeted recovery. Supersedes conflicting earlier handoff flow guidance; does not claim code/test readiness.
+- [**11 November SPARK-273 approved architectural decision**](../decision-log/2026-11-11-reservation-event-driven-confirmation.md): normative implementation direction and explicit owner-contract/verification gates; the 10 November evaluation-time cutoff remains authoritative.

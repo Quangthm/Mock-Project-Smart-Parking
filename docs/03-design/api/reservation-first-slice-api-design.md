@@ -1,5 +1,7 @@
 # Reservation first slice — API and owner contracts
 
+> **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
+
 ## Overview
 
 | Metadata | Value |
@@ -154,3 +156,27 @@ Gate entry/departure emits `OperationsGateAuditV1` through the same scoped Postg
 ## Service-local contract packaging
 
 Operations owns its authentication implementation and local Account-current/audit wire DTOs. UserService has independently compiled compatible Account-current DTOs. No src/Shared project or cross-service assembly reference is required. Existing message namespace/type identity is retained for transport compatibility; the wire contract, not a shared source file, is the service boundary.
+
+## 11 November 2026 addendum — short creation receipt and event-driven confirmation
+
+**Source and precedence:** [approved architectural decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md), [team integration contract](../../05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md). This addendum changes **target behavior**; the current route/state implementation is not yet changed, built or verified. Existing November 10 single guarded `evaluatedAt < T` confirmation cutoff stays in force.
+
+### Revised request and reservation state meanings (target)
+
+`POST /api/reservation-requests` continues to accept the reviewed exact selection (`termsId`, `termsVersion`, chosen payment method and stable `Idempotency-Key`), returning `202` with a durable request receipt. `202` and `PENDING_AUTHORIZATION` do not create a hold. After authorized guarded admission, the creation workflow becomes terminal **at durable `PENDING_PAYMENT` hold commit**; propose an explicit receipt terminal `HOLD_CREATED` to distinguish it from historic `COMPLETED`, which currently means confirmed booking in the original API. Existing consumers must not be broken silently: finalize the response token, version strategy and client migration together before code. The persistent reservation remains `PENDING_PAYMENT` until a separately triggered, guarded confirmation UoW commits. Booking lifecycle `COMPLETED` remains post-parking.
+
+`GET /api/reservation-requests/{requestId}` remains account-scoped receipt/replay; `GET /api/me/reservations/{reservationId}` remains the booking entitlement authority. Its nullable `orderId` becomes available **after** a separate durable order-provisioning worker resolves the Payment order; that worker does not extend H or keep the creation receipt open. The frontend may poll own reads for UI progress, but that is not backend per-second Payment polling. Show `CONFIRMED` only from the committed booking state; Payment success, return URL and broker push are not confirmation.
+
+### Cross-owner financial contracts (proposed wire signatures)
+
+- **Preview/review:** retain server-calculated amount and a versioned immutable reviewed commercial snapshot, bound to Account/vehicle/site/slot/start/end/method, total/deposit/currency, tariff version, prepayment mode, accepted coverage/version and quote/review expiry. Payment owns tariff/prepayment policies and rounding. `FULL` is documented default; no invented percent/fixed rates. Missing/invalid pricing/coverage fails closed, not zero. A distinct Payment quote entity is optional but accepted-version semantics are required.
+- **Order preparation/combined acceptance:** `PUT /internal/reservation-deposit-orders/{operationId}` is a *proposed* protected S2S endpoint after hold commit. It must atomically validate/accept reviewed price/coverage and create or return exactly one `RESERVATION_FEE` order; no separate `AcceptQuote` HTTP endpoint. Request binds actor/scope IDs, reservation/workflow/order operation, accepted terms identity/version and immutable amounts, payment method and **exact `H` as `expiresAt`**. Same key/payload → same `CREATED(orderId)`; mismatch → `409`; unknown network result → `UNKNOWN` and same-ID recovery; definitive absence after H → durably fenced `CLOSED_NO_ORDER`. No new order or checkout at/after H.
+- **Checkout:** authenticated Driver uses the existing Payment `POST /api/v1/payments/orders/{orderId}/checkout`. Verify order Account ownership and real provider-backed QR/URL; a booking ID is never an order ID. A wrong-order/foreign-account request must fail without leaking existence or charging.
+- **Verified collection message:** prefer dedicated proposed `ReservationDepositCollectedV1`, or a compatible enriched generic type, with stable `eventId`, `collectionId`, `paymentOrderId`, `paymentTransactionId`, `operationId`, `reservationId`, `accountId`, `tenantId`, `siteId`, accepted `quoteId`/terms version, amount/currency, verified provider identity/time, schema version. Producer validates provider and stages collection/outbox atomically. Operations has a separate authenticated consumer with inbox deduplication, exact persisted binding checks and a guarded MediatR confirmation command. Both services must agree independently versioned message identity/exchange/binding/permissions; do not treat current `PaymentSucceededV1` as accepted reservation wire contract as-is.
+- **Targeted recovery:** restricted `GET` lookup for all distinct collections and a keyed reconciliation/refund-acceptance operation for `UNKNOWN`, missed events, late/additional money and terminal receipts; no default per-second Payment collection sweep. An accepted refund request is not payout.
+
+### Confirmation execution contract
+
+The still-live hold may **eventually** use only a locked Operations aggregate/domain transition and persisted claim evidence, **after** a verified Facility+Operations+Gate writer-serialization/invalidation gate. Until proof, retain current confirmation Facility acquire/complete dependency and fresh capacity/plate/site evaluation. Never use `PENDING_PAYMENT` status alone as evidence of a valid hold: evaluate authoritative H and T. After expiry/invalidation, acquire and revalidate compatible claim before T, or reconcile. One Operations DB `evaluatedAt` strictly before T determines eligibility; a pre-T evaluation may commit after T, but cannot be exposed before commit. Rollback re-evaluates with a new timestamp. Zero price requires genuine owner-issued free terms without synthetic collection.
+
+**Implementation status:** API shapes and event names above are proposed owner contracts, not implemented route declarations. Confirm exact endpoint DTOs, authorization issuer/audience/permission and response-state migration before code. Preserve existing owner port isolation, MediatR, Domain aggregate, repository/UoW and outbox conventions.
