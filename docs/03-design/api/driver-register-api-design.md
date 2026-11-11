@@ -9,6 +9,7 @@ Canonical behavior: [FR-AUTH-01/02/06 and FR-BAS-08](../../01-requirements/srs/m
 | Operation | Existing method/path | Request and result |
 |---|---|---|
 | Register | `POST /api/auth/register/driver` | `fullName`, at least one of `email`/`phone`, optional `password`, and `turnstileToken` when bot verification is enabled; persist pending identity and Driver account, require consented mandatory VNeID simulation. Return scoped registration/challenge metadata; no session. |
+| Simulate VNeID | `POST /api/auth/register/driver/simulate-vneid` | `registrationId`, `consentConfirmed: true`, optional `consentVersion`. Fake API returns a GUID substitute tied to the user and persists it in `UserDb`. |
 | Verify | `POST /api/auth/register/driver/verify` | `registrationId`, six-digit `code`, authorized verification context; valid contact proof plus completed simulation permits activation. Return verification result only, **no automatic login** (D06). |
 | Resend | `POST /api/auth/register/driver/resend` | Existing `registrationId`, authorized scoped context; replace OTP while preserving attempts/lock and cooldown. |
 | Recover | `POST /api/auth/register/driver/recover` | Existing `contact`; safe recovery only, no secret/session issued solely from contact or ID. Final recovery authorization/envelope pending V11-DES-03. |

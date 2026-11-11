@@ -100,4 +100,7 @@ public sealed class IdentityAccessRepository(AppDbContext database) : IIdentityA
         database.AuthChallenges.Add(challenge);
         database.WorkflowDeliveries.Add(delivery);
     }
+
+    public Task<UserSimulatedIdentity?> FindSimulatedIdentityAsync(Guid userId, CancellationToken cancellationToken) =>
+        database.UserSimulatedIdentities.SingleOrDefaultAsync(i => i.UserId == userId, cancellationToken);
 }
