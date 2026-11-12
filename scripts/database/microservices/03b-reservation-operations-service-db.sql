@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS parking_sessions (
     access_item_id UUID,
     account_id UUID,
     current_slot_id UUID,
+    current_spatial_unit_id UUID,
     
     original_plate VARCHAR(50),
     normalized_plate VARCHAR(50),

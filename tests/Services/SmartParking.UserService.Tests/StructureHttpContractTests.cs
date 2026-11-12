@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -47,6 +47,7 @@ public sealed class StructureHttpContractTests
             builder.Services.AddSingleton<IStructureRepository>(store);
             builder.Services.AddSingleton<IOperationsConcurrency>(store);
             builder.Services.AddSingleton<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>(store);
+            builder.Services.AddSingleton<SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher>(new NoopReservationFacts());
         });
         await host.StartAsync();
         using var client = host.GetTestClient();
@@ -165,6 +166,7 @@ public sealed class StructureHttpContractTests
             builder.Services.AddSingleton<IStructureRepository>(store);
             builder.Services.AddSingleton<IOperationsConcurrency>(store);
             builder.Services.AddSingleton<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>(store);
+            builder.Services.AddSingleton<SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher>(new NoopReservationFacts());
         });
     }
 
@@ -210,5 +212,13 @@ public sealed class StructureHttpContractTests
         public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(1);
         public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class NoopReservationFacts : SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher
+    {
+        public Task AvailabilityChangedAsync(SmartParking.OperationService.Application.Reservations.ReservationAvailabilityChangedV1 fact, CancellationToken ct) => Task.CompletedTask;
+        public Task FacilityAppliedAsync(SmartParking.OperationService.Application.Reservations.FacilityStructureAppliedV1 fact, CancellationToken ct) => Task.CompletedTask;
+        public Task HoldChangedAsync(SmartParking.OperationService.Application.Reservations.ReservationHoldChangedV1 fact, CancellationToken ct) => Task.CompletedTask;
+        public Task ConfirmedAsync(SmartParking.OperationService.Application.Reservations.ReservationConfirmedV1 fact, CancellationToken ct) => Task.CompletedTask;
     }
 }

@@ -190,9 +190,16 @@ export function mapModelSlots(
   // with no prefix stripping, normalisation, spatial index fallback or invented slots.
 
   const slotByCode = new Map<string, ParkingSlot>()
+  const slotByUpper = new Map<string, ParkingSlot>()
+  const slotByNormalized = new Map<string, ParkingSlot>()
 
   for (const slot of slots) {
-    if (slot.number) slotByCode.set(slot.number, slot)
+    if (slot.number) {
+      slotByCode.set(slot.number, slot)
+      slotByUpper.set(slot.number.toUpperCase(), slot)
+      const norm = normalizeSlotIdentifier(slot.number)
+      if (norm) slotByNormalized.set(norm, slot)
+    }
   }
 
   const meshNames = candidateList.map((item) => item.mesh.name)
@@ -208,7 +215,10 @@ export function mapModelSlots(
 
     mesh.userData.isSlot = true
 
-    const targetSlot = slotByCode.get(mesh.name)
+    const targetSlot =
+      slotByCode.get(mesh.name) ??
+      slotByUpper.get(mesh.name.toUpperCase()) ??
+      slotByNormalized.get(normalizeSlotIdentifier(mesh.name))
 
     if (!targetSlot) continue
 

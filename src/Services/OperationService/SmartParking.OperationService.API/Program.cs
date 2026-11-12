@@ -1,6 +1,10 @@
+using Microsoft.AspNetCore.SignalR;
 using SmartParking.OperationService.Application;
 using SmartParking.OperationService.API.Controllers;
+using SmartParking.OperationService.API.Hubs;
 using SmartParking.OperationService.API.Middleware;
+using SmartParking.OperationService.API.Realtime;
+using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Infrastructure;
 using SmartParking.OperationService.Infrastructure.Authentication;
 using SmartParking.OperationService.Application.Reservations;
@@ -49,8 +53,27 @@ public static class OperationHost
         builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
         ApiErrors.Configure(builder.Services);
         builder.Services.AddControllers().AddApplicationPart(typeof(ReservationsController).Assembly);
-        var origins = builder.Configuration["Cors:AllowedOrigins"]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            ?? builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        // SPARK-244 P2: realtime operator monitoring hub. Redis backplane is
+        // enabled only when a connection string is configured (multi-instance).
+        var signalR = builder.Services.AddSignalR();
+        var redis = builder.Configuration["Redis:ConnectionString"]
+            ?? builder.Configuration.GetConnectionString("Redis");
+        if (!string.IsNullOrWhiteSpace(redis))
+        {
+            var normalizedRedis = redis.StartsWith("redis://", StringComparison.OrdinalIgnoreCase)
+                ? redis["redis://".Length..]
+                : redis;
+            signalR.AddStackExchangeRedis(normalizedRedis, options =>
+            {
+                options.Configuration.AbortOnConnectFail = false;
+            });
+        }
+        builder.Services.AddSingleton<IRealtimeLayoutBroadcaster, SignalRLayoutRealtimeBroadcaster>();
+
+        var rawOrigins = builder.Configuration["Cors:AllowedOrigins"];
+        var origins = !string.IsNullOrWhiteSpace(rawOrigins)
+            ? rawOrigins.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443"];
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
         {
             if (origins.Length > 0) policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
@@ -77,6 +100,7 @@ public static class OperationHost
         if (admissionEnabled) app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout");
         return app;
     }
 }
