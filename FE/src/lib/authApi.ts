@@ -210,6 +210,12 @@ type AuthRequestOptions = {
   credentials?: RequestCredentials
 }
 
+export class ApiConnectionError extends Error {
+  constructor() {
+    super("Cannot reach the authentication server. Please try again.")
+  }
+}
+
 export async function request<T>(
   path: string,
   method = "GET",
@@ -254,7 +260,7 @@ export async function request<T>(
     })
   } catch {
     if (options.signal?.aborted) throw new DOMException("Request cancelled.", "AbortError")
-    throw new Error("Cannot reach the authentication server. Please try again.")
+    throw new ApiConnectionError()
   }
 
   const payload =

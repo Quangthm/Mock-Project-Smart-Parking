@@ -4,6 +4,7 @@ import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 import { useApp } from "../../../context/AppContext"
 import { classifyPaymentStatus, isPaymentOrderId, paymentApi, type PaymentStatusResponse } from "../../../lib/paymentApi"
 import { formatStatus } from "../../../lib/formatStatus"
+import { driverReservationApi } from "../../../lib/driverReservationApi"
 import "./payment-checkout.css"
 
 type ResultState = "checking" | "success" | "failed" | "pending" | "unavailable"
@@ -17,6 +18,23 @@ export function PaymentResultPage() {
   const [detail, setDetail] = useState<PaymentStatusResponse | null>(null)
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
+  const [reservationStatus, setReservationStatus] = useState("")
+
+  useEffect(() => {
+    setReservationStatus("")
+    if (user?.role !== "driver" || !isPaymentOrderId(orderId)) return
+    let reservationId: string | null
+    try { reservationId = sessionStorage.getItem(`sp_reservation_order:${orderId}`) }
+    catch { return }
+    if (!reservationId) return
+    let active = true
+    driverReservationApi.read(reservationId).then(reservation => {
+      if (active && reservation.orderId?.toLowerCase() === orderId.toLowerCase()) setReservationStatus(reservation.state)
+    }).catch(() => {
+      if (active) setReservationStatus("Unavailable")
+    })
+    return () => { active = false }
+  }, [user?.id, user?.role, orderId, refresh, result])
 
   useEffect(() => {
     let active = true
@@ -62,6 +80,7 @@ export function PaymentResultPage() {
     <span className={`payment-result-icon is-${result}`} aria-hidden="true">{result === "success" ? "✓" : result === "failed" ? "×" : "·"}</span>
     <h1>{title}</h1><p>{description}</p>
     {detail && <dl className="payment-result-facts"><div><dt>Order code</dt><dd>{detail.orderCode}</dd></div><div><dt>Amount</dt><dd>{detail.amount.toLocaleString("vi-VN")} VND</dd></div><div><dt>Status</dt><dd>{formatStatus(detail.status)}</dd></div></dl>}
+    {reservationStatus && <p>Reservation status: {formatStatus(reservationStatus)}. See Current Bookings for the latest update.</p>}
     {(orderId || transactionId) && <p className="payment-result-reference">Payment reference: {orderId || transactionId}</p>}
     <div className="payment-result-actions">
       {(result === "pending" || (result === "unavailable" && (!!paymentApi.rememberedCheckout(orderId) || isPaymentOrderId(transactionId)))) && <button type="button" className="btn-primary" onClick={() => setRefresh(value => value + 1)}>Check status again</button>}
