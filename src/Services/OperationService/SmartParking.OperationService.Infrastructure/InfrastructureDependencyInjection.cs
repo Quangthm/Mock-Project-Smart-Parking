@@ -30,6 +30,14 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<IOperatorIdentityClient>(provider =>
             provider.GetRequiredService<OperatorIdentityClient>());
 
+        services.AddHttpClient<OwnerIdentityClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddScoped<IOwnerIdentityClient>(provider =>
+            provider.GetRequiredService<OwnerIdentityClient>());
+
         var serviceKey = configuration["Services:Key"]
             ?? throw new InvalidOperationException("Configure Services:Key.");
         services.AddHttpClient<IReservationVehicleOwner, ReservationVehicleClient>(client =>
@@ -64,6 +72,8 @@ public static class InfrastructureDependencyInjection
         });
         services.AddScoped<ICheckoutPaymentClient>(provider =>
             provider.GetRequiredService<CheckoutPaymentClient>());
+
+        services.AddScoped<Application.Policies.Ports.ISiteOwnershipValidator, Policies.SiteOwnershipValidator>();
 
         AddOutboxPublisher(services, configuration);
 
