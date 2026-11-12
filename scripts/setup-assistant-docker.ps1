@@ -177,6 +177,34 @@ if ($composeEnv['Assistant__Reads__Search__Enabled'] -eq 'true' -and
 }
 $composeEnv[$ageName] = [string]$age
 $composeEnv[$skewName] = [string]$skew
+$userCaPath = $null
+$userReadEnabled = $composeEnv['Assistant__Reads__User__Enabled'] -ceq 'true'
+if ($settings['SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH']) {
+    $userCaPath = Get-RequiredPath 'SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH' 'Leaf'
+    $userCaPem = [IO.File]::ReadAllText($userCaPath)
+    if ($userCaPem -notmatch '(?s)\A\s*-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\s*\z') {
+        throw 'Assistant User TLS trust requires one public PEM certificate.'
+    }
+    $userCaCertificate = $null
+    try {
+        $userCaCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new($userCaPath)
+        if ($userCaCertificate.NotBefore -gt (Get-Date) -or $userCaCertificate.NotAfter -le (Get-Date)) {
+            throw 'Expired User TLS trust certificate.'
+        }
+    } catch {
+        throw 'Assistant User TLS trust requires a valid, unexpired public certificate.'
+    } finally {
+        if ($userCaCertificate) { $userCaCertificate.Dispose() }
+    }
+    $composeEnv['SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH'] = $userCaPath
+}
+if ($userReadEnabled -and !$userCaPath) {
+    throw 'Assistant User read is enabled but SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH is missing. Provide the public CA that signed UserService TLS or disable Assistant__Reads__User__Enabled.'
+}
+if ($userReadEnabled -and [string]$settings['Assistant__Reads__User__Origin'] -ceq 'https://user-service:8443' -and
+    [string]$settings['SMARTPARK_USER_DOCKER_TLS_ENABLED'] -cne 'true') {
+    throw 'Assistant User origin is https://user-service:8443 but SMARTPARK_USER_DOCKER_TLS_ENABLED is not true. Start User with the TLS overlay before enabling this read.'
+}
 if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not found. Start Docker Desktop and retry.' }
 $endpoint = $env:DOCKER_HOST
 if ($env:DOCKER_CONTEXT -or !$endpoint) {
@@ -203,6 +231,7 @@ $composeEnv['PGPASSWORD'] = $connection['Password']
 $schemaCompose = @('compose','--project-name',$SchemaProject,'--env-file',$EnvPath,'-f',(Join-Path $root 'compose.schema-integration.yml'))
 $assistantProject = if ($SchemaProject -eq 'smartpark-schema') { 'smartpark-app' } else { "$SchemaProject-assistant" }
 $assistantCompose = @('compose','--project-name',$assistantProject,'--env-file',$EnvPath,'-f',(Join-Path $root 'compose.assistant.yml'))
+if ($userCaPath) { $assistantCompose += @('-f', (Join-Path $root 'compose.assistant-trust.yml')) }
 
 # New IoT volumes initialize Assistant through Compose. Keep this fallback for
 # existing IoT volumes with an untouched Assistant base, in one transaction.

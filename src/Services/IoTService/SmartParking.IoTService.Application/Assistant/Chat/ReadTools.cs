@@ -48,7 +48,10 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
             {
                 await dispatch(ct); Require(account); ct.ThrowIfCancellationRequested();
                 var items = await owner.Vehicles(ct); Require(account);
-                return Reply(items.Length == 0 ? "empty" : "answered", en ? "Vehicles authorized by your account service." : "Danh sách xe do dịch vụ tài khoản cho phép xem.",
+                var vehicleContent = items.Length == 0
+                    ? (en ? "No vehicles are available to view for this account." : "Không tìm thấy xe được phép xem cho tài khoản hiện tại.")
+                    : (en ? "Vehicles authorized by your account service." : "Danh sách xe do dịch vụ tài khoản cho phép xem.");
+                return Reply(items.Length == 0 ? "empty" : "answered", vehicleContent,
                     [new VehicleCard("vehicles", items.Take(20).ToArray(), clock.GetUtcNow(), items.Length > 20)]);
             }
             if (detail.Success)

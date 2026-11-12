@@ -16,6 +16,7 @@ if (!(Test-Path -LiteralPath $envFile -PathType Leaf)) {
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
 $ownerEmail = [string]$settings['SMARTPARK_OWNER_EMAIL']
 $operatorEmail = [string]$settings['SMARTPARK_OPERATOR_EMAIL']
+$driverEmail = 'driver@gmail.com'
 if ([string]::IsNullOrWhiteSpace($ownerEmail)) { $ownerEmail = 'owner@smartpark.local' }
 if ([string]::IsNullOrWhiteSpace($operatorEmail)) { $operatorEmail = 'operator@smartpark.local' }
 if ($ownerEmail -cnotmatch '^[^@\s]+@[^@\s]+$') { throw "Invalid SMARTPARK_OWNER_EMAIL: $ownerEmail" }
@@ -37,6 +38,8 @@ $ids = @{
     slot8     = 'd0000000-0000-4000-8000-000000000008'
     owner_email = $ownerEmail
     operator_email = $operatorEmail
+    driver_email = $driverEmail
+    driver_vehicle_id = 'e0000000-0000-4000-8000-000000000001'
 }
 
 $composeArgs = @(
@@ -60,7 +63,7 @@ foreach ($service in @('user-db','facility-db','operations-db')) {
 Write-Host '      OK (user-db, facility-db, operations-db)' -ForegroundColor DarkGray
 
 Write-Host '[2/6] Resolving demo accounts...' -ForegroundColor Cyan
-Write-Host "      owner=$ownerEmail operator=$operatorEmail" -ForegroundColor DarkGray
+Write-Host "      owner=$ownerEmail operator=$operatorEmail driver=$driverEmail" -ForegroundColor DarkGray
 $accountCheckSql = @'
 SELECT
   (SELECT count(DISTINCT a.id)
@@ -77,13 +80,22 @@ SELECT
     WHERE lower(u.email) = lower(:'operator_email')
       AND u.deleted_at IS NULL
       AND a.deleted_at IS NULL
-      AND a.role_code = 'SITE_OPERATOR')::text;
+      AND a.role_code = 'SITE_OPERATOR')::text
+  || '|' ||
+  (SELECT count(DISTINCT a.id)
+     FROM users u
+     JOIN accounts a ON a.user_id = u.id
+    WHERE lower(u.email) = lower(:'driver_email')
+      AND u.deleted_at IS NULL
+      AND a.deleted_at IS NULL
+      AND a.role_code = 'DRIVER')::text;
 '@
 $checkArgs = $composeArgs + @(
     'exec', '-T', 'user-db', 'psql', '-U', 'smartpark_user', '-d', 'smartpark_user',
     '-v', 'ON_ERROR_STOP=1',
     '-v', "owner_email=$ownerEmail",
     '-v', "operator_email=$operatorEmail",
+    '-v', "driver_email=$driverEmail",
     '-tA'
 )
 $accountCheck = $accountCheckSql | & docker @checkArgs
@@ -92,14 +104,14 @@ if ($LASTEXITCODE -ne 0) {
 }
 $accountText = (($accountCheck | Out-String).Trim())
 $accountParts = @($accountText -split '\|')
-if ($accountParts.Count -ne 2 -or $accountParts[0].Trim() -ne '1' -or $accountParts[1].Trim() -ne '1') {
-    Write-Host '      Owner/operator demo accounts were not found in UserDb.' -ForegroundColor Red
+if ($accountParts.Count -ne 3 -or $accountParts[0].Trim() -ne '1' -or $accountParts[1].Trim() -ne '1' -or $accountParts[2].Trim() -ne '1') {
+    Write-Host '      Owner/operator/driver demo accounts were not found in UserDb.' -ForegroundColor Red
     Write-Host '      Start UserService once so DataSeeder creates them:' -ForegroundColor Yellow
     Write-Host '        .\scripts\run-schema-service.ps1 -Service User' -ForegroundColor Yellow
     Write-Host '      Wait for "Now listening on: http://localhost:5035", then rerun this script.' -ForegroundColor Yellow
     exit 2
 }
-Write-Host '      OK (1 owner, 1 operator)' -ForegroundColor DarkGray
+Write-Host '      OK (1 owner, 1 operator, 1 driver)' -ForegroundColor DarkGray
 
 function Invoke-SeedFile {
     param(
@@ -188,10 +200,24 @@ SELECT
      JOIN users u ON u.id = a.user_id
     WHERE lower(u.email) = lower(:'operator_email')
       AND a.tenant_id = :'tenant_id'::uuid
+     AND a.deleted_at IS NULL)::text || '|' ||
+  (SELECT count(*)
+     FROM vehicles v
+     JOIN accounts a ON a.id = v.account_id
+     JOIN users u ON u.id = a.user_id
+     WHERE lower(u.email) = lower(:'driver_email')
+      AND a.status = 'ACTIVE'
+      AND a.role_code = 'DRIVER'
+      AND v.deleted_at IS NULL
+      AND v.id = :'driver_vehicle_id'::uuid
+      AND v.normalized_plate = '51A12345'
       AND a.deleted_at IS NULL)::text;
 '@
-Assert-Counts -Label 'identity' -Actual $identityCounts -Expected @('1','1','1')
-Write-Host '      OK (tenant + 2 accounts + 1 grant)' -ForegroundColor DarkGray
+$identityParts = @($identityCounts -split '\|' | ForEach-Object { ([string]$_).Trim() })
+if ($identityParts.Count -ne 4 -or $identityParts[0] -ne '1' -or $identityParts[1] -ne '1' -or $identityParts[2] -ne '1' -or $identityParts[3] -ne '1') {
+    throw "identity count mismatch: expected tenant=1 owner=1 grant=1 exact demo driver vehicle=1, got $identityCounts"
+}
+Write-Host '      OK (tenant + 2 accounts + driver vehicle + 1 grant)' -ForegroundColor DarkGray
 
 Write-Host '[4/6] Seeding facility DB...' -ForegroundColor Cyan
 Invoke-SeedFile -Service 'facility-db' -DatabaseUser 'smartpark_facility' -DatabaseName 'smartpark_facility' -Path (Join-Path $demoDir '02-facility.sql')
@@ -224,3 +250,4 @@ Write-Host '[6/6] Demo data ready.' -ForegroundColor Green
 Write-Host "      Site: DEMO-HQ ($($ids['site_id']))"
 Write-Host "      Owner: $ownerEmail (password: SMARTPARK_OWNER_PASSWORD in .env)"
 Write-Host "      Operator: $operatorEmail (password: SMARTPARK_OPERATOR_PASSWORD in .env)"
+Write-Host "      Driver: $driverEmail / Password@123; vehicle 51A-123.45"

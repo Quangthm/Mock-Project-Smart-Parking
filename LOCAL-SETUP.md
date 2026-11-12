@@ -127,6 +127,26 @@ Assistant nằm trong project Docker `smartpark-app`, cổng mặc định `http
 
 Để kiểm tìm bãi và tra lịch với API thật, bật từng cờ `Assistant__Reads__*__Enabled` sau khi nhận HTTPS origin mà container truy cập và tin cậy được. Dùng [hướng dẫn QA owner reads](docs/04-testing/assistant-handoff-testing.md#6-test-tích-hợp-owner-sau-khi-môi-trường-sẵn-sàng) để cấu hình và đối chiếu dữ liệu test.
 
+**Đọc xe UserService qua HTTPS trong Docker.** Chuẩn bị PFX TLS có private key, còn hạn và SAN `user-service`, cùng CA công khai đã ký chứng chỉ đó. Dùng chứng chỉ TLS riêng với khóa ký JWT và PFX bảo vệ keyring. Điền các giá trị local trong root `.env`.
+
+| Biến | Giá trị |
+| --- | --- |
+| `SMARTPARK_USER_DOCKER_TLS_ENABLED` | `true` |
+| `SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH` | Đường dẫn tuyệt đối đến PFX TLS |
+| `SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD` | Mật khẩu PFX local |
+| `SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH` | Đường dẫn CA public dạng PEM `.crt` |
+| `Assistant__Reads__User__Enabled` | `true` |
+| `Assistant__Reads__User__Origin` | `https://user-service:8443` |
+
+Chạy lần lượt hai runner sau. User mở HTTPS cổng 8443 trong Docker network. Assistant cài CA vào trust store của container mỗi lần khởi động và preflight kiểm tra PFX có SAN `user-service`; nếu thiếu SAN, setup dừng trước khi dựng container. Cổng HTTP của frontend và User trên host tiếp tục phục vụ luồng đăng nhập hiện có.
+
+```powershell
+.\scripts\run-app-service.ps1 -Service User -NoBuild -NoLogWindow
+.\scripts\run-app-service.ps1 -Service Assistant -NoBuild -NoLogWindow
+```
+
+`User`/`All` chọn `compose.user-tls.yml` khi TLS được bật. Setup Assistant chọn `compose.assistant-trust.yml` khi có CA public. Khi gia hạn, dùng đường dẫn chứng chỉ mới rồi chạy lại hai runner để Compose cập nhật mount. Nghiệm thu bằng Driver thật hỏi `Xe của tôi`, đối chiếu với My Vehicles. Danh sách rỗng cần hiện rõ rỗng; lỗi TLS hoặc owner cần hiện lỗi nguồn.
+
 Với volume IoT có sẵn mà phần chatbot còn trống, runner Assistant bổ sung các bảng trong một transaction. Với DB đã chạy S05, sao lưu, dừng Assistant cũ và áp migration mới theo [hướng dẫn hội thoại](docs/03-design/ai/conversation-and-recovery.md#approval-and-scope) trước khi dựng bản mới. Setup kiểm tra schema đã nâng cấp. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
 
 ### Cảnh báo ghi đè và mất dữ liệu
@@ -156,7 +176,7 @@ Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner
 - Admin: xem `SMARTPARK_ADMIN_PASSWORD` trong `.env`; email mặc định `admin@smartpark.local`.
 - Owner/operator: UserService seed thêm `owner@smartpark.local` và `operator@smartpark.local` khi service khởi động; password từ `.env` (`SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`).
 - UserService **chỉ tạo lần đầu** và không thay mật khẩu tài khoản đã có.
-- Driver demo: `driver@gmail.com / Password@123` do `DataSeeder` tạo trong code.
+- Driver demo: `driver@gmail.com / Password@123` do `DataSeeder` tạo trong code. Sau khi UserService đã chạy, chạy `.\scripts\seed-demo-site.ps1` để thêm vehicle demo `51A-123.45` vào Driver Account; script không cần media storage và có thể chạy lại an toàn.
 
 ## 3. Run Application
 
@@ -478,6 +498,8 @@ Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ
 ```
 
 Rebuild image app là bước **riêng** (migration không build lại service): xem [QUICK_START.md](QUICK_START.md#8-pull-branch-mới--cập-nhật-image-service-và-schema-db).
+
+**User volume cũ thiếu `vehicles.binding_revision`:** setup dừng trước bước nâng cấp feature và chỉ rõ migration `scripts/database/migrations/20261111_user_vehicle_binding_revision.sql`. Volume mới đã có cột này trong baseline. Với volume cũ, sao lưu đúng User database, review và áp file migration đó theo quy trình SQL của nhóm rồi chạy lại setup; không reset volume để vượt qua lỗi. File chỉ thêm cột revision mặc định 1 và constraint dương, không di chuyển quyền sở hữu xe. Nếu cột có sẵn nhưng sai kiểu/nullability, migration sẽ dừng để review schema.
 
 #### Volume cũ thiếu bảng overlay
 

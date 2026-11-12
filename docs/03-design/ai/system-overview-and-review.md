@@ -1,6 +1,8 @@
 # AI Chatbot — Tổng quan hệ thống và phạm vi đề nghị leader duyệt
 
-Cập nhật 10/11/2026 cho leader, BA/Product, owner service, frontend và QA. Dùng SHA trong PR để ghi nhận bản bàn giao. [Hướng dẫn QA](../../04-testing/assistant-handoff-testing.md) ghi các bước chạy và tiêu chí nghiệm thu.
+Cập nhật 12/11/2026 cho leader, mentor, BA/Product, owner service, frontend và QA. Dùng SHA trong PR để ghi nhận bản bàn giao. [Hướng dẫn click từng bước, Docker và demo 13/11](../../04-testing/assistant-leader-demo-checklist.md) dành cho tester; [ma trận QA đầy đủ](../../04-testing/assistant-handoff-testing.md) giữ tiêu chí nghiệm thu sâu.
+
+**Đọc nhanh trước vấn đáp:** mục 13 mô tả runtime và RAG thực tế, mục 14 lần theo API/hội thoại, mục 15 giải thích Docker/bảo mật, mục 16 là câu hỏi mentor. Các mục 1–12 giữ bối cảnh và dependency. Bằng chứng mới ở mục 17 thay cho suy luận từ các con số lịch sử trong mục 9.
 
 ## 1. Quyết định cần leader xem trước
 
@@ -187,7 +189,7 @@ Admin nhập provider key/model, bật cấu hình và công tắc chung để n
 | User tự thử local Admin/Driver/chat | Smoke tương tác được người dùng báo tạm ổn | Chưa có biên bản từng case với commit, trace, provider và environment |
 | Full solution trước lượt cuối PG | 962 pass, 4 fail, 70 skip, build đạt | Bốn fail baseline operational-layout của Facility, không gọi full suite xanh |
 
-Các lượt trước có ghi Gemini FAQ thật trên deployment corpus riêng. Bằng chứng cũ không tự áp cho model, key, corpus hoặc máy mới. Đợt viết tài liệu này chỉ đối chiếu source và hồ sơ, không gọi lại provider/DB.
+Các lượt trước có ghi Gemini FAQ thật trên deployment corpus riêng. Bằng chứng cũ không tự áp cho model, key, corpus hoặc máy mới. Đợt cập nhật 12/11 có kiểm runtime riêng ở mục 17; không dùng bằng chứng provider cũ để kết luận model hiện tại đã được nghiệm thu.
 
 Hạn chế vận hành còn mở gồm SLO/tải/chi phí, backup deletion SLA, rollout và rollback môi trường đích, bằng chứng lost commit ACK/deadline dưới lock, generic revocation UX, privacy/deployment terms được owner chốt. Khả năng keyword/typo hiện có vẫn có thể từ chối câu ngoài tập đã đánh giá. Mở rộng semantic/egress cần phương án riêng, tránh coi fine-tuning là cách sửa mặc định.
 
@@ -225,3 +227,200 @@ Hạn chế vận hành còn mở gồm SLO/tải/chi phí, backup deletion SLA,
 - [Knowledge/publication](knowledge-and-faq.md), [conversation/recovery](conversation-and-recovery.md), [owner reads](business-data-integration.md).
 - [API S01](../api/assistant-s01-end-to-end-api-design.md), [availability authority](../api/assistant-s06-availability-authority.md), [read integration](../api/assistant-s06-read-integration.md).
 - [Nhật ký backend](../../../ai/tasks/active/chatbot-development-progress.md), [lịch sử triển khai](../../../ai/tasks/archive/chatbot-implementation-history.md).
+
+## 13. Kiến trúc hiện tại và RAG — nội dung chuẩn bị vấn đáp
+
+### 13.1. Bốn tầng hiện có, nhiệm vụ và cách lần source
+
+| Tầng | Nhận gì, làm gì, trả gì | File tiêu biểu |
+| --- | --- | --- |
+| API | Nhận HTTP/JSON, xác thực JWT/role, tạo actor từ claims, kiểm content type/payload, rate limit, gọi MediatR, bọc envelope/traceId. Không quyết định giá/booking | `API/Program.cs`, `AssistantGuestHost.cs`, `Authentication/AssistantAuthentication.cs`, `Http/ChatHosting.cs`, `Management/AssistantManagementHosting.cs` |
+| Application | Điều phối use case: trạng thái Settings, phân loại intent, truy xuất FAQ, chọn cấu hình provider, admission/terminal chat, gọi port đọc owner. Không chứa câu SQL hay tự mở DB owner | `Application/Assistant/Guest/GuestHandlers.cs`, `Guest/PublicFaqRetrieval.cs`, `Chat/ChatHandlers.cs`, `Chat/ReadTools.cs`, `Management/ManagedDemoGenerator.cs` |
+| Infrastructure | Hiện thực I/O ngoài: đọc publication Markdown/manifest, HTTP OpenAI/Gemini, HTTP User/Operations/Search, Data Protection cho credential | `Infrastructure/Assistant/Guest/PublicKnowledgeFile.cs`, `Knowledge/DemoGroundedGenerator.cs`, `OwnerReadClient.cs`, `ParkingSearchClient.cs`, `Management/AssistantSecretProtector.cs` |
+| Persistence | Npgsql với DB IoT: state/credential/receipts, hội thoại/tin nhắn/request ledger, transaction/lock/replay, reset/recovery/purge | `Persistence/AssistantManagementStore.cs`, `AssistantChatStore.cs` |
+
+Các đường dẫn trong bảng tính từ `src/Services/IoTService/SmartParking.IoTService.<Tầng>/`; tên thư mục rút gọn để dễ đọc. FE là một thành phần riêng: `assistantApi.ts`/`assistantAdminApi.ts` xử lý transport; `DriverChatbot.tsx`/`GuestChatbot.tsx` xử lý UI; `assistantBookingPreview.ts` xử lý bản nháp cục bộ.
+
+Chatbot chưa có project Domain riêng; không mô tả thành 5 tầng chỉ vì một số service khác dùng 5 tầng. Port/interface nằm phía Application; adapter nằm Infrastructure/Persistence và được nối ở DI của API. MediatR là gọi trong process, không phải RabbitMQ. Không có luồng broker bắt buộc cho mỗi câu FAQ.
+
+Normal Docker chạy host bình thường (`AssistantGuestHost`), không phải `/api/demo/assistant`. Chỉ environment `Demo` chọn `AssistantDemoHost`. Class có chữ `Demo` như `ManagedDemoGenerator`/`DemoGroundedGenerator` vẫn được normal host tái sử dụng; tên class không chứng minh dữ liệu giả. Python LPR/camera không tham gia xử lý câu hỏi FAQ.
+
+### 13.2. RAG đang dùng: retrieval lexical + generation bị giới hạn nguồn
+
+RAG là lấy kiến thức phù hợp trước rồi bổ sung vào đầu vào model để sinh câu trả lời. Bản này thực hiện retrieval theo từ khóa/quy tắc; **chưa dùng embeddings, vector index, semantic similarity hay vector database**. Cũng không fine-tune model bằng tài liệu dự án.
+
+```mermaid
+flowchart TD
+    Q[Câu hỏi] --> Gate[Kiểm quyền readiness và intent]
+    Gate -->|Dữ liệu riêng| Owner[Read tool tới API owner nếu được bật]
+    Gate -->|FAQ công khai| Load[Đọc snapshot Markdown và manifest]
+    Load --> Check[Kiểm hash version approval thời gian]
+    Check --> Retrieve[Normalize và xếp hạng title aliases content]
+    Retrieve -->|Không rõ hoặc không có nguồn| Clarify[Làm rõ hoặc handoff]
+    Retrieve -->|Một article phù hợp| Candidate[Chọn provider và configuration]
+    Candidate -->|Không có candidate| Knowledge[Trả nội dung knowledge có nguồn]
+    Candidate -->|Có candidate| Gen[Gửi một nguồn đã duyệt và câu hỏi giới hạn]
+    Gen --> Validate[Kiểm JSON reply sourceIds và giới hạn]
+    Validate --> Fresh[Kiểm lại Settings và publication]
+    Knowledge --> Fresh
+    Fresh --> Reply[Phản hồi mode outcome sources cards actions]
+```
+
+**Bước 1 — Xuất bản nguồn.** Nguồn biên tập là Markdown tiếng Việt trong repo. Admin duyệt nội dung; deployment operator tạo bản runtime cùng `publication.json`. Loader kiểm SHA-256 của bytes thực tế, version, metadata duyệt, audience public, trạng thái published/approved, thời điểm hiệu lực. `role=admin` trong manifest là metadata, không thay thế xác thực người duyệt. Hash phát hiện nội dung đổi sau duyệt, không chống được một quản trị viên filesystem có toàn quyền.
+
+**Bước 2 — Parse.** Tách article có ID/title/aliases và nội dung. Chỉ `### Nội dung` đi vào generation/citation; phần đối chiếu nội bộ không gửi model. Loader có giới hạn số bài/kích thước và cache fingerprint, nhưng vẫn kiểm phiên bản/bytes/thời gian công bố. DRAFT, hash lệch, hết hiệu lực hoặc manifest thiếu thì fail closed. Không tự lấy một JSON cũ thay thế nguồn không hợp lệ.
+
+**Bước 3 — Phân loại trước retrieval.** Câu muốn dữ liệu cá nhân, live availability/giá/giao dịch không được coi là FAQ để model tự đoán. Guest được handoff đăng nhập khi cần. Driver dùng read tool đúng allowlist nếu capability bật. FAQ chung như cách thanh toán chỉ giải thích tài liệu, không đọc tài khoản hoặc tạo payment.
+
+**Bước 4 — Truy xuất.** `PublicFaqRetrieval` normalize chữ/thanh điệu theo câu, loại stop words, so title + alias + nội dung. Điểm xét cụm alias, anchors và độ bao phủ; bằng điểm có thể không chọn. Có phục hồi một typo rất giới hạn cho alias ngắn 2–4 từ; không phải sửa mọi lỗi ngôn ngữ. Normal flow chọn **một article**, không top-k nhiều vector chunks. Không đủ bằng chứng thì làm rõ/handoff.
+
+**Bước 5 — Augment.** Provider nhận article đã duyệt cùng câu hỏi giới hạn. Intent cụ thể dùng câu hỏi cố định do backend tạo. Driver chat dùng canonical question hoặc title; không gửi nguyên transcript. Guest có `PublicFaqQuestion.Screen`: một số câu công khai sau sàng lọc có thể được gửi; còn lại dùng title/câu cố định. Không khẳng định mọi raw question đều bị gửi hoặc đều bị chặn.
+
+**Bước 6 — Generate hoặc fallback.** Nếu có cấu hình provider đủ điều kiện, model diễn đạt theo nguồn (`mode=ai`). Nếu không có candidate hoặc các lỗi recoverable khiến hết budget, có thể trả hướng dẫn gốc (`mode=knowledge`). Câu hỏi tiếng Anh có thể được model diễn đạt tiếng Anh từ nguồn Việt; fallback phải ghi rõ đang dùng nội dung Việt, không duy trì một bản chính sách Anh không đồng bộ.
+
+**Bước 7 — Validate và recheck.** Kiểm cấu trúc JSON, reply length, nguồn được phép, sourceIds lạ/trùng, response size. Không có sourceIds thì no-answer. Kiểm lại Settings/publication để tránh trả kết quả theo nguồn/cấu hình đã thu hồi giữa request. Citation hợp lệ **không chứng minh mọi câu do model sinh đều đúng ngữ nghĩa**; vẫn cần QA nội dung và eval ngoài tập câu mẫu.
+
+### 13.3. Provider thật được gọi như thế nào?
+
+| Provider | Adapter gọi | Đầu vào/đầu ra quan trọng |
+| --- | --- | --- |
+| OpenAI | `POST https://api.openai.com/v1/responses` | `store=false`, `stream=false`, `max_output_tokens=2048`, JSON schema cho `reply`/`sourceIds` |
+| Gemini | `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` | Model từ cấu hình đã kiểm, key ở header, JSON output có reply/sourceIds |
+
+Đây là mô tả adapter trong checkout, không phải hướng dẫn phiên bản API mới nhất của hãng. Browser không gọi trực tiếp provider và không giữ provider secret. Prompt giới hạn FAQ công khai, không cho model khẳng định đã booking/thanh toán/chỗ trống. Adapter có redaction một số pattern secret nhưng không phải DLP toàn diện; không đưa dữ liệu riêng vào prompt rồi trông cậy redaction.
+
+`ManagedDemoGenerator` chọn provider/config theo thứ tự đã bật, không tự dùng AI để tìm model tối ưu. Budget hiện tại: tối đa 3 attempts, tổng 20 giây, AI 18 giây, từng attempt 7 giây, cooldown 60 giây theo cấu hình/rules. Lỗi mạng/timeout/upstream recoverable có thể thử candidate tiếp; output sai cấu trúc không được retry mù. Một kết quả hợp lệ, kể cả no-answer, dừng failover. History bền vững không có nghĩa LLM nhớ cuộc trò chuyện: follow-up chọn nguồn cục bộ từ tối đa 6 turns/12.000 ký tự và cùng version nguồn.
+
+## 14. Lần theo API và quy trình từng chức năng
+
+### 14.1. Guest FAQ
+
+1. `GuestChatbot` lấy `GET /api/assistant/status`, chỉ mở theo readiness.
+2. Người dùng nhập câu, FE gọi `POST /api/assistant/guest/messages` với `requestId`, `message`, `locale`.
+3. Handler đọc Settings/publication, phân loại, truy xuất và gọi generation/fallback như mục 13.
+4. Envelope trả `success`, `data`, `traceId`; `data` có mode/outcome/content/sources/cards/actions.
+5. Guest UI hiển thị; câu riêng có action login. Không có durable guest history và không tự nhập toàn bộ guest transcript sang Account sau đăng nhập.
+
+Ví dụ request (ID minh hoạ, không dùng lại cho nhiều lần gửi thật):
+
+```json
+{"requestId":"11111111-1111-4111-8111-111111111111","message":"SmartPark là gì?","locale":"vi"}
+```
+
+### 14.2. Hội thoại đăng nhập, idempotency và recovery
+
+| Bước | API dưới `/api/assistant` | FE/backend làm gì |
+| --- | --- | --- |
+| Kiểm capability | GET `/capabilities` | Driver xem feature được mở; không đồng nghĩa owner thật đã được nghiệm thu |
+| Mở chat hiện tại | GET `/conversations`, GET `/{id}` dưới conversations | Scope Account + role; không chọn Account từ một body do client tự khai |
+| Tạo | POST `/conversations` với `{clientConversationId, locale}` | 201 mới, 200 replay theo contract |
+| Lịch sử | GET `/conversations/{id}/messages` với cursor/limit hợp lệ | Cursor được bảo vệ; trả dữ liệu thuộc conversation được phép |
+| Gửi | POST `/conversations/{id}/messages` với `{clientMessageId, expectedRevision, message}` | Admission ghi user message + request running trong transaction; revision/fingerprint chống replay sai nội dung |
+| Nhận kết quả | POST trả 200 terminal hoặc 202 running | Nếu chưa xong, dùng Location/request lookup, không đoán đã thất bại |
+| Phục hồi | GET `/conversations/{id}/requests/{clientMessageId}` | Hỏi cùng request; không tự chạy model/ghi lại như request mới |
+| Hủy | POST cùng request thêm `/cancel`, body `{}` | Trả trạng thái thật; nếu hoàn tất trước hủy thì không giả cancelled |
+| Reset | POST `/conversations/{id}/reset`, body `{}` | Ẩn chat, hủy running, đến hạn purge sau 168 giờ nếu không retention hold |
+
+Scope bảo vệ gồm **AccountId và role**, không chỉ UserId. Một người có nhiều Account/role không được trộn history. FE dùng auth generation guard để bỏ response cũ khi logout/switch Account; server vẫn kiểm quyền riêng, không tin FE là lớp bảo vệ duy nhất.
+
+Admission và terminal write được tách: ghi nhận request trước, chạy công việc với host lifetime, sau đó commit kết quả. Client mất socket không tự xoá việc đã nhận. Client tra result bằng cùng ID; replay đúng fingerprint trả kết quả đã lưu, không tạo tin nhắn đôi. Recovery sweep đánh request quá deadline còn running thành `REQUEST_INTERRUPTED`, không tự redispatch giao dịch. Transaction/lock ở Persistence bảo vệ cạnh tranh, không giữ transaction DB mở suốt một HTTP call provider theo cách tùy tiện.
+
+Current runtime có giới hạn hoạt động và rate limit; ví dụ `ChatExecution` có 2 slots trong process và 10 admission/Account/phút. Đây là cấu hình code hiện tại, không phải cam kết capacity production. 429 là backpressure; tester không spam POST để cố qua.
+
+### 14.3. Read tool xe và dữ liệu live
+
+```mermaid
+sequenceDiagram
+    participant FE as Driver UI
+    participant API as Assistant API
+    participant App as ReadTools
+    participant User as UserService
+    FE->>API: JWT + message Xe của tôi
+    API->>App: Actor từ token và intent đã kiểm
+    App->>User: GET /api/vehicles qua HTTPS + Driver Bearer
+    User-->>App: Xe được phép xem hoặc lỗi owner
+    App-->>API: Structured cards hoặc empty/source error
+    API-->>FE: Kết quả đã lưu trong history
+```
+
+Assistant không query User DB trực tiếp. UserService xác định xe Account được phép xem. Client owner bị giới hạn fixed HTTPS origin, response size/time/shape; không lấy URL tuỳ ý do câu chat cung cấp. Dữ liệu xe riêng được dựng thành card, không cần đưa vào LLM FAQ. Danh sách rỗng là kết quả hợp lệ; timeout/TLS/403 là lỗi nguồn, không được biến thành “không có xe”. Card trong history là snapshot trả lời lúc đó; hỏi câu mới để refresh.
+
+Own reservations dùng `/api/me/reservations` và detail; private reads chuyển Bearer Driver đến owner. Parking search dùng public read, không forward Bearer người dùng như private read. Các nguồn này cần contract/HTTPS/data và test owner thực tế. Không có API nguồn sẵn sàng thì capability để tắt, không mock chỗ trống/giá để demo.
+
+### 14.4. Settings và secret lifecycle
+
+Admin UI gọi GET `/api/assistant/admin/settings`; thay đổi qua POST `/admin/mutations` với action, mutationId và expectedRevision. Revision tránh ghi đè thay đổi Admin khác; receipt giúp retry đúng mutation không thực thi lặp. UI nhận metadata/model/priority/trạng thái, không nhận lại plaintext key đã lưu. Infrastructure dùng Data Protection, Persistence giữ protected secret và state/receipt.
+
+Model discovery và Test connection có route riêng: `/admin/models/discover`, `/admin/configurations/{id}/test`. Thêm configuration lưu disabled để Admin chủ động bật. Runtime có ba mức bật: hệ thống, provider, configuration. Reorder ảnh hưởng thứ tự failover; rotate thay key, revoke loại key khỏi request mới. Test connection chỉ chứng minh phép test đó, chưa chứng minh mọi câu FAQ hoặc corpus đều tốt.
+
+### 14.5. Parser và ranh giới với booking
+
+`DriverChatbot` chỉ bật preview ở dashboard Driver. `interpretBookingTurn` nhận câu giống yêu cầu booking, tách loại xe/nhãn xe/nhãn bãi/ngày giờ, hỏi field thiếu và cho chỉnh. Nhánh này xử lý tại FE, không phải LLM đã quyết định booking. Thời gian theo Việt Nam; từ “ngày mai” tính theo ngày lúc nhập.
+
+Ba câu đã thêm hồi quy: `Đặt chỗ cho ô tô tại Bitexco ngày mai từ 14h đến 16h`, `Đặt chỗ ô tô ở Bitexco ngày mai từ 14h đến 16h`, `Tôi muốn đặt chỗ tại bãi Bitexco ngày mai từ 14h đến 16h`. Hai câu đầu CAR; câu cuối không nói loại xe nên phải hỏi, không gán CAR.
+
+Bản nháp trong bộ nhớ widget; chưa có persistent draft/TTL/revision chuẩn owner, chưa resolve vehicle/site ID, chưa kiểm availability/quote/terms, chưa handoff sang `BookingFlow`. Bấm xác nhận trong intake không tạo reservation/payment. `BookingFlow` tồn tại riêng không chứng minh chatbot đã nối vào đó. Đây là phần đã làm được để hỗ trợ nhập liệu, không gọi là booking end-to-end.
+
+## 15. Docker, dữ liệu và bảo mật để giải thích cho mentor
+
+### 15.1. Ba địa chỉ dễ nhầm
+
+| Địa chỉ mặc định | Ai dùng | Ý nghĩa |
+| --- | --- | --- |
+| `http://localhost:5173` | Browser cùng máy Docker | FE |
+| `http://localhost:5076` | Browser/QA cùng máy Docker | Assistant container published port |
+| `https://user-service:8443` | Assistant trong Docker network | User private-read origin với TLS; không phải URL browser localhost |
+
+User HTTP mặc định publish `5035` cho login; host Assistant runner HTTPS `5075` khác Docker `5076`. `localhost` trong container trỏ về container đó, không phải UserService. Vì vậy origin loopback cho owner read trong Docker bị preflight chặn.
+
+### 15.2. Ba loại key không được đánh đồng
+
+1. **JWT signing key của User:** private chỉ ở issuer UserService; Assistant nhận public key để kiểm token, không dùng private key để giả đăng nhập.
+2. **PFX/keyring của Assistant:** bảo vệ provider secret/cursor. DB có credential mà mất keyring/PFX có thể không giải mã được. Backup DB + keyring + PFX phải đi cùng và giữ bí mật.
+3. **TLS PFX của User + public CA:** mã hoá/xác thực kết nối Assistant → User. SAN đúng `user-service`, CA được tin trong Assistant; không tắt xác thực TLS.
+
+`compose.user-tls.yml` bổ sung listener/mount PFX cho User. `compose.assistant-trust.yml` mount public CA, cài trust khi container khởi động. Runner kiểm path/private key/expiry/SAN, setup Assistant kiểm CA và origin/flags. Preflight là kiểm đầu vào, không thay thế HTTP request thực tế. Kiểm SAN hiện dùng nhãn format chứng chỉ của runtime; Windows locale khác chưa nghiệm thu.
+
+### 15.3. Máy mới và máy có dữ liệu khác nhau
+
+Máy mới cần source đầy đủ, `.env`, keys/certs, publication và provider credential; Docker không tự biết khóa/approval của nhóm. Fresh DB init canonical schema; DB cũ phải được kiểm tương thích và nâng cấp theo migration có kiểm soát. `binding_revision` thiếu thì setup dừng và chỉ ra migration; không tự reset volume.
+
+Build image và migrate DB là hai việc riêng. `-NoBuild` chỉ dùng khi image đúng source đã có; pull code rồi chạy image cũ không phải nghiệm thu code mới. Secret và `.cache` không nằm trong commit. File untracked chưa commit sẽ thiếu trên máy tester dù máy tác giả chạy được.
+
+## 16. Câu hỏi mentor thường hỏi và câu trả lời có căn cứ
+
+| Câu hỏi | Trả lời ngắn cần hiểu |
+| --- | --- |
+| Em làm gì trong hệ thống? | Orchestration chatbot, Settings provider, FAQ có nguồn, chat/history/recovery, adapters đọc owner, UI/draft và setup/test liên quan. Owner khác giữ booking/payment authority |
+| RAG của em là vector hay keyword? | Lexical/rule-based trên Markdown đã duyệt, chọn một article rồi generation/fallback. Chưa có embedding/vector DB |
+| Tại sao không đưa toàn bộ tài liệu vào prompt? | Chọn nguồn phù hợp, giới hạn payload/phạm vi công khai và citation; tránh gửi dữ liệu không cần thiết. Trade-off là câu diễn đạt lạ có thể bị từ chối/làm rõ |
+| Không có API key thì có trả lời không? | Có thể trả knowledge khi global/release/publication sẵn sàng; mode nói rõ fallback. Không được tuyên bố model đã trả lời |
+| Lưu history có nghĩa model nhớ hết không? | Không. History để UX/recovery/audit; context chọn nguồn được giới hạn cục bộ, không gửi toàn transcript |
+| Chống hallucination hoàn toàn chưa? | Chưa. Nguồn duyệt, prompt/JSON/source validation giảm rủi ro; citation đúng không tự chứng minh ngữ nghĩa đúng. Cần QA corpus/model |
+| Người dùng hỏi xe, LLM có vào DB không? | Không. Intent allowlist → adapter HTTPS → User API kiểm quyền → card có cấu trúc; không query DB owner và không gửi xe riêng sang FAQ model |
+| Tại sao có expectedRevision và clientMessageId? | Revision bảo vệ cạnh tranh; ID/fingerprint hỗ trợ idempotency và lookup khi timeout. Không double-send bằng ID mới khi kết quả chưa biết |
+| Reload lúc đang trả lời thì sao? | Request đã admission vẫn gắn host, FE tra request ledger; sweep đóng request quá hạn. Không hứa mọi lỗi mạng đều tự phục hồi hoàn hảo nếu chưa test tình huống đó |
+| Reset có xoá ngay không? | Ẩn ngay; đến hạn 7 ngày mới purge nếu không retention hold |
+| Tại sao Admin không gọi tool xe của Driver? | Role/tool boundary riêng; chat Admin/Owner hỗ trợ FAQ/history, không tự nâng quyền thành Driver |
+| Có phải health xanh là demo được? | Không. Cần readiness, publication, Settings, auth và positive functional test. Test connection cũng không bằng generation/content acceptance |
+| Booking em xong đến đâu? | Xong nhập/chỉnh bản nháp theo mẫu FE; chưa xác minh owner/quote/form/create/payment. Không giả kết quả để lấp phần thành viên khác |
+| Phần nào chờ ai? | User: Account/xe/trust; Facility: site/structure/publication; Operations: availability/reservation/admission; Payment: quote/accepted pricing/payment linkage; FE/Product: wire form/UX sau contract; QA/DevOps: runtime/load/deployment. Tên cá nhân chưa được xác nhận |
+| Ngày mai demo gì? | Theo checklist GO từng phân đoạn: FAQ có nguồn, Settings đã rehearsal, Driver history đã test, parser. Xe chỉ khi positive card pass; không demo Operations/Payment chưa nghiệm thu |
+
+## 17. Snapshot nghiệm thu 12/11/2026 và phần chưa đóng
+
+| Hạng mục | Kết quả trên máy hiện tại | Phạm vi bằng chứng |
+| --- | --- | --- |
+| Setup runtime | PASS, tạo/chạy lại Assistant healthy | Dữ liệu dev/cấu hình hiện tại, chưa phải máy leader sạch |
+| Docker User/Assistant | Healthy tại lượt kiểm mới | Liveness, không tự chứng minh A/B hoặc owner card |
+| Frontend Docker | Container Up; HTTP 200 | Trang tải được, chưa smoke lại toàn bộ click UI |
+| Guest status | enabled=true, guestFaq=true, contractVersion 0.4.1 | Runtime GET status |
+| Guest FAQ `SmartPark là gì?` | answered, mode knowledge, nguồn smartpark-overview 0.4.0 | FAQ fallback thật; chưa xác nhận generation provider ở lượt này |
+| Backend IoT suite | 502 PASS, 7 SKIP, 0 FAIL | Suite mặc định; các PG opt-in/worker skip không là pass |
+| FE suite/build | 282/282 PASS; build PASS | Có cảnh báo bundle; parser subset 14/14 |
+| Setup fixture | PASS Windows PowerShell 5.1 | Doubles, khác runtime; PS7 empty-env khác PS5 nên không dùng kết quả sai host để suy ra lộ key |
+| SAN/binding preflight sửa mới | Review độc lập không thấy blocker; binding fixture PASS | SAN tương tự hostname bị chặn, thiếu binding dừng trước feature write |
+| Login API scripted | BOT_VERIFICATION_REQUIRED | Turnstile cần luồng UI; chưa phải chatbot bug |
+| UI, Driver card/history/A-B | UNVERIFIED trong lượt mới | Công cụ browser bị chặn vì không xác định URL đủ tin cậy; lịch sử smoke cũ không thay nghiệm thu candidate mới |
+
+**Kết luận:** có thể giao tester kiểm phần cốt lõi theo checklist; chỉ chốt demo sau các ca P0 tương ứng PASS trên UI và máy sẽ trình diễn. Không tuyên bố toàn hệ thống hoàn tất hoặc full-stack clean-machine acceptance. Bộ source đang có thay đổi chưa commit; cần SHA candidate sau khi người dùng commit. Ghi kết quả mới vào biên bản, giữ booking/payment/availability ngoài demo hiện tại theo đúng phân công.

@@ -104,6 +104,7 @@ function timeRange(text: string): TimeRange | null {
 const dayToken = /(?:^|\s)(?:ngày )?((?:mai|kia)|hôm nay|\d{4}-\d{2}-\d{2})(?=\s|$)/giu
 const dateCue = /^(?:ngày(?:\s|$)|hôm nay|mai(?:\s|$)|thứ\s|chủ nhật|\d{4}-|\d{1,2}\/)/iu
 const timeCue = /^(?:từ\s|sáng(?:\s|$)|chiều(?:\s|$)|tối(?:\s|$)|\d{1,2}(?:h|:|\s|$))/iu
+const timingStart = /\s+(?=(?:ngày\s|mai(?:\s|$)|kia(?:\s|$)|hôm nay(?:\s|$)|từ\s+\d|\d{1,2}(?:h|:)))/iu
 
 function updateTime(fields: BookingFields, text: string, today: string): BookingFields {
   const days = Array.from(text.matchAll(dayToken))
@@ -164,10 +165,11 @@ export function interpretBookingTurn(
       site = request.replace(/^(?:tại|ở)\s+/iu, "")
       request = ""
     }
-    const trailingTime = site?.match(/\s+(từ\s.+)$/iu)
-    if (trailingTime) {
-      request = `${request} ${trailingTime[1]}`.trim()
-      site = site.slice(0, trailingTime.index)
+    const siteTiming = site?.match(timingStart)
+    if (siteTiming && site) {
+      const timing = site.slice(siteTiming.index! + siteTiming[0].length).trim()
+      site = site.slice(0, siteTiming.index).trim()
+      request = `${request} ${timing}`.trim()
     }
     const vehiclePrefix = request.match(vehicleCategory)?.[0] ?? request.match(/^xe(?=\s|$)/iu)?.[0]
     const afterVehicle = vehiclePrefix ? request.slice(vehiclePrefix.length).trim() : request

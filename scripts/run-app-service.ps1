@@ -19,6 +19,46 @@ $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExpo
 $assistantEnabled = $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
 
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
+$userTlsEnvironment = @{}
+$userTlsEnabled = ''
+if ($Service -in @('User', 'All')) { $userTlsEnabled = [string]$settings['SMARTPARK_USER_DOCKER_TLS_ENABLED'] }
+if ($userTlsEnabled -cnotin @('', 'false', 'true')) {
+    throw 'SMARTPARK_USER_DOCKER_TLS_ENABLED must be true or false.'
+}
+if ($userTlsEnabled -ceq 'true') {
+    $userTlsPath = [string]$settings['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH']
+    $userTlsPassword = [string]$settings['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD']
+    $userTlsAbsolute = [IO.Path]::IsPathRooted($userTlsPath)
+    if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+        $userTlsAbsolute = $userTlsPath -match '^[A-Za-z]:[\\/]' -or $userTlsPath -match '^\\\\[^\\/]+[\\/][^\\/]+'
+    }
+    if (!$userTlsAbsolute -or
+        !(Test-Path -LiteralPath $userTlsPath -PathType Leaf) -or !$userTlsPassword) {
+        throw 'User Docker TLS requires an existing absolute PFX path and its password.'
+    }
+    $userTlsCertificate = $null
+    try {
+        $userTlsCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $userTlsPath, $userTlsPassword, [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
+        if (!$userTlsCertificate.HasPrivateKey -or $userTlsCertificate.NotBefore -gt (Get-Date) -or
+            $userTlsCertificate.NotAfter -le (Get-Date)) {
+            throw 'Invalid User TLS certificate.'
+        }
+        $san = $userTlsCertificate.Extensions |
+            Where-Object { $_.Oid.Value -eq '2.5.29.17' } |
+            ForEach-Object { $_.Format($true) }
+        if (($san -join ';') -notmatch '(?im)(?:^|[,;\r\n])\s*(?:DNS Name=|DNS:)\s*user-service\s*(?=$|[,;\r\n])') {
+            throw 'User TLS certificate SAN must include user-service.'
+        }
+    } catch {
+        throw 'User Docker TLS requires an unexpired PFX with a private key, matching password, and DNS SAN user-service.'
+    } finally {
+        if ($userTlsCertificate) { $userTlsCertificate.Dispose() }
+    }
+    $composeArgs += @('-f', (Join-Path $root 'compose.user-tls.yml'))
+    $userTlsEnvironment['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH'] = $userTlsPath
+    $userTlsEnvironment['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD'] = $userTlsPassword
+}
 
 # Docker writes progress and warnings to stderr. PowerShell 5.1 turns native
 # stderr into terminating errors under ErrorActionPreference=Stop, so all Docker
@@ -26,7 +66,12 @@ $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',
 function Invoke-Docker {
     param([string[]]$Arguments, [switch]$Capture)
     $previous = $ErrorActionPreference
+    $previousTlsEnvironment = @{}
     try {
+        foreach ($name in $userTlsEnvironment.Keys) {
+            $previousTlsEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            [Environment]::SetEnvironmentVariable($name, $userTlsEnvironment[$name], 'Process')
+        }
         $ErrorActionPreference = 'Continue'
         if ($Capture) {
             $output = @(& docker @Arguments 2>&1)
@@ -41,6 +86,9 @@ function Invoke-Docker {
         return $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previous
+        foreach ($name in $previousTlsEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $previousTlsEnvironment[$name], 'Process')
+        }
     }
 }
 

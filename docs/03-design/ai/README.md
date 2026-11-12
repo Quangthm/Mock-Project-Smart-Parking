@@ -1,6 +1,6 @@
 # AI Chatbot — Đọc từ đây
 
-Chatbot trả lời từ knowledge đã duyệt và gọi API trong phạm vi được cấp quyền. FAQ đã có bằng chứng Gemini thật. Luồng đặt chỗ toàn trình còn mở. Mục lục cập nhật **10/11/2026**.
+Chatbot trả lời từ knowledge đã duyệt và gọi API trong phạm vi được cấp quyền. Luồng đặt chỗ toàn trình còn mở. Mục lục cập nhật **12/11/2026**.
 
 ## Tìm đúng tài liệu
 
@@ -10,6 +10,7 @@ Chatbot trả lời từ knowledge đã duyệt và gọi API trong phạm vi đ
 | Gửi leader duyệt hệ thống, tiến độ và phần còn mở | [Tổng quan hệ thống và phạm vi review](system-overview-and-review.md) |
 | Giao owner chốt dependency cụ thể | [Phụ thuộc và quyết định](service-dependencies-and-decisions.md) |
 | Gửi tester setup, chạy test case và ghi kết quả | [Hướng dẫn setup và test](../../04-testing/assistant-handoff-testing.md) |
+| Demo 13/11, Docker và thao tác click từng bước | [Checklist máy leader](../../04-testing/assistant-leader-demo-checklist.md) |
 | Sửa nội dung FAQ | [Knowledge duy nhất](p1/knowledge/smartpark-knowledge.md), [hướng dẫn xuất bản](knowledge-and-faq.md) |
 | Phát triển history/recovery | [Hội thoại và phục hồi](conversation-and-recovery.md) |
 | Đọc xe/lịch đặt/tìm bãi | [Tích hợp tra cứu](business-data-integration.md) |

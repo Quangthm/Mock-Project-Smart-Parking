@@ -129,6 +129,13 @@ if ($state -eq 'empty') {
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.
 if ($Service -eq 'User') {
+    # The base sentinel predates vehicle binding revisions. Fail before any
+    # additive feature writer rather than claiming an old volume is current.
+    $bindingSql = "SELECT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.vehicles') AND attname = 'binding_revision' AND NOT attisdropped AND atttypid = 'bigint'::regtype AND attnotnull)"
+    $bindingReady = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c $bindingSql
+    if ($LASTEXITCODE -ne 0 -or ($bindingReady -join '').Trim() -ne 't') {
+        throw 'User vehicles.binding_revision is missing or incompatible. Back up the selected User database, review and manually apply scripts/database/migrations/20261111_user_vehicle_binding_revision.sql, then rerun setup. No feature migration applied; do not reset the volume.'
+    }
     # The existing session/outbox preflight intentionally accepts a pre-media
     # database. Reuse only the bounded, rerunnable media section of the canonical
     # base; replaying the whole initialization script against existing data is unsafe.

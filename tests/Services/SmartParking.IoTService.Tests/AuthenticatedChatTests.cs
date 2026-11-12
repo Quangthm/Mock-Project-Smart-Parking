@@ -61,6 +61,30 @@ public sealed partial class AuthenticatedChatTests
     }
 
     [Theory]
+    [InlineData("vi", "Xe của tôi", "Không tìm thấy xe được phép xem cho tài khoản hiện tại.")]
+    [InlineData("en", "my vehicles", "No vehicles are available to view for this account.")]
+    public async Task EmptyVehicleReadExplainsTheScopedResultAndPreservesItInReplayAndHistory(string locale, string question, string expectedContent)
+    {
+        var owner = new ReadOwner { Mode = "empty-vehicles" };
+        await using var f = await Fixture.Create(owner: owner);
+        var conversation = await f.Data(await f.Post("/api/assistant/conversations", new { clientConversationId = Guid.NewGuid(), locale }));
+        var id = conversation.GetProperty("id").GetGuid();
+        var route = $"/api/assistant/conversations/{id}";
+        var request = new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message = question };
+        foreach (var response in new[] { await f.Post(route + "/messages", request), await f.Post(route + "/messages", request) })
+        {
+            var result = await f.Data(response);
+            var answer = result.GetProperty("answer");
+            Assert.Equal("empty", answer.GetProperty("outcome").GetString());
+            Assert.Equal(expectedContent, answer.GetProperty("content").GetString());
+            Assert.Empty(answer.GetProperty("cards")[0].GetProperty("items").EnumerateArray());
+        }
+        var history = await f.Data(await f.Get(route + "/messages"));
+        Assert.Equal(expectedContent, history.GetProperty("items")[1].GetProperty("content").GetString());
+        Assert.Equal(1, owner.Calls);
+    }
+
+    [Theory]
     [InlineData("timeout", "timeout")]
     [InlineData("deadline", "timeout")]
     [InlineData("malformed", "dependency_unavailable")]
@@ -397,7 +421,11 @@ public sealed partial class AuthenticatedChatTests
             if (Mode == "malformed") return new(HttpStatusCode.OK) { Content = new StringContent("{\"success\":true,\"data\":{}}") };
             if (Status != 200) return new((HttpStatusCode)Status) { Content = new StringContent("PRIVATE_UPSTREAM") };
             object data;
-            if (request.RequestUri.AbsolutePath == "/api/vehicles") data = new[] { new { id = Vehicle, vehicleType = "CAR", rawPlate = "SYNTHETIC-PLATE", accountId = Guid.NewGuid(), imageReference = "PRIVATE_IMAGE" } };
+            if (request.RequestUri.AbsolutePath == "/api/vehicles")
+            {
+                data = Mode == "empty-vehicles" ? Array.Empty<object>()
+                    : new[] { new { id = Vehicle, vehicleType = "CAR", rawPlate = "SYNTHETIC-PLATE", accountId = Guid.NewGuid(), imageReference = "PRIVATE_IMAGE" } };
+            }
             else
             {
                 var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(request.RequestUri.Query);

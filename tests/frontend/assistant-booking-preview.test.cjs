@@ -41,6 +41,29 @@ test('extracts a complete request with user-entered vehicle and site labels', ()
   assert.equal(preview.endAt, '2026-11-15T16:15:00+07:00');
 });
 
+test('separates timing that follows a site name in natural Vietnamese booking requests', () => {
+  for (const text of [
+    'Đặt chỗ cho ô tô tại Bitexco ngày mai từ 14h đến 16h',
+    'Đặt chỗ ô tô ở Bitexco ngày mai từ 14h đến 16h',
+  ]) {
+    const { preview } = start(text);
+    assert.equal(preview.vehicleType, 'CAR');
+    assert.equal(preview.siteText, 'Bitexco');
+    assert.equal(preview.startAt, '2026-11-12T14:00:00+07:00');
+    assert.equal(preview.endAt, '2026-11-12T16:00:00+07:00');
+    assert.deepEqual(preview.missingFields, ['vehicle']);
+  }
+});
+
+test('keeps the site and timing when a booking request omits vehicle type', () => {
+  const { preview } = start('Tôi muốn đặt chỗ tại bãi Bitexco ngày mai từ 14h đến 16h');
+  assert.equal(preview.vehicleType, null);
+  assert.equal(preview.siteText, 'Bitexco');
+  assert.equal(preview.startAt, '2026-11-12T14:00:00+07:00');
+  assert.equal(preview.endAt, '2026-11-12T16:00:00+07:00');
+  assert.deepEqual(preview.missingFields, ['vehicleType', 'vehicle']);
+});
+
 test('asks for exact hours and keeps the known day across clarification', () => {
   const first = start('Đặt chỗ ô tô chiều mai');
   assert.deepEqual(first.preview.missingFields, ['timeRange', 'vehicle', 'site']);
