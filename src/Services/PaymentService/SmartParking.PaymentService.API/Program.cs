@@ -49,7 +49,7 @@ else
             var jwtSection = builder.Configuration.GetSection("Jwt");
             var issuer = jwtSection["Issuer"] ?? "SmartParking.UserService";
             var audience = jwtSection["Audience"] ?? "SmartParking";
-            var secretKey = jwtSection["SecretKey"] ?? "smartpark-default-insecure-dev-jwt-key-replace-in-production-min-32-chars";
+            var secretKey = jwtSection["SecretKey"];
             var pemKey = jwtSection["PublicKeyPem"] ?? jwtSection["PrivateKeyPem"];
 
             var signingKeys = new List<SecurityKey>();
@@ -82,7 +82,18 @@ else
         });
 }
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireMachineOrServiceRole", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("SERVICE") ||
+            context.User.IsInRole("OPERATIONS_WORKER") ||
+            context.User.IsInRole("INTERNAL_SERVICE") ||
+            context.User.HasClaim("role", "SERVICE") ||
+            context.User.HasClaim("role", "OPERATIONS_WORKER") ||
+            context.User.HasClaim("role", "INTERNAL_SERVICE") ||
+            context.User.HasClaim("scope", "s2s")));
+});
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();

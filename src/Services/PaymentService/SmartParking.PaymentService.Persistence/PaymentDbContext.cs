@@ -17,6 +17,8 @@ public class PaymentDbContext : DbContext
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<ProviderWebhook> ProviderWebhooks => Set<ProviderWebhook>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<ReservationQuote> ReservationQuotes => Set<ReservationQuote>();
+    public DbSet<RefundRequest> RefundRequests => Set<RefundRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
