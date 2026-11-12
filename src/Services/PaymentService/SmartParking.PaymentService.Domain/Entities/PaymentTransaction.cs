@@ -11,7 +11,14 @@ public class PaymentTransaction
     public TransactionType TransactionType { get; set; } = TransactionType.PAYMENT;
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.PAYOS;
     public string? GatewayTransactionId { get; set; }
+    public string? IdempotencyKey { get; set; }
     public decimal Amount { get; set; }
+
+    public string? CheckoutUrl { get; set; }
+    public string? QrCode { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? AccountName { get; set; }
+    public string? Bin { get; set; }
 
     public PaymentStatus Status { get; set; } = PaymentStatus.PENDING;
     public DateTimeOffset? PaidAt { get; set; }
