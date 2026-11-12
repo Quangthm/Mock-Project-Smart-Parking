@@ -253,3 +253,30 @@ The earlier four-file change was preparatory only: it removed the standalone quo
 - User deferred Facility claim-scoped release. A retry after a lost Facility release response can release a newer occupant. The Facility claim and release contract and schema were left unchanged. Existing Operations databases need a reviewed schema transition for the scan and checkout columns.
 - Solution build succeeded with `dotnet build SmartParking.slnx --nologo -m:1 --no-restore -v:q`. Frontend regression suite passed. Backend tests remain [UNVERIFIED] because VSTest could not connect to its local test host, and the focused out-of-sandbox run was declined. No live database, broker, or provider validation ran.
 - The sandbox blocked writing the Git index and staging approval was declined. Git still lists six unmerged paths. Next step is to review and stage the working-tree resolution and its supporting changes, then complete the merge. No commit or push was made.
+
+## SPARK-273 reservation-slice finalization checkpoint — 12 November 2026
+
+### Source review and current integration state
+
+- Reviewed current local versions of `BookingProgressHandler`, `ReservationOrderProvisioning`, `ReservationConfirmationHandlers`, `BookingContracts`, `ReservationBooking`, `ReservationMessaging`, `ReservationOwners`, `ReservationLifecycleEvents` and `ReservationBookingRepository`, plus the application/infrastructure/persistence registrations and the existing architecture/API/Payment handoffs.
+- Confirmed the source path preserves committed `PENDING_PAYMENT` hold → terminal `HOLD_CREATED` receipt → same-context outbox hold fact → hold consumer dispatch to positive-price order provisioning or zero-price acceptance. The order request is made outside the guarded Operations transaction and records Payment's returned `OrderId`; it does not manufacture an order.
+- Confirmed `ReservationDepositCollectedV1` is consumed by the existing MassTransit registration and dispatched to guarded binding validation/confirmation. The pre-T evaluation, Facility dependency, plate/capacity guards and committed-only `CONFIRMED` behavior remain. Payment's generic `PaymentSucceededV1` consumer remains the separate Gate-settlement path.
+- Operations owns the local `IReservationCommercialOwner` port, but the registered `UnavailableReservationCommercialOwner` still blocks preview, quote, order, zero-price acceptance, collection lookup and reconciliation. The local Payment event consumer has booking-state/`CollectionId` idempotency but no EF Inbox middleware; reliable Payment-side outcome delivery remains blocked. Facility/vehicle adapters and the Operations MassTransit Bus Outbox are real source registrations; deployment readiness is not established.
+- Reviewed/updated the existing API design, 11 November implementation-alignment handoff, Payment producer handoff and deployment checklist. Added the four-item **Deferred Implementation Backlog — Post Reservation/Payment Integration**. No architecture decision, Payment implementation, Jira item, scheduler, worker, schema, or test artifact was added.
+- The pre-existing worktree edit to `ReservationMessaging.cs` (hold consumer/endpoint registration) and other unrelated dirty files were preserved and not staged or committed. `ReservationOrderProvisioningWorker.cs` remains unchanged.
+
+### Validation and status
+
+- **PASS:** `dotnet build SmartParking.slnx --nologo -m:1 --no-restore` — build succeeded, 0 errors, 4 warnings, all pre-existing NuGet advisories: NU1902 MessagePack 2.5.302 and NU1903 SignalR StackExchangeRedis 10.0.12. No dependency or unrelated source changes were made.
+- **PASS:** `git diff --check` — no whitespace errors; Git reported the existing LF-to-CRLF working-copy warning for the alignment handoff.
+- Unit, integration, smoke, Postman, Docker and manual verification: **NOT RUN — USER VERIFICATION REQUIRED**, per user instruction.
+- PaymentService/Facility live integration and end-to-end reservation/payment flow: **blocked/unverified**; do not claim readiness until the Payment team implementation and cross-owner contracts are reviewed.
+
+### Git checkpoint
+
+- Branch: `feature/SPARK-273-driver-book-parking-ahead-of-arrival`; HEAD at start: `532b09eaf89a2bfa43b00492a16e79cde5160e02`.
+- The existing worktree contained unrelated instructions/session/test changes and an uncommitted `ReservationMessaging.cs` hold-consumer change. They remain unstaged and untouched by this documentation slice. No stage, commit, push, merge, Jira or deployment operation was performed.
+
+### Next actionable step
+
+- User reviews the source-level integration handoff and backlog. When the PaymentService implementation is available (including the user's review of PR #98 / SPARK-391), agree the exact producer DTO, topology/authentication, immutable binding, and durable outcome behavior before wiring a real adapter. Scheduler, worker removal and additional recovery remain deferred.

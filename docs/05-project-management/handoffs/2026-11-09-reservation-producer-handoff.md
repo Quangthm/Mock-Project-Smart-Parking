@@ -79,14 +79,18 @@ This affects the parking fee collected at exit for a vehicle that entered on a r
 
 **Acceptance evidence:** Delay RabbitMQ delivery after confirming a 0 VND cash checkout. Keep the parking record open and verify it updates to `Completed` with the recorded exit time after Operations commits, without a manual reload. Verify that duplicate notifications are harmless, reconnect recovers a missed update, and operators at another site receive no checkout notification. Live verification is pending.
 
-## Operations work still required before live sales
+## Operations source status — 12 November 2026
 
-The local draft contains review/preview/receipt/own-booking routes, persisted binding, guarded evaluation-time confirmation. Facility producer/transport, quota/capacity and booking-restriction checks are implemented in the unverified Commit 1 draft. The commercial adapter still returns explicit unavailable errors; no live paid booking is enabled. The following are **Operations work**, not delegated Payment fixes:
+The local Operations source now has the short `HOLD_CREATED` receipt, hold-event dispatch, persisted order/zero-price provisioning, inbound reservation-deposit consumer, immutable binding validation and guarded paid/zero-price confirmation. The five-second order/hold/confirmation due-work worker remains as a temporary recovery mechanism; it is not a durable scheduled command at H. See the [current integration alignment and deferred backlog](2026-11-11-SPARK-273-implementation-alignment.md).
 
-- Verify Commit 1 against both services: selected-slot first hold wins, quota/narrower scope limits, mixed-category resource accounting, plate exclusion, expiry, cancellation evidence and durable Facility recovery. See [the integration handoff](2026-11-10-reservation-events-and-facility-integration.md).
-- Move external calls out of guarded database transactions and finish durable stages/replay/compensation for ambiguous owner acceptance. Current draft progression still makes owner calls while holding locks and is not release-ready.
-- Integrate the agreed owner transports, collection notifications and post-terminal reconciliation. The current worker only polls open receipts; it cannot discover money arriving after completion by itself.
-- Complete bounded readiness, failure handling and deployment evidence. Do not turn unavailable implementations into permissive success to demonstrate a happy path.
+**Still blocked before live sales:** the registered `IReservationCommercialOwner` implementation is `UnavailableReservationCommercialOwner`, so preview/review/order/zero-price acceptance/collection lookup/reconciliation fail closed. Payment's actual producer implementation, mutually agreed message identity/topology/ACL and durable confirmation/decline outcome delivery are not verified. The current Payment event endpoint uses locked booking state and `CollectionId` for business idempotency; it does not configure EF Inbox middleware. No end-to-end Payment/Operations flow or live delivery is claimed.
+
+The following remain **Operations/source acceptance and joint integration work**, not permission to change Payment ownership:
+
+- After the real producer is available, verify the existing hold/receipt, one-time Account-current authorization, selected-slot/plate/quota/capacity guards, Facility dependency, cancellation evidence and persisted UoW/outbox behavior against both services. Tests and live acceptance are **NOT RUN — USER VERIFICATION REQUIRED**.
+- Wire only the agreed Payment owner operations into the existing commercial port. Keep owner calls outside guarded Operations transactions; preserve exact reviewed terms, stable operation identity, authoritative returned `orderId`, `UNKNOWN` semantics and exact H.
+- Agree and implement reliable collection and confirmation/decline outcome delivery, including late/additional collections and targeted reconciliation, with Payment as financial authority. Do not infer this from the registered consumer or existing `PaymentSucceededV1` Gate-settlement event.
+- Preserve the current Facility confirmation dependency and authoritative pre-T evaluation until the fast-path invariant gate is proved. Complete deployment evidence before claiming integration readiness; unavailable adapters must remain fail-closed.
 
 ## Joint acceptance evidence
 
