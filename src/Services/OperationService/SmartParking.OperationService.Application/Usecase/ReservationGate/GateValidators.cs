@@ -61,3 +61,23 @@ public sealed class CheckOutReservationValidator : AbstractValidator<CheckOutRes
         RuleFor(x => x.ImageData).Must(GateInput.ValidImage);
     }
 }
+
+public sealed class PrepareReservationCheckoutValidator : AbstractValidator<PrepareReservationCheckoutCommand>
+{
+    public PrepareReservationCheckoutValidator()
+    {
+        RuleFor(x => x.SiteId).NotEmpty();
+        RuleFor(x => x.ReservationId).NotEmpty();
+        RuleFor(x => x.ImageData).Must(GateInput.ValidImage);
+    }
+}
+
+public sealed class PrepareSessionCheckoutValidator : AbstractValidator<PrepareSessionCheckoutCommand>
+{
+    public PrepareSessionCheckoutValidator()
+    {
+        RuleFor(x => x.SiteId).NotEmpty();
+        RuleFor(x => x.SessionId).NotEmpty();
+        RuleFor(x => x.ImageData).Must(GateInput.ValidImage);
+    }
+}
