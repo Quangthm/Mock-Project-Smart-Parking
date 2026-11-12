@@ -37,6 +37,34 @@ $dockerRows = @(& (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnv
 if (!($dockerRows | Where-Object { $_.Check -eq 'Assistant__Reads__Search__Origin' -and $_.Status -eq 'INVALID' -and $_.Detail -like 'Docker Assistant*' })) {
     throw 'Docker Assistant loopback origin not rejected.'
 }
+$dockerOnlyFixture = Join-Path $scratch 'docker-only.env'
+($before -replace '(?m)^ConnectionStrings__IoT=.*\r?\n', '') | Set-Content -LiteralPath $dockerOnlyFixture -Encoding UTF8
+$dockerOnlyRows = @(& (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $dockerOnlyFixture)
+if (!($dockerOnlyRows | Where-Object { $_.Check -eq 'ConnectionStrings__IoT' -and $_.Status -eq 'NOT_REQUIRED' }) -or
+    !($dockerOnlyRows | Where-Object { $_.Check -eq 'SMARTPARK_ASSISTANT_URL' -and $_.Status -eq 'NOT_REQUIRED' })) {
+    throw 'Docker-only setup incorrectly required host Assistant settings.'
+}
+$relativeRoot = Join-Path $scratch 'relative-config'
+New-Item -ItemType Directory -Path (Join-Path $relativeRoot 'keyring'), (Join-Path $relativeRoot 'keys'),
+    (Join-Path $relativeRoot 'knowledge') -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $relativeRoot 'keys/public.pem') -Value 'synthetic-public-key' -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $relativeRoot 'keys/assistant.pfx') -Value 'synthetic-pfx' -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $relativeRoot 'knowledge/smartpark-knowledge.md') -Value 'knowledge' -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $relativeRoot 'knowledge/publication.json') -Value '{}' -Encoding UTF8
+$relativeFixture = Join-Path $relativeRoot 'relative.env'
+@('SMARTPARK_ASSISTANT_DOCKER_ENABLED=true', 'Assistant__Jwt__Issuer=synthetic-issuer',
+    'Assistant__Jwt__Audience=synthetic-audience', 'Assistant__Jwt__PublicKeyFile=keys/public.pem',
+    'Assistant__Management__KeyDirectory=keyring',
+    'Assistant__Management__KeyEncryptionCertificatePath=keys/assistant.pfx',
+    'Assistant__Management__KeyEncryptionCertificatePassword=synthetic-password',
+    'Assistant__Guest__KnowledgeDirectory=knowledge') |
+    Set-Content -LiteralPath $relativeFixture -Encoding UTF8
+$relativeRows = @(& (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $relativeFixture)
+if (!($relativeRows | Where-Object { $_.Check -eq 'Assistant__Jwt__PublicKeyPem' -and $_.Status -eq 'CONFIGURED' }) -or
+    !($relativeRows | Where-Object { $_.Check -eq 'Assistant__Management__KeyDirectory' -and $_.Status -eq 'CONFIGURED' }) -or
+    !($relativeRows | Where-Object { $_.Check -eq 'Assistant__Guest__KnowledgeDirectory' -and $_.Status -eq 'CONFIGURED' })) {
+    throw 'Relative Assistant paths were not resolved from the environment file.'
+}
 $rejected = $false
 try { & (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $fixture -RecreateDb }
 catch { $rejected = $_.Exception.Message -match 'cannot be combined' }

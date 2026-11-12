@@ -2,7 +2,10 @@
 param([Parameter(Mandatory)][string]$EnvPath)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $EnvPath -NoExport
+$envFile = (Resolve-Path -LiteralPath $EnvPath).Path
+$envDirectory = Split-Path -Parent $envFile
+$settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
+$dockerEnabled = $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
 function Report([string]$Check, [string]$Status, [string]$Detail) {
     [pscustomobject]@{ Check = $Check; Status = $Status; Detail = $Detail }
 }
@@ -10,33 +13,49 @@ function Present([string]$Name) {
     $value = $settings[$Name]
     return ![string]::IsNullOrWhiteSpace($value) -and !$value.StartsWith('replace-with-')
 }
+function Resolve-ConfiguredPath([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+    if ([IO.Path]::IsPathRooted($Value)) { return $Value }
+    return Join-Path $envDirectory $Value
+}
 foreach ($name in @('SMARTPARK_ASSISTANT_URL','ConnectionStrings__IoT','Assistant__Jwt__Issuer',
     'Assistant__Jwt__Audience','Assistant__Jwt__PublicKeyPem')) {
+    if ($name -in @('SMARTPARK_ASSISTANT_URL','ConnectionStrings__IoT') -and $dockerEnabled -and !(Present $name)) {
+        Report $name 'NOT_REQUIRED' 'Docker setup derives the IoT connection and uses the Docker Assistant port.'
+        continue
+    }
+    if ($name -in @('SMARTPARK_ASSISTANT_URL','ConnectionStrings__IoT') -and !$dockerEnabled -and !(Present $name)) {
+        Report $name 'MISSING' 'Required when using the host Assistant runner.'
+        continue
+    }
     if ($name -eq 'Assistant__Jwt__PublicKeyPem' -and (Present 'Assistant__Jwt__PublicKeyFile')) {
-        $file = $settings['Assistant__Jwt__PublicKeyFile']
-        $absolute = [IO.Path]::IsPathRooted($file)
-        if ([IO.Path]::DirectorySeparatorChar -eq '\') {
-            $absolute = $file -match '^[A-Za-z]:[\\/]' -or $file -match '^\\\\[^\\/]+[\\/][^\\/]+'
-        }
-        if ($absolute -and (Test-Path -LiteralPath $file -PathType Leaf)) {
-            Report $name 'CONFIGURED' 'Public-key file present; host runner loads it, cryptographic validity unverified.'
-        } else { Report $name 'MISSING' 'Public-key file must exist and be absolute.' }
+        $file = Resolve-ConfiguredPath ([string]$settings['Assistant__Jwt__PublicKeyFile'])
+        if (Test-Path -LiteralPath $file -PathType Leaf) {
+            Report $name 'CONFIGURED' 'Public-key file present; path may be relative to .env, cryptographic validity unverified.'
+        } else { Report $name 'MISSING' 'Configured public-key file does not exist.' }
     }
     elseif (Present $name) { Report $name 'CONFIGURED' 'Present; value redacted, runtime validity unverified.' }
     else { Report $name 'MISSING' 'Configure locally after review.' }
 }
 foreach ($name in @('Assistant__Management__KeyDirectory','Assistant__Guest__KnowledgeDirectory')) {
-    $path = $settings[$name]
-    $absolute = $false
-    if (Present $name) {
-        $absolute = [IO.Path]::IsPathRooted($path)
-        if ([IO.Path]::DirectorySeparatorChar -eq '\') {
-            $absolute = $path -match '^[A-Za-z]:[\\/]' -or $path -match '^\\\\[^\\/]+[\\/][^\\/]+'
-        }
-    }
-    if ($absolute -and (Test-Path -LiteralPath $path -PathType Container)) {
-        Report $name 'CONFIGURED' 'Existing absolute directory; permissions/protection unverified.'
-    } else { Report $name 'MISSING' 'An existing absolute directory is required; nothing created.' }
+    $path = Resolve-ConfiguredPath ([string]$settings[$name])
+    if ($path -and (Test-Path -LiteralPath $path -PathType Container)) {
+        Report $name 'CONFIGURED' 'Existing directory; path may be relative to .env, permissions/protection unverified.'
+    } else { Report $name 'MISSING' 'An existing keyring/knowledge directory is required; nothing created.' }
+}
+$certificatePath = Resolve-ConfiguredPath ([string]$settings['Assistant__Management__KeyEncryptionCertificatePath'])
+if ($certificatePath -and (Test-Path -LiteralPath $certificatePath -PathType Leaf) -and
+    (Present 'Assistant__Management__KeyEncryptionCertificatePassword')) {
+    Report 'Assistant__Management__KeyEncryptionCertificatePath' 'CONFIGURED' 'PFX and password are present; certificate validity is checked during setup.'
+} else {
+    Report 'Assistant__Management__KeyEncryptionCertificatePath' 'MISSING' 'An existing PFX path and password are required for the Assistant keyring.'
+}
+if (!$settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -or $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -eq 'false') {
+    Report 'SMARTPARK_ASSISTANT_DOCKER_ENABLED' 'DISABLED' 'Docker Assistant provisioning is disabled.'
+} elseif ($dockerEnabled) {
+    Report 'SMARTPARK_ASSISTANT_DOCKER_ENABLED' 'CONFIGURED' 'Docker Assistant provisioning is enabled.'
+} else {
+    Report 'SMARTPARK_ASSISTANT_DOCKER_ENABLED' 'INVALID' 'Expected true or false.'
 }
 foreach ($name in @('Assistant__Guest__ReleaseEnabled','Assistant__Chat__ReleaseEnabled')) {
     if ($settings[$name] -eq 'true') { Report $name 'CONFIGURED' 'Release flag enabled; runtime gates still apply.' }
@@ -56,6 +75,29 @@ foreach ($owner in @('User','Operations','Search')) {
     } elseif ($settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true' -and $uri.IsLoopback) {
         Report $name 'INVALID' 'Docker Assistant is enabled. Use an HTTPS origin reachable from the container.'
     } else { Report $name 'CONFIGURED' 'HTTPS origin configured; TLS/auth/reachability unverified.' }
+}
+$userReadEnabled = $settings['Assistant__Reads__User__Enabled'] -ceq 'true'
+if (!$userReadEnabled) {
+    Report 'SMARTPARK_USER_DOCKER_TLS_ENABLED' 'NOT_REQUIRED' 'User vehicle read is disabled.'
+} else {
+    if ($settings['SMARTPARK_USER_DOCKER_TLS_ENABLED'] -cne 'true') {
+        Report 'SMARTPARK_USER_DOCKER_TLS_ENABLED' 'INVALID' 'User vehicle read requires the Docker User TLS overlay.'
+    } else {
+        Report 'SMARTPARK_USER_DOCKER_TLS_ENABLED' 'CONFIGURED' 'TLS overlay enabled; certificate SAN/reachability are checked during setup.'
+    }
+    foreach ($name in @('SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH','SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH')) {
+        $path = Resolve-ConfiguredPath ([string]$settings[$name])
+        if ($path -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+            Report $name 'CONFIGURED' 'Certificate file present; cryptographic validity is checked during setup.'
+        } else {
+            Report $name 'MISSING' 'An existing certificate/PFX file is required when User vehicle read is enabled.'
+        }
+    }
+    if (Present 'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD') {
+        Report 'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD' 'CONFIGURED' 'Password is present; value redacted.'
+    } else {
+        Report 'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD' 'MISSING' 'TLS PFX password is required when User vehicle read is enabled.'
+    }
 }
 if ($settings['Assistant__Reads__Search__Enabled'] -eq 'true') {
     foreach ($bounds in @(@('MaxAgeSeconds', 1, 3600), @('ClockSkewSeconds', 0, 60))) {

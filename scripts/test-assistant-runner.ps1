@@ -20,6 +20,8 @@ function dotnet {
 }
 function Write-Fixture([string]$Origin = 'https://localhost:5036', [string]$Connection = 'synthetic-private-value') {
     @(
+        'SMARTPARK_DEV_PASSWORD=synthetic-db-password',
+        'SMARTPARK_SERVICE_KEY=synthetic-service-key-at-least-32-characters',
         "ConnectionStrings__IoT=$Connection", 'Assistant__Jwt__Issuer=synthetic-issuer',
         'Assistant__Jwt__Audience=synthetic-audience', 'Assistant__Jwt__PublicKeyPem=synthetic-public-key',
         "Assistant__Management__KeyDirectory=$scratch", "Assistant__Guest__KnowledgeDirectory=$scratch",
@@ -49,19 +51,19 @@ try {
     & (Join-Path $scratch 'scripts/run-schema-service.ps1') -Service Assistant
     if ($global:assistantRunnerTestLaunches -ne 1) { throw 'Normal host not launched once.' }
     $publicFile = Join-Path $scratch 'public.pem'
-    [IO.File]::WriteAllText($publicFile, "synthetic-public-key`nsecond-line")
+    [IO.File]::WriteAllText($publicFile, "-----BEGIN PUBLIC KEY-----`nY3ludGhldGljLXB1YmxpYy1rZXk=`nc2Vjb25kLWxpbmU=`n-----END PUBLIC KEY-----")
     Add-Content -LiteralPath (Join-Path $scratch '.env') -Value "Assistant__Jwt__PublicKeyFile=$publicFile"
     & (Join-Path $scratch 'scripts/run-schema-service.ps1') -Service Assistant
-    if ($env:Assistant__Jwt__PublicKeyPem -cne "synthetic-public-key`nsecond-line") { throw 'Multiline public key was not loaded.' }
+    if ($env:Assistant__Jwt__PublicKeyPem -cne "-----BEGIN PUBLIC KEY-----`nY3ludGhldGljLXB1YmxpYy1rZXk=`nc2Vjb25kLWxpbmU=`n-----END PUBLIC KEY-----") { throw 'Multiline public key was not loaded.' }
     $env:Assistant__Jwt__PublicKeyFile = ''
     Write-Fixture -Origin 'http://localhost:5035'
     Expect-Rejection 'fixed HTTPS'
     Write-Fixture -Connection ''
     Expect-Rejection 'ConnectionStrings__IoT'
-    foreach ($relativePath in @('\Windows', 'C:Windows')) {
+    foreach ($relativePath in @('\DefinitelyMissingSmartParkKeyring', 'C:\DefinitelyMissingSmartParkKeyring')) {
         Write-Fixture
         Add-Content -LiteralPath (Join-Path $scratch '.env') -Value "Assistant__Management__KeyDirectory=$relativePath"
-        Expect-Rejection 'must exist and be absolute'
+        Expect-Rejection 'Assistant__Management__KeyDirectory'
     }
     Write-Host 'PASS: normal host dispatch, process configuration, Demo isolation, HTTPS guard, missing configuration, secret-safe errors.'
 } finally {
