@@ -65,7 +65,7 @@ public sealed class ReviewReservationTermsHandler(ICurrentActor actor, IReservat
         if (!policy.AllowsWindow(new ReservationInterval(intent.Start, intent.End), now))
             throw new ReservationGateException(400, "BOOKING_WINDOW_INVALID", "The requested interval is outside the effective booking policy.");
         // Preview/review does not evaluate vehicle authority. That happens once after workflow Allowed.
-        var quote = await commercial.QuoteAsync(account, intent, ct);
+        var quote = await commercial.QuoteAsync(account, facts.TenantId, intent, ct);
         BookingContracts.ValidateQuote(quote, account, intent, await bookings.DatabaseNowAsync(ct));
         var snapshot = new BookingTermsSnapshot(quote, facts, JsonSerializer.Serialize(policy),
             policy.Platform.Id, policy.Platform.Version, policy.Site.Id, policy.Site.Version);

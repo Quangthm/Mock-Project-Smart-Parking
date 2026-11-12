@@ -33,18 +33,6 @@ public sealed class ReservationVehicleClient(HttpClient client) : IReservationVe
     private static ReservationGateException Unavailable() => new(503, "OWNER_UNAVAILABLE", "Vehicle binding authority is unavailable.");
 }
 
-// Real producer adapters replace these registrations only after their versioned/authenticated
-// contracts are delivered. No legacy-price, fake coverage or demo payment fallback is permitted.
-public sealed class UnavailableReservationCommercialOwner : IReservationCommercialOwner
-{
-    private static ReservationGateException Missing() => new(503, "OWNER_UNAVAILABLE", "Reservation commercial producer is not integrated.");
-    public Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct) => throw Missing();
-    public Task<CommercialTerms> QuoteAsync(Guid accountId, BookingSelection intent, CancellationToken ct) => throw Missing();
-    public Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct) => throw Missing();
-    public Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct) => throw Missing();
-    public Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct) => throw Missing();
-    public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct) => throw Missing();
-}
 public sealed class ReservationFactsPublisher(IPublishEndpoint publisher) : IReservationFactsPublisher
 {
     public Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct) =>

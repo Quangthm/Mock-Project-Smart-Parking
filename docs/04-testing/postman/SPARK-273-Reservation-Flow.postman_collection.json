@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "95ef8f73-2730-4bb5-bf11-2ea005a770c4",
     "name": "SPARK-273 Reservation Flow",
-    "description": "Manual reservation flow against the implemented Operations routes. The approved verified collection consumer and guarded confirmation path are implemented in source, but live Payment/Facility verification remains pending. No mock or demo-payment route is used.",
+    "description": "Manual reservation flow against the implemented Operations routes. Operations calls real Payment preview/quote/order endpoints; zero-price acceptance and reconciliation remain fail-closed. Paid confirmation consumes generic PaymentSucceededV1 with persisted accepted-order validation (open deviation from the proposed dedicated collection event). Live Payment/Facility/broker verification remains pending. No mock or demo-payment route is used.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {

@@ -48,6 +48,9 @@ public sealed record VerifiedReservationCollection(Guid EventId, Guid Collection
     Guid PaymentTransactionId, Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId,
     Guid QuoteId, string QuoteVersion, Guid TermsId, string TermsVersion, decimal Amount, string Currency,
     string Provider, string ProviderReference, DateTimeOffset ProviderVerifiedAt, DateTimeOffset OccurredAt);
+public sealed record ReservationPaymentEvidence(Guid EventId, Guid PaymentOrderId, Guid PaymentTransactionId,
+    Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId, decimal Amount, string Currency,
+    string Provider, string? ProviderReference, DateTimeOffset PaidAt);
 public sealed record BookingView(Guid ReservationId, string State, Guid SiteId, Guid? RequestedSlotId,
     DateTimeOffset Start, DateTimeOffset End, DateTimeOffset? HoldExpiresAt, Guid? OrderId,
     string OrderProvisioningState, string? OrderProvisioningCode, string ZeroPriceAcceptanceState,
@@ -61,7 +64,7 @@ public sealed record ReservationConfirmedV1(Guid EventId, Guid ReservationId, Gu
 public interface IReservationCommercialOwner
 {
     Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct);
-    Task<CommercialTerms> QuoteAsync(Guid accountId, BookingSelection intent, CancellationToken ct);
+    Task<CommercialTerms> QuoteAsync(Guid accountId, Guid tenantId, BookingSelection intent, CancellationToken ct);
     // A real Payment order is created only after the reservation hold is durably committed.
     // Quote review remains local to the accepted booking snapshot; subsequent order creation is
     // idempotent and uses the reservation/order operation identity rather than a separate accept step.
@@ -112,6 +115,7 @@ public interface IReservationTermsRepository
 public sealed record PreviewReservationPriceQuery(ReservationPricePreview Intent) : IRequest<PricePreview>;
 public sealed record ReviewReservationTermsCommand(BookingSelection Intent) : IRequest<ReviewedTerms>;
 public sealed record ProgressReservationCommand(Guid RequestId) : IRequest;
+public sealed record RecordReservationPaymentCommand(ReservationPaymentEvidence Evidence) : IRequest;
 public sealed record ReadOwnBookingQuery(Guid Id) : IRequest<BookingView>;
 public sealed record ReadOwnBookingsQuery(int PageSize = 20, DateTimeOffset? Before = null, Guid? BeforeId = null)
     : IRequest<IReadOnlyList<BookingView>>;

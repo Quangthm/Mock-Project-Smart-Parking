@@ -41,7 +41,7 @@ See [the v1 API specification](../../03-design/api/reservation-facility-dependen
 
 Schema declarations are in the original Facility and Operations scripts only. Existing volumes are not upgraded by `CREATE IF NOT EXISTS`; inventory/reconcile them explicitly. Do not reset a shared database or infer that a previously installed schema is aligned.
 
-`ReservationFacilityDependencyTests` and `ReservationAvailabilityTests` are authored but NOT RUN. Verify acquire versus structure/physical writes, lost replies and restart at every boundary, immutable replay, abort tombstones, no circular waits, real outbox routing and error envelopes in the isolated deployment. Commercial acceptance/order/collection calls still need Commit 2 durable staging outside guarded transactions; the unavailable commercial adapter prevents live sales until that work and Payment delivery are complete.
+`ReservationFacilityDependencyTests` and `ReservationAvailabilityTests` are authored but NOT RUN. Verify acquire versus structure/physical writes, lost replies and restart at every boundary, immutable replay, abort tombstones, no circular waits, real outbox routing and error envelopes in the isolated deployment. Commercial preview, quote and order calls now use a real Payment adapter staged outside guarded Operations transactions. Zero-price acceptance, quote-bound collection lookup, reconciliation, production machine authentication and live end-to-end acceptance remain blocked; do not infer live sales from the source adapter.
 
 ## 11 November — aggregate-only live-hold fast-path proof gate
 

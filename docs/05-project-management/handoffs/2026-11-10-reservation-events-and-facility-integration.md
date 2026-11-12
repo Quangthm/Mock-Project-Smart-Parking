@@ -35,7 +35,9 @@ New Facility producer workflows are MediatR handlers using Domain entities, repo
 
 ## 11 November amendment — Payment consumer and guarded confirmation path
 
-**Approved decision:** [event-driven confirmation](../decision-log/2026-11-11-reservation-event-driven-confirmation.md), [cross-team handoff](2026-11-11-SPARK-273-implementation-alignment.md). This is a **target design**; not a claim that the Payment consumer, proven aggregate-only fast path or deployment already exists.
+**Approved decision:** [event-driven confirmation](../decision-log/2026-11-11-reservation-event-driven-confirmation.md), [cross-team handoff](2026-11-11-SPARK-273-implementation-alignment.md). This is a **target design**; not a claim that the proven aggregate-only fast path or deployment already exists.
+
+**12 November source update:** Operations now has a real Payment adapter, a dedicated reservation `PaymentSucceededV1` consumer and guarded confirmation handlers. The generic event plus persisted accepted-order validation is an open deviation from item 2 below, not approval of a replacement contract. Tests and live integration are NOT RUN; the aggregate-only fast path remains gated off, and zero-price/reconciliation/production machine authentication remain blocked.
 
 1. Operations' creation request workflow finishes when a `PENDING_PAYMENT` reservation and exclusive claim durably commit. The five-minute default H is **not** a five-minute Saga worker lifetime. Order provisioning and payment confirmation are separately replayable work items. Operations never calls Payment while holding protected plate/site DB guards.
 2. **Primary financial trigger:** Payment's outbox emits one owner-authenticated verified collection message per distinct collection, including collections after order PAID or booking receipt terminal. Proposed `ReservationDepositCollectedV1` must include collection/event/order/transaction/reservation/operation/account/tenant/site, accepted quote/terms version, amount/currency and provider proof references. Existing generic `PaymentSucceededV1` is not sufficient without binding amendments. Agree exact event type/assembly identity, broker routing, ACL, queue and schema version before coding.
@@ -106,4 +108,4 @@ Use fresh isolated schemas declared in the original scripts. CREATE IF NOT EXIST
 - Disable outbox delivery or stop the broker after configuration, then restore it: each committed effect must eventually deliver; rolled-back effects must not.
 - Test middleware malformed JSON, validation, 401/403/404/405/415, unknown exception, request cancellation and already-started response. HEAD remains bodyless and unknown errors remain sanitized.
 
-Full paid booking still depends on [Payment producers](2026-11-09-reservation-producer-handoff.md) and Operations' second commit for durable commercial stages/recovery. Postman scripts follow that work.
+Full paid booking still depends on verified [Payment producers](2026-11-09-reservation-producer-handoff.md) and the durable commercial/recovery edges. Local source now includes the Operations adapter/consumer and minimal Payment compatibility fixes, but no tests or live paid booking are claimed. Production Operations→Payment authentication, zero-price acceptance, quote-bound collection lookup/reconciliation and event-contract owner review remain blockers.

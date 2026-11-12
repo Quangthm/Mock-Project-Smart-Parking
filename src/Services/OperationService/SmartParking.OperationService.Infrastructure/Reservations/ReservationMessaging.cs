@@ -111,6 +111,7 @@ public static class ReservationMessaging
             {
                 registration.AddConsumer<AccountAccessDecisionConsumer>();
                 registration.AddConsumer<ReservationHoldChangedConsumer>();
+                registration.AddConsumer<ReservationPaymentSucceededConsumer>();
             }
             if (gateCheckoutEnabled)
             {
@@ -135,9 +136,9 @@ public static class ReservationMessaging
                         host.Username(brokerUser);
                         host.Password(brokerPassword);
                     });
+                bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                 if (gateCheckoutEnabled)
                 {
-                    bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                     bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
                     {
                         endpoint.UseMessageRetry(retry => retry.Intervals(
@@ -152,6 +153,15 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<ReservationDepositCollectedConsumer>(context);
+                    });
+                }
+                if (admissionEnabled)
+                {
+                    bus.ReceiveEndpoint("smartpark-operation-reservation-payment-succeeded-v1", endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<ReservationPaymentSucceededConsumer>(context);
                     });
                 }
                 bus.Message<OperationsGateAuditV1>(message => message.SetEntityName(OperationsAuditTopology.Exchange));

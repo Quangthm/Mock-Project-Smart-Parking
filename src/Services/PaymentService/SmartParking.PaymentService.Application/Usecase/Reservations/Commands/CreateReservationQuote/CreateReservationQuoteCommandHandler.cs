@@ -78,7 +78,7 @@ public sealed class CreateReservationQuoteCommandHandler
         }
 
         var calcRequest = new PricingCalculationRequest(
-            TenantId: req.TenantId ?? policy.TariffId,
+            TenantId: req.TenantId ?? Guid.Empty,
             SiteId: req.SiteId,
             VehicleType: vehicleType,
             EntryTime: req.Start,
@@ -119,7 +119,7 @@ public sealed class CreateReservationQuoteCommandHandler
         var quote = new ReservationQuote
         {
             Id = Guid.NewGuid(),
-            TenantId = req.TenantId ?? policy.TariffId,
+            TenantId = req.TenantId ?? Guid.Empty,
             SiteId = req.SiteId,
             AccountId = accountId.Value,
             VehicleId = req.VehicleId,

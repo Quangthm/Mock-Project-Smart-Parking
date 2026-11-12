@@ -42,7 +42,13 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         {
             if (existingOrder.ReferenceId != req.ReservationId ||
                 existingOrder.AccountId != req.AccountId ||
-                Math.Abs(existingOrder.Amount - req.Amount) > 0.01m)
+                existingOrder.TenantId != req.TenantId ||
+                existingOrder.SiteId != req.SiteId ||
+                existingOrder.ReferenceType != ReferenceType.RESERVATION ||
+                existingOrder.OrderType != OrderType.RESERVATION_FEE ||
+                existingOrder.ExpiresAt != req.ExpiresAt ||
+                Math.Abs(existingOrder.Amount - req.Amount) > 0.01m ||
+                Math.Abs(existingOrder.FinalAmount - req.Amount) > 0.01m)
             {
                 _logger.LogWarning("Idempotency conflict for OperationId: {OperationId}", req.OperationId);
                 throw new PaymentDomainException(
@@ -120,6 +126,30 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         {
             _logger.LogWarning("Quote DepositAmount mismatch: Quote={QuoteAmount}, Req={ReqAmount}", quote.DepositAmount, req.Amount);
             throw new PaymentDomainException("QUOTE_AMOUNT_MISMATCH", $"Requested amount {req.Amount} does not match quote deposit {quote.DepositAmount}.", "amount");
+        }
+
+        if (req.TenantId != Guid.Empty && quote.TenantId != Guid.Empty && quote.TenantId != req.TenantId)
+        {
+            _logger.LogWarning("Quote TenantId mismatch: Quote={QuoteTenant}, Req={ReqTenant}", quote.TenantId, req.TenantId);
+            throw new PaymentDomainException("QUOTE_TENANT_MISMATCH", "ReservationQuote does not belong to the requested tenant.", "tenantId");
+        }
+
+        if (quote.SiteId != req.SiteId)
+        {
+            _logger.LogWarning("Quote SiteId mismatch: Quote={QuoteSite}, Req={ReqSite}", quote.SiteId, req.SiteId);
+            throw new PaymentDomainException("QUOTE_SITE_MISMATCH", "ReservationQuote does not belong to the requested site.", "siteId");
+        }
+
+        if (!string.Equals(quote.Currency, req.Currency, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Quote currency mismatch: Quote={QuoteCurrency}, Req={ReqCurrency}", quote.Currency, req.Currency);
+            throw new PaymentDomainException("QUOTE_CURRENCY_MISMATCH", "ReservationQuote currency does not match the requested currency.", "currency");
+        }
+
+        if (!string.Equals(quote.TermsVersion, req.TermsVersion, StringComparison.Ordinal))
+        {
+            _logger.LogWarning("Quote terms version mismatch: Quote={QuoteVersion}, Req={ReqVersion}", quote.TermsVersion, req.TermsVersion);
+            throw new PaymentDomainException("TERMS_STALE", "ReservationQuote terms version does not match the accepted terms.", "termsVersion");
         }
 
         // 4. Accept Quote & Create Order atomically
