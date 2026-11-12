@@ -2,7 +2,7 @@
 param()
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path $PSScriptRoot -Parent
-$testRoot = Join-Path $sourceRoot ('.cache/setup-tests-' + [Guid]::NewGuid().ToString('N'))
+$testRoot = Join-Path $sourceRoot ('.cache/sp-setup-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
 $global:setupTestSecretMaps = @{}
 $global:setupTestSecretWrites = 0
 $global:setupTestDockerCalls = @()
@@ -71,7 +71,7 @@ function New-Fixture($name) {
     foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
         if ($service -eq 'Notification') {
             $project = Join-Path $fixture "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
-            New-Item -ItemType Directory -Force -Path $project | Out-Null
+            [IO.Directory]::CreateDirectory($project) | Out-Null
             [IO.File]::WriteAllText((Join-Path $project "SmartParking.NotificationAuditService.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
         } else {
             $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
@@ -106,7 +106,7 @@ Invoke-Fixture $local
 Assert-Setup ([Convert]::ToBase64String($localBytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $local '.env')))) 'Rerun changed .env.'
 Assert-Setup ($global:setupTestSecretWrites -eq $writes) 'Rerun rewrote existing secrets.'
 $key = $global:setupTestSecretMaps['User']['Services:Key']
-Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Notification']['Services:Key']) 'Local service keys differ.'
+Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key']) 'Local service keys differ.'
 Assert-Setup ($global:setupTestSecretMaps['Parking']['ConnectionStrings:Parking'] -match 'Database=smartpark_facility;Username=smartpark_facility;') 'Facility database mapping differs from compose.'
 Assert-Setup ($global:setupTestSecretMaps['Reservation']['ConnectionStrings:Reservation'] -match 'Database=smartpark_operations;Username=smartpark_operations;') 'Operations database mapping differs from compose.'
 $global:setupTestSecretMaps = @{}

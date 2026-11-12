@@ -1,5 +1,5 @@
-#Requires -Version 7.0
 # Disposable Docker projects and locally signed test JWTs.
+# Compatible with Windows PowerShell 5.1 and PowerShell 7+.
 param([switch]$NoBuild, [switch]$PreflightOnly)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -9,6 +9,62 @@ $envPath = Join-Path $scratch 'test.env'
 $schema = $null
 $rsa = [Security.Cryptography.RSA]::Create(2048)
 $certificateRsa = [Security.Cryptography.RSA]::Create(2048)
+
+function Test-WindowsHost {
+    if ($env:OS -eq 'Windows_NT' -or $PSVersionTable.PSEdition -eq 'Desktop') { return $true }
+    try {
+        return [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+            [Runtime.InteropServices.OSPlatform]::Windows)
+    } catch {
+        return $false
+    }
+}
+
+$isWindowsHost = Test-WindowsHost
+
+function Get-PowerShellExecutable {
+    $name = if ($isWindowsHost) { 'powershell.exe' } else { 'pwsh' }
+    $command = Get-Command $name -ErrorAction SilentlyContinue
+    if (!$command) {
+        throw "Cannot find $name. Run this script from an installed PowerShell host."
+    }
+    return $command.Source
+}
+
+function ConvertTo-DerLength([int]$Length) {
+    if ($Length -lt 128) { return [byte[]]@([byte]$Length) }
+    $lengthBytes = [BitConverter]::GetBytes($Length)
+    [Array]::Reverse($lengthBytes)
+    $first = 0
+    while ($first -lt $lengthBytes.Length -and $lengthBytes[$first] -eq 0) { $first++ }
+    $significant = [byte[]]$lengthBytes[$first..($lengthBytes.Length - 1)]
+    return [byte[]](@([byte](0x80 -bor $significant.Length)) + $significant)
+}
+
+function ConvertTo-DerInteger([byte[]]$Value) {
+    $first = 0
+    while ($first -lt ($Value.Length - 1) -and $Value[$first] -eq 0) { $first++ }
+    $content = [byte[]]$Value[$first..($Value.Length - 1)]
+    if (($content[0] -band 0x80) -ne 0) { $content = [byte[]](@([byte]0) + $content) }
+    $header = [byte[]](@([byte]0x02) + (ConvertTo-DerLength $content.Length))
+    return [byte[]]($header + $content)
+}
+
+function Convert-RsaPublicKeyToPem([Security.Cryptography.RSA]$Rsa) {
+    # PKCS#1 RSA PUBLIC KEY is accepted by RSA.ImportFromPem on .NET 10 and
+    # avoids requiring ExportSubjectPublicKeyInfoPem on Windows PowerShell 5.1.
+    $parameters = $Rsa.ExportParameters($false)
+    $modulus = [byte[]](ConvertTo-DerInteger $parameters.Modulus)
+    $exponent = [byte[]](ConvertTo-DerInteger $parameters.Exponent)
+    $body = [byte[]]($modulus + $exponent)
+    $der = [byte[]](@([byte]0x30) + (ConvertTo-DerLength $body.Length) + $body)
+    $base64 = [Convert]::ToBase64String($der)
+    $lines = for ($offset = 0; $offset -lt $base64.Length; $offset += 64) {
+        $count = [Math]::Min(64, $base64.Length - $offset)
+        $base64.Substring($offset, $count)
+    }
+    return "-----BEGIN RSA PUBLIC KEY-----`r`n$($lines -join "`r`n")`r`n-----END RSA PUBLIC KEY-----`r`n"
+}
 
 function Get-FreePort {
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
@@ -42,14 +98,35 @@ function Invoke-Assistant([string]$Path, [hashtable]$Headers, [hashtable]$Body) 
     }
     return (Invoke-RestMethod @http).data
 }
+function Get-HttpStatusCode([string]$Uri, [hashtable]$Headers) {
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -Headers $Headers -TimeoutSec 10
+        return [int]$response.StatusCode
+    } catch {
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            return [int]$_.Exception.Response.StatusCode
+        }
+        throw
+    }
+}
 function Invoke-Setup([string]$SettingsPath, [string]$ExpectedFailure, [switch]$ValidateOnly) {
-    $shell = if ($IsWindows) { 'powershell.exe' } else { 'pwsh' }
+    $shell = Get-PowerShellExecutable
     $arguments = @('-NoProfile')
-    if ($IsWindows) { $arguments += @('-ExecutionPolicy','Bypass') }
+    if ($isWindowsHost) { $arguments += @('-ExecutionPolicy','Bypass') }
     $runnerOptions = @('-NoBuild')
     if ($ValidateOnly) { $runnerOptions += '-ValidateOnly' }
-    $output = & $shell @arguments -File $runner -EnvPath $SettingsPath -SchemaProject $project @runnerOptions 2>&1
-    $failed = $LASTEXITCODE -ne 0
+    # Windows PowerShell promotes native stderr to a terminating error when
+    # $ErrorActionPreference is Stop. Capture the child exit code explicitly so
+    # expected validation failures can be asserted on both PowerShell editions.
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $shell @arguments -File $runner -EnvPath $SettingsPath -SchemaProject $project @runnerOptions 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    $failed = $exitCode -ne 0
     if ($ExpectedFailure) {
         if (!$failed -or ($output -join ' ') -notmatch $ExpectedFailure) {
             $output | ForEach-Object { Write-Host $_ }
@@ -82,7 +159,7 @@ try {
             (Join-Path $root 'src/Services/IoTService'))
     }
     $publicKeyPath = Join-Path $scratch 'assistant-public.pem'
-    [IO.File]::WriteAllText($publicKeyPath, $rsa.ExportSubjectPublicKeyInfoPem())
+    [IO.File]::WriteAllText($publicKeyPath, (Convert-RsaPublicKeyToPem $rsa))
     $certPath = Join-Path $scratch 'assistant.pfx'
     $password = [Guid]::NewGuid().ToString('N')
     $certRequest = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=assistant-docker-fixture',
@@ -173,8 +250,9 @@ Hướng dẫn giả lập cho Docker.
     $owner = @{ Authorization = "Bearer $(Get-TestToken 'owner' $account $user)" }
     $settings = (Invoke-Assistant 'admin/settings' $admin).settings
     if ($settings.revision -ne 0 -or $settings.enabled) { throw 'Expected disabled Assistant Settings on fresh schema.' }
-    $denied = Invoke-WebRequest "$baseUrl/api/assistant/admin/settings" -Headers $driver -TimeoutSec 10 -SkipHttpErrorCheck
-    if ($denied.StatusCode -ne 403) { throw 'Driver unexpectedly accessed Assistant Settings.' }
+    if ((Get-HttpStatusCode "$baseUrl/api/assistant/admin/settings" $driver) -ne 403) {
+        throw 'Driver unexpectedly accessed Assistant Settings.'
+    }
 
     function Save-Settings([hashtable]$Mutation) {
         $Mutation.mutationId = [Guid]::NewGuid()
@@ -202,8 +280,9 @@ Hướng dẫn giả lập cho Docker.
     $ownerChat = Invoke-Assistant 'conversations' $owner @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
     $adminChat = Invoke-Assistant 'conversations' $admin @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
     $driverPath = "conversations/$($chat.id)"
-    $foreign = Invoke-WebRequest "$baseUrl/api/assistant/$driverPath/messages" -Headers $owner -TimeoutSec 10 -SkipHttpErrorCheck
-    if ($foreign.StatusCode -ne 404) { throw 'Owner can access Driver history on the same Account.' }
+    if ((Get-HttpStatusCode "$baseUrl/api/assistant/$driverPath/messages" $owner) -ne 404) {
+        throw 'Owner can access Driver history on the same Account.'
+    }
     $message = Invoke-Assistant "conversations/$($chat.id)/messages" $driver @{
         clientMessageId=[Guid]::NewGuid(); expectedRevision=0; message='SmartPark'
     }
@@ -221,8 +300,8 @@ Hướng dẫn giả lập cho Docker.
     $history = Invoke-Assistant "$driverPath/messages" $driver
     if ($history.items.Count -ne 2) { throw 'Docker rerun did not preserve Driver history.' }
     if (!(Invoke-Assistant "$driverPath/reset" $driver @{}).reset) { throw 'Reset was not acknowledged.' }
-    $oldHistory = Invoke-WebRequest "$baseUrl/api/assistant/$driverPath/messages" -Headers $driver -TimeoutSec 10 -SkipHttpErrorCheck
-    if ($oldHistory.StatusCode -ne 404 -or (Invoke-Assistant 'conversations' $driver).items.Count -ne 0) {
+    $oldHistoryStatus = Get-HttpStatusCode "$baseUrl/api/assistant/$driverPath/messages" $driver
+    if ($oldHistoryStatus -ne 404 -or (Invoke-Assistant 'conversations' $driver).items.Count -ne 0) {
         throw 'Reset did not hide Driver history.'
     }
     $replacement = Invoke-Assistant 'conversations' $driver @{ clientConversationId=[Guid]::NewGuid(); locale='vi' }
