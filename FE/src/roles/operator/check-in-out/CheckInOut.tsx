@@ -227,7 +227,7 @@ export function CheckInOut({
         action: mode,
       }
       setQuickResult(result)
-      if (mode === "check-out") await prepareCheckout(result)
+      if (mode === "check-out") await prepareCheckout(result, imageData)
 
       if (autoCheckIn && mode === "check-in") {
         await executeCheckAction(match, "check-in", imageData)
@@ -261,7 +261,7 @@ export function CheckInOut({
           action: mode,
         }
         setQuickResult(result)
-        await prepareCheckout(result)
+        await prepareCheckout(result, imageData)
       } catch (walkInError) {
         if (!(walkInError instanceof AuthApiError) || walkInError.status !== 404) {
           setQuickError(walkInError instanceof Error ? walkInError.message : "Could not look up the active parking session.")
@@ -346,7 +346,7 @@ export function CheckInOut({
 
   }
 
-  async function prepareCheckout(result: QuickGateResult) {
+  async function prepareCheckout(result: QuickGateResult, imageData?: string) {
     if (!lot || pricingLoading || actionLoading) return
     const session = result.kind === "walk-in" ? result.session : null
     if (result.kind === "walk-in" && !session) return
@@ -365,6 +365,7 @@ export function CheckInOut({
         reservationId: booking?.id,
         sessionId: session?.id,
         plateNumber: result.kind === "reservation" ? result.booking.licensePlate : result.plate,
+        imageData,
       })
       if (!Number.isFinite(prepared.order.amount) || prepared.order.amount < 0) {
         throw new Error("Payment Service returned an invalid amount.")
@@ -392,7 +393,7 @@ export function CheckInOut({
     setPaymentMessage(isTestPayOs ? "Preparing a 2,000 VND PayOS test payment..." : "Calculating parking fee...")
     let prepared: Awaited<ReturnType<typeof paymentApi.prepare>>
     try {
-      if (!isTestPayOs) {
+      if (!isTestPayOs && !input.imageData) {
         if (preparedCheckout?.siteId !== lot.id || preparedCheckout.referenceId !== input.referenceId) {
           throw new Error("Review the amount due before collecting payment.")
         }
@@ -806,7 +807,7 @@ export function CheckInOut({
                     <button
                       type="button"
                       className="rounded-lg border border-violet-500 px-4 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-500/10"
-                      disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice !== null}
+                      disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice === null}
                       onClick={() => void executeWalkInAction(quickResult, "check-out", latestScanImage || undefined, quickResult.vehicleType, "PAYOS_TEST")}
                     >
                       Test PayOS · 2,000 VND
