@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react"
+import { driverReservationApi, type DriverReservation } from "../../../lib/driverReservationApi"
+import { formatStatus } from "../../../lib/formatStatus"
+import { useServerRefresh } from "../../../lib/serverRefresh"
+import { readReservationAttempt } from "./ReservationCheckout"
 
 import { useApp } from "../../../context/AppContext"
 import type { Booking } from "../../../lib/types"
@@ -39,7 +43,7 @@ function BookingRow({ booking, vehicleType, address }: { booking: Booking; vehic
   </article>
 }
 
-export function ActiveBookings() {
+export function ActiveBookings({ onResumeReservation }: { onResumeReservation?: (siteId: string) => void } = {}) {
   const { user } = useApp()
   const [bookings, setBookings] = useState<Booking[]>(() => user ? store.getBookingsByDriver(user.id) : [])
   const [registeredVehicles, setRegisteredVehicles] = useState<RegisteredVehicle[]>([])
@@ -73,7 +77,8 @@ export function ActiveBookings() {
   const vehicles = user ? store.getVehiclesByDriver(user.id) : []
 
   return <div className="current-bookings driver-current-bookings">
-    {parking.length > 0 && <FindMyCarCard />}
+    {user && <FindMyCarCard key={user.id} />}
+    {user && <ServerReservations key={user.id} userId={user.id} onResume={onResumeReservation} />}
     {([
       { id: "parking", title: "Parking now", description: "Vehicles currently checked in", records: parking, icon: "parking" as const },
       { id: "upcoming", title: "Upcoming bookings", description: "Confirmed and pending reservations", records: upcoming, icon: "calendar" as const },
@@ -94,9 +99,54 @@ export function ActiveBookings() {
           address={lots.find(lot => lot.id === booking.lotId)?.address}
         />) : <div className="driver-booking-empty" role="status">
           <UntitledIcon name={group.icon} size={21} />
-          <span>{group.id === "parking" ? "No vehicle is parked right now." : "Your next booking will appear here."}</span>
+          <span>{group.id === "parking" ? "No checked-in bookings in this list." : "Your next booking will appear here."}</span>
         </div>}
       </div>
     </section>)}
   </div>
+}
+
+function ServerReservations({ userId, onResume }: { userId: string; onResume?: (siteId: string) => void }) {
+  const [result, setResult] = useState<DriverReservation[] | null>(null)
+  const [error, setError] = useState("")
+  const [retry, setRetry] = useState(0)
+
+  async function load(isCurrent: () => boolean) {
+    try {
+      const reservations = await driverReservationApi.list()
+      if (isCurrent()) { setResult(reservations); setError("") }
+    } catch (cause) {
+      if (isCurrent()) setError(cause instanceof Error ? cause.message : "Could not load reservations.")
+    }
+  }
+
+  useEffect(() => {
+    let current = true
+    void load(() => current)
+    return () => { current = false }
+  }, [retry])
+  useServerRefresh(userId, load)
+
+  return <section className="card space-y-3" aria-labelledby="server-reservations">
+    <h2 id="server-reservations" className="text-lg font-bold">Recent reservations</h2>
+    {error && <div className="space-y-2"><p role="alert">{error}</p>
+      <button type="button" className="btn-outline" onClick={() => setRetry(value => value + 1)}>Retry</button>
+    </div>}
+    {!error && !result && <p role="status">Loading reservations…</p>}
+    {result?.length === 0 && !error && <p>No reservations yet.</p>}
+    {result && result.length > 0 && <ul className="divide-y divide-[var(--border)]">
+      {result.map(item => {
+        const site = store.getLots().find(lot => lot.id === item.siteId)
+        const attempt = readReservationAttempt(`sp_reservation_attempt:${userId}:${item.siteId}`)
+        return <li key={item.reservationId} className="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div className="min-w-0 break-words">
+            <strong>{site?.name || "Parking reservation"}</strong>
+            <p className="text-sm text-[var(--muted)]">{new Date(item.start).toLocaleString("en-VN")} – {new Date(item.end).toLocaleString("en-VN")}</p>
+            <p className="text-sm">{formatStatus(item.state)}</p>
+          </div>
+          {onResume && site && attempt?.reservationId === item.reservationId && item.state === "PENDING_PAYMENT" && <button type="button" className="btn-outline" onClick={() => onResume(site.id)}>Resume reservation</button>}
+        </li>
+      })}
+    </ul>}
+  </section>
 }
