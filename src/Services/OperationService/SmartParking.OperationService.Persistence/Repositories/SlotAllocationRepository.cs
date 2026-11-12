@@ -13,4 +13,6 @@ public sealed class SlotAllocationRepository(ReservationDbContext db)
                        a.ReservationId == reservationId && a.AllocationStatus == "RESERVED")
             .OrderByDescending(a => a.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+    public async Task<IReadOnlyList<SlotAllocationRow>> FindActiveForSessionAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken ct) =>
+        await Set.Where(a => a.TenantId == tenantId && a.SiteId == siteId && a.ParkingSessionId == sessionId && (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED")).ToListAsync(ct);
 }

@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartParking.FacilityService.API;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Reservations;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
 
@@ -516,6 +517,7 @@ public sealed class FacilityStructureEndpointTests
 
     private sealed class Harness
     {
+        public EmptyReservationDependencies ReservationDependencies { get; } = new();
         public Harness()
         {
             Operations = new InMemoryStructureOperationStore();
@@ -573,8 +575,10 @@ public sealed class FacilityStructureEndpointTests
                 services.RemoveAll<IStructureCommitments>();
                 services.AddSingleton<IStructureCommitments>(harness.Commitments);
 
-                services.RemoveAll<IStructureSynchronizationStore>();
-                services.AddSingleton<IStructureSynchronizationStore>(harness.Synchronization);
+                services.RemoveAll<IStructureSynchronizationRepository>();
+                services.AddSingleton<IStructureSynchronizationRepository>(harness.Synchronization);
+                services.RemoveAll<IReservationDependencyRepository>();
+                services.AddSingleton<IReservationDependencyRepository>(harness.ReservationDependencies);
 
                 services.RemoveAll<IStructureOperationStore>();
                 services.AddSingleton<IStructureOperationStore>(harness.Operations);
@@ -585,7 +589,7 @@ public sealed class FacilityStructureEndpointTests
                 services.RemoveAll<IMaintenanceWindowStore>();
                 services.AddSingleton<IMaintenanceWindowStore>(harness.Windows);
 
-                // The background recovery worker would open the gate pool after 10s. Removing it
+                // The background recovery worker would open the gate pool. Removing it
                 // keeps startup and the whole test free of database I/O.
                 var worker = services.FirstOrDefault(
                     descriptor => descriptor.ImplementationType == typeof(StructureSynchronizationWorker));
@@ -705,7 +709,7 @@ public sealed class FacilityStructureEndpointTests
     }
 
     private sealed class InMemoryStructureSynchronizationStore(InMemoryStructureOperationStore operations)
-        : IStructureSynchronizationStore
+        : IStructureSynchronizationRepository
     {
         private readonly Dictionary<Guid, StructureSynchronization> rows = [];
 

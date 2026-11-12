@@ -27,6 +27,13 @@ public class PaymentTransactionRepository : IPaymentTransactionRepository
             .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTxId, cancellationToken);
     }
 
+    public async Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.PaymentTransactions
+            .Include(x => x.PaymentOrder)
+            .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PaymentTransaction>> GetByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default)
     {
         return await _dbContext.PaymentTransactions

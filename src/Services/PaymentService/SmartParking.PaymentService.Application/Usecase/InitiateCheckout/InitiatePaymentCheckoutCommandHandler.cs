@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Application.DTOs.Payments;
 using SmartParking.PaymentService.Domain.Entities;
@@ -16,6 +17,7 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
     private readonly IPaymentTransactionRepository _transactionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPaymentGatewayPort _paymentGatewayPort;
+    private readonly ICurrentActor _currentActor;
     private readonly ILogger<InitiatePaymentCheckoutCommandHandler> _logger;
 
     public InitiatePaymentCheckoutCommandHandler(
@@ -23,12 +25,14 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         IPaymentTransactionRepository transactionRepository,
         IUnitOfWork unitOfWork,
         IPaymentGatewayPort paymentGatewayPort,
+        ICurrentActor currentActor,
         ILogger<InitiatePaymentCheckoutCommandHandler> logger)
     {
         _orderRepository = orderRepository;
         _transactionRepository = transactionRepository;
         _unitOfWork = unitOfWork;
         _paymentGatewayPort = paymentGatewayPort;
+        _currentActor = currentActor;
         _logger = logger;
     }
 
@@ -38,36 +42,96 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         var order = await _orderRepository.GetByIdAsync(request.OrderId, cancellationToken);
         if (order == null)
         {
-            throw new PaymentDomainException("ORDER_NOT_FOUND", $"Không tìm thấy đơn hàng thanh toán {request.OrderId}.");
+            throw new PaymentDomainException("ORDER_NOT_FOUND", $"Payment order {request.OrderId} was not found.");
+        }
+
+        if (order.AccountId.HasValue)
+        {
+            if (!_currentActor.IsInternalService &&
+                (!_currentActor.IsAuthenticated || _currentActor.AccountId != order.AccountId.Value))
+            {
+                throw new PaymentDomainException(
+                    "FORBIDDEN_ORDER_ACCESS",
+                    "You are not authorized to initiate checkout for this payment order.");
+            }
         }
 
         if (order.Status == PaymentOrderStatus.PAID)
         {
-            throw new PaymentDomainException("ORDER_ALREADY_PAID", "Đơn hàng này đã được thanh toán thành công trước đó.");
+            throw new PaymentDomainException("ORDER_ALREADY_PAID", "This payment order has already been paid.");
         }
 
         if (order.IsExpired(now))
         {
-            throw new PaymentDomainException("ORDER_EXPIRED", "Đơn hàng này đã hết hạn thanh toán.");
+            throw new PaymentDomainException("ORDER_EXPIRED", "This payment order has expired.");
         }
 
-        // Idempotency check:
-        // If caller passed an idempotency key, check if order was already initialized with the SAME idempotency key
-        if (!string.IsNullOrEmpty(request.IdempotencyKey) && order.IdempotencyKey == request.IdempotencyKey)
+        if (order.FinalAmount <= 0)
         {
-            var pendingTx = order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.PENDING);
-            if (pendingTx != null)
+            throw new PaymentDomainException(
+                "ZERO_AMOUNT_ORDER",
+                "This order has no amount due, so a PayOS checkout cannot be created.");
+        }
+
+        // 1. Idempotency replay by IdempotencyKey if provided
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var existingTxByKey = await _transactionRepository.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
+            if (existingTxByKey != null && existingTxByKey.PaymentOrderId == order.Id)
             {
-                _logger.LogInformation("Replaying existing checkout for OrderId {OrderId} with IdempotencyKey {Key}", order.Id, request.IdempotencyKey);
+                if (existingTxByKey.Status == PaymentStatus.PENDING)
+                {
+                    _logger.LogInformation("Replaying transaction with IdempotencyKey {IdempotencyKey} for OrderId {OrderId}.", request.IdempotencyKey, order.Id);
+                    return new PaymentCheckoutResponseDto(
+                        PaymentTransactionId: existingTxByKey.Id,
+                        OrderCode: long.TryParse(order.OrderCode, out var oc) ? oc : 100000 + (long)Math.Abs(order.Id.GetHashCode() % 900000),
+                        Amount: (long)order.FinalAmount,
+                        CheckoutUrl: existingTxByKey.CheckoutUrl ?? (string.IsNullOrWhiteSpace(existingTxByKey.GatewayTransactionId) ? "" : $"https://pay.payos.vn/web/{existingTxByKey.GatewayTransactionId}"),
+                        QrCode: existingTxByKey.QrCode ?? "",
+                        AccountNumber: existingTxByKey.AccountNumber ?? "",
+                        AccountName: existingTxByKey.AccountName ?? "",
+                        Bin: existingTxByKey.Bin ?? "",
+                        Status: existingTxByKey.Status.ToString(),
+                        ExpiresAt: order.ExpiresAt ?? now.AddMinutes(15),
+                        IsReplayed: true
+                    );
+                }
+            }
+        }
+
+        // 2. A pending transaction already represents the active checkout for this order.
+        var pendingTx = order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.PENDING);
+        if (pendingTx != null)
+        {
+            if (IsMockGatewayTransactionId(pendingTx.GatewayTransactionId, pendingTx.Id))
+            {
+                _logger.LogInformation(
+                    "Cancelling stale mock checkout {TransactionId} for OrderId {OrderId} so a live PayOS checkout can be created.",
+                    pendingTx.Id,
+                    order.Id);
+                pendingTx.MarkCancelled();
+                _transactionRepository.Update(pendingTx);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(pendingTx.GatewayTransactionId))
+                {
+                    throw new PaymentDomainException(
+                        "PAYOS_CHECKOUT_LINK_UNAVAILABLE",
+                        "The pending PayOS checkout has no payment link ID. Check its status or choose cash payment.");
+                }
+
+                _logger.LogInformation("Replaying existing pending checkout for OrderId {OrderId}.", order.Id);
                 return new PaymentCheckoutResponseDto(
                     PaymentTransactionId: pendingTx.Id,
                     OrderCode: long.TryParse(order.OrderCode, out var oc) ? oc : 100000 + (long)Math.Abs(order.Id.GetHashCode() % 900000),
                     Amount: (long)order.FinalAmount,
-                    CheckoutUrl: $"https://pay.payos.vn/web/{pendingTx.GatewayTransactionId ?? pendingTx.Id.ToString("N")}",
-                    QrCode: "00020101021238540010A00000072701240006970422011001234567890208QRIBFTTA5303704540250005802VN62230819Thanh toan do xe 20266304ABCD",
-                    AccountNumber: "0123456789",
-                    AccountName: "SMARTPARKING CORP",
-                    Bin: "970422",
+                    CheckoutUrl: pendingTx.CheckoutUrl ?? $"https://pay.payos.vn/web/{pendingTx.GatewayTransactionId}",
+                    QrCode: pendingTx.QrCode ?? "",
+                    AccountNumber: pendingTx.AccountNumber ?? "",
+                    AccountName: pendingTx.AccountName ?? "",
+                    Bin: pendingTx.Bin ?? "",
                     Status: pendingTx.Status.ToString(),
                     ExpiresAt: order.ExpiresAt ?? now.AddMinutes(15),
                     IsReplayed: true
@@ -75,17 +139,20 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             }
         }
 
-        // Check retry limit
+        // 3. Block checkout retry if there is an unresolved UNKNOWN transaction
+        var hasAmbiguousTx = order.Transactions.Any(t => t.Status == PaymentStatus.UNKNOWN);
+        if (hasAmbiguousTx)
+        {
+            throw new PaymentDomainException(
+                "PAYMENT_TRANSACTION_AMBIGUOUS",
+                "There is an unresolved transaction in an unknown state with the payment provider. Please verify transaction status before attempting again.");
+        }
+
+        // 4. Check retry limit
         var failedAttempts = order.Transactions.Count(t => t.Status == PaymentStatus.FAILED);
         if (!PaymentStateMachine.IsRetryAllowed(failedAttempts))
         {
-            throw new PaymentDomainException("PAYMENT_RETRY_LIMIT_EXCEEDED", $"Đơn hàng đã vượt quá giới hạn thử lại ({PaymentStateMachine.MaxRetryLimit} lần).");
-        }
-
-        // Update idempotency key if provided
-        if (!string.IsNullOrEmpty(request.IdempotencyKey))
-        {
-            order.IdempotencyKey = request.IdempotencyKey;
+            throw new PaymentDomainException("PAYMENT_RETRY_LIMIT_EXCEEDED", $"The payment retry limit ({PaymentStateMachine.MaxRetryLimit}) has been reached.");
         }
 
         var transactionId = Guid.NewGuid();
@@ -96,7 +163,23 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         }
 
         var expiresAt = order.ExpiresAt ?? now.AddMinutes(15);
-        var description = $"Thanh toan {orderCodeNumber}";
+        var description = $"SP {orderCodeNumber}";
+
+        // 5. Persist attempt intent with PENDING status BEFORE calling external gateway!
+        var transaction = new PaymentTransaction
+        {
+            Id = transactionId,
+            TenantId = order.TenantId,
+            PaymentOrderId = order.Id,
+            TransactionType = TransactionType.PAYMENT,
+            PaymentMethod = request.PaymentMethod,
+            IdempotencyKey = request.IdempotencyKey,
+            Amount = order.FinalAmount,
+            Status = PaymentStatus.PENDING,
+            CreatedAt = now
+        };
+        await _transactionRepository.AddAsync(transaction, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var gatewayRequest = new PaymentInitiateRequest(
             TransactionId: transactionId,
@@ -109,41 +192,45 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         );
 
         var gatewayResult = await _paymentGatewayPort.InitiatePaymentAsync(gatewayRequest, cancellationToken);
+        if (gatewayResult.IsSuccess && IsMockGatewayTransactionId(gatewayResult.GatewayTransactionId, transactionId))
+        {
+            transaction.MarkCancelled();
+            _transactionRepository.Update(transaction);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            throw new PaymentDomainException(
+                "PAYOS_CREDENTIALS_NOT_CONFIGURED",
+                "Live PayOS credentials are not loaded by Payment Service. The demo link was blocked; configure the credentials and retry.");
+        }
+
         if (!gatewayResult.IsSuccess)
         {
-            var failedTx = new PaymentTransaction
+            if (gatewayResult.ErrorCode == "GATEWAY_TIMEOUT")
             {
-                Id = transactionId,
-                TenantId = order.TenantId,
-                PaymentOrderId = order.Id,
-                TransactionType = TransactionType.PAYMENT,
-                PaymentMethod = request.PaymentMethod,
-                Amount = order.FinalAmount,
-                Status = gatewayResult.ErrorCode == "GATEWAY_TIMEOUT" ? PaymentStatus.UNKNOWN : PaymentStatus.FAILED,
-                CreatedAt = now
-            };
-            await _transactionRepository.AddAsync(failedTx, cancellationToken);
+                transaction.MarkUnknown();
+            }
+            else
+            {
+                transaction.MarkFailed();
+            }
+
+            _transactionRepository.Update(transaction);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             throw new PaymentDomainException(
                 gatewayResult.ErrorCode ?? "GATEWAY_INITIATION_FAILED",
-                gatewayResult.ErrorMessage ?? "Không thể kết nối đến cổng thanh toán payOS.");
+                gatewayResult.ErrorMessage ?? "Could not connect to the PayOS payment gateway.");
         }
 
-        var transaction = new PaymentTransaction
-        {
-            Id = transactionId,
-            TenantId = order.TenantId,
-            PaymentOrderId = order.Id,
-            TransactionType = TransactionType.PAYMENT,
-            PaymentMethod = request.PaymentMethod,
-            GatewayTransactionId = gatewayResult.GatewayTransactionId,
-            Amount = order.FinalAmount,
-            Status = PaymentStatus.PENDING,
-            CreatedAt = now
-        };
+        // 6. Record authoritative provider data onto the transaction
+        transaction.GatewayTransactionId = gatewayResult.GatewayTransactionId;
+        transaction.CheckoutUrl = gatewayResult.CheckoutUrl;
+        transaction.QrCode = gatewayResult.QrCode;
+        transaction.AccountNumber = gatewayResult.AccountNumber;
+        transaction.AccountName = gatewayResult.AccountName;
+        transaction.Bin = gatewayResult.Bin;
 
-        await _transactionRepository.AddAsync(transaction, cancellationToken);
+        _transactionRepository.Update(transaction);
         _orderRepository.Update(order);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -161,4 +248,10 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             IsReplayed: false
         );
     }
+
+    private static bool IsMockGatewayTransactionId(string? gatewayTransactionId, Guid transactionId) =>
+        gatewayTransactionId?.StartsWith("MOCK-", StringComparison.Ordinal) == true ||
+        (gatewayTransactionId is not null &&
+         Guid.TryParseExact(gatewayTransactionId, "N", out var parsedId) &&
+         parsedId == transactionId);
 }

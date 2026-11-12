@@ -1,6 +1,6 @@
 # Tích hợp database với code ứng dụng
 
-Tài liệu này giữ **profile triển khai đã ghi nhận trước SPARK-296** trên branch `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` tại lần ghi nhận `58df087`). Nguồn bootstrap là 7 base DDL + 8 overlay + `compose.schema-integration.yml` + `scripts/apply-workflow-migrations.ps1` + `setup.ps1`, không phải checkout arch. Phần User & Access dưới đây bổ sung thứ tự deploy thủ công SPARK-248 và kiểm tra schema hiện tại; không xác nhận đã reset/deploy database thực tế.
+**Historical only — do not use this page as the current setup contract.** It records the profile before SPARK-296 on `feature/db-hybrid-srs-v1` (HEAD `b069e82`; branch point `0c8a6fb`; `develop` at capture time `58df087`). The current clean setup has 7 microservice base DDL files and no SQL overlays; `compose.schema-integration.yml` mounts only files under `scripts/database/microservices/`. Use [LOCAL-SETUP.md](../../../LOCAL-SETUP.md) and [scripts/database/README.md](../../../scripts/database/README.md) for current setup. The historical notes below are retained as evidence and do not certify a current database reset/deployment.
 
 ## 1. Baseline và quan hệ với nhánh arch
 

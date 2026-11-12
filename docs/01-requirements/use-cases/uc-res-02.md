@@ -26,8 +26,9 @@ See the [operation matrix](../srs/authorization-operation-classification.md) and
 3. Treat physical occupancy independently from reservation/protection projection. If the requested/protected resource is occupied by an unrelated current session, do not mark the future reservation fulfilled and do not displace the occupant.
 4. Commit allocation revision and claim updates; preserve requested preference/history.
 5. For unexpected loss or continuing unrelated occupation, queue affected arrivals and feasible resources; preserve occupied/unaffected claims and use Operator for genuine ties.
-6. Offer a conforming alternative for the effective `ALTERNATIVE_OFFER_DURATION` (default 5 minutes); accept only before authoritative expiry.
-7. Count accepted Driver reallocation requests against the effective `DRIVER_REALLOCATION_REQUEST_LIMIT` (default 2); system recovery/retries/invalid requests do not spend allowance.
+6. Use compatible backup during the allocation window; reevaluate on relevant changes and durable periodic work. At F, record full applicable refund eligibility when an unused confirmed booking remains unfulfilled. A first confirmation/loss after F tries immediate recovery, then earns the right if unfulfilled. Recovery preserves it.
+7. At T, cancel still-unfulfilled confirmed bookings for facility failure, including unusable ALLOCATED rows; preserve usable bookings and PARKING. Replay historical F/T before later recovery after downtime. No T−5 milestone.
+8. Driver offer/switch API and offer expiry are deferred. Future switching must replace under the same interval/vehicle/site/version guards, preserving the valid original on failure; system recovery does not spend the Driver allowance.
 
 ### Clarifying examples
 
@@ -46,7 +47,7 @@ For Slot S-12, `OCCUPIED + PROTECTED` may mean Driver A is currently parked whil
 
 ## Alternatives and failures
 
-Offer expiry releases temporary offer claim only. Usable alternative refusal uses voluntary terms; no feasible conforming alternative uses failure handling. Accepted reallocation alone earns no refund.
+An earned facility-failure right survives recovery: T=10:00, F=09:45, recovery at 09:47 still permits exercise until accepted entry or unused closure. Missing/contradictory historical usability evidence requires reconciliation. Future offer expiry releases only its temporary claim; refusing a usable alternative uses voluntary terms only when no independent earned right applies.
 
 ## Postconditions
 

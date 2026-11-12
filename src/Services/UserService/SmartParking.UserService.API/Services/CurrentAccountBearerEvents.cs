@@ -11,7 +11,7 @@ public sealed class CurrentAccountBearerEvents(ICurrentAccessService access, Api
 {
     public override Task MessageReceived(MessageReceivedContext context)
     {
-        if (context.Request.Path.StartsWithSegments("/hubs/operators") &&
+        if (context.Request.Path.StartsWithSegments("/hubs") &&
             context.Request.Query.TryGetValue("access_token", out var token))
             context.Token = token;
         return Task.CompletedTask;

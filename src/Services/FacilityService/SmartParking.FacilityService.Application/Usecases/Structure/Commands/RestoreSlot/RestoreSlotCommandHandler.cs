@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.R
 
 public sealed class RestoreSlotCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<RestoreSlotCommandHandler> logger)
     : IRequestHandler<RestoreSlotCommand>
 {
@@ -15,7 +15,7 @@ public sealed class RestoreSlotCommandHandler(
     {
         logger.LogInformation("Restoring slot {SlotId} in site {SiteId}", request.SlotId, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.RestoreSlot(request.SlotId);
         await session.CommitAsync(ct);
     }

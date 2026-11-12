@@ -15,4 +15,4 @@ public sealed record RegistrationClaimResponse(Guid Id, string RawPlate, string 
     Guid ImageAssetId, string Status, DateTimeOffset CreatedAt);
 public sealed record ResolveVehicleBindingRequest(Guid AccountId, Guid VehicleId, long? ExpectedRevision);
 public sealed record BindingResponse(string State, Guid? VehicleId = null, Guid? AccountId = null,
-    string? VehicleType = null, long? Revision = null);
+    string? VehicleType = null, long? Revision = null, string? CanonicalPlate = null);

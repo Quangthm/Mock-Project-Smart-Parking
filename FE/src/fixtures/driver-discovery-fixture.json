@@ -1,0 +1,42 @@
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "siteId": "8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70",
+        "siteCode": "LOT-BT-01",
+        "siteName": "Ben Thanh Tower Parking",
+        "addressLine": "1 Le Loi, District 1, Ho Chi Minh City",
+        "coordinates": { "latitude": 10.7721, "longitude": 106.6980 },
+        "lotType": "MULTI_STOREY",
+        "distanceMeters": 1420,
+        "availability": { "status": "AVAILABLE", "availableCount": 12, "vehicleType": "CAR" },
+        "tariff": { "tariffRef": "TAR-2026-11", "billingUnit": "HOUR", "currentAmountMinor": 20000, "currency": "VND" },
+        "directions": { "handoff": "EXTERNAL_MAP" },
+        "handoff": {
+          "siteId": "8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70",
+          "layoutApiPath": "/api/parking-lots/8f2c7b10-1c4a-4e9a-9b2f-2d3e4f5a6b70/operational-layout"
+        },
+        "freshness": { "generatedAt": "2026-11-02T09:14:03Z", "isStale": false, "stalenessThresholdSeconds": 30, "source": "OPERATIONS" }
+      },
+      {
+        "siteId": "9a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+        "siteCode": "LOT-ND-02",
+        "siteName": "Nguyen Du Central Parking",
+        "addressLine": "30 Nguyen Du, District 1, Ho Chi Minh City",
+        "coordinates": { "latitude": 10.7780, "longitude": 106.6995 },
+        "lotType": "BASEMENT",
+        "distanceMeters": 850,
+        "availability": { "status": "AVAILABLE", "availableCount": 5, "vehicleType": "CAR" },
+        "tariff": { "tariffRef": "TAR-2026-12", "billingUnit": "HOUR", "currentAmountMinor": 25000, "currency": "VND" },
+        "directions": { "handoff": "EXTERNAL_MAP" },
+        "handoff": {
+          "siteId": "9a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+          "layoutApiPath": "/api/parking-lots/9a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d/operational-layout"
+        },
+        "freshness": { "generatedAt": "2026-11-02T09:14:03Z", "isStale": false, "stalenessThresholdSeconds": 30, "source": "OPERATIONS" }
+      }
+    ],
+    "page": { "limit": 20, "offset": 0, "returned": 2, "total": 2, "hasMore": false }
+  }
+}

@@ -174,7 +174,7 @@ public sealed class FacilityController(
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
                 success = false,
-                code = "INTERNAL_ERROR",
+                code = "INTERNAL_SERVER_ERROR",
                 message = "An unexpected error occurred."
             });
         }

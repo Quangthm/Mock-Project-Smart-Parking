@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Gate.Commands.Releas
 
 public sealed class ReleaseOperationalBackupCommandHandler(
     ISlotOperatorAuthorizer operators,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<ReleaseOperationalBackupCommandHandler> logger)
     : IRequestHandler<ReleaseOperationalBackupCommand>
 {
@@ -17,8 +17,8 @@ public sealed class ReleaseOperationalBackupCommandHandler(
             request.SlotId, request.SiteId);
         var operatorScope = await operators.ScopeAsync(request.SiteId, ct);
         const string reason = "Backup designation released by operator.";
-        await using var session = await unitOfWork.BeginEditAsync(
-            operatorScope, request.SiteId, ct, markedSlot: request.SlotId, reason: reason);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(
+            operatorScope, request.SiteId, MarkedSlot: request.SlotId, Reason: reason), ct);
         session.Structure.MarkBackup(request.SlotId, false);
         await session.CommitAsync(ct);
     }

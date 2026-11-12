@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -12,6 +12,8 @@ using SmartParking.OperationService.API;
 using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using ReservationDomain = SmartParking.OperationService.Domain;
+
+using OperationsUnitOfWorkTransaction = SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWorkTransaction;
 
 namespace SmartParking.UserService.Tests;
 
@@ -42,7 +44,10 @@ public sealed class StructureHttpContractTests
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
             builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
-            builder.Services.AddSingleton<IStructureSafetyStore>(store);
+            builder.Services.AddSingleton<IStructureRepository>(store);
+            builder.Services.AddSingleton<IOperationsConcurrency>(store);
+            builder.Services.AddSingleton<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>(store);
+            builder.Services.AddSingleton<SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher>(new NoopReservationFacts());
         });
         await host.StartAsync();
         using var client = host.GetTestClient();
@@ -158,58 +163,62 @@ public sealed class StructureHttpContractTests
             builder.WebHost.UseTestServer();
             builder.Configuration["Services:Key"] = ServiceKey;
             builder.Configuration["ConnectionStrings:Reservation"] = "Host=localhost;Database=unused;Username=unused";
-            builder.Services.AddSingleton<IStructureSafetyStore>(store);
+            builder.Services.AddSingleton<IStructureRepository>(store);
+            builder.Services.AddSingleton<IOperationsConcurrency>(store);
+            builder.Services.AddSingleton<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>(store);
+            builder.Services.AddSingleton<SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher>(new NoopReservationFacts());
         });
     }
 
     // Only the SQL boundary is replaced. Requests still pass through the real
     // HTTP adapter, service-key middleware, JSON DTOs, Application and Domain.
-    private sealed class MemoryReservationStore : IStructureSafetyStore
+    private sealed class MemoryReservationStore : IStructureRepository, IOperationsConcurrency,
+        SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork, OperationsUnitOfWorkTransaction
     {
-        private readonly Dictionary<Guid, string> receipts = [];
+        private readonly Dictionary<Guid, SmartParking.OperationService.Domain.Entities.StructureReleaseReceiptRow> receipts = [];
+        private SmartParking.OperationService.Domain.Entities.StructureEditHoldRow? hold;
+        private SmartParking.OperationService.Domain.Entities.StructureSiteStateRow? state;
         public Guid ProtectedSlot { get; } = Guid.NewGuid();
-        public Guid? CurrentToken { get; private set; }
+        public Guid? CurrentToken => hold?.Token;
         public bool RejectAcquire { get; set; }
         public int ReleaseCalls { get; private set; }
-        public int AppliedOutcomes { get; private set; }
-        public ReservationDomain.EditOutcome? LastOutcome { get; private set; }
-
-        public Task<ReservationDomain.HoldSnapshot> ReadSnapshotAsync(Guid tenant, Guid site, CancellationToken ct)
-            => Task.FromResult(new ReservationDomain.HoldSnapshot([ProtectedSlot], false, [new(null, "CAR", 0, 0)]));
-
-        public Task<ReservationDomain.HoldSnapshot> AcquireAsync(Guid tenant, Guid site, Guid token, CancellationToken ct)
+        public int AppliedOutcomes => receipts.Count;
+        public ReservationDomain.EditOutcome? LastOutcome => receipts.Values.LastOrDefault() is { } row
+            ? JsonSerializer.Deserialize<ReservationDomain.EditOutcome>(row.Outcome, new JsonSerializerOptions(JsonSerializerDefaults.Web)) : null;
+        public Task<ReservationDomain.HoldSnapshot> SnapshotAsync(Guid tenant, Guid site, DateTimeOffset now, CancellationToken ct) =>
+            Task.FromResult(new ReservationDomain.HoldSnapshot([ProtectedSlot], false, [new(null, "CAR", 0, 0)]));
+        public Task<ReservationDomain.StructureImpactResponse> ImpactAsync(Guid tenant, Guid site, DateTimeOffset now, CancellationToken ct) =>
+            Task.FromResult(new ReservationDomain.StructureImpactResponse([], []));
+        public Task<SmartParking.OperationService.Domain.Entities.StructureEditHoldRow?> HoldAsync(Guid site, CancellationToken ct)
         {
-            if (RejectAcquire || CurrentToken is { } current && current != token)
-                throw new ReservationDomain.HoldConflictException();
-            CurrentToken = token;
-            return Task.FromResult(new ReservationDomain.HoldSnapshot(
-                [ProtectedSlot], false, [new(null, "CAR", 0, 0)]));
+            if (RejectAcquire) throw new ReservationDomain.HoldConflictException();
+            return Task.FromResult(hold);
         }
+        public Task<SmartParking.OperationService.Domain.Entities.StructureReleaseReceiptRow?> ReceiptAsync(Guid token, CancellationToken ct) =>
+            Task.FromResult(receipts.GetValueOrDefault(token));
+        public Task<SmartParking.OperationService.Domain.Entities.StructureSiteStateRow?> StateAsync(Guid site, CancellationToken ct) => Task.FromResult(state);
+        public Task<IReadOnlyList<SmartParking.OperationService.Domain.Entities.SiteCapacityPoolRow>> PoolsAsync(Guid tenant, Guid site, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<SmartParking.OperationService.Domain.Entities.SiteCapacityPoolRow>>([]);
+        public void AddHold(SmartParking.OperationService.Domain.Entities.StructureEditHoldRow row) => hold = row;
+        public void RemoveHold(SmartParking.OperationService.Domain.Entities.StructureEditHoldRow row) { hold = null; ReleaseCalls++; }
+        public void AddState(SmartParking.OperationService.Domain.Entities.StructureSiteStateRow row) => state = row;
+        public void AddReceipt(SmartParking.OperationService.Domain.Entities.StructureReleaseReceiptRow row) => receipts.Add(row.Token, row);
+        public Task LockSiteAsync(Guid site, CancellationToken ct) => Task.CompletedTask;
+        public Task LockVehicleAsync(string identity, CancellationToken ct) => Task.CompletedTask;
+        public IReservationRepository Reservations => throw new NotSupportedException();
+        public IParkingSessionRepository ParkingSessions => throw new NotSupportedException();
+        public ISlotAllocationRepository SlotAllocations => throw new NotSupportedException();
+        public Task<OperationsUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct) => Task.FromResult<OperationsUnitOfWorkTransaction>(this);
+        public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(1);
+        public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 
-        public Task ReleaseAsync(
-            Guid tenant, Guid site, Guid token, ReservationDomain.EditOutcome? outcome, CancellationToken ct)
-        {
-            ReleaseCalls++;
-            var payload = JsonSerializer.Serialize(outcome);
-            if (receipts.TryGetValue(token, out var stored))
-            {
-                if (stored != payload) throw new ReservationDomain.HoldConflictException();
-                return Task.CompletedTask;
-            }
-            if (CurrentToken != token) throw new ReservationDomain.HoldConflictException();
-            LastOutcome = outcome;
-            AppliedOutcomes++;
-            receipts[token] = payload;
-            CurrentToken = null;
-            return Task.CompletedTask;
-        }
-
-        public Task<ReservationDomain.StructureImpactResponse> ImpactAsync(Guid tenant, Guid site, CancellationToken ct) => Task.FromResult(new ReservationDomain.StructureImpactResponse([], []));
-
-        public Task ForceReleaseAsync(Guid tenant, Guid site, CancellationToken ct)
-        {
-            CurrentToken = null;
-            return Task.CompletedTask;
-        }
+    private sealed class NoopReservationFacts : SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher
+    {
+        public Task AvailabilityChangedAsync(SmartParking.OperationService.Application.Reservations.ReservationAvailabilityChangedV1 fact, CancellationToken ct) => Task.CompletedTask;
+        public Task FacilityAppliedAsync(SmartParking.OperationService.Application.Reservations.FacilityStructureAppliedV1 fact, CancellationToken ct) => Task.CompletedTask;
+        public Task HoldChangedAsync(SmartParking.OperationService.Application.Reservations.ReservationHoldChangedV1 fact, CancellationToken ct) => Task.CompletedTask;
+        public Task ConfirmedAsync(SmartParking.OperationService.Application.Reservations.ReservationConfirmedV1 fact, CancellationToken ct) => Task.CompletedTask;
     }
 }

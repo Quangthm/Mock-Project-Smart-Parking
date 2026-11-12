@@ -29,6 +29,9 @@ internal static class TestAuthorization
         services.TryAddSingleton<IUserManagementService>(UnsupportedFeature.Create<IUserManagementService>());
         services.TryAddSingleton<IOwnerRegistrationService>(UnsupportedFeature.Create<IOwnerRegistrationService>());
         services.TryAddSingleton<IAccountWorkflows>(UnsupportedFeature.Create<IAccountWorkflows>());
+        services.TryAddSingleton<IAccountAuthorityRepository>(UnsupportedFeature.Create<IAccountAuthorityRepository>());
+        services.TryAddSingleton<IAccountAccessDecisionRepository>(UnsupportedFeature.Create<IAccountAccessDecisionRepository>());
+        services.TryAddSingleton<IAccountAccessDecisionPublisher>(UnsupportedFeature.Create<IAccountAccessDecisionPublisher>());
         services.TryAddSingleton(new global::UserService.Application.Media.MediaSettings(false, ""));
         services.TryAddSingleton<global::UserService.Application.Common.Interfaces.Persistence.IMediaAssetRepository>(UnsupportedFeature.Create<global::UserService.Application.Common.Interfaces.Persistence.IMediaAssetRepository>());
         services.TryAddSingleton<global::UserService.Application.Media.IMediaProvider>(UnsupportedFeature.Create<global::UserService.Application.Media.IMediaProvider>());

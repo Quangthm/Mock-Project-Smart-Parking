@@ -19,7 +19,7 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Application\SmartParking.UserService.Application.csproj" Aliases="global,UserApplication" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Persistence\SmartParking.UserService.Persistence.csproj" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.Infrastructure\SmartParking.UserService.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Services\UserService\SmartParking.UserService.API\SmartParking.UserService.API.csproj" />

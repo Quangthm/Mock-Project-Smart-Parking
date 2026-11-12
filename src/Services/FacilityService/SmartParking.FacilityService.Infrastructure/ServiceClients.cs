@@ -1,30 +1,53 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Infrastructure;
 
-public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor context) : IOwnerAuthorizer, IOwnerScopeReader
+public sealed class OwnerIdentityClient(
+    HttpClient client,
+    IHttpContextAccessor context,
+    ILogger<OwnerIdentityClient>? logger = null) : IOwnerAuthorizer, IOwnerScopeReader
 {
     public async Task<IdentityScope> ScopeAsync(CancellationToken ct, string permission = "PARKING_MANAGE")
     {
         var bearer = context.HttpContext?.Request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(bearer)) throw new StructureException("UNAUTHENTICATED", "Sign in as an Owner.");
+        if (string.IsNullOrWhiteSpace(bearer))
+        {
+            logger?.LogWarning("Owner scope rejected: Missing Authorization header");
+            throw new StructureException("UNAUTHENTICATED", "Sign in as an Owner.");
+        }
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "api/auth/owner-scope?permission=" + Uri.EscapeDataString(permission));
             request.Headers.TryAddWithoutValidation("Authorization", bearer);
             using var response = await client.SendAsync(request, ct);
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new StructureException("UNAUTHENTICATED", "Session is invalid or revoked.");
-            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden) throw new StructureException("FORBIDDEN", "Owner access is required.");
-            if (!response.IsSuccessStatusCode) throw new StructureException("IDENTITY_UNAVAILABLE", "Identity service is unavailable.");
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                logger?.LogWarning("Identity service rejected token: 401 Unauthorized");
+                throw new StructureException("UNAUTHENTICATED", "Session is invalid or revoked.");
+            }
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                logger?.LogWarning("Identity service rejected scope: 403 Forbidden");
+                throw new StructureException("FORBIDDEN", "Owner access is required.");
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                logger?.LogError("Identity service returned status {StatusCode}", response.StatusCode);
+                throw new StructureException("IDENTITY_UNAVAILABLE", "Identity service is unavailable.");
+            }
             var result = await response.Content.ReadFromJsonAsync<IdentityScope>(ct);
             return result is { UserId: var id, TenantIds: not null } && id != Guid.Empty ? result : throw new StructureException("IDENTITY_UNAVAILABLE", "Invalid identity response.");
         }
         catch (Exception e) when (e is HttpRequestException or JsonException || e is OperationCanceledException && !ct.IsCancellationRequested)
-        { throw new StructureException("IDENTITY_UNAVAILABLE", "Identity service is unavailable."); }
+        {
+            logger?.LogError(e, "Identity service request failed");
+            throw new StructureException("IDENTITY_UNAVAILABLE", "Identity service is unavailable.");
+        }
     }
     public async Task<bool> IsOwnerAsync(OwnerScope owner, CancellationToken ct)
     {
@@ -34,7 +57,9 @@ public sealed class OwnerIdentityClient(HttpClient client, IHttpContextAccessor 
 }
 
 
-public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCommitments
+public sealed class StructureCommitmentsClient(
+    HttpClient client,
+    ILogger<StructureCommitmentsClient>? logger = null) : IStructureCommitments
 {
     public async Task<CommitmentSnapshot> ReadSnapshotAsync(Guid tenantId, Guid siteId, CancellationToken ct)
     {
@@ -46,7 +71,11 @@ public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCo
             if (snapshot.ProtectedSlots is null) throw Unavailable();
             return snapshot;
         }
-        catch (Exception e) when (e is HttpRequestException or JsonException || e is OperationCanceledException && !ct.IsCancellationRequested) { throw Unavailable(); }
+        catch (Exception e) when (e is HttpRequestException or JsonException || e is OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            logger?.LogError(e, "Failed to read structure commitments snapshot for SiteId {SiteId}", siteId);
+            throw Unavailable();
+        }
     }
 
 
@@ -66,6 +95,7 @@ public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCo
         }
         catch (Exception error) when (IsTransportFailure(error, cancellationToken))
         {
+            logger?.LogError(error, "Failed to acquire structure commitments for SiteId {SiteId} with Token {Token}", siteId, token);
             throw Unavailable();
         }
     }
@@ -85,6 +115,7 @@ public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCo
         }
         catch (Exception error) when (IsTransportFailure(error, cancellationToken))
         {
+            logger?.LogError(error, "Failed to release structure commitments for SiteId {SiteId} with Token {Token}", siteId, token);
             throw Unavailable();
         }
     }
@@ -102,6 +133,7 @@ public sealed class StructureCommitmentsClient(HttpClient client) : IStructureCo
         }
         catch (Exception error) when (IsTransportFailure(error, cancellationToken))
         {
+            logger?.LogError(error, "Failed to force release structure commitments holds for SiteId {SiteId}", siteId);
             throw Unavailable();
         }
     }

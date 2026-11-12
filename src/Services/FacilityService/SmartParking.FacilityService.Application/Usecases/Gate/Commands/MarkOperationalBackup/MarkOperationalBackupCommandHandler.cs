@@ -7,17 +7,15 @@ namespace SmartParking.FacilityService.Application.Usecases.Gate.Commands.MarkOp
 
 public sealed class MarkOperationalBackupCommandHandler(
     ISlotOperatorAuthorizer operators,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<MarkOperationalBackupCommandHandler> logger)
     : IRequestHandler<MarkOperationalBackupCommand>
 {
     public async Task Handle(MarkOperationalBackupCommand request, CancellationToken ct)
     {
-        logger.LogInformation("Marking operational backup for slot {SlotId} at site {SiteId} with reason: {Reason}",
-            request.SlotId, request.SiteId, request.Reason);
+        logger.LogInformation("Marking operational backup.");
         var operatorScope = await operators.ScopeAsync(request.SiteId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(
-            operatorScope, request.SiteId, ct, markedSlot: request.SlotId, reason: request.Reason);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(operatorScope, request.SiteId, MarkedSlot: request.SlotId, Reason: request.Reason), ct);
         session.Structure.MarkBackup(request.SlotId, true);
         await session.CommitAsync(ct);
     }

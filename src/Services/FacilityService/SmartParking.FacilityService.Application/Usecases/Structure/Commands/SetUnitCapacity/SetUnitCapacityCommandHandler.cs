@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.S
 
 public sealed class SetUnitCapacityCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<SetUnitCapacityCommandHandler> logger)
     : IRequestHandler<SetUnitCapacityCommand>
 {
@@ -16,7 +16,7 @@ public sealed class SetUnitCapacityCommandHandler(
         logger.LogInformation("Setting capacity of unit {UnitId} to {Capacity} in site {SiteId}",
             request.UnitId, request.Capacity, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.SetUnitCapacity(request.UnitId, request.Capacity);
         await session.CommitAsync(ct);
     }

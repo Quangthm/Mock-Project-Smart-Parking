@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Frontend','All')][string]$Service = 'All'
+    [ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification','Frontend','All')][string]$Service = 'All'
 )
 $ErrorActionPreference = 'Stop'
 if ($Service -eq 'Parking') { $Service = 'Facility' } # Legacy CLI alias.
@@ -16,9 +16,10 @@ if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
 $map = @{
     User        = 'user-service'
-    Facility    = 'facility-service'
-    Operation   = 'operation-service'
-    Payment     = 'payment-service'
+    Facility     = 'facility-service'
+    Operation    = 'operation-service'
+    Payment      = 'payment-service'
+    Notification = 'notification-service'
     Frontend    = 'frontend'
 }
 

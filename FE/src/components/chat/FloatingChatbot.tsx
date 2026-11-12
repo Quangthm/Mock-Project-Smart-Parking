@@ -41,18 +41,19 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
   const dragRef = useRef<{ pointerId: number; x: number; y: number; start: Position; moved: boolean } | null>(null)
   const suppressClickRef = useRef(false)
   const wasDraggedRef = useRef(false)
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight }))
   const [position, setPosition] = useState<Position>(() => ({ x: window.innerWidth - launcherSize - 24, y: window.innerHeight - launcherSize - 24 }))
 
   useEffect(() => {
     const resize = () => {
-      setViewport({ width: window.innerWidth, height: window.innerHeight })
+      setViewport({ width: window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight })
       const driverMobile = role === "driver" && window.matchMedia("(max-width: 900px)").matches
       const bottomGap = driverMobile ? parkingMode ? 88 : 96 : edgeGap
       if (!open) setPosition((current) => ({ x: clamp(current.x, edgeGap, Math.max(edgeGap, window.innerWidth - launcherSize - edgeGap)), y: clamp(current.y, parkingMode ? edgeGap : 76, Math.max(parkingMode ? edgeGap : 76, window.innerHeight - launcherSize - bottomGap)) }))
     }
     window.addEventListener("resize", resize)
-    return () => window.removeEventListener("resize", resize)
+    window.visualViewport?.addEventListener("resize", resize)
+    return () => { window.removeEventListener("resize", resize); window.visualViewport?.removeEventListener("resize", resize) }
   }, [open, parkingMode, role])
   useEffect(() => {
     if (open) return
@@ -282,7 +283,8 @@ export function FloatingChatbot({ role, parkingMode = false, parkingSheetOpen = 
         className="smartparking-chat-launcher"
         style={{ touchAction: "none" }}
       >
-        <UntitledIcon name="sparkles" size={23} />
+        <span className="smartparking-chat-orbit" aria-hidden="true" />
+        <span className="smartparking-chat-launcher-symbol" aria-hidden="true"><UntitledIcon name="sparkles" size={23} /></span>
       </button>
     </div>
   )

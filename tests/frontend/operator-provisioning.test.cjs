@@ -12,7 +12,14 @@ function load(file, imports = {}, globals = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const context = { exports: {}, Error, ...globals, require(name) {
+    // Presentation primitives are outside these API/state tests; browser fixtures cover dismissal.
+    if (name.endsWith('/ui/Modal')) return { Modal: 'dialog' };
+    if (name.endsWith('/ui/useConfirmation')) return { useConfirmation: () => ({ confirm: async () => false, confirmation: null }) };
+    if (name.endsWith('/LotActionMenu')) return { LotActionMenu: 'lot-actions' };
+    if (name.endsWith('/serverRefresh')) return { useServerRefresh() {} };
+    if (name === 'motion/react') return { motion: { div: 'div' }, useReducedMotion: () => true };
     if (name === 'react-dom') return { createPortal: content => content };
+    if (name.startsWith('motion')) return { motion: new Proxy({}, { get: () => 'div' }), useReducedMotion: () => false };
     if (name.endsWith("/ui/RoundedSelect")) return { RoundedSelect: "select" };
     if (name.endsWith("/ui/PageHeader")) return { PageHeader: "page-header" };
     if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" }; if (name.endsWith("/ui/Badge")) return { Badge: "badge" };

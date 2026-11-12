@@ -47,7 +47,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         if (!parseResult.IsValidSignature)
         {
             _logger.LogWarning("Webhook signature verification failed for payOS callback.");
-            return new ProcessPayOsWebhookResult(false, "Chữ ký webhook không hợp lệ.", "INVALID_WEBHOOK_SIGNATURE");
+            return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
         var eventId = parseResult.BankReference ?? parseResult.GatewayTransactionId ?? parseResult.OrderCode.ToString();
@@ -57,7 +57,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         if (existingWebhook != null && existingWebhook.ProcessingState == WebhookProcessingState.PROCESSED)
         {
             _logger.LogInformation("PayOS webhook event {EventId} was already processed. Replaying success response.", eventId);
-            return new ProcessPayOsWebhookResult(true, "Webhook đã được xử lý thành công trước đó (Idempotent).");
+            return new ProcessPayOsWebhookResult(true, "The webhook was already processed successfully (Idempotent replay).");
         }
 
         if (existingWebhook == null)
@@ -81,7 +81,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return new ProcessPayOsWebhookResult(false, $"Không tìm thấy đơn hàng tương ứng với orderCode {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
+            return new ProcessPayOsWebhookResult(false, $"No payment order was found for order code {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
         }
 
         // 4. Validate amount
@@ -93,22 +93,39 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return new ProcessPayOsWebhookResult(false, "Số tiền thanh toán không khớp với đơn hàng (AMOUNT_MISMATCH).", "AMOUNT_MISMATCH");
+            return new ProcessPayOsWebhookResult(false, "The payment amount does not match the order amount.", "AMOUNT_MISMATCH");
         }
 
         // 5. Update state on SUCCESS
         if (parseResult.PaymentStatus == "SUCCESS")
         {
-            // Idempotency: If order was already PAID, don't duplicate event or state changes
-            if (order.Status == PaymentOrderStatus.PAID)
+            var now = DateTimeOffset.UtcNow;
+            var isAlreadySettled = order.Transactions.Any(t =>
+                t.Status == PaymentStatus.SUCCESS &&
+                !string.IsNullOrWhiteSpace(parseResult.GatewayTransactionId) &&
+                t.GatewayTransactionId == parseResult.GatewayTransactionId);
+
+            if (isAlreadySettled)
             {
-                _logger.LogInformation("OrderCode {OrderCode} is already marked as PAID. Replaying success response without duplicate outbox event.", order.OrderCode);
+                _logger.LogInformation("GatewayTransactionId {GatewayTransactionId} for OrderCode {OrderCode} is already settled. Replaying success response without duplicate processing.",
+                    parseResult.GatewayTransactionId, order.OrderCode);
                 existingWebhook.MarkProcessed();
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return new ProcessPayOsWebhookResult(true, "Webhook processed successfully (Idempotent replay).");
+                return new ProcessPayOsWebhookResult(true, "Transaction already settled successfully (Idempotent replay).");
             }
 
-            var tx = order.Transactions.OrderByDescending(t => t.CreatedAt).FirstOrDefault();
+            var isLateOrExtra = order.Status == PaymentOrderStatus.PAID ||
+                                order.Status == PaymentOrderStatus.CANCELLED ||
+                                order.IsExpired(now);
+
+            // Find pending transaction matching gatewayTx or first pending attempt for this order
+            var tx = order.Transactions.FirstOrDefault(t =>
+                t.Status == PaymentStatus.PENDING &&
+                (string.IsNullOrWhiteSpace(t.GatewayTransactionId) ||
+                 string.IsNullOrWhiteSpace(parseResult.GatewayTransactionId) ||
+                 t.GatewayTransactionId == parseResult.GatewayTransactionId))
+                ?? order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.PENDING);
+
             if (tx == null)
             {
                 tx = new PaymentTransaction
@@ -119,20 +136,30 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
                     TransactionType = TransactionType.PAYMENT,
                     PaymentMethod = PaymentMethod.PAYOS,
                     GatewayTransactionId = parseResult.GatewayTransactionId,
-                    Amount = order.FinalAmount,
+                    Amount = parseResult.AmountVnd,
                     Status = PaymentStatus.PENDING,
-                    CreatedAt = DateTimeOffset.UtcNow
+                    CreatedAt = now
                 };
                 await _transactionRepository.AddAsync(tx, cancellationToken);
             }
 
             tx.MarkSuccess(parseResult.GatewayTransactionId, parseResult.TransactionTime);
-            order.MarkPaid(parseResult.TransactionTime);
+
+            if (!isLateOrExtra)
+            {
+                order.MarkPaid(parseResult.TransactionTime);
+            }
+            else
+            {
+                _logger.LogWarning("Late or extra collection detected for OrderCode {OrderCode}, TxId {TxId}. Order status remains {Status}.",
+                    order.OrderCode, tx.Id, order.Status);
+            }
+
             existingWebhook.MarkProcessed();
 
-            // Finalize invoice if exists
+            // Finalize invoice if exists and not late/extra
             var invoice = await _invoiceRepository.GetByPaymentOrderIdAsync(order.Id, cancellationToken);
-            if (invoice != null)
+            if (invoice != null && !isLateOrExtra)
             {
                 invoice.PricingSnapshot.Status = "PAID";
                 invoice.PricingSnapshot.IsSettled = true;
@@ -159,7 +186,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
                 ReferenceId = order.ReferenceId,
                 PlateNumber = invoice?.PricingSnapshot.PlateNumber,
                 AccountId = order.AccountId,
-                Amount = order.FinalAmount,
+                Amount = parseResult.AmountVnd,
                 ParkingFee = invoice?.BaseParkingFee ?? order.FinalAmount,
                 PenaltyFee = invoice?.OverstayPenaltyFee,
                 PenaltyReason = invoice?.PricingSnapshot.LineItems.FirstOrDefault(l => l.ItemType == "PENALTY_OVERSTAY")?.Description,

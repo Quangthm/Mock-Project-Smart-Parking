@@ -27,6 +27,7 @@ services:
       - facility-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/microservices/03a-parking-structure-ops-service-db.sql:/docker-entrypoint-initdb.d/02-base.sql:ro
+      - ./scripts/database/integration/realtime-projection.sql:/docker-entrypoint-initdb.d/03-realtime-projection.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_facility -d smartpark_facility"]
       interval: 5s
@@ -43,6 +44,7 @@ services:
     volumes:
       - operations-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/03b-reservation-operations-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      - ./scripts/database/integration/realtime-outbox.sql:/docker-entrypoint-initdb.d/02-realtime-outbox.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_operations -d smartpark_operations"]
       interval: 5s
@@ -98,6 +100,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  redis:
+    image: redis:7-alpine
+    container_name: smartpark-redis
+    ports:
+      - "127.0.0.1:${SMARTPARK_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: smartpark-rabbitmq
@@ -119,6 +135,7 @@ services:
 
 
 volumes:
+  redis-data:
   rabbitmq-data:
   user-schema-data:
   facility-schema-data:

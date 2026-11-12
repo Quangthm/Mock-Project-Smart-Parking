@@ -12,4 +12,12 @@ public interface IInvoiceRepository
     void Update(Invoice invoice);
     Task<string> GenerateInvoiceNumberAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Invoice>> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default);
+    Task<(IReadOnlyList<Invoice> Items, int TotalCount)> GetByAccountIdPagedAsync(
+        Guid accountId,
+        string? status,
+        DateTimeOffset? fromDate,
+        DateTimeOffset? toDate,
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 }

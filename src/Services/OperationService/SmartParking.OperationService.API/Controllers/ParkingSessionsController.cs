@@ -1,7 +1,10 @@
+using System.Security.Claims;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
 using SmartParking.OperationService.Application;
+using SmartParking.OperationService.Application.Usecase.ParkingSessions.Queries.GetCurrentVehicleLocation;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.OperationService.API.Controllers;
@@ -49,6 +52,37 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
             new CheckOutWalkInCommand(siteId, sessionId, body.PlateNumber, body.ImageData), ct);
         return Ok(new { success = true, data = session });
     }
+
+    [HttpPost("{referenceId:guid}/scan")]
+    public async Task<IActionResult> ScanLocation(
+        [FromRoute] Guid referenceId,
+        [FromQuery] Guid siteId,
+        [FromBody] ScanParkingLocationRequest body,
+        CancellationToken ct)
+    {
+        var session = await Mediator.Send(
+            new ScanParkingSessionCommand(siteId, referenceId, body.SlotId), ct);
+        return Ok(new { success = true, data = session });
+    }
+
+    [Authorize]
+    [HttpGet("current/location")]
+    [HttpGet("/api/sessions/current/location")]
+    public async Task<IActionResult> GetCurrentVehicleLocation(CancellationToken ct)
+    {
+        var raw = User.FindFirst("account_id")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(raw, out var accountId) || accountId == Guid.Empty)
+            return Unauthorized(new { success = false, code = "UNAUTHENTICATED", message = "Authentication is required." });
+
+        var result = await Mediator.Send(new GetCurrentVehicleLocationQuery(accountId), ct);
+        if (result is null)
+            return NotFound(new { success = false, code = "SESSION_NOT_FOUND", message = "No active parking session found for the current user" });
+
+        return Ok(new { success = true, data = result });
+    }
 }
 
 public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null);
+public sealed record ScanParkingLocationRequest(Guid SlotId);

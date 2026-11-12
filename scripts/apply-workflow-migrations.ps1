@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][ValidateSet('User','Parking','Operation','Reservation','Payment','Notification','Iot')][string]$Service,
     [Parameter(Mandatory)][string]$SchemaRoot,
     [string]$EnvPath,
@@ -71,23 +71,23 @@ $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation=
 $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
-    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows')
-    Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts')
+    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows','processed_events','slot_sequence_watermarks','occupancy_release_ledger')
+    Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts','outbox_events')
     Payment = @()
     Notification = @()
     Iot = @()
 }[$Service]
-# Sentinel relation created only by the canonical scripts (base or overlay) for
-# this database. Index for User (partial unique on normalized_plate), table elsewhere.
+# Sentinel relation created by the canonical microservice base script for this
+# database. Index for User (partial unique on normalized_plate), table elsewhere.
 $sentinel = @{ User='uq_active_vehicle_plate'; Parking='tenants'; Reservation='site_capacity_pools'; Payment='payment_orders'; Notification='notification_templates'; Iot='devices' }[$Service]
 
 # Block list: remaining legacy 05.1–05.12 workflow scripts and integration/* alignment scripts are
-# superseded by the new base files + overlays; applying them would double-apply or conflict.
+# superseded by the canonical microservice base files; applying them would conflict.
 $blockedPattern = '(^|[\\/])05\.(?:[1-9]|1[0-2])[-.][^\\/]*\.sql$|(^|[\\/])integration[\\/]0[123][^\\/]*\.sql$'
 foreach ($script in $scripts) {
     $relative = "scripts/database/$script"
     if ($relative -match $blockedPattern) {
-        throw "Blocked migration script '$relative': its content is superseded by the new base files and overlays. Use the canonical microservices/overlay scripts only."
+        throw "Blocked migration script '$relative': its content is superseded by the canonical microservice base files. Use scripts/database/microservices only."
     }
     if (!(Test-Path -LiteralPath (Join-Path $codeRoot $relative) -PathType Leaf)) {
         throw "Migration script not found: $relative."
@@ -125,6 +125,18 @@ if ($state -eq 'empty') {
     }
 }
 
+# These incremental features are not included in the canonical baseline.
+# Apply on both empty and current databases; each migration is re-runnable.
+$features = switch ($Service) {
+    'Parking' { 'integration/realtime-projection.sql' }
+    'Reservation' { 'integration/realtime-outbox.sql' }
+    default { }
+}
+foreach ($feature in $features) {
+    $sql = Get-Content -LiteralPath (Join-Path $codeRoot "scripts/database/$feature") -Raw
+    $sql | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) { throw "Feature migration failed for $Service at $feature." }
+}
 
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.
@@ -147,6 +159,12 @@ if ($Service -eq 'User') {
     if ($LASTEXITCODE -ne 0) { throw 'User media upgrade failed; preserve data and reconcile before retrying. No volume reset is required.' }
     Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-media-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
+}
+if ($Service -eq 'Reservation') {
+    $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT COUNT(*) = 3 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name IN ('location_scanned_at', 'checkout_payment_order_id', 'checkout_paid_at')"
+    if ($LASTEXITCODE -ne 0 -or ($columnExists -join '').Trim() -ne 't') {
+        throw 'Operation schema is missing parking session scan or checkout settlement columns. Use a separately reviewed migration or an explicitly authorized clean database rebuild.'
+    }
 }
 foreach ($table in (@($required) + @($sentinel))) {
     $exists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT to_regclass('public.$table') IS NOT NULL"
@@ -190,7 +208,11 @@ if ($Service -eq 'User') {
 } elseif ($Service -eq 'Iot') {
     Write-Output 'IoT base schema verified. The Assistant runner checks the Assistant schema before startup.'
 } elseif ($state -eq 'current') {
-    Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    if ($Service -eq 'Reservation') {
+        Write-Output 'Operation schema already current; required relations and parking session scan and checkout columns verified, nothing applied.'
+    } else {
+        Write-Output "$Service schema already current; verified required relations, nothing to apply."
+    }
 } else {
     Write-Output "$Service workflow migrations applied."
 }

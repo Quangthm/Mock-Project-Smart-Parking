@@ -27,29 +27,54 @@ public sealed class CreatePaymentOrderCommandHandler(
     {
         var request = command.Request;
         if (request.Amount < 0)
-            throw new PaymentDomainException("INVALID_AMOUNT", "Số tiền thanh toán không hợp lệ.");
+            throw new PaymentDomainException("INVALID_AMOUNT", "The payment amount is invalid.");
+
+        var effectiveOrderType = request.OrderType ?? OrderType.PARKING_FEE;
+        if (effectiveOrderType == OrderType.RESERVATION_FEE && request.ReferenceType == ReferenceType.RESERVATION)
+        {
+            throw new PaymentDomainException(
+                "FORBIDDEN_RESERVATION_DEPOSIT_CREATION",
+                "Reservation deposit orders must be created via the internal EnsureOrder endpoint with an immutable quote.");
+        }
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var existing = await orders.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
             if (existing is not null)
+            {
+                if (existing.FinalAmount != request.Amount ||
+                    existing.ReferenceType != request.ReferenceType ||
+                    existing.ReferenceId != request.ReferenceId ||
+                    existing.AccountId != request.AccountId ||
+                    existing.SiteId != request.SiteId)
+                {
+                    throw new PaymentDomainException(
+                        "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                        "Idempotency key has already been used with a different request payload.");
+                }
+
                 return ToResponse(existing);
+            }
         }
 
         var now = DateTimeOffset.UtcNow;
+        var expiresAt = request.ExpiresAt ?? now.AddMinutes(15);
+
         var order = new PaymentOrder
         {
             Id = Guid.NewGuid(),
             TenantId = request.TenantId,
             SiteId = request.SiteId,
             AccountId = request.AccountId,
+            PlateNumber = request.PlateNumber,
             OrderCode = $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
             IdempotencyKey = request.IdempotencyKey,
+            OrderType = effectiveOrderType,
             ReferenceType = request.ReferenceType,
             ReferenceId = request.ReferenceId,
             Amount = request.Amount,
             FinalAmount = request.Amount,
-            ExpiresAt = now.AddMinutes(15),
+            ExpiresAt = expiresAt,
             CreatedAt = now,
             UpdatedAt = now
         };

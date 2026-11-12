@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Assistant','Frontend','All')][string]$Service,
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification','Assistant','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
 )
@@ -113,10 +113,11 @@ $map = @{
     Facility    = 'facility-service'
     Operation   = 'operation-service'
     Payment     = 'payment-service'
+    Notification = 'notification-service'
     Frontend    = 'frontend'
 }
 $targets = if ($Service -eq 'All') {
-    @('user-service','facility-service','operation-service','payment-service','frontend')
+    @('user-service','facility-service','operation-service','payment-service','notification-service','frontend')
 } else {
     @($map[$Service])
 }

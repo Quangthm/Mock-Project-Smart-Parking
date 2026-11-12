@@ -11,6 +11,7 @@ All new API endpoint specifications and refactors must follow the standard templ
 
 | Domain / Capability | Document | Owning Service |
 |---|---|---|
+| Reservation admission and first-slice contracts | [reservation-first-slice-api-design.md](reservation-first-slice-api-design.md) | Operations / UserService; finalization gated |
 | Owned avatar and vehicle images | [user-images-api-design.md](user-images-api-design.md) | UserService |
 | Assistant end-to-end S01 (v0.4.1; in review, not implemented) | [assistant-s01-end-to-end-api-design.md](assistant-s01-end-to-end-api-design.md) | IoT + domain service owners |
 | Driver Assistant FAQ (option B; in review) | [iot-assistant-p0-api-design.md](iot-assistant-p0-api-design.md) | IoTService |
@@ -24,6 +25,8 @@ All new API endpoint specifications and refactors must follow the standard templ
 | Vehicle Registration / Private Claims (SPARK-243); Removal Deferred | [vehicle-registration-api-design.md](vehicle-registration-api-design.md) | UserService |
 | 3D Digital Twin & Operational Layout Projection (hub) | [3d-digital-twin-api-design.md](3d-digital-twin-api-design.md) | FacilityService (transitional: ParkingService) |
 | Own Normal Profile & Name Update | [own-profile-api-design.md](own-profile-api-design.md) | UserService |
+| Driver Maps & Recorded Vehicle Location | [driver-maps-vehicle-location-api-design.md](driver-maps-vehicle-location-api-design.md) | OperationService (discovery/location) + FacilityService (layout projection) |
+| Driver Payment History & Server-Side PDF Invoices | [driver-payment-history-and-pdf-invoice-api-design.md](driver-payment-history-and-pdf-invoice-api-design.md) | PaymentService |
 
 > **Machine-Readable Specifications:** The OpenAPI 3.1 contract for the 3D Digital Twin subsystem is located at [3d-digital-twin-openapi.yaml](3d-digital-twin-openapi.yaml).
 > **Task-Specific History:** Historical task split specs (SPARK-228, SPARK-244) are preserved in [../../archive/api/](../../archive/api/README.md).

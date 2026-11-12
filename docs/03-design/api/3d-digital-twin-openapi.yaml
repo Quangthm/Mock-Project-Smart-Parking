@@ -599,6 +599,49 @@ components:
           format: date-time
           example: "2026-10-24T10:16:00.000Z"
 
+    RealtimeEventEnvelope:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - siteId
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Immutable event identity (outbox PK). Idempotency anchor for consumers (SPARK-244 G5).
+          example: 550e8400-e29b-41d4-a716-446655440000
+        eventType:
+          type: string
+          enum:
+            - SlotStateChanged
+            - ZoneCapacityChanged
+            - CapacityMetricsChanged
+            - TelemetryFreshnessChanged
+            - SnapshotRequired
+          example: SlotStateChanged
+        occurredAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T10:15:30.000Z"
+        sequenceNumber:
+          type: integer
+          format: int64
+          description: Monotonic per-slot (or per-zone) sequence assigned by publisher. Lower/equal than last applied is ignored.
+          example: 12
+        siteId:
+          type: string
+          format: uuid
+          example: f7d3a2b1-5e8c-4a3d-9f1e-2c8b7a6d5e4f
+        slotId:
+          type: [string, "null"]
+          format: uuid
+          example: b8a1c2d3-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+        payload:
+          type: object
+          additionalProperties: true
+
     PhysicalState:
       type: string
       enum:
@@ -783,6 +826,12 @@ components:
                 success: false
                 code: CANNOT_DELETE_ACTIVE_CONTAINER
                 message: "Cannot delete floor Floor_L2: active reservations exist in child slots."
+            operatorLotUnassigned:
+              summary: Operator not assigned to requested lot
+              value:
+                success: false
+                code: OPERATOR_LOT_UNASSIGNED
+                message: "Operator is not assigned to the requested parking lot."
             duplicateActiveSlotCode:
               summary: Concurrent insertion of active duplicate slot code
               value:

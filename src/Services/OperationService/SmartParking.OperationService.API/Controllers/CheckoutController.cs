@@ -8,7 +8,7 @@ namespace SmartParking.OperationService.API.Controllers;
 
 [Route("api/checkout")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(mediator)
+public sealed class CheckoutController(IMediator mediator, IHostEnvironment environment) : ApiControllerBase(mediator)
 {
     [HttpPost("pricing")]
     public async Task<IActionResult> Pricing([FromBody] PricingRequest body, CancellationToken ct) =>
@@ -30,7 +30,7 @@ public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(m
         {
             success = true,
             data = await Mediator.Send(
-                new PrepareReservationCheckoutCommand(siteId, reservationId, body.PlateNumber), ct)
+                new PrepareReservationCheckoutCommand(siteId, reservationId, body.PlateNumber, body.ImageData), ct)
         });
 
     [HttpPost("sessions/{sessionId:guid}/prepare")]
@@ -43,8 +43,24 @@ public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(m
         {
             success = true,
             data = await Mediator.Send(
-                new PrepareSessionCheckoutCommand(siteId, sessionId, body.PlateNumber), ct)
+                new PrepareSessionCheckoutCommand(siteId, sessionId, body.PlateNumber, ImageData: body.ImageData), ct)
         });
+
+    [HttpPost("sessions/{sessionId:guid}/prepare-test-payos")]
+    public async Task<IActionResult> PrepareSessionTestPayOs(
+        Guid sessionId,
+        [FromQuery] Guid siteId,
+        [FromBody] CheckoutRequest body,
+        CancellationToken ct)
+    {
+        if (!environment.IsDevelopment()) return NotFound();
+        return Ok(new
+        {
+            success = true,
+            data = await Mediator.Send(
+                new PrepareSessionCheckoutCommand(siteId, sessionId, body.PlateNumber, 2000m, body.ImageData), ct)
+        });
+    }
 
     [HttpPost("orders/{orderId:guid}/payos")]
     public async Task<IActionResult> PayOs(Guid orderId, [FromBody] IdempotencyRequest body, CancellationToken ct) =>
@@ -64,7 +80,7 @@ public sealed class CheckoutController(IMediator mediator) : ApiControllerBase(m
     public async Task<IActionResult> Status(Guid transactionId, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(new GetCheckoutStatusQuery(transactionId), ct) });
 
-    public sealed record CheckoutRequest(string? PlateNumber);
+    public sealed record CheckoutRequest(string? PlateNumber, string? ImageData = null);
     public sealed record PricingRequest(
         Guid SiteId,
         Guid ReferenceId,

@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.S
 
 public sealed class SetSiteActiveCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<SetSiteActiveCommandHandler> logger)
     : IRequestHandler<SetSiteActiveCommand>
 {
@@ -15,7 +15,7 @@ public sealed class SetSiteActiveCommandHandler(
     {
         logger.LogInformation("Setting site active status to {Active} for SiteId {SiteId}", request.Active, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.SetActive(request.Active);
         await session.CommitAsync(ct);
     }

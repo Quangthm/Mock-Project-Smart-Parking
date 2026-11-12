@@ -84,6 +84,12 @@ WHERE NOT EXISTS (
       AND vehicle_type = 'MOTORCYCLE'
 );
 
+UPDATE operational_policies
+SET is_active = TRUE,
+    updated_at = CURRENT_TIMESTAMP
+WHERE tenant_id = :'tenant_id'::uuid
+  AND site_id = :'site_id'::uuid;
+
 INSERT INTO operational_policies (
     tenant_id, site_id,
     arrival_late_tolerance_minutes,
@@ -95,7 +101,7 @@ INSERT INTO operational_policies (
     occupancy_validity_timespan_hours,
     is_active
 )
-VALUES (
+SELECT
     :'tenant_id'::uuid,
     :'site_id'::uuid,
     15,
@@ -106,9 +112,11 @@ VALUES (
     60,
     4,
     TRUE
-)
-ON CONFLICT (tenant_id, site_id) DO UPDATE
-SET is_active = TRUE,
-    updated_at = CURRENT_TIMESTAMP;
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM operational_policies
+    WHERE tenant_id = :'tenant_id'::uuid
+      AND site_id = :'site_id'::uuid
+);
 
 COMMIT;

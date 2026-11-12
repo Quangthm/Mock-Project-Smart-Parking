@@ -289,6 +289,29 @@ CREATE INDEX IF NOT EXISTS idx_operator_audit_logs_site_created
     ON operator_audit_logs (site_id, created_at DESC);
 
 -- 13. BẢNG CUNG CẤP CẤU HÌNH BÃI CHO QUY TRÌNH TIẾP NHẬN CHỦ BÃI XE (OWNER ONBOARDING)
+-- Operations acceptance evidence; resolved tokens are retained to fence delayed messages.
+-- HELD has no automatic TTL release: only an acknowledged outcome or fenced abort releases it.
+CREATE TABLE IF NOT EXISTS reservation_dependencies (
+    id UUID PRIMARY KEY,
+    workflow_id UUID NOT NULL,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    slot_id UUID NOT NULL,
+    purpose TEXT NOT NULL CHECK (purpose IN ('ADMISSION','CONFIRMATION')),
+    intent_fingerprint TEXT NOT NULL,
+    deadline TIMESTAMPTZ NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('PREPARING','HELD','COMPLETED','ABORTED')),
+    snapshot_json JSONB NULL,
+    outcome_fingerprint TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (workflow_id,purpose),
+    CHECK (state NOT IN ('HELD','COMPLETED') OR snapshot_json IS NOT NULL),
+    CHECK ((state='COMPLETED') = (outcome_fingerprint IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS ix_reservation_dependencies_held_site
+    ON reservation_dependencies(site_id) WHERE state='HELD';
+
 CREATE TABLE IF NOT EXISTS owner_onboarding_provisions (
     application_id uuid PRIMARY KEY,
     site_id uuid NOT NULL UNIQUE REFERENCES parking_sites(id),

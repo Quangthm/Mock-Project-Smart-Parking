@@ -532,6 +532,7 @@ function setupSignUpFixture(options = {}) {
     },
   };
 
+  const submissionRef = { current: false };
   let refCallCount = 0;
   const react = {
     useEffect: () => {},
@@ -545,7 +546,8 @@ function setupSignUpFixture(options = {}) {
       };
       return [stateStore[idx], setter];
     },
-    useRef() {
+    useRef(initial) {
+      if (initial === false) return submissionRef;
       refCallCount++;
       return refCallCount % 2 === 1 ? mockDriverRef : mockOwnerRef;
     },
@@ -573,6 +575,8 @@ function setupSignUpFixture(options = {}) {
 
   const signUpModule = loadModule('roles/authentications/Sign Up/SignUp.tsx', {
     react,
+    '../../../lib/identityDemo': { rememberIdentityDemo() {} },
+    '../../../components/ui/VNeIDSimulation': { VNeIDSimulation: 'vneid-simulation' },
     'react/jsx-runtime': { jsx, jsxs: jsx },
     '../../../components/ui/RoundedSelect': { RoundedSelect: 'rounded-select' },
     '../../../context/AppContext': { useApp: () => ({ view: 'sign-up', setView: () => {} }) },
@@ -677,6 +681,10 @@ test('Scenario 22: SignUp Driver retains token on HTTP 429 Rate Limit', async ()
   const form = f.getNodes().find((n) => n.type === 'form');
   await form.props.onSubmit({ preventDefault: () => {} });
 
+  assert.equal(f.getDriverCalls().length, 0, 'Registration cannot send OTP before simulation');
+  const demo = f.getNodes().find(n => n.type === 'vneid-simulation');
+  assert.equal(demo.props.context, 'driver_registration');
+  await demo.props.onComplete();
   assert.equal(f.getDriverCalls().length, 1);
   assert.equal(f.getDriverCalls()[0].turnstileToken, 'driver-token-waiting-cooldown');
   assert.equal(f.getDriverResetCalls(), 0, 'WIDGET MUST NOT BE RESET on HTTP 429 rate limit error');
@@ -702,6 +710,38 @@ test('Scenario 23 & 25: SignUp Driver resets widget on 400 VALIDATION_FAILED or 
   const form = f.getNodes().find((n) => n.type === 'form');
   await form.props.onSubmit({ preventDefault: () => {} });
 
+  assert.equal(f.getDriverCalls().length, 0, 'Registration cannot send OTP before simulation');
+  const demo = f.getNodes().find(n => n.type === 'vneid-simulation');
+  assert.equal(demo.props.context, 'driver_registration');
+  await demo.props.onComplete();
   assert.equal(f.getDriverCalls().length, 1);
   assert.equal(f.getDriverResetCalls(), 1, 'WIDGET MUST BE RESET on 400 BOT_VERIFICATION_FAILED');
+});
+
+
+test('Owner registration waits for the demo and preserves the form on cancel', async () => {
+  const f = setupSignUpFixture('business');
+  for (const [placeholder, value] of [
+    ['Your full name', 'Demo Owner'],
+    ['Company or lot name', 'Demo Parking'],
+    ['business@company.com', 'owner@example.com'],
+    ['0901-xxx-xxx', '0901234567'],
+  ]) {
+    f.getNodes().find(node => node.props?.placeholder === placeholder).props.onChange({ target: { value } });
+  }
+  f.getNodes().find(node => node.type === 'button' && node.props?.children === 'Partner Terms & Conditions').props.onClick();
+  f.getNodes().find(node => typeof node.props?.onAccept === 'function').props.onAccept();
+
+  const submit = () => f.getNodes().find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  const demo = () => f.getNodes().find(node => node.type === 'vneid-simulation');
+  await submit();
+  assert.equal(f.getOwnerCalls().length, 0);
+  assert.equal(demo().props.context, 'owner_registration');
+  demo().props.onCancel();
+  assert.equal(demo(), undefined);
+  assert.equal(f.getOwnerCalls().length, 0);
+  await submit();
+  await demo().props.onComplete();
+  assert.equal(f.getOwnerCalls().length, 1);
+  assert.equal(f.getOwnerCalls()[0].businessName, 'Demo Parking');
 });

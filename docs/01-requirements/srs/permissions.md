@@ -22,7 +22,7 @@ Every action below requires the applicable role/permission and target resource s
 | device.diagnostics.read | — | assigned lot | owned lot read-only | explicit integration/security scope | IoT; view cannot mutate or reveal secrets |
 | policy.operational.publish | — | execute only | owned lot approved choices | platform defaults/bounds | Operations or Facility owner of specific policy |
 | policy.financial.publish | — | — | owned lot within bounds | platform bounds only | Payment; immutable accepted terms; failure refund100% locked |
-| reservation.create/read/cancel | own eligible | operational records, no Driver impersonation | scoped business read | no blanket grant | Operations; current rights, capacity, lifecycle, abuse/cap guards |
+| reservation.create/read/cancel | own eligible | operational records, no Driver impersonation | scoped business read | no blanket grant | Operations; current rights, capacity, lifecycle, cancellation restrictions and cross-lot vehicle exclusivity (no Account cap) |
 | reservation.reallocation.request | own up to2 | system recovery/decision | escalation | — | Operations; accepted submissions counted, no system-recovery debit |
 | allocation.arrival/admit/verify | present/request only | assigned lot | no implied execution | no implied execution | Operations; evidence, version, compatibility, genuine tie review |
 | checkout.accept/cash.collect | pay own | assigned lot | no implied execution | no implied execution | Operations accepts cutoff; Payment records audited collection |

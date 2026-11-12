@@ -7,6 +7,7 @@ import "./theme.css"
 import "./workspace-layout.css"
 import "./ui-refinement.css"
 import "./motion.css"
+import "./adaptive-ui.css"
 
 const isAssistantDemo = import.meta.env.DEV &&
   import.meta.env.VITE_ASSISTANT_DEMO_ENABLED === "true" &&

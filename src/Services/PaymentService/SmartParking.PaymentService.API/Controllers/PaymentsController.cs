@@ -76,6 +76,11 @@ public class PaymentsController : ControllerBase
         [FromBody] PrepareParkingFeeOrderRequestDto request,
         CancellationToken cancellationToken)
     {
+        if (request.DevelopmentTestAmount.HasValue && !_environment.IsDevelopment())
+            return NotFound();
+        if (request.DevelopmentTestAmount.HasValue && request.DevelopmentTestAmount.Value != 2000m)
+            return BadRequest(new { success = false, errorCode = "INVALID_TEST_AMOUNT", message = "The development PayOS test amount is fixed at 2,000 VND." });
+
         var command = new PrepareParkingFeeOrderCommand(
             TenantId: request.TenantId,
             SiteId: request.SiteId,
@@ -88,7 +93,8 @@ public class PaymentsController : ControllerBase
             PenaltyAmount: request.PenaltyAmount,
             PenaltyReason: request.PenaltyReason,
             IdempotencyKey: request.IdempotencyKey,
-            DepositAmount: request.DepositAmount
+            DepositAmount: request.DepositAmount,
+            DevelopmentTestAmount: request.DevelopmentTestAmount
         );
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -194,6 +200,7 @@ public class PaymentsController : ControllerBase
     /// Tiếp nhận Webhook IPN từ cổng thanh toán payOS
     /// </summary>
     [HttpPost("callbacks/payos")]
+    [HttpPost("payos/webhook")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
@@ -217,7 +224,7 @@ public class PaymentsController : ControllerBase
             {
                 success = false,
                 errorCode = "INVALID_JSON_PAYLOAD",
-                message = "Payload webhook không phải định dạng JSON hợp lệ."
+                message = "The webhook payload is not valid JSON."
             });
         }
 
