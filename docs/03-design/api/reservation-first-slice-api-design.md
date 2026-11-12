@@ -180,3 +180,37 @@ Operations owns its authentication implementation and local Account-current/audi
 The still-live hold may **eventually** use only a locked Operations aggregate/domain transition and persisted claim evidence, **after** a verified Facility+Operations+Gate writer-serialization/invalidation gate. Until proof, retain current confirmation Facility acquire/complete dependency and fresh capacity/plate/site evaluation. Never use `PENDING_PAYMENT` status alone as evidence of a valid hold: evaluate authoritative H and T. After expiry/invalidation, acquire and revalidate compatible claim before T, or reconcile. One Operations DB `evaluatedAt` strictly before T determines eligibility; a pre-T evaluation may commit after T, but cannot be exposed before commit. Rollback re-evaluates with a new timestamp. Zero price requires genuine owner-issued free terms without synthetic collection.
 
 **Implementation status:** API shapes and event names above are proposed owner contracts, not implemented route declarations. Confirm exact endpoint DTOs, authorization issuer/audience/permission and response-state migration before code. Preserve existing owner port isolation, MediatR, Domain aggregate, repository/UoW and outbox conventions.
+
+
+## Assistant read reconciliation — 13 November 2026
+
+| Metadata | Value |
+|---|---|
+| Status / approval | Approved in CI repair chat: retain develop booking API and migrate Assistant consumer |
+| Contract / owner | Additive booking-read extension, 2026-11-13; Parking Operations |
+| Traceability | TOKEN own reads in authorization matrix; S06 minimal read delegation; existing US-D05 booking scope |
+| Implementation | Working tree; no new route, auth scheme, schema or admission bypass |
+
+### API specification
+
+`GET /api/me/reservations` keeps its Driver JWT, Account ownership, `ReservationAdmission:Enabled` gate and `success/data` array response. It reads booking rows (`RequestId != null`), not the older all-reservations projection. `pageSize` remains 20 by default, range 1–100; `before` and `beforeId` must be supplied together. Order remains `createdAt DESC, reservationId DESC`. Unknown query fields confer no identity authority and follow existing MVC binding behavior.
+
+Optional `from` and `to` are ISO date-time query values (clients send explicit UTC offsets), must be paired and satisfy `to > from`. Operations applies strict overlap `start < to && end > from` **before** pagination. Touching an interval boundary does not overlap. Invalid pairs/order return 400 `INVALID_REQUEST`; no new statuses are excluded.
+
+Example (synthetic): `GET /api/me/reservations?pageSize=20&from=2032-02-28T00:00:00Z&to=2032-02-29T00:00:00Z`. No body; validated Driver Bearer required. Response is HTTP 200 with `Cache-Control` prohibiting storage:
+
+```json
+{"success":true,"data":[{"reservationId":"11111111-1111-4111-8111-111111111111","state":"CONFIRMED","siteId":"22222222-2222-4222-8222-222222222222","requestedSlotId":null,"start":"2032-02-28T01:00:00Z","end":"2032-02-28T02:00:00Z","holdExpiresAt":null,"orderId":null,"bookedAmount":null,"depositAmount":null,"currency":null,"confirmedAt":null,"createdAt":"2032-02-27T00:00:00Z","vehicle":{"vehicleType":"CAR","displayLabel":"SYNTHETIC"}}]}
+```
+
+Both list rows and `GET /api/me/reservations/{id}` (single booking object in `data`) add nullable `vehicle: {vehicleType, displayLabel}` from the owning reservation row. Missing vehicle evidence remains null; displayLabel uses stored original/normalized plate and can be null. No cross-service enrichment or invented plate. 401/403 remain JWT/role failures, foreign/missing detail remains 404, admission disabled remains 503. A dependency error never becomes an empty 200; existing error middleware determines the specific safe code.
+
+### Assistant mapping, continuation and retry
+
+Assistant requests `pageSize=20`, displays at most 19 rows and uses the twentieth solely as lookahead. Its protected cursor carries Account, interval, and the nineteenth row's `createdAt/reservationId`; the next request translates those into `before/beforeId`. Tampering, other Accounts, and changed filters fail before owner I/O. Cursor protection uses the existing Assistant Data Protection key ring. Old cursors require a fresh search after deployment. No frozen snapshot is promised.
+
+Assistant maps `reservationId/state/start/end` into its existing card fields. Card/page `asOf` means the Assistant's observation time after the successful owner response, never booking creation time or a transactional DB snapshot. Created time is used only for pagination. Missing vehicle evidence remains null. Detail always re-reads the owner and verifies the returned ID. Canonical arrays/objects are required; the old `{items,nextCursor,asOf}` and `{reservation,asOf}` wire forms are no longer accepted. Existing errors, cancellation, bounded response/deadline and no-retry behavior are retained.
+
+### Review and rollout
+
+Deploy Operations' additive filter/vehicle extension together with the Assistant adapter. Keep admission and JWT trust requirements; do not enable legacy endpoints or alter production configuration to satisfy tests. Tests exercise the production controller/JWT/actor/handler path with synthetic external dependencies, plus consumer pagination, protected cursor, malformed payload, detail and observation-time regressions. Live PostgreSQL/broker acceptance is separate from these offline CI checks.

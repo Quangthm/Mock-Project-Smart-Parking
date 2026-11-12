@@ -1,5 +1,7 @@
 # S06 read integration — decision packet
 
+> **13 November 2026 reconciliation:** the original minimal wire contract below is historical. The approved [booking-read reconciliation](reservation-first-slice-api-design.md#assistant-read-reconciliation--13-november-2026) keeps develop booking routes/JWT/admission and migrates the Assistant adapter, pagination and tests. Do not register the legacy own-read routes alongside the booking controller.
+
 | Metadata | Value |
 | --- | --- |
 | Status | D01 bounded read delegation + D05 minimal G03 reads APPROVED in this chat; G01 and other D01/D05 scopes OPEN |
