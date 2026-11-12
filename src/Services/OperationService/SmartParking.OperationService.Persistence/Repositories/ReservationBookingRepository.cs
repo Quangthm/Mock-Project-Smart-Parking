@@ -34,6 +34,49 @@ public sealed partial class ReservationRepository
             (before == null || r.CreatedAt < before || r.CreatedAt == before && r.Id.CompareTo(beforeId!.Value) < 0))
             .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(take).ToListAsync(ct);
 
+    public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) =>
+        db.Reservations.AsNoTracking().SingleOrDefaultAsync(r => r.Id == reservationId && r.RequestId != null, ct);
+
+    public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) =>
+        db.Reservations.AsNoTracking().AnyAsync(r => r.PaymentOrderId == orderId && r.Id != reservationId, ct);
+
+    public async Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct) =>
+        await db.Reservations.AsNoTracking().Where(r =>
+                (r.OrderProvisioningState == "PENDING" || r.OrderProvisioningState == "UNKNOWN" ||
+                    r.OrderProvisioningState == "IN_PROGRESS") &&
+                r.OrderProvisioningNextActionAt <= now)
+            .OrderBy(r => r.OrderProvisioningNextActionAt).ThenBy(r => r.Id)
+            .Select(r => r.Id).Take(take).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) =>
+        await db.Reservations.AsNoTracking().Where(r =>
+                r.Status == "PENDING_PAYMENT" && r.HoldExpiresAt <= now)
+            .OrderBy(r => r.HoldExpiresAt).ThenBy(r => r.Id)
+            .Select(r => r.Id).Take(take).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) =>
+        await db.Reservations.AsNoTracking().Where(r =>
+                r.DepositAmount == 0 && r.ConfirmationState == "PENDING" &&
+                r.ConfirmationNextActionAt <= now && r.ConfirmationEvaluatedAt == null)
+            .OrderBy(r => r.ConfirmationNextActionAt).ThenBy(r => r.Id)
+            .Select(r => r.Id).Take(take).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) =>
+        await db.Reservations.AsNoTracking().Where(r =>
+                r.DepositAmount > 0 && r.CollectionId != null && r.ConfirmationState == "PENDING" &&
+                r.ConfirmationNextActionAt <= now && r.ConfirmationEvaluatedAt == null)
+            .OrderBy(r => r.ConfirmationNextActionAt).ThenBy(r => r.Id)
+            .Select(r => r.Id).Take(take).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Guid>> DueZeroPriceAcceptanceAsync(DateTimeOffset now, int take, CancellationToken ct) =>
+        await db.Reservations.AsNoTracking().Where(r =>
+                r.DepositAmount == 0 &&
+                (r.ZeroPriceAcceptanceState == "PENDING" || r.ZeroPriceAcceptanceState == "UNKNOWN" ||
+                    r.ZeroPriceAcceptanceState == "IN_PROGRESS") &&
+                r.ZeroPriceAcceptanceNextActionAt <= now)
+            .OrderBy(r => r.ZeroPriceAcceptanceNextActionAt).ThenBy(r => r.Id)
+            .Select(r => r.Id).Take(take).ToListAsync(ct);
+
     public async Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct)
     {
         var value = await ScalarAsync("SELECT clock_timestamp()", ct);

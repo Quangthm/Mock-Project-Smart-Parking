@@ -2,17 +2,17 @@
 
 > **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
 
-Status update on 9 November 2026: **First-slice build success reported by the user; test execution explicitly deferred by the user until booking-through-confirmation is ready for frontend/Postman verification.** The observed committed baseline is `0a2383bdfedf34058c4a2bae99c1ae9087162da0`. Build command/output was not supplied; the agent has not independently run it. Earlier agent build attempts and approval-system failures are historical. Database/broker/runtime checks below remain unverified and are instructions for the later deployment acceptance, not tasks to run now. A later source change requires fresh build evidence.
+Status update on 11 November 2026: **Operations implementation is partial and not end-to-end ready.** The request workflow now terminates at the durable `PENDING_PAYMENT` hold using receipt state `HOLD_CREATED` (contract version 2); a separate durable order/expiry worker and guarded zero-price path are present. The commercial adapter still fails closed, and no verified Payment collection consumer or paid confirmation path is implemented. Build/test/Postman execution status is tracked in the task completion report; this checklist remains future live deployment acceptance. Database/broker/provider checks below are not claimed as run.
 
 ## Current scope and gates
 
-Implemented/draft source: Operations-local JWT validation; admission/receipt and Account-current replay; database policy revisions; direct Gate/structure handlers and durable audit; preview/review/own-booking routes; one-time canonical-plate binding; plate-before-site Gate guards; booking hold/evaluation-checkpoint progression. These additions have **not** passed a fresh build. The latest attempted Operations `dotnet build --no-restore --nologo` returned exit 1, zero warnings/errors and no diagnostic. The user's prior successful build covers only the committed first slice.
+Implemented source includes Operations-local JWT validation; admission/receipt and Account-current replay; database policy revisions; direct Gate/structure handlers and durable audit; preview/review/own-booking routes; one-time canonical-plate binding; plate-before-site Gate guards; the short creation receipt; durable order/expiry state; and a guarded zero-price confirmation path. The current order adapter is intentionally unavailable, so no successful Payment order is fabricated. A separate verified collection inbox/consumer, replay deduplication, paid confirmation/reacquisition and late-payment reconciliation remain unimplemented pending Payment's versioned producer/event contract.
 
-Live booking remains unavailable: commercial/Facility adapters and capacity acceptance fail closed. Operations still needs complete capacity/restriction enforcement, external-call staging outside guarded transactions, and post-terminal financial notification/reconciliation. See [producer handoff](../../05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md). Allowed now enters PREPARING rather than the old deliberate FINALIZATION_NOT_READY result. No paid or zero-price booking is ready for end-to-end acceptance. Scan/reallocation/cancellation/checkout are next phase by user choice; do not invent fee defaults to enable them.
+Live booking remains blocked at the fail-closed commercial adapter (`OWNER_UNAVAILABLE`). Remote order calls are staged outside guarded Operations transactions. Normal creation no longer polls Payment collections or waits for confirmation. Preserve the existing Facility confirmation dependency and strict November 10 `evaluatedAt < T` cutoff; the aggregate-only fast path is not proven. Do not invent fee defaults or treat `PENDING_PAYMENT` as proof that a hold remains valid.
 
 ## 1. Compile and focused tests
 
-**Do not execute this checklist yet solely to exercise placeholder integrations.** The user deferred tests until the through-confirmation workflow is complete. First resolve the producer/capacity gates above. Keep the task active and distinguish source preparation from acceptance.
+The source implementation and Postman artifacts can be statically checked independently of unavailable services. Do not call a local build or unit test evidence of live Payment, PostgreSQL, RabbitMQ or provider acceptance.
 
 From the repository root on a machine with .NET SDK 10 and restored package access:
 
@@ -27,7 +27,7 @@ Add `FullyQualifiedName~ReservationEvaluationCheckpointTests` to the focused Ope
 
 Also include `ReservationFacilityDependencyTests`, `ReservationAvailabilityTests` and `FacilityStructureEndpointTests` in the focused filter. The Facility v1 producer and Operations adapter are in the Commit 1 draft. Use the dedicated service JWT and verify exact-token abort fencing, lost replies, concurrent deletion and recovery. See [the Facility and event handoff](../../05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
 
-### Manual checklist for Commit 1 and the Payment handoff
+### Manual checklist for current Operations source and Payment handoff
 
 **On the current branch**
 
@@ -36,14 +36,15 @@ Also include `ReservationFacilityDependencyTests`, `ReservationAvailabilityTests
 - [ ] Start User, Facility and Operation with `scripts/run-schema-service.ps1 -Service <name>` in separate terminals. Prepare an active tenant/site, live unit, two compatible operational slots and an active Driver with an eligible CAR.
 - [ ] From an authorized service test client, call Facility's v1 read and acquire routes. Verify active and unavailable slot facts, wrong credentials returning 401/403, exact-token replay, changed payload returning 409, edit blocked while HELD, complete/abort replay and delayed acquire after abort staying ABORTED. Use the [route, request and response examples](../../03-design/api/reservation-facility-dependency-api-design.md).
 - [ ] Make a compatible Facility structure change. Verify one Operations applied event reaches a bound queue. Replay the same completion and verify no second fact. Pause delivery, make another compatible edit, then resume and verify retained delivery.
-- [ ] With admission enabled, call `POST /api/reservation-price-previews` and `POST /api/reservation-terms` with the [valid Driver payload](../../03-design/api/reservation-first-slice-api-design.md). Once local validation and Facility/policy checks pass, expect 503 `OWNER_UNAVAILABLE` from the commercial adapter. There is no real order or committed payment hold to pay on this branch.
+- [ ] With admission enabled, call `POST /api/reservation-price-previews` and `POST /api/reservation-terms` with the [valid Driver payload](../../03-design/api/reservation-first-slice-api-design.md). The checked-in commercial adapter returns 503 `OWNER_UNAVAILABLE`; this is the current fail-closed result.
+- [ ] Once a real Payment producer is wired, create using reviewed terms and a stable `Idempotency-Key`. Expect the receipt to reach terminal `HOLD_CREATED`/contract version 2 at hold commit while the reservation remains `PENDING_PAYMENT`; confirm the independent order worker does not keep the receipt open or call collection lookup.
 
 **After Payment delivery and Operations Commit 2**
 
 - [ ] Deploy Payment's authoritative preview, quote/coverage acceptance, order, collection and reconciliation contracts. Wire the matching Operations adapter and durable commercial stages before attempting a real payment.
-- [ ] With the same Driver, preview the price, review terms, submit exact terms to `POST /api/reservation-requests` with a fresh `Idempotency-Key`, and poll the returned Location. Expect 202, authorization and preparation, then receipt `BOOKING` and own reservation `PENDING_PAYMENT`. Read `GET /api/me/reservations/{reservationId}` until an authoritative order ID appears.
+- [ ] With the same Driver, preview the price, review terms, submit exact terms to `POST /api/reservation-requests` with a fresh `Idempotency-Key`, and poll the returned Location. Expect 202, then receipt `HOLD_CREATED` and own reservation `PENDING_PAYMENT`. Read `GET /api/me/reservations/{reservationId}` for real order-provisioning state and an order ID only after Payment returns one.
 - [ ] Before paying, submit an overlapping request from another eligible Driver/plate for the same selected slot. Expect one committed hold and one `SLOT_TIME_CONFLICT` even with another free slot. Repeat separately for quota, cross-site plate conflict and a payment hold that has expired. Compare durable events with committed state.
-- [ ] Pay the first order through the configured test provider. Resume the same receipt and own reservation. Expect receipt `COMPLETED` and reservation `CONFIRMED` only after the guarded pre-T evaluation commits. Verify the persisted collection and confirmation event. Repeat with provider replay, no browser return, expiry and late/additional collection using the cases below.
+- [ ] Pay only a real returned order through the configured test provider. Payment status alone is not Operations confirmation. Once the agreed verified event consumer is implemented, verify Operations reports `CONFIRMED` only after guarded pre-T evaluation commits; test duplicate delivery, no browser return, expiry and late/additional collection using the cases below.
 
 ### Through-confirmation deployment acceptance additions
 

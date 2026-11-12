@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     operation TEXT NOT NULL CHECK (operation = 'CREATE_RESERVATION'),
     intent_json JSONB NOT NULL,
     fingerprint TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'BOOKING', 'COMPLETED', 'EXPIRED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
+    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,
     overall_deadline TIMESTAMPTZ NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     CHECK (admitted_at < overall_deadline)
 );
 CREATE INDEX IF NOT EXISTS ix_reservation_requests_due ON reservation_requests(next_action_at, id)
-    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'BOOKING');
+    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING');
 
 -- Review snapshots are immutable; acceptance binds each review to one workflow.
 CREATE TABLE IF NOT EXISTS reservation_terms (
@@ -266,6 +266,20 @@ CREATE TABLE IF NOT EXISTS reservations (
     deposit_amount NUMERIC(18,2) CHECK (deposit_amount >= 0),
     currency TEXT,
     payment_order_id UUID UNIQUE,
+    order_provisioning_state TEXT NOT NULL DEFAULT 'NOT_REQUIRED'
+        CHECK (order_provisioning_state IN ('NOT_REQUIRED', 'PENDING', 'IN_PROGRESS', 'UNKNOWN', 'CREATED', 'CLOSED_NO_ORDER')),
+    order_provisioning_next_action_at TIMESTAMPTZ,
+    order_provisioning_attempts INT NOT NULL DEFAULT 0 CHECK (order_provisioning_attempts >= 0),
+    order_provisioning_code TEXT,
+    zero_price_acceptance_state TEXT NOT NULL DEFAULT 'NOT_REQUIRED'
+        CHECK (zero_price_acceptance_state IN ('NOT_REQUIRED', 'PENDING', 'IN_PROGRESS', 'UNKNOWN', 'ACCEPTED', 'REJECTED')),
+    zero_price_acceptance_next_action_at TIMESTAMPTZ,
+    zero_price_acceptance_attempts INT NOT NULL DEFAULT 0 CHECK (zero_price_acceptance_attempts >= 0),
+    zero_price_acceptance_code TEXT,
+    confirmation_state TEXT NOT NULL DEFAULT 'AWAITING_COLLECTION'
+        CHECK (confirmation_state IN ('AWAITING_COLLECTION', 'AWAITING_ZERO_PRICE_ACCEPTANCE', 'PENDING', 'CONFIRMED', 'NO_ENTITLEMENT', 'RECONCILIATION_REQUIRED')),
+    confirmation_next_action_at TIMESTAMPTZ,
+    confirmation_code TEXT,
     collection_id UUID UNIQUE,
     confirmation_effect_id UUID UNIQUE,
     confirmation_evaluated_at TIMESTAMPTZ,
@@ -310,6 +324,15 @@ CREATE INDEX IF NOT EXISTS idx_reservations_tenant_site ON reservations(tenant_i
 CREATE INDEX IF NOT EXISTS idx_reservations_account ON reservations(account_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status_times ON reservations(status, expected_start_time, expected_end_time);
 CREATE INDEX IF NOT EXISTS idx_reservations_plate ON reservations(normalized_plate);
+CREATE INDEX IF NOT EXISTS ix_reservations_order_provisioning_due
+    ON reservations(order_provisioning_next_action_at, id)
+    WHERE order_provisioning_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
+CREATE INDEX IF NOT EXISTS ix_reservations_no_payment_confirmation_due
+    ON reservations(confirmation_next_action_at, id)
+    WHERE deposit_amount = 0 AND confirmation_state = 'PENDING';
+CREATE INDEX IF NOT EXISTS ix_reservations_zero_price_acceptance_due
+    ON reservations(zero_price_acceptance_next_action_at, id)
+    WHERE deposit_amount = 0 AND zero_price_acceptance_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
 
 -- Business enforcement evidence, not an audit repository. Future cancellation handlers
 -- write this atomically with cancellation under reservation-account:<account_id>.

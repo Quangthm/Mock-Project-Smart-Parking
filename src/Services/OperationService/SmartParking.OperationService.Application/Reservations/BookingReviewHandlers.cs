@@ -118,6 +118,20 @@ internal static class BookingContracts
     public static string Fingerprint(BookingSelection input) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Normalize(input)))));
     public static ReservationGateException InvalidOwner() => new(503, "OWNER_CONTRACT_INVALID", "The owner response does not match the reservation contract.");
+    public static BookingSelection Selection(ReservationRow row) => new(row.VehicleId!.Value, row.SiteId,
+        row.TargetSlotId!.Value, row.ExpectedStartTime, row.ExpectedEndTime, row.SelectedPaymentMethod!);
+    public static CommercialTerms AcceptedTerms(ReservationRow row)
+    {
+        var quote = JsonSerializer.Deserialize<CommercialTerms>(row.AcceptedPricingSnapshot!)
+            ?? throw new InvalidOperationException("Stored accepted pricing terms are invalid.");
+        if (quote.AccountId != row.AccountId || quote.Selection != Selection(row) ||
+            quote.QuoteId == Guid.Empty || string.IsNullOrWhiteSpace(quote.Version) ||
+            quote.BookedAmount != row.BookedAmount || quote.DepositAmount != row.DepositAmount ||
+            quote.Currency != row.Currency || string.IsNullOrWhiteSpace(quote.CoverageVersion) ||
+            string.IsNullOrWhiteSpace(quote.Disclosure))
+            throw InvalidOwner();
+        return quote;
+    }
     public static void ValidateFacility(FacilityBookingFacts facts, BookingSelection intent)
     {
         if (facts.TenantId == Guid.Empty || facts.SiteId != intent.SiteId || facts.SlotId != intent.RequestedSlotId ||
@@ -136,7 +150,23 @@ internal static class BookingContracts
             quote.PrepaymentMode == "PERCENTAGE" && quote.DepositAmount > quote.BookedAmount ||
             string.IsNullOrWhiteSpace(quote.CoverageVersion) || string.IsNullOrWhiteSpace(quote.Disclosure)) throw InvalidOwner();
     }
+    public static void ValidateReservationCollectionBinding(ReservationRow row, ReservationDepositCollectedV1 payment)
+    {
+        if (row.Id != payment.ReservationId || row.RequestId != payment.OperationId ||
+            row.AccountId != payment.AccountId || row.TenantId != payment.TenantId || row.SiteId != payment.SiteId ||
+            row.PaymentOrderId != payment.PaymentOrderId || row.DepositAmount is null or <= 0 ||
+            row.DepositAmount != payment.Amount || row.Currency != payment.Currency)
+            throw new InvalidOperationException("Payment collection is not bound to the reservation and order identity.");
+        var accepted = AcceptedTerms(row);
+        if (accepted.QuoteId != payment.QuoteId || accepted.Version != payment.QuoteVersion ||
+            row.TermsId != payment.TermsId || row.TermsVersion != payment.TermsVersion)
+            throw new InvalidOperationException("Payment collection is not bound to the accepted quote and terms.");
+        if (row.CollectionId is not null && row.CollectionId != payment.CollectionId)
+            throw new InvalidOperationException("A different payment collection is already recorded for this reservation.");
+    }
     public static BookingView View(ReservationRow row) => new(row.Id, row.Status, row.SiteId, row.TargetSlotId,
         row.ExpectedStartTime, row.ExpectedEndTime, row.HoldExpiresAt, row.PaymentOrderId,
+        row.OrderProvisioningState, row.OrderProvisioningCode,
+        row.ZeroPriceAcceptanceState,
         row.BookedAmount, row.DepositAmount, row.Currency, row.ConfirmedAt, row.CreatedAt);
 }

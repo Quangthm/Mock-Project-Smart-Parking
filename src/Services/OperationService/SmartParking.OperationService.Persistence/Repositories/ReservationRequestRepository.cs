@@ -34,7 +34,7 @@ public sealed class ReservationRequestRepository(ReservationDbContext db) : IRes
 
     public async Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, CancellationToken ct) =>
         await db.ReservationRequests.AsNoTracking().Where(x => (x.State == "PENDING_AUTHORIZATION" ||
-            x.State == "PREPARING" || x.State == "BOOKING") && x.NextActionAt <= now)
+            x.State == "PREPARING") && x.NextActionAt <= now)
             .OrderBy(x => x.NextActionAt).ThenBy(x => x.Id).Select(x => x.Id).Take(100).ToListAsync(ct);
 
     public void Add(ReservationRequest request) => db.ReservationRequests.Add(request);

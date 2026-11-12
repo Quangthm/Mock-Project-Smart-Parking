@@ -40,8 +40,8 @@ public sealed class UnavailableReservationCommercialOwner : IReservationCommerci
     private static ReservationGateException Missing() => new(503, "OWNER_UNAVAILABLE", "Reservation commercial producer is not integrated.");
     public Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct) => throw Missing();
     public Task<CommercialTerms> QuoteAsync(Guid accountId, BookingSelection intent, CancellationToken ct) => throw Missing();
-    public Task<bool> AcceptAsync(Guid requestId, CommercialTerms terms, CancellationToken ct) => throw Missing();
     public Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct) => throw Missing();
+    public Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct) => throw Missing();
     public Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct) => throw Missing();
     public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct) => throw Missing();
 }

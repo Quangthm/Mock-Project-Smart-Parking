@@ -86,7 +86,11 @@ public static class ReservationMessaging
         services.AddMassTransit(registration =>
         {
             if (admissionEnabled) registration.AddConsumer<AccountAccessDecisionConsumer>();
-            if (gateCheckoutEnabled) registration.AddConsumer<PaymentSucceededConsumer>();
+            if (gateCheckoutEnabled)
+            {
+                registration.AddConsumer<PaymentSucceededConsumer>();
+                registration.AddConsumer<ReservationDepositCollectedConsumer>();
+            }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
                 outbox.UsePostgres();
@@ -113,6 +117,15 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<PaymentSucceededConsumer>(context);
+                    });
+
+                    bus.Message<SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1>(message =>
+                        message.SetEntityName("smartpark.payment.reservation-deposit-collected.v1"));
+                    bus.ReceiveEndpoint("smartpark-operation-reservation-deposit-collected-v1", endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<ReservationDepositCollectedConsumer>(context);
                     });
                 }
                 bus.Message<OperationsGateAuditV1>(message => message.SetEntityName(OperationsAuditTopology.Exchange));
@@ -152,6 +165,7 @@ public static class ReservationMessaging
         {
             services.AddHostedService<ReservationAuthorizationWorker>();
             services.AddHostedService<ReservationFacilityDependencyWorker>();
+            services.AddHostedService<ReservationOrderProvisioningWorker>();
         }
         return services;
     }

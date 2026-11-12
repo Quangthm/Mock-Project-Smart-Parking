@@ -1,5 +1,6 @@
 using MassTransit;
 using MediatR;
+using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.OperationService.Infrastructure.Messaging;
@@ -36,4 +37,11 @@ public sealed class PaymentSucceededConsumer(IMediator mediator) : IConsumer<Pay
             payment.TenantId, payment.SiteId, payment.ReferenceType, payment.ReferenceId,
             payment.PaymentOrderId, payment.OccurredAt), context.CancellationToken);
     }
+}
+
+public sealed class ReservationDepositCollectedConsumer(IMediator mediator)
+    : IConsumer<SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1>
+{
+    public Task Consume(ConsumeContext<SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1> context) =>
+        mediator.Send(new RecordReservationDepositCollectedCommand(context.Message), context.CancellationToken);
 }

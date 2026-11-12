@@ -20,6 +20,7 @@
 - User explicitly selected implementation of the attached reservation first slice after the branch/session mismatch was surfaced.
 - Inspected Operations host, entities/mapping, repository/UoW interfaces, gate handlers, structure store, UserService outbox precedent and authorization retry policy.
 - Existing Operations has no Driver JWT authentication or reservation admission Saga. Legacy gate handlers call a workflow-owning store. The structure store relies on database triggers for its site guard.
+- Removed the separate commercial quote-acceptance round trip from the reservation preparation path; accepted terms are retained in the durable booking snapshot and the real Payment order is provisioned only after the hold is committed. This keeps the workflow aligned with the approved short creation flow and event-driven confirmation design.
 
 ## 4. Technical Decisions
 - User's current schema/architecture instructions supersede the handoff's proposed overlays, trigger retention and additive-upgrade mechanism. No new database trigger/function or noncircular ALTER is authorized.
@@ -208,6 +209,42 @@ Local setup follow-up: documented a Windows PowerShell OpenSSL fallback and manu
 5. Pending release gates: Payment reservation producers and machine authorization; Facility fast-path proof; Operations order stages and event consumer; frontend integration; actual build, deployment and cross-service tests. Current commercial adapter still fails closed. Do not mark ticket Done based solely on handoff approval.
 
 **Next steps:** owners agree OpenAPI/event DTOs, compensation/coverage handshake and topology; implement under the shared coding skill, verify test cases in the updated SPARK-273 deployment checklist, and only then consider replacing the Facility confirmation dependency with the fast path. This session appendix does not erase earlier working history.
+
+## Continuation checkpoint — 11 November 2026 (implementation)
+
+The earlier four-file change was preparatory only: it removed the standalone quote-acceptance call but did not make creation short, provision orders independently, add verified-event confirmation, or provide the required Postman deliverables. This continuation adds the Operations-side workflow stages that can be implemented without inventing Payment's missing wire contracts.
+
+### Implemented in source
+
+- `ReservationRequest.AttachBooking` now terminates the receipt as `HOLD_CREATED`; admission responses expose `contractVersion: 2`. The same guarded Operations UoW commits the `PENDING_PAYMENT` reservation, accepted review, dependency completion and hold fact. `ReservationRow.Status` remains `PENDING_PAYMENT`. `ProgressReservationHandler` no longer looks up collections or confirms paid reservations.
+- `ReservationRow` persists order provisioning, zero-price acceptance, hold expiry and confirmation recovery state. A distinct background worker dispatches order, expiry and guarded zero-price handlers. Stable operation identity is the original reservation request ID. The worker persists exact accepted terms and H; `EnsureOrderAsync` runs only after its intent transaction commits. Unknown outcomes retry the same operation; created order IDs and closed-no-order outcomes are persisted. Terms are not silently repriced.
+- Known no-effect `PENDING` order/zero-price acceptance work is closed when its accepted terms or H expire; an `UNKNOWN` outcome is not misrepresented as absence and remains available for same-ID owner recovery.
+- Genuine zero-price terms use a separate owner acceptance operation and no synthetic order. Confirmation still requires owner acceptance and the existing Facility confirmation dependency, availability/plate guards, and the strict database evaluation timestamp before reservation start. Paid confirmation remains unavailable without a verified collection consumer.
+- The Operations commercial adapter still returns `OWNER_UNAVAILABLE` for preview, review and order/zero-price acceptance. This is deliberately fail-closed; there is no fabricated quote/order or successful Payment result.
+- Created the SPARK-273 Postman Collection v2.1, blank local environment, and manual guide. The collection covers actual Operations routes, stable create replay, exact hold deadline/order state, conditional real Payment checkout/status, overlapping-capacity conflict and expiry checks. It does not invent an event or API endpoint.
+- Updated the API design, deployment checklist and testing index. Existing schema SQL is the original owning Operations schema script; no database was changed. A reviewed migration/reconciliation is still required for already-created databases.
+
+### Remaining requirements and blockers
+
+- Payment's authenticated reservation `EnsureOrder`/zero-price producer contracts and implementation are unavailable. The adapter therefore blocks live preview/review and prevents end-to-end order provisioning.
+- The November 11 decision leaves the versioned verified-collection event schema, identity, topology and trust contract for cross-owner agreement. No paid reservation consumer, durable collection inbox/deduplication, paid confirmation command, late-money recovery or targeted reconciliation dispatcher has been added. Do not repurpose legacy `PaymentSucceededV1` (gate settlement) as collection evidence. `CollectionsAsync` remains a port for future targeted recovery and is not polled in normal creation.
+- Preserve Facility confirmation and fresh capacity/plate/site checks. Writer-safety evidence for aggregate-only confirmation has not been produced; optimization remains pending. Paid expired-hold reacquisition/reconciliation depends on the event/recovery contract.
+- `OWNER_UNAVAILABLE` means the current Postman run is blocked at preview/review; it is not evidence that the later flows passed. No PostgreSQL, RabbitMQ, provider or browser acceptance was run.
+
+### Files created for this continuation
+
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationOrderProvisioning.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationConfirmationHandlers.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationOrderProvisioningWorker.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/ReservationCreationLifecycleTests.cs`
+- `docs/04-testing/postman/SPARK-273-Reservation-Flow.postman_collection.json`
+- `docs/04-testing/postman/SPARK-273-Local.postman_environment.example.json`
+- `docs/04-testing/postman/SPARK-273-manual-test-guide.md`
+
+### Validation
+
+- **PASSED:** focused `ReservationCreationLifecycleTests` plus `ReservationEvaluationCheckpointTests` (9 tests total); Operations API project build; Postman collection and environment JSON parsing; `git diff --check`.
+- **NOT RUN:** PostgreSQL/RabbitMQ integration, provider checkout/webhook, cross-service contract tests, collection confirmation/reconciliation, and Postman live run. The current fail-closed adapter blocks the last group.
 
 ## Develop merge checkpoint — 11 November 2026
 

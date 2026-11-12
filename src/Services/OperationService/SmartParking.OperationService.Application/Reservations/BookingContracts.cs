@@ -24,16 +24,33 @@ public sealed record ReviewedOperationalPolicy(Guid PlatformRevisionId, int Plat
     bool ArrivalLateToleranceEnabled, string CancellationTimezone);
 public sealed record VehicleBindingResult(bool Eligible, long? Revision, string? CanonicalPlate);
 public sealed record DepositOrderRequest(Guid OperationId, Guid ReservationId, Guid AccountId,
-    Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency,
-    string PaymentMethod, DateTimeOffset ExpiresAt);
+    Guid TenantId, Guid SiteId, Guid VehicleId, Guid SlotId, DateTimeOffset Start, DateTimeOffset End,
+    Guid OperationsTermsId, string OperationsTermsVersion, CommercialTerms AcceptedTerms,
+    DateTimeOffset ExpiresAt);
+public sealed record ZeroPriceAcceptanceRequest(Guid OperationId, Guid ReservationId, Guid AccountId,
+    Guid TenantId, Guid SiteId, Guid VehicleId, Guid SlotId, DateTimeOffset Start, DateTimeOffset End,
+    Guid OperationsTermsId, string OperationsTermsVersion, CommercialTerms AcceptedTerms,
+    DateTimeOffset ExpiresAt);
+public sealed record ZeroPriceAcceptanceResult(string State, ZeroPriceAcceptanceRequest AcceptedRequest,
+    string? OutcomeCode = null);
 // CREATED replays the same order. CLOSED_NO_ORDER is an authoritative, durable fence
 // against later creation for this operation. UNKNOWN must never be translated into absence.
-public sealed record DepositOrderResult(string State, Guid? OrderId, DepositOrderRequest AcceptedRequest);
+public sealed record DepositOrderResult(string State, Guid? OrderId, DepositOrderRequest AcceptedRequest,
+    string? OutcomeCode = null);
 public sealed record VerifiedCollection(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
     Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
 public sealed record CollectionLookup(string State, IReadOnlyList<VerifiedCollection> Collections);
+public sealed record ReservationDepositCollectedV1(Guid EventId, Guid CollectionId, Guid PaymentOrderId,
+    Guid PaymentTransactionId, Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId,
+    Guid QuoteId, string QuoteVersion, Guid TermsId, string TermsVersion, decimal Amount, string Currency,
+    string Provider, string ProviderReference, DateTimeOffset ProviderVerifiedAt, DateTimeOffset OccurredAt);
+public sealed record VerifiedReservationCollection(Guid EventId, Guid CollectionId, Guid PaymentOrderId,
+    Guid PaymentTransactionId, Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId,
+    Guid QuoteId, string QuoteVersion, Guid TermsId, string TermsVersion, decimal Amount, string Currency,
+    string Provider, string ProviderReference, DateTimeOffset ProviderVerifiedAt, DateTimeOffset OccurredAt);
 public sealed record BookingView(Guid ReservationId, string State, Guid SiteId, Guid? RequestedSlotId,
     DateTimeOffset Start, DateTimeOffset End, DateTimeOffset? HoldExpiresAt, Guid? OrderId,
+    string OrderProvisioningState, string? OrderProvisioningCode, string ZeroPriceAcceptanceState,
     decimal? BookedAmount, decimal? DepositAmount, string? Currency, DateTimeOffset? ConfirmedAt,
     DateTimeOffset CreatedAt);
 public sealed record ReservationConfirmedV1(Guid EventId, Guid ReservationId, Guid AccountId,
@@ -45,9 +62,11 @@ public interface IReservationCommercialOwner
 {
     Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct);
     Task<CommercialTerms> QuoteAsync(Guid accountId, BookingSelection intent, CancellationToken ct);
-    // Stable requestId; acceptance/replay must serialize with quote/coverage changes.
-    Task<bool> AcceptAsync(Guid requestId, CommercialTerms terms, CancellationToken ct);
+    // A real Payment order is created only after the reservation hold is durably committed.
+    // Quote review remains local to the accepted booking snapshot; subsequent order creation is
+    // idempotent and uses the reservation/order operation identity rather than a separate accept step.
     Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct);
+    Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct);
     Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct);
     // Durable, idempotent owner acceptance; not proof of refund payout.
     Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct);
@@ -73,6 +92,13 @@ public interface IReservationBookingRepository : Common.Interfaces.Persistence.I
     Task<ReservationRow?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct);
     Task<IReadOnlyList<ReservationRow>> ListOwnBookingsAsync(Guid accountId, int take,
         DateTimeOffset? before, Guid? beforeId, CancellationToken ct);
+    Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct);
+    Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> DueZeroPriceAcceptanceAsync(DateTimeOffset now, int take, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct);
     Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct);
     Task RequireDurableConfirmationAsync(CancellationToken ct);
     Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct);

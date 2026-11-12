@@ -1,11 +1,13 @@
 ---
 name: smartpark-coding
-description: Implement or review SmartPark backend and frontend features using the approved five-layer backend architecture, Account-based authorization, CQRS, uniform errors, reliable service integration, concurrency discipline, and responsive product UI conventions. Inspect relevant repository instructions and feature contracts first.
+description: Implement or review SmartPark backend and frontend features using the approved five-layer architecture, Account-based authorization, CQRS, SOLID, incremental implementation slices, event-driven integration, concurrency discipline, and responsive UI conventions. Inspect repository instructions, service ownership and feature contracts first.
 ---
 
 # SmartPark coding skill — approved final
 
 Decision snapshot: 2026-11-04 (authorization amendment; other conventions retained). This is the reusable shared coding guide for SmartPark implementation and PR review. For coding tasks, it is the primary implementation convention loaded by `ai/AGENTS.md`; it does not replace authoritative SRS/business rules, approved architecture/service ownership, more specific feature contracts, or nonconflicting scoped `AGENTS.md` instructions. Feature-specific rules remain feature-specific unless this guide explicitly promotes them to a shared convention. Examples are illustrative SmartPark examples, not universal product requirements or compiled repository code.
+
+**Shared-guidance amendment (2026-11-12):** Slice-first implementation, SOLID/ownership discipline, explicit escalation of exceptional-case designs, and event-driven execution preferences were added. This is general coding guidance, not retroactive approval to change existing service contracts, schedulers or production infrastructure.
 
 ## 1. Authority and efficient context loading
 
@@ -40,6 +42,27 @@ Inspect the **local Git checkout** before relying on repository state. At minimu
 
 Ask only about unresolved material behavior/contracts. Continue independent work. Do not reset, overwrite, stage, commit, push, deploy, or mutate shared databases without task authorization. Preserve unrelated changes.
 
+### Slice-first implementation and exceptional-case escalation
+
+For a nontrivial coding task, **plan before expanding**: divide the authorized work into the smallest coherent, vertically testable slices. Each slice should deliver one necessary behavior using existing conventions and dependencies first. Distinguish the feature's immediate acceptance criteria from later enhancements, cross-service work and speculative hardening. Do not build an entire proposed architecture upfront merely because future edge cases are imaginable.
+
+Before the first code change, briefly identify each planned slice's **user-visible/business outcome, service owner, prerequisite, affected layers/files, indispensable invariants, verification method, and deferred scope**. Implement the current authorized slice, inspect what it actually requires, and report its result and remaining risks. Continue to another already-approved slice only when the user's task authorizes continued implementation; otherwise checkpoint and request direction. **New scope or architecture always requires the approval gate above**, even within a broadly worded request. Do not make unrequested Git commits or stage/push files.
+
+**Do not mistake deferred complexity for permission to violate correctness.** Implement established acceptance, authorization, concurrency, idempotency, immutable binding and atomic outbox requirements when the current slice depends on them. Handle failures safely and disclose unverified behavior. Only defer a protection when the scenario or additional mechanism is outside the approved contract, has an authoritative upstream owner, is already covered by an existing invariant, or requires a new design decision. A potentially severe financial, security, capacity or data-loss gap must be surfaced and fail closed where appropriate; never silently accept or conceal it.
+
+Before adding a table, receipt, durable worker, retry state machine, coordinator, Saga, new event or abstraction *for an exceptional scenario*:
+
+1. Trace whether the scenario can actually occur under the approved upstream and downstream contracts. Separate **one logical business event** from **at-least-once transport delivery**; neither implies the other.
+2. Identify the authoritative service that owns preventing, detecting or correcting the condition. Prefer fixing/using that owner's guarantee to duplicating its responsibilities in a consumer.
+3. Verify which existing aggregate, constraint, broker inbox/outbox, scheduled command or idempotent operation already handles the risk. Explain any remaining, evidenced gap and why the current slice cannot safely proceed without addressing it.
+4. If additional behavior is still needed but not approved, **report it as a proposed next slice** with a minimal remedy and costs; do not implement it automatically. Keep working only on independent approved behavior.
+
+Use this concrete escalation format rather than a vague "edge case":
+
+> **Scenario:** In situation X, event A can occur while event B is in progress, producing outcome C. **Existing protection:** Implementation or contract Y does/does not prevent C because [source-level reason]. **Owner and impact:** Service S owns the relevant fact; C affects [entitlement, money, capacity, security, etc.]. **Proposal (not implemented):** Add slice Z, comparing the smallest viable fixes and their operational cost. **Approval needed:** [specific decision].
+
+Do not manufacture hypothetical failures to justify feature-local infrastructure, and do not claim a case is impossible without verifying the authoritative contract and delivery semantics. Record accepted limitations, blockers and proposed slices in the task handoff.
+
 ## 2. Layer responsibilities
 
 | Layer | Owns | Must avoid |
@@ -55,6 +78,18 @@ API composition-root references to implementation assemblies are allowed for wir
 Repository/service ports may be defined inward, but **Application performs I/O orchestration**. Domain receives already-resolved facts and evaluates business truth; Domain entities/services must not reach outward to repositories, HTTP services, brokers or DbContext to fetch those facts.
 
 Use IMediator by project choice; do not substitute ISender unless an explicit project decision changes this convention. MediatR is in-process; RabbitMQ is cross-service. Use SignalR only for an actual approved realtime use case. Payment owns authoritative tariffs; serialize financial snapshots outside Domain while preserving the approved contract when such work is in scope.
+
+### SOLID, cohesive ownership and proportional abstraction
+
+Apply **SOLID as a decision discipline, not a class-count target**:
+
+- **Single Responsibility:** An aggregate owns its business lifecycle; handlers orchestrate one use case; broker adapters deliver messages; the authoritative service owns its data. Do not combine financial settlement ownership with reservation entitlement or create a second state machine for another service's records.
+- **Open/Closed:** Extend a stable behavior at an established variation point when a real requirement warrants it. Do not pre-build provider registries, plugin frameworks or abstract base classes for hypothetical variants.
+- **Liskov Substitution:** Port implementations and test doubles must honor the same contracts, failure meanings and idempotency guarantees. An unavailable adapter fails closed rather than returning a fabricated success.
+- **Interface Segregation:** Keep inward-owned ports small and consumer-oriented; separate unrelated operations only when callers have genuinely different needs. Avoid both giant god interfaces and an interface per concrete class by default.
+- **Dependency Inversion:** Business decisions depend on approved Application/Domain abstractions and authoritative facts, not concrete EF, HTTP, broker classes or foreign service databases.
+
+Favor **low coupling, high cohesion and the minimum number of independently coordinated state machines**. Reuse existing repositories, outbox/inbox, Domain transitions and service contracts before creating extra entities, tables, managers or workers. Explain a new abstraction by the current slice's demonstrated responsibility or invariants, not "future-proofing" alone. Number of source files is not itself a measure of simplicity or complexity.
 
 ### Validation and rule ownership
 
@@ -357,6 +392,18 @@ Prefer fact-style integration events for downstream reactions. Do not publish a 
 
 SignalR is for realtime client notification, not durable backend integration and not proof that the business transaction committed.
 
+### Event-driven execution and durable deadlines — preferred direction
+
+For a known business trigger, **react to the committed fact or command** rather than repeatedly scanning all business rows on a short timer. Examples: committed hold → order-provisioning intent; verified deposit → reservation confirmation; dependency ready → resume the corresponding command. Use existing MassTransit/RabbitMQ plus transactional outbox/inbox and idempotent Application handlers where their contracts support the need. Do not simulate responsiveness by polling another service's payment status during an open request.
+
+For a deadline such as hold expiry H, prefer **one durable scheduled command at the authoritative deadline**, if the installed infrastructure actually supports durable delayed delivery. Its handler must lock/reload current state and evaluate authoritative database time and business guards; an event becoming due is not itself proof the hold must expire. Duplicate, early, late or reordered delivery must be safe. A delayed/missed expiry notification cannot extend an expired hold: other capacity writers must still evaluate the stored deadline when deciding conflicts.
+
+**Verify before choosing a scheduler.** MassTransit, RabbitMQ transport capabilities, enabled plugins, deployment configuration and rollback/recovery behavior must be inspected. Do not assume delayed exchanges, message TTL/dead lettering, Quartz or Hangfire are configured or sufficiently precise. Never use process-local `Task.Delay`, a timer or volatile memory as the *only* durability mechanism. Adding a scheduler dependency, RabbitMQ plugin, new hosted service or persistence table requires the existing architecture/rollout approval gate when not already authorized.
+
+Background services are **not banned**: broker consumers, outbox delivery, required authorization/dependency coordination, startup repair and bounded reconciliation may legitimately run in the background. Avoid *frequent normal-path business-table polling by default*, not background processing itself. Use an indexed due-work scan or periodic repair only when its correctness, recovery requirement and cost are justified and approved; do not replace or remove unrelated existing workers during a feature refactor.
+
+Document trigger ownership, transaction/outbox boundary, stable identity, retry owner/budget, failure-to-publish behavior, restart recovery, consumer idempotency, and authority for deadline/state decisions. If an event-driven scheduler is not available under current infrastructure, **report the blocker and propose a separate slice** rather than silently substituting an unsafe timer or installing new infrastructure. Do not assume broker delivery is exactly-once even when the upstream producer emits one logical event.
+
 ### Messaging implementation boundary
 
 Define Application `IEventPublisher`/integration ports and implement them using Infrastructure MassTransit/RabbitMQ. Verify installed versions and scoped dependencies. Keep Domain independent of transport packages. Use approved event ownership, schema/version, identifiers, intended consumers and minimal payload. Do not invent downstream uses. Audit identity must distinguish actor Account from affected User. Resolve no-op event semantics explicitly.
@@ -391,7 +438,7 @@ When a feature's correctness depends on the transactional outbox, missing requir
 
 Review behavior, not merely coverage percentages. Execute focused tests and required gates; do not repeat broad testing without a concrete reason. Report actual commands/outcomes and environment limitations. Never inherit old session results as current evidence.
 
-Use the lightest verification level that can actually prove the behavior.
+Use the lightest verification level that can actually prove the behavior. Respect an explicit user instruction to leave smoke, integration, automated-test execution or Postman/manual runs to the user: still author appropriate tests and give exact commands/UI steps, but mark them **NOT RUN — USER VERIFICATION REQUIRED** instead of executing them or claiming a pass. Lightweight build/static checks remain optional within the user's permitted scope.
 
 For RabbitMQ/MassTransit work, prefer in this order as appropriate:
 
@@ -422,7 +469,7 @@ Select verification categories according to the behavior changed; do not mechani
 
 Mocked locks/transactions do not prove database concurrency. In-memory bus tests do not prove real RabbitMQ durability. A missing environment is a disclosed validation gap, not a pass. Use production-like DI to verify behaviors/adapters are actually registered.
 
-Deliver actual files changed, request-to-response call path, decisions versus proposals, SQL/setup instructions, tests and residual risks. For PR review, lead with concrete defects and file/symbol evidence; distinguish requirements violations from style preferences. Include suggested Conventional Commit text without committing unless authorized. Checkpoint phases in the established task/session document to support resumption.
+Deliver actual files changed, request-to-response call path, decisions versus proposals, SQL/setup instructions, tests and residual risks. For PR review, lead with concrete defects and file/symbol evidence; distinguish requirements violations from style preferences. For coding tasks, report each completed slice, what was **not** implemented, its dependency/owner, and any exceptional-case next-slice proposal requiring approval. Include suggested Conventional Commit text without committing unless authorized. Checkpoint phases in the established task/session document to support resumption.
 
 ## 11. Quick rejection checklist for agent-generated changes
 
@@ -441,6 +488,9 @@ Deliver actual files changed, request-to-response call path, decisions versus pr
 - Reject FE code that treats SignalR or client-calculated financial values as authoritative business state.
 - Reject hardcoded CORS origins/service URLs that belong to environment configuration.
 - Reject new cross-service/architecture direction implemented without the architecture approval gate when the guide/approved contracts do not already decide it.
+- Reject speculative exceptional-case state machines, receipt tables, coordinators or retries added before verifying that the scenario is reachable and whether its authoritative service already owns the guarantee; require a justified, approved follow-up slice.
+- Reject repeated short-interval business-table polling presented as the default event-driven workflow when a supported durable trigger exists; also reject in-memory-only deadline timers or unapproved scheduler plugins masquerading as durable scheduling.
+- Reject implementations that expand through all hypothetical future slices without a checkpoint, duplicate an upstream service's financial/business ownership, or use SOLID as a pretext for needless abstractions.
 - Reject scripts auto-applied to the user DB, guessed schema, fabricated test passes, or concealed pending contract approvals.
 
 ## 12. Reference entry points

@@ -35,4 +35,5 @@ public sealed record ReadReservationReceiptQuery(Guid RequestId) : IRequest<Rese
 public sealed record AdvanceReservationAuthorizationCommand(Guid RequestId) : IRequest;
 public sealed record RecordAccountAccessDecisionCommand(AccountAccessDecisionV1 Decision) : IRequest;
 public sealed record RecordReservationWorkFailureCommand(Guid RequestId) : IRequest;
-public sealed record ReservationReceipt(Guid RequestId, string State, Guid? ReservationId, string? Code);
+public sealed record ReservationReceipt(Guid RequestId, string State, Guid? ReservationId, string? Code,
+    int ContractVersion = 2);

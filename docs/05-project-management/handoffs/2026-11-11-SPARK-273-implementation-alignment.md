@@ -4,7 +4,7 @@
 
 **Scope:** Booking through `CONFIRMED`, CAR / Specific Slot. Post-confirmation lifecycle remains a separately tracked phase.
 
-**Status:** Approved workflow direction; implementation/producer/Facility fast-path verification remains pending. No code, Jira, deploy or runtime-test changes are claimed.
+**Status:** The approved reservation deposit consumer and guarded confirmation path are implemented in source and registered for MassTransit consumption; runtime verification and Payment/Facility live checks remain pending. No code, Jira, deploy or runtime-test changes are claimed.
 
 **Primary decision:** [11 November architecture decision](../decision-log/2026-11-11-reservation-event-driven-confirmation.md). The [10 November evaluation-time checkpoint](../decision-log/2026-11-10-reservation-evaluation-checkpoint.md) remains in force.
 

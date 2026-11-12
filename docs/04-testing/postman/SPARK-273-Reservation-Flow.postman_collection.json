@@ -1,0 +1,495 @@
+{
+  "info": {
+    "_postman_id": "95ef8f73-2730-4bb5-bf11-2ea005a770c4",
+    "name": "SPARK-273 Reservation Flow",
+    "description": "Manual reservation flow against the implemented Operations routes. The approved verified collection consumer and guarded confirmation path are implemented in source, but live Payment/Facility verification remains pending. No mock or demo-payment route is used.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{driverToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "operationBaseUrl", "value": "http://localhost:5055" },
+    { "key": "paymentBaseUrl", "value": "http://localhost:5065" }
+  ],
+  "item": [
+    {
+      "name": "01 - Review and create",
+      "item": [
+        {
+          "name": "01.1 - Server price preview",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-price-previews"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Preview uses the live Operations response', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Preview contains authoritative versioned pricing', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.pricingVersion).to.be.a('string').and.not.empty; });",
+                  "if (body.data) { pm.environment.set('previewBookedAmount', body.data.bookedAmount); pm.environment.set('previewDepositAmount', body.data.depositAmount); pm.environment.set('previewCurrency', body.data.currency); pm.environment.set('previewPricingVersion', body.data.pricingVersion); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.2 - Review and capture exact terms",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-terms"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Terms review returns a successful live response', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Terms bind quote, version, expiry and amounts', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.termsId).to.be.a('string'); pm.expect(body.data.termsVersion).to.be.a('string'); pm.expect(body.data.commercial.quoteId).to.be.a('string'); pm.expect(body.data.commercial.version).to.be.a('string'); });",
+                  "if (body.data) { pm.environment.set('termsId', body.data.termsId); pm.environment.set('termsVersion', body.data.termsVersion); pm.environment.set('quoteId', body.data.commercial.quoteId); pm.environment.set('pricingVersion', body.data.commercial.version); pm.environment.set('termsValidUntil', body.data.validUntil); pm.environment.set('acceptedBookedAmount', body.data.commercial.bookedAmount); pm.environment.set('acceptedDepositAmount', body.data.commercial.depositAmount); pm.environment.set('acceptedCurrency', body.data.commercial.currency); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.3 - Create reservation (stable idempotency key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{reservationIdempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{termsId}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-requests"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('reservationIdempotencyKey')) pm.environment.set('reservationIdempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Creation is durably admitted', function () { pm.response.to.have.status(202); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Receipt is versioned and not a confirmation', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.contractVersion).to.eql(2); pm.expect(body.data.state).to.be.oneOf(['PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED']); });",
+                  "if (body.data) { pm.environment.set('requestId', body.data.requestId); if (body.data.reservationId) pm.environment.set('reservationId', body.data.reservationId); pm.environment.set('receiptState', body.data.state); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.4 - Replay same create (must not duplicate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{reservationIdempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{termsId}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Idempotent replay is accepted', function () { pm.response.to.have.status(202); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Replay returns the original request identity', function () { pm.expect(body.data.requestId).to.eql(pm.environment.get('requestId')); });",
+                  "pm.environment.set('replayRequestId', body.data.requestId);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Observe independent workflows",
+      "item": [
+        {
+          "name": "02.1 - Read creation receipt",
+          "request": {
+            "method": "GET",
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Receipt read succeeds', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('receiptState', body.data.state);",
+                  "if (body.data.reservationId) pm.environment.set('reservationId', body.data.reservationId);",
+                  "pm.test('Hold receipt is distinct from confirmed lifecycle', function () { pm.expect(body.data.state).to.be.oneOf(['PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.2 - Read own reservation (authoritative state and H)",
+          "request": {
+            "method": "GET",
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Own reservation read succeeds', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "const data = body.data;",
+                  "pm.environment.set('reservationState', data.state);",
+                  "if (data.holdExpiresAt) pm.environment.set('holdExpiresAt', data.holdExpiresAt);",
+                  "if (data.orderId) pm.environment.set('paymentOrderId', data.orderId);",
+                  "pm.environment.set('orderProvisioningState', data.orderProvisioningState);",
+                  "pm.environment.set('zeroPriceAcceptanceState', data.zeroPriceAcceptanceState);",
+                  "pm.test('Only Operations status establishes confirmation', function () { pm.expect(data.state).to.be.oneOf(['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED', 'CANCELLED', 'UNFULFILLABLE']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.3 - Read Payment invoice for a real order (skip until order exists)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{paymentDriverToken}}", "type": "string" }]
+            },
+            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{paymentOrderId}}/invoice"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["if (!pm.environment.get('paymentOrderId')) pm.execution.skipRequest();"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Payment order invoice is read independently', function () { pm.response.to.have.status(200); });",
+                  "pm.environment.set('paymentInvoice', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.4 - Initiate real Payment checkout (skip until real order exists)",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{paymentDriverToken}}", "type": "string" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{checkoutIdempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"{{paymentReturnUrl}}\",\n  \"cancelUrl\": \"{{paymentCancelUrl}}\"\n}"
+            },
+            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{paymentOrderId}}/checkout"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('paymentOrderId')) pm.execution.skipRequest();",
+                  "if (!pm.environment.get('checkoutIdempotencyKey')) pm.environment.set('checkoutIdempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Payment returns a real checkout response', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Checkout response contains provider transaction identity', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.paymentTransactionId).to.be.a('string'); pm.expect(body.data.checkoutUrl).to.be.a('string'); });",
+                  "if (body.data) { pm.environment.set('paymentTransactionId', body.data.paymentTransactionId); pm.environment.set('paymentCheckoutUrl', body.data.checkoutUrl); pm.environment.set('paymentTransactionStatus', body.data.status); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.5 - Read Payment transaction status independently",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{paymentDriverToken}}", "type": "string" }]
+            },
+            "url": "{{paymentBaseUrl}}/api/v1/payments/transactions/{{paymentTransactionId}}/status"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["if (!pm.environment.get('paymentTransactionId')) pm.execution.skipRequest();"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Payment status read succeeds independently', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('paymentTransactionStatus', body.data.status);",
+                  "pm.environment.set('paymentStatusAuthoritative', body.data.isAuthoritative);",
+                  "pm.test('Payment status alone is not reservation confirmation', function () { pm.expect(body.data.status).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.6 - Re-read reservation; confirm only from Operations state",
+          "request": {
+            "method": "GET",
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reservation is read from Operations after payment', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json().data;",
+                  "pm.environment.set('reservationState', data.state);",
+                  "if (data.state === 'CONFIRMED') pm.environment.set('confirmedAt', data.confirmedAt);",
+                  "pm.test('Reservation remains pending until backend commits confirmation', function () { pm.expect(data.state).to.be.oneOf(['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED', 'CANCELLED', 'UNFULFILLABLE']); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Negative and recovery checks",
+      "item": [
+        {
+          "name": "03.1 - Same key with changed intent (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{reservationIdempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{differentEnd}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{termsId}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Reusing a key for changed intent is rejected', function () { pm.response.to.have.status(409); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.2 - Review overlapping reservation terms",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{conflictVehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"start\": \"{{conflictStart}}\",\n  \"end\": \"{{conflictEnd}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-terms"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Conflict terms are reviewed by Operations', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Conflict terms have a versioned identity', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.termsId).to.be.a('string'); pm.expect(body.data.termsVersion).to.be.a('string'); });",
+                  "if (body.data) { pm.environment.set('conflictTermsId', body.data.termsId); pm.environment.set('conflictTermsVersion', body.data.termsVersion); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.3 - Submit overlapping request with a new key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{conflictIdempotencyKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{conflictVehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{conflictStart}}\",\n  \"end\": \"{{conflictEnd}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{conflictTermsId}}\",\n  \"termsVersion\": \"{{conflictTermsVersion}}\"\n}"
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-requests"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('conflictIdempotencyKey')) pm.environment.set('conflictIdempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Competing request is admitted for authoritative conflict evaluation', function () { pm.response.to.have.status(202); });",
+                  "const body = pm.response.json();",
+                  "if (body.data) { pm.environment.set('conflictRequestId', body.data.requestId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.4 - Read competing request conflict receipt",
+          "request": {
+            "method": "GET",
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{conflictRequestId}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["if (!pm.environment.get('conflictRequestId')) pm.execution.skipRequest();"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Conflict receipt read succeeds', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json().data;",
+                  "pm.environment.set('conflictReceiptState', data.state);",
+                  "pm.test('Overlapping slot request is rejected when processing is terminal', function () { if (data.state === 'REJECTED') pm.expect(data.code).to.eql('SLOT_TIME_CONFLICT'); else pm.expect(data.state).to.be.oneOf(['PENDING_AUTHORIZATION', 'PREPARING']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.5 - Re-read reservation after hold deadline",
+          "request": {
+            "method": "GET",
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["if (!pm.environment.get('reservationId') || !pm.environment.get('holdExpiresAt')) pm.execution.skipRequest();"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reservation expiry is read from Operations', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json().data;",
+                  "pm.environment.set('reservationState', data.state);",
+                  "pm.environment.set('holdExpiresAt', data.holdExpiresAt);",
+                  "pm.test('Expired hold is released after its exact deadline', function () { if (Date.now() >= new Date(data.holdExpiresAt).getTime() + 5000) pm.expect(data.state).to.eql('EXPIRED'); else pm.expect(data.state).to.be.oneOf(['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.6 - Anonymous own-reservation read (expect 401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Own reservation is not available anonymously', function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

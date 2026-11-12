@@ -15,7 +15,8 @@ public sealed class AdmissionMapperProfile : Profile
 {
     public AdmissionMapperProfile() => CreateMap<ReservationRequest, ReservationReceipt>()
         .ForCtorParam(nameof(ReservationReceipt.RequestId), opt => opt.MapFrom(x => x.Id))
-        .ForCtorParam(nameof(ReservationReceipt.ReservationId), opt => opt.MapFrom(x => x.ReservationId));
+        .ForCtorParam(nameof(ReservationReceipt.ReservationId), opt => opt.MapFrom(x => x.ReservationId))
+        .ForCtorParam(nameof(ReservationReceipt.ContractVersion), opt => opt.MapFrom(_ => 2));
 }
 
 public sealed class AdmitReservationValidator : AbstractValidator<AdmitReservationCommand>

@@ -9,7 +9,7 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class ProgressReservationHandler(IReservationRequestRepository requests,
     IReservationTermsRepository reviews, IReservationBookingRepository bookings,
-    IReservationVehicleOwner vehicles, IReservationCommercialOwner commercial,
+    IReservationVehicleOwner vehicles,
     IReservationFacilityDependencyRepository dependencies, IReservationWorkflowConcurrency workers,
     IReservationAvailabilityRepository availability, IReservationFactsPublisher publisher,
     IOperationsConcurrency guards, IUnitOfWork work, IMediator mediator)
@@ -20,7 +20,7 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         await using var lease = await workers.TryEnterAsync(command.RequestId, ct);
         if (lease is null) return;
         var observed = await requests.FindForWorkerAsync(command.RequestId, ct);
-        if (observed is null || observed.State is not ("PREPARING" or "BOOKING")) return;
+        if (observed is null || observed.State != "PREPARING") return;
         if (observed.State == "PREPARING" && observed.VehicleBindingState is null)
         {
             await RecordBindingAsync(observed, ct);
@@ -28,12 +28,11 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         }
         await using var transaction = await work.BeginTransactionAsync(ct);
         var request = await requests.LockAsync(command.RequestId, ct);
-        if (request is null || request.State is not ("PREPARING" or "BOOKING")) return;
+        if (request is null || request.State != "PREPARING") return;
         var now = await bookings.DatabaseNowAsync(ct);
         try
         {
-            if (request.State == "PREPARING") await PrepareAsync(request, now, ct);
-            else await ProgressBookingAsync(request, now, ct);
+            await PrepareAsync(request, now, ct);
         }
         catch (ReservationGateException error) when (error.Code is "OWNER_UNAVAILABLE" or
             "CAPACITY_COORDINATION_UNAVAILABLE" or "OWNER_CONTRACT_INVALID")
@@ -114,9 +113,8 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         booking.NormalizedPlate = request.VehiclePlate;
         await bookings.RequirePlateAvailableAsync(booking, now, ct);
         await mediator.Send(new RequireReservationAvailabilityCommand(booking, resourceFacts, now), ct);
-        if (!await commercial.AcceptAsync(request.Id, accepted.Commercial, ct))
-        { request.Reject("TERMS_CHANGED_OR_EXPIRED"); return; }
-        // The owner accepts by stable workflow ID. A lost local commit replays that same acceptance.
+        // Accepted terms are durably stored with the booking; a real Payment order is created
+        // only after the hold is committed and the exact reservation identity is known.
         now = await bookings.DatabaseNowAsync(ct);
         if (now >= booking.HoldExpiresAt || now >= request.OverallDeadline)
         { request.Reject("BOOKING_PREPARATION_EXPIRED"); return; }
@@ -125,130 +123,6 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         request.AttachBooking(booking.Id);
         await PublishHoldAsync(booking, now, "PENDING_PAYMENT", booking.Version, ct);
         dependency.MarkReady(JsonSerializer.Serialize(new { reservationId = booking.Id, outcome = "HOLD_COMMITTED" }), now);
-    }
-
-    private async Task ProgressBookingAsync(ReservationRequest request, DateTimeOffset now, CancellationToken ct)
-    {
-        var input = JsonSerializer.Deserialize<CreateReservationRequest>(request.IntentJson)!;
-        await guards.LockVehicleAsync(request.VehiclePlate!, ct);
-        await guards.LockSiteAsync(input.SiteId, ct);
-        var own = await bookings.FindOwnBookingAsync(request.AccountId, request.ReservationId!.Value, ct)
-            ?? throw new InvalidOperationException("Workflow booking is missing.");
-        var booking = await bookings.FindForUpdateAsync(own.TenantId, own.SiteId, own.Id, ct)
-            ?? throw new InvalidOperationException("Workflow booking is missing.");
-        now = await bookings.DatabaseNowAsync(ct);
-        await ReleaseExpiredHoldAsync(booking, now, ct);
-        var quote = JsonSerializer.Deserialize<CommercialTerms>(booking.AcceptedPricingSnapshot!)!;
-        if (booking.DepositAmount == 0)
-        {
-            if (now >= booking.ExpectedStartTime) { request.FinishBooking("EXPIRED", "BOOKING_START_REACHED"); return; }
-            await ConfirmAsync(request, booking, null, ct);
-            return;
-        }
-        var orderRequest = new DepositOrderRequest(request.Id, booking.Id, booking.AccountId, booking.TenantId,
-            booking.SiteId, quote.QuoteId, booking.TermsVersion!, booking.DepositAmount!.Value, booking.Currency!,
-            booking.SelectedPaymentMethod!, booking.HoldExpiresAt!.Value);
-        if (booking.PaymentOrderId is null)
-        {
-            // Producer MUST replay by operation ID, and MUST NOT create a new order after H.
-            var order = await commercial.EnsureOrderAsync(orderRequest, ct);
-            if (order.AcceptedRequest != orderRequest) throw BookingContracts.InvalidOwner();
-            if (order.State == "UNKNOWN" && order.OrderId is null)
-            { request.Defer(now.AddSeconds(1), "PAYMENT_ORDER_OUTCOME_UNKNOWN"); return; }
-            if (order.State == "CLOSED_NO_ORDER" && order.OrderId is null)
-            {
-                now = await bookings.DatabaseNowAsync(ct);
-                if (now < booking.HoldExpiresAt) throw BookingContracts.InvalidOwner();
-                await ReleaseExpiredHoldAsync(booking, now, ct);
-                request.FinishBooking("EXPIRED", "PAYMENT_HOLD_EXPIRED");
-                return;
-            }
-            if (order.State != "CREATED" || order.OrderId is null || order.OrderId == Guid.Empty)
-                throw BookingContracts.InvalidOwner();
-            booking.RecordOrder(order.OrderId.Value);
-            return;
-        }
-        var lookup = await commercial.CollectionsAsync(booking.Id, booking.PaymentOrderId.Value, ct);
-        if (lookup.State is not ("PENDING" or "UNKNOWN" or "SETTLED" or "CLOSED_NO_COLLECTION") || lookup.Collections is null)
-            throw BookingContracts.InvalidOwner();
-        foreach (var collection in lookup.Collections)
-        {
-            if (collection.CollectionId == Guid.Empty || collection.OrderId != booking.PaymentOrderId || collection.ReservationId != booking.Id ||
-                collection.AccountId != booking.AccountId || collection.TenantId != booking.TenantId || collection.SiteId != booking.SiteId ||
-                collection.QuoteId != quote.QuoteId || collection.TermsVersion != booking.TermsVersion ||
-                collection.Amount != booking.DepositAmount || collection.Currency != booking.Currency) throw BookingContracts.InvalidOwner();
-        }
-        now = await bookings.DatabaseNowAsync(ct);
-        // Duplicate delivery is harmless; contradictory payloads for one financial identity
-        // are not. Pin an already-selected collection regardless of producer list ordering.
-        var groups = lookup.Collections.GroupBy(x => x.CollectionId).ToArray();
-        if (groups.Any(group => group.Distinct().Skip(1).Any()) ||
-            lookup.State == "CLOSED_NO_COLLECTION" && groups.Length != 0 ||
-            lookup.State == "SETTLED" && groups.Length == 0)
-            throw BookingContracts.InvalidOwner();
-        var distinct = groups.Select(group => group.First())
-            .OrderByDescending(x => x.CollectionId == booking.CollectionId).ThenBy(x => x.CollectionId).ToArray();
-        if (booking.CollectionId is not null && distinct.All(x => x.CollectionId != booking.CollectionId))
-            throw BookingContracts.InvalidOwner();
-        foreach (var extra in distinct.Skip(1))
-            await commercial.ReconcileAsync(booking.Id, extra, "ADDITIONAL_COLLECTION", ct);
-        if (distinct.FirstOrDefault() is { } paid)
-        {
-            if (now >= booking.ExpectedStartTime)
-            {
-                await commercial.ReconcileAsync(booking.Id, paid, "NO_BOOKING_ENTITLEMENT", ct);
-                request.FinishBooking("EXPIRED", "PAYMENT_RECONCILIATION_ACCEPTED");
-                return;
-            }
-            await ConfirmAsync(request, booking, paid.CollectionId, ct);
-        }
-        else if (lookup.State == "CLOSED_NO_COLLECTION" && now >= booking.HoldExpiresAt)
-            request.FinishBooking("EXPIRED", "PAYMENT_HOLD_EXPIRED");
-        else request.Defer(now.AddSeconds(1), lookup.State == "UNKNOWN" ? "PAYMENT_OUTCOME_UNKNOWN" : "AWAITING_PAYMENT");
-    }
-
-    private async Task ConfirmAsync(ReservationRequest request, ReservationRow booking, Guid? collectionId, CancellationToken ct)
-    {
-        var now = await bookings.DatabaseNowAsync(ct);
-        if (now >= booking.ExpectedStartTime) { request.Defer(now.AddSeconds(1), "BOOKING_START_REACHED"); return; }
-        var dependency = await RequireDependencyAsync(request, "CONFIRMATION", booking.TenantId, booking.SiteId,
-            booking.TargetSlotId!.Value, booking.ExpectedStartTime, now, ct);
-        if (dependency is null) return;
-        var resourceFacts = JsonSerializer.Deserialize<FacilityResourceSnapshot>(dependency.SnapshotJson!)
-            ?? throw new InvalidOperationException("Stored Facility facts are invalid.");
-        BookingContracts.ValidateFacility(resourceFacts.Booking, BookingContracts.Selection(
-            JsonSerializer.Deserialize<CreateReservationRequest>(request.IntentJson)!));
-        await bookings.RequireDurableConfirmationAsync(ct);
-        // All competing guards and the Facility dependency row are held. Capture once:
-        // use this value for every time-sensitive eligibility check and the stored decision.
-        var evaluatedAt = await bookings.DatabaseNowAsync(ct);
-        if (evaluatedAt >= booking.ExpectedStartTime || evaluatedAt >= dependency.Deadline)
-        {
-            await ReleaseExpiredHoldAsync(booking, evaluatedAt, ct);
-            request.Defer(evaluatedAt.AddSeconds(1), "BOOKING_START_REACHED");
-            return;
-        }
-        await bookings.RequirePlateAvailableAsync(booking, evaluatedAt, ct);
-        await mediator.Send(new RequireReservationAvailabilityCommand(booking, resourceFacts, evaluatedAt), ct);
-        booking.ConfirmAtEvaluation(collectionId, evaluatedAt);
-        dependency.MarkReady(JsonSerializer.Serialize(new { reservationId = booking.Id, outcome = "CONFIRMED",
-            evaluatedAt, confirmationEventId = booking.ConfirmationEffectId }), evaluatedAt);
-        await publisher.ConfirmedAsync(new(booking.ConfirmationEffectId!.Value, booking.Id, booking.AccountId,
-            booking.TenantId, booking.SiteId, evaluatedAt), ct);
-        await publisher.AvailabilityChangedAsync(new(Guid.NewGuid(), evaluatedAt, booking.TenantId,
-            booking.SiteId, booking.TargetSlotId!.Value, booking.ExpectedStartTime,
-            booking.ClaimEndTime ?? booking.ExpectedEndTime, "CONFIRMED"), ct);
-        request.FinishBooking("COMPLETED", null);
-        // Outbox, receipt and confirmed state become visible only after the owning commit.
-        // Lost acknowledgement replays these durable identities; rollback requires a new evaluation.
-    }
-
-    private async Task ReleaseExpiredHoldAsync(ReservationRow booking, DateTimeOffset now, CancellationToken ct)
-    {
-        var previous = booking.Status;
-        booking.ReleaseExpiredHold(now);
-        if (previous == "PENDING_PAYMENT" && booking.Status == "EXPIRED")
-            await PublishHoldAsync(booking, now, "EXPIRED", checked(booking.Version + 1), ct);
     }
 
     private Task PublishHoldAsync(ReservationRow booking, DateTimeOffset now, string state, int version, CancellationToken ct) =>
