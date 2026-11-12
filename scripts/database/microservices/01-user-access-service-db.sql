@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     company_name VARCHAR(255),
     avatar_url TEXT,
     avatar_asset_id UUID,
+    simulated_vneid_guid UUID,
     failed_login_attempts INT NOT NULL DEFAULT 0,
     locked_until TIMESTAMPTZ,
     access_version BIGINT NOT NULL DEFAULT 0,

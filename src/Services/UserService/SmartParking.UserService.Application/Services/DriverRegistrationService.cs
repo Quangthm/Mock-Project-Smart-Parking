@@ -38,8 +38,10 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
         if (await db.ContactExistsAsync(email, phone, ct))
             throw Error("CONTACT_EXISTS", "Email or phone is already registered. Resume OTP verification if pending.", 409);
         var now = clock.GetUtcNow();
+        var simulatedGuid = Guid.NewGuid();
         var user = new User { Id = Guid.NewGuid(), FullName = request.FullName.Trim(), Email = email, Phone = phone,
             PasswordHash = string.IsNullOrEmpty(request.Password) ? "" : passwords.Hash(request.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
+        user.AssignSimulatedVNeId(simulatedGuid);
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             CreatedOn = now, Status = "ACTIVE", RoleCode = "DRIVER" };
         user.Accounts.Add(account);
@@ -47,13 +49,12 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
         var code = NewCode();
         SetCode(registration, code);
 
-        // Pre-seed simulated identity GUID for user
         var simulatedIdentity = new UserSimulatedIdentity
         {
             Id = Guid.NewGuid(),
             UserId = user.Id.Value,
             User = user,
-            SimulatedVNeIdGuid = Guid.NewGuid(),
+            SimulatedVNeIdGuid = simulatedGuid,
             ConsentGiven = true,
             ConsentTimestamp = now,
             ConsentVersion = "v1.1-simulated",
@@ -98,6 +99,12 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
     {
         await using var tx = await db.BeginTransactionAsync(ct);
         var (r, user) = await LoadAsync(request.RegistrationId, ct);
+        if (user.SimulatedVNeIdGuid is null || user.SimulatedVNeIdGuid == Guid.Empty)
+        {
+            var fallbackGuid = Guid.NewGuid();
+            user.AssignSimulatedVNeId(fallbackGuid);
+        }
+
         var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
         if (simulated is null)
         {
@@ -107,7 +114,7 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
                 Id = Guid.NewGuid(),
                 UserId = user.Id.Value,
                 User = user,
-                SimulatedVNeIdGuid = Guid.NewGuid(),
+                SimulatedVNeIdGuid = user.SimulatedVNeIdGuid!.Value,
                 ConsentGiven = true,
                 ConsentTimestamp = now,
                 ConsentVersion = "v1.1-simulated",

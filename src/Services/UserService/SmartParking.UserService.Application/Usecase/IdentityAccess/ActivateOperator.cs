@@ -44,6 +44,12 @@ public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository
                 Encoding.UTF8.GetBytes(AuthSessionService.HashRefreshToken(request.Body.Token))))
             throw new AuthException("INVALID_TOKEN", "Activation link is invalid or expired.", 401);
 
+        if (value.User.SimulatedVNeIdGuid is null || value.User.SimulatedVNeIdGuid == Guid.Empty)
+        {
+            var fallbackGuid = Guid.NewGuid();
+            value.User.AssignSimulatedVNeId(fallbackGuid);
+        }
+
         var simulated = await repository.FindSimulatedIdentityAsync(value.User.Id!.Value, cancellationToken);
         if (simulated is null)
         {
@@ -52,7 +58,7 @@ public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository
                 Id = Guid.NewGuid(),
                 UserId = value.User.Id.Value,
                 User = value.User,
-                SimulatedVNeIdGuid = Guid.NewGuid(),
+                SimulatedVNeIdGuid = value.User.SimulatedVNeIdGuid!.Value,
                 ConsentGiven = true,
                 ConsentTimestamp = now,
                 ConsentVersion = "v1.1-simulated",

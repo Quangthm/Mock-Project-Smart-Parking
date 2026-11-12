@@ -41,8 +41,10 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         if (await db.OwnerContactExistsAsync(email, phone, ct))
             throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409);
         var now = clock.GetUtcNow();
+        var simulatedGuid = Guid.NewGuid();
         var user = new User { Id = Guid.NewGuid(), FullName = body.FullName.Trim(), CompanyName = body.BusinessName.Trim(), Email = email, Phone = phone,
             PasswordHash = string.IsNullOrEmpty(body.Password) ? "" : passwords.Hash(body.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
+        user.AssignSimulatedVNeId(simulatedGuid);
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             Status = "PENDING_APPROVAL", CreatedOn = now };
         account.RoleCode = "BUSINESS_OWNER";
@@ -52,13 +54,12 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
             BusinessName = body.BusinessName.Trim(), LotType = body.LotType, SubmittedAt = now,
             SetupTokenHash = Hash(setupToken), SetupTokenExpiresAt = now.AddHours(24) };
 
-        // Pre-seed simulated identity GUID for user
         var simulatedIdentity = new UserSimulatedIdentity
         {
             Id = Guid.NewGuid(),
             UserId = user.Id.Value,
             User = user,
-            SimulatedVNeIdGuid = Guid.NewGuid(),
+            SimulatedVNeIdGuid = simulatedGuid,
             ConsentGiven = true,
             ConsentTimestamp = now,
             ConsentVersion = "v1.1-simulated",
@@ -93,6 +94,12 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         if (application.Status != "pending" || application.ApprovalRequestedBy is not null || user.DeletedOn is not null || user.Status != UserStatus.PendingVerification)
             throw Error("APPLICATION_CLOSED", "Setup is no longer editable.", 409);
 
+        if (user.SimulatedVNeIdGuid is null || user.SimulatedVNeIdGuid == Guid.Empty)
+        {
+            var fallbackGuid = Guid.NewGuid();
+            user.AssignSimulatedVNeId(fallbackGuid);
+        }
+
         var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
         if (simulated is null)
         {
@@ -102,7 +109,7 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
                 Id = Guid.NewGuid(),
                 UserId = user.Id.Value,
                 User = user,
-                SimulatedVNeIdGuid = Guid.NewGuid(),
+                SimulatedVNeIdGuid = user.SimulatedVNeIdGuid!.Value,
                 ConsentGiven = true,
                 ConsentTimestamp = now,
                 ConsentVersion = "v1.1-simulated",

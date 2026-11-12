@@ -161,6 +161,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
                 entity.Property(e => e.AvatarAssetId).HasColumnName("avatar_asset_id");
                 entity.HasOne<MediaAsset>().WithMany().HasForeignKey(e => e.AvatarAssetId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(e => e.SimulatedVNeIdGuid).HasColumnName("simulated_vneid_guid");
                 // Preserve the stored, read-only avatar value without reinterpretation or conversion.
                 entity.Property(e => e.AvatarUrl)
                     .HasColumnName("avatar_url")
