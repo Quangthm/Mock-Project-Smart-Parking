@@ -66,6 +66,7 @@ public sealed class SearchOwnerValidationTests
     private static ServiceProvider Services(ResponseHandler transport)
     {
         var services = new ServiceCollection();
+        services.AddDataProtection();
         services.AddSingleton<TimeProvider>(new Clock());
         services.AddSingleton<ICurrentActor>(new TestActor());
         services.AddSingleton(new ReadToolOptions(false, false, true, 60, 2));

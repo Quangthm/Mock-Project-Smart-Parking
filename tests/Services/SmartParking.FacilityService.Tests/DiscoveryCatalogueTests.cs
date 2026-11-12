@@ -65,22 +65,29 @@ public sealed class DiscoveryCatalogueTests
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(path)).StatusCode);
         Assert.Empty((await Data(await client.GetAsync(Query))).GetProperty("items").EnumerateArray());
     }
-    [Fact]
-    public async Task FrameworkErrorsHaveSafeEnvelopes()
+    [Theory]
+    [InlineData("get-with-body", HttpStatusCode.BadRequest)]
+    [InlineData("unsupported-method", HttpStatusCode.MethodNotAllowed)]
+    [InlineData("unsupported-media-type", HttpStatusCode.UnsupportedMediaType)]
+    [InlineData("malformed-json", HttpStatusCode.BadRequest)]
+    public async Task FrameworkErrorsHaveSafeEnvelopes(string scenario, HttpStatusCode expectedStatus)
     {
         using var f=new Factory();
         using var client=f.CreateClient();
         var path=$"/api/parking-lots/{Guid.NewGuid()}/publication";
-        using var getWithBody=new HttpRequestMessage(HttpMethod.Get, Query) { Content=JsonContent.Create(new { location="synthetic" }) };
-        foreach (var response in new[] { await client.SendAsync(getWithBody), await client.PostAsync(Query, null),
-            await client.PutAsync(path,new StringContent("body")),
-            await client.PutAsync(path,new StringContent("{broken",System.Text.Encoding.UTF8,"application/json")) })
+        using var request = scenario switch
         {
-            Assert.Contains(response.StatusCode,new[] { HttpStatusCode.BadRequest,HttpStatusCode.MethodNotAllowed,HttpStatusCode.UnsupportedMediaType });
-            Assert.Equal("no-store",response.Headers.CacheControl?.ToString());
-            var body=await response.Content.ReadFromJsonAsync<JsonElement>();
-            Assert.False(body.GetProperty("success").GetBoolean());
-        }
+            "get-with-body" => new HttpRequestMessage(HttpMethod.Get, Query) { Content=JsonContent.Create(new { location="synthetic" }) },
+            "unsupported-method" => new HttpRequestMessage(HttpMethod.Post, Query),
+            "unsupported-media-type" => new HttpRequestMessage(HttpMethod.Put, path) { Content=new StringContent("body") },
+            "malformed-json" => new HttpRequestMessage(HttpMethod.Put, path) { Content=new StringContent("{broken",System.Text.Encoding.UTF8,"application/json") },
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario))
+        };
+        using var response = await client.SendAsync(request);
+        Assert.Equal(expectedStatus,response.StatusCode);
+        Assert.Equal("no-store",response.Headers.CacheControl?.ToString());
+        var body=await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(body.GetProperty("success").GetBoolean());
     }
     [Fact]
     public async Task SaturatedCatalogueReturns429WithNoStoreAndReleasesPermits()

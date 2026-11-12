@@ -169,7 +169,8 @@ public sealed partial class AuthenticatedChatTests
         Assert.Equal(expected.To, DateTimeOffset.Parse(query["to"].ToString()));
         var more = await Ask("more reservations", 4);
         Assert.Equal("empty", more.GetProperty("answer").GetProperty("outcome").GetString());
-        Assert.Contains("cursor=synthetic-cursor", owner.Paths[2].Query);
+        Assert.Contains("beforeId=", owner.Paths[2].Query);
+        Assert.DoesNotContain("cursor=", owner.Paths[2].Query);
         var detail = await Ask("reservation details " + owner.Reservation, 6);
         Assert.Equal("answered", detail.GetProperty("answer").GetProperty("outcome").GetString());
         Assert.Equal(owner.Reservation, detail.GetProperty("answer").GetProperty("cards")[0].GetProperty("reservation").GetProperty("id").GetGuid());
@@ -430,9 +431,15 @@ public sealed partial class AuthenticatedChatTests
             {
                 var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(request.RequestUri.Query);
                 var start = query.ContainsKey("from") ? DateTimeOffset.Parse(query["from"].ToString()).AddHours(1) : DateTimeOffset.UtcNow;
-                var row = new ReservationSummary(Reservation, Site, new("CAR", "SYNTHETIC-PLATE"), start, start.AddHours(1), "CONFIRMED", DateTimeOffset.UtcNow);
-                data = request.RequestUri.AbsolutePath.EndsWith(Reservation.ToString()) ? new ReservationDetail(row, row.AsOf)
-                    : new ReservationPage(query.ContainsKey("cursor") ? [] : [row], query.ContainsKey("cursor") ? null : "synthetic-cursor", row.AsOf);
+                var created = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+                var rows = Enumerable.Range(0, 20).Select(i => new {
+                    reservationId = i == 0 ? Reservation : Guid.Parse($"11111111-1111-4111-8111-{i:D12}"), siteId = Site,
+                    vehicle = new { vehicleType = "CAR", displayLabel = "SYNTHETIC-PLATE" }, start, end = start.AddHours(1),
+                    state = "CONFIRMED", createdAt = created.AddMinutes(-i)
+                }).ToArray();
+                data = request.RequestUri.AbsolutePath.EndsWith(Reservation.ToString()) ? (object)rows[0]
+                    : query.ContainsKey("beforeId") ? Array.Empty<object>() : rows;
+
             }
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { success = true, data }) };
         }

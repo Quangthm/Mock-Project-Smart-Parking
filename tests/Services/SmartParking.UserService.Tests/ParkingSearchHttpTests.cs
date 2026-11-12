@@ -17,6 +17,12 @@ namespace SmartParking.UserService.Tests;
 
 public sealed class ParkingSearchHttpTests
 {
+    [Fact]
+    public async Task DisabledDiscoveryResolvesProductionDependenciesWithoutFixtureDataProtection()
+    {
+        await using var f = await Host.Start(enabled: false, ephemeralProtection: false);
+        await f.Error(Path, 503);
+    }
     [Theory]
     [InlineData("known", 1)]
     [InlineData("full", 0)]
@@ -333,7 +339,7 @@ public sealed class ParkingSearchHttpTests
         public Logs Logs = new();
         public HttpClient Client = null!;
         private WebApplication app = null!;
-        public static async Task<Host> Start(bool enabled = true, string? capacityMode = null)
+        public static async Task<Host> Start(bool enabled = true, string? capacityMode = null, bool ephemeralProtection = true)
         {
             var f = new Host();
             f.Owners = new(f.Clock);
@@ -353,7 +359,7 @@ public sealed class ParkingSearchHttpTests
                     f.CapacitySource = new Capacity(f.Clock, capacityMode);
                     b.Services.AddSingleton<IDiscoveryCapacitySource>(f.CapacitySource);
                 }
-                b.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+                if (ephemeralProtection) b.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
                 b.Logging.AddProvider(f.Logs);
                 foreach (var name in new[] { "discovery-facility", "discovery-payment" })
                     b.Services.PostConfigure<HttpClientFactoryOptions>(name, o => o.HttpMessageHandlerBuilderActions.Add(x => x.PrimaryHandler = f.Owners));
