@@ -583,7 +583,7 @@
 .dashboard-theme .dashboard-nav-item:focus-visible { background: var(--raised); color: var(--fg); transform: scale(1.06); }
 .dashboard-theme .dashboard-nav-item.active,
 .dark .dashboard-theme .dashboard-nav-item.active { border-color: var(--border); border-radius: 999px; background: var(--active); color: var(--primary); }
-.dashboard-theme .dashboard-nav-item:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.dashboard-theme .dashboard-nav-item:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .dashboard-nav-mobile-label { display: none; }
 .dashboard-nav-hint {
   position: fixed;
@@ -690,7 +690,7 @@
   transition: box-shadow 180ms ease, border-color 180ms ease;
 }
 .dashboard-theme .find-parking-map .parking-map-label:hover { box-shadow: 0 9px 24px #10251b42; border-color: var(--primary); }
-.dashboard-theme .find-parking-map .parking-map-label:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.dashboard-theme .find-parking-map .parking-map-label:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .find-parking-map .is-selected-parking-marker.parking-map-label { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary), 0 8px 22px #10251b30; }
 .dashboard-theme .parking-map-label-count {
   display: grid;
@@ -738,7 +738,7 @@
 .dashboard-theme .find-parking-search-heading h1 { font-size: 17px; }
 .dashboard-theme .find-parking-filter-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; margin-top: 10px; padding: 0 15px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font-size: 13px; font-weight: 650; cursor: pointer; }
 .dashboard-theme .find-parking-filter-toggle:hover, .dashboard-theme .find-parking-filter-toggle[aria-expanded="true"] { border-color: var(--primary); color: var(--primary); }
-.dashboard-theme .find-parking-filter-toggle:focus-visible, .dashboard-theme .find-parking-history button:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.dashboard-theme .find-parking-filter-toggle:focus-visible, .dashboard-theme .find-parking-history button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .find-parking-filters { flex-wrap: wrap; max-height: 180px; overflow-y: auto; gap: 8px; margin-top: 10px; }
 .dashboard-theme .find-parking-filters button, .dashboard-theme .find-parking-filters select { border-radius: 999px; min-height: 44px; font-size: 12px; }
 .dashboard-theme .find-parking-history { display: grid; gap: 5px; margin-top: 12px; }
@@ -800,7 +800,7 @@
 .dashboard-theme .find-parking-map-menu-trigger:hover,
 .dashboard-theme .find-parking-map-menu-trigger[aria-expanded="true"] { background: var(--raised); color: var(--primary); }
 .dashboard-theme .find-parking-map-menu-trigger:focus-visible,
-.dashboard-theme .find-parking-map-menu-list button:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.dashboard-theme .find-parking-map-menu-list button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .find-parking-map-menu-list {
   position: absolute;
   top: calc(100% + 9px);
@@ -852,7 +852,7 @@
 }
 .dashboard-theme .current-bookings-tabs button:hover { background: var(--raised); color: var(--fg); }
 .dashboard-theme .current-bookings-tabs button.is-active { border-color: var(--border); background: var(--active); color: var(--primary); }
-.dashboard-theme .current-bookings-tabs button:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.dashboard-theme .current-bookings-tabs button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .current-bookings-tab-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--available); }
 .dashboard-theme .current-bookings-count { display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 999px; background: var(--card); color: var(--fg); font-size: 12px; font-variant-numeric: tabular-nums; }
 .dashboard-theme .current-bookings-panel { display: grid; gap: 12px; }
@@ -933,7 +933,7 @@
   .dashboard-theme .dashboard-sidebar.is-open { transform: translateX(0); visibility: visible; transition: transform 200ms ease; }
   .dashboard-theme .dashboard-drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 14px; color: var(--fg); font-size: 1rem; }
   .dashboard-theme .dashboard-drawer-close { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--fg); cursor: pointer; }
-  .dashboard-theme .dashboard-drawer-close:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .dashboard-theme .dashboard-drawer-close:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
   .dashboard-theme .dashboard-nav-scroll,
   .dashboard-theme .dashboard-nav-group { width: 100%; height: auto; flex-direction: column; align-items: stretch; overflow: visible; scroll-snap-type: none; }
   .dashboard-theme .dashboard-nav-scroll { gap: 8px; }

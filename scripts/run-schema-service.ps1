@@ -66,6 +66,57 @@ foreach ($remoteService in @('User','Parking','Reservation','Payment','Notificat
     if ($url) { [Environment]::SetEnvironmentVariable('Services__' + $remoteService, $url, 'Process') }
 }
 
+$jwtIssuer = if ($env:SMARTPARK_JWT_ISSUER) { $env:SMARTPARK_JWT_ISSUER } else { 'SmartParking.UserService' }
+$jwtAudience = if ($env:SMARTPARK_JWT_AUDIENCE) { $env:SMARTPARK_JWT_AUDIENCE } else { 'SmartParking' }
+$jwtPath = if ($env:SMARTPARK_JWT_JWKS_PATH) { $env:SMARTPARK_JWT_JWKS_PATH } else { '/.well-known/jwks.json' }
+if ($Service -eq 'User') {
+    $env:Jwt__Issuer = $jwtIssuer
+    $env:Jwt__Audience = $jwtAudience
+    $env:Jwt__JwksPath = $jwtPath
+    # A blank environment value disappears on Windows PowerShell 5.1. A space
+    # explicitly overrides stale user-secrets while remaining unconfigured.
+    $env:Jwt__KeyId = if ($env:SMARTPARK_JWT_KEY_ID) { $env:SMARTPARK_JWT_KEY_ID } else { ' ' }
+    foreach ($field in @('PrivateKeyPem','PrivateKeyPemBase64')) {
+        $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
+        $value = [Environment]::GetEnvironmentVariable($sourceName, 'Process')
+        if (!(Test-JwtConfiguredValue $value)) { $value = ' ' }
+        [Environment]::SetEnvironmentVariable('Jwt__' + $field, $value, 'Process')
+    }
+} else {
+    $env:JwtValidation__Issuer = $jwtIssuer
+    $env:JwtValidation__Audience = $jwtAudience
+    $env:JwtValidation__JwksUri = ([Uri]::new([Uri]$env:Services__User, $jwtPath)).AbsoluteUri
+}
+
+# Task-scoped reservation admission configuration; credentials remain service-specific.
+if ($Service -in @('User', 'Reservation')) {
+    $env:ReservationAdmission__Enabled = if ($env:SMARTPARK_RESERVATION_ADMISSION_ENABLED) { $env:SMARTPARK_RESERVATION_ADMISSION_ENABLED } else { 'false' }
+    $brokerPrefix = if ($Service -eq 'User') { 'SMARTPARK_RESERVATION_USER' } else { 'SMARTPARK_RESERVATION_OPERATION' }
+    $env:ReservationAdmission__BrokerUser = [Environment]::GetEnvironmentVariable($brokerPrefix + '_BROKER_USER')
+    $env:ReservationAdmission__BrokerPassword = [Environment]::GetEnvironmentVariable($brokerPrefix + '_BROKER_PASSWORD')
+    if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerUser)) { $env:ReservationAdmission__BrokerUser = ' ' }
+    if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerPassword)) { $env:ReservationAdmission__BrokerPassword = ' ' }
+    if ($Service -eq 'Reservation') {
+        $env:SMARTPARK_RABBITMQ_HOST = '127.0.0.1'
+        $env:JwtValidation__AllowInsecureTransport = if ($env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS) { $env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS } else { 'false' }
+        $env:Cors__AllowedOrigins = $env:SMARTPARK_OPERATION_CORS_ORIGINS
+        $env:Messaging__AuditEnabled = if ($env:SMARTPARK_OPERATION_AUDIT_ENABLED) { $env:SMARTPARK_OPERATION_AUDIT_ENABLED } else { 'false' }
+        if (!$env:Messaging__OutboxDeliveryEnabled) { $env:Messaging__OutboxDeliveryEnabled = 'false' }
+    }
+}
+
+if ($Service -in @('Parking', 'Reservation')) {
+    $env:ReservationIntegration__Enabled = if ($env:SMARTPARK_RESERVATION_FACILITY_ENABLED) { $env:SMARTPARK_RESERVATION_FACILITY_ENABLED } else { 'false' }
+    if ($Service -eq 'Reservation') {
+        $env:ReservationIntegration__AllowHttp = if ($env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP) { $env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP } else { 'false' }
+        $env:ReservationIntegration__OperationsPrivateKeyPath = if ($env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH) { $env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH } else { '' }
+    } else {
+        $env:ReservationIntegration__OperationsPublicKeyPath = if ($env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH) { $env:SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH } else { '' }
+    }
+}
+$dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
+$defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444' }
+$apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065' }
 
 $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }

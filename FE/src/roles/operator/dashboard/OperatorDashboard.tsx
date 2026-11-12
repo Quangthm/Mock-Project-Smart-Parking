@@ -1,11 +1,11 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
+import { useServerRefresh } from "../../../lib/serverRefresh"
 import { CheckInOut } from "../check-in-out/CheckInOut"
 import { LotStatus } from "../parking-lot/LotStatus"
 import type { SlotStatusFilter } from "../parking-lot/useLotStatus"
 import { EmergencyPanel } from "../emergency/EmergencyPanel"
-import { SlotManagement } from "../parking-slots/SlotManagement"
 import { TicketManagement } from "../tickets/TicketManagement"
 import { OperatorAssignments } from "./OperatorAssignments"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -28,7 +28,6 @@ export type OperatorTab =
   | "checkin"
   | "checkout"
   | "status"
-  | "slots"
   | "tickets"
   | "emergency"
   | "assignments"
@@ -72,6 +71,15 @@ export function OperatorDashboard({
   const [sitesError, setSitesError] = useState("")
   const [sitesLoading, setSitesLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [sitesRevision, setSitesRevision] = useState(0)
+  const [sitesRefreshing, setSitesRefreshing] = useState(false)
+  const [loadedScope, setLoadedScope] = useState("")
+  const userScope = user ? user.id + ":" + user.role + ":" + accessRole : ""
+  useServerRefresh(user?.role === "operator" && tab !== "checkin" && tab !== "checkout" ? userScope : undefined, () => {
+    if (!sitesRefreshing && !bookingsState.loading && !ticketsState.loading && !notificationsState.loading && !reportsState.loading) {
+      setRefreshKey(value => value + 1)
+    }
+  }, 45_000)
 
   useEffect(() => {
     const refresh = () => setRefreshKey((value) => value + 1)
@@ -82,7 +90,8 @@ export function OperatorDashboard({
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail as OperatorTab
-      if (["overview", "checkin", "checkout", "status", "emergency", "slots", "tickets", "assignments", "finance"].includes(detail))
+      if (detail === "status") setTargetSlotStatus("all")
+      if (["overview", "checkin", "checkout", "status", "emergency", "tickets", "assignments", "finance"].includes(detail))
         setTab(detail)
     }
     window.addEventListener("sp:dashboard-nav", onNavigate)
@@ -90,16 +99,21 @@ export function OperatorDashboard({
   }, [])
 
   useEffect(() => {
-    if (tab === "status" || tab === "slots") setRefreshKey((value) => value + 1)
+    if (tab === "status") setRefreshKey((value) => value + 1)
   }, [tab])
 
   useEffect(() => {
     let active = true
-    setSitesLoading(true)
+    if (loadedScope !== userScope) setSitesLoading(true)
+    setSitesRefreshing(true)
     setSitesError("")
     loadOperatorSites(user)
       .then((sites) => {
-        if (active) setAllLots(sites)
+        if (active) {
+          setAllLots(sites)
+          setLoadedScope(userScope)
+          setSitesRevision(value => value + 1)
+        }
       })
       .catch((error) => {
         if (active) {
@@ -108,14 +122,14 @@ export function OperatorDashboard({
         }
       })
       .finally(() => {
-        if (active) setSitesLoading(false)
+        if (active) { setSitesLoading(false); setSitesRefreshing(false) }
       })
     return () => {
       active = false
     }
-  }, [user, refreshKey])
+  }, [user, userScope, refreshKey])
 
-  const ownerLots = allLots
+  const ownerLots = loadedScope === userScope ? allLots : []
 
   const selectedLot = useMemo(() => {
     return (
@@ -125,9 +139,9 @@ export function OperatorDashboard({
     )
   }, [activeSiteId, ownerLots])
 
-  const resourceScope = `${selectedLot?.id ?? ""}:${refreshKey}`
+  const resourceScope = `${userScope}:${selectedLot?.id ?? ""}`
   const reportSiteIds = accessRole === "financial" ? ownerLots.map((site) => site.id) : []
-  const reportScope = `${accessRole}:${refreshKey}:${reportSiteIds.join(",")}`
+  const reportScope = `${userScope}:${reportSiteIds.join(",")}`
   const currentLotBookings = bookingsState.scope === resourceScope ? bookingsState.data : []
   const tickets = ticketsState.scope === resourceScope ? ticketsState.data : []
   const notifications = notificationsState.scope === resourceScope ? notificationsState.data : []
@@ -143,9 +157,9 @@ export function OperatorDashboard({
 
   useEffect(() => {
     const initialState = { scope: resourceScope, data: [], loading: Boolean(selectedLot && accessRole === "operation"), error: "" }
-    setBookingsState(initialState)
-    setTicketsState(initialState)
-    setNotificationsState(initialState)
+    setBookingsState(current => initialState.loading && current.scope === resourceScope ? { ...current, loading: true } : initialState)
+    setTicketsState(current => initialState.loading && current.scope === resourceScope ? { ...current, loading: true } : initialState)
+    setNotificationsState(current => initialState.loading && current.scope === resourceScope ? { ...current, loading: true } : initialState)
     if (!selectedLot || accessRole !== "operation") return
     let active = true
     Promise.allSettled([
@@ -177,10 +191,12 @@ export function OperatorDashboard({
     return () => {
       active = false
     }
-  }, [accessRole, selectedLot?.id, refreshKey])
+  }, [accessRole, resourceScope, sitesRevision])
 
   useEffect(() => {
-    setReportsState({ scope: reportScope, data: [], loading: reportSiteIds.length > 0, error: "" })
+    setReportsState(current => current.scope === reportScope && reportSiteIds.length
+      ? { ...current, loading: true }
+      : { scope: reportScope, data: [], loading: reportSiteIds.length > 0, error: "" })
     if (accessRole !== "financial" || !reportSiteIds.length) return
     let active = true
     Promise.allSettled(reportSiteIds.map((siteId) => reservationApi.list(siteId)))
@@ -199,7 +215,7 @@ export function OperatorDashboard({
     return () => {
       active = false
     }
-  }, [accessRole, ownerLots, refreshKey])
+  }, [accessRole, reportScope, sitesRevision])
 
   // Cashier role shortcut view
   if (accessRole === "cashier") {
@@ -266,14 +282,7 @@ export function OperatorDashboard({
                 label: "Lot Status & 3D Map",
                 icon: "grid",
                 active: tab === "status",
-                onClick: () => setTab("status"),
-              },
-              {
-                id: "slots",
-                label: "Backup Slots & Buffer",
-                icon: "shield",
-                active: tab === "slots",
-                onClick: () => setTab("slots"),
+                onClick: () => handleOverviewNavigation("status"),
               },
               {
                 id: "tickets",
@@ -313,8 +322,8 @@ export function OperatorDashboard({
       backup: "backup",
       maintenance: "maintenance",
     }
-    if (nextTab === "status" && payload && payload in VALID_SLOT_STATUS_MAP) {
-      setTargetSlotStatus(VALID_SLOT_STATUS_MAP[payload])
+    if (nextTab === "status") {
+      setTargetSlotStatus(payload ? VALID_SLOT_STATUS_MAP[payload] ?? "all" : "all")
       setTab("status")
       return
     }
@@ -349,7 +358,7 @@ export function OperatorDashboard({
             {reportsError}
           </div>
         )}
-        {(tab === "status" || tab === "slots") && (
+        {tab === "status" && (
           <div className="mb-4 flex justify-end">
             <button type="button" className="btn-outline px-3 py-1.5 text-xs" disabled={sitesLoading} onClick={() => setRefreshKey((value) => value + 1)}>Refresh sites and slots</button>
           </div>
@@ -409,12 +418,7 @@ export function OperatorDashboard({
 
           {/* TAB 3: LOT STATUS & 3D STRUCTURE */}
           {accessRole === "operation" && tab === "status" && (
-            <LotStatus lot={selectedLot} initialStatusFilter={targetSlotStatus} />
-          )}
-
-          {/* TAB 4: BACKUP SLOTS & BUFFER */}
-          {accessRole === "operation" && tab === "slots" && (
-            <SlotManagement lot={selectedLot} />
+            <LotStatus key={(selectedLot?.id ?? "none") + ":" + targetSlotStatus} lot={selectedLot} initialStatusFilter={targetSlotStatus} refreshOnResume={false} />
           )}
 
           {/* TAB 5: TICKETS */}

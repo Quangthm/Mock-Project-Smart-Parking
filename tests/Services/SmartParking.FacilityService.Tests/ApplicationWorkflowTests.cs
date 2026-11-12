@@ -107,7 +107,7 @@ public sealed class ApplicationWorkflowTests
         Assert.Empty(fixture.Structure.Slots);
 
         fixture.FailRelease = false;
-        var restarted = new StructureSynchronizationService(fixture.Store, fixture);
+        var restarted = new StructureSynchronizationHandlers(fixture.Store, fixture);
         var failures = await restarted.RecoverPendingAsync(CancellationToken.None);
 
         Assert.Empty(failures);
@@ -210,7 +210,7 @@ public sealed class ApplicationWorkflowTests
             ReservationDomain.StructureEditPolicy.ValidateOutcome(nullEntry));
     }
 
-    private sealed class StructureWorkflowTestHelper(IStructureUnitOfWork unitOfWork)
+    private sealed class StructureWorkflowTestHelper(StructureEditHandlers unitOfWork)
     {
         public async Task ChangeAsync(OwnerScope owner, Guid siteId, Action<ParkingStructure> change)
         {
@@ -245,8 +245,8 @@ public sealed class ApplicationWorkflowTests
         public Guid AcquiredToken { get; private set; }
         public ParkingStructure Structure { get; }
         public MemoryStore Store { get; }
-        public StructureSynchronizationService Synchronization { get; }
-        public IStructureUnitOfWork UnitOfWork { get; }
+        public StructureSynchronizationHandlers Synchronization { get; }
+        public StructureEditHandlers UnitOfWork { get; }
         public StructureWorkflowTestHelper Service { get; }
         public bool Authorized { get; set; } = true;
         public bool FailRelease { get; set; }
@@ -260,7 +260,7 @@ public sealed class ApplicationWorkflowTests
             SlotId = Structure.AddSlot(unit, "A01", VehicleType.CAR);
             Store = new MemoryStore(Events);
             Synchronization = new(Store, this);
-            UnitOfWork = new StructureUnitOfWork(this, this, this, this, Store, Synchronization);
+            UnitOfWork = new StructureEditHandlers(this, this, this, this, Store, StructureTestMediator.Create(Synchronization), new EmptyReservationDependencies());
             Service = new StructureWorkflowTestHelper(UnitOfWork);
         }
 
@@ -339,7 +339,7 @@ public sealed class ApplicationWorkflowTests
         }
     }
 
-    private sealed class MemoryStore(List<string> events) : IStructureSynchronizationStore
+    private sealed class MemoryStore(List<string> events) : IStructureSynchronizationRepository
     {
         public List<StructureSynchronization> Rows { get; } = [];
         public bool LockAvailable { get; set; } = true;

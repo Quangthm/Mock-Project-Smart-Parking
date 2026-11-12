@@ -4,14 +4,17 @@ import * as maptilersdk from "@maptiler/sdk"
 import { animate } from "animejs"
 import "@maptiler/sdk/dist/maptiler-sdk.css"
 import { driverData as store } from "../data/data"
-import type { LotType, ParkingLot } from "../../../lib/types"
+import type { LotType, ParkingLot, ParkingSlot } from "../../../lib/types"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 import { getDrivingRoute, type DrivingRoute } from "../../../lib/routingApi"
 import { ParkingDetailsPanel, type VehicleCapacityInfo } from "./ParkingDetailsPanel"
 import { useApp } from "../../../context/AppContext"
+import { searchDiscoveryLots, type DiscoveryLotItem, type OriginSource } from "../../../lib/driverDiscoveryApi"
+import { parkingApi } from "../../../lib/parkingApi"
+import { mapOperationalLayoutSlots } from "../../../lib/driverSlotMapping"
+import { distanceKm, validCoordinates, type LatLng } from "../../../lib/parkingCoordinates"
 
-type LatLng = { lat: number; lng: number }
 type MapState = "loading" | "ready" | "missing-key" | "error"
 type MapStyleName = "streets" | "satellite" | "hybrid"
 const mapStyleIds: Record<MapStyleName, string> = { streets: "streets-v4", satellite: "satellite-v4", hybrid: "hybrid-v4" }
@@ -21,16 +24,6 @@ function mapStyleUrl(style: MapStyleName, apiKey: string, theme: "light" | "dark
 }
 const lotTypeLabels: Record<LotType, string> = { outdoor: "Outdoor", basement: "Underground", "multi-storey": "Indoor (Multi-storey)" }
 
-function validCoordinates(point: LatLng) {
-  return Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180 && !(point.lat === 0 && point.lng === 0)
-}
-function distanceKm(from: LatLng, to: LatLng) {
-  const radians = (degrees: number) => degrees * Math.PI / 180
-  const latDistance = radians(to.lat - from.lat)
-  const lngDistance = radians(to.lng - from.lng)
-  const a = Math.sin(latDistance / 2) ** 2 + Math.cos(radians(from.lat)) * Math.cos(radians(to.lat)) * Math.sin(lngDistance / 2) ** 2
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
 function availableSpaces(lot: ParkingLot) { return Array.isArray(lot.slots) ? lot.slots.filter((slot) => slot.status === "available").length : 0 }
 function hasAvailabilityData(lot: ParkingLot) { return Array.isArray(lot.slots) }
 function availabilityLevel(lot: ParkingLot) {
@@ -43,6 +36,60 @@ function availabilityLevel(lot: ParkingLot) {
 function formatRate(rate: number) { return Number.isFinite(rate) ? `${rate.toLocaleString("vi-VN")} VND` : "Rate unavailable" }
 const routeSourceId = "smartparking-driving-route"
 const routeLayerId = "smartparking-driving-route-line"
+// Shown verbatim when the browser denies or cannot provide GPS (AC-1 manual fallback).
+const GPS_DENIED_MESSAGE = "GPS access was denied. You can manually enter an address to search nearby parking."
+// ISO-4217 currencies with no minor unit, so the minor amount is already the display amount.
+const zeroDecimalCurrencies = new Set(["VND", "JPY", "KRW", "IDR", "CLP", "ISK", "HUF"])
+function amountToMajorUnits(amountMinor: number, currency: string) {
+  if (!Number.isFinite(amountMinor)) return NaN
+  return zeroDecimalCurrencies.has(currency.toUpperCase()) ? amountMinor : amountMinor / 100
+}
+function mapDiscoveryLotType(value: string): LotType {
+  if (value === "BASEMENT") return "basement"
+  if (value === "MULTI_STOREY") return "multi-storey"
+  return "outdoor"
+}
+// Discovery returns lot-level facts only, so availability is projected onto the
+// existing ParkingLot.slots shape (one available slot per reported free space).
+// UNKNOWN availability keeps `slots` non-array so the current UI renders it as unknown.
+function mapDiscoveryLot(item: DiscoveryLotItem): ParkingLot {
+  const { status, availableCount } = item.availability
+  let slots: ParkingSlot[]
+  if (status === "FULL") {
+    slots = []
+  } else if (status === "AVAILABLE" && typeof availableCount === "number" && Number.isFinite(availableCount)) {
+    slots = Array.from({ length: Math.max(0, Math.trunc(availableCount)) }, (_, index) => ({
+      id: `${item.siteId}-slot-${index + 1}`,
+      number: String(index + 1),
+      floor: 1,
+      status: "available" as const,
+    }))
+  } else {
+    slots = undefined as unknown as ParkingSlot[]
+  }
+  return {
+    // AC-2: discovery siteId is carried through unchanged; never regenerated or hashed.
+    id: item.siteId,
+    ownerId: "",
+    name: item.siteName,
+    type: mapDiscoveryLotType(item.lotType),
+    address: item.addressLine,
+    slots,
+    totalSlots: NaN,
+    floors: 1,
+    devices: [],
+    hourlyRate: amountToMajorUnits(item.tariff.currentAmountMinor, item.tariff.currency),
+    dailyRate: NaN,
+    nightRate: NaN,
+    gracePeriodMinutes: NaN,
+    subscriptionMonthly: NaN,
+    subscriptionYearly: NaN,
+    status: "active",
+    lat: item.coordinates.latitude,
+    lng: item.coordinates.longitude,
+    createdAt: item.freshness.generatedAt,
+  }
+}
 
 export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   onBook: (lot: ParkingLot) => void
@@ -51,7 +98,11 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
 }) {
   const { theme, user } = useApp()
   const [sourceLots, setSourceLots] = useState(() => store.getLots())
-  const lots = useMemo(() => sourceLots.filter((lot) => lot.status === "active"), [sourceLots])
+  const [originSource, setOriginSource] = useState<OriginSource>("CURRENT_GPS")
+  const [discoveryLots, setDiscoveryLots] = useState<ParkingLot[] | null>(null)
+  // Manual-origin mode uses discovery results; every other origin keeps the store pipeline.
+  const activeSourceLots = originSource === "MANUAL" && discoveryLots ? discoveryLots : sourceLots
+  const lots = useMemo(() => activeSourceLots.filter((lot) => lot.status === "active"), [activeSourceLots])
   const validLots = useMemo(() => lots.filter(validCoordinates), [lots])
   const mapElement = useRef<HTMLDivElement>(null)
   const mapFrameRef = useRef<HTMLDivElement>(null)
@@ -68,6 +119,9 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const locationRequestRef = useRef(0)
   const routeRequestRef = useRef<AbortController | null>(null)
   const routeSequenceRef = useRef(0)
+  // Guards against duplicate operational-layout fetches while one is in flight.
+  const resolvingLotsRef = useRef(new Set<string>())
+  const mountedRef = useRef(true)
   const [selected, setSelected] = useState<ParkingLot | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [searchCollapsed, setSearchCollapsed] = useState(true)
@@ -85,6 +139,9 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const [location, setLocation] = useState<LatLng | null>(null)
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [locationError, setLocationError] = useState("")
+  const [manualOrigin, setManualOrigin] = useState("")
+  const [manualError, setManualError] = useState("")
+  const [manualLoading, setManualLoading] = useState(false)
   const [locating, setLocating] = useState(false)
   const [mapState, setMapState] = useState<MapState>("loading")
   const [mapStyle, setMapStyle] = useState<MapStyleName>("streets")
@@ -185,6 +242,43 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     window.addEventListener("sp-data-change", refresh)
     return () => window.removeEventListener("sp-data-change", refresh)
   }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+  // Owner-created lots are persisted with `slots: []`; the real bays live in
+  // FacilityService. Resolve each slot-less lot once from the authoritative
+  // operational-layout projection so availability and Book Now are accurate.
+  // LOOP GUARD: only lots with empty slots are fetched/saved, and a saved lot is
+  // skipped on the next run, so the save -> `sp-data-change` cycle terminates.
+  useEffect(() => {
+    const unresolved = sourceLots.filter((lot) => !Array.isArray(lot.slots) || lot.slots.length === 0)
+    if (!unresolved.length) return
+    unresolved.forEach((lot) => {
+      if (resolvingLotsRef.current.has(lot.id)) return
+      resolvingLotsRef.current.add(lot.id)
+      void (async () => {
+        try {
+          const layout = await parkingApi.operationalLayout(lot.id)
+          if (!mountedRef.current) return
+          const mappedSlots = mapOperationalLayoutSlots(layout.slots)
+          if (!mappedSlots.length) return
+          const updatedLot: ParkingLot = {
+            ...lot,
+            slots: mappedSlots,
+            totalSlots: layout.metrics?.totalPhysicalCapacity ?? mappedSlots.length,
+          }
+          store.saveLot(updatedLot)
+          setSourceLots((previous) => previous.map((item) => (item.id === lot.id ? updatedLot : item)))
+        } catch {
+          // Offline, fixture mode or an unavailable service: keep the existing
+          // (empty) slots and never throw or overwrite them.
+        } finally {
+          resolvingLotsRef.current.delete(lot.id)
+        }
+      })()
+    })
+  }, [sourceLots])
   useEffect(() => {
     if (!selected) return
     const latest = lots.find((lot) => lot.id === selected.id)
@@ -419,7 +513,14 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     return () => { map.off("style.load", draw) }
   }, [route, mapState, mapStyle, searchCollapsed, detailsOpen, visible])
   function findMyLocation(applyNearFilter = false) {
-    if (!navigator.geolocation) { setLocationError("Location is unavailable in this browser."); return }
+    if (!navigator.geolocation) {
+      setLocating(false)
+      setLocation(null)
+      setLocationAccuracy(null)
+      setOriginSource("MANUAL")
+      setLocationError(GPS_DENIED_MESSAGE)
+      return
+    }
     if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current)
     if (locationTimerRef.current !== null) window.clearTimeout(locationTimerRef.current)
     const requestId = ++locationRequestRef.current
@@ -429,18 +530,25 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     setLocation(null)
     setLocationAccuracy(null)
     setLocating(true)
-    const finish = (position: GeolocationPosition | null, message = "Your current location could not be determined. Check location permissions and try again.") => {
-      if (completed || requestId !== locationRequestRef.current) return
-      completed = true
+    const stopWatching = () => {
       if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current)
       if (locationTimerRef.current !== null) window.clearTimeout(locationTimerRef.current)
       locationWatchRef.current = null
       locationTimerRef.current = null
+    }
+    const finish = (position: GeolocationPosition | null, message = "Your current location could not be determined. Check location permissions and try again.") => {
+      if (completed || requestId !== locationRequestRef.current) return
+      completed = true
+      stopWatching()
       setLocating(false)
       if (!position) { setLocationError(message); return }
       const next = { lat: position.coords.latitude, lng: position.coords.longitude }
       setLocation(next)
       setLocationAccuracy(position.coords.accuracy)
+      // GPS succeeded: leave manual mode so the store-based pipeline stays authoritative.
+      setOriginSource("CURRENT_GPS")
+      setManualError("")
+      setDiscoveryLots(null)
       if (applyNearFilter && position.coords.accuracy <= 5000) setMaxDistance(5)
       if (applyNearFilter && position.coords.accuracy > 5000) {
         setMaxDistance(null)
@@ -449,15 +557,67 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       const zoom = position.coords.accuracy > 5000 ? 10 : position.coords.accuracy > 1000 ? 12 : 14
       mapInstance.current?.flyTo({ center: [next.lng, next.lat], zoom, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 850 })
     }
+    // AC-1: a denied permission falls back to the manual address input instead of failing.
+    const fallbackToManual = () => {
+      if (completed || requestId !== locationRequestRef.current) return
+      completed = true
+      stopWatching()
+      setLocating(false)
+      setLocation(null)
+      setLocationAccuracy(null)
+      setOriginSource("MANUAL")
+      setLocationError(GPS_DENIED_MESSAGE)
+    }
     locationWatchRef.current = navigator.geolocation.watchPosition((position) => {
       const point = { lat: position.coords.latitude, lng: position.coords.longitude }
       if (!validCoordinates(point) || !Number.isFinite(position.coords.accuracy)) return
       if (!best || position.coords.accuracy < best.coords.accuracy) best = position
       if (position.coords.accuracy <= 150) finish(position)
     }, (error) => {
-      finish(best, error.code === 1 ? "Allow location access to find parking near you." : "Your current location could not be determined. Please try again.")
+      if (error.code === 1) { fallbackToManual(); return }
+      finish(best, "Your current location could not be determined. Please try again.")
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
     if (!completed) locationTimerRef.current = window.setTimeout(() => finish(best), 10000)
+  }
+  async function searchByManualOrigin() {
+    const address = manualOrigin.trim()
+    if (!address) { setManualError("Enter an address to search nearby parking."); return }
+    const apiKey = import.meta.env.VITE_MAPTILER_API_KEY
+    if (!apiKey) { setManualError("Address search needs a MapTiler API key. Add VITE_MAPTILER_API_KEY to use manual search."); return }
+    setManualError("")
+    setLocationError("")
+    setManualLoading(true)
+    let point: LatLng
+    try {
+      const response = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(address)}.json?key=${encodeURIComponent(apiKey)}&limit=1`)
+      if (!response.ok) throw new Error("geocoding failed")
+      const body: unknown = await response.json()
+      const center = (body as { features?: Array<{ center?: [number, number] }> }).features?.[0]?.center
+      if (!Array.isArray(center) || center.length < 2 || !Number.isFinite(center[0]) || !Number.isFinite(center[1]) || !validCoordinates({ lat: center[1], lng: center[0] })) {
+        setManualLoading(false)
+        setManualError("No matching address was found. Try a nearby landmark or street name.")
+        return
+      }
+      point = { lat: center[1], lng: center[0] }
+    } catch {
+      setManualLoading(false)
+      setManualError("Address search is unavailable right now. Please try again.")
+      return
+    }
+    setLocation(point)
+    setLocationAccuracy(null)
+    setOriginSource("MANUAL")
+    setDiscoveryLots(null)
+    mapInstance.current?.flyTo({ center: [point.lng, point.lat], zoom: 14, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 850 })
+    try {
+      const discovery = await searchDiscoveryLots({ originSource: "MANUAL", latitude: point.lat, longitude: point.lng, manualOrigin: address })
+      setDiscoveryLots(discovery.items.map(mapDiscoveryLot))
+      if (!discovery.items.length) setManualError("No parking lots were found near this address. Try a different location.")
+    } catch {
+      setManualError("Parking search is unavailable right now. Please try again.")
+    } finally {
+      setManualLoading(false)
+    }
   }
   function changeMapStyle(style: MapStyleName) {
     setMapStyle(style)
@@ -505,6 +665,12 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
           </div>
           <label className="sr-only" htmlFor="find-parking-query">Search by parking name or address</label>
           <input id="find-parking-query" name="parking-search" className="input sp-search-input" value={query} onFocus={() => setResultsOpen(true)} onChange={(event) => { setQuery(event.target.value); setResultsOpen(true) }} onKeyDown={(event) => { if (event.key === "Enter") rememberSearch(query) }} placeholder="Search name or address…" autoComplete="off" />
+          {originSource === "MANUAL" && <form className="mt-2.5 flex items-stretch gap-2" onSubmit={(event) => { event.preventDefault(); void searchByManualOrigin() }} aria-label="Search parking near a manual address">
+            <label className="sr-only" htmlFor="find-parking-manual-origin">Search parking near an address</label>
+            <input id="find-parking-manual-origin" name="parking-manual-origin" className="input sp-search-input min-w-0 flex-1" value={manualOrigin} onChange={(event) => setManualOrigin(event.target.value)} placeholder="Enter an address, e.g. Bến Thành" autoComplete="street-address" disabled={manualLoading} />
+            <button type="submit" className="btn-primary shrink-0" disabled={manualLoading || !manualOrigin.trim()}>{manualLoading ? "Searching..." : "Search"}</button>
+          </form>}
+          {originSource === "MANUAL" && manualError && <p className="find-parking-location-error" role="alert">{manualError}</p>}
           {searchHistory.length > 0 && <div className="find-parking-history" aria-label="Recent searches">
             <div className="find-parking-history-heading">
               <strong>Recent Searches</strong>

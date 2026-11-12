@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.R
 
 public sealed class RemoveUnitCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<RemoveUnitCommandHandler> logger)
     : IRequestHandler<RemoveUnitCommand>
 {
@@ -15,7 +15,7 @@ public sealed class RemoveUnitCommandHandler(
     {
         logger.LogInformation("Removing unit {UnitId} from site {SiteId}", request.UnitId, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.RemoveUnit(request.UnitId);
         await session.CommitAsync(ct);
     }

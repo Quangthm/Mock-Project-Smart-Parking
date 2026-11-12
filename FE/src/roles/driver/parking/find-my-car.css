@@ -1,0 +1,189 @@
+/* Find my car — a read-only projection of the current vehicle location.
+   Surfaces mirror the driver-booking-* cards: quiet border, rounded card,
+   muted labels with strong values, and the shared status tokens. */
+
+.find-my-car-card {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--fg);
+}
+.find-my-car-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  min-width: 0;
+}
+.find-my-car-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.find-my-car-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--status-available-bg);
+  color: var(--primary);
+}
+.find-my-car-heading h2 { margin: 0; color: var(--fg); font-size: 1.25rem; line-height: 1.3; }
+.find-my-car-subtitle { margin: 3px 0 0; color: var(--muted); font-size: .8125rem; }
+
+/* Precision is encoded by label, hue and a leading dot; never colour alone. */
+.find-my-car-card .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  min-height: 28px;
+  padding: 3px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.find-my-car-card .badge::before { content: ""; width: 7px; height: 7px; flex: none; border-radius: 50%; background: currentColor; }
+.find-my-car-card .badge.is-slot { color: var(--badge-success-fg); background: var(--status-available-bg); border-color: color-mix(in srgb, var(--badge-success-fg) 34%, transparent); }
+.find-my-car-card .badge.is-zone { color: var(--badge-warning-fg); background: var(--status-reserved-bg); border-color: color-mix(in srgb, var(--badge-warning-fg) 34%, transparent); }
+.find-my-car-card .badge.is-unknown { color: var(--badge-primary-fg); background: var(--active); border-color: color-mix(in srgb, var(--badge-primary-fg) 30%, transparent); }
+
+/* AC-9 stale warning: factual copy plus an explicit reload action. */
+.find-my-car-stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--badge-warning-fg) 40%, transparent);
+  border-radius: 14px;
+  background: var(--status-reserved-bg);
+  color: var(--badge-warning-fg);
+}
+.find-my-car-stale > svg { flex: none; }
+.find-my-car-stale p { flex: 1 1 220px; margin: 0; font-size: .875rem; font-weight: 600; line-height: 1.5; }
+.find-my-car-reload {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--badge-warning-fg) 46%, transparent);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--badge-warning-fg);
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+.find-my-car-reload:hover { background: color-mix(in srgb, var(--status-reserved-bg) 62%, var(--card)); transform: translateY(-1px); }
+.find-my-car-reload:active { transform: translateY(0) scale(.98); }
+.find-my-car-reload:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.find-my-car-body { display: grid; gap: 14px; min-width: 0; }
+.find-my-car-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.find-my-car-details > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+}
+.find-my-car-details dt { color: var(--muted); font-size: .75rem; font-weight: 650; }
+.find-my-car-details dd {
+  margin: 0;
+  color: var(--fg);
+  font-size: .9375rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.find-my-car-allocation {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  min-height: 28px;
+  padding: 3px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.find-my-car-allocation::before { content: ""; width: 7px; height: 7px; flex: none; border-radius: 50%; background: currentColor; }
+.find-my-car-allocation[data-status="OCCUPIED"] { color: var(--badge-primary-fg); background: var(--active); }
+.find-my-car-allocation[data-status="RESERVED"] { color: var(--badge-warning-fg); background: var(--status-reserved-bg); }
+
+.find-my-car-meta { margin: 0; color: var(--muted); font-size: .8125rem; }
+.find-my-car-meta strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+.find-my-car-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--raised);
+  color: var(--fg);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+.find-my-car-note svg { flex: none; margin-top: 2px; color: var(--primary); }
+
+.find-my-car-pending {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 15px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--fg);
+  font-size: .9rem;
+  line-height: 1.55;
+}
+.find-my-car-pending svg { flex: none; margin-top: 2px; color: var(--primary); }
+
+.find-my-car-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-height: 44px; color: var(--muted); font-size: .875rem; }
+.find-my-car-state p { margin: 0; }
+.find-my-car-state.is-error { color: var(--badge-danger-strong); }
+.find-my-car-state.is-error > svg { flex: none; }
+.find-my-car-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: find-my-car-spin .8s linear infinite;
+}
+@keyframes find-my-car-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .find-my-car-card { padding: 17px; border-radius: 16px; }
+  .find-my-car-header { flex-direction: column; align-items: stretch; }
+  .find-my-car-details { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .find-my-car-spinner { animation: none; }
+  .find-my-car-reload { transition: none; }
+}

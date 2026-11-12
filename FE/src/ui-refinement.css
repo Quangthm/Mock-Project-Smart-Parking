@@ -14,8 +14,9 @@
 .dashboard-theme .dashboard-content h2 { font-size: clamp(1.125rem, 1.45vw, 1.375rem); }
 .dashboard-theme .dashboard-content h3 { font-size: 1.0625rem; }
 .dashboard-theme .dashboard-content :is(.text-xs, .text-sm) { line-height: 1.5; }
-.dashboard-theme .dashboard-content :is(.owner-kpi, .owner-finance-kpi, .operator-kpi, .admin-kpi, .parking-kpi) { padding: var(--ui-gap-4); }
-.dashboard-theme .dashboard-content :is(.owner-kpi-strip, .owner-finance-kpis, .operator-kpi-strip, .admin-kpi-strip, .parking-kpi-strip) { gap: var(--ui-gap-3); }
+.dashboard-theme .dashboard-content :is(.owner-kpi, .owner-finance-kpi, .operator-kpi, .admin-kpi) { padding: var(--ui-gap-4); }
+.dashboard-theme .dashboard-content .operator-kpi { gap: 4px; padding: 12px; }
+.dashboard-theme .dashboard-content :is(.owner-kpi-strip, .owner-finance-kpis, .operator-kpi-strip, .admin-kpi-strip) { gap: var(--ui-gap-3); }
 .dashboard-theme :is(.owner-workspace-main, .admin-workspace-main) { padding: var(--ui-workspace-pad) !important; }
 .dashboard-theme .owner-workspace-main > :not(:last-child),
 .dashboard-theme .admin-workspace-main > :not(:last-child) { margin-bottom: var(--ui-gap-4); }
@@ -70,11 +71,10 @@
 .parking-hero-3d-pulse { width: 9px; height: 9px; border-radius: 50%; background: #8be0b8; box-shadow: 0 0 0 4px #8be0b82a; }
 .parking-hero-3d-pause { position: absolute; z-index: 1; left: 9%; bottom: 8%; min-height: 44px; padding: 0 16px; border: 1px solid #a7e8c767; border-radius: 999px; background: #172b26e8; color: #e9f9ef; font: inherit; font-size: .8125rem; font-weight: 650; cursor: pointer; }
 .parking-hero-3d-pause:hover { background: #285040; }
-.parking-hero-3d-pause:focus-visible { outline: 3px solid #8be0b8; outline-offset: 3px; }
+.parking-hero-3d-pause:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 .landing-page .parking-hero-3d-caption,
 .landing-page .parking-hero-3d-pause { border-color: var(--hero-outline); background: color-mix(in srgb, var(--hero-bg) 92%, transparent); color: var(--hero-fg); transition: background-color 320ms ease, border-color 320ms ease, color 320ms ease; }
 .landing-page .parking-hero-3d-pause:hover { background: color-mix(in srgb, var(--hero-accent) 13%, var(--hero-bg)); }
-.landing-page .parking-hero-3d-pause:focus-visible { outline-color: var(--hero-accent); }
 .landing-page .parking-hero-3d-pulse { background: var(--hero-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--hero-accent) 20%, transparent); }
 .landing-page .parking-hero-3d-fallback span:nth-child(n+2) { background: var(--hero-bg); }
 @media (prefers-reduced-motion: reduce) { .parking-hero-3d-pause { display: none; } .parking-hero-3d-caption { animation: none; } }
@@ -137,7 +137,7 @@
 .dashboard-theme .application-review-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; min-width: 112px; border-radius: 999px !important; }
 .dashboard-theme .application-approve { background: var(--primary) !important; color: var(--primary-fg) !important; }
 .dashboard-theme .application-reject { background: var(--status-occupied-bg) !important; color: var(--occupied) !important; border: 1px solid var(--occupied) !important; }
-.dashboard-theme .application-review-actions button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.dashboard-theme .application-review-actions button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .application-review-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .dashboard-theme .application-reviewed-card { gap: 12px; padding: 18px 20px !important; }
 
@@ -188,7 +188,7 @@
 .security-recovery-notice > span { flex: 1 1 320px; min-width: 0; line-height: 1.5; }
 .security-recovery-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .security-recovery-actions > button { min-height: 44px; border-radius: 999px; }
-.security-recovery-notice :is(button):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.security-recovery-notice :is(button):focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .security-recovery-notice.is-transient { animation: security-recovery-slide 5s linear both; }
 @keyframes security-recovery-slide {
   0% { opacity: 0; transform: translateX(28px); }
@@ -221,7 +221,7 @@
 .application-document-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0 18px}
 .application-document-actions button{min-height:44px;border-radius:999px}
 .application-document-actions span{font-size:.8rem;color:var(--muted)}
-.owner-model-import:focus-within>span{outline:3px solid var(--primary);outline-offset:3px}
+.owner-model-import:has(input:focus-visible)>span{outline: 2px solid var(--focus-ink, var(--focus));outline-offset: -3px}
 .application-model-import{display:inline-flex;margin:4px 0 16px;cursor:pointer}
 .application-model-import>span{min-height:44px;display:inline-flex;align-items:center;border-radius:999px}
 .security-setup-notice.is-transient { animation: security-notice-slide 5s ease-in-out both; }
@@ -258,7 +258,7 @@
 .driver-history-tabs > button { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted); font: inherit; font-size: .875rem; font-weight: 650; cursor: pointer; }
 .driver-history-tabs > button:hover { border-color: var(--primary); color: var(--fg); }
 .driver-history-tabs > button.is-active { border-color: var(--primary); background: var(--active); color: var(--fg); }
-.driver-history-tabs > button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.driver-history-tabs > button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .driver-history-tabs > button span { font-variant-numeric: tabular-nums; color: var(--muted); }
 
 /* Auth takes the available page height; the footer begins immediately after it. */
@@ -332,7 +332,7 @@
 
 /* One surface and one focus indicator for icon-led search controls. */
 .dashboard-theme .sp-search-field { min-height: 46px; min-width: 0; padding-inline: 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--muted); }
-.dashboard-theme .sp-search-field:focus-within { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 2px; }
+.dashboard-theme .sp-search-field:has(input:focus-visible) { outline: 2px solid var(--muted); outline-offset: -2px; }
 .dashboard-theme .sp-search-field > svg { flex: none; }
 .dashboard-theme .sp-search-field input,
 .dashboard-theme .sp-search-field input:focus-visible { flex: 1 1 auto; min-width: 0; width: 100%; min-height: 42px; height: auto; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent; color: var(--fg); font-size: .875rem; }
@@ -340,7 +340,7 @@
 .dashboard-theme .sp-search-field > button { display: grid; flex: none; place-items: center; width: 44px; height: 44px; padding: 0; margin-right: -10px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
 .dashboard-theme .sp-search-field > button:hover { color: var(--fg); background: var(--raised); }
 .dashboard-theme .sp-search-input { min-height: 44px; min-width: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--fg); font-size: .875rem; }
-.dashboard-theme .sp-search-input:focus-visible { border-color: var(--focus); outline: 3px solid var(--focus); outline-offset: 2px; box-shadow: none; }
+.dashboard-theme .sp-search-input:focus-visible { outline: 2px solid var(--muted); outline-offset: -2px; box-shadow: none; }
 .dashboard-theme.driver-theme :is(.dashboard-search-results button, .popover-item, .find-parking-map-menu-list button) {
   min-height: 44px;
   border-radius: 14px;
@@ -402,8 +402,8 @@
 .dashboard-theme.driver-theme .booking-datetime-field { border-radius: 16px; }
 .dashboard-theme.driver-theme :is(.find-parking-location, .find-parking-icon-button, .find-parking-detail-title button,
   .find-parking-filter-toggle, .find-parking-result-count, .booking-calendar-heading button):focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  outline: 2px solid var(--focus-ink, var(--focus));
+  outline-offset: -3px;
 }
 
 @media (min-width: 1025px) {
@@ -453,7 +453,7 @@
 .dashboard-theme .find-parking-map-style-trigger[aria-expanded="true"] { background: var(--raised); }
 .dashboard-theme .find-parking-map-style-trigger:disabled { opacity: .55; cursor: not-allowed; }
 .dashboard-theme .find-parking-map-style-trigger:focus-visible,
-.dashboard-theme .find-parking-map-style-list button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dashboard-theme .find-parking-map-style-list button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .dashboard-theme .find-parking-map-style-value { flex: 1; min-width: 0; font-size: 14px; font-weight: 650; }
 .dashboard-theme .find-parking-map-style-trigger svg { flex: none; transition: transform 220ms var(--sp-ease-soft); }
 .dashboard-theme .find-parking-map-style-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
@@ -546,7 +546,7 @@
 }
 .sp-rounded-select-trigger:hover,
 .sp-rounded-select-trigger[aria-expanded="true"] { border-color: var(--primary); background: var(--raised); }
-.sp-rounded-select-trigger:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sp-rounded-select-trigger:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .sp-rounded-select-trigger:disabled { opacity: .55; cursor: not-allowed; }
 .sp-rounded-select-trigger svg { flex: none; transition: transform 220ms var(--sp-ease-soft, ease); }
 .sp-rounded-select-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
@@ -732,7 +732,7 @@
 .policy-flow-nav button { display: grid; align-content: start; gap: 8px; min-height: 124px; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); color: var(--fg); text-align: left; cursor: pointer; transition: transform .18s ease, border-color .18s ease, background-color .18s ease; }
 .policy-flow-nav button:hover, .policy-flow-nav button:focus-visible { transform: translateY(-2px); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, var(--card)); }
 .policy-flow-nav button.is-active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
-.policy-flow-nav button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.policy-flow-nav button:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .policy-flow-nav .policy-flow-number { color: var(--primary); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .policy-flow-nav strong { font-size: .9375rem; line-height: 1.35; }
 .policy-flow-nav small { color: var(--muted); font-size: .75rem; line-height: 1.4; }
@@ -751,7 +751,6 @@
 .system-config-parameters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .system-config-grid > .btn-primary { grid-column: 1 / -1; justify-self: start; }
 .owner-lots-comparison-table tbody td { vertical-align: top; }
-.owner-lots-comparison-table tbody td:nth-child(n+4):nth-child(-n+9) { font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .system-config-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .system-config-parameters { grid-template-columns: minmax(0, 1fr); } }
 .audit-log-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); }
@@ -759,7 +758,7 @@
 .application-collapse-summary { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(135px, auto) 20px; align-items: center; gap: 16px; min-height: 72px; padding: 15px 20px; cursor: pointer; list-style: none; }
 .application-collapse-summary::-webkit-details-marker { display: none; }
 .application-collapse-summary:hover { background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
-.application-collapse-summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.application-collapse-summary:focus-visible { outline: 2px solid var(--focus-ink, var(--focus)); outline-offset: -3px; }
 .application-collapse-summary > svg:last-child { transition: transform .2s ease; }
 .application-collapsible[open] .application-collapse-summary > svg:last-child { transform: rotate(180deg); }
 .application-collapse-name { display: grid; gap: 4px; min-width: 0; }
@@ -852,8 +851,8 @@
   input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate)::after { transition-delay: 120ms; }
   input[type="checkbox"]:not([role="switch"]):indeterminate::after { clip-path: inset(42% 16% round 1px); }
   input[type="checkbox"]:not([role="switch"]):focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 3px;
+    outline: 2px solid var(--focus-ink, var(--focus));
+    outline-offset: -3px;
   }
   input[type="checkbox"]:not([role="switch"]):disabled { opacity: .55; cursor: not-allowed; }
   @media (prefers-reduced-motion: reduce) {

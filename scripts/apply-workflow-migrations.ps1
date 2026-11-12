@@ -109,9 +109,9 @@ if ($Service -eq 'User') {
     if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
 }
 if ($Service -eq 'Reservation') {
-    $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name='location_scanned_at')"
+    $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT COUNT(*) = 3 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name IN ('location_scanned_at', 'checkout_payment_order_id', 'checkout_paid_at')"
     if ($LASTEXITCODE -ne 0 -or ($columnExists -join '').Trim() -ne 't') {
-        throw 'Operation schema is missing parking_sessions.location_scanned_at. The canonical microservice base defines this column; no existing data was changed. Use a separately reviewed migration or an explicitly authorized clean database rebuild.'
+        throw 'Operation schema is missing parking session scan or checkout settlement columns. Use a separately reviewed migration or an explicitly authorized clean database rebuild.'
     }
 }
 foreach ($table in (@($required) + @($sentinel))) {
@@ -129,7 +129,7 @@ if ($Service -eq 'User') {
     Write-Output 'User schema already current; full session and outbox verifier passed. Consolidated base skipped; incremental features verified/applied.'
 } elseif ($state -eq 'current') {
     if ($Service -eq 'Reservation') {
-        Write-Output 'Operation schema already current; required relations and parking_sessions.location_scanned_at verified, nothing applied.'
+        Write-Output 'Operation schema already current; required relations and parking session scan and checkout columns verified, nothing applied.'
     } else {
         Write-Output "$Service schema already current; verified required relations, nothing to apply."
     }

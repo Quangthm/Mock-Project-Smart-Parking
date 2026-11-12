@@ -8,6 +8,7 @@ Start with [shared contracts and pending API work](v1.1-contracts.md). The follo
 
 | Capability | Active design |
 |---|---|
+| Reservation first slice | [Admission and owner contracts](../../03-design/api/reservation-first-slice-api-design.md) — finalization gated |
 | Partner Registration, existing Owner role | [Registration and first-lot setup](../../03-design/api/owner-register-api-design.md) |
 | Initial application review and document replacement | [Admin review](../../03-design/api/admin-approve-owner-api-design.md) |
 | Driver registration and verification | [Driver](../../03-design/api/driver-register-api-design.md) |

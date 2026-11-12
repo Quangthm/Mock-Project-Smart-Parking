@@ -1,5 +1,5 @@
 import { PageHeader } from "../components/ui/PageHeader"
-import { useRef } from "react"
+import { useRef, useState, type FormEvent } from "react"
 
 import { useApp } from "../context/AppContext"
 
@@ -729,8 +729,15 @@ export function Business() {
 }
 
 function ContactForm() {
-  const { setView } = useApp()
-
+  const [emailPrepared, setEmailPrepared] = useState(false)
+  function prepareEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const subject = `Parking partnership: ${data.get("businessName")}`
+    const body = `Business: ${data.get("businessName")}\nEmail: ${data.get("email")}\nPhone: ${data.get("phone")}\n\n${data.get("message")}`
+    window.location.href = `mailto:support.smartparkingvn@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    setEmailPrepared(true)
+  }
   return (
     <div
       className="card"
@@ -772,10 +779,9 @@ function ContactForm() {
           textAlign: "center",
         }}
       >
-        Have questions? Our business team will contact you within 24 hours to
-        discuss your needs.
+        Have questions? Prepare an email to our team with your parking lot details.
       </p>
-      <div
+      <form onSubmit={prepareEmail}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -783,25 +789,24 @@ function ContactForm() {
           flex: 1,
         }}
       >
-        <input className="input" placeholder="Business name" />
-        <input className="input" placeholder="Contact email" type="email" />
-        <input className="input" placeholder="Phone number" />
-        <textarea
+        <label className="label">Business name<input name="businessName" autoComplete="organization" className="input mt-2 w-full" required maxLength={200} /></label>
+        <label className="label">Contact email<input name="email" autoComplete="email" className="input mt-2 w-full" type="email" required /></label>
+        <label className="label">Phone number<input name="phone" type="tel" autoComplete="tel" className="input mt-2 w-full" /></label>
+        <label className="label">Parking lot details<textarea name="message"
           className="input"
           rows={3}
           placeholder="Brief description of your lot (type, location, # slots)..."
-          style={{ resize: "none" }}
-        />
+          style={{ resize: "vertical" }}
+        /></label>
         <button
           className="btn-outline"
           style={{ width: "100%", justifyContent: "center" }}
-          onClick={() =>
-            alert("Message sent! Our team will contact you within 24 hours.")
-          }
+          type="submit"
         >
-          Send Message →
+          Open email app
         </button>
-      </div>
+        {emailPrepared && <p role="status" className="text-sm leading-relaxed text-[var(--muted)]">Your email draft is ready. Send it in your email app, or contact support.smartparkingvn@gmail.com. Nothing has been sent by this website.</p>}
+      </form>
     </div>
   )
 }

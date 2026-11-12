@@ -47,7 +47,7 @@
 .payment-result-reference{margin-top:18px!important;overflow-wrap:anywhere;font-size:.875rem}
 .payment-result-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
 .payment-result-actions button{min-height:44px;border-radius:999px}
-.payos-checkout :focus-visible,.payment-result-card :focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+.payos-checkout :focus-visible,.payment-result-card :focus-visible{outline: 2px solid var(--focus-ink, var(--focus));outline-offset: -3px}
 @media(max-width:560px){.payment-result-actions button{width:100%}.payos-method,.payos-pay-button{width:100%}}
 @media(max-width:620px){.payos-checkout-details{grid-template-columns:minmax(0,1fr)}.payos-checkout-actions{grid-column:1}.payos-checkout-actions button{width:100%}}
 .booking-payment-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:var(--raised);color:var(--primary)}

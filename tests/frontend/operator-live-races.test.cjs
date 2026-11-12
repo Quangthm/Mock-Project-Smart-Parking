@@ -17,6 +17,8 @@ function load(file, imports, globals = {}) {
     if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" };
     if (name.endsWith("/ui/Badge")) return { Badge: "badge" };
     if (name.endsWith("/ui/Button")) return { Button: "button" };
+    if (name.endsWith("/ui/Modal")) return { Modal: "dialog" };
+    if (name.endsWith("/ui/useConfirmation")) return { useConfirmation: () => ({ confirm: async () => false, confirmation: null }) };
     if (name.endsWith("/forms/PasswordVisibilityIcon")) return { PasswordVisibilityIcon: "password-icon" };
     if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
     return imports[name];

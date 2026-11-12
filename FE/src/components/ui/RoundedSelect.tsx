@@ -27,6 +27,7 @@ export function RoundedSelect({ children, className = "", style, value, disabled
   const menuRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | undefined>(undefined)
   const openFrame = useRef<number | undefined>(undefined)
+  const menuRequested = useRef(false)
   const [present, setPresent] = useState(false)
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<"above" | "below">("below")
@@ -44,26 +45,32 @@ export function RoundedSelect({ children, className = "", style, value, disabled
   }, [id])
 
   function closeMenu(returnFocus = false) {
+    if (!menuRequested.current) return
+    menuRequested.current = false
     window.clearTimeout(closeTimer.current)
     window.cancelAnimationFrame(openFrame.current ?? 0)
     setOpen(false)
     closeTimer.current = window.setTimeout(() => setPresent(false), 180)
-    if (returnFocus) triggerRef.current?.focus()
+    if (returnFocus) triggerRef.current?.focus({ preventScroll: true })
   }
 
   function openMenu(focusIndex: "first" | "last" = "first") {
-    if (disabled || !options.length) return
+    if (menuRequested.current || disabled || !options.length) return
     window.clearTimeout(closeTimer.current)
     const trigger = triggerRef.current
     if (!trigger) return
+    menuRequested.current = true
     const rect = trigger.getBoundingClientRect()
     const width = Math.min(Math.max(rect.width, 188), window.innerWidth - 24)
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))
-    const belowSpace = window.innerHeight - rect.bottom - 16
-    const aboveSpace = rect.top - 16
+    const viewport = window.visualViewport
+    const viewportTop = viewport?.offsetTop ?? 0
+    const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight)
+    const belowSpace = viewportBottom - rect.bottom - 16
+    const aboveSpace = rect.top - viewportTop - 16
     const expectedHeight = Math.min(options.length * 44 + 16, 320)
     const above = belowSpace < expectedHeight && aboveSpace > belowSpace
-    const maxHeight = Math.min(320, Math.max(88, (above ? aboveSpace : belowSpace) - 8))
+    const maxHeight = Math.min(320, Math.max(44, (above ? aboveSpace : belowSpace) - 8))
     const height = Math.min(expectedHeight, maxHeight)
     const computed = getComputedStyle(trigger)
     const colors = Object.fromEntries(["card", "fg", "muted", "border", "raised", "primary", "focus"].map((name) => [`--sp-select-${name}`, computed.getPropertyValue(`--${name}`)]))
@@ -72,9 +79,9 @@ export function RoundedSelect({ children, className = "", style, value, disabled
     setPresent(true)
     openFrame.current = window.requestAnimationFrame(() => {
       setOpen(true)
-      window.requestAnimationFrame(() => {
+      openFrame.current = window.requestAnimationFrame(() => {
         const choices = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')
-        if (choices?.length) choices[focusIndex === "first" ? 0 : choices.length - 1]?.focus()
+        if (choices?.length) choices[focusIndex === "first" ? 0 : choices.length - 1]?.focus({ preventScroll: true })
       })
     })
   }
@@ -84,22 +91,19 @@ export function RoundedSelect({ children, className = "", style, value, disabled
     const dismiss = (event: PointerEvent) => {
       if (!triggerRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) closeMenu()
     }
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); closeMenu(true) }
-    }
     const scroll = (event: Event) => {
       if (!menuRef.current?.contains(event.target as Node)) closeMenu()
     }
     document.addEventListener("pointerdown", dismiss)
-    document.addEventListener("keydown", escape)
     document.addEventListener("scroll", scroll, true)
     window.addEventListener("resize", closeOnResize)
+    window.visualViewport?.addEventListener("resize", closeOnResize)
     function closeOnResize() { closeMenu() }
     return () => {
       document.removeEventListener("pointerdown", dismiss)
-      document.removeEventListener("keydown", escape)
       document.removeEventListener("scroll", scroll, true)
       window.removeEventListener("resize", closeOnResize)
+      window.visualViewport?.removeEventListener("resize", closeOnResize)
     }
   }, [present])
 
@@ -109,9 +113,16 @@ export function RoundedSelect({ children, className = "", style, value, disabled
   }, [])
 
   return (
-    <span className={`sp-rounded-select ${className}`} style={style}>
+    <span className={`sp-rounded-select ${className}`} style={style} onKeyDown={(event) => {
+      if (event.key !== "Escape" || !menuRequested.current) return
+      event.preventDefault()
+      event.stopPropagation()
+      closeMenu(true)
+    }}>
       <select {...nativeProps} id={id} value={value} disabled={disabled} required={required} className="sp-rounded-select-native" tabIndex={-1} aria-hidden="true" onFocus={() => triggerRef.current?.focus()} onInvalid={(event) => { event.preventDefault(); triggerRef.current?.focus() }} onChange={(event) => onChange?.({ target: { value: event.target.value } })}>{children}</select>
-      <button ref={triggerRef} type="button" className="sp-rounded-select-trigger" title={title} aria-label={nativeProps["aria-label"] ?? (labelText ? `${labelText}: ${selected?.label ?? ""}` : undefined)} aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} aria-required={required || undefined} disabled={disabled} onClick={() => open ? closeMenu() : openMenu()} onKeyDown={(event) => {
+      <button ref={triggerRef} type="button" className="sp-rounded-select-trigger" title={title} aria-label={nativeProps["aria-label"] ?? (labelText ? `${labelText}: ${selected?.label ?? ""}` : undefined)} aria-haspopup="listbox" aria-expanded={open} aria-controls={present ? menuId : undefined} aria-required={required || undefined} disabled={disabled}
+        onPointerDown={(event) => { if (event.button === 0 && menuRequested.current) event.preventDefault() }}
+        onClick={() => menuRequested.current ? closeMenu(true) : openMenu()} onKeyDown={(event) => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault()
           openMenu(event.key === "ArrowDown" ? "first" : "last")
@@ -121,7 +132,11 @@ export function RoundedSelect({ children, className = "", style, value, disabled
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       {present && createPortal(
-        <div ref={menuRef} id={menuId} role="listbox" aria-label={nativeProps["aria-label"] ?? labelText ?? title ?? "Choose an option"} className="sp-rounded-select-menu" data-open={open} data-placement={placement} style={menuStyle} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) closeMenu() }} onKeyDown={(event) => {
+        <div ref={menuRef} id={menuId} role="listbox" aria-label={nativeProps["aria-label"] || labelText || title || "Choose an option"} className="sp-rounded-select-menu" data-open={open} data-placement={placement} style={menuStyle} inert={!open} onBlur={(event) => {
+          // A second press moves focus to the trigger before its click toggles the menu.
+          if (event.relatedTarget !== triggerRef.current && !event.currentTarget.contains(event.relatedTarget)) closeMenu()
+        }} onKeyDown={(event) => {
+          if (event.key === "Tab") { closeMenu(true); return }
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
           event.preventDefault()
           const choices = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')]

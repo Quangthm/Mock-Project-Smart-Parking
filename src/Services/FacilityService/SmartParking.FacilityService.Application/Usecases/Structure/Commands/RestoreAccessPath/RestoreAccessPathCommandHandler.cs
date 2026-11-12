@@ -7,7 +7,7 @@ namespace SmartParking.FacilityService.Application.Usecases.Structure.Commands.R
 
 public sealed class RestoreAccessPathCommandHandler(
     IOwnerScopeResolver scopeResolver,
-    IStructureUnitOfWork unitOfWork,
+    IMediator mediator,
     ILogger<RestoreAccessPathCommandHandler> logger)
     : IRequestHandler<RestoreAccessPathCommand>
 {
@@ -15,7 +15,7 @@ public sealed class RestoreAccessPathCommandHandler(
     {
         logger.LogInformation("Restoring access path {PathId} in site {SiteId}", request.PathId, request.SiteId);
         var owner = await scopeResolver.ResolveAsync(request.TenantId, ct);
-        await using var session = await unitOfWork.BeginEditAsync(owner, request.SiteId, ct);
+        await using var session = await mediator.Send(new BeginStructureEditCommand(owner, request.SiteId), ct);
         session.Structure.RestorePath(request.PathId);
         await session.CommitAsync(ct);
     }

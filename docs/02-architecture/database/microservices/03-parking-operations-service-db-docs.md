@@ -1,10 +1,19 @@
 # Parking Operations Service — Database Documentation
 
+## Reservation first-slice schema status — 9 November 2026
+
+Only the original `scripts/database/microservices/03b-reservation-operations-service-db.sql` is modified. New declarations include durable `reservation_requests`, MassTransit inbox/outbox, versioned platform/site `operational_policies`, and nullable `reservations.accepted_operational_policy_snapshot` / `active_claim_slot_id`. Platform policies contain all required values; nullable site values inherit. Effective-range exclusions and revision uniqueness reject ambiguous active histories. Values and applied revision references must be captured at acceptance; finalization/snapshot writes are gated pending commercial producers and D4c proof.
+
+The separately authorized [reservation default seed](../../../../scripts/database/seeds/03b-reservation-policy-defaults.sql) inserts one fixed platform revision without overwriting existing revisions. It contains approved defaults, no tariffs/quotas/sites, no invented Owner bounds, and no default late-tolerance enablement. Every site must explicitly choose enabled or disabled. Override bounds use minutes except count/limit keys; only the approved 15–30 minute arrival bound is seeded. The full policy-management API/catalogue remains teammate work.
+
+CREATE IF NOT EXISTS is fresh-install/replay only: it cannot upgrade old tables or remove installed triggers. Historical overlay/trigger descriptions below do not authorize new overlays or prove current checkout/deployment state. Existing shared-volume transition needs explicit owner review. No database has been changed by this task. See [implementation gates](../../architecture-decisions/reservation-first-slice-implementation-proposal.md) and [deployment checks](../../../04-testing/reports/SPARK-273-deployment-checklist.md).
+
+
 > **Service**: Parking Operations Service (`OperationsDb` — logical, triển khai trên 2 DB vật lý)  
 > **Database files**: [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) → `smartpark_facility`; [`03b-reservation-operations-service-db.sql`](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) → `smartpark_operations`<br>
 > **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB27–DB30/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
-> **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và audit (`audit_logs`).
+> **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và sự kiện audit qua transactional outbox.
 
 ---
 
@@ -44,7 +53,7 @@ smartpark_facility (03a)                              smartpark_operations (03b)
                                                      │ monthly_passes               │
                                                      │ operational_incidents        │
                                                      │ search_facility_projections  │
-                                                     │ audit_logs                   │
+                                                     │ transactional audit outbox   │
                                                      └──────────────────────────────┘
 ```
 
@@ -236,9 +245,11 @@ Bảng chiếu dữ liệu phục vụ tìm kiếm bãi xe theo tọa độ GPS 
 
 ---
 
-## 12. Bảng `audit_logs` — Nhật ký kiểm toán cổng (Zero Cascade)
+## 12. Durable audit events
 
-Ghi nhận thao tác mở barie, cưỡng chế gán slot, đổi trạng thái phiên đỗ của Operator. Append-only, không CASCADE. Index `(site_id, created_at DESC)` và `(actor_id)`.
+Audit history belongs to the separate audit service. Operations captures `OperationsGateAuditV1` in its existing PostgreSQL outbox in the same transaction as Gate state changes. The new audit repository/entity/mapping and fresh-schema `audit_logs` declaration are removed. Existing deployed rows are not dropped or migrated. Consumer implementation and seven-year audit retention from the policy catalogue belong to the audit owner, not an Operations audit table.
+
+Audit-disabled effectful Gate writes return 503. Broker unavailability with configured capture retains outbox work. The audit queue must exist and be bound before delivery starts; durable exchange alone does not retain events without a queue. See the deployment checklist above.
 
 ---
 
@@ -291,3 +302,9 @@ Chi tiết quyết định: `docs/04-testing/reports/refactor-Docker Setup & Fun
 |---|---|
 | `uuid-ossp` | Hàm `uuid_generate_v4()` sinh khóa chính |
 | `btree_gist` | Hỗ trợ `EXCLUDE USING gist` cho reservations/slot_allocations/monthly_passes |
+
+## Application safeguard replacement
+
+The original Operations declaration script no longer creates `guard_structure_edit` or `record_reservation_confirmation`. Direct handlers take the transaction-scoped site lock before reads. UoW verifies that lock, rejects held/inactive commitments and scope changes, preserves the first confirmation timestamp and accepted policy snapshot, and increments aggregate concurrency versions. No current confirmation workflow is exposed: the timestamp does not prove D4c.
+
+These guards and transactional audit capture apply only to the supported repository/UoW handlers. Direct SQL, bulk writes, direct DbContext saves, cascades and uncoordinated writers bypass them. PostgreSQL concurrency/rollback verification remains pending; the source refactor is not evidence of deployment correctness.

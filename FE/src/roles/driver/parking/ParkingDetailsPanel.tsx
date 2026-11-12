@@ -3,6 +3,7 @@ import type { DrivingRoute } from "../../../lib/routingApi"
 import { useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
+import { buildExternalDirectionsUrl } from "../../../lib/driverDiscoveryApi"
 
 type RouteStatus = "idle" | "locating" | "loading" | "ready" | "error"
 export type VehicleCapacityInfo = { status: "loading" | "ready" | "unavailable"; car: number | null; motorcycle: number | null }
@@ -31,6 +32,12 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
   const canBook = lot.status === "active" && available !== null && available > 0
   const hourlyRate = Number.isFinite(lot.hourlyRate) ? `${lot.hourlyRate.toLocaleString("vi-VN")} VND / hour` : "Rate unavailable"
   const dailyRate = Number.isFinite(lot.dailyRate) ? `${lot.dailyRate.toLocaleString("vi-VN")} VND / day` : null
+  const hasCoordinates = Number.isFinite(lot.lat) && Number.isFinite(lot.lng) && !(lot.lat === 0 && lot.lng === 0)
+
+  // AC-1: hand off navigation to an external map without changing internal routing.
+  function openExternalDirections() {
+    window.open(buildExternalDirectionsUrl(lot.lat, lot.lng, lot.name), "_blank", "noopener,noreferrer")
+  }
 
   return (
     <aside className="find-parking-details-panel" aria-label="Parking details">
@@ -100,6 +107,9 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
           <UntitledIcon name="map-pin" size={16} />{routeStatus === "idle" ? "Direction" : "Close directions"}
         </button>
         <button type="button" className="btn-primary" onClick={onBook} disabled={!canBook}>Book Now</button>
+        <button type="button" className="btn-outline col-span-2" onClick={openExternalDirections} disabled={!!coordinateError || !hasCoordinates}>
+          <UntitledIcon name="map" size={16} />Open in Google Maps
+        </button>
         {!canBook && <p>{available === null ? "Booking is unavailable while availability is unknown." : lot.status !== "active" ? "This parking lot is unavailable." : "No spaces are currently available."}</p>}
       </div>
       {policyOpen && <LotPolicyModal lot={lot} onClose={() => setPolicyOpen(false)} />}

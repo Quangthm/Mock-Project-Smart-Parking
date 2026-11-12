@@ -11,6 +11,5 @@ public class GenericRepository<TEntity>(ReservationDbContext db) : IRepository<T
     public Task AddAsync(TEntity entity, CancellationToken cancellationToken) =>
         Set.AddAsync(entity, cancellationToken).AsTask();
 
-    public void Update(TEntity entity) => Set.Update(entity);
     public void Remove(TEntity entity) => Set.Remove(entity);
 }

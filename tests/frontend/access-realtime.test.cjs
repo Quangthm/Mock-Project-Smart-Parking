@@ -56,7 +56,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 test('uses the current token factory and handles one targeted revocation', async () => {
   const f = fixture();
   await settle();
-  assert.equal(f.url, 'http://localhost:5035/hubs/access');
+  assert.equal(f.url, 'http://localhost:5035/hubs/operators');
   assert.equal(await f.options.accessTokenFactory(), 'current-token');
   const event = f.listeners.get('AccessRevoked');
   event({ reasonCode: 'USER_LOCKED' });

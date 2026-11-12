@@ -16,9 +16,10 @@ import { request } from "../../../lib/authApi"
 import { showUiToast } from "../../../lib/uiToast"
 import { formatStatus } from "../../../lib/formatStatus"
 import { useDialogKeyboard } from "../../../components/ui/useDialogKeyboard"
+import { useServerRefresh } from "../../../lib/serverRefresh"
 
 export function Applications() {
-  const { accentColor } = useApp()
+  const { accentColor, user } = useApp()
   const [apps, setApps] = useState<OwnerApplicationRecord[]>([])
   const [contractDrafts, setContractDrafts] = useState<Record<string, ContractDraftRecord | null>>({})
   const [modelApp, setModelApp] = useState<OwnerApplicationRecord | null>(null)
@@ -39,11 +40,18 @@ export function Applications() {
 
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState(1)
+  const [refreshing, setRefreshing] = useState(false)
+  const [backgroundRevision, setBackgroundRevision] = useState(0)
+  useServerRefresh(user?.role === "admin" ? user.id : undefined, () => {
+    if (!busy && !loading && !refreshing) setBackgroundRevision(value => value + 1)
+  })
 
   useEffect(() => {
     let active = true
 
-    setLoading(true)
+    if (busy) return
+    if (!apps.length && !backgroundRevision) setLoading(true)
+    setRefreshing(true)
 
     setError("")
 
@@ -62,13 +70,13 @@ export function Applications() {
       })
 
       .finally(() => {
-        if (active) setLoading(false)
+        if (active) { setLoading(false); setRefreshing(false) }
       })
 
     return () => {
       active = false
     }
-  }, [reload])
+  }, [reload, backgroundRevision, busy, user?.id])
 
   useEffect(() => {
     const refreshDrafts = () => setContractDrafts(Object.fromEntries(apps.map(app => [app.id, loadContractDraft(app.id)])))

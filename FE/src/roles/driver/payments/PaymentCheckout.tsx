@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { classifyPaymentStatus, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
+import { useServerRefresh } from "../../../lib/serverRefresh"
 import qrLogo from "../../../assets/payment-qr.png"
 import "./payment-checkout.css"
 
@@ -15,20 +16,27 @@ export function PaymentCheckout({ showMethodPicker = true }: { showMethodPicker?
 
   useEffect(() => {
     if (!checkout || status !== "pending") return
-    let active = true
-    const checkStatus = async () => {
+    const timer = window.setInterval(() => setNow(Date.now()), 5000)
+    return () => window.clearInterval(timer)
+  }, [checkout, status])
+
+  useEffect(() => {
+    if (!checkout) return
+    setNow(Date.now())
+  }, [checkout])
+
+  const transactionId = checkout?.paymentTransactionId
+  useServerRefresh(status === "pending" && transactionId ? transactionId + ":" + orderId : undefined, async (isCurrent) => {
+      if (!transactionId) return
       try {
-        const result = await paymentApi.status(checkout.paymentTransactionId)
-        if (active && result.orderId.toLowerCase() === orderId.trim().toLowerCase()) {
-          setStatus(classifyPaymentStatus(result))
+        const result = await paymentApi.status(transactionId)
+        if (isCurrent() && result.orderId.toLowerCase() === orderId.trim().toLowerCase()) {
+          setStatus(current => current === "pending" ? classifyPaymentStatus(result) : current)
         }
       } catch {
         // An unavailable status lookup does not prove payment succeeded or failed.
       }
-    }
-    const interval = window.setInterval(() => { setNow(Date.now()); void checkStatus() }, 5000)
-    return () => { active = false; window.clearInterval(interval) }
-  }, [checkout, orderId, status])
+  }, 5000)
 
   async function pay(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

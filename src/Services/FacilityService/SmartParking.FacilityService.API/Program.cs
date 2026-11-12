@@ -9,6 +9,7 @@ using SmartParking.FacilityService.Application.DTOs;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Infrastructure;
+using SmartParking.FacilityService.Application.Reservations;
 
 namespace SmartParking.FacilityService.API;
 
@@ -41,13 +42,12 @@ public static class FacilityHost
         builder.Services.AddScoped<IOwnerOnboardingStore, OwnerOnboardingStore>();
         builder.Services.AddScoped<IFacilityDirectoryStore, FacilityDirectoryStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-        builder.Services.AddScoped<IStructureUnitOfWork, StructureUnitOfWork>();
+        builder.Services.AddScoped<IReservationDependencyRepository, ReservationDependencyRepository>();
         builder.Services.AddSingleton(_ => new ParkingGateConnectionPool(
             builder.Configuration.GetConnectionString("Parking")
                 ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking."),
             builder.Configuration.GetValue("Services:ParkingGateLimit", 16)));
-        builder.Services.AddScoped<IStructureSynchronizationStore, PostgresStructureSynchronizationStore>();
-        builder.Services.AddScoped<IStructureSynchronizationService, StructureSynchronizationService>();
+        builder.Services.AddScoped<IStructureSynchronizationRepository, PostgresStructureSynchronizationRepository>();
         builder.Services.AddHostedService<StructureSynchronizationWorker>();
         builder.Services.AddScoped<IStructureOperationStore, StructureOperationStore>();
         builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
@@ -56,11 +56,29 @@ public static class FacilityHost
         builder.Services.AddScoped<IOperatorSiteAuthorizer>(s => s.GetRequiredService<OperatorSiteClient>());
         builder.Services.AddScoped<IOperatorOperationsStore, OperatorOperationsStore>();
         builder.Services.AddScoped<OperatorOperationsService>();
-        builder.Services.AddScoped<IOperatorGateSlotStore, OperatorGateSlotStore>();
+        builder.Services.AddScoped<IOperatorGateSlotRepository, OperatorGateSlotRepository>();
         builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
 
         // Application Layer CQRS & Pipeline Behaviors
         builder.Services.AddApplicationServices();
+        builder.Services.AddExceptionHandler<FacilityExceptionHandler>();
+        ApiErrors.Configure(builder.Services);
+        builder.Services.AddReservationServiceAuthentication(builder.Configuration);
+        builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
+            ReservationServiceAuthentication.Scheme, options =>
+            {
+                options.Events.OnChallenge = async context =>
+                {
+                    context.HandleResponse();
+                    await ApiErrors.WriteAsync(context.HttpContext, 401, "UNAUTHENTICATED",
+                        "A valid Operations service credential is required.", ct: context.HttpContext.RequestAborted);
+                };
+                options.Events.OnForbidden = async context =>
+                {
+                    await ApiErrors.WriteAsync(context.HttpContext, 403, "FORBIDDEN",
+                        "The service is not permitted to use this capability.", ct: context.HttpContext.RequestAborted);
+                };
+            });
 
         builder.Services.AddControllers()
             .AddJsonOptions(options =>
@@ -70,14 +88,17 @@ public static class FacilityHost
             });
         var app = builder.Build();
         app.UseCors();
-        app.UseMiddleware<ExceptionHandlingMiddleware>();
+        ApiErrors.Use(app);
         app.Use(async (context, next) =>
         {
-            if (context.Request.Path.StartsWithSegments("/internal") && !CryptographicOperations.FixedTimeEquals(
+            if (context.Request.Path.StartsWithSegments("/internal") &&
+                !context.Request.Path.StartsWithSegments("/internal/reservation-dependencies") && !CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
             await next(context);
         });
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapControllers();
         return app;
     }
