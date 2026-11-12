@@ -651,6 +651,7 @@ export const paymentApi = {
     sessionId?: string
     reservationId?: string
     plateNumber?: string
+    imageData?: string
     developmentTestPayOs?: boolean
   }) => {
     const referenceId = body.reservationId ?? body.sessionId
@@ -661,7 +662,7 @@ export const paymentApi = {
     return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
       path,
       "POST",
-      { plateNumber: body.plateNumber },
+      { plateNumber: body.plateNumber, imageData: body.imageData },
     )
   },
   calculate: (body: {
