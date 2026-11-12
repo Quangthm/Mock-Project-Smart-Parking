@@ -32,10 +32,11 @@ public sealed record DepositOrderResult(string State, Guid? OrderId, DepositOrde
 public sealed record VerifiedCollection(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
     Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
 public sealed record CollectionLookup(string State, IReadOnlyList<VerifiedCollection> Collections);
+public sealed record BookingVehicle(string VehicleType, string? DisplayLabel);
 public sealed record BookingView(Guid ReservationId, string State, Guid SiteId, Guid? RequestedSlotId,
     DateTimeOffset Start, DateTimeOffset End, DateTimeOffset? HoldExpiresAt, Guid? OrderId,
     decimal? BookedAmount, decimal? DepositAmount, string? Currency, DateTimeOffset? ConfirmedAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt, BookingVehicle? Vehicle = null);
 public sealed record ReservationConfirmedV1(Guid EventId, Guid ReservationId, Guid AccountId,
     Guid TenantId, Guid SiteId, DateTimeOffset ConfirmedAt);
 
@@ -72,7 +73,7 @@ public interface IReservationBookingRepository : Common.Interfaces.Persistence.I
 {
     Task<ReservationRow?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct);
     Task<IReadOnlyList<ReservationRow>> ListOwnBookingsAsync(Guid accountId, int take,
-        DateTimeOffset? before, Guid? beforeId, CancellationToken ct);
+        DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null);
     Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct);
     Task RequireDurableConfirmationAsync(CancellationToken ct);
     Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct);
@@ -87,5 +88,6 @@ public sealed record PreviewReservationPriceQuery(ReservationPricePreview Intent
 public sealed record ReviewReservationTermsCommand(BookingSelection Intent) : IRequest<ReviewedTerms>;
 public sealed record ProgressReservationCommand(Guid RequestId) : IRequest;
 public sealed record ReadOwnBookingQuery(Guid Id) : IRequest<BookingView>;
-public sealed record ReadOwnBookingsQuery(int PageSize = 20, DateTimeOffset? Before = null, Guid? BeforeId = null)
+public sealed record ReadOwnBookingsQuery(int PageSize = 20, DateTimeOffset? Before = null, Guid? BeforeId = null,
+    DateTimeOffset? From = null, DateTimeOffset? To = null)
     : IRequest<IReadOnlyList<BookingView>>;

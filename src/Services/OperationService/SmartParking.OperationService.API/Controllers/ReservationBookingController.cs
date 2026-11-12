@@ -24,6 +24,7 @@ public sealed class ReservationBookingController(IMediator mediator) : ApiContro
 
     [HttpGet("/api/me/reservations")]
     public async Task<IActionResult> List([FromQuery] int pageSize = 20, [FromQuery] DateTimeOffset? before = null,
-        [FromQuery] Guid? beforeId = null, CancellationToken ct = default) =>
-        Ok(new { success = true, data = await Mediator.Send(new ReadOwnBookingsQuery(pageSize, before, beforeId), ct) });
+        [FromQuery] Guid? beforeId = null, [FromQuery] DateTimeOffset? from = null,
+        [FromQuery] DateTimeOffset? to = null, CancellationToken ct = default) =>
+        Ok(new { success = true, data = await Mediator.Send(new ReadOwnBookingsQuery(pageSize, before, beforeId, from, to), ct) });
 }

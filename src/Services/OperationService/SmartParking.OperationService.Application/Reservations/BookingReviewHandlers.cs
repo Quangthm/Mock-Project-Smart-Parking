@@ -96,6 +96,8 @@ public sealed class ReadOwnBookingsValidator : AbstractValidator<ReadOwnBookings
         RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
         RuleFor(x => x).Must(x => (x.Before is null) == (x.BeforeId is null));
         RuleFor(x => x.BeforeId).Must(x => x is null || x != Guid.Empty);
+        RuleFor(x => x).Must(x => (x.From is null) == (x.To is null));
+        RuleFor(x => x).Must(x => x.From is null || x.To > x.From);
     }
 }
 public sealed class ReadOwnBookingsHandler(ICurrentActor actor, IReservationBookingRepository bookings)
@@ -104,7 +106,7 @@ public sealed class ReadOwnBookingsHandler(ICurrentActor actor, IReservationBook
     public async Task<IReadOnlyList<BookingView>> Handle(ReadOwnBookingsQuery query, CancellationToken ct)
     {
         var (_, account) = AdmissionActor.RequireDriver(actor);
-        return (await bookings.ListOwnBookingsAsync(account, query.PageSize, query.Before, query.BeforeId, ct))
+        return (await bookings.ListOwnBookingsAsync(account, query.PageSize, query.Before, query.BeforeId, ct, query.From, query.To))
             .Select(BookingContracts.View).ToArray();
     }
 }
@@ -138,5 +140,6 @@ internal static class BookingContracts
     }
     public static BookingView View(ReservationRow row) => new(row.Id, row.Status, row.SiteId, row.TargetSlotId,
         row.ExpectedStartTime, row.ExpectedEndTime, row.HoldExpiresAt, row.PaymentOrderId,
-        row.BookedAmount, row.DepositAmount, row.Currency, row.ConfirmedAt, row.CreatedAt);
+        row.BookedAmount, row.DepositAmount, row.Currency, row.ConfirmedAt, row.CreatedAt,
+        string.IsNullOrWhiteSpace(row.VehicleType) ? null : new(row.VehicleType, row.OriginalPlate ?? row.NormalizedPlate));
 }

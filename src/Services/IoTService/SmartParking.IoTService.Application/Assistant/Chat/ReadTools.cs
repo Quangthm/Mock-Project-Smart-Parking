@@ -10,8 +10,8 @@ namespace SmartParking.IoTService.Application.Assistant.Chat;
 public sealed record ReadToolOptions(bool Vehicles = false, bool Reservations = false, bool Search = false, int SearchMaxAgeSeconds = 0, int SearchSkewSeconds = 0);
 public sealed class OwnerReadFailure(string code) : Exception { public string Code { get; } = code; }
 public sealed record VehicleSummary(Guid Id, string VehicleType, string DisplayLabel);
-public sealed record ReservationVehicle(string VehicleType, string DisplayLabel);
-public sealed record ReservationSummary(Guid Id, Guid SiteId, ReservationVehicle Vehicle, DateTimeOffset StartAt,
+public sealed record ReservationVehicle(string VehicleType, string? DisplayLabel);
+public sealed record ReservationSummary(Guid Id, Guid SiteId, ReservationVehicle? Vehicle, DateTimeOffset StartAt,
     DateTimeOffset EndAt, string Status, DateTimeOffset AsOf);
 public sealed record ReservationPage(ReservationSummary[] Items, string? NextCursor, DateTimeOffset AsOf);
 public sealed record ReservationDetail(ReservationSummary Reservation, DateTimeOffset AsOf);

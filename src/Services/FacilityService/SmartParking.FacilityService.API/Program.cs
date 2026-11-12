@@ -113,6 +113,7 @@ public static class FacilityHost
             catch (BadHttpRequestException e) when (DiscoveryCatalogueEndpoints.IsDiscoveryPath(context.Request.Path))
             {
                 context.Response.StatusCode = e.StatusCode;
+                context.Response.Headers.CacheControl = "no-store";
                 await context.Response.WriteAsJsonAsync(new { success=false, code="VALIDATION_FAILED",
                     message="Discovery request could not complete.", errors=Array.Empty<string>(), traceId=context.TraceIdentifier });
             }

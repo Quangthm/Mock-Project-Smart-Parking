@@ -37,6 +37,7 @@ public static class DiscoveryHosting
             ? uri : null;
     public static void AddParkingSearch(this WebApplicationBuilder builder)
     {
+        builder.Services.AddDataProtection();
         var settings = builder.Configuration.GetSection("Discovery");
         var origins = new DiscoveryOrigins(Origin(settings["FacilityOrigin"]), Origin(settings["PaymentOrigin"]), settings["PaymentServiceKey"]);
         var age = int.TryParse(settings["MaxAgeSeconds"], out var a) ? a : 0;
