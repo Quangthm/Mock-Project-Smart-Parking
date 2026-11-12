@@ -75,10 +75,12 @@ public static class ReservationMessaging
             services.AddScoped<IReservationFactsPublisher, ReservationFactsPublisher>();
         }
         var restrictedBroker = admissionEnabled || auditEnabled;
-        var brokerUser = restrictedBroker ? configuration["ReservationAdmission:BrokerUser"] :
-            configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark";
-        var brokerPassword = restrictedBroker ? configuration["ReservationAdmission:BrokerPassword"] :
-            configuration["SMARTPARK_RABBITMQ_PASSWORD"];
+        var brokerUser = (restrictedBroker && !string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerUser"]))
+            ? configuration["ReservationAdmission:BrokerUser"]
+            : configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark";
+        var brokerPassword = (restrictedBroker && !string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerPassword"]))
+            ? configuration["ReservationAdmission:BrokerPassword"]
+            : configuration["SMARTPARK_RABBITMQ_PASSWORD"];
         if (string.IsNullOrWhiteSpace(brokerUser) || string.IsNullOrWhiteSpace(brokerPassword))
             throw new InvalidOperationException("Configure Operations broker credentials for enabled messaging.");
         services.AddMassTransit(registration =>

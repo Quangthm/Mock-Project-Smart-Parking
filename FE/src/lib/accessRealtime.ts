@@ -34,8 +34,14 @@ export function watchAccessRevocation(onRevoked: (reason: AccessRevokedReason) =
     if (stopped || starting || connection.state !== "Disconnected" || document.visibilityState === "hidden") return
     clearTimeout(retry)
     retry = undefined
-    starting = connection.start().catch(() => {
+    starting = connection.start().catch((err: any) => {
       if (!stopped) {
+        const status = err?.statusCode || (err && (err as any).status)
+        const msg = String(err?.message || err || "")
+        if (status === 403 || msg.includes("403") || msg.includes("Forbidden")) {
+          stop()
+          return
+        }
         // Realtime is optional; protected HTTP requests still enforce access.
         console.warn("Access updates are temporarily unavailable; retrying.")
         retry = setTimeout(connect, 10_000)

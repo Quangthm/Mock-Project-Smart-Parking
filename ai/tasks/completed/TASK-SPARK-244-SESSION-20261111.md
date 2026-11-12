@@ -111,14 +111,34 @@
 
 ---
 
-## 9. Git Status & Tracking
-- **Branch:** `feat/SPARK-244-realtime-monitoring`
-- **Remote Tracking:** `origin/feat/SPARK-244-realtime-monitoring` (in sync, up to date)
-- **Head Commit:** `7296286b`
-- **Working Tree:** Clean (0 unstaged, 0 untracked)
+---
+
+## 9. Demo Site Seeding Fix (03-reservation.sql)
+- **Problem:** When executing `.\scripts\seed-demo-site.ps1`, step `[5/6] Seeding reservation DB...` failed with PostgreSQL error:
+  `ERROR: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
+- **Root Cause:** In `scripts/database/seeds/demo/03-reservation.sql:110`, an `INSERT INTO operational_policies ... ON CONFLICT (tenant_id, site_id) DO UPDATE ...` was used. However, table `operational_policies` in `operations-db` does not define a unique constraint on `(tenant_id, site_id)` (it uses revision versioning and GIST exclusion constraints).
+- **Fix:**
+  - Aligned `operational_policies` seed query with the pattern already used by `site_capacity_pools` and `operational_capacity_configs`: an idempotent `UPDATE ... WHERE tenant_id = ... AND site_id = ...` followed by `INSERT INTO operational_policies (...) SELECT ... WHERE NOT EXISTS (...)`.
+- **Verification:**
+  - Successfully executed `powershell -ExecutionPolicy Bypass -File .\scripts\seed-demo-site.ps1` with all 6 steps passing:
+    - `[1/6] Checking schema containers... OK (user-db, facility-db, operations-db)`
+    - `[2/6] Resolving demo accounts... OK (1 owner, 1 operator)`
+    - `[3/6] Seeding identity DB... OK (tenant + 2 accounts + 1 grant)`
+    - `[4/6] Seeding facility DB... OK (1 site, 2 units, 48 slots)`
+    - `[5/6] Seeding reservation DB... OK (2 pools, 2 configs, 1 policy)`
+    - `[6/6] Demo data ready.`
+  - Verified idempotency by re-running the seed script consecutively with 0 errors.
 
 ---
 
-## 10. Next Steps
-- PR #68 CI/CD GitHub Actions workflow will now run completely green.
+## 10. Git Status & Tracking
+- **Branch:** `feat/SPARK-244-realtime-monitoring`
+- **Remote Tracking:** `origin/feat/SPARK-244-realtime-monitoring`
+- **Working Tree:** Clean
+
+---
+
+## 11. Next Steps
+- PR #68 CI/CD GitHub Actions workflow will run completely green.
+- Demo environment is completely verified and seedable in Docker.
 - Ready for final approval and merge into `develop`.
