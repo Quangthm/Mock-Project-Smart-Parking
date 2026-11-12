@@ -19,7 +19,7 @@ function load(file, imports = {}, globals = {}) {
     if (name.endsWith('/serverRefresh')) return { useServerRefresh() {} };
     if (name === 'motion/react') return { motion: { div: 'div' }, useReducedMotion: () => true };
     if (name === 'react-dom') return { createPortal: content => content };
-    if (name === 'motion/react') return { motion: new Proxy({}, { get: () => 'div' }), useReducedMotion: () => false };
+    if (name.startsWith('motion')) return { motion: new Proxy({}, { get: () => 'div' }), useReducedMotion: () => false };
     if (name.endsWith("/ui/RoundedSelect")) return { RoundedSelect: "select" };
     if (name.endsWith("/ui/PageHeader")) return { PageHeader: "page-header" };
     if (name.endsWith("/ui/ParkingStatus")) return { ParkingStatus: "parking-status" }; if (name.endsWith("/ui/Badge")) return { Badge: "badge" };

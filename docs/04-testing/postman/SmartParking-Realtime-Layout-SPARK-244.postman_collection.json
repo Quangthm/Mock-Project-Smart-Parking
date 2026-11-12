@@ -1,0 +1,1357 @@
+{
+  "info": {
+    "name": "SmartParking - SPARK-244 Realtime Layout Monitoring (manual verification)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "# SPARK-244 Realtime operator layout monitoring - manual verification\n\nExercises the REST surfaces that back the SPARK-244 realtime operator channel on the SPARK-228 operational-layout read path. Route paths, request records, response fields and status codes are taken from the worktree source, not from a summary:\n\n- `src/Services/FacilityService/SmartParking.FacilityService.API/Program.cs` (operational-layout, internal gate slot routes)\n- `src/Services/FacilityService/SmartParking.FacilityService.Application/OperationalLayoutProjection.cs` (wire DTO)\n- `src/Services/FacilityService/SmartParking.FacilityService.Persistence/PostgresOperationalLayoutReader.cs` (snapshot composition)\n- `src/Services/FacilityService/SmartParking.FacilityService.Persistence/OperatorGateSlotStore.cs` (claim/release SQL)\n- `src/Services/OperationService/SmartParking.OperationService.API/Controllers/*.cs` and `Persistence/ReservationGateStore.cs` (walk-in outbox writes)\n- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Clients/OperatorIdentityClient.cs` (403 mapping)\n- `scripts/database/overlay/realtime-outbox.sql` and `realtime-projection.sql` (DB-only checks)\n\n## Folders\n\n- **00 - Setup (run first)** - login owner/operator/admin/driver, generate `runSuffix` and the walk-in plate values.\n- **01 - Operator layout snapshot** - GET operational-layout: site, contract version, metrics, zones, floors, slot visual states.\n- **02 - Outbox / idempotency** - drive the walk-in check-in/check-out REST path that writes `outbox_events`; DB-only SQL checks are documented, not executed by Postman.\n- **03 - Release-once** - internal claim, then double release: the second `UPDATE` matches zero rows and the slot stays AVAILABLE.\n- **04 - Zone-only reserved count** - assert `zoneOnlyReservedCount` and the reader invariant; true zone-level reservation creation is BLOCKED (no source in the code).\n- **05 - Operator scope** - assigned/unassigned operator scope reads, the 403 `OPERATOR_LOT_UNASSIGNED` REST mapping, and the role gate.\n- **06 - Realtime delivery / latency** - REST read/write latency proxies only. A real SignalR connect/delta/reconnect case is BLOCKED because Postman cannot perform a SignalR/WebSocket handshake.\n\n## Run order\n\nRun folders top to bottom. Folder 00 must run first: it stores all four tokens and generates `runSuffix`. Folder 03 mutates one seeded slot and restores it. Folder 02/06 create walk-in sessions on `seededSiteId` and check them out again.\n\n## Default local ports\n\n- UserService: `http://localhost:5035` (`userServiceUrl`)\n- OperationService: `http://localhost:5055` (`reservationServiceUrl`, the SPARK-238 key name)\n- FacilityService: `http://localhost:5045` (`baseUrl`)\n\n## SignalR limitation (important)\n\nPostman cannot open the hub at `/ws/parking-lots/{siteId}/layout`. This collection therefore never claims to verify a WebSocket connection. It verifies the REST surfaces around the hub (gate write -> outbox row -> Facility projection -> operational-layout read) and marks every true SignalR case as **BLOCKED** in `SPARK-244-manual-test-guide.md`. Do not fabricate a REST endpoint for the hub.\n\n## Secrets\n\nThe environment ships real demo emails and the public seeded driver password. `ownerPassword`, `operatorPassword`, `adminPassword` and `serviceKey` are intentionally empty. See the manual guide for the `.env` keys."
+  },
+  "item": [
+    {
+      "name": "00 - Setup (run first)",
+      "description": "Logs in the Owner, the assigned Operator, the Admin and the Driver, and generates the per-run plate values. Run this folder before any other folder.",
+      "item": [
+        {
+          "name": "0.1 Login Owner",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const suffix = Date.now().toString(36).slice(-5) + Math.floor(Math.random() * 1000);",
+                  "pm.environment.set('runSuffix', suffix);",
+                  "pm.environment.set('walkInPlate', 'SP244-' + suffix.toUpperCase());",
+                  "pm.environment.set('probePlate', 'SP244P-' + suffix.toUpperCase());",
+                  "console.log('runSuffix=' + suffix);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is owner', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('owner');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('ownerToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_OWNER_EMAIL/PASSWORD from the repository root .env. Stores `ownerToken` and generates `runSuffix`, `walkInPlate`, `probePlate`."
+          }
+        },
+        {
+          "name": "0.2 Login Operator (assigned, SLOT_OVERRIDE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is operator', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('operator');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('operatorToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{operatorEmail}}\",\n  \"password\": \"{{operatorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_OPERATOR_EMAIL/PASSWORD. The demo seed assigns this account to seededSiteId and grants SLOT_OVERRIDE. Stores `operatorToken`."
+          }
+        },
+        {
+          "name": "0.3 Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is admin', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('admin');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('adminToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with SMARTPARK_ADMIN_EMAIL/PASSWORD. Optional for this collection; stores `adminToken`."
+          }
+        },
+        {
+          "name": "0.4 Login Driver",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('login succeeded (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'login failed: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body && body.success, 'login failed: ' + snippet).to.eql(true);",
+                  "  pm.expect(body && body.data, 'missing data in login response: ' + snippet).to.be.an('object');",
+                  "});",
+                  "pm.test('access token present', () => {",
+                  "  pm.expect(body && body.data && body.data.accessToken, 'no accessToken in response: ' + snippet).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('role is driver', () => {",
+                  "  pm.expect(body && body.data && body.data.user && body.data.user.role).to.eql('driver');",
+                  "});",
+                  "if (body && body.data && body.data.accessToken) { pm.environment.set('driverToken', body.data.accessToken); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{driverEmail}}\",\n  \"password\": \"{{driverPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{userServiceUrl}}/api/auth/login",
+            "description": "POST /api/auth/login with the seeded driver driver@gmail.com / Password@123 (public in DataSeeder). Stores `driverToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Operator layout snapshot",
+      "description": "GET /api/parking-lots/{id}/operational-layout against the seeded site. Asserts the wire DTO declared in OperationalLayoutProjection.cs. Slots intentionally carry no eventId/sequenceNumber/siteId (G5: those live on RealtimeEventEnvelope), so 1.1 asserts their absence as the canonical contract; the OpenAPI SlotVisualStateDto now matches the C# record. DB-only checks are not part of this folder.",
+      "item": [
+        {
+          "name": "1.1 Owner snapshot (telemetry, full contract)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'unexpected body: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const payload = (body && body.data) || {};",
+                  "pm.test('site identity matches the seeded site', () => {",
+                  "  pm.expect(payload.siteId).to.eql(pm.environment.get('seededSiteId'));",
+                  "  pm.expect(payload.siteCode).to.be.a('string').and.not.empty;",
+                  "  pm.expect(payload.siteName).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('snapshot contract metadata', () => {",
+                  "  pm.expect(payload.contractVersion).to.eql('1.2.0');",
+                  "  pm.expect(payload.stalenessThresholdSeconds).to.eql(30);",
+                  "  pm.expect(payload.isFresh).to.be.a('boolean');",
+                  "  pm.expect(Number.isFinite(Date.parse(payload.generatedAt)), 'generatedAt is not ISO-8601').to.eql(true);",
+                  "});",
+                  "pm.test('metrics contract', () => {",
+                  "  const m = payload.metrics;",
+                  "  pm.expect(m).to.be.an('object');",
+                  "  ['totalPhysicalCapacity','occupiedCount','reservedCount','availableCarSlots'].forEach(k => pm.expect(m[k], k).to.be.a('number'));",
+                  "  pm.expect(m.motorcycleCapacity).to.be.an('object');",
+                  "  ['maxCapacity','occupiedCount','availableCount'].forEach(k => pm.expect(m.motorcycleCapacity[k], 'motorcycleCapacity.' + k).to.be.a('number'));",
+                  "  pm.expect(m.zoneCapacities).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "pm.test('zone capacity contract', () => {",
+                  "  payload.metrics.zoneCapacities.forEach(zone => {",
+                  "    pm.expect(zone.zoneId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(zone.zoneCode).to.be.a('string').and.not.empty;",
+                  "    pm.expect(zone.floorCode).to.be.a('string');",
+                  "    ['maxCapacity','occupiedCount','allocatedSlotCount','zoneOnlyReservedCount'].forEach(k => pm.expect(zone[k], 'zone.' + k).to.be.a('number'));",
+                  "  });",
+                  "});",
+                  "pm.test('floors contract', () => {",
+                  "  pm.expect(payload.floors).to.be.an('array').that.is.not.empty;",
+                  "  payload.floors.forEach(floor => {",
+                  "    pm.expect(floor.floorId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(floor.floorCode).to.be.a('string').and.not.empty;",
+                  "    pm.expect(floor.name).to.be.a('string');",
+                  "    pm.expect(floor.level).to.be.a('number');",
+                  "    pm.expect(floor.maxCapacity).to.be.a('number');",
+                  "  });",
+                  "});",
+                  "pm.test('slot visual state contract', () => {",
+                  "  pm.expect(payload.slots).to.be.an('array').that.is.not.empty;",
+                  "  const physical = ['AVAILABLE','OCCUPIED','UNKNOWN','MAINTENANCE','UNAVAILABLE'];",
+                  "  const reservation = ['UNRESERVED','RESERVED','PROTECTED','BACKUP'];",
+                  "  payload.slots.forEach(slot => {",
+                  "    pm.expect(slot.slotId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(slot.slotCode).to.be.a('string').and.not.empty;",
+                  "    pm.expect(slot.floorId).to.be.a('string');",
+                  "    pm.expect(slot.floorCode).to.be.a('string');",
+                  "    pm.expect(slot.supportedVehicleType).to.be.a('string');",
+                  "    pm.expect(slot.slotType).to.be.a('string');",
+                  "    pm.expect(physical).to.include(slot.physicalState);",
+                  "    pm.expect(reservation).to.include(slot.reservationState);",
+                  "    pm.expect(slot.isEvCharging).to.be.a('boolean');",
+                  "    pm.expect(slot.isBookable).to.be.a('boolean');",
+                  "    pm.expect(slot).to.have.property('coordinates3d');",
+                  "    pm.expect(slot).to.have.property('features');",
+                  "    pm.expect(slot).to.have.property('operatorContext');",
+                  "    pm.expect(Number.isFinite(Date.parse(slot.updatedAt)), 'updatedAt is not ISO-8601').to.eql(true);",
+                  "  });",
+                  "});",
+                  "pm.test('SPARK-244 per-slot fields are absent (OpenAPI delta not implemented)', () => {",
+                  "  const slot = payload.slots[0];",
+                  "  pm.expect(slot).to.not.have.property('eventId');",
+                  "  pm.expect(slot).to.not.have.property('sequenceNumber');",
+                  "  pm.expect(slot).to.not.have.property('siteId');",
+                  "});",
+                  "if (payload.slots && payload.slots.length) { pm.environment.set('snapshotSlotId', payload.slots[0].slotId); }",
+                  "pm.environment.set('snapshotGeneratedAt', payload.generatedAt);",
+                  "console.log('openapi-vs-code: 3d-digital-twin-openapi.yaml SlotVisualStateDto declares eventId/sequenceNumber/siteId, but OperationalLayoutProjection.cs does not. The snapshot cannot be a per-slot idempotency source.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "GET /api/parking-lots/{id}/operational-layout (FacilityService Program.cs:203-245). Owner token -> LayoutCallerResolver.ResolveOwnerAsync -> Telemetry visibility, so no redaction. Asserts OperationalLayoutProjectionDto/SlotVisualStateDto from OperationalLayoutProjection.cs:18-77. Explicitly asserts that eventId/sequenceNumber/siteId are NOT emitted on slots (canonical contract per G5: envelope-only, guide section 5)."
+          }
+        },
+        {
+          "name": "1.2 Owner snapshot filtered by vehicleType=CAR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope', () => pm.expect(body && body.success).to.eql(true));",
+                  "const payload = (body && body.data) || {};",
+                  "pm.test('only CAR slots are returned', () => {",
+                  "  pm.expect(payload.slots).to.be.an('array');",
+                  "  pm.expect(payload.slots.every(slot => slot.supportedVehicleType === 'CAR'), 'found a non-CAR slot').to.eql(true);",
+                  "});",
+                  "pm.test('metrics are still present after filtering', () => pm.expect(payload.metrics).to.be.an('object'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout?vehicleType=CAR",
+            "description": "PostgresOperationalLayoutReader filters slots[] by vehicleType after computing metrics (reader:161-169), so metrics stay global. The exact-case parse is enforced in Program.cs:214-222."
+          }
+        },
+        {
+          "name": "1.3 Invalid vehicleType (400 INVALID_VEHICLE_TYPE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "pm.test('INVALID_VEHICLE_TYPE', () => pm.expect(body && body.code).to.eql('INVALID_VEHICLE_TYPE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout?vehicleType=BOGUS",
+            "description": "Program.cs:214-222 returns 400 { success:false, code:INVALID_VEHICLE_TYPE } when the value is not CAR/MOTORCYCLE/OVERSIZED with exact casing."
+          }
+        },
+        {
+          "name": "1.4 Unknown floor (400 INVALID_FLOOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "pm.test('INVALID_FLOOR', () => pm.expect(body && body.code).to.eql('INVALID_FLOOR'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout?floor=__NOPE__",
+            "description": "PostgresOperationalLayoutReader:164-169 throws StructureException(INVALID_FLOOR); the Facility middleware maps the default branch to 400 (Program.cs:105-116)."
+          }
+        },
+        {
+          "name": "1.5 Anonymous snapshot (200 sanitized, no 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope', () => pm.expect(body && body.success).to.eql(true));",
+                  "pm.test('snapshot payload present', () => {",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "  pm.expect(body.data.slots).to.be.an('array');",
+                  "  pm.expect(body.data.metrics).to.be.an('object');",
+                  "});",
+                  "console.log('LayoutCallerResolver returns Anonymous with IsSiteTelemetryGranted=false; the route is a public read and redacts instead of returning 401.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "LayoutCallerResolver.cs:19-21 returns Anonymous when no bearer is present; PostgresOperationalLayoutReader still serves the sanitized projection (OperationalLayoutRedaction). This is the SPARK-228 behavior, unchanged by SPARK-244."
+          }
+        },
+        {
+          "name": "1.6 Unknown site (404 SITE_NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+                  "pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "pm.test('SITE_NOT_FOUND', () => pm.expect(body && body.code).to.eql('SITE_NOT_FOUND'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/parking-lots/{{foreignSiteId}}/operational-layout",
+            "description": "PostgresOperationalLayoutReader:33-47 throws StructureException(SITE_NOT_FOUND); Program.cs:111 maps it to 404. The anonymous caller has no tenant scope, so a missing site is indistinguishable from a foreign one."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Outbox / idempotency",
+      "description": "REST-observable side of the SPARK-244 outbox. The walk-in check-in writes an outbox_events row in the same transaction as parking_sessions, and check-out writes an OccupancyReleased row. Postman cannot query PostgreSQL, so the DB-only assertions are SQL pre/post conditions, not pm.test assertions.\n\nDB-ONLY SQL (operations-db, run in psql):\n\n-- 1) envelope written by 2.1 (eventType OccupancyChanged, payload.action=checkin_walkin, no slotId)\nSELECT event_id, event_type, occurred_at, sequence_number, site_id, payload, published_at\nFROM outbox_events\nWHERE site_id = '<seededSiteId>'\nORDER BY sequence_number DESC\nLIMIT 10;\n\n-- 2) idempotency anchor (Q3/G5): event_id is the primary key and a duplicate insert must fail\nSELECT event_id, event_type, processed_at FROM processed_events ORDER BY processed_at DESC LIMIT 10;\n\n-- 3) stored payload for the walk-in session (replace <walkInSessionId>)\nSELECT event_id, payload FROM outbox_events\nWHERE payload->>'sessionId' = '<walkInSessionId>';\n\nA true duplicate-delivery test (publish the same envelope twice) needs a broker/DB harness and is BLOCKED for Postman; see the manual guide.",
+      "item": [
+        {
+          "name": "2.1 Walk-in check-in writes OccupancyChanged",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'unexpected body: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "});",
+                  "const payload = (body && body.data) || {};",
+                  "pm.test('walk-in session identity', () => {",
+                  "  pm.expect(payload.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(payload.siteId).to.eql(pm.environment.get('seededSiteId'));",
+                  "  pm.expect(payload.licensePlate).to.eql(pm.environment.get('walkInPlate'));",
+                  "  pm.expect(payload.vehicleType).to.eql('CAR');",
+                  "});",
+                  "pm.test('walk-in has no slot assignment (payload has no slotId)', () => {",
+                  "  pm.expect(payload.slotId).to.eql(null);",
+                  "  pm.expect(payload.slotNumber).to.eql(null);",
+                  "  pm.expect(payload.exitTime).to.eql(null);",
+                  "});",
+                  "if (payload.id) { pm.environment.set('walkInSessionId', payload.id); }",
+                  "console.log('DB-ONLY: SELECT event_type,payload FROM outbox_events WHERE payload->>\\'sessionId\\' = \\'' + payload.id + '\\'; expect OccupancyChanged + action=checkin_walkin.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"{{walkInPlate}}\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{reservationServiceUrl}}/api/parking-sessions/walk-in/check-in?siteId={{seededSiteId}}",
+            "description": "ParkingSessionsController.cs:30-39; ReservationGateStore.CreateWalkInAsync:78-111 writes parking_sessions plus OutboxEvents { EventType=OccupancyChanged, SequenceNumber=NextSequenceAsync(siteId), Payload={sessionId,action:checkin_walkin} } in one transaction. Requires the operator's site-scope assignment through OperatorIdentityClient.RequireSiteAsync. DB-only check: see folder description."
+          }
+        },
+        {
+          "name": "2.2 Session is visible through the REST read",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope', () => pm.expect(body && body.success).to.eql(true));",
+                  "const rows = (body && body.data) || [];",
+                  "pm.expect(rows).to.be.an('array');",
+                  "const id = pm.environment.get('walkInSessionId');",
+                  "const row = rows.find(item => item.id === id);",
+                  "pm.test('the walk-in session is listed', () => pm.expect(row, 'session ' + id + ' missing from GET /api/parking-sessions').to.be.an('object'));",
+                  "pm.test('session row is ACTIVE at the seeded site', () => {",
+                  "  pm.expect(row.siteId).to.eql(pm.environment.get('seededSiteId'));",
+                  "  pm.expect(row.status).to.eql('ACTIVE');",
+                  "  pm.expect(row.originalPlate).to.eql(pm.environment.get('walkInPlate'));",
+                  "  pm.expect(row.entryTime).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "url": "{{reservationServiceUrl}}/api/parking-sessions?siteId={{seededSiteId}}",
+            "description": "ParkingSessionsController.cs:13-18 + ReservationGateStore.ListSessionsAsync:12-32. ParkingSessionHistoryEntry surfaces originalPlate/normalizedPlate/status, NOT licensePlate. This is the REST-observable confirmation that the write committed."
+          }
+        },
+        {
+          "name": "2.3 Duplicate walk-in plate (409 VEHICLE_ALREADY_INSIDE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "pm.test('VEHICLE_ALREADY_INSIDE', () => pm.expect(body && body.code).to.eql('VEHICLE_ALREADY_INSIDE'));",
+                  "console.log('This is a duplicate-plate guard, not a replayed-event test. A true duplicate occupancy event is BLOCKED (see guide).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"{{walkInPlate}}\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{reservationServiceUrl}}/api/parking-sessions/walk-in/check-in?siteId={{seededSiteId}}",
+            "description": "ReservationGateStore.CreateWalkInAsync:89-91 rejects a second active session for the same normalized plate with 409 VEHICLE_ALREADY_INSIDE; ReservationExceptionMiddleware writes the envelope."
+          }
+        },
+        {
+          "name": "2.4 Walk-in check-out writes OccupancyReleased (cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope', () => pm.expect(body && body.success).to.eql(true));",
+                  "const payload = (body && body.data) || {};",
+                  "pm.test('the session was closed', () => {",
+                  "  pm.expect(payload.id).to.eql(pm.environment.get('walkInSessionId'));",
+                  "  pm.expect(Number.isFinite(Date.parse(payload.exitTime)), 'exitTime is not ISO-8601').to.eql(true);",
+                  "});",
+                  "console.log('DB-ONLY: OccupancyReleased payload is {sessionId, slotId:null} for a walk-in (no allocation).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"{{walkInPlate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{reservationServiceUrl}}/api/parking-sessions/{{walkInSessionId}}/walk-in/check-out?siteId={{seededSiteId}}",
+            "description": "ParkingSessionsController.cs:41-51; ReservationGateStore.CheckOutWalkInAsync:113-158 writes OccupancyReleased {sessionId, slotId=session.CurrentSlotId?.ToString()} in the same transaction. A walk-in has no allocation, so slotId is null and the Facility projection intentionally does not change any parking_slots row (OccupancyProjectionRepository.cs:36-57 only acts when SlotId is set)."
+          }
+        },
+        {
+          "name": "2.5 Snapshot after the walk-in cycle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('snapshot is still readable after outbox writes', () => {",
+                  "  pm.expect(body && body.success).to.eql(true);",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "  pm.expect(body.data.slots).to.be.an('array');",
+                  "  pm.expect(body.data.metrics).to.be.an('object');",
+                  "});",
+                  "console.log('The walk-in outbox events carry no slotId, so a slot-level visual delta is not expected from this folder. Slot-level delta needs a reservation check-in (BLOCKED: no reservation-creation REST route exists in this worktree).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "Confirms the Facility read path is unaffected by a walk-in event that has no slot id. The consumer's processed_events row is still written for the envelope, but no parking_slots UPDATE is expected."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Release-once",
+      "description": "REST-observable release idempotency on the internal gate route: the first release flips OCCUPIED -> AVAILABLE, the second matches zero rows and still returns 204. The release-once ledger (occupancy_release_ledger, unique session_id) belongs to the Facility consumer and is DB-only here.\n\nDB-ONLY SQL (facility-db):\n\n-- release-once ledger: one row per session, unique on session_id\nSELECT session_id, count(*) AS rows_for_session\nFROM occupancy_release_ledger\nGROUP BY session_id\nHAVING count(*) > 1;   -- must return zero rows\n\nSELECT * FROM occupancy_release_ledger ORDER BY processed_at DESC LIMIT 10;\n\n-- per-slot replay watermark\nSELECT slot_id, last_sequence_number FROM slot_sequence_watermarks ORDER BY updated_at DESC LIMIT 10;\n\nDriving a real OccupancyReleased event for a reservation requires a seeded reservation and a running producer/consumer pair; see the manual guide (case 03.7, BLOCKED for Postman).",
+      "item": [
+        {
+          "name": "3.1 Internal claim without X-Service-Key (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no success envelope is returned', () => {",
+                  "  let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "  pm.expect(body === undefined || body.success !== true).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{seededTenantId}}\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/internal/gate-sites/{{seededSiteId}}/slots/claim",
+            "description": "Facility Program.cs:69-75 compares X-Service-Key with Services:Key for every /internal path and returns 401 without a body on mismatch. Fill `serviceKey` from SMARTPARK_SERVICE_KEY before running 3.2."
+          }
+        },
+        {
+          "name": "3.2 Claim an AVAILABLE slot (sets OCCUPIED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "const snippet = pm.response.text().slice(0, 200);",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('claimed slot payload (body: ' + snippet + ')', () => {",
+                  "  pm.expect(body, 'unexpected body: ' + snippet).to.be.an('object');",
+                  "  pm.expect(body.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.code).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.vehicleType).to.be.a('string');",
+                  "});",
+                  "if (body && body.id) {",
+                  "  pm.environment.set('claimedSlotId', body.id);",
+                  "  pm.environment.set('claimedSlotCode', body.code);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Service-Key",
+                "value": "{{serviceKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{seededTenantId}}\",\n  \"vehicleType\": \"CAR\",\n  \"preferredSlotId\": null,\n  \"targetUnitId\": null,\n  \"allowReservedSlot\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/internal/gate-sites/{{seededSiteId}}/slots/claim",
+            "description": "Facility Program.cs:128-145 -> OperatorGateSlotStore.ClaimAvailableAsync:9-79. The SQL requires physical_state='AVAILABLE', so it sets the chosen row to OCCUPIED and returns {id, code, vehicleType}. If the site has no free slot it returns 409 NO_AVAILABLE_SLOT."
+          }
+        },
+        {
+          "name": "3.3 Snapshot shows the claimed slot OCCUPIED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const payload = (body && body.data) || {};",
+                  "const id = pm.environment.get('claimedSlotId');",
+                  "const slot = (payload.slots || []).find(item => item.slotId === id);",
+                  "pm.test('claimed slot appears in the snapshot', () => pm.expect(slot, 'slot ' + id + ' not returned').to.be.an('object'));",
+                  "pm.test('claimed slot is OCCUPIED', () => pm.expect(slot && slot.physicalState).to.eql('OCCUPIED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "The reader loads parking_slots.physical_state directly (PostgresOperationalLayoutReader:71-88) and maps it through OperationalStateMapping."
+          }
+        },
+        {
+          "name": "3.4 Release #1 (204)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', () => pm.response.to.have.status(204));",
+                  "pm.test('empty body', () => pm.expect(pm.response.text()).to.eql(''));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Service-Key",
+                "value": "{{serviceKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{seededTenantId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/internal/gate-sites/{{seededSiteId}}/slots/{{claimedSlotId}}/release",
+            "description": "Facility Program.cs:146-157 -> OperatorGateSlotStore.ReleaseAsync:81-94. The UPDATE sets physical_state='AVAILABLE' only while the row is OCCUPIED. Returns Results.NoContent() unconditionally."
+          }
+        },
+        {
+          "name": "3.5 Release #2 (204, no-op)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', () => pm.response.to.have.status(204));",
+                  "pm.test('empty body', () => pm.expect(pm.response.text()).to.eql(''));",
+                  "console.log('The second UPDATE matches zero rows because physical_state is already AVAILABLE; the route still returns 204, which is the API-layer release idempotency. The consumer ledger is checked by SQL.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Service-Key",
+                "value": "{{serviceKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{seededTenantId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/internal/gate-sites/{{seededSiteId}}/slots/{{claimedSlotId}}/release",
+            "description": "Second call to the same route. The conditional UPDATE (`AND physical_state='OCCUPIED'`) affects zero rows, so performing it twice cannot double-free or corrupt the slot. This proves release idempotency at the internal API boundary, not the consumer ledger."
+          }
+        },
+        {
+          "name": "3.6 Snapshot shows AVAILABLE / UNRESERVED again",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const payload = (body && body.data) || {};",
+                  "const id = pm.environment.get('claimedSlotId');",
+                  "const slot = (payload.slots || []).find(item => item.slotId === id);",
+                  "pm.test('released slot is AVAILABLE and UNRESERVED', () => {",
+                  "  pm.expect(slot, 'slot ' + id + ' not returned').to.be.an('object');",
+                  "  pm.expect(slot.physicalState).to.eql('AVAILABLE');",
+                  "  pm.expect(slot.reservationState).to.eql('UNRESERVED');",
+                  "});",
+                  "pm.test('released slot is bookable again', () => pm.expect(slot && slot.isBookable).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "ReleaseAsync leaves reservation_state untouched (it was already NULL), so MapReservationState(null) returns UNRESERVED and the reader recomputes isBookable=true (OperationalLayoutProjection.cs:229, OperationalStateMapping.cs:17-20)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Zone-only reserved count",
+      "description": "Asserts the ZoneCapacityDto field that carries zone-only precision (OperationalLayoutProjection.cs:43-51). The reader sets both allocatedSlotCount and zoneOnlyReservedCount to the same subtree RESERVED count (PostgresOperationalLayoutReader:143-159, OPEN D0-5). There is no zone-level allocation source in the code, so a true zone-only reservation cannot be created through any REST route. That case is BLOCKED and documented in the manual guide.\n\nDB-ONLY diagnostic (facility-db):\n\nSELECT u.name AS zone, s.slot_code, s.physical_state, s.reservation_state\nFROM parking_slots s JOIN spatial_units u ON u.id = s.spatial_unit_id\nWHERE s.site_id = '<seededSiteId>' AND s.deleted_at IS NULL\nORDER BY u.name, s.slot_code;\n\n-- There is no zone-level reservation table/column; the projection approximates the count from RESERVED slots in the zone subtree.",
+      "item": [
+        {
+          "name": "4.1 Zone capacity carries zoneOnlyReservedCount",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const payload = (body && body.data) || {};",
+                  "const zones = (payload.metrics && payload.metrics.zoneCapacities) || [];",
+                  "pm.test('zoneCapacities is a non-empty array', () => pm.expect(zones).to.be.an('array').that.is.not.empty);",
+                  "pm.test('every zone carries the G4 field and its siblings', () => {",
+                  "  zones.forEach(zone => {",
+                  "    pm.expect(zone.zoneId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(zone.zoneCode).to.be.a('string').and.not.empty;",
+                  "    pm.expect(zone.floorCode).to.be.a('string');",
+                  "    pm.expect(zone.zoneOnlyReservedCount).to.be.a('number');",
+                  "    pm.expect(zone.zoneOnlyReservedCount).to.be.at.least(0);",
+                  "    pm.expect(zone.allocatedSlotCount).to.be.a('number');",
+                  "    pm.expect(zone.maxCapacity).to.be.a('number');",
+                  "    pm.expect(zone.occupiedCount).to.be.a('number');",
+                  "  });",
+                  "});",
+                  "if (zones.length) { pm.environment.set('snapshotZoneCode', zones[0].zoneCode); }",
+                  "console.log('Zones: ' + zones.map(z => z.zoneCode + ' onlyReserved=' + z.zoneOnlyReservedCount + ' allocated=' + z.allocatedSlotCount).join(', '));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "ZoneCapacityDto is defined at OperationalLayoutProjection.cs:43-51 and populated at PostgresOperationalLayoutReader:143-159. For an owner (telemetry visibility) the values are not redacted; for anonymous/driver they are masked by OperationalLayoutRedaction:49-57."
+          }
+        },
+        {
+          "name": "4.2 zoneOnlyReservedCount matches the zone RESERVED count",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const payload = (body && body.data) || {};",
+                  "const code = pm.environment.get('snapshotZoneCode');",
+                  "const zone = (payload.metrics.zoneCapacities || []).find(item => item.zoneCode === code);",
+                  "pm.test('the sampled zone is still present', () => pm.expect(zone, 'zone ' + code + ' missing').to.be.an('object'));",
+                  "const reservedSlots = (payload.slots || []).filter(slot => slot.zoneCode === code && slot.reservationState === 'RESERVED').length;",
+                  "pm.test('zoneOnlyReservedCount equals the RESERVED slots in that zone', () => pm.expect(zone && zone.zoneOnlyReservedCount).to.eql(reservedSlots));",
+                  "pm.test('allocatedSlotCount mirrors the same reader approximation', () => pm.expect(zone && zone.allocatedSlotCount).to.eql(zone.zoneOnlyReservedCount));",
+                  "console.log('G4 OPEN: the reader has no zone-level allocation source; both counters are the subtree RESERVED count, so this folder can only prove the contract shape, not a true zone-only reservation.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "PostgresOperationalLayoutReader:148-157 computes reserved = inZone.Count(ReservationState==RESERVED), then passes `reserved, reserved` for allocatedSlotCount and zoneOnlyReservedCount. The assertion encodes that actual implementation; a design-conformant zone-only reservation is BLOCKED (guide case 04.3)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Operator scope",
+      "description": "Operator assignment gate and its 403 mapping. UserService exposes GET /api/operators/site-scope (assignment only) and GET /api/operators/slot-scope (assignment + SLOT_OVERRIDE). OperationService maps a UserService 403 to `OPERATOR_LOT_UNASSIGNED` in OperatorIdentityClient.ResolveSiteAsync:41-42, and ReservationExceptionMiddleware renders the envelope. The hub uses the same AuthorizeSiteAsync but cannot be exercised from Postman (BLOCKED).",
+      "item": [
+        {
+          "name": "5.1 Assigned operator site-scope (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('userId present', () => pm.expect(body && body.userId).to.be.a('string').and.not.empty);",
+                  "pm.test('exactly one tenant in scope', () => {",
+                  "  pm.expect(body && body.tenantIds).to.be.an('array').with.lengthOf(1);",
+                  "  pm.expect(body.tenantIds[0]).to.eql(pm.environment.get('seededTenantId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "url": "{{userServiceUrl}}/api/operators/site-scope?siteId={{seededSiteId}}",
+            "description": "OperatorsController.cs:38-44 returns Ok(new { userId, tenantIds }) for an assigned operator; [Authorize(Roles=operator)] gates the route. This is the exact endpoint OperatorIdentityClient calls (api/operators/site-scope?siteId=)."
+          }
+        },
+        {
+          "name": "5.2 Unassigned site through OperationService (403 OPERATOR_LOT_UNASSIGNED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "pm.test('OPERATOR_LOT_UNASSIGNED mapping', () => pm.expect(body && body.code).to.eql('OPERATOR_LOT_UNASSIGNED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "url": "{{reservationServiceUrl}}/api/parking-sessions?siteId={{foreignSiteId}}",
+            "description": "ListParkingSessionsQuery -> IOperatorIdentityClient.RequireSiteAsync -> ResolveSiteAsync -> UserService returns 403 -> ReservationGateException(403, OPERATOR_LOT_UNASSIGNED) at OperatorIdentityClient.cs:41-42 -> ReservationExceptionMiddleware.cs:36-44 renders it. This is the REST-observable form of the hub's 403 mapping."
+          }
+        },
+        {
+          "name": "5.3 Unassigned operator site-scope (raw 403, FORBIDDEN envelope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "console.log('UserService returns the generic FORBIDDEN envelope here; the OPERATOR_LOT_UNASSIGNED code is added by OperationService at 5.2.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "url": "{{userServiceUrl}}/api/operators/site-scope?siteId={{foreignSiteId}}",
+            "description": "OperatorsController.cs:42 returns Forbid() when no assignment matches siteId, so UserService answers 403 with the generic FORBIDDEN envelope. The OPERATOR_LOT_UNASSIGNED mapping is asserted through OperationService at 5.2."
+          }
+        },
+        {
+          "name": "5.4 Driver token on operator scope (403 role gate)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "console.log('The route is [Authorize(Roles=operator)]; a valid driver token is authenticated but not in the role, so ASP.NET returns 403.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": "{{userServiceUrl}}/api/operators/site-scope?siteId={{seededSiteId}}",
+            "description": "OperatorsController.cs:10 [Authorize] + line 38 [Authorize(Roles=operator)]. A driver token must not be treated as an operator assignment."
+          }
+        },
+        {
+          "name": "5.5 Assigned operator operational layout (200, not 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('assigned operator receives the snapshot', () => {",
+                  "  pm.expect(body && body.success).to.eql(true);",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "  pm.expect(body.data.slots).to.be.an('array');",
+                  "  pm.expect(body.data.metrics).to.be.an('object');",
+                  "});",
+                  "console.log('Design v1.2.0 G6 says an unassigned operator gets 403 on GET /operational-layout. Here the operator IS assigned, so 200 is expected either way; the unassigned REST case is 5.2 through OperationService.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "LayoutCallerResolver.ResolveOperatorAsync:85-96 calls slot-scope (assignment + SLOT_OVERRIDE); the seeded operator passes, so IsSiteTelemetryGranted=true and the response is telemetry-visible."
+          }
+        },
+        {
+          "name": "5.6 Driver on legacy operator-layout (403 FORBIDDEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+                  "pm.test('success false', () => pm.expect(body && body.success).to.eql(false));",
+                  "pm.test('FORBIDDEN', () => pm.expect(body && body.code).to.eql('FORBIDDEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operator-layout",
+            "description": "Facility Program.cs:269-275 gates the legacy route with ISlotOperatorAuthorizer.ScopeAsync. SlotOperatorClient.cs:19 maps the UserService 403 to StructureException(FORBIDDEN); Program.cs:109-116 renders 403. This is the strict SLOT_OVERRIDE boundary, unlike the public operational-layout read."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Realtime delivery / latency",
+      "description": "REST proxies only. Postman cannot connect to the SignalR hub, so the true delivery path (Operations state change -> outbox -> RabbitMQ -> Facility consumer -> SignalR group site:{siteId}:operators) is NOT exercised here. 6.1 and 6.3 measure REST read and REST write-to-read time; they do not measure the hub. The dev-only p95 <= 2s target (Q4) is BLOCKED without a WebSocket client and at least 20 samples.\n\nManual SignalR procedure (BLOCKED for Postman): connect a .NET/JS SignalR client to `{{reservationServiceUrl}}/ws/parking-lots/{{seededSiteId}}/layout` with `?access_token=<operator JWT>`, expect `SnapshotRequired`, then trigger an Operations check-in/check-out and timestamp the `SlotStateChanged` / `OccupancyReleased` callback.",
+      "item": [
+        {
+          "name": "6.1 REST snapshot read latency proxy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const ms = pm.response.responseTime;",
+                  "pm.environment.set('layoutReadElapsedMs', String(ms));",
+                  "pm.test('single REST read is under the 2s dev budget (proxy only)', () => {",
+                  "  pm.expect(ms).to.be.a('number');",
+                  "  pm.expect(ms).to.be.at.most(2000);",
+                  "});",
+                  "console.log('REST read latency=' + ms + 'ms. This is NOT the Operations->SignalR->client p95 (BLOCKED, see folder description).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/parking-lots/{{seededSiteId}}/operational-layout",
+            "description": "Measures one snapshot read with pm.response.responseTime. The delta-design Q4 target is p95 <= 2s for the realtime pipeline, not for a single REST read; this is a sanity proxy only."
+          }
+        },
+        {
+          "name": "6.2 Latency probe: walk-in check-in write",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('probeWriteAt', String(Date.now()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('probe session created', () => pm.expect(body && body.data && body.data.id).to.be.a('string').and.not.empty);",
+                  "if (body && body.data && body.data.id) { pm.environment.set('probeSessionId', body.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"{{probePlate}}\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{reservationServiceUrl}}/api/parking-sessions/walk-in/check-in?siteId={{seededSiteId}}",
+            "description": "Starts the write-to-read timer in the pre-request script and creates a second walk-in session. This is the Operations REST write that commits the outbox row."
+          }
+        },
+        {
+          "name": "6.3 Probe session visible + write-to-read elapsed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const rows = (body && body.data) || [];",
+                  "const id = pm.environment.get('probeSessionId');",
+                  "const row = rows.find(item => item.id === id);",
+                  "pm.test('probe session is visible through REST', () => pm.expect(row, 'probe session ' + id + ' missing').to.be.an('object'));",
+                  "const started = Number(pm.environment.get('probeWriteAt'));",
+                  "const elapsed = Date.now() - started;",
+                  "pm.environment.set('writeToReadElapsedMs', String(elapsed));",
+                  "pm.test('write-to-read elapsed is a finite number', () => pm.expect(Number.isFinite(elapsed)).to.eql(true));",
+                  "pm.test('write-to-read time is under the 2s dev budget (proxy only)', () => pm.expect(elapsed).to.be.at.most(2000));",
+                  "console.log('Operations REST write -> REST read elapsed=' + elapsed + 'ms. The SignalR delivery leg is not measured (BLOCKED).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "url": "{{reservationServiceUrl}}/api/parking-sessions?siteId={{seededSiteId}}",
+            "description": "Reads the session list and computes Date.now() - probeWriteAt. This proves the Operations write is visible to the next REST read within the dev budget; it does not prove hub delivery."
+          }
+        },
+        {
+          "name": "6.4 Cleanup the latency probe session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = undefined; }",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('probe session closed', () => {",
+                  "  pm.expect(body && body.success).to.eql(true);",
+                  "  pm.expect(body.data && body.data.id).to.eql(pm.environment.get('probeSessionId'));",
+                  "  pm.expect(Number.isFinite(Date.parse(body.data && body.data.exitTime))).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{operatorToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"{{probePlate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{reservationServiceUrl}}/api/parking-sessions/{{probeSessionId}}/walk-in/check-out?siteId={{seededSiteId}}",
+            "description": "Closes the probe session so repeated runs do not accumulate active walk-ins on the demo site."
+          }
+        }
+      ]
+    }
+  ]
+}

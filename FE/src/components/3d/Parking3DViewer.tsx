@@ -329,6 +329,12 @@ export function Parking3DViewer({
     const map = new Map<string, SlotVisualStateDto>()
     for (const slot of layout?.slots ?? []) {
       map.set(slot.slotCode, slot)
+      if (slot.slotCode) {
+        map.set(slot.slotCode.toUpperCase(), slot)
+        map.set(slot.slotCode.toLowerCase(), slot)
+        const norm = normalizeSlotIdentifier(slot.slotCode)
+        if (norm) map.set(norm, slot)
+      }
       map.set(slot.slotId, slot)
     }
     return map
@@ -392,11 +398,13 @@ export function Parking3DViewer({
       const slotData = viewerSlotFor(
         mesh,
         inst.overlayMapping.slotByObjectId.get(mesh.id) ??
-          (layout ? undefined : inst.registrationMapping?.slotByObjectId.get(mesh.id)),
+          inst.registrationMapping?.slotByObjectId.get(mesh.id),
       )
 
       const projected =
         layoutSlots.get(mesh.name) ??
+        layoutSlots.get(mesh.name.toUpperCase()) ??
+        layoutSlots.get(normalizeSlotIdentifier(mesh.name)) ??
         layoutSlots.get(slotData.id) ??
         layoutSlots.get(slotData.number)
 
@@ -990,6 +998,8 @@ export function Parking3DViewer({
 
       const projected =
         layoutSlots.get(targetMesh.name) ??
+        layoutSlots.get(targetMesh.name.toUpperCase()) ??
+        layoutSlots.get(normalizeSlotIdentifier(targetMesh.name)) ??
         layoutSlots.get(slotData.id) ??
         layoutSlots.get(slotData.number)
 
@@ -1049,6 +1059,8 @@ export function Parking3DViewer({
 
       const projected =
         layoutSlots.get(targetMesh.name) ??
+        layoutSlots.get(targetMesh.name.toUpperCase()) ??
+        layoutSlots.get(normalizeSlotIdentifier(targetMesh.name)) ??
         layoutSlots.get(slotData.id) ??
         layoutSlots.get(slotData.number)
 

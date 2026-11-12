@@ -24,7 +24,9 @@ public static class ApiErrors
         if (context.Response.HasStarted || context.RequestAborted.IsCancellationRequested) return false;
         context.Response.StatusCode = status;
         context.Response.ContentLength = null;
-        context.Response.Headers.CacheControl = "no-store";
+        // Endpoints may set a stricter cache policy before writing an error; do not clobber it.
+        if (context.Response.Headers.CacheControl.Count == 0)
+            context.Response.Headers.CacheControl = "no-store";
         if (status == 401) context.Response.Headers.TryAdd("WWW-Authenticate", "Bearer");
         if (HttpMethods.IsHead(context.Request.Method) || status is 204 or 304) return true;
         var body = new Dictionary<string, object?>
@@ -62,6 +64,23 @@ public static class ApiErrors
 
     public static void Use(IApplicationBuilder app)
     {
+        // ExceptionHandlerMiddleware calls Response.Clear() and registers an OnStarting callback that forces
+        // "no-cache,no-store". Register the operational-layout cache policy before that handler so this
+        // OnStarting callback runs last (LIFO) and survives both the clear and the forced defaults.
+        app.Use(async (context, next) =>
+        {
+            if (IsOperationalLayout(context.Request.Path))
+            {
+                context.Response.OnStarting(static state =>
+                {
+                    var response = (HttpResponse)state;
+                    response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+                    response.Headers.Vary = "Authorization";
+                    return Task.CompletedTask;
+                }, context.Response);
+            }
+            await next();
+        });
         app.UseMiddleware<RequestCompletionMiddleware>();
         app.UseExceptionHandler();
         app.UseStatusCodePages(async status =>
@@ -83,6 +102,11 @@ public static class ApiErrors
                 ct: context.RequestAborted);
         });
     }
+
+    private static bool IsOperationalLayout(PathString path) =>
+        path.StartsWithSegments("/api/parking-lots", StringComparison.OrdinalIgnoreCase) &&
+        path.Value is not null &&
+        path.Value.EndsWith("/operational-layout", StringComparison.OrdinalIgnoreCase);
 
     private sealed class BindingErrorResult : IActionResult
     {

@@ -250,7 +250,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [authError])
 
   useEffect(() => {
-    if (!authReady || !user) return
+    if (!authReady || !user || user.role !== "owner") return
     let revoked = false
     const messages: Record<AccessRevokedReason, string> = {
       USER_LOCKED: "Your account has been locked. Please contact support or an administrator if you believe this is incorrect.",

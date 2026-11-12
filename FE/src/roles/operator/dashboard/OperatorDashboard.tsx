@@ -21,6 +21,7 @@ import {
   reservationApi,
   type OperatorSite,
 } from "../../../lib/operatorApi"
+import { watchOperatorLayout } from "../../../lib/operatorLayoutLive"
 import type { Booking } from "../../../lib/types"
 
 export type OperatorTab =
@@ -139,7 +140,12 @@ export function OperatorDashboard({
     )
   }, [activeSiteId, ownerLots])
 
-  const resourceScope = `${userScope}:${selectedLot?.id ?? ""}`
+  useEffect(() => {
+    if (!selectedLot?.id) return
+    return watchOperatorLayout(selectedLot.id, () => setRefreshKey((value) => value + 1))
+  }, [selectedLot?.id])
+
+  const resourceScope = `${userScope}:${selectedLot?.id ?? ""}:${refreshKey}`
   const reportSiteIds = accessRole === "financial" ? ownerLots.map((site) => site.id) : []
   const reportScope = `${userScope}:${reportSiteIds.join(",")}`
   const currentLotBookings = bookingsState.scope === resourceScope ? bookingsState.data : []
