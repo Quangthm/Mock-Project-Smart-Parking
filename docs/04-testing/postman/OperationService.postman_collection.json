@@ -1228,7 +1228,7 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "const key = pm.variables.replaceIn('{{}}');",
+                  "const key = pm.variables.replaceIn('{{$guid}}');",
                   "pm.collectionVariables.set(\"noDraftIdempotencyKey\", key);",
                   "if (pm.environment.has(\"noDraftIdempotencyKey\")) {",
                   "    pm.environment.set(\"noDraftIdempotencyKey\", key);",
@@ -1273,7 +1273,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\\n  \"activationMode\": \"IMMEDIATE\",\\n  \"publishNote\": \"Attempting publish when draft does not exist\"\\n}",
+              "raw": "{\n  \"activationMode\": \"IMMEDIATE\",\n  \"publishNote\": \"Attempting publish when draft does not exist\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1294,7 +1294,7 @@
                 "publish"
               ]
             },
-            "description": "Kiem tra truong hop gui yeu cau publish khi chua luu ban nhap (tra ve 409 NO_DRAFT_TO_PUBLISH)."
+            "description": "Kiểm tra trường hợp gửi yêu cầu xuất bản khi chưa có bản nháp (trả về 409 NO_DRAFT_TO_PUBLISH)."
           },
           "response": []
         },
@@ -1305,17 +1305,17 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "// Tao ban nhap moi voi noi dung khac biet truoc khi gui lai idempotencyKey cu (da dung tai 1.6)",
+                  "// Tạo bản nháp mới với nội dung khác biệt trước khi gửi lại idempotencyKey cũ (đã dùng tại 1.6)",
                   "const siteId = pm.variables.get(\"siteId\");",
                   "const baseUrl = pm.variables.get(\"baseUrl\");",
                   "const token = pm.variables.get(\"ownerToken\");",
                   "",
                   "pm.sendRequest({",
-                  "    url: ${baseUrl}/api/v1/lots//policies/draft,",
+                  "    url: `${baseUrl}/api/v1/lots/${siteId}/policies/draft`,",
                   "    method: 'PUT',",
                   "    header: {",
                   "        'Content-Type': 'application/json',",
-                  "        'Authorization': Bearer ",
+                  "        'Authorization': `Bearer ${token}`",
                   "    },",
                   "    body: {",
                   "        mode: 'raw',",
@@ -1375,7 +1375,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\\n  \"activationMode\": \"IMMEDIATE\",\\n  \"publishNote\": \"Attempted replay with altered draft payload\"\\n}",
+              "raw": "{\n  \"activationMode\": \"IMMEDIATE\",\n  \"publishNote\": \"Attempted replay with altered draft payload\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1396,7 +1396,7 @@
                 "publish"
               ]
             },
-            "description": "Kiem tra co che bao ve Idempotency khi tai su dung Idempotency-Key voi draft payload da thay doi (tra ve 409 IDEMPOTENCY_PAYLOAD_MISMATCH)."
+            "description": "Kiểm tra cơ chế bảo vệ Idempotency khi tái sử dụng Idempotency-Key với draft payload đã thay đổi (trả về 409 IDEMPOTENCY_PAYLOAD_MISMATCH)."
           },
           "response": []
         },
@@ -1411,26 +1411,26 @@
                   "const baseUrl = pm.variables.get(\"baseUrl\");",
                   "const token = pm.variables.get(\"ownerToken\");",
                   "",
-                  "// 1. Tao khoa idempotency",
-                  "const schedKey = pm.variables.replaceIn('{{}}');",
-                  "const immKey = pm.variables.replaceIn('{{}}');",
+                  "// 1. Tạo biến khóa idempotency",
+                  "const schedKey = pm.variables.replaceIn('{{$guid}}');",
+                  "const immKey = pm.variables.replaceIn('{{$guid}}');",
                   "pm.collectionVariables.set(\"regressionImmKey\", immKey);",
                   "if (pm.environment.has(\"regressionImmKey\")) {",
                   "    pm.environment.set(\"regressionImmKey\", immKey);",
                   "}",
                   "",
-                  "// 2. Tinh thoi diem kich hoat tuong lai (+5 ngay)",
+                  "// 2. Tính thời điểm kích hoạt tương lai (+5 ngày)",
                   "const futureDate = new Date();",
                   "futureDate.setDate(futureDate.getDate() + 5);",
                   "const futureIso = futureDate.toISOString();",
                   "",
-                  "// 3. Luu Draft A -> Publish Scheduled (+5 ngay) -> Luu Draft B (cho IMMEDIATE tiep theo)",
+                  "// 3. Chuỗi gọi: Lưu Draft A -> Publish Scheduled (+5 ngày) -> Lưu Draft B (cho IMMEDIATE tiếp theo)",
                   "pm.sendRequest({",
-                  "    url: ${baseUrl}/api/v1/lots//policies/draft,",
+                  "    url: `${baseUrl}/api/v1/lots/${siteId}/policies/draft`,",
                   "    method: 'PUT',",
                   "    header: {",
                   "        'Content-Type': 'application/json',",
-                  "        'Authorization': Bearer ",
+                  "        'Authorization': `Bearer ${token}`",
                   "    },",
                   "    body: {",
                   "        mode: 'raw',",
@@ -1449,11 +1449,11 @@
                   "        return;",
                   "    }",
                   "    pm.sendRequest({",
-                  "        url: ${baseUrl}/api/v1/lots//policies/publish,",
+                  "        url: `${baseUrl}/api/v1/lots/${siteId}/policies/publish`,",
                   "        method: 'POST',",
                   "        header: {",
                   "            'Content-Type': 'application/json',",
-                  "            'Authorization': Bearer ,",
+                  "            'Authorization': `Bearer ${token}`,",
                   "            'Idempotency-Key': schedKey",
                   "        },",
                   "        body: {",
@@ -1470,11 +1470,11 @@
                   "            return;",
                   "        }",
                   "        pm.sendRequest({",
-                  "            url: ${baseUrl}/api/v1/lots//policies/draft,",
+                  "            url: `${baseUrl}/api/v1/lots/${siteId}/policies/draft`,",
                   "            method: 'PUT',",
                   "            header: {",
                   "                'Content-Type': 'application/json',",
-                  "                'Authorization': Bearer ",
+                  "                'Authorization': `Bearer ${token}`",
                   "            },",
                   "            body: {",
                   "                mode: 'raw',",
@@ -1537,7 +1537,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\\n  \"activationMode\": \"IMMEDIATE\",\\n  \"publishNote\": \"Immediate override of scheduled policy\"\\n}",
+              "raw": "{\n  \"activationMode\": \"IMMEDIATE\",\n  \"publishNote\": \"Immediate override of scheduled policy\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1558,7 +1558,7 @@
                 "publish"
               ]
             },
-            "description": "Kiem tra tinh nang ghi de lich hen gio tuong lai khi xuat ban ngay (IMMEDIATE) - ngan chan loi exclusion constraint 409 RESOURCE_CONFLICT."
+            "description": "Kiểm tra tính năng ghi đè lịch hẹn giờ tương lai khi xuất bản ngay (IMMEDIATE) - ngăn chặn lỗi exclusion constraint 409 RESOURCE_CONFLICT."
           },
           "response": []
         }
