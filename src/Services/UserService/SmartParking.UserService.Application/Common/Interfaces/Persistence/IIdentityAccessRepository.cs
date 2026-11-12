@@ -18,4 +18,5 @@ public interface IIdentityAccessRepository
     Task<IReadOnlyList<AuthChallenge>> GetPendingInvitationsAsync(Guid userId, CancellationToken cancellationToken);
     Task ReplaceInvitationAsync(Guid userId, AuthChallenge challenge, WorkflowDelivery delivery, CancellationToken cancellationToken);
     Task<UserSimulatedIdentity?> FindSimulatedIdentityAsync(Guid userId, CancellationToken cancellationToken);
+    void AddSimulatedIdentity(UserSimulatedIdentity identity);
 }

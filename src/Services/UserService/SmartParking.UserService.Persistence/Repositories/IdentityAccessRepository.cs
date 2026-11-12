@@ -103,4 +103,7 @@ public sealed class IdentityAccessRepository(AppDbContext database) : IIdentityA
 
     public Task<UserSimulatedIdentity?> FindSimulatedIdentityAsync(Guid userId, CancellationToken cancellationToken) =>
         database.UserSimulatedIdentities.SingleOrDefaultAsync(i => i.UserId == userId, cancellationToken);
+
+    public void AddSimulatedIdentity(UserSimulatedIdentity identity) =>
+        database.UserSimulatedIdentities.Add(identity);
 }

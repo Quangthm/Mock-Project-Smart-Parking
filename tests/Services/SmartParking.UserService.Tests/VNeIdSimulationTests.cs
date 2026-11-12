@@ -115,6 +115,8 @@ public sealed class VNeIdSimulationTests
         public Task<IReadOnlyList<OperatorGrant>> GetOperatorGrantsAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<OperatorGrant>>(Array.Empty<OperatorGrant>());
         public Task<UserSimulatedIdentity?> FindSimulatedIdentityAsync(Guid userId, CancellationToken cancellationToken)
             => Task.FromResult(Invitations.Values.FirstOrDefault(v => v.User.Id == userId).User is null ? null : new UserSimulatedIdentity { UserId = userId, SimulationStatus = "COMPLETED" });
+
+        public void AddSimulatedIdentity(UserSimulatedIdentity identity) { }
     }
 
     [Fact]

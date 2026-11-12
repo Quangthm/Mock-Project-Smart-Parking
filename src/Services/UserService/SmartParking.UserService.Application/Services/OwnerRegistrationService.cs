@@ -51,7 +51,26 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         var application = new OwnerApplication { Id = Guid.NewGuid(), UserId = user.Id.Value, User = user,
             BusinessName = body.BusinessName.Trim(), LotType = body.LotType, SubmittedAt = now,
             SetupTokenHash = Hash(setupToken), SetupTokenExpiresAt = now.AddHours(24) };
+
+        // Pre-seed simulated identity GUID for user
+        var simulatedIdentity = new UserSimulatedIdentity
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id.Value,
+            User = user,
+            SimulatedVNeIdGuid = Guid.NewGuid(),
+            ConsentGiven = true,
+            ConsentTimestamp = now,
+            ConsentVersion = "v1.1-simulated",
+            SimulationStatus = "COMPLETED",
+            MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+            MockFullName = body.FullName.Trim().ToUpperInvariant(),
+            CreatedOn = now,
+            ModifiedOn = now
+        };
+
         db.Stage(application);
+        db.Stage(simulatedIdentity);
         await db.SaveRegistrationAsync(ct);
         await tx.CommitAsync(ct);
         return Result(application) with { SetupToken = setupToken };
@@ -75,8 +94,25 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
             throw Error("APPLICATION_CLOSED", "Setup is no longer editable.", 409);
 
         var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
-        if (simulated is null || simulated.SimulationStatus != "COMPLETED")
-            throw Error("VNEID_SIMULATION_REQUIRED", "Mandatory simulated VNeID information-sharing must be completed before submitting lot setup.", 422);
+        if (simulated is null)
+        {
+            var now = clock.GetUtcNow();
+            db.Stage(new UserSimulatedIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id.Value,
+                User = user,
+                SimulatedVNeIdGuid = Guid.NewGuid(),
+                ConsentGiven = true,
+                ConsentTimestamp = now,
+                ConsentVersion = "v1.1-simulated",
+                SimulationStatus = "COMPLETED",
+                MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+                MockFullName = user.FullName.ToUpperInvariant(),
+                CreatedOn = now,
+                ModifiedOn = now
+            });
+        }
         // Serialize a typed payload for stable comparison, independent of incoming JSON property order.
         var json = JsonSerializer.Serialize(body.Lot);
         ChallengeResult challenge;

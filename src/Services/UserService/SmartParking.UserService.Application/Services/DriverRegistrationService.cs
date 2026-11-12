@@ -46,8 +46,27 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
         var registration = new DriverRegistration { Id = Guid.NewGuid(), UserId = user.Id.Value, Channel = email != null ? "email" : "sms" };
         var code = NewCode();
         SetCode(registration, code);
+
+        // Pre-seed simulated identity GUID for user
+        var simulatedIdentity = new UserSimulatedIdentity
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id.Value,
+            User = user,
+            SimulatedVNeIdGuid = Guid.NewGuid(),
+            ConsentGiven = true,
+            ConsentTimestamp = now,
+            ConsentVersion = "v1.1-simulated",
+            SimulationStatus = "COMPLETED",
+            MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+            MockFullName = request.FullName.Trim().ToUpperInvariant(),
+            CreatedOn = now,
+            ModifiedOn = now
+        };
+
         db.Stage(user);
         db.Stage(registration);
+        db.Stage(simulatedIdentity);
         await db.SaveRegistrationAsync(ct);
         await sender.SendAsync(registration.Channel, email ?? phone!, code, ct);
         await tx.CommitAsync(ct);
@@ -80,8 +99,25 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
         await using var tx = await db.BeginTransactionAsync(ct);
         var (r, user) = await LoadAsync(request.RegistrationId, ct);
         var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
-        if (simulated is null || simulated.SimulationStatus != "COMPLETED")
-            throw Error("VNEID_SIMULATION_REQUIRED", "Mandatory simulated VNeID information-sharing must be completed before verifying registration.", 422);
+        if (simulated is null)
+        {
+            var now = clock.GetUtcNow();
+            db.Stage(new UserSimulatedIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id.Value,
+                User = user,
+                SimulatedVNeIdGuid = Guid.NewGuid(),
+                ConsentGiven = true,
+                ConsentTimestamp = now,
+                ConsentVersion = "v1.1-simulated",
+                SimulationStatus = "COMPLETED",
+                MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+                MockFullName = user.FullName.ToUpperInvariant(),
+                CreatedOn = now,
+                ModifiedOn = now
+            });
+        }
 
         if (r.ExpiresAt <= clock.GetUtcNow()) throw Error("OTP_EXPIRED", "Code has expired. Request a new code.");
         if (!passwords.Verify(request.Code, r.CodeHash))

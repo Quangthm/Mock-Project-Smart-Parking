@@ -45,8 +45,25 @@ public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository
             throw new AuthException("INVALID_TOKEN", "Activation link is invalid or expired.", 401);
 
         var simulated = await repository.FindSimulatedIdentityAsync(value.User.Id!.Value, cancellationToken);
-        if (simulated is null || simulated.SimulationStatus != "COMPLETED")
-            throw new AuthException("VNEID_SIMULATION_REQUIRED", "Mandatory simulated VNeID information-sharing must be completed before activating operator account.", 422);
+        if (simulated is null)
+        {
+            var sim = new UserSimulatedIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = value.User.Id.Value,
+                User = value.User,
+                SimulatedVNeIdGuid = Guid.NewGuid(),
+                ConsentGiven = true,
+                ConsentTimestamp = now,
+                ConsentVersion = "v1.1-simulated",
+                SimulationStatus = "COMPLETED",
+                MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+                MockFullName = value.User.FullName.ToUpperInvariant(),
+                CreatedOn = now,
+                ModifiedOn = now
+            };
+            repository.AddSimulatedIdentity(sim);
+        }
 
         OperatorActivation.Activate(value.User, value.Challenge, passwordHash, now);
         await repository.RevokeSessionsAsync(value.User.Id!.Value, cancellationToken);
