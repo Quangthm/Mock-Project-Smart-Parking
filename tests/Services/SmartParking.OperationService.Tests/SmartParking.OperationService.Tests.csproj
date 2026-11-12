@@ -8,5 +8,6 @@
     <Using Include="Xunit" />
     <ProjectReference Include="../../../src/Services/OperationService/SmartParking.OperationService.Application/SmartParking.OperationService.Application.csproj" />
     <ProjectReference Include="../../../src/Services/OperationService/SmartParking.OperationService.Persistence/SmartParking.OperationService.Persistence.csproj" />
+    <ProjectReference Include="../../../src/Services/OperationService/SmartParking.OperationService.Infrastructure/SmartParking.OperationService.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

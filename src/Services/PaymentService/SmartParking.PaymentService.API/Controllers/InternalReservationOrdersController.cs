@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.Application.DTOs.Reservations;
 using SmartParking.PaymentService.Application.Usecase.Reservations.Commands.EnsureReservationDepositOrder;
 using SmartParking.PaymentService.Application.Usecase.Reservations.Commands.ReconcileReservation;
@@ -8,7 +9,7 @@ using SmartParking.PaymentService.Application.Usecase.Reservations.Queries.GetRe
 
 namespace SmartParking.PaymentService.API.Controllers;
 
-[Authorize(Policy = "RequireMachineOrServiceRole")]
+[Authorize(Policy = OperationsServiceAuthentication.Policy)]
 [ApiController]
 [Route("internal")]
 public sealed class InternalReservationOrdersController : ControllerBase

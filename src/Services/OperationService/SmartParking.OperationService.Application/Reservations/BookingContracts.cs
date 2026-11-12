@@ -40,7 +40,7 @@ public sealed record DepositOrderResult(string State, Guid? OrderId, DepositOrde
 public sealed record VerifiedCollection(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
     Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
 public sealed record CollectionLookup(string State, IReadOnlyList<VerifiedCollection> Collections);
-public sealed record ReservationDepositCollectedV1(Guid EventId, Guid CollectionId, Guid PaymentOrderId,
+public sealed record ReservationDepositEvidence(Guid EventId, Guid CollectionId, Guid PaymentOrderId,
     Guid PaymentTransactionId, Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId,
     Guid QuoteId, string QuoteVersion, Guid TermsId, string TermsVersion, decimal Amount, string Currency,
     string Provider, string ProviderReference, DateTimeOffset ProviderVerifiedAt, DateTimeOffset OccurredAt);

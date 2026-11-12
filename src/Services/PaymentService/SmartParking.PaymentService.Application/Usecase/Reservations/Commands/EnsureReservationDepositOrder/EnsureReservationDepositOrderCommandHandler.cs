@@ -47,6 +47,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                 existingOrder.ReferenceType != ReferenceType.RESERVATION ||
                 existingOrder.OrderType != OrderType.RESERVATION_FEE ||
                 existingOrder.ExpiresAt != req.ExpiresAt ||
+                existingOrder.QuoteId != req.QuoteId ||
+                !string.Equals(existingOrder.TermsVersion, req.TermsVersion, StringComparison.Ordinal) ||
                 Math.Abs(existingOrder.Amount - req.Amount) > 0.01m ||
                 Math.Abs(existingOrder.FinalAmount - req.Amount) > 0.01m)
             {
@@ -60,11 +62,13 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             if (existingOrder.Status == PaymentOrderStatus.CANCELLED || existingOrder.IsExpired(now))
             {
                 _logger.LogInformation("OperationId: {OperationId} was closed with no order (Tombstone / Expired).", req.OperationId);
-                return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null, req);
+                return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null,
+                    PersistedAcceptedRequest(existingOrder, req));
             }
 
             _logger.LogInformation("Replaying existing order '{OrderId}' for OperationId: {OperationId}", existingOrder.Id, req.OperationId);
-            return new EnsureReservationDepositOrderResponseDto("CREATED", existingOrder.Id, req);
+            return new EnsureReservationDepositOrderResponseDto("CREATED", existingOrder.Id,
+                PersistedAcceptedRequest(existingOrder, req));
         }
 
         // 2. Fence Check: If now >= ExpiresAt (H-Fence Tombstone)
@@ -81,6 +85,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                 OrderType = OrderType.RESERVATION_FEE,
                 ReferenceType = ReferenceType.RESERVATION,
                 ReferenceId = req.ReservationId,
+                QuoteId = req.QuoteId,
+                TermsVersion = req.TermsVersion,
                 Amount = req.Amount,
                 FinalAmount = req.Amount,
                 Status = PaymentOrderStatus.CANCELLED,
@@ -93,7 +99,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             await _orderRepository.AddAsync(tombstone, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null, req);
+            return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null,
+                PersistedAcceptedRequest(tombstone, req));
         }
 
         // 3. Validate Quote
@@ -167,6 +174,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             OrderType = OrderType.RESERVATION_FEE,
             ReferenceType = ReferenceType.RESERVATION,
             ReferenceId = req.ReservationId,
+            QuoteId = quote.Id,
+            TermsVersion = quote.TermsVersion,
             Amount = req.Amount,
             FinalAmount = req.Amount,
             Status = PaymentOrderStatus.PENDING,
@@ -182,6 +191,28 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         _logger.LogInformation("Successfully ensured reservation deposit order '{OrderId}' for OperationId '{OperationId}', Quote '{QuoteId}'",
             order.Id, req.OperationId, quote.Id);
 
-        return new EnsureReservationDepositOrderResponseDto("CREATED", order.Id, req);
+        return new EnsureReservationDepositOrderResponseDto("CREATED", order.Id,
+            PersistedAcceptedRequest(order, req));
+    }
+
+    private static EnsureReservationDepositOrderRequestDto PersistedAcceptedRequest(
+        PaymentOrder order,
+        EnsureReservationDepositOrderRequestDto requested)
+    {
+        var operationId = Guid.TryParse(order.IdempotencyKey, out var parsed)
+            ? parsed
+            : requested.OperationId;
+        return new EnsureReservationDepositOrderRequestDto(
+            operationId,
+            order.ReferenceId,
+            order.AccountId ?? Guid.Empty,
+            order.TenantId,
+            order.SiteId,
+            order.QuoteId ?? Guid.Empty,
+            order.TermsVersion ?? string.Empty,
+            order.Amount,
+            requested.Currency,
+            requested.PaymentMethod,
+            order.ExpiresAt ?? requested.ExpiresAt);
     }
 }

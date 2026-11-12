@@ -116,7 +116,6 @@ public static class ReservationMessaging
             if (gateCheckoutEnabled)
             {
                 registration.AddConsumer<PaymentSucceededConsumer>();
-                registration.AddConsumer<ReservationDepositCollectedConsumer>();
             }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
@@ -144,15 +143,6 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<PaymentSucceededConsumer>(context);
-                    });
-
-                    bus.Message<SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1>(message =>
-                        message.SetEntityName("smartpark.payment.reservation-deposit-collected.v1"));
-                    bus.ReceiveEndpoint("smartpark-operation-reservation-deposit-collected-v1", endpoint =>
-                    {
-                        endpoint.UseMessageRetry(retry => retry.Intervals(
-                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<ReservationDepositCollectedConsumer>(context);
                     });
                 }
                 if (admissionEnabled)

@@ -163,6 +163,8 @@ services:
       <<: [*backend-env, *jwt-validation]
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       Services__OperationService__BaseUrl: http://operation-service:8080/
+      ReservationIntegration__Enabled: ${SMARTPARK_RESERVATION_FACILITY_ENABLED:-false}
+      ReservationIntegration__OperationsPublicKeyPem: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM:-}
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: "5672"
       RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}

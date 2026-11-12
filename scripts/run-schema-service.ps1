@@ -105,7 +105,7 @@ if ($Service -in @('User', 'Reservation')) {
     }
 }
 
-if ($Service -in @('Parking', 'Reservation')) {
+if ($Service -in @('Parking', 'Payment', 'Reservation')) {
     $env:ReservationIntegration__Enabled = if ($env:SMARTPARK_RESERVATION_FACILITY_ENABLED) { $env:SMARTPARK_RESERVATION_FACILITY_ENABLED } else { 'false' }
     if ($Service -eq 'Reservation') {
         $env:ReservationIntegration__AllowHttp = if ($env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP) { $env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP } else { 'false' }

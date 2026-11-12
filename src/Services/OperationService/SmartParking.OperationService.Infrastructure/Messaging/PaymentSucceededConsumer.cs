@@ -54,10 +54,3 @@ public sealed class ReservationPaymentSucceededConsumer(IMediator mediator) : IC
             payment.PaymentMethod, payment.GatewayReference, payment.OccurredAt)), context.CancellationToken);
     }
 }
-
-public sealed class ReservationDepositCollectedConsumer(IMediator mediator)
-    : IConsumer<SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1>
-{
-    public Task Consume(ConsumeContext<SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1> context) =>
-        mediator.Send(new RecordReservationDepositCollectedCommand(context.Message), context.CancellationToken);
-}

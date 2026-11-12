@@ -150,7 +150,7 @@ internal static class BookingContracts
             quote.PrepaymentMode == "PERCENTAGE" && quote.DepositAmount > quote.BookedAmount ||
             string.IsNullOrWhiteSpace(quote.CoverageVersion) || string.IsNullOrWhiteSpace(quote.Disclosure)) throw InvalidOwner();
     }
-    public static void ValidateReservationCollectionBinding(ReservationRow row, ReservationDepositCollectedV1 payment)
+    public static void ValidateReservationCollectionBinding(ReservationRow row, ReservationDepositEvidence payment)
     {
         if (row.Id != payment.ReservationId || row.RequestId != payment.OperationId ||
             row.AccountId != payment.AccountId || row.TenantId != payment.TenantId || row.SiteId != payment.SiteId ||

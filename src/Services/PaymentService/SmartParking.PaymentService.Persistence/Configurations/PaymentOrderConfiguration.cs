@@ -26,6 +26,8 @@ public class PaymentOrderConfiguration : IEntityTypeConfiguration<PaymentOrder>
         builder.Property(x => x.OrderType).HasColumnName("order_type").HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.ReferenceType).HasColumnName("reference_type").HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.ReferenceId).HasColumnName("reference_id").IsRequired();
+        builder.Property(x => x.QuoteId).HasColumnName("quote_id");
+        builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50);
 
         builder.Property(x => x.Amount).HasColumnName("amount").HasPrecision(14, 2).IsRequired();
         builder.Property(x => x.DiscountAmount).HasColumnName("discount_amount").HasPrecision(14, 2).HasDefaultValue(0);

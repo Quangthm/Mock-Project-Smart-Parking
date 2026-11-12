@@ -140,15 +140,15 @@ public sealed class ConfirmZeroPriceReservationHandler(IReservationBookingReposi
             booking.HoldExpiresAt!.Value, state, version), ct);
 }
 
-public sealed record RecordReservationDepositCollectedCommand(ReservationDepositCollectedV1 Event) : IRequest;
+public sealed record RecordReservationDepositCommand(ReservationDepositEvidence Evidence) : IRequest;
 
-public sealed class RecordReservationDepositCollectedHandler(IReservationBookingRepository bookings,
+public sealed class RecordReservationDepositHandler(IReservationBookingRepository bookings,
     IReservationWorkflowConcurrency workers, IOperationsConcurrency guards, IUnitOfWork work,
-    IMediator mediator) : IRequestHandler<RecordReservationDepositCollectedCommand>
+    IMediator mediator) : IRequestHandler<RecordReservationDepositCommand>
 {
-    public async Task Handle(RecordReservationDepositCollectedCommand command, CancellationToken ct)
+    public async Task Handle(RecordReservationDepositCommand command, CancellationToken ct)
     {
-        var payment = command.Event;
+        var payment = command.Evidence;
         if (payment.ReservationId == Guid.Empty || payment.PaymentOrderId == Guid.Empty ||
             payment.AccountId == Guid.Empty || payment.TenantId == Guid.Empty || payment.SiteId == Guid.Empty ||
             payment.PaymentTransactionId == Guid.Empty)
@@ -242,13 +242,13 @@ public sealed class RecordReservationPaymentHandler(IReservationBookingRepositor
             throw new InvalidOperationException("Reservation payment evidence does not match the persisted booking binding.");
 
         var terms = BookingContracts.AcceptedTerms(observed);
-        var collected = new ReservationDepositCollectedV1(payment.EventId, payment.PaymentTransactionId,
+        var collected = new ReservationDepositEvidence(payment.EventId, payment.PaymentTransactionId,
             payment.PaymentOrderId, payment.PaymentTransactionId, operationId, observed.Id, observed.AccountId,
             observed.TenantId, observed.SiteId, terms.QuoteId, terms.Version, termsId, observed.TermsVersion,
             payment.Amount, payment.Currency, payment.Provider, payment.ProviderReference ?? string.Empty,
             payment.PaidAt, payment.PaidAt);
 
-        await mediator.Send(new RecordReservationDepositCollectedCommand(collected), ct);
+        await mediator.Send(new RecordReservationDepositCommand(collected), ct);
     }
 }
 

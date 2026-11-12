@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
@@ -82,18 +83,7 @@ else
         });
 }
 
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("RequireMachineOrServiceRole", policy =>
-        policy.RequireAssertion(context =>
-            context.User.IsInRole("SERVICE") ||
-            context.User.IsInRole("OPERATIONS_WORKER") ||
-            context.User.IsInRole("INTERNAL_SERVICE") ||
-            context.User.HasClaim("role", "SERVICE") ||
-            context.User.HasClaim("role", "OPERATIONS_WORKER") ||
-            context.User.HasClaim("role", "INTERNAL_SERVICE") ||
-            context.User.HasClaim("scope", "s2s")));
-});
+builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
