@@ -17,6 +17,7 @@ Start with [shared contracts and pending API work](v1.1-contracts.md). The follo
 | Admin directory and restricted access changes | [Admin management](../../03-design/api/admin-manage-users-api-design.md) |
 | Additional lots, structure, deactivation | [Facility](../../03-design/api/parking-structure-api-design.md) |
 | Registered vehicles and soft removal | [Vehicles](../../03-design/api/vehicle-registration-api-design.md) |
+| Owner parking lot policies & operational bounds | [Owner lot policies](../../03-design/api/operation-service/owner-parking-lot-policy-api-design.md) · [Service contract](operation-service/01-owner-parking-lot-policies.contract.md) |
 | Geographic discovery, products and booking handoff | [Shared integration contracts](v1.1-contracts.md#discovery-and-parking-products) |
 | Customer Invoice & Checkout Handoff (Payment & Pricing) | [Customer Invoice Contract (SPARK-321)](payment-service/03-customer-invoice-and-checkout-handoff.contract.md) |
 | Checkout, Payment Settlement & Invoice Notification | [Checkout, Payment & Notification Integration](../../03-design/api/checkout-payment-notification-integration-api-design.md) |

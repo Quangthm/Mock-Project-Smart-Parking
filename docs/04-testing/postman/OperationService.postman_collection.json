@@ -1,0 +1,1568 @@
+{
+  "info": {
+    "_postman_id": "c7a8e192-3f41-482a-9e2b-7b91d6e8a042",
+    "name": "SmartParking - OperationService",
+    "description": "# SmartParking OperationService — Postman Collection\n\nBộ kiểm thử tích hợp và Smoke Test toàn diện cho **OperationService** (Cổng `5055`).\nTuân thủ chuẩn [manage-postman-collections Skill](.agents/skills/manage-postman-collections/SKILL.md) và [Rào chắn GEMINI.md](GEMINI.md).\n\n## Cấu trúc Thư mục:\n1. **00 - Setup & Authentication**: Tự động đăng nhập vào UserService (`http://localhost:5035`) lấy Bearer token Owner và lưu vào biến môi trường; kiểm tra health của OperationService.\n2. **01 - Owner Lot Policies (SPARK-230)**: Cấu hình chính sách vận hành bãi xe (Catalogue, Draft, Publish Immediate/Scheduled, Revisions, Idempotency Replay, Auth, Bounds & Duration Validations).\n\n## Rào chắn Kỹ thuật (GEMINI.md Section 5):\n- Tuyệt đối không dùng `pm.request.body.raw` để ghi đè body trong script.\n- Toàn bộ tham số động đều được khai báo qua placeholder `{{var}}` trong Body tab.\n- Mọi biến nội suy trong Body đều có mặt trong mảng `variable` cấp Collection với giá trị khởi tạo chuẩn.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5055",
+      "type": "string"
+    },
+    {
+      "key": "userBaseUrl",
+      "value": "http://localhost:5035",
+      "type": "string"
+    },
+    {
+      "key": "ownerEmail",
+      "value": "owner@smartpark.local",
+      "type": "string"
+    },
+    {
+      "key": "ownerPassword",
+      "value": "Aa1!RKJ7NEyy",
+      "type": "string"
+    },
+    {
+      "key": "ownerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otherOwnerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "siteId",
+      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "type": "string"
+    },
+    {
+      "key": "invalidSiteId",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "scheduledIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pastIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "scheduledActivationAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pastScheduledActivationAt",
+      "value": "2020-01-01T00:00:00Z",
+      "type": "string"
+    },
+    {
+      "key": "publishedRevision",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "page",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "pageSize",
+      "value": "10",
+      "type": "string"
+    },
+    {
+      "key": "noDraftIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "regressionImmKey",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{ownerToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "00 - Setup & Authentication",
+      "description": "Kiểm tra trạng thái sẵn sàng và tự động đăng nhập lấy Bearer token cho Owner.",
+      "item": [
+        {
+          "name": "0.1 Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Kiểm tra liveness/readiness của OperationService."
+          },
+          "response": []
+        },
+        {
+          "name": "0.2 Login as Owner (Auto Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Login succeeded and token returned\", function () {",
+                  "    pm.expect(body.success).to.be.true;",
+                  "    pm.expect(body.data).to.have.property(\"accessToken\");",
+                  "    pm.expect(body.data.user.role).to.eql(\"owner\");",
+                  "});",
+                  "",
+                  "if (body && body.data && body.data.accessToken) {",
+                  "    const token = body.data.accessToken;",
+                  "    pm.environment.set(\"ownerToken\", token);",
+                  "    pm.collectionVariables.set(\"ownerToken\", token);",
+                  "    console.log(\"Owner Bearer token acquired and saved.\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{userBaseUrl}}/api/auth/login",
+              "host": [
+                "{{userBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Tự động đăng nhập vào UserService với tài khoản Owner để lấy accessToken phục vụ toàn bộ các request sau."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Owner Lot Policies (SPARK-230)",
+      "description": "Bộ API quản lý chính sách vận hành bãi xe dành cho Chủ bãi (Owner Lot Policies). Bao gồm tra cứu danh mục, soạn bản nháp, xuất bản chính sách ngay hoặc hẹn giờ, xem lịch sử phiên bản, kiểm tra replay idempotency và kiểm toán bảo mật/validation.",
+      "item": [
+        {
+          "name": "1.1 Get Catalogue - Happy Path (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is successful and contains catalogue policies\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.have.property(\"siteId\");",
+                  "    pm.expect(json.data.siteId).to.eql(pm.variables.get(\"siteId\"));",
+                  "    pm.expect(json.data).to.have.property(\"policies\");",
+                  "    pm.expect(json.data.policies).to.be.an(\"array\").that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/catalogue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "catalogue"
+              ]
+            },
+            "description": "Tra cứu danh mục 15 chính sách vận hành và giá trị thực tế đang có hiệu lực tại bãi xe."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Get Draft - Initial State (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Draft response format is valid\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json).to.have.property(\"data\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "draft"
+              ]
+            },
+            "description": "Đọc bản nháp cấu hình đang soạn thảo. Nếu chưa có nháp, data sẽ là null."
+          },
+          "response": []
+        },
+        {
+          "name": "1.3 Save Draft - Envelope Policies (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Draft saved with envelope structure\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql(\"DRAFT\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"policies\": {\n    \"paymentHoldDurationMinutes\": 15,\n    \"arrivalLateToleranceMinutes\": 20,\n    \"arrivalLateToleranceEnabled\": true,\n    \"minReservationDurationMinutes\": 30,\n    \"maxReservationDurationHours\": 24,\n    \"reservationProtectionWindowHours\": 2,\n    \"allocationLeadTimeMinutes\": 30,\n    \"occupancyValidityTimespanHours\": 2,\n    \"maxAdvanceBookingDays\": 7,\n    \"interBookingBufferMinutes\": 5,\n    \"driverReallocationRequestLimit\": 3,\n    \"parkingProductEnabled\": {\n      \"monthly\": true,\n      \"yearly\": true\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "draft"
+              ]
+            },
+            "description": "Lưu bản nháp chính sách sử dụng body lồng kiểu envelope: { \"policies\": { ... } }."
+          },
+          "response": []
+        },
+        {
+          "name": "1.4 Save Draft - Flat Fields (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Draft saved with flat structure\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql(\"DRAFT\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentHoldDurationMinutes\": 10,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"arrivalLateToleranceEnabled\": true,\n  \"minReservationDurationMinutes\": 30,\n  \"maxReservationDurationHours\": 48,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"occupancyValidityTimespanHours\": 4,\n  \"maxAdvanceBookingDays\": 14,\n  \"interBookingBufferMinutes\": 5,\n  \"driverReallocationRequestLimit\": 5,\n  \"parkingProductEnabled\": {\n    \"monthly\": true,\n    \"yearly\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "draft"
+              ]
+            },
+            "description": "Lưu bản nháp chính sách sử dụng body phẳng (flat properties)."
+          },
+          "response": []
+        },
+        {
+          "name": "1.5 Get Draft - With Saved Data (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns saved draft properties\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.not.be.null;",
+                  "    pm.expect(json.data.policies.paymentHoldDurationMinutes).to.eql(10);",
+                  "    pm.expect(json.data.policies.arrivalLateToleranceMinutes).to.eql(15);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "draft"
+              ]
+            },
+            "description": "Kiểm tra lại nội dung bản nháp sau khi đã lưu ở các bước trên."
+          },
+          "response": []
+        },
+        {
+          "name": "1.6 Publish Policy - Immediate Activation (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Tự động sinh Idempotency-Key UUID mới cho cả collection và environment",
+                  "const key = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.collectionVariables.set(\"idempotencyKey\", key);",
+                  "if (pm.environment.has(\"idempotencyKey\")) {",
+                  "    pm.environment.set(\"idempotencyKey\", key);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Policy published immediately\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql(\"ACTIVE\");",
+                  "    pm.expect(json.data).to.have.property(\"newRevision\");",
+                  "    // Lưu revision mới để dùng cho test tra cứu snapshot",
+                  "    const rev = json.data.newRevision.toString();",
+                  "    pm.collectionVariables.set(\"publishedRevision\", rev);",
+                  "    if (pm.environment.has(\"publishedRevision\")) {",
+                  "        pm.environment.set(\"publishedRevision\", rev);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationMode\": \"IMMEDIATE\",\n  \"publishNote\": \"Publishing operational policy for standard business hours\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Xuất bản chính sách có hiệu lực ngay lập tức (IMMEDIATE) và bảo vệ bằng Idempotency-Key."
+          },
+          "response": []
+        },
+        {
+          "name": "1.7 Publish Policy - Idempotency Replay (200 OK + Replayed Header)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Idempotency-Replayed header is true\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Idempotency-Replayed\")).to.eql(\"true\");",
+                  "});",
+                  "",
+                  "pm.test(\"Replayed payload returns identical revision\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.newRevision.toString()).to.eql(pm.variables.get(\"publishedRevision\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationMode\": \"IMMEDIATE\",\n  \"publishNote\": \"Publishing operational policy for standard business hours\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Gửi lại chính xác request xuất bản với cùng Idempotency-Key. Backend phải trả về kết quả đã cache kèm header Idempotency-Replayed: true."
+          },
+          "response": []
+        },
+        {
+          "name": "1.8 Publish Policy - Scheduled Future Activation (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// 1. Tính toán thời điểm kích hoạt tương lai (+2 ngày)",
+                  "const futureDate = new Date();",
+                  "futureDate.setDate(futureDate.getDate() + 2);",
+                  "const iso = futureDate.toISOString();",
+                  "pm.collectionVariables.set(\"scheduledActivationAt\", iso);",
+                  "if (pm.environment.has(\"scheduledActivationAt\")) {",
+                  "    pm.environment.set(\"scheduledActivationAt\", iso);",
+                  "}",
+                  "const schedKey = pm.variables.replaceIn('{{$guid}}');",
+                  "pm.collectionVariables.set(\"scheduledIdempotencyKey\", schedKey);",
+                  "if (pm.environment.has(\"scheduledIdempotencyKey\")) {",
+                  "    pm.environment.set(\"scheduledIdempotencyKey\", schedKey);",
+                  "}",
+                  "",
+                  "// 2. Tạo bản nháp mới trước khi xuất bản hẹn giờ (vì lượt publish 1.6 đã hoàn tất và dọn nháp cũ)",
+                  "const siteId = pm.variables.get(\"siteId\");",
+                  "const baseUrl = pm.variables.get(\"baseUrl\");",
+                  "const token = pm.variables.get(\"ownerToken\");",
+                  "pm.sendRequest({",
+                  "    url: `${baseUrl}/api/v1/lots/${siteId}/policies/draft`,",
+                  "    method: 'PUT',",
+                  "    header: {",
+                  "        'Content-Type': 'application/json',",
+                  "        'Authorization': `Bearer ${token}`",
+                  "    },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            policies: {",
+                  "                paymentHoldDurationMinutes: 20,",
+                  "                arrivalLateToleranceMinutes: 25,",
+                  "                arrivalLateToleranceEnabled: true,",
+                  "                interBookingBufferMinutes: 10",
+                  "            }",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    if (err) {",
+                  "        console.error(\"Auto-draft creation failed:\", err);",
+                  "    } else {",
+                  "        console.log(\"Fresh draft prepared for scheduled activation.\");",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Scheduled policy created successfully\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql(\"SCHEDULED\");",
+                  "    pm.expect(json.data).to.have.property(\"newRevision\");",
+                  "    pm.expect(json.data).to.have.property(\"activatedAt\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{scheduledIdempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationMode\": \"SCHEDULED\",\n  \"scheduledActivationAt\": \"{{scheduledActivationAt}}\",\n  \"publishNote\": \"Scheduled policy configuration for upcoming weekend festival\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Xuất bản chính sách hẹn giờ (SCHEDULED). Khoảng hiệu lực được kiểm soát bởi ràng buộc GiST không trùng lặp."
+          },
+          "response": []
+        },
+        {
+          "name": "1.9 Get Policy Revisions History (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns revisions list\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.have.property(\"items\");",
+                  "    pm.expect(json.data.items).to.be.an(\"array\").that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/revisions?page={{page}}&pageSize={{pageSize}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "{{pageSize}}"
+                }
+              ]
+            },
+            "description": "Lấy danh sách lịch sử các phiên bản chính sách đã ban hành (hỗ trợ phân trang, max pageSize 50)."
+          },
+          "response": []
+        },
+        {
+          "name": "1.10 Get Specific Revision Snapshot (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns exact revision snapshot\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.have.property(\"policies\");",
+                  "    pm.expect(json.data.policies).to.have.property(\"paymentHoldDurationMinutes\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/revisions/{{publishedRevision}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "revisions",
+                "{{publishedRevision}}"
+              ]
+            },
+            "description": "Tra cứu chi tiết snapshot của một phiên bản chính sách cụ thể trong lịch sử."
+          },
+          "response": []
+        },
+        {
+          "name": "1.11 Auth Failure - Missing Token (401 UNAUTHORIZED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401 Unauthorized\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is UNAUTHORIZED\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"UNAUTHORIZED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/catalogue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "catalogue"
+              ]
+            },
+            "description": "Kiểm tra cơ chế chặn truy cập khi request không mang theo Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "1.12 Auth Failure - Cross-Lot Access Denied (403 CROSS_LOT_ACCESS_DENIED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const token = pm.variables.get(\"otherOwnerToken\");",
+                  "if (!token) {",
+                  "    pm.test(\"Skip: otherOwnerToken is not configured\", function () {",
+                  "        console.log(\"SKIP 1.12: Configure otherOwnerToken in environment to verify 403 Cross-Lot Access Denied.\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Status code is 403 Forbidden\", function () {",
+                  "        pm.response.to.have.status(403);",
+                  "    });",
+                  "    pm.test(\"Error code is CROSS_LOT_ACCESS_DENIED\", function () {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.success).to.be.false;",
+                  "        pm.expect(json.code || json.errorCode).to.eql(\"CROSS_LOT_ACCESS_DENIED\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherOwnerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/catalogue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "catalogue"
+              ]
+            },
+            "description": "Kiểm tra cơ chế chặn truy cập chéo bãi khi tài khoản Owner không có quyền quản lý siteId này."
+          },
+          "response": []
+        },
+        {
+          "name": "1.13 Error Case - Site Not Found (404 SITE_NOT_FOUND)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is SITE_NOT_FOUND\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"SITE_NOT_FOUND\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{invalidSiteId}}/policies/catalogue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{invalidSiteId}}",
+                "policies",
+                "catalogue"
+              ]
+            },
+            "description": "Kiểm tra phản hồi khi tra cứu chính sách cho một siteId không tồn tại trong hệ thống."
+          },
+          "response": []
+        },
+        {
+          "name": "1.14 Validation Error - Parameter Exceeds Ceiling (400 POLICY_OUT_OF_BOUNDS)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is POLICY_OUT_OF_BOUNDS\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"POLICY_OUT_OF_BOUNDS\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentHoldDurationMinutes\": 999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "draft"
+              ]
+            },
+            "description": "Kiểm tra validation khi một tham số vượt quá trần quy định trong catalog (paymentHoldDurationMinutes tối đa 30)."
+          },
+          "response": []
+        },
+        {
+          "name": "1.15 Validation Error - Min Duration > Max Duration (400 INVALID_TIME_DURATION)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is INVALID_TIME_DURATION\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"INVALID_TIME_DURATION\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minReservationDurationMinutes\": 180,\n  \"maxReservationDurationHours\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "draft"
+              ]
+            },
+            "description": "Kiểm tra ràng buộc logic thời lượng: thời gian đỗ tối thiểu (180 phút = 3h) không được lớn hơn thời gian tối đa (2h)."
+          },
+          "response": []
+        },
+        {
+          "name": "1.16 Validation Error - Past Activation Schedule (400 INVALID_ACTIVATION_SCHEDULE)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"pastIdempotencyKey\", pm.variables.replaceIn('{{$guid}}'));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is INVALID_ACTIVATION_SCHEDULE\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"INVALID_ACTIVATION_SCHEDULE\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{pastIdempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationMode\": \"SCHEDULED\",\n  \"scheduledActivationAt\": \"{{pastScheduledActivationAt}}\",\n  \"publishNote\": \"Invalid past schedule configuration\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Kiểm tra validation khi hẹn giờ kích hoạt (SCHEDULED) tại một mốc thời gian trong quá khứ."
+          },
+          "response": []
+        },
+        {
+          "name": "1.17 Publish Policy - Without Draft (409 NO_DRAFT_TO_PUBLISH)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const key = pm.variables.replaceIn('{{}}');",
+                  "pm.collectionVariables.set(\"noDraftIdempotencyKey\", key);",
+                  "if (pm.environment.has(\"noDraftIdempotencyKey\")) {",
+                  "    pm.environment.set(\"noDraftIdempotencyKey\", key);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is NO_DRAFT_TO_PUBLISH\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"NO_DRAFT_TO_PUBLISH\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{noDraftIdempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \"activationMode\": \"IMMEDIATE\",\\n  \"publishNote\": \"Attempting publish when draft does not exist\"\\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Kiem tra truong hop gui yeu cau publish khi chua luu ban nhap (tra ve 409 NO_DRAFT_TO_PUBLISH)."
+          },
+          "response": []
+        },
+        {
+          "name": "1.18 Publish Policy - Idempotency Payload Mismatch (409 IDEMPOTENCY_PAYLOAD_MISMATCH)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Tao ban nhap moi voi noi dung khac biet truoc khi gui lai idempotencyKey cu (da dung tai 1.6)",
+                  "const siteId = pm.variables.get(\"siteId\");",
+                  "const baseUrl = pm.variables.get(\"baseUrl\");",
+                  "const token = pm.variables.get(\"ownerToken\");",
+                  "",
+                  "pm.sendRequest({",
+                  "    url: ${baseUrl}/api/v1/lots//policies/draft,",
+                  "    method: 'PUT',",
+                  "    header: {",
+                  "        'Content-Type': 'application/json',",
+                  "        'Authorization': Bearer ",
+                  "    },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            policies: {",
+                  "                paymentHoldDurationMinutes: 28,",
+                  "                arrivalLateToleranceMinutes: 20,",
+                  "                arrivalLateToleranceEnabled: true,",
+                  "                interBookingBufferMinutes: 10",
+                  "            }",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    if (err) {",
+                  "        console.error(\"Mismatch test draft creation failed:\", err);",
+                  "    } else {",
+                  "        console.log(\"Altered draft saved for idempotency mismatch test.\");",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test(\"Error code is IDEMPOTENCY_PAYLOAD_MISMATCH\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code || json.errorCode).to.eql(\"IDEMPOTENCY_PAYLOAD_MISMATCH\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \"activationMode\": \"IMMEDIATE\",\\n  \"publishNote\": \"Attempted replay with altered draft payload\"\\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Kiem tra co che bao ve Idempotency khi tai su dung Idempotency-Key voi draft payload da thay doi (tra ve 409 IDEMPOTENCY_PAYLOAD_MISMATCH)."
+          },
+          "response": []
+        },
+        {
+          "name": "1.19 Publish Policy - Immediate Activation Overrides Future Scheduled (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const siteId = pm.variables.get(\"siteId\");",
+                  "const baseUrl = pm.variables.get(\"baseUrl\");",
+                  "const token = pm.variables.get(\"ownerToken\");",
+                  "",
+                  "// 1. Tao khoa idempotency",
+                  "const schedKey = pm.variables.replaceIn('{{}}');",
+                  "const immKey = pm.variables.replaceIn('{{}}');",
+                  "pm.collectionVariables.set(\"regressionImmKey\", immKey);",
+                  "if (pm.environment.has(\"regressionImmKey\")) {",
+                  "    pm.environment.set(\"regressionImmKey\", immKey);",
+                  "}",
+                  "",
+                  "// 2. Tinh thoi diem kich hoat tuong lai (+5 ngay)",
+                  "const futureDate = new Date();",
+                  "futureDate.setDate(futureDate.getDate() + 5);",
+                  "const futureIso = futureDate.toISOString();",
+                  "",
+                  "// 3. Luu Draft A -> Publish Scheduled (+5 ngay) -> Luu Draft B (cho IMMEDIATE tiep theo)",
+                  "pm.sendRequest({",
+                  "    url: ${baseUrl}/api/v1/lots//policies/draft,",
+                  "    method: 'PUT',",
+                  "    header: {",
+                  "        'Content-Type': 'application/json',",
+                  "        'Authorization': Bearer ",
+                  "    },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            policies: {",
+                  "                paymentHoldDurationMinutes: 25,",
+                  "                arrivalLateToleranceMinutes: 18,",
+                  "                arrivalLateToleranceEnabled: true,",
+                  "                interBookingBufferMinutes: 5",
+                  "            }",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    if (err) {",
+                  "        console.error(\"Draft A creation failed:\", err);",
+                  "        return;",
+                  "    }",
+                  "    pm.sendRequest({",
+                  "        url: ${baseUrl}/api/v1/lots//policies/publish,",
+                  "        method: 'POST',",
+                  "        header: {",
+                  "            'Content-Type': 'application/json',",
+                  "            'Authorization': Bearer ,",
+                  "            'Idempotency-Key': schedKey",
+                  "        },",
+                  "        body: {",
+                  "            mode: 'raw',",
+                  "            raw: JSON.stringify({",
+                  "                activationMode: 'SCHEDULED',",
+                  "                scheduledActivationAt: futureIso,",
+                  "                publishNote: 'Scheduled policy to be overridden by immediate'",
+                  "            })",
+                  "        }",
+                  "    }, function (err2, res2) {",
+                  "        if (err2) {",
+                  "            console.error(\"Scheduled publish failed:\", err2);",
+                  "            return;",
+                  "        }",
+                  "        pm.sendRequest({",
+                  "            url: ${baseUrl}/api/v1/lots//policies/draft,",
+                  "            method: 'PUT',",
+                  "            header: {",
+                  "                'Content-Type': 'application/json',",
+                  "                'Authorization': Bearer ",
+                  "            },",
+                  "            body: {",
+                  "                mode: 'raw',",
+                  "                raw: JSON.stringify({",
+                  "                    policies: {",
+                  "                        paymentHoldDurationMinutes: 15,",
+                  "                        arrivalLateToleranceMinutes: 20,",
+                  "                        arrivalLateToleranceEnabled: false,",
+                  "                        interBookingBufferMinutes: 5",
+                  "                    }",
+                  "                })",
+                  "            }",
+                  "        }, function (err3, res3) {",
+                  "            if (err3) {",
+                  "                console.error(\"Draft B creation failed:\", err3);",
+                  "            } else {",
+                  "                console.log(\"Regression setup ready.\");",
+                  "            }",
+                  "        });",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Immediate policy successfully overrides scheduled policy\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql(\"ACTIVE\");",
+                  "    pm.expect(json.data).to.have.property(\"newRevision\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{regressionImmKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \"activationMode\": \"IMMEDIATE\",\\n  \"publishNote\": \"Immediate override of scheduled policy\"\\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{siteId}}",
+                "policies",
+                "publish"
+              ]
+            },
+            "description": "Kiem tra tinh nang ghi de lich hen gio tuong lai khi xuat ban ngay (IMMEDIATE) - ngan chan loi exclusion constraint 409 RESOURCE_CONFLICT."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
