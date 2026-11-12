@@ -305,6 +305,7 @@ export function CheckInOut({
           entryTime: booking.entryTime ?? booking.startTime,
           reservationId: booking.id,
           plateNumber: booking.licensePlate,
+          imageData,
         })
         if (settlement === "PENDING") return
       }
@@ -384,6 +385,7 @@ export function CheckInOut({
     plateNumber?: string
     sessionId?: string
     reservationId?: string
+    imageData?: string
   }): Promise<"PAID" | "PENDING"> {
     if (!lot) throw new Error("Select a parking site before processing payment.")
     const isTestPayOs = payment === "PAYOS_TEST"
@@ -403,6 +405,7 @@ export function CheckInOut({
         sessionId: input.sessionId,
         reservationId: input.reservationId,
         plateNumber: input.plateNumber,
+        imageData: input.imageData,
         developmentTestPayOs: isTestPayOs,
       })
     } catch (error) {
@@ -467,6 +470,7 @@ export function CheckInOut({
           entryTime: result.session.entryTime,
           sessionId: result.session.id,
           plateNumber: result.plate,
+          imageData,
         })
         if (settlement === "PENDING") return
         session = result.session

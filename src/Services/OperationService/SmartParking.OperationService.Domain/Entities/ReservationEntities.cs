@@ -70,8 +70,16 @@ public sealed class ParkingSessionRow
         if (ExitTime is not null) return;
         if (SessionStatus is not ("ACTIVE" or "PENDING_PAYMENT") || now < EntryTime) throw new GateTransitionException("INVALID_SESSION_STATE", "Only active parking sessions can depart.");
         ExitTime = now;
-        ExitImageUrl = image;
+        ExitImageUrl = image ?? ExitImageUrl;
         SessionStatus = "COMPLETED";
+    }
+
+    public void CaptureCheckoutImage(string? image)
+    {
+        if (string.IsNullOrWhiteSpace(image)) return;
+        if (ExitTime is not null || SessionStatus is not ("ACTIVE" or "PENDING_PAYMENT"))
+            throw new GateTransitionException("INVALID_SESSION_STATE", "Only an open parking session can capture checkout evidence.");
+        ExitImageUrl = image;
     }
 
     public Guid Id { get; set; }
