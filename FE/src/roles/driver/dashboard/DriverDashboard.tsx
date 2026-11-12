@@ -494,7 +494,10 @@ export function DriverDashboard() {
                 {homePanel === "bookings" ? (
                   <section className="driver-bookings-page">
                     <PageHeader title="Bookings" variant="compact" />
-                    <ActiveBookings />
+                    <ActiveBookings onResumeReservation={siteId => {
+                      const site = store.getLots().find(lot => lot.id === siteId)
+                      if (site) setBookingLot(site)
+                    }} />
                   </section>
                 ) : (
                   <section>
