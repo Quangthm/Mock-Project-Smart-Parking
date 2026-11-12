@@ -15,16 +15,75 @@ public class InitiatePaymentCheckoutCommandHandlerTests
     private readonly FakePaymentTransactionRepository _txRepo = new();
     private readonly FakeUnitOfWork _uow = new();
     private readonly FakePaymentGatewayPort _gatewayPort = new();
+    private readonly FakeCurrentActor _actor = new();
 
-    private InitiatePaymentCheckoutCommandHandler CreateHandler()
+    private InitiatePaymentCheckoutCommandHandler CreateHandler(FakeCurrentActor? actor = null)
     {
         return new InitiatePaymentCheckoutCommandHandler(
             _orderRepo,
             _txRepo,
             _uow,
             _gatewayPort,
+            actor ?? _actor,
             NullLogger<InitiatePaymentCheckoutCommandHandler>.Instance
         );
+    }
+
+    [Fact]
+    public async Task Handle_DifferentAccount_ThrowsForbiddenPaymentDomainException()
+    {
+        var orderOwnerId = Guid.NewGuid();
+        var callerId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+
+        _orderRepo.Orders.Add(new PaymentOrder
+        {
+            Id = orderId,
+            AccountId = orderOwnerId,
+            Status = PaymentOrderStatus.PENDING,
+            FinalAmount = 50000,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10)
+        });
+
+        var customActor = new FakeCurrentActor
+        {
+            IsAuthenticated = true,
+            UserId = callerId,
+            AccountId = callerId,
+            IsInternalService = false
+        };
+        var handler = CreateHandler(customActor);
+        var command = new InitiatePaymentCheckoutCommand(orderId, "idem-diff-account");
+
+        var ex = await Assert.ThrowsAsync<PaymentDomainException>(() => handler.Handle(command, CancellationToken.None));
+        Assert.Equal("FORBIDDEN_ORDER_ACCESS", ex.Code);
+    }
+
+    [Fact]
+    public async Task Handle_InternalService_AllowedEvenIfDifferentAccount()
+    {
+        var orderOwnerId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+
+        _orderRepo.Orders.Add(new PaymentOrder
+        {
+            Id = orderId,
+            AccountId = orderOwnerId,
+            Status = PaymentOrderStatus.PENDING,
+            FinalAmount = 50000,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10)
+        });
+
+        var serviceActor = new FakeCurrentActor
+        {
+            IsAuthenticated = true,
+            IsInternalService = true
+        };
+        var handler = CreateHandler(serviceActor);
+        var command = new InitiatePaymentCheckoutCommand(orderId, "idem-service-account");
+
+        var response = await handler.Handle(command, CancellationToken.None);
+        Assert.NotNull(response);
     }
 
     [Fact]
@@ -146,6 +205,78 @@ public class InitiatePaymentCheckoutCommandHandlerTests
         Assert.Equal("PENDING", result.Status);
 
         Assert.Single(_txRepo.Transactions);
-        Assert.Equal(1, _uow.SaveCount);
+        Assert.Equal(2, _uow.SaveCount);
+    }
+
+    [Fact]
+    public async Task Handle_Replay_ReturnsStoredRealQrCodeAndBankData_WithoutFakeStrings()
+    {
+        var orderId = Guid.NewGuid();
+        var idemKey = "replayed-real-key-123";
+        var existingTxId = Guid.NewGuid();
+
+        var order = new PaymentOrder
+        {
+            Id = orderId,
+            OrderCode = "202610200003",
+            FinalAmount = 25000,
+            Status = PaymentOrderStatus.PENDING,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15)
+        };
+        var existingTx = new PaymentTransaction
+        {
+            Id = existingTxId,
+            PaymentOrderId = orderId,
+            Status = PaymentStatus.PENDING,
+            Amount = 25000,
+            GatewayTransactionId = "GW-REAL-LINK",
+            CheckoutUrl = "https://pay.payos.vn/web/GW-REAL-LINK",
+            QrCode = "0002010102REAL_QR_CODE",
+            AccountNumber = "999888777",
+            AccountName = "REAL CORP",
+            Bin = "970400"
+        };
+        order.Transactions.Add(existingTx);
+        _orderRepo.Orders.Add(order);
+
+        var handler = CreateHandler();
+        var command = new InitiatePaymentCheckoutCommand(orderId, idemKey);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(result.IsReplayed);
+        Assert.Equal("https://pay.payos.vn/web/GW-REAL-LINK", result.CheckoutUrl);
+        Assert.Equal("0002010102REAL_QR_CODE", result.QrCode);
+        Assert.Equal("999888777", result.AccountNumber);
+        Assert.Equal("REAL CORP", result.AccountName);
+        Assert.Equal("970400", result.Bin);
+    }
+
+    [Fact]
+    public async Task Handle_AmbiguousUnknownTransaction_BlocksCheckoutRetry()
+    {
+        var orderId = Guid.NewGuid();
+        var order = new PaymentOrder
+        {
+            Id = orderId,
+            OrderCode = "202610200004",
+            FinalAmount = 30000,
+            Status = PaymentOrderStatus.PENDING,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15)
+        };
+        order.Transactions.Add(new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            PaymentOrderId = orderId,
+            Status = PaymentStatus.UNKNOWN,
+            Amount = 30000
+        });
+        _orderRepo.Orders.Add(order);
+
+        var handler = CreateHandler();
+        var command = new InitiatePaymentCheckoutCommand(orderId, "new-attempt");
+
+        var ex = await Assert.ThrowsAsync<PaymentDomainException>(() => handler.Handle(command, CancellationToken.None));
+        Assert.Equal("PAYMENT_TRANSACTION_AMBIGUOUS", ex.Code);
     }
 }

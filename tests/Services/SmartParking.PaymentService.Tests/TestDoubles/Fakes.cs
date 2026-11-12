@@ -53,6 +53,11 @@ public class FakePaymentTransactionRepository : IPaymentTransactionRepository
         return Task.FromResult(Transactions.FirstOrDefault(x => x.GatewayTransactionId == gatewayTxId));
     }
 
+    public Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Transactions.FirstOrDefault(x => x.IdempotencyKey == idempotencyKey));
+    }
+
     public Task<IReadOnlyList<PaymentTransaction>> GetByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default)
     {
         var list = Transactions.Where(x => x.PaymentOrderId == orderId).ToList();
@@ -70,6 +75,58 @@ public class FakePaymentTransactionRepository : IPaymentTransactionRepository
         var idx = Transactions.FindIndex(x => x.Id == transaction.Id);
         if (idx >= 0) Transactions[idx] = transaction;
         else Transactions.Add(transaction);
+    }
+}
+
+public class FakeReservationQuoteRepository : IReservationQuoteRepository
+{
+    public readonly List<ReservationQuote> Quotes = new();
+
+    public Task<ReservationQuote?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Quotes.FirstOrDefault(x => x.Id == id));
+    }
+
+    public Task AddAsync(ReservationQuote quote, CancellationToken cancellationToken = default)
+    {
+        Quotes.Add(quote);
+        return Task.CompletedTask;
+    }
+
+    public void Update(ReservationQuote quote)
+    {
+        var idx = Quotes.FindIndex(x => x.Id == quote.Id);
+        if (idx >= 0) Quotes[idx] = quote;
+        else Quotes.Add(quote);
+    }
+}
+
+public class FakeRefundRequestRepository : IRefundRequestRepository
+{
+    public readonly List<RefundRequest> RefundRequests = new();
+
+    public Task<RefundRequest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(RefundRequests.FirstOrDefault(x => x.Id == id));
+    }
+
+    public Task<IReadOnlyList<RefundRequest>> GetByPaymentOrderIdAsync(Guid paymentOrderId, CancellationToken cancellationToken = default)
+    {
+        var list = RefundRequests.Where(x => x.PaymentOrderId == paymentOrderId).ToList();
+        return Task.FromResult<IReadOnlyList<RefundRequest>>(list);
+    }
+
+    public Task AddAsync(RefundRequest refundRequest, CancellationToken cancellationToken = default)
+    {
+        RefundRequests.Add(refundRequest);
+        return Task.CompletedTask;
+    }
+
+    public void Update(RefundRequest refundRequest)
+    {
+        var idx = RefundRequests.FindIndex(x => x.Id == refundRequest.Id);
+        if (idx >= 0) RefundRequests[idx] = refundRequest;
+        else RefundRequests.Add(refundRequest);
     }
 }
 
@@ -290,6 +347,12 @@ public class FakeCurrentActor : SmartParking.PaymentService.Application.Common.I
 {
     public bool IsAuthenticated { get; set; } = true;
     public Guid? UserId { get; set; }
+    public Guid? AccountId
+    {
+        get => _accountId ?? UserId;
+        set => _accountId = value;
+    }
+    private Guid? _accountId;
     public string? Role { get; set; } = "DRIVER";
     public Guid? TenantId { get; set; }
     public Guid? SiteId { get; set; }
