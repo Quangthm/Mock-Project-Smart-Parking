@@ -55,10 +55,10 @@ Checklist trước khi setup:
 
 ### AI Chatbot bằng Docker
 
-**Smoke test cách ly cho tester.** Mở Docker Desktop ở chế độ Linux containers và chạy từ thư mục gốc bằng PowerShell 7:
+**Smoke test cách ly cho tester.** Mở Docker Desktop ở chế độ Linux containers và chạy từ thư mục gốc bằng Windows PowerShell 5.1+ hoặc PowerShell 7+:
 
 ```powershell
-pwsh -NoProfile -File scripts/test-assistant-docker-setup.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-docker-setup.ps1
 ```
 
 Bộ test tự tạo PostgreSQL, JWT và tài liệu FAQ mẫu. Tester có thể chạy trước khi chuẩn bị `.env`, tài khoản UserService và provider key. Test build image `smartpark/assistant:local`, kiểm Settings, quyền Admin/Driver, FAQ và lịch sử qua lần chạy lại setup, rồi dọn container và volume test.
@@ -76,6 +76,8 @@ Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bả
 | `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
 | `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). |
 | `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
+
+Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`; Admin nhập trong Settings sau khi container đã chạy.
 
 Nếu chưa có bộ khóa dev, có thể tạo bằng PowerShell 7 trong **một thư mục mới ngoài repo**. Cặp JWT này dành riêng cho UserService local. PFX dùng một khóa RSA khác. Nạp PEM riêng vào cấu hình UserService theo mục 5.5.
 

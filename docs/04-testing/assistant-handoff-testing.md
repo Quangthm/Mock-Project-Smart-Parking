@@ -21,7 +21,7 @@ Lưu cho mỗi đợt test tên nhánh, commit bản được bàn giao, ngày, 
 
 ### 2.1. Công cụ và dữ liệu đầu vào
 
-Cần Git, .NET SDK 10, Docker Desktop Linux containers và Docker Compose có `up --wait`. Runner hỗ trợ Windows PowerShell 5.1. PowerShell 7 cần cho công thức tạo khóa local và harness Docker tự động. Có kết nối tới registry Docker/NuGet ở lần build đầu. Node trên host cần khi chạy FE trực tiếp, Docker FE đã có Node.
+Cần Git, .NET SDK 10, Docker Desktop Linux containers và Docker Compose có `up --wait`. Runner và Docker setup harness hỗ trợ Windows PowerShell 5.1+ hoặc PowerShell 7+. PowerShell 7 vẫn có thể dùng cho công thức tạo khóa local. Có kết nối tới registry Docker/NuGet ở lần build đầu. Node trên host cần khi chạy FE trực tiếp, Docker FE đã có Node.
 
 Người phụ trách môi trường cung cấp những thứ sau qua kênh riêng của nhóm.
 
@@ -264,7 +264,7 @@ dotnet restore SmartParking.slnx
 dotnet build SmartParking.slnx -c Release --no-restore --nologo -m:1
 dotnet test tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj -c Release --no-build --nologo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-postgres.ps1
-pwsh -NoProfile -File scripts/test-assistant-docker-setup.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-docker-setup.ps1
 ```
 
 | Bộ test | Kiểm gì | Kết quả đã ghi nhận 08/11/2026 |

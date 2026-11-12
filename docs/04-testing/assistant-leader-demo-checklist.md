@@ -31,17 +31,17 @@ Phạm vi: FAQ, Settings, chat/history/recovery, đọc xe của Driver và bả
 ## 1. Chuẩn bị máy
 
 - Dùng checkout có đủ thay đổi Assistant, gồm `compose.user-tls.yml`, `compose.assistant-trust.yml` và migration User vehicle binding. Các file chưa commit không tự đi theo khi clone/pull branch.
-- Chuẩn bị cấu hình theo [LOCAL-SETUP](../../LOCAL-SETUP.md): JWT public key khớp UserService, keyring/PFX gốc nếu dùng lại DB, knowledge publication, TLS PFX SAN `user-service` và CA public. Đường dẫn tuyệt đối phải tồn tại trên máy leader. Không đưa khóa bí mật vào Git hoặc báo cáo test.
+- Chuẩn bị cấu hình theo [LOCAL-SETUP](../../LOCAL-SETUP.md): JWT public key khớp UserService, keyring/PFX gốc nếu dùng lại DB, knowledge publication, TLS PFX SAN `user-service` và CA public. Mọi path local phải tồn tại trên máy leader; path Assistant có thể ghi tương đối so với `.env`. Không đưa khóa bí mật vào Git hoặc báo cáo test.
 - Khởi động Docker Desktop; `docker info` phải thành công trước khi chạy setup. Giữ password của volume hiện có. Không reset volume để xử lý lỗi cấu hình.
 - Đặt `Assistant__Reads__User__Enabled=true` khi TLS/trust đã sẵn sàng; giữ Operations/Search tắt nếu chưa được owner nghiệm thu.
 
 ## 2. Kiểm tra và chạy
 
-Chạy fixture setup bằng **Windows PowerShell 5.1**; fixture Docker preflight yêu cầu **PowerShell 7**. Fixture dùng dữ liệu giả và không chứng minh app thật healthy.
+Chạy fixture setup bằng **Windows PowerShell 5.1+ hoặc PowerShell 7+**. Fixture dùng dữ liệu giả và không chứng minh app thật healthy.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-setup.ps1
-pwsh -NoProfile -File scripts/test-assistant-docker-setup.ps1 -PreflightOnly -NoBuild
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-docker-setup.ps1 -PreflightOnly -NoBuild
 .\setup.ps1 -AssistantCheck
 ```
 
@@ -85,7 +85,7 @@ Ghi: commit/working-tree đang chạy, máy test, thời điểm, phiên bản P
 1. Mở Docker Desktop, đợi engine Running. Dùng Linux containers.
 2. Nhận checkout đúng SHA từ người bàn giao, mở PowerShell ở thư mục chứa `setup.ps1`.
 3. Chạy `docker info`; nếu lỗi pipe/daemon thì dừng, mở lại Docker Desktop. Chưa chạy setup khi Docker chưa sẵn sàng.
-4. Máy cần các prerequisite trong LOCAL-SETUP; cần .NET 10 SDK cho restore/host tests, Node theo project cho FE tests/build, Windows PowerShell 5.1 cho setup fixture, PowerShell 7 cho Docker fixture và đoạn tạo key mẫu. Build container cần truy cập registry/package feed.
+4. Máy cần các prerequisite trong LOCAL-SETUP; cần .NET 10 SDK cho restore/host tests, Node theo project cho FE tests/build, Windows PowerShell 5.1+ cho setup fixture và Docker fixture, PowerShell 7 vẫn có thể dùng cho đoạn tạo key mẫu. Build container cần truy cập registry/package feed.
 5. Nếu chưa có `.env`, sao chép `.env.example` thành `.env`. Nếu đã có, giữ file hiện tại; bổ sung từng key thiếu. Đừng ghi đè password gắn với volume cũ.
 
 ### Bước 2 — Chuẩn bị cấu hình riêng (người setup thực hiện một lần)
