@@ -43,6 +43,7 @@
   <Folder Name="/tests/Services/">
     <Project Path="tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj" />
+    <Project Path="tests/Services/SmartParking.OperationService.Tests/SmartParking.OperationService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.NotificationAuditService.Tests/SmartParking.NotificationAuditService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.PaymentService.Tests/SmartParking.PaymentService.Tests.csproj" />
     <Project Path="tests/Services/SmartParking.UserService.Tests/SmartParking.UserService.Tests.csproj" />

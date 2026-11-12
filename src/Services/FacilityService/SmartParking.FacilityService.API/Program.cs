@@ -49,9 +49,22 @@ public static class FacilityHost
             builder.Configuration.GetValue("Services:ParkingGateLimit", 16)));
         builder.Services.AddScoped<IStructureSynchronizationRepository, PostgresStructureSynchronizationRepository>();
         builder.Services.AddHostedService<StructureSynchronizationWorker>();
+        builder.Services.AddScoped<IOccupancyProjectionRepository, OccupancyProjectionRepository>();
+        // Occupancy projection is enabled only when the broker is configured; without it the
+        // projection tables stay untouched and the operator layout keeps serving its snapshot.
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["RabbitMq:ConnectionString"]))
+        {
+            builder.Services.Configure<RabbitMqProjectionOptions>(builder.Configuration.GetSection("RabbitMq"));
+            builder.Services.AddHostedService<OccupancyProjectionWorker>();
+        }
         builder.Services.AddScoped<IStructureOperationStore, StructureOperationStore>();
         builder.Services.AddHttpClient<IStructureImpactPlanner, StructureImpactPlanner>(c => { c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/"); c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.Add("X-Service-Key", key); });
-        builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443").AllowAnyHeader().AllowAnyMethod()));
+        var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"];
+        var allowedOrigins = !string.IsNullOrWhiteSpace(configuredOrigins)
+            ? configuredOrigins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                ?? ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443"];
+        builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
         builder.Services.AddHttpClient<OperatorSiteClient>(c => { c.BaseAddress = new(builder.Configuration["Services:User"] ?? "http://localhost:5035/"); c.Timeout = TimeSpan.FromSeconds(10); });
         builder.Services.AddScoped<IOperatorSiteAuthorizer>(s => s.GetRequiredService<OperatorSiteClient>());
         builder.Services.AddScoped<IOperatorOperationsStore, OperatorOperationsStore>();

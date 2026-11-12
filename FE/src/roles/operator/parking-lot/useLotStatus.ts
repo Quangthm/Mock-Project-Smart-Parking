@@ -293,9 +293,15 @@ export function useLotStatus(
   const siteLayout = resolveLotLayout(site)
   const [fetchedLayout, setFetchedLayout] = useState<OperationalLayoutProjection | null>(null)
   const propLayout = useMemo(
-    () => options.layout ?? (fetchedLayout && siteLayout
-      ? Date.parse(fetchedLayout.generatedAt) > Date.parse(siteLayout.generatedAt) ? fetchedLayout : siteLayout
-      : siteLayout ?? fetchedLayout),
+    () => {
+      if (options.layout) return options.layout
+      if (fetchedLayout && siteLayout) {
+        const fetchedTime = Date.parse(fetchedLayout.generatedAt) || 0
+        const siteTime = Date.parse(siteLayout.generatedAt) || 0
+        return fetchedTime >= siteTime ? fetchedLayout : siteLayout
+      }
+      return fetchedLayout ?? siteLayout ?? null
+    },
     [options.layout, siteLayout, fetchedLayout],
   )
   useEffect(() => {

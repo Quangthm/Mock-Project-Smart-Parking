@@ -168,6 +168,7 @@ public sealed class ReservationGateUseCaseTests
         public bool AlreadyInside;
         public bool FailAudit;
         public Task<OperatorSiteScope> RequireSiteAsync(Guid site, CancellationToken ct) { Calls.Add("identity"); return Task.FromResult(new OperatorSiteScope(Guid.NewGuid(), Tenant, Site)); }
+        public Task<OperatorSiteScope> AuthorizeSiteAsync(Guid site, string bearerToken, CancellationToken ct) => RequireSiteAsync(site, ct);
         public Task LockSiteAsync(Guid site, CancellationToken ct) { Calls.Add("guard"); return Task.CompletedTask; }
         public Task LockVehicleAsync(string id, CancellationToken ct)
         {
