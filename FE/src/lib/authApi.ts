@@ -228,7 +228,9 @@ export async function request<T>(
       ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
-    throw new Error("Cannot reach the authentication server. Please try again.")
+    throw new Error(apiPrefix === "/api/auth"
+      ? "Cannot reach the authentication server. Please try again."
+      : "The service could not be reached or the request timed out. Please try again.")
   }
 
   const payload =

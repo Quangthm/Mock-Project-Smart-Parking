@@ -6,6 +6,7 @@ import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { canonicalVietnamesePlate, vehiclesApi, type RegisteredVehicle } from "../../../lib/vehiclesApi"
 import { driverData as store } from "../data/data"
 import { FindMyCarCard } from "../parking/FindMyCarCard"
+import { LiveReservations } from "./LiveReservations"
 import "../../../booking-support.css"
 
 const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
@@ -67,8 +68,6 @@ export function ActiveBookings() {
 
   const parking = bookings.filter((booking) => booking.status === "checked-in")
     .sort((a, b) => b.startTime.localeCompare(a.startTime))
-  const upcoming = bookings.filter((booking) => booking.status === "confirmed" || booking.status === "pending")
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))
   const lots = store.getLots()
   const vehicles = user ? store.getVehiclesByDriver(user.id) : []
 
@@ -76,7 +75,6 @@ export function ActiveBookings() {
     {parking.length > 0 && <FindMyCarCard />}
     {([
       { id: "parking", title: "Parking now", description: "Vehicles currently checked in", records: parking, icon: "parking" as const },
-      { id: "upcoming", title: "Upcoming bookings", description: "Confirmed and pending reservations", records: upcoming, icon: "calendar" as const },
     ]).map(group => <section key={group.id} className="driver-booking-group" aria-labelledby={`driver-booking-${group.id}`}>
       <header className="driver-booking-group-header">
         <div><h2 id={`driver-booking-${group.id}`}>{group.title}</h2><p>{group.description}</p></div>
@@ -98,5 +96,6 @@ export function ActiveBookings() {
         </div>}
       </div>
     </section>)}
+    {user && <LiveReservations key={`${user.id}:${user.role}`} accountScope={`${user.id}:${user.role}`} />}
   </div>
 }

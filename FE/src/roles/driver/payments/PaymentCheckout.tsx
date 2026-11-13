@@ -5,8 +5,8 @@ import { useServerRefresh } from "../../../lib/serverRefresh"
 import qrLogo from "../../../assets/payment-qr.png"
 import "./payment-checkout.css"
 
-export function PaymentCheckout({ showMethodPicker = true }: { showMethodPicker?: boolean }) {
-  const [orderId, setOrderId] = useState(() => showMethodPicker ? new URLSearchParams(window.location.search).get("orderId") ?? sessionStorage.getItem("sp_payos_latest_order") ?? "" : "")
+export function PaymentCheckout({ showMethodPicker = true, reservationOrderId, holdExpiresAt }: { showMethodPicker?: boolean; reservationOrderId?: string; holdExpiresAt?: string | null }) {
+  const [orderId, setOrderId] = useState(() => reservationOrderId ?? (showMethodPicker ? new URLSearchParams(window.location.search).get("orderId") ?? sessionStorage.getItem("sp_payos_latest_order") ?? "" : ""))
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -15,10 +15,10 @@ export function PaymentCheckout({ showMethodPicker = true }: { showMethodPicker?
   const [now, setNow] = useState(Date.now)
 
   useEffect(() => {
-    if (!checkout || status !== "pending") return
+    if ((!checkout && !holdExpiresAt) || status !== "pending") return
     const timer = window.setInterval(() => setNow(Date.now()), 5000)
     return () => window.clearInterval(timer)
-  }, [checkout, status])
+  }, [checkout, status, holdExpiresAt])
 
   useEffect(() => {
     if (!checkout) return
@@ -41,6 +41,10 @@ export function PaymentCheckout({ showMethodPicker = true }: { showMethodPicker?
   async function pay(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selected || !isPaymentOrderId(orderId) || busy) return
+    if (holdExpiresAt && Date.parse(holdExpiresAt) <= Date.now()) {
+      setError("The reservation payment deadline has passed. Refresh the reservation status.")
+      return
+    }
     setBusy(true)
     setError("")
     try {
@@ -70,25 +74,27 @@ export function PaymentCheckout({ showMethodPicker = true }: { showMethodPicker?
     }
   }
 
-  const expired = checkout ? new Date(checkout.expiresAt).getTime() <= now : false
+  const holdExpired = !!holdExpiresAt && Date.parse(holdExpiresAt) <= now
+  const expired = holdExpired || (checkout ? new Date(checkout.expiresAt).getTime() <= now : false)
   const payable = !!checkout && status === "pending" && !expired
 
   return <section className="card payos-checkout" aria-labelledby="payos-checkout-title">
     <div className="payos-checkout-heading"><span>PAYMENT SERVICE</span><h3 id="payos-checkout-title">Pay by QR</h3><p>{showMethodPicker ? "Generate a real VietQR from an existing Payment Service order." : "Your payment details will appear here when the booking creates a payment order."}</p></div>
-    {!checkout && !showMethodPicker ? <div className="payos-checkout-unavailable" role="status">
+    {!checkout && !showMethodPicker && !reservationOrderId ? <div className="payos-checkout-unavailable" role="status">
       <strong>QR payment is not available for this booking yet.</strong>
       <p>SmartParking needs a payment order from the booking service before it can request a real payOS QR code. Your slot has not been reserved and no payment has been started.</p>
     </div> : !checkout ? <form onSubmit={pay} className="payos-checkout-form">
-      <label htmlFor="payment-order-id">Payment order ID</label>
+      {!reservationOrderId && <><label htmlFor="payment-order-id">Payment order ID</label>
       <input id="payment-order-id" className="input" value={orderId} onChange={event => { setOrderId(event.target.value); setError("") }} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autoComplete="off" spellCheck={false} required aria-describedby="payment-order-hint" />
-      <p id="payment-order-hint">The booking service has not yet supplied a payment order. When it does, this ID can be passed here automatically. A booking ID is not a payment order ID.</p>
+      <p id="payment-order-hint">The booking service has not yet supplied a payment order. When it does, this ID can be passed here automatically. A booking ID is not a payment order ID.</p></>}
       {showMethodPicker && <div className="payos-methods" role="group" aria-label="Payment method">
         <button type="button" className={`payos-method${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => setSelected(true)}>
           <img src={qrLogo} alt="" /><span><strong>payOS VietQR</strong><small>Bank transfer via payOS</small></span><span className="payos-method-check" aria-hidden="true">{selected ? "✓" : ""}</span>
         </button>
       </div>}
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
-      <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || busy}>{busy ? "Generating QR…" : "Generate payment QR"}</button>
+      {holdExpired && <p role="status">The reservation payment deadline has passed.</p>}
+      <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || busy || holdExpired}>{busy ? "Generating QR…" : "Generate payment QR"}</button>
     </form> : <div className="payos-checkout-details">
       {payable && checkout.qrCode?.trim() ? <div className="payos-qr-panel"><QRCodeSVG value={checkout.qrCode} size={224} marginSize={2} title="Scan this payOS VietQR to pay" /><p>Scan with your banking app</p></div> : <p role="status">{expired ? "This payment link has expired. Check its status before starting another payment." : status === "success" ? "Payment confirmed by Payment Service." : status === "failed" ? "This payment attempt failed." : "payOS did not return a QR image. Use its secure checkout page to pay."}</p>}
       <dl className="payos-checkout-facts">
