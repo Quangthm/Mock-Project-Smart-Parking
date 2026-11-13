@@ -31,12 +31,14 @@ public sealed record CalculateCheckoutPricingQuery(
 public sealed record PrepareReservationCheckoutCommand(
     Guid SiteId,
     Guid ReservationId,
-    string? PlateNumber) : IRequest<CheckoutPaymentPreparation>;
+    string? PlateNumber,
+    string? ImageData = null) : IRequest<CheckoutPaymentPreparation>;
 public sealed record PrepareSessionCheckoutCommand(
     Guid SiteId,
     Guid SessionId,
     string? PlateNumber,
-    decimal? DevelopmentTestAmount = null) : IRequest<CheckoutPaymentPreparation>;
+    decimal? DevelopmentTestAmount = null,
+    string? ImageData = null) : IRequest<CheckoutPaymentPreparation>;
 
 public sealed class CalculateCheckoutPricingQueryHandler(
     IOperatorIdentityClient identity,
@@ -89,7 +91,7 @@ public sealed class PrepareReservationCheckoutCommandHandler(
             session.OriginalPlate ?? session.NormalizedPlate ?? "",
             session.AccountId,
             ct);
-        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, ct);
+        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, request.ImageData, ct);
         return result;
     }
 }
@@ -123,7 +125,7 @@ public sealed class PrepareSessionCheckoutCommandHandler(
             null,
             ct,
             request.DevelopmentTestAmount);
-        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, ct);
+        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, request.ImageData, ct);
         return result;
     }
 }
@@ -131,13 +133,14 @@ public sealed class PrepareSessionCheckoutCommandHandler(
 internal static class GateCheckout
 {
     public static async Task BindOrderAsync(IParkingSessionRepository sessions, IOperationsConcurrency guards,
-        IUnitOfWork work, ParkingSessionRow observed, Guid orderId, CancellationToken ct)
+        IUnitOfWork work, ParkingSessionRow observed, Guid orderId, string? imageData, CancellationToken ct)
     {
         await using var transaction = await work.BeginTransactionAsync(ct);
         await guards.LockVehicleAsync(observed.NormalizedPlate!, ct);
         await guards.LockSiteAsync(observed.SiteId, ct);
         var session = await sessions.FindForUpdateAsync(observed.TenantId, observed.SiteId, observed.Id, ct)
             ?? throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
+        session.CaptureCheckoutImage(imageData);
         session.AwaitCheckoutPayment(orderId);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);

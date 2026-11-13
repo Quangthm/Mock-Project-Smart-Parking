@@ -1,0 +1,127 @@
+@baseUrl = http://localhost:5045
+@siteId = 7c9e6679-7425-40de-944b-e07fc1f90ae7
+@ownerToken = eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.dummyOwnerToken
+@otherOwnerToken = eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.dummyOtherOwnerToken
+@idempotencyKey = 8f44cf61-7132-4d7a-8f92-9f3791a87b1c
+
+### 1. Health Check (Happy Path)
+GET {{baseUrl}}/health
+Accept: application/json
+
+### 2. Tra cứu Danh mục Chính sách & Giá trị Hiệu lực (Happy Path - 200 OK)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/catalogue
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### 3. Đọc Bản nháp Cấu hình (Happy Path - 200 OK, nếu chưa có draft data = null)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### 4. Lưu / Cập nhật Bản nháp với Envelope Policies (Happy Path - 200 OK)
+PUT {{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "policies": {
+    "paymentHoldDurationMinutes": 10,
+    "arrivalLateToleranceMinutes": 20,
+    "arrivalLateToleranceEnabled": true,
+    "minReservationDurationMinutes": 30,
+    "maxReservationDurationHours": 48,
+    "reservationProtectionWindowHours": 4,
+    "allocationLeadTimeMinutes": 60,
+    "occupancyValidityTimespanHours": 4,
+    "maxAdvanceBookingDays": 14,
+    "interBookingBufferMinutes": 5,
+    "driverReallocationRequestLimit": 3,
+    "parkingProductEnabled": {
+      "monthly": true,
+      "yearly": true
+    }
+  }
+}
+
+### 5. Lưu Bản nháp Vi phạm Bounds (Error Case - 400 POLICY_OUT_OF_BOUNDS)
+# paymentHoldDurationMinutes = 45 vượt quá giới hạn trần [5..30]
+PUT {{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "policies": {
+    "paymentHoldDurationMinutes": 45
+  }
+}
+
+### 6. Lưu Bản nháp Vi phạm Logic Thời gian (Error Case - 400 INVALID_TIME_DURATION)
+# minReservationDurationMinutes (180 phút) lớn hơn maxReservationDurationHours (2 giờ = 120 phút)
+PUT {{baseUrl}}/api/v1/lots/{{siteId}}/policies/draft
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "policies": {
+    "minReservationDurationMinutes": 180,
+    "maxReservationDurationHours": 2
+  }
+}
+
+### 7. Xuất bản & Kích hoạt Chính sách Ngay lập tức (Happy Path - 200 OK)
+POST {{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish
+Authorization: Bearer {{ownerToken}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "activationMode": "IMMEDIATE",
+  "publishNote": "Cập nhật chính sách tháng 11"
+}
+
+### 8. Thử lại Xuất bản cùng Idempotency-Key (Replayed - 200 OK với header Idempotency-Replayed: true)
+POST {{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish
+Authorization: Bearer {{ownerToken}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "activationMode": "IMMEDIATE",
+  "publishNote": "Cập nhật chính sách tháng 11"
+}
+
+### 9. Xuất bản Hẹn giờ Kích hoạt (SCHEDULED - 200 OK)
+POST {{baseUrl}}/api/v1/lots/{{siteId}}/policies/publish
+Authorization: Bearer {{ownerToken}}
+Idempotency-Key: 99999999-7132-4d7a-8f92-9f3791a87b1c
+Content-Type: application/json
+
+{
+  "activationMode": "SCHEDULED",
+  "scheduledActivationAt": "2026-12-01T00:00:00Z",
+  "publishNote": "Lên lịch áp dụng cho mùa lễ hội"
+}
+
+### 10. Lấy Lịch sử Phiên bản Chính sách (Happy Path - 200 OK)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/revisions?page=1&pageSize=10
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### 11. Tra cứu Snapshot Phiên bản Quá khứ (Happy Path - 200 OK)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/revisions/1
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### 12. Tra cứu Snapshot Không tồn tại (Error Case - 404 REVISION_NOT_FOUND)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/revisions/999
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### 13. Thao tác Không có Token Xác thực (Error Case - 401 UNAUTHORIZED)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/catalogue
+Accept: application/json
+
+### 14. Truy cập Bãi xe của Chủ khác (Error Case - 403 CROSS_LOT_ACCESS_DENIED)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/policies/catalogue
+Authorization: Bearer {{otherOwnerToken}}
+Accept: application/json

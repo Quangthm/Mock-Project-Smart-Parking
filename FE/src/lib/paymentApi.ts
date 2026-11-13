@@ -32,6 +32,20 @@ export interface PaymentStatusResponse {
 
 type Envelope<T> = { success: boolean; data?: T; errorCode?: string; message?: string }
 
+export interface DriverInvoice {
+  invoiceIdentity: { invoiceId: string; invoiceNumber: string; issuedAt: string }
+  parkingSessionReference: { siteName: string; plateNumber: string }
+  financialSummary: { finalTotalAmount: number; currency: string; surplusRefund: number }
+  financialStatus: { status: string; isSettled: boolean; paymentMethod: string | null }
+}
+
+export interface DriverInvoicePage {
+  items: DriverInvoice[]
+  totalCount: number
+  pageNumber: number
+  totalPages: number
+}
+
 export function isPaymentOrderId(value: string): boolean {
   return uuidPattern.test(value.trim())
 }
@@ -77,7 +91,45 @@ async function paymentRequest<T>(path: string, init: RequestInit): Promise<T> {
   return payload.data
 }
 
+async function invoiceRequest(path: string, accept: string, signal?: AbortSignal): Promise<Response> {
+  const token = await ensureAccessToken()
+  if (!token) throw new Error("Sign in to view your invoices.")
+  const response = await fetch(`${paymentBase}/api/v1/payments/invoices${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: accept },
+    cache: "no-store",
+    signal,
+  })
+  if (response.ok) return response
+  const errors: Record<number, string> = {
+    401: "Your session has expired. Sign in to view your invoices.",
+    403: "You do not have access to this invoice information.",
+    404: "Invoice information could not be found.",
+    422: "This invoice is not available for download until payment is settled.",
+  }
+  throw new Error(errors[response.status] ?? "Payment Service could not load invoice information. Please try again.")
+}
+
 export const paymentApi = {
+  async invoiceHistory(filters: { pageNumber: number; status: string; fromDate: string; toDate: string }, signal?: AbortSignal): Promise<DriverInvoicePage> {
+    const query = new URLSearchParams({ pageNumber: String(filters.pageNumber), pageSize: "10" })
+    if (filters.status) query.set("status", filters.status)
+    if (filters.fromDate) query.set("fromDate", `${filters.fromDate}T00:00:00+07:00`)
+    if (filters.toDate) query.set("toDate", `${filters.toDate}T23:59:59.9999999+07:00`)
+    const response = await invoiceRequest(`/my-history?${query}`, "application/json", signal)
+    const page = await response.json() as DriverInvoicePage
+    if (!Array.isArray(page?.items) || !Number.isInteger(page.totalPages) || !Number.isInteger(page.pageNumber)) {
+      throw new Error("Payment Service returned an invalid invoice list.")
+    }
+    return page
+  },
+  async downloadInvoice(invoiceId: string, signal?: AbortSignal): Promise<Blob> {
+    if (!isPaymentOrderId(invoiceId)) throw new Error("Invalid invoice ID.")
+    const response = await invoiceRequest(`/${invoiceId}/download`, "application/pdf", signal)
+    if (!response.headers.get("content-type")?.toLowerCase().startsWith("application/pdf")) {
+      throw new Error("Payment Service did not return a PDF.")
+    }
+    return response.blob()
+  },
   async checkout(orderId: string): Promise<CheckoutResponse> {
     const normalized = orderId.trim().toLowerCase()
     if (!isPaymentOrderId(normalized)) throw new Error("Enter a valid payment order ID.")

@@ -115,7 +115,15 @@ export function CheckInOut({
 
   const [sessions, setSessions] = useState<ParkingSessionHistoryEntry[]>([])
   const [paymentMessage, setPaymentMessage] = useState("")
-  const [checkoutPrice, setCheckoutPrice] = useState<number | null>(null)
+  const [preparedCheckout, setPreparedCheckout] = useState<{
+    siteId: string
+    referenceId: string
+    result: Awaited<ReturnType<typeof paymentApi.prepare>>
+  } | null>(null)
+  const checkoutReference = confirmingAction?.booking.id ??
+    (quickResult?.kind === "reservation" ? quickResult.booking.id : quickResult?.session?.id)
+  const checkoutPrice = preparedCheckout && preparedCheckout.siteId === lot?.id && preparedCheckout.referenceId === checkoutReference
+    ? preparedCheckout.result.order.amount : null
   const [pricingLoading, setPricingLoading] = useState(false)
 
   function slotLabel(booking: Booking) {
@@ -192,7 +200,7 @@ export function CheckInOut({
   ) {
     setQuickError("")
     setQuickResult(null)
-    setCheckoutPrice(null)
+    setPreparedCheckout(null)
     setPaymentMessage("")
     const term = (inputToUse ?? quickInput).trim()
 
@@ -219,14 +227,8 @@ export function CheckInOut({
         action: mode,
       }
       setQuickResult(result)
-      if (mode === "check-out") {
-        await loadCheckoutPrice({
-          referenceId: match.id,
-          vehicleType: match.vehicleType ?? "CAR",
-          entryTime: match.entryTime ?? match.startTime,
-          reservationId: match.id,
-        })
-      }
+      if (mode === "check-out") await prepareCheckout(result, imageData)
+
       if (autoCheckIn && mode === "check-in") {
         await executeCheckAction(match, "check-in", imageData)
       }
@@ -259,12 +261,7 @@ export function CheckInOut({
           action: mode,
         }
         setQuickResult(result)
-        await loadCheckoutPrice({
-          referenceId: activeSession.id,
-          vehicleType: activeSession.vehicleType,
-          entryTime: activeSession.entryTime,
-          sessionId: activeSession.id,
-        })
+        await prepareCheckout(result, imageData)
       } catch (walkInError) {
         if (!(walkInError instanceof AuthApiError) || walkInError.status !== 404) {
           setQuickError(walkInError instanceof Error ? walkInError.message : "Could not look up the active parking session.")
@@ -308,6 +305,7 @@ export function CheckInOut({
           entryTime: booking.entryTime ?? booking.startTime,
           reservationId: booking.id,
           plateNumber: booking.licensePlate,
+          imageData,
         })
         if (settlement === "PENDING") return
       }
@@ -348,27 +346,33 @@ export function CheckInOut({
 
   }
 
-  async function loadCheckoutPrice(input: {
-    referenceId: string
-    vehicleType: string
-    entryTime: string
-    plateNumber?: string
-    sessionId?: string
-    reservationId?: string
-  }) {
-    if (!lot) return
+  async function prepareCheckout(result: QuickGateResult, imageData?: string) {
+    if (!lot || pricingLoading || actionLoading) return
+    const session = result.kind === "walk-in" ? result.session : null
+    if (result.kind === "walk-in" && !session) return
+    const booking = result.kind === "reservation" ? result.booking : null
+    const referenceId = booking?.id ?? session?.id
+    if (!referenceId) return
+
     setPricingLoading(true)
+    setPaymentMessage("")
     try {
-      const pricing = await paymentApi.calculate({
-        tenantId: lot.tenantId,
+      const prepared = await paymentApi.prepare({
         siteId: lot.id,
-        vehicleType: input.vehicleType || "CAR",
-        entryTime: input.entryTime,
-        exitTime: new Date().toISOString(),
-        sessionId: input.sessionId,
-        reservationId: input.reservationId,
+        referenceId,
+        vehicleType: booking?.vehicleType ?? session?.vehicleType ?? "CAR",
+        entryTime: booking?.entryTime ?? booking?.startTime ?? session?.entryTime ?? "",
+        reservationId: booking?.id,
+        sessionId: session?.id,
+        plateNumber: result.kind === "reservation" ? result.booking.licensePlate : result.plate,
+        imageData,
       })
-      setCheckoutPrice(pricing.finalAmountVnd)
+      if (!Number.isFinite(prepared.order.amount) || prepared.order.amount < 0) {
+        throw new Error("Payment Service returned an invalid amount.")
+      }
+      setPreparedCheckout({ siteId: lot.id, referenceId, result: prepared })
+    } catch (error) {
+      setPaymentMessage(error instanceof Error ? error.message : "Could not prepare checkout.")
     } finally {
       setPricingLoading(false)
     }
@@ -382,13 +386,19 @@ export function CheckInOut({
     plateNumber?: string
     sessionId?: string
     reservationId?: string
+    imageData?: string
   }): Promise<"PAID" | "PENDING"> {
     if (!lot) throw new Error("Select a parking site before processing payment.")
     const isTestPayOs = payment === "PAYOS_TEST"
     setPaymentMessage(isTestPayOs ? "Preparing a 2,000 VND PayOS test payment..." : "Calculating parking fee...")
     let prepared: Awaited<ReturnType<typeof paymentApi.prepare>>
     try {
-      prepared = await paymentApi.prepare({
+      if (!isTestPayOs && !input.imageData) {
+        if (preparedCheckout?.siteId !== lot.id || preparedCheckout.referenceId !== input.referenceId) {
+          throw new Error("Review the amount due before collecting payment.")
+        }
+        prepared = preparedCheckout.result
+      } else prepared = await paymentApi.prepare({
         siteId: lot.id,
         referenceId: input.referenceId,
         vehicleType: input.vehicleType || "CAR",
@@ -396,6 +406,7 @@ export function CheckInOut({
         sessionId: input.sessionId,
         reservationId: input.reservationId,
         plateNumber: input.plateNumber,
+        imageData: input.imageData,
         developmentTestPayOs: isTestPayOs,
       })
     } catch (error) {
@@ -405,7 +416,7 @@ export function CheckInOut({
     }
     setPaymentMessage(isTestPayOs
       ? "Test amount: 2,000 VND. The session completes only after PayOS confirms payment."
-      : `Amount due: ${prepared.pricing.finalAmountVnd.toLocaleString("vi-VN")} VND`)
+      : `Amount due: ${prepared.order.amount.toLocaleString("vi-VN")} VND`)
     const key = `checkout:${lot.id}:${input.referenceId}${isTestPayOs ? ":development-test-2000" : ""}`
     const order = prepared.order
     localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
@@ -428,6 +439,7 @@ export function CheckInOut({
       return "PENDING"
     }
     localStorage.removeItem("smartpark.pendingCheckout")
+    setPreparedCheckout(null)
     return "PAID"
   }
 
@@ -459,6 +471,7 @@ export function CheckInOut({
           entryTime: result.session.entryTime,
           sessionId: result.session.id,
           plateNumber: result.plate,
+          imageData,
         })
         if (settlement === "PENDING") return
         session = result.session
@@ -701,11 +714,9 @@ export function CheckInOut({
                   <span className="font-mono text-[var(--fg)]">{quickResult.booking.driverId.slice(0, 10)}...</span>
                 </div>
                 <div>
-                  <span className="text-[var(--muted)] block">Amount & Payment:</span>
+                  <span className="text-[var(--muted)] block">Payment status:</span>
                   <span className="font-bold text-[var(--fg)]">
-                    {quickResult.booking.paymentStatus
-                      ? `${quickResult.booking.amount.toLocaleString("vi-VN")} VND`
-                      : "Managed by Payment Service"}
+                    {quickResult.booking.paymentStatus ? formatStatus(quickResult.booking.paymentStatus) : "Managed by Payment Service"}
                   </span>
                 </div>
               </div>
@@ -738,10 +749,12 @@ export function CheckInOut({
                   {pricingLoading
                     ? "Calculating..."
                     : checkoutPrice === null
-                      ? "Unavailable"
+                      ? paymentMessage ? "Fee unavailable" : "Loading parking fee…"
                       : `${checkoutPrice.toLocaleString("vi-VN")} VND`}
                 </div>
-                {paymentMessage && <p className="mt-2 text-xs text-[var(--muted)]">{paymentMessage}</p>}
+                {paymentMessage && <p role="status" className="mt-2 text-xs text-[var(--muted)]">{paymentMessage}</p>}
+                {checkoutPrice === null && paymentMessage && !pricingLoading && <button type="button" className="btn-outline mt-3" disabled={actionLoading || lookupLoading}
+                  onClick={() => void prepareCheckout(quickResult)}>Retry loading fee</button>}
               </div>
             )}
 
@@ -780,7 +793,7 @@ export function CheckInOut({
                     disabled={actionLoading || lookupLoading || pricingLoading || checkoutPrice === null}
                     onClick={() => void executeWalkInAction(quickResult, "check-out", latestScanImage || undefined, quickResult.vehicleType, "CASH")}
                   >
-                    Confirm
+                    Confirm Cash
                   </button>
                   <button
                     type="button"
@@ -899,7 +912,7 @@ export function CheckInOut({
             <p className="mt-3 text-xs text-[var(--muted)]">
               {confirmingAction.action === "check-in"
                 ? "This will set slot status to OCCUPIED and mark the booking as CHECKED-IN."
-                : "This will release the slot back to AVAILABLE and complete the booking."}
+                : "Review the amount due before collecting payment. Operations completes checkout after recording departure."}
             </p>
 
             {confirmingAction.action === "check-out" && (
@@ -909,10 +922,12 @@ export function CheckInOut({
                   {pricingLoading
                     ? "Calculating..."
                     : checkoutPrice === null
-                      ? "Unavailable"
+                      ? paymentMessage ? "Fee unavailable" : "Loading parking fee…"
                       : `${checkoutPrice.toLocaleString("vi-VN")} VND`}
                 </p>
-                {paymentMessage && <p className="mt-2 text-xs text-[var(--muted)]">{paymentMessage}</p>}
+                {paymentMessage && <p role="status" className="mt-2 text-xs text-[var(--muted)]">{paymentMessage}</p>}
+                {checkoutPrice === null && paymentMessage && !pricingLoading && <button type="button" className="btn-outline mt-3" disabled={actionLoading}
+                  onClick={() => void prepareCheckout({ kind: "reservation", booking: confirmingAction.booking, action: "check-out" })}>Retry loading fee</button>}
               </div>
             )}
 
@@ -950,7 +965,7 @@ export function CheckInOut({
                     disabled={actionLoading || pricingLoading || checkoutPrice === null}
                     onClick={() => void executeCheckAction(confirmingAction.booking, "check-out", confirmingAction.imageData, "CASH")}
                   >
-                    Confirm
+                    Confirm Cash
                   </button>
                   <button
                     type="button"

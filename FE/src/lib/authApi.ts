@@ -192,6 +192,12 @@ export async function ensureAccessToken(): Promise<string> {
   return sessionStorage.getItem(tokenKey) ?? ""
 }
 
+export class ApiConnectionError extends Error {
+  constructor() {
+    super("Cannot reach the authentication server. Please try again.")
+  }
+}
+
 export async function request<T>(
   path: string,
   method = "GET",
@@ -228,7 +234,7 @@ export async function request<T>(
       ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
-    throw new Error("Cannot reach the authentication server. Please try again.")
+    throw new ApiConnectionError()
   }
 
   const payload =

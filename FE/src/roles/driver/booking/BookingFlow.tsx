@@ -8,6 +8,7 @@ import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { driverData as store } from "../data/data"
 
+
 import type {
   Booking,
   ParkingLot,
@@ -15,7 +16,8 @@ import type {
 } from "../../../lib/types"
 
 import { qrLogo } from "../data/paymentOptions"
-import { PaymentCheckout } from "../payments/PaymentCheckout"
+import { driverReservationApi, type ReservationSelection } from "../../../lib/driverReservationApi"
+import { readReservationAttempt, ReservationCheckout } from "./ReservationCheckout"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
@@ -82,7 +84,9 @@ export function BookingFlow(props: BookingFlowProps) {
 
 function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const { user } = useApp()
-  const [step, setStep] = useState<Step>(resumeBooking ? "payment" : "slot")
+  const storageKey = `sp_reservation_attempt:${user?.id}:${lot.id}`
+  const [step, setStep] = useState<Step>(() => readReservationAttempt(storageKey) ? "qr" : resumeBooking ? "payment" : "slot")
+  const [preview, setPreview] = useState<{ key: string; text: string } | null>(null)
 
   const [viewMode, setViewMode] = useState<"3d" | "grid">("3d")
 
@@ -136,21 +140,23 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
     if (!user || resumeBooking) return
     let active = true
     setVehicles([])
-    setSelectedVehicleId("")
     setVehicleLoading(true)
     setVehicleListFailed(false)
     setVehicleError("")
     setRegistrationClaims([])
-    Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
-      .then(([allItems, claims]) => {
+    void vehiclesApi.claims().then(claims => {
+      if (active) setRegistrationClaims(claims)
+    }).catch(() => {
+      // Pending claims are informational. The vehicle list contains the registered vehicles.
+    })
+    vehiclesApi.list()
+      .then(allItems => {
         const items = allItems.filter(item => item.vehicleType === "CAR")
         if (!active) return
-        setRegistrationClaims(claims)
-        setVehicles(items)
+        setVehicles(allItems)
         setSelectedVehicleId((current) =>
           items.some(item => item.id === current) ? current : items[0]?.id ?? "",
         )
-        setAddVehicleOpen(items.length === 0)
       })
       .catch((error) => {
         if (active) {
@@ -192,12 +198,37 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const validTimeWindow = Number.isFinite(startTimestamp) && Number.isFinite(endTimestamp) &&
     startTimestamp > Date.now() && endTimestamp > startTimestamp
 
-  const amount = Math.ceil(hours) * lot.hourlyRate
-
   const bookingVehicles = vehicles.filter(vehicle => vehicle.vehicleType === "CAR")
   const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
   )
+
+  const previewSlotId = selectedSlot?.id
+  const previewVehicleId = selectedVehicle?.id
+  const previewKey = JSON.stringify([lot.id, previewSlotId, previewVehicleId, startTime, endTime])
+  useEffect(() => {
+    if (!previewSlotId || !previewVehicleId || !validTimeWindow || (step !== "details" && step !== "payment")) return
+    let active = true
+    const timer = window.setTimeout(() => {
+      driverReservationApi.preview({
+        siteId: lot.id, requestedSlotId: previewSlotId, vehicleId: previewVehicleId,
+        start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
+      }).then(price => {
+        if (active) setPreview({ key: previewKey, text: `${price.bookedAmount.toLocaleString("vi-VN")} ${price.currency}` })
+      }).catch(error => {
+        if (active) setPreview({ key: previewKey, text: error instanceof Error ? error.message : "Price preview unavailable." })
+      })
+    }, 350)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [lot.id, previewSlotId, previewVehicleId, previewKey, validTimeWindow, step, startTime, endTime])
+  const priceText = preview?.key === previewKey ? preview.text : validTimeWindow && previewVehicleId && previewSlotId
+    ? "Checking price…" : "Available after choosing time and vehicle"
+  const reservationSelection: ReservationSelection | null =
+    selectedSlot && selectedVehicle && validTimeWindow && paymentMethod ? {
+      siteId: lot.id, requestedSlotId: selectedSlot.id, vehicleId: selectedVehicle.id,
+      start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
+      paymentMethod: paymentMethod === "qr" ? "PAYOS" : "CASH",
+    } : null
 
   function chooseSlot(slot: ParkingSlot) {
     const latest = preferPopulatedLot(
@@ -277,8 +308,8 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
         imageAssetId: vehicleForm.imageAssetId,
       })
       if (getSessionGeneration() !== generation) return
+      setVehicles(current => [...current.filter(item => item.id !== created.id), created])
       if (created.vehicleType === "CAR") {
-        setVehicles((current) => [...current, created])
         setSelectedVehicleId(created.id)
       } else setVehicleNotice("Motorcycle registered. Specific Slot booking requires a car.")
       setVehicleForm((current) => ({ ...current, plate: "", imageAssetId: "" }))
@@ -288,10 +319,13 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
       if (getSessionGeneration() !== generation) return
       if (error instanceof AuthApiError && error.code === "PLATE_EXISTS") {
         try {
-          const [items, claims] = await Promise.all([vehiclesApi.list(), vehiclesApi.claims()])
+          const items = await vehiclesApi.list()
+          const claims = await vehiclesApi.claims().catch(() => [])
           if (getSessionGeneration() !== generation) return
           setRegistrationClaims(claims)
-          setVehicles(items.filter(item => item.vehicleType === "CAR"))
+          setVehicles(items)
+          setSelectedVehicleId(current => items.some(item => item.id === current && item.vehicleType === "CAR")
+            ? current : items.find(item => item.vehicleType === "CAR")?.id ?? "")
           setVehicleError(claims.some(c => c.canonicalPlate === canonicalVietnamesePlate(vehicleForm.plate))
             ? pendingRegistrationMessage : "This plate is already registered. Choose an active car.")
         } catch { if (getSessionGeneration() === generation) setVehicleError("Could not confirm registration status. Please refresh.") }
@@ -314,9 +348,9 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   }
 
   function continueToPayment() {
-    if (!paymentMethod) return
+    if (!reservationSelection) return
 
-    setStep(paymentMethod)
+    setStep(paymentMethod === "cash" ? "cash" : "qr")
   }
 
   const activeFloorKey: string =
@@ -714,7 +748,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
               <div><dt>Vehicle</dt><dd>{selectedVehicle ? `${selectedVehicle.vehicleType === "CAR" ? "Car" : "Motorcycle"} · ${formatVietnamesePlate(selectedVehicle)}` : vehicleLoading ? "Loading vehicles…" : "Choose in the next step"}</dd></div>
               <div><dt>Arrival</dt><dd>{startTime ? new Date(startTime).toLocaleString("vi-VN") : "Choose in the next step"}</dd></div>
               <div><dt>Duration</dt><dd>{hours > 0 ? formatDuration(hours) : "Choose in the next step"}</dd></div>
-              <div><dt>Estimated price</dt><dd>{hours > 0 ? `${amount.toLocaleString("vi-VN")} VND` : "Available after choosing time"}</dd></div>
+              <div><dt>Estimated price</dt><dd>{priceText}</dd></div>
             </dl>
             {!selectedSlot && <p className="booking-summary-empty">Select an available space in the model or grid to continue.</p>}
           {message && (
@@ -792,7 +826,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
             </div>
           )}
           {registrationClaims.map(claim => <p key={claim.id} role="status">{claim.rawPlate}: {pendingRegistrationMessage}</p>)}
-          {!vehicleLoading && !vehicleError && vehicles.length === 0 && (
+          {!vehicleLoading && !vehicleListFailed && bookingVehicles.length === 0 && (
             <p
               style={{
                 margin: "0 0 0.75rem",
@@ -800,26 +834,28 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
                 fontSize: "0.82rem",
               }}
             >
-              No active cars available. Register a car to book this slot.
+              {vehicles.some(vehicle => vehicle.vehicleType === "MOTORCYCLE")
+                ? "Your motorcycle is registered. This reservation requires a registered car."
+                : "No registered cars are available for this slot."}
             </p>
           )}
           {vehicleNotice && <p className="mb-3 rounded-lg bg-[var(--bg)] p-3 text-sm" role="status">{vehicleNotice}</p>}
           {!vehicleLoading && !vehicleListFailed && (
-            <button
-              className="btn-outline"
-              type="button"
-              onClick={() => {
-                setAddVehicleOpen((open) => !open)
-                setMessage("")
-              }}
-              style={{
-                padding: "0.45rem 0.7rem",
-                fontSize: "0.78rem",
-                marginBottom: "0.75rem",
-              }}
-            >
-              {addVehicleOpen ? "Cancel Add Vehicle" : "+ Add New Vehicle"}
-            </button>
+            <div className="mb-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-2">
+              <button
+                className="btn-outline min-h-11 justify-center px-3 text-center text-sm"
+                type="button"
+                onClick={() => {
+                  setAddVehicleOpen((open) => !open)
+                  setMessage("")
+                }}
+              >
+                {addVehicleOpen ? "Cancel Add Vehicle" : "+ Add New Vehicle"}
+              </button>
+              <button type="button" className="btn-outline min-h-11 justify-center px-3 text-center text-sm" onClick={() => setVehicleReload(value => value + 1)}>
+                Refresh vehicles
+              </button>
+            </div>
           )}
           {addVehicleOpen && !vehicleLoading && !vehicleListFailed && (
             <form
@@ -900,7 +936,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
             >
               Estimated total:{" "}
               <strong style={{ color: "var(--fg)" }}>
-                {amount.toLocaleString("vi-VN")} VND
+                {priceText}
               </strong>
             </p>
           )}
@@ -979,7 +1015,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
             >
               Estimated total:{" "}
               <strong style={{ color: "var(--fg)" }}>
-                {(resumeBooking?.amount ?? amount).toLocaleString("vi-VN")} VND
+                {priceText}
               </strong>
             </p>
             <button
@@ -1077,7 +1113,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
             <button
               type="button"
               className="btn-primary"
-              disabled={!paymentMethod}
+              disabled={!reservationSelection}
               onClick={continueToPayment}
               style={{ flex: 1, justifyContent: "center" }}
             >
@@ -1087,25 +1123,8 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
         </section>
       )}
 
-      {step === "qr" && (
-        <div className="booking-stage-right booking-payment-checkout">
-          <PaymentCheckout showMethodPicker={false} />
-          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
-            Back to payment methods
-          </button>
-        </div>
-      )}
-
-      {step === "cash" && (
-        <section className="card booking-stage-right booking-cash-stage">
-          <span className="booking-payment-icon" aria-hidden="true"><UntitledIcon name="banknote" size={28} /></span>
-          <h3>Pay by cash</h3>
-          <p>Cash is collected at the parking site. This choice has not reserved a slot or recorded a payment. Booking confirmation will be available when the booking service is connected.</p>
-          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
-            Back to payment methods
-          </button>
-        </section>
-      )}
+      {(step === "qr" || step === "cash") && <ReservationCheckout storageKey={storageKey}
+        selection={reservationSelection} onBack={() => setStep("payment")} onDone={onDone} />}
 
       </div>
 

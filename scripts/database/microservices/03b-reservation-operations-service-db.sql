@@ -198,6 +198,10 @@ CREATE TABLE IF NOT EXISTS operational_policies (
     daily_cancellation_limit INT NULL CHECK (daily_cancellation_limit > 0),
     cancellation_timezone TEXT NULL CHECK (cancellation_timezone = 'Asia/Ho_Chi_Minh'),
     override_bounds JSONB NULL CHECK (jsonb_typeof(override_bounds) = 'object'),
+    published_by UUID NULL,
+    publish_note TEXT NULL,
+    driver_reallocation_request_limit INT NULL,
+    parking_product_enabled JSONB NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -228,6 +232,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_operational_policy_revision
     ON operational_policies(COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid),
         COALESCE(site_id, '00000000-0000-0000-0000-000000000000'::uuid), version);
 CREATE INDEX IF NOT EXISTS idx_operational_policies_site ON operational_policies(site_id);
+
+ALTER TABLE operational_policies ADD COLUMN IF NOT EXISTS published_by UUID NULL;
+ALTER TABLE operational_policies ADD COLUMN IF NOT EXISTS publish_note TEXT NULL;
+ALTER TABLE operational_policies ADD COLUMN IF NOT EXISTS driver_reallocation_request_limit INT NULL;
+ALTER TABLE operational_policies ADD COLUMN IF NOT EXISTS parking_product_enabled JSONB NULL;
+ALTER TABLE operational_policies ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128) NULL;
+ALTER TABLE operational_policies ADD COLUMN IF NOT EXISTS idempotency_payload_hash VARCHAR(128) NULL;
+
+-- 2b. BẢNG BẢN NHÁP CHÍNH SÁCH VẬN HÀNH (OPERATIONAL POLICY DRAFTS)
+-- SPARK-230 / SPARK-233: Quản lý bản nháp cấu hình của Chủ bãi xe trước khi kích hoạt
+CREATE TABLE IF NOT EXISTS operational_policy_drafts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    target_revision INT NOT NULL,
+    draft_payload JSONB NOT NULL CHECK (jsonb_typeof(draft_payload) = 'object'),
+    scheduled_activation_at TIMESTAMPTZ NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by UUID NOT NULL,
+    UNIQUE (site_id),
+    CHECK (tenant_id IS DISTINCT FROM '00000000-0000-0000-0000-000000000000'::uuid AND
+           site_id IS DISTINCT FROM '00000000-0000-0000-0000-000000000000'::uuid)
+);
+CREATE INDEX IF NOT EXISTS idx_operational_policy_drafts_site ON operational_policy_drafts(site_id);
 
 -- 3. BẢNG POOL SỨC CHỨA THEO BÃI/KHU VỰC (SITE CAPACITY POOLS)
 -- Quản lý quota và số lượng xe động phục vụ chống overbooking
@@ -336,6 +364,7 @@ CREATE TABLE IF NOT EXISTS parking_sessions (
     access_item_id UUID,
     account_id UUID,
     current_slot_id UUID,
+    current_spatial_unit_id UUID,
     
     original_plate VARCHAR(50),
     normalized_plate VARCHAR(50),

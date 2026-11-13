@@ -200,6 +200,7 @@ public class PaymentsController : ControllerBase
     /// Tiếp nhận Webhook IPN từ cổng thanh toán payOS
     /// </summary>
     [HttpPost("callbacks/payos")]
+    [HttpPost("payos/webhook")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]

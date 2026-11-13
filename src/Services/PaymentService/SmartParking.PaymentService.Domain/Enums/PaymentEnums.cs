@@ -54,3 +54,18 @@ public enum WebhookProcessingState
     PROCESSED,
     FAILED
 }
+
+public enum PrepaymentMode
+{
+    FULL,
+    PERCENTAGE,
+    FIXED
+}
+
+public enum ReservationQuoteStatus
+{
+    ISSUED,
+    ACCEPTED,
+    EXPIRED,
+    CANCELLED
+}

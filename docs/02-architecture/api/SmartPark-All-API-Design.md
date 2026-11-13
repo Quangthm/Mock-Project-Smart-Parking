@@ -17,6 +17,7 @@ The former file was an implementation snapshot dated 12 October 2026, not the au
 | U31–U33 vehicles | [Binding, media and soft removal](../../03-design/api/vehicle-registration-api-design.md) |
 | U20, P01–P13, R01–R03 scope/structure/internal contracts | [Facility and Operations target](../../03-design/api/parking-structure-api-design.md); unchanged historical request details remain available below, not newly approved. |
 | Discovery and monthly/yearly products | [Operations/Payment integration](v1.1-contracts.md#discovery-and-parking-products) |
+| Owner parking lot policies & operational bounds (SPARK-233) | [Operation Service contract](operation-service/01-owner-parking-lot-policies.contract.md) · [Endpoint design](../../03-design/api/operation-service/owner-parking-lot-policy-api-design.md) |
 
 ## Historical endpoint anchors
 

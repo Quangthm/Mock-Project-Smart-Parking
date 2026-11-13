@@ -156,6 +156,8 @@ export interface OperatorSite {
   modelFileName?: string
   lotType?: LotType
   assignmentPermissions?: string[]
+  operationalLayout?: OperationalLayoutProjection | null
+  layout?: OperationalLayoutProjection | null
   slots: OperatorSlot[]
   units: Structure["units"]
 }
@@ -358,6 +360,8 @@ function siteFromOperationalLayout(
       stalenessThresholdSeconds: projection.stalenessThresholdSeconds,
     },
     lotType: inferredType,
+    operationalLayout: projection,
+    layout: projection,
     modelUrl: ALLOWED_PARKING_MODELS[inferredType]?.path,
     modelFileName: ALLOWED_PARKING_MODELS[inferredType]?.fileName,
     units,
@@ -647,6 +651,7 @@ export const paymentApi = {
     sessionId?: string
     reservationId?: string
     plateNumber?: string
+    imageData?: string
     developmentTestPayOs?: boolean
   }) => {
     const referenceId = body.reservationId ?? body.sessionId
@@ -657,7 +662,7 @@ export const paymentApi = {
     return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
       path,
       "POST",
-      { plateNumber: body.plateNumber },
+      { plateNumber: body.plateNumber, imageData: body.imageData },
     )
   },
   calculate: (body: {

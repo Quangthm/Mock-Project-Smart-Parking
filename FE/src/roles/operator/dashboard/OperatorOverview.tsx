@@ -29,7 +29,7 @@ export function OperatorOverview({
   const totalSlots = lot?.totalSlots ?? 0
   const availableSlots = lot?.slots.filter((slot) => slot.status === "available").length ?? 0
   const occupiedSlots = lot?.slots.filter((slot) => slot.status === "occupied").length ?? 0
-  const reservedSlots = lot?.slots.filter((slot) => slot.status === "reserved").length ?? 0
+  const reservedSlots = lot?.slots.filter((slot) => slot.status === "reserved" && slot.reservationState?.toUpperCase() !== "BACKUP").length ?? 0
   const backupSlots = lot?.slots.filter((slot) => slot.reservationState?.toUpperCase() === "BACKUP").length ?? 0
   // Maintenance is the physical MAINTENANCE axis only; UNKNOWN and UNAVAILABLE
   // both derive `status === "disabled"` and must not be counted as maintenance.

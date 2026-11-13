@@ -188,6 +188,7 @@ public static class UserHost
         app.UseRateLimiter();
         app.MapControllers();
         app.MapHub<UserService.API.Hubs.OperatorAccessHub>("/hubs/operators", options => options.CloseOnAuthenticationExpiration = true);
+        app.MapHub<UserService.API.Hubs.UserAccessHub>("/hubs/access", options => options.CloseOnAuthenticationExpiration = true);
         return app;
     }
 
