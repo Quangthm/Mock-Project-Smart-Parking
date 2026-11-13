@@ -33,9 +33,8 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
 
     [AllowAnonymous, HttpPost("register/owner/simulate-vneid")]
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
-    public async Task<IActionResult> SimulateOwnerVNeId([FromBody] SimulatedVNeIdRequest body,
-        [FromServices] IVNeIdSimulationService vneid, CancellationToken ct) =>
-        Ok(new { success = true, data = await vneid.CompleteOwnerSimulationAsync(body, ct) });
+    public async Task<IActionResult> SimulateOwnerVNeId([FromBody] SimulatedVNeIdRequest body, CancellationToken ct) =>
+        Ok(new { success = true, data = await mediator.Send(new UserService.Application.Usecase.VNeIdSimulation.SimulateOwnerVNeIdCommand(body), ct) });
 
     [AllowAnonymous]
     [HttpPost("register/driver")]
@@ -46,9 +45,8 @@ public class AuthController(IMediator mediator, IMapper mapper) : ApiControllerB
 
     [AllowAnonymous, HttpPost("register/driver/simulate-vneid")]
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
-    public async Task<IActionResult> SimulateDriverVNeId([FromBody] SimulatedVNeIdRequest body,
-        [FromServices] IVNeIdSimulationService vneid, CancellationToken ct) =>
-        Ok(new { success = true, data = await vneid.CompleteDriverSimulationAsync(body, ct) });
+    public async Task<IActionResult> SimulateDriverVNeId([FromBody] SimulatedVNeIdRequest body, CancellationToken ct) =>
+        Ok(new { success = true, data = await mediator.Send(new UserService.Application.Usecase.VNeIdSimulation.SimulateDriverVNeIdCommand(body), ct) });
 
     [AllowAnonymous,HttpPost("register/driver/recover"),Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("DriverOtp")]
     public async Task<IActionResult> RecoverDriver(OtpLoginDto body,[FromServices] IDriverRegistrationService registrations,CancellationToken ct)=>
