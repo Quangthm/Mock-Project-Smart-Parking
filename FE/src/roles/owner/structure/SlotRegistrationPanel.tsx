@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react"
+import { formatSlotLabel } from "../../../lib/operationalLayout"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
@@ -22,6 +23,7 @@ import {
 import { suggestSlotCode } from "../../../lib/3d/meshSlotMapping"
 import { ReleasedIdentifierDialog } from "./ReleasedIdentifierDialog"
 import { StructureFeedback } from "./StructureFeedback"
+import "./slot-registration-picker.css"
 
 const inputClass = "input w-full text-sm"
 const labelClass = "space-y-1 text-xs font-medium text-[var(--muted)]"
@@ -92,6 +94,8 @@ export function SlotRegistrationPanel({
   const [currentKey, setCurrentKey] = useState<string | null>(null)
   const [formError, setFormError] = useState("")
   const [notice, setNotice] = useState("")
+  const [meshQuery, setMeshQuery] = useState("")
+  const meshSearchId = useId()
   const [solution, setSolution] = useState<{ mesh: RegistrationMesh; released: ReleasedIdentifier } | null>(null)
   // Nothing selectable: every template bay is already registered, or the 3D model
   // has not loaded and the fallback only draws bays for already-registered slots.
@@ -124,6 +128,11 @@ export function SlotRegistrationPanel({
   const resolution = resolveSlotPrimary(categories, primary || null)
   const summary = summarizeRegistration(Object.values(outcomes))
   const selectedKeys = useMemo(() => new Set(selection.map((item) => item.key)), [selection])
+  const matchingMeshes = useMemo(() => {
+    const query = meshQuery.trim().replace(/_/g, " ").toLocaleLowerCase()
+    return census.unregistered.filter(mesh => formatSlotLabel(mesh.name).toLocaleLowerCase().includes(query))
+  }, [census.unregistered, meshQuery])
+  const selectedMeshCount = census.unregistered.filter(mesh => selectedKeys.has(mesh.key)).length
   const finishedKeys = useMemo(
     () =>
       Object.values(outcomes)
@@ -362,28 +371,43 @@ export function SlotRegistrationPanel({
         )}
 
         {census.unregistered.length > 0 && (
-          <details className="rounded-xl border border-[var(--border)] bg-[var(--bg)]">
-            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-[var(--fg)]">
-              Choose meshes from a list (keyboard-friendly) · {census.unregisteredMeshes}
+          <details className="slot-bay-picker">
+            <summary className="slot-bay-picker__summary">
+              <span className="slot-bay-picker__heading"><UntitledIcon name="grid" size={18} /><span>Choose bays <span className="slot-bay-picker__total">{census.unregistered.length}</span></span></span>
+              <span className="slot-bay-picker__summary-end"><span>{selectedMeshCount} selected</span><span className="slot-bay-picker__chevron"><UntitledIcon name="chevron-down" size={16} /></span></span>
             </summary>
-            <ul className="grid max-h-56 gap-1 overflow-y-auto border-t border-[var(--border)] p-2 sm:grid-cols-2">
-              {census.unregistered.map((mesh) => {
-                const checked = selection.some((item) => item.key === mesh.key)
+            <div className="slot-bay-picker__toolbar">
+              <div className="slot-bay-picker__search">
+                <label htmlFor={meshSearchId} className="sr-only">Search unregistered bays</label>
+                <UntitledIcon name="search" size={17} />
+                <input id={meshSearchId} name="baySearch" type="search" autoComplete="off" spellCheck={false}
+                  placeholder="Search bays…" value={meshQuery} onChange={event => setMeshQuery(event.target.value)} />
+              </div>
+              <p aria-live="polite">{matchingMeshes.length} of {census.unregistered.length} bays</p>
+            </div>
+            <ul className="slot-bay-picker__list" aria-label="Unregistered bays">
+              {matchingMeshes.map((mesh) => {
+                const checked = selectedKeys.has(mesh.key)
+                const ev = /(?:^|[_\s-])EV(?:[_\s-]|$)/i.test(mesh.name)
+                const car = /car/i.test(mesh.name)
                 return (
                   <li key={mesh.key}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs text-[var(--fg)] hover:bg-[var(--raised)]">
+                    <label className="slot-bay-picker__option" data-selected={checked}>
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleMeshFromList(mesh)}
-                        className="size-4 accent-[var(--primary)]"
+                        aria-label={`Select ${formatSlotLabel(mesh.name)}`}
                       />
-                      <span className="min-w-0 truncate tabular-nums" title={mesh.name}>{mesh.name}</span>
+                      <span className="slot-bay-picker__name" title={formatSlotLabel(mesh.name)} translate="no">{formatSlotLabel(mesh.name)}</span>
+                      <span className="slot-bay-picker__kind"><UntitledIcon name={ev ? "zap" : car ? "car" : "parking"} size={15} /><span>{ev ? "EV" : car ? "Car" : "Bay"}</span></span>
                     </label>
                   </li>
                 )
               })}
             </ul>
+            {!matchingMeshes.length && <p className="slot-bay-picker__empty" role="status">No bays match your search. Try another name.</p>}
+            <p className="slot-bay-picker__footer">Choose a bay to add it to the registration list below.</p>
           </details>
         )}
 
@@ -405,8 +429,8 @@ export function SlotRegistrationPanel({
                   <li key={mesh.key} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
                     <div className="grid gap-2 sm:grid-cols-[minmax(6rem,10rem)_minmax(0,1fr)_auto] sm:items-start">
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-[var(--fg)]" title={mesh.name}>
-                          {mesh.name}
+                        <p className="truncate text-xs font-semibold text-[var(--fg)]" title={formatSlotLabel(mesh.name)}>
+                          {formatSlotLabel(mesh.name)}
                         </p>
                         <Badge tone={badge.tone} className="mt-1">
                           {running ? "Registering…" : badge.label}

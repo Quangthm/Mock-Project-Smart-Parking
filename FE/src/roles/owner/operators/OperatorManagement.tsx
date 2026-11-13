@@ -36,7 +36,17 @@ export function OperatorManagement({
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSite, setFilterSite] = useState(selectedSiteId)
   const [inviting, setInviting] = useState<string | null>(null)
-  useEffect(() => watchOperators(() => setReload(value => value + 1)), [user?.id])
+  useEffect(() => {
+    let active = true
+    const stop = watchOperators(() => {
+      void operatorsApi.list().then(accounts => {
+        if (active) setOperators(accounts)
+      }).catch(err => {
+        if (active) setError(err instanceof Error ? err.message : "Cannot refresh operators.")
+      })
+    })
+    return () => { active = false; stop() }
+  }, [user?.id])
 
   async function resendInvitation(id: string) {
     setInviting(id)

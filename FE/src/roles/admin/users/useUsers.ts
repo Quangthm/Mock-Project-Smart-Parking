@@ -23,7 +23,7 @@ export function useUsers() {
   const appliedBackgroundRevision = useRef(0)
   useServerRefresh(admin?.role === "admin" ? admin.id : undefined, () => {
     if (!saving && !loading && !detailLoading && !refreshing) setBackgroundRevision(value => value + 1)
-  }, 20_000)
+  })
 
   useEffect(() => {
     if (admin?.role !== "admin") return

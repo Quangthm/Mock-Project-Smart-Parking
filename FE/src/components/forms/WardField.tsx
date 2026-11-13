@@ -29,7 +29,7 @@ export function WardField({ id, provinceCode, value, onChange, required = false 
 
   const custom = manual || unavailable || (!loading && !!value && !wards.includes(value))
   return <div>
-    <label className="label" htmlFor={id}>Ward / Commune / Special zone {required ? "*" : ""}</label>
+    <label className="label" htmlFor={id}>Ward / Commune / Special zone {required && <span className="required-mark">*</span>}</label>
     {!unavailable && <RoundedSelect id={id} className="input" value={custom ? "__manual__" : value}
       disabled={loading} required={required && !custom} onChange={event => {
         if (event.target.value === "__manual__") {

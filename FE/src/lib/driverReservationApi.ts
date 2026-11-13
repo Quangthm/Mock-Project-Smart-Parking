@@ -1,4 +1,4 @@
-import { ApiConnectionError, AuthApiError, request } from "./authApi"
+import { ApiConnectionError, AuthApiError, getSessionGeneration, request } from "./authApi"
 
 const server = (import.meta.env.VITE_RESERVATION_API_BASE_URL ?? "http://localhost:5055").replace(/\/$/, "")
 
@@ -69,9 +69,23 @@ async function call<T>(path: string, body?: unknown, key?: string): Promise<T> {
   }
 }
 
+let previewAttempt: { key: string; generation: number; until: number; promise: Promise<{ bookedAmount: number; currency: string }> } | null = null
 export const driverReservationApi = {
-  preview: (selection: Omit<ReservationSelection, "paymentMethod">) =>
-    call<{ bookedAmount: number; currency: string }>("/reservation-price-previews", selection),
+  preview: (selection: Omit<ReservationSelection, "paymentMethod">) => {
+    const key = JSON.stringify(selection)
+    const generation = getSessionGeneration()
+    if (previewAttempt?.key === key && previewAttempt.generation === generation && previewAttempt.until > Date.now()) return previewAttempt.promise
+    const promise = call<{ bookedAmount: number; currency: string }>("/reservation-price-previews", selection)
+    const attempt = { key, generation, until: Date.now() + 30_000, promise }
+    attempt.promise = promise
+      .then(result => { if (previewAttempt === attempt) previewAttempt = null; return result })
+      .catch(error => {
+        if (!(error instanceof AuthApiError && error.status === 400) && previewAttempt === attempt) previewAttempt = null
+        throw error
+      })
+    previewAttempt = attempt
+    return attempt.promise
+  },
   review: (selection: ReservationSelection) => call<ReservationTerms>("/reservation-terms", selection),
   create: (intent: ReservationIntent, key: string) => call<ReservationReceipt>("/reservation-requests", intent, key),
   receipt: (id: string) => call<ReservationReceipt>(`/reservation-requests/${encodeURIComponent(id)}`),

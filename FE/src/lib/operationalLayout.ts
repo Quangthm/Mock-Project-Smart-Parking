@@ -281,7 +281,7 @@ export function formatSlotLabel(slotCode: string | null | undefined): string {
   const ev = /^PARKING_EV_CAR_(\d+)$/i.exec(raw)
   if (ev) return `EV-${ev[1]}`
 
-  return raw
+  return raw.replace(/_/g, " ")
 }
 
 /** Same rule as {@link matchSlotCode}, for a whole site; used for diagnostics. */

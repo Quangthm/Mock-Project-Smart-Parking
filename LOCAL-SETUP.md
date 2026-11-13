@@ -162,6 +162,17 @@ npm run dev
 
 Vite chạy mặc định tại http://localhost:5173. Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có và **giữ nguyên file đã cấu hình**. Điền MapTiler key của bạn nếu giao diện cần bản đồ (xem mục 5.2).
 
+### Local captcha configuration
+
+For Docker local testing, `SMARTPARK_TURNSTILE_ENABLED` in the root `.env` configures both UserService verification and the frontend widget. After changing it, apply both containers:
+
+```powershell
+.\scripts\run-app-service.ps1 -Service User -NoBuild -NoLogWindow
+.\scripts\run-app-service.ps1 -Service Frontend -NoBuild -NoLogWindow
+```
+
+Reload the browser afterward. For a frontend running directly on the host, align `VITE_TURNSTILE_ENABLED` in `FE/.env` with UserService and restart Vite. The widget is enabled by default; disabling its display does not bypass backend verification or validate account credentials.
+
 ## 4. Verify Setup
 
 Checklist sau khi setup và chạy app:

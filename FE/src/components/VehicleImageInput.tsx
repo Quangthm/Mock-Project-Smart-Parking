@@ -22,6 +22,7 @@ export function VehicleImageInput({ vehicleId, onUploaded, disabled = false, sho
   const [failed, setFailed] = useState(false)
   const intent = useRef({ key: crypto.randomUUID(), draft: crypto.randomUUID() })
   const generation = useRef(0)
+  const uploading = useRef(false)
   useEffect(() => () => { generation.current++ }, [])
   useEffect(() => {
     if (!file) return
@@ -31,7 +32,8 @@ export function VehicleImageInput({ vehicleId, onUploaded, disabled = false, sho
   }, [file])
 
   async function upload() {
-    if (!file || busy || ready || disabled) return
+    if (!file || uploading.current || busy || ready || disabled) return
+    uploading.current = true
     const current = generation.current
     setBusy(true)
     setMessage("")
@@ -59,6 +61,7 @@ export function VehicleImageInput({ vehicleId, onUploaded, disabled = false, sho
         setMessage(error instanceof Error ? error.message : "Image upload failed.")
       }
     } finally {
+      uploading.current = false
       if (generation.current === current) setBusy(false)
     }
   }
@@ -80,10 +83,13 @@ export function VehicleImageInput({ vehicleId, onUploaded, disabled = false, sho
       <input className="input mt-1 w-full min-w-0" name="vehiclePhoto" type="file" accept={imageTypes.join(",")} disabled={busy || disabled}
         onChange={event => {
         const selected = event.currentTarget.files?.[0]
+        event.currentTarget.value = ""
         if (!selected) return
         generation.current++
         setPreview("")
         setReady(false)
+        setFailed(false)
+        setMessage("")
         intent.current = { key: crypto.randomUUID(), draft: crypto.randomUUID() }
         onUploaded("")
         const error = !imageTypes.includes(selected.type) ? "Choose a JPEG, PNG or WebP image."
@@ -98,7 +104,7 @@ export function VehicleImageInput({ vehicleId, onUploaded, disabled = false, sho
     <button type="button" className="btn-outline min-h-11" disabled={!file || busy || ready || disabled} onClick={upload}>
       {busy ? "Uploading…" : ready ? "Photo uploaded" : failed && file ? "Retry upload" : "Upload photo"}
     </button>
-    {message && <p className="text-sm" role={failed ? "alert" : "status"}>{message}</p>}
+    {message && <p className={`text-sm ${failed ? "text-[var(--danger,#b42318)]" : "text-[var(--muted)]"}`} role={failed ? "alert" : "status"}>{message}</p>}
   </div>
 }
 

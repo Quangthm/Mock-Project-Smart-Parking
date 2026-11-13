@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, type CSSProperties } from "react"
-import { useTurnstile } from "../../hooks/useTurnstile"
+import { useTurnstile, turnstileEnabled } from "../../hooks/useTurnstile"
 
 export interface TurnstileWidgetRef {
   reset: () => void
@@ -52,6 +52,8 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetRef, TurnstileWidgetPro
       }),
       [reset, token],
     )
+
+    if (!turnstileEnabled) return null
 
     return (
       <div

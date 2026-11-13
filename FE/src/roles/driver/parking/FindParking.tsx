@@ -12,6 +12,7 @@ import { ParkingDetailsPanel, type VehicleCapacityInfo } from "./ParkingDetailsP
 import { useApp } from "../../../context/AppContext"
 import { searchDiscoveryLots, type DiscoveryLotItem, type OriginSource } from "../../../lib/driverDiscoveryApi"
 import { parkingApi } from "../../../lib/parkingApi"
+import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
 import { mapOperationalLayoutSlots } from "../../../lib/driverSlotMapping"
 import { distanceKm, validCoordinates, type LatLng } from "../../../lib/parkingCoordinates"
 
@@ -121,6 +122,8 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const routeSequenceRef = useRef(0)
   // Guards against duplicate operational-layout fetches while one is in flight.
   const resolvingLotsRef = useRef(new Set<string>())
+  const layoutRetryAfterRef = useRef(new Map<string, number>())
+  const [layoutRevision, setLayoutRevision] = useState(0)
   const mountedRef = useRef(true)
   const [selected, setSelected] = useState<ParkingLot | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -246,22 +249,24 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
-  // Owner-created lots are persisted with `slots: []`; the real bays live in
-  // FacilityService. Resolve each slot-less lot once from the authoritative
-  // operational-layout projection so availability and Book Now are accurate.
-  // LOOP GUARD: only lots with empty slots are fetched/saved, and a saved lot is
-  // skipped on the next run, so the save -> `sp-data-change` cycle terminates.
+  // Fetch the full slot layout only when opening a site's details; map markers
+  // do not need an individual layout request for every stored site.
   useEffect(() => {
-    const unresolved = sourceLots.filter((lot) => !Array.isArray(lot.slots) || lot.slots.length === 0)
+    const unresolved = sourceLots.filter((lot) =>
+      detailsOpen && lot.id === selected?.id && (!Array.isArray(lot.slots) || lot.slots.length === 0) &&
+      !resolvingLotsRef.current.has(lot.id) && (layoutRetryAfterRef.current.get(lot.id) ?? 0) <= Date.now(),
+    ).slice(0, Math.max(0, 3 - resolvingLotsRef.current.size))
     if (!unresolved.length) return
     unresolved.forEach((lot) => {
-      if (resolvingLotsRef.current.has(lot.id)) return
+      if (resolvingLotsRef.current.has(lot.id) || (layoutRetryAfterRef.current.get(lot.id) ?? 0) > Date.now()) return
       resolvingLotsRef.current.add(lot.id)
+      const generation = getSessionGeneration()
       void (async () => {
         try {
           const layout = await parkingApi.operationalLayout(lot.id)
-          if (!mountedRef.current) return
+          if (!mountedRef.current || generation !== getSessionGeneration()) return
           const mappedSlots = mapOperationalLayoutSlots(layout.slots)
+          layoutRetryAfterRef.current.set(lot.id, Date.now() + 30_000)
           if (!mappedSlots.length) return
           const updatedLot: ParkingLot = {
             ...lot,
@@ -270,15 +275,19 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
           }
           store.saveLot(updatedLot)
           setSourceLots((previous) => previous.map((item) => (item.id === lot.id ? updatedLot : item)))
-        } catch {
+        } catch (error) {
+          // Missing/inaccessible sites must not be retried on every store notification.
+          const permanent = error instanceof AuthApiError && [400, 403, 404].includes(error.status)
+          layoutRetryAfterRef.current.set(lot.id, Date.now() + (permanent ? 300_000 : 30_000))
           // Offline, fixture mode or an unavailable service: keep the existing
           // (empty) slots and never throw or overwrite them.
         } finally {
           resolvingLotsRef.current.delete(lot.id)
+          if (mountedRef.current && generation === getSessionGeneration()) setLayoutRevision(value => value + 1)
         }
       })()
     })
-  }, [sourceLots])
+  }, [sourceLots, layoutRevision, detailsOpen, selected?.id])
   useEffect(() => {
     if (!selected) return
     const latest = lots.find((lot) => lot.id === selected.id)
@@ -307,14 +316,17 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   useEffect(() => {
     const apiKey = import.meta.env.VITE_MAPTILER_API_KEY
     if (!apiKey) { setMapState("missing-key"); return }
-    if (!mapElement.current) return
+    const container = mapElement.current
+    if (!container) return
     let cancelled = false
+    // StrictMode cancels its probe before a map starts downloading style assets.
+    const initializeFrame = requestAnimationFrame(() => {
     try {
       maptilersdk.config.apiKey = apiKey
       const initialStyle = mapStyleUrl("streets", apiKey, theme)
       appliedMapStyleRef.current = initialStyle
       const map = new maptilersdk.Map({
-        container: mapElement.current, style: initialStyle,
+        container, style: initialStyle,
         ...(parkingCenter ? { center: [parkingCenter.lng, parkingCenter.lat] as [number, number], zoom: 13 } : {}),
         navigationControl: false, geolocateControl: false, fullscreenControl: false,
       })
@@ -330,8 +342,10 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       })
       map.on("error", () => { if (!cancelled && !map.loaded()) setMapState("error") })
     } catch { if (!cancelled) setMapState("error") }
+    })
     return () => {
       cancelled = true
+      cancelAnimationFrame(initializeFrame)
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current.clear()
       locationMarkerRef.current?.remove()

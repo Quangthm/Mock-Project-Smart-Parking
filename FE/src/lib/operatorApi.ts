@@ -453,7 +453,29 @@ async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
     throw new Error("The assignment service returned an invalid site list. Please try again.")
   }
   const projections = await Promise.allSettled(
-    assignments.map(async (assignment) => {
+    assignments.map(readAssignedOperatorSite),
+  )
+  const available = projections.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  )
+  if (assignments.length > 0 && available.length === 0) {
+    const firstFailure = projections.find(result => result.status === "rejected")
+    throw firstFailure?.status === "rejected" ? firstFailure.reason : new Error("Assigned parking sites are unavailable.")
+  }
+  return Promise.all(available.map(async (site) => {
+    const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
+    return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
+  }))
+}
+
+export async function refreshOperatorSite(site: OperatorSite): Promise<OperatorSite> {
+  const updated = await readAssignedOperatorSite({
+    siteId: site.id, tenantId: site.tenantId, permissions: site.assignmentPermissions ?? [],
+  })
+  return { ...updated, modelUrl: site.modelUrl ?? updated.modelUrl }
+}
+
+async function readAssignedOperatorSite(assignment: { siteId: string; tenantId: string; permissions: string[] }): Promise<OperatorSite> {
       const projection = await readOperatorLayout(() => parkingApi.operationalLayout(assignment.siteId))
       if (projection?.siteId && projection.siteId !== assignment.siteId) {
         throw new Error("The parking service returned a layout for a different site.")
@@ -471,19 +493,6 @@ async function fetchOperatorSites(user: User): Promise<OperatorSite[]> {
         throw new Error("The parking service returned an incomplete layout for this assigned site.")
       }
       return { ...siteFromStructure(legacy), assignmentPermissions: assignment.permissions }
-    }),
-  )
-  const available = projections.flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  )
-  if (assignments.length > 0 && available.length === 0) {
-    const firstFailure = projections.find(result => result.status === "rejected")
-    throw firstFailure?.status === "rejected" ? firstFailure.reason : new Error("Assigned parking sites are unavailable.")
-  }
-  return Promise.all(available.map(async (site) => {
-    const savedModelUrl = await loadOwnerModelUrl(site.id).catch(() => null)
-    return savedModelUrl ? { ...site, modelUrl: savedModelUrl } : site
-  }))
 }
 
 function toBooking(reservation: GateReservation): Booking {

@@ -18,6 +18,7 @@ let refreshInFlight: Promise<void> | null = null
 let logoutInProgress = false
 // A refresh rotates credentials within a login; login/logout changes its identity.
 let sessionGeneration = 0
+let currentUserInFlight: { generation: number; promise: Promise<User | null> } | null = null
 export const getSessionGeneration = () => sessionGeneration
 
 function requireSessionGeneration(expected: number) {
@@ -198,7 +199,32 @@ export class ApiConnectionError extends Error {
   }
 }
 
-export async function request<T>(
+const pendingReads = new Map<string, Promise<unknown>>()
+
+export function request<T>(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  apiPrefix = "/api/auth",
+  serverUrl = baseUrl,
+  extraHeaders?: Record<string, string>,
+  responseFormat: "json" | "blob" = "json",
+): Promise<T> {
+  // Share only in-flight reads within the same login, never cached business state.
+  if (method !== "GET" || body !== undefined) {
+    pendingReads.clear()
+    return performRequest(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormat)
+  }
+  const key = JSON.stringify([sessionGeneration, serverUrl, apiPrefix, path, extraHeaders, responseFormat])
+  const existing = pendingReads.get(key)
+  if (existing) return existing as Promise<T>
+  const pending = performRequest<T>(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormat)
+    .finally(() => { if (pendingReads.get(key) === pending) pendingReads.delete(key) })
+  pendingReads.set(key, pending)
+  return pending
+}
+
+async function performRequest<T>(
   path: string,
   method = "GET",
   body?: unknown,
@@ -234,6 +260,7 @@ export async function request<T>(
       ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
+    requireSessionGeneration(generation)
     throw new ApiConnectionError()
   }
 
@@ -276,7 +303,7 @@ export async function request<T>(
         ? "Your session has expired. Please sign in again."
         : "Authentication request failed.")
 
-    throw new AuthApiError(message, response.status, payload?.code, payload)
+    throw new AuthApiError(message, response.status, payload?.code ?? payload?.errorCode, payload)
   }
 
   return payload as T
@@ -416,17 +443,26 @@ export const authApi = {
   async currentUser(): Promise<User | null> {
     if (!sessionStorage.getItem(tokenKey)) return null
     const generation = sessionGeneration
-    await ensureAccessToken()
-    requireSessionGeneration(generation)
-    const token = sessionStorage.getItem(tokenKey)
+    if (currentUserInFlight?.generation === generation) return currentUserInFlight.promise
+    const pending = (async () => {
+      await ensureAccessToken()
+      requireSessionGeneration(generation)
+      const token = sessionStorage.getItem(tokenKey)
 
-    const response = await request<ApiResponse<ApiUser>>("/me")
+      const response = await request<ApiResponse<ApiUser>>("/me")
 
     // A response from a previous session must not restore it after logout or a new login.
 
-    if (token !== sessionStorage.getItem(tokenKey)) return null
+      if (token !== sessionStorage.getItem(tokenKey)) return null
 
-    return toUser(response.data)
+      return toUser(response.data)
+    })()
+    const entry = { generation, promise: pending }
+    entry.promise = pending.finally(() => {
+      if (currentUserInFlight === entry) currentUserInFlight = null
+    })
+    currentUserInFlight = entry
+    return entry.promise
   },
 
   async updateOwnProfile(fullName: string): Promise<ApiUser> {

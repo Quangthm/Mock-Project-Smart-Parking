@@ -229,6 +229,7 @@ services:
       VITE_NOTIFICATION_API_BASE_URL: http://localhost:5068
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
+      VITE_TURNSTILE_ENABLED: ${SMARTPARK_TURNSTILE_ENABLED:-true}
       VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
       CHOKIDAR_USEPOLLING: "true"
     ports:

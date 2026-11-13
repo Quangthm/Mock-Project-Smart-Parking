@@ -1,17 +1,17 @@
 import { useEffect, useRef } from "react"
 import { authApi } from "./authApi"
 
-// One scheduler per mounted resource, with no fetches while the page is hidden.
+// Refresh on returning to the app. Timed polling is opt-in for existing checkout flows.
 type Refresh = (isCurrent: () => boolean) => void | Promise<void>
 
-export function watchServerRefresh(refresh: Refresh, intervalMs: number) {
+export function watchServerRefresh(refresh: Refresh, intervalMs?: number) {
   let disposed = false
   let pending = false
   let lastStarted = Date.now()
 
   const run = async () => {
     if (disposed || pending || document.visibilityState === "hidden" || navigator.onLine === false) return
-    if (Date.now() - lastStarted < Math.min(5_000, intervalMs)) return
+    if (Date.now() - lastStarted < Math.min(5_000, intervalMs ?? 5_000)) return
     lastStarted = Date.now()
     pending = true
     try {
@@ -21,7 +21,7 @@ export function watchServerRefresh(refresh: Refresh, intervalMs: number) {
     }
   }
   const schedule = () => { void run().catch(() => { /* The resource loader owns its error state. */ }) }
-  const timer = window.setInterval(schedule, intervalMs)
+  const timer = intervalMs === undefined ? undefined : window.setInterval(schedule, intervalMs)
   window.addEventListener("focus", schedule)
   window.addEventListener("online", schedule)
   document.addEventListener("visibilitychange", schedule)
@@ -34,7 +34,7 @@ export function watchServerRefresh(refresh: Refresh, intervalMs: number) {
   }
 }
 
-export function useServerRefresh(scope: string | undefined, refresh: Refresh, intervalMs = 30_000) {
+export function useServerRefresh(scope: string | undefined, refresh: Refresh, intervalMs?: number) {
   const currentRefresh = useRef(refresh)
   currentRefresh.current = refresh
   useEffect(() => {

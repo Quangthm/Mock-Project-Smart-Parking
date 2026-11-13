@@ -1,5 +1,5 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useApp } from "../../../context/AppContext"
 import { useServerRefresh } from "../../../lib/serverRefresh"
 import { CheckInOut } from "../check-in-out/CheckInOut"
@@ -17,11 +17,12 @@ import { showUiToast } from "../../../lib/uiToast"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import {
   loadOperatorSites,
+  refreshOperatorSite,
   operatorOperationsApi,
   reservationApi,
   type OperatorSite,
 } from "../../../lib/operatorApi"
-import { watchOperatorLayout } from "../../../lib/operatorLayoutLive"
+import { watchOperatorLayout, type LayoutConnectionState } from "../../../lib/operatorLayoutLive"
 import type { Booking } from "../../../lib/types"
 
 export type OperatorTab =
@@ -72,6 +73,9 @@ export function OperatorDashboard({
   const [sitesError, setSitesError] = useState("")
   const [sitesLoading, setSitesLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [bookingRevision, setBookingRevision] = useState(0)
+  const [layoutConnectionState, setLayoutConnectionState] = useState<LayoutConnectionState>("connecting")
+  const [layoutConnectionAttempt, setLayoutConnectionAttempt] = useState(0)
   const [sitesRevision, setSitesRevision] = useState(0)
   const [sitesRefreshing, setSitesRefreshing] = useState(false)
   const [loadedScope, setLoadedScope] = useState("")
@@ -80,7 +84,7 @@ export function OperatorDashboard({
     if (!sitesRefreshing && !bookingsState.loading && !ticketsState.loading && !notificationsState.loading && !reportsState.loading) {
       setRefreshKey(value => value + 1)
     }
-  }, 45_000)
+  })
 
   useEffect(() => {
     const refresh = () => setRefreshKey((value) => value + 1)
@@ -98,10 +102,6 @@ export function OperatorDashboard({
     window.addEventListener("sp:dashboard-nav", onNavigate)
     return () => window.removeEventListener("sp:dashboard-nav", onNavigate)
   }, [])
-
-  useEffect(() => {
-    if (tab === "status") setRefreshKey((value) => value + 1)
-  }, [tab])
 
   useEffect(() => {
     let active = true
@@ -128,7 +128,7 @@ export function OperatorDashboard({
     return () => {
       active = false
     }
-  }, [user, userScope, refreshKey])
+  }, [userScope, refreshKey])
 
   const ownerLots = loadedScope === userScope ? allLots : []
 
@@ -140,10 +140,30 @@ export function OperatorDashboard({
     )
   }, [activeSiteId, ownerLots])
 
+  const selectedLotRef = useRef(selectedLot)
+  selectedLotRef.current = selectedLot
   useEffect(() => {
-    if (!selectedLot?.id) return
-    return watchOperatorLayout(selectedLot.id, () => setRefreshKey((value) => value + 1))
-  }, [selectedLot?.id])
+    const siteId = selectedLot?.id
+    if (!siteId) return
+    let active = true
+    const stop = watchOperatorLayout(siteId, async (refreshBookings) => {
+      const site = selectedLotRef.current
+      if (!active || site?.id !== siteId) return
+      try {
+        const updated = await refreshOperatorSite(site)
+        if (active) {
+          setAllLots(current => current.map(item => item.id === siteId ? updated : item))
+          if (refreshBookings) {
+            if (accessRole === "financial") setSitesRevision(value => value + 1)
+            else setBookingRevision(value => value + 1)
+          }
+        }
+      } catch (error) {
+        if (active) setSitesError(requestError(error, "Could not refresh this parking site's layout."))
+      }
+    }, state => { if (active) setLayoutConnectionState(state) })
+    return () => { active = false; stop() }
+  }, [selectedLot?.id, userScope, accessRole, layoutConnectionAttempt])
 
   const resourceScope = `${userScope}:${selectedLot?.id ?? ""}:${refreshKey}`
   const reportSiteIds = accessRole === "financial" ? ownerLots.map((site) => site.id) : []
@@ -162,25 +182,29 @@ export function OperatorDashboard({
   ] as const
 
   useEffect(() => {
+    if (!selectedLot || accessRole !== "operation") return
+    let active = true
+    setBookingsState(current => ({ ...current, scope: resourceScope, loading: true }))
+    reservationApi.list(selectedLot.id).then(data => {
+      if (active) setBookingsState({ scope: resourceScope, data, loading: false, error: "" })
+    }).catch(error => {
+      if (active) setBookingsState({ scope: resourceScope, data: [], loading: false, error: requestError(error, "Could not load reservations.") })
+    })
+    return () => { active = false }
+  }, [accessRole, resourceScope, bookingRevision])
+
+  useEffect(() => {
     const initialState = { scope: resourceScope, data: [], loading: Boolean(selectedLot && accessRole === "operation"), error: "" }
-    setBookingsState(current => initialState.loading && current.scope === resourceScope ? { ...current, loading: true } : initialState)
     setTicketsState(current => initialState.loading && current.scope === resourceScope ? { ...current, loading: true } : initialState)
     setNotificationsState(current => initialState.loading && current.scope === resourceScope ? { ...current, loading: true } : initialState)
     if (!selectedLot || accessRole !== "operation") return
     let active = true
     Promise.allSettled([
-      reservationApi.list(selectedLot.id),
       operatorOperationsApi.listTickets(selectedLot.id),
       operatorOperationsApi.listNotifications(selectedLot.id),
     ])
-      .then(([bookings, nextTickets, nextNotifications]) => {
+      .then(([nextTickets, nextNotifications]) => {
         if (!active) return
-        setBookingsState({
-          scope: resourceScope,
-          data: bookings.status === "fulfilled" ? bookings.value : [],
-          loading: false,
-          error: bookings.status === "rejected" ? requestError(bookings.reason, "Could not load reservations.") : "",
-        })
         setTicketsState({
           scope: resourceScope,
           data: nextTickets.status === "fulfilled" ? nextTickets.value : [],
@@ -197,7 +221,7 @@ export function OperatorDashboard({
     return () => {
       active = false
     }
-  }, [accessRole, resourceScope, sitesRevision])
+  }, [accessRole, resourceScope])
 
   useEffect(() => {
     setReportsState(current => current.scope === reportScope && reportSiteIds.length
@@ -339,6 +363,12 @@ export function OperatorDashboard({
   return (
     <DashboardSidebar groups={sidebarGroups}>
       <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+        {selectedLot && layoutConnectionState === "unavailable" && (
+          <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-[var(--fg)]">
+            <span>Live updates are unavailable. Showing the last loaded parking layout.</span>
+            <button type="button" className="btn-outline" onClick={() => setLayoutConnectionAttempt(value => value + 1)}>Retry live updates</button>
+          </div>
+        )}
         {sitesError && (
           <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
             <span>{sitesError}</span>

@@ -296,6 +296,16 @@ Shared implementation requirements:
 
 The shared coding guide defines **responsive implementation quality**, not the exact layout of individual SmartPark pages.
 
+### Event-driven updates and polling approval gate
+
+Prefer approved backend SignalR events for frontend updates where those events are available. Fetch an initial authoritative snapshot and reconcile after reconnecting; coalesce event bursts and refresh only affected resources rather than repeatedly reloading the whole screen.
+
+**Prioritize SignalR and closing backend event-contract gaps over making the frontend poll resources.** If the required event support is missing, incomplete or unclear, prepare a backend handoff with explicit requirements and a proposed contract before choosing a polling workaround. Identify the owning service, committed changes that trigger notifications, event names and payload/resource identifiers, authorized recipient scope, and snapshot/reconnect reconciliation behavior. Distinguish proposed contracts from implemented capabilities; do not invent event support or modify backend code outside the authorized task scope. Request the backend work/contract clarification needed for event-driven updates and continue independent frontend work while that dependency is pending. Any polling still required must pass the approval gate below.
+
+**Polling is a last resort, including fallback polling during a disconnected realtime connection. Before implementing new polling or expanding existing polling, explicitly explain why event-driven updates cannot satisfy the requirement and obtain the project owner's explicit approval.** "Owner" here means the project owner/requesting decision-maker, not the application's Owner role. A missing backend event or a connection failure is a reason to propose polling, not automatic permission to implement it.
+
+The proposal must identify the affected endpoints, trigger/start conditions, interval, expected requests per active client and scaling impact, stop conditions, and safeguards against overlapping requests, duplicate timers and unbounded retries. Record the reason and approval in the task's existing decision record. Without approval, leave the polling proposal pending and continue independent work; do not silently introduce a timer-based fallback. Existing polling is not retroactively approved by this rule: identify it during relevant reviews and seek approval before expanding it.
+
 ## 7. Uniform errors and practical OCP
 
 Use the **built-in ASP.NET Core exception-handling middleware** via `UseExceptionHandler(...)` together with DI-registered `IExceptionHandler` implementations (`AddExceptionHandler<T>()`). `IExceptionHandler` is the framework-supported handling strategy invoked by the exception-handler middleware; it does **not** remove middleware from the request pipeline.
