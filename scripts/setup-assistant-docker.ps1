@@ -82,24 +82,6 @@ try {
         $keyringCertificate.Dispose()
     }
 } catch { throw 'Assistant requires an unexpired PFX with an RSA private key and matching password.' }
-$markdown = Join-Path $knowledge 'smartpark-knowledge.md'
-$manifest = Join-Path $knowledge 'publication.json'
-if (!(Test-Path -LiteralPath $markdown -PathType Leaf) -or !(Test-Path -LiteralPath $manifest -PathType Leaf)) {
-    throw 'Provide the approved Markdown deployment copy and publication.json before setup.'
-}
-try { $publication = Get-Content -Raw -Encoding UTF8 -LiteralPath $manifest | ConvertFrom-Json }
-catch { throw 'Assistant publication.json is invalid.' }
-if ($publication.role -cne 'admin' -or !$publication.version -or !$publication.approvedBy -or
-    (Get-FileHash -Algorithm SHA256 -LiteralPath $markdown).Hash -ne $publication.sha256) {
-    throw 'Assistant publication metadata or Markdown hash does not match the approved deployment copy.'
-}
-$header = ([IO.File]::ReadAllText($markdown) -split '(?m)^---\s*$', 3)[1]
-if ($header -cnotmatch '(?m)^publication_state:\s*published\s*$' -or
-    $header -cnotmatch '(?m)^review_status:\s*approved\s*$' -or
-    $header -cnotmatch ('(?m)^version:\s*' + [regex]::Escape([string]$publication.version) + '\s*$')) {
-    throw 'Assistant setup requires the approved deployment copy with the manifest version.'
-}
-
 $port = 5076
 if ($settings['SMARTPARK_ASSISTANT_DOCKER_PORT'] -and
     (![int]::TryParse($settings['SMARTPARK_ASSISTANT_DOCKER_PORT'], [ref]$port) -or $port -lt 1 -or $port -gt 65535)) {
@@ -118,6 +100,25 @@ $chatRelease = [string]$settings['Assistant__Chat__ReleaseEnabled']
 if (($guestRelease -and $guestRelease -cnotin @('true','false')) -or
     ($chatRelease -and $chatRelease -cnotin @('true','false'))) {
     throw 'Assistant release flags must use true or false.'
+}
+$markdown = Join-Path $knowledge 'smartpark-knowledge.md'
+$manifest = Join-Path $knowledge 'publication.json'
+if ($guestRelease -ceq 'true' -or (Test-Path -LiteralPath $markdown) -or (Test-Path -LiteralPath $manifest)) {
+    if (!(Test-Path -LiteralPath $markdown -PathType Leaf) -or !(Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        throw 'Provide the approved Markdown deployment copy and publication.json before setup.'
+    }
+    try { $publication = Get-Content -Raw -Encoding UTF8 -LiteralPath $manifest | ConvertFrom-Json }
+    catch { throw 'Assistant publication.json is invalid.' }
+    if ($publication.role -cne 'admin' -or !$publication.version -or !$publication.approvedBy -or
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $markdown).Hash -ne $publication.sha256) {
+        throw 'Assistant publication metadata or Markdown hash does not match the approved deployment copy.'
+    }
+    $header = ([IO.File]::ReadAllText($markdown) -split '(?m)^---\s*$', 3)[1]
+    if ($header -cnotmatch '(?m)^publication_state:\s*published\s*$' -or
+        $header -cnotmatch '(?m)^review_status:\s*approved\s*$' -or
+        $header -cnotmatch ('(?m)^version:\s*' + [regex]::Escape([string]$publication.version) + '\s*$')) {
+        throw 'Assistant setup requires the approved deployment copy with the manifest version.'
+    }
 }
 $adopt = [string]$settings['SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING']
 if ($adopt -and $adopt -cnotin @('true','false')) {
@@ -205,6 +206,12 @@ if ($userReadEnabled -and [string]$settings['Assistant__Reads__User__Origin'] -c
     [string]$settings['SMARTPARK_USER_DOCKER_TLS_ENABLED'] -cne 'true') {
     throw 'Assistant User origin is https://user-service:8443 but SMARTPARK_USER_DOCKER_TLS_ENABLED is not true. Start User with the TLS overlay before enabling this read.'
 }
+. (Join-Path $PSScriptRoot 'discovery-docker.ps1')
+$discoveryEnvironment = Get-DiscoveryDockerEnvironment $settings $envDirectory
+if ($discoveryEnvironment.Count -gt 0) {
+    # Public CA only. Do not export the Payment service key or owner PFX password to Assistant.
+    $composeEnv['SMARTPARK_DISCOVERY_DOCKER_DIRECTORY'] = $discoveryEnvironment['SMARTPARK_DISCOVERY_DOCKER_DIRECTORY']
+}
 if (!(Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not found. Start Docker Desktop and retry.' }
 $endpoint = $env:DOCKER_HOST
 if ($env:DOCKER_CONTEXT -or !$endpoint) {
@@ -232,6 +239,7 @@ $schemaCompose = @('compose','--project-name',$SchemaProject,'--env-file',$EnvPa
 $assistantProject = if ($SchemaProject -eq 'smartpark-schema') { 'smartpark-app' } else { "$SchemaProject-assistant" }
 $assistantCompose = @('compose','--project-name',$assistantProject,'--env-file',$EnvPath,'-f',(Join-Path $root 'compose.assistant.yml'))
 if ($userCaPath) { $assistantCompose += @('-f', (Join-Path $root 'compose.assistant-trust.yml')) }
+if ($discoveryEnvironment.Count -gt 0) { $assistantCompose += @('-f', (Join-Path $root 'compose.assistant-discovery-trust.yml')) }
 
 # New IoT volumes initialize Assistant through Compose. Keep this fallback for
 # existing IoT volumes with an untouched Assistant base, in one transaction.

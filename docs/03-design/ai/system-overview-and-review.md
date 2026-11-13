@@ -1,6 +1,6 @@
 # AI Chatbot — Tổng quan hệ thống và phạm vi đề nghị leader duyệt
 
-Cập nhật 12/11/2026 cho leader, mentor, BA/Product, owner service, frontend và QA. Dùng SHA trong PR để ghi nhận bản bàn giao. [Hướng dẫn click từng bước, Docker và demo 13/11](../../04-testing/assistant-leader-demo-checklist.md) dành cho tester; [ma trận QA đầy đủ](../../04-testing/assistant-handoff-testing.md) giữ tiêu chí nghiệm thu sâu.
+Cập nhật 12/11/2026 cho leader, mentor, BA/Product, owner service, frontend và QA. Dùng SHA trong PR để ghi nhận bản bàn giao. [Hướng dẫn QA chính](../../04-testing/assistant-handoff-testing.md) đã hợp nhất setup máy mới/add-on, thao tác click, seed và test từng role; kết quả review 13/11 nằm tại đó. Các snapshot có ngày bên dưới giữ bằng chứng lịch sử.
 
 **Đọc nhanh trước vấn đáp:** mục 13 mô tả runtime và RAG thực tế, mục 14 lần theo API/hội thoại, mục 15 giải thích Docker/bảo mật, mục 16 là câu hỏi mentor. Các mục 1–12 giữ bối cảnh và dependency. Bằng chứng mới ở mục 17 thay cho suy luận từ các con số lịch sử trong mục 9.
 
@@ -85,9 +85,9 @@ Các bảng Assistant gồm management state, protected credentials, mutation re
 | Nhóm | Entry point hiện có |
 | --- | --- |
 | Guest | GET `/api/assistant/status`, POST `/api/assistant/guest/messages` |
-| Driver capability | GET `/api/assistant/capabilities` |
-| Driver conversation | POST/GET `/api/assistant/conversations`, GET `/{id}`, GET/POST `/{id}/messages` dưới route conversation |
-| Driver recovery | GET `/api/assistant/conversations/{id}/requests/{clientMessageId}`, POST cùng route thêm `/cancel` |
+| Driver/Admin/Owner capability | GET `/api/assistant/capabilities` |
+| Driver/Admin/Owner conversation | POST/GET `/api/assistant/conversations`, GET `/{id}`, GET/POST `/{id}/messages` dưới route conversation |
+| Driver/Admin/Owner recovery/reset | GET `/api/assistant/conversations/{id}/requests/{clientMessageId}`, POST cùng route thêm `/cancel`; POST `/api/assistant/conversations/{id}/reset` |
 | Admin | GET `/api/assistant/admin/settings`, POST `/api/assistant/admin/mutations`, POST `/models/discover`, POST `/configurations/{id}/test` dưới nhóm admin |
 | Owner đã có source | User `/api/vehicles`, Operations `/api/me/reservations`, `/api/me/reservations/{id}`, `/api/parking-search`, cùng catalogue Facility/discovery price Payment |
 
@@ -405,7 +405,7 @@ Build image và migrate DB là hai việc riêng. `-NoBuild` chỉ dùng khi ima
 | Có phải health xanh là demo được? | Không. Cần readiness, publication, Settings, auth và positive functional test. Test connection cũng không bằng generation/content acceptance |
 | Booking em xong đến đâu? | Xong nhập/chỉnh bản nháp theo mẫu FE; chưa xác minh owner/quote/form/create/payment. Không giả kết quả để lấp phần thành viên khác |
 | Phần nào chờ ai? | User: Account/xe/trust; Facility: site/structure/publication; Operations: availability/reservation/admission; Payment: quote/accepted pricing/payment linkage; FE/Product: wire form/UX sau contract; QA/DevOps: runtime/load/deployment. Tên cá nhân chưa được xác nhận |
-| Ngày mai demo gì? | Theo checklist GO từng phân đoạn: FAQ có nguồn, Settings đã rehearsal, Driver history đã test, parser. Xe chỉ khi positive card pass; không demo Operations/Payment chưa nghiệm thu |
+| Demo phạm vi nào? | Theo checklist GO từng phân đoạn: FAQ có nguồn, Settings đã rehearsal, Driver history đã test, parser. Xe chỉ khi positive card pass; không demo Operations/Payment chưa nghiệm thu |
 
 ## 17. Snapshot nghiệm thu 12/11/2026 và phần chưa đóng
 

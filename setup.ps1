@@ -729,6 +729,9 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
             $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
             if (Test-JwtConfiguredValue $settings[$sourceName]) { $desired['Jwt:' + $field] = $settings[$sourceName] }
         }
+        if ($settings['SMARTPARK_JWT_PRIVATE_KEY_FILE']) {
+            $desired['Jwt:PrivateKeyPem'] = Read-JwtPrivateKeyFile $settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] $taskRoot
+        }
         $desired['DevelopmentAdmin:Email'] = $settings['SMARTPARK_ADMIN_EMAIL']
         $desired['DevelopmentAdmin:Password'] = $settings['SMARTPARK_ADMIN_PASSWORD']
         $desired['DevelopmentOwner:Email'] = $settings['SMARTPARK_OWNER_EMAIL']

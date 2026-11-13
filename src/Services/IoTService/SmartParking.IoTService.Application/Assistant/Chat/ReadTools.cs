@@ -31,7 +31,9 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
     public async Task<GuestReply?> TryAnswer(Guid account, Conversation conversation, Guid messageId, string message, Func<CancellationToken, Task> dispatch, CancellationToken ct)
     {
         var text = Normalize(message);
-        var vehicles = text is "my vehicles" or "show my vehicles" or "xe cua toi" or "danh sach xe cua toi";
+        var vehicles = text is "my vehicles" or "show my vehicles" or "xe cua toi" or "danh sach xe cua toi"
+            or "toi da dang ky nhung xe nao" or "toi da dang ky xe nao" or "toi co nhung xe nao"
+            or "xe toi da dang ky" or "nhung xe toi da dang ky";
         var reservations = text.Contains("lich dat", StringComparison.Ordinal) || text.Contains("my reservations", StringComparison.Ordinal) || text.Contains("my bookings", StringComparison.Ordinal) || text == "do i have any bookings tomorrow";
         var detail = Regex.Match(text, @"^(?:reservation details|chi tiet lich dat) ([a-f0-9-]{36})$");
         var next = text is "more reservations" or "lich dat tiep theo";

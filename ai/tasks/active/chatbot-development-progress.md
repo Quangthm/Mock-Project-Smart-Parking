@@ -1,5 +1,26 @@
 # AI Chatbot — Quá trình phát triển backend
 
+## Review bàn giao tester — 13/11/2026 (hoàn tất review/fix và tài liệu; nghiệm thu đích còn mở)
+
+- Yêu cầu: review cấu trúc, toàn bộ script/Markdown và AIChatbot; sửa setup Docker/env; gom hướng dẫn QA đầy đủ, dữ liệu và test case từng role; xóa tài liệu dư có căn cứ.
+- Baseline: branch `AI-ChatBot`, HEAD `ac59552d799f41bcce574c53ba8e6795bb761c3b`. Working tree đã có thay đổi env, FE, Docker/setup/seed, Operations/Payment/User tests cùng discovery compose/scripts chưa tracked. Giữ toàn bộ thay đổi trước phiên, không commit/reset.
+- Áp dụng coding skill qua router; env/session theo `ai/rule.md`. Ba reviewer độc lập GPT-6.1 Sol: backend assistant; scripts/compose/env/seed; frontend chatbot. Parent phụ trách tài liệu và kiểm chứng tổng hợp.
+- Preflight dọn tài liệu: chỉ bỏ hướng dẫn trùng sau khi nhập đủ nội dung hữu ích vào `docs/04-testing/assistant-handoff-testing.md` và sửa liên kết. Giữ requirements, contracts, source knowledge, archive quyết định và bằng chứng lịch sử. Người dùng đã yêu cầu xóa Markdown dư; không xóa DB/volume hoặc file cấu hình cá nhân.
+- Kiểm chứng hiện tại: [UNVERIFIED], chưa dùng số liệu các phiên trước làm bằng chứng phiên này. Không tự xuất bản corpus draft hoặc tạo phê duyệt nghiệp vụ.
+- Bước tiếp: đối chiếu source/cấu hình, chạy test phù hợp và ghi readiness theo từng phạm vi; không hứa booking/payment chatbot khi chưa có luồng thực thi.
+
+### Kết quả cuối của đợt review 13/11
+
+- Ba subagent GPT-6.1 Sol review độc lập backend, FE, scripts/setup; reviewer FE kiểm lại fix race backend và tài liệu QA. Đã xử lý các finding, gồm field capabilities, role, test provider cần cô lập candidate, admission prerequisite và seed không có approval publication.
+- Sửa backend management race: tắt global trong generation → cancel, đổi revision → RETRIEVAL_UNAVAILABLE, không lưu late answer. Hai HTTP regression test. Guest widget hiển thị lỗi an toàn/dễ hiểu.
+- Setup: thêm initializer local fresh và `-UseExistingSigningKey` cho add-on giữ nguyên JWT FILE/PEM/Base64; đồng bộ env-relative path ở setup/host/Docker; bảo vệ key cũ; tạo TLS/keyring riêng; sửa host listeners, fresh Facility discovery init, capacity seed, duplicate env keys và PS5.1 UTF-8 fixtures. `.env` cá nhân không sửa.
+- Handoff QA đã viết lại: máy trắng/add-on, nhóm env, provider/corpus, seed và manual onboarding, 76 case ID theo Guest/Driver/Admin/Owner/Operator, negative authorization và ranh giới draft/read/write. LOCAL-SETUP/QUICK_START/maintenance/env skill cập nhật cùng workflow.
+- Dọn docs: đã backup SHA256 `71c7a11412c42af42148516cfd5354585e5ab891f6d6bd3f7486c5e317e870c9` rồi gộp/xóa checklist leader trùng, sửa incoming links. Inventory 412 → 411 Markdown; 197 → 193 missing file links (còn phần lớn archive ngoài scope), không có link file hỏng trong docs thay đổi; anchor guide và 76 ID duy nhất đạt. Không xóa archive quyết định/requirements/source knowledge.
+- Validation: solution build 0 error; full tests 1607 pass / 0 fail / 109 skip (IoT 518/0/7). PostgreSQL harness riêng 6/6 pass, migration replay + populated upgrade + backup/restore đạt; worker con là skip thiết kế. FE build đạt; targeted chatbot 67/67, full Node frontend 298/298. Docker Assistant fixture thực đạt PS7 và Windows PS5.1; fresh Facility discovery fixture đạt; Compose app/schema/discovery config quiet đạt. Setup/check/runner/listener/discovery/migration-plan/initializer fixtures đạt; final initializer add-on FILE/PEM/Base64 preserve + mismatch/missing/placeholder reject đạt.
+- Giới hạn: build còn NU1510/NU1900/NU1902/NU1903, không tự nâng packages. Chưa test live browser với UserService/provider thật hoặc full clean-machine onboarding. Capacity source còn unknown, reservation reads cần admission/JWKS của owner; chatbot không tạo booking/payment. Seed DEMO-HQ thiếu finalized onboarding evidence, không là positive search fixture.
+- Git: giữ nguyên baseline dirty work; không stage/commit/push. Script fixture dùng tài nguyên cách ly; không reset shared DB/volume. Một volume fixture Facility được giữ lại theo báo cáo reviewer, container đã dừng; không có thao tác xóa volume ngoài harness.
+- Bước tiếp cho QA: mở `docs/04-testing/assistant-handoff-testing.md`, chuẩn bị corpus/provider/account môi trường đích và ghi PASS/FAIL/BLOCKED từng ca. Review/fix/docs của yêu cầu đã bàn giao; nhật ký chatbot vẫn active vì nghiệm thu toàn bộ sản phẩm và booking scope còn mở.
+
 ## 1. Thông tin
 - Session gốc07/11, cập nhật08/11/2026; branch `AI-ChatBot`, mốc trước đợt chia commit là `3d3def76`.
 - **In Progress**; một nhật ký active cho chatbot backend, không tạo file mỗi prompt.
@@ -305,3 +326,24 @@ Theo yêu cầu người dùng, bỏ SESSION/ngày khỏi tên file chatbot; dù
 - Chạy lại test-setup.ps1 bằng Windows PowerShell 5.1.26100.9818: exit 0, toàn bộ fixture PASS. Lỗi trước ở PowerShell 7 do khác biệt xóa biến môi trường null thành empty; chưa có bằng chứng lộ signing value. Review độc lập xác nhận; đã bỏ hai sửa đổi suy đoán trong runner/JWT helper.
 - Docker Assistant PreflightOnly: PASS. Docker runtime hiện UNVERIFIED: pipe dockerDesktopLinuxEngine không tồn tại, không có bằng chứng container healthy ở lượt này.
 - Thêm docs/04-testing/assistant-leader-demo-checklist.md: setup/build đúng máy mới, kiểm card/history/A-B/parser, giới hạn seed-demo-site và giữ booking/payment thuộc owner khác.
+
+### Chỉnh hướng dẫn theo phản hồi tester — 13/11/2026
+
+- Viết lại mục setup thành các bước copy/chạy, thêm khối dotenv giá trị local đầy đủ cho máy mới và khối riêng cho máy đã có JWT.
+- Tách rõ mật khẩu tự sinh phải giữ nguyên, provider key nhập UI, Turnstile local smoke và cặp key QA cần tự điền. Không sửa `.env` thật.
+- Chuyển bảng cấu trúc kỹ thuật xuống cuối tài liệu. Giữ test cases và giới hạn tính năng; kiểm link/fence/case ID và `git diff --check`, không chạy lại runtime vì chỉ đổi tài liệu.
+
+### Review chéo bộ câu hỏi từng role và API — 13/11/2026
+
+- Yêu cầu mới: giữ đầy đủ 80 câu hỏi user đưa, có expected rõ theo role và hướng dẫn setup/API copy được. Ba subagent độc lập `questions_audit`, `api_setup_audit`, `role_faq_audit` rà code/corpus/contracts và review chéo bản Markdown.
+- Thêm 4.6: 80 câu nguyên văn, chia chung 11 / Driver 18 / Admin 14 / Owner 18 / Operator 19; giữ 76 TC trước đó. Phân biệt mong đợi FAQ, đọc thật, draft FE, thiếu nội dung và kiểm giới hạn; không coi safe refusal là hoàn thành nghiệp vụ.
+- Thêm 2.6: Postman environment, status/Guest JSON, Bearer đúng role, GET current trước create, history/revision/send/lookup/replay, Admin settings read và lỗi phổ biến. Provider keys vẫn nhập qua UI, không chép secrets vào docs.
+- Reviewer chạy probe .NET offline với classifier/retrieval source hiện tại và 31 câu FAQ trên corpus repo; parent chạy lại binary để đối chiếu. Kết quả tại 4.7 ghi unknown và wrong-source (đăng ký tài khoản → partner, đổi giá → allocation, thiếu mã booking → pass cancellation). Đây là phát hiện GAP chất lượng, không provider/API/runtime evidence.
+- Không sửa code, quyền nghiệp vụ, corpus publication hoặc cấu hình local trong lượt này. Full suite trước đó không nhận là rerun lượt docs. Cross-review sửa token environment/Vault syntax ambiguity và hướng dẫn sinh UUID bằng PowerShell.
+- Handoff còn cần QA môi trường thật và phát triển retrieval/knowledge/tool theo phạm vi được duyệt; tài liệu không hứa tất cả câu hiện đã hoạt động.
+
+### Pre-commit readiness review — 13/11/2026
+
+- Rechecked current dirty candidate without staging/committing. Initializer (fresh and existing FILE/PEM/Base64) and discovery fixture rerun PASS; full Node frontend 298/298 PASS; diff whitespace and guide links/fences/JSON PASS. Changed/untracked text scan found no private-key payload/provider-token patterns; local `.env`, `.env.bak` and `.cache` are not tracked. Pattern scan is not a comprehensive secret audit.
+- Prior current-code solution build/test and Docker/PG evidence remains as recorded; no backend edits since those runs, no unnecessary broad rerun. This review does not replace target-machine UI/provider acceptance.
+- Verdict: GO for QA candidate with known gaps, NOT full 80-question functional acceptance or production release. FAQ unknown/wrong-source issues remain in guide 4.7; tester must receive approved corpus, provider access and QA account setup. All new compose/helper/initializer/test scripts must be included in the eventual user commit; tracked-file-only commit would omit required dependencies. No Git write action performed.

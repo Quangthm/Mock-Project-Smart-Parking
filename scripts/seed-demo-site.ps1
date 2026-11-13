@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     # Accepted for command-line parity with setup.ps1; this script never prompts.
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+    [string]$DriverEmail = 'driver@gmail.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,7 +17,8 @@ if (!(Test-Path -LiteralPath $envFile -PathType Leaf)) {
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
 $ownerEmail = [string]$settings['SMARTPARK_OWNER_EMAIL']
 $operatorEmail = [string]$settings['SMARTPARK_OPERATOR_EMAIL']
-$driverEmail = 'driver@gmail.com'
+$driverEmail = $DriverEmail.Trim()
+if ($driverEmail -cnotmatch '^[^@\s]+@[^@\s]+$') { throw 'Invalid DriverEmail.' }
 if ([string]::IsNullOrWhiteSpace($ownerEmail)) { $ownerEmail = 'owner@smartpark.local' }
 if ([string]::IsNullOrWhiteSpace($operatorEmail)) { $operatorEmail = 'operator@smartpark.local' }
 if ($ownerEmail -cnotmatch '^[^@\s]+@[^@\s]+$') { throw "Invalid SMARTPARK_OWNER_EMAIL: $ownerEmail" }
@@ -107,8 +109,8 @@ $accountParts = @($accountText -split '\|')
 if ($accountParts.Count -ne 3 -or $accountParts[0].Trim() -ne '1' -or $accountParts[1].Trim() -ne '1' -or $accountParts[2].Trim() -ne '1') {
     Write-Host '      Owner/operator/driver demo accounts were not found in UserDb.' -ForegroundColor Red
     Write-Host '      Start UserService once so DataSeeder creates them:' -ForegroundColor Yellow
-    Write-Host '        .\scripts\run-schema-service.ps1 -Service User' -ForegroundColor Yellow
-    Write-Host '      Wait for "Now listening on: http://localhost:5035", then rerun this script.' -ForegroundColor Yellow
+    Write-Host '        .\scripts\run-app-service.ps1 -Service User -NoLogWindow' -ForegroundColor Yellow
+    Write-Host '      Wait for UserService to become healthy, then rerun this script.' -ForegroundColor Yellow
     exit 2
 }
 Write-Host '      OK (1 owner, 1 operator, 1 driver)' -ForegroundColor DarkGray
@@ -250,4 +252,4 @@ Write-Host '[6/6] Demo data ready.' -ForegroundColor Green
 Write-Host "      Site: DEMO-HQ ($($ids['site_id']))"
 Write-Host "      Owner: $ownerEmail (password: SMARTPARK_OWNER_PASSWORD in .env)"
 Write-Host "      Operator: $operatorEmail (password: SMARTPARK_OPERATOR_PASSWORD in .env)"
-Write-Host "      Driver: $driverEmail / Password@123; vehicle 51A-123.45"
+Write-Host "      Driver: $driverEmail (existing account; password unchanged); vehicle 51A-123.45"

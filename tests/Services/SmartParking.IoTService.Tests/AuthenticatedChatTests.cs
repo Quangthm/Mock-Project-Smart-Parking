@@ -26,6 +26,28 @@ namespace SmartParking.IoTService.Tests;
 public sealed partial class AuthenticatedChatTests
 {
     [Theory]
+    [InlineData("Tôi đã đăng ký những xe nào?")]
+    [InlineData("Tôi đã đăng ký xe nào?")]
+    [InlineData("Tôi có những xe nào?")]
+    [InlineData("Xe tôi đã đăng ký")]
+    [InlineData("Những xe tôi đã đăng ký")]
+    [InlineData("  Toi da dang ky nhung xe nao?  ")]
+    public async Task RegisteredVehicleQuestionsUseTheScopedOwnerRead(string question)
+    {
+        var owner = new ReadOwner();
+        await using var f = await Fixture.Create(owner: owner);
+        var id = await f.Conversation();
+        var result = await f.Data(await f.Post($"/api/assistant/conversations/{id}/messages",
+            new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message = question }));
+        var answer = result.GetProperty("answer");
+        Assert.Equal("answered", answer.GetProperty("outcome").GetString());
+        Assert.Equal(owner.Vehicle, answer.GetProperty("cards")[0].GetProperty("items")[0].GetProperty("id").GetGuid());
+        Assert.Equal(new[] { f.Account }, owner.Accounts);
+        Assert.Equal(1, owner.Calls);
+        Assert.Equal(0, f.Answers.Generations);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task CancelOrOffDuringOwnerPreparationPreventsDispatch(bool off)
@@ -619,20 +641,45 @@ public sealed partial class AuthenticatedChatTests
     }
     [Theory]
     [InlineData("off")]
+    [InlineData("provider-off")]
     [InlineData("timeout")]
     [InlineData("invalid")]
     [InlineData("failure")]
     public async Task InterruptedGenerationNeverAppendsLateAnswer(string mode)
     {
         await using var f=await Fixture.Create(mode=="timeout"?100:20000);var id=await f.Conversation();var key=Guid.NewGuid();var route=$"/api/assistant/conversations/{id}";
-        f.Answers.Block=mode is "off" or "timeout";f.Answers.Invalid=mode=="invalid";f.Answers.Fail=mode=="failure";
+        if (mode == "provider-off") f.EnableProvider();
+        var maintenance = mode is "off" or "provider-off";
+        f.Answers.Block=maintenance || mode=="timeout";f.Answers.Invalid=mode=="invalid";f.Answers.Fail=mode=="failure";
         var pending=f.Post(route+"/messages",new{clientMessageId=key,expectedRevision=0,message="payment"});
-        if(mode=="off"){await f.Answers.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));f.Settings.State=f.Settings.State with{Enabled=false};}
-        var response=await pending;Assert.Equal(mode=="off"?503:200,(int)response.StatusCode);
+        if(maintenance){await f.Answers.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));f.Settings.State=f.Settings.State with{Enabled=false};}
+        if (mode == "provider-off") f.Answers.Release.TrySetResult();
+        var response=await pending;Assert.Equal(maintenance?503:200,(int)response.StatusCode);
         f.Answers.Release.TrySetResult();var result=await f.Data(await f.Get(route+$"/requests/{key}"));
-        Assert.Equal(mode=="off"?"cancelled":"failed",result.GetProperty("state").GetString());
+        Assert.Equal(maintenance?"cancelled":"failed",result.GetProperty("state").GetString());
         Assert.Equal(JsonValueKind.Null,result.GetProperty("answer").ValueKind);Assert.Single((await f.Data(await f.Get(route+"/messages"))).GetProperty("items").EnumerateArray());
     }
+    [Fact]
+    public async Task SettingsRevisionChangeDuringManagedGenerationPreservesRetrievalFailure()
+    {
+        await using var f = await Fixture.Create();
+        f.EnableProvider();
+        var id = await f.Conversation();
+        var key = Guid.NewGuid();
+        var route = $"/api/assistant/conversations/{id}";
+        f.Answers.Block = true;
+        var pending = f.Post(route + "/messages", new { clientMessageId = key, expectedRevision = 0, message = "payment" });
+        await f.Answers.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        f.Settings.State = f.Settings.State with { Revision = f.Settings.State.Revision + 1 };
+        f.Answers.Release.TrySetResult();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await pending).StatusCode);
+        var result = await f.Data(await f.Get(route + $"/requests/{key}"));
+        Assert.Equal("failed", result.GetProperty("state").GetString());
+        Assert.Equal("RETRIEVAL_UNAVAILABLE", result.GetProperty("requestError").GetProperty("code").GetString());
+        Assert.Equal(JsonValueKind.Null, result.GetProperty("answer").ValueKind);
+    }
+
     [Fact]
     public async Task OneCurrentChatPerRoleAndResetRetryTargetsOnlyOldChat()
     {

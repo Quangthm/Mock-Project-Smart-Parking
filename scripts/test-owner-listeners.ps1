@@ -49,7 +49,7 @@ try {
     $privateFile=Join-Path $scratch 'synthetic-signing.pem'
     [IO.File]::WriteAllText($privateFile,"synthetic-private-key`nsecond-line")
     Write-ListenerFixture 'SMARTPARK_SERVICE_USER_LISTEN_URLS' ''
-    Add-Content -LiteralPath (Join-Path $scratch '.env') -Value "SMARTPARK_JWT_PRIVATE_KEY_FILE=$privateFile"
+    Add-Content -LiteralPath (Join-Path $scratch '.env') -Value 'SMARTPARK_JWT_PRIVATE_KEY_FILE=synthetic-signing.pem'
     $global:ownerListenerExpected='http://localhost:5035'
     $priorSigningPem=$env:Jwt__PrivateKeyPem
     $global:ownerListenerExpectedSigning="synthetic-private-key`nsecond-line"

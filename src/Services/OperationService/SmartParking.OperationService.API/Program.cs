@@ -24,6 +24,7 @@ public static class OperationHost
         builder.Services.AddApplicationServices();
         builder.Services.AddInfrastructureServices(builder.Configuration);
         builder.AddParkingSearch();
+        builder.AddOwnReservationReadDependencies();
         var admissionEnabled = builder.Configuration.GetValue<bool>("ReservationAdmission:Enabled");
         builder.Services.AddAuthorization();
         builder.Services.AddScoped<ICurrentActor, HttpCurrentActor>();

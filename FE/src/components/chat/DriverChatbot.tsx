@@ -13,7 +13,16 @@ type PendingRequest = {
 }
 
 function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {}
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const fields = value as Record<string, unknown>
+  // Persisted cards/actions can retain .NET property casing inside JSON elements.
+  // Prefer canonical wire keys while keeping existing conversation history readable.
+  const normalized: Record<string, unknown> = { ...fields }
+  for (const [key, entry] of Object.entries(fields)) {
+    const wireKey = key.charAt(0).toLowerCase() + key.slice(1)
+    if (!Object.prototype.hasOwnProperty.call(normalized, wireKey)) normalized[wireKey] = entry
+  }
+  return normalized
 }
 function label(value: unknown) { return typeof value === "string" ? value : "" }
 function date(value: unknown) {

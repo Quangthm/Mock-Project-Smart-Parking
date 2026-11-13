@@ -108,7 +108,7 @@ if ($settings['Assistant__Reads__Search__Enabled'] -eq 'true') {
         } else { Report $name 'CONFIGURED' 'Value is in bounds; deployment freshness policy unverified.' }
     }
 }
-$knowledge = $settings['Assistant__Guest__KnowledgeDirectory']
+$knowledge = Resolve-ConfiguredPath ([string]$settings['Assistant__Guest__KnowledgeDirectory'])
 foreach ($file in @('smartpark-knowledge.md','publication.json')) {
     if ($knowledge -and (Test-Path -LiteralPath (Join-Path $knowledge $file) -PathType Leaf)) {
         Report "Corpus/$file" 'UNVERIFIED' 'File present; host must validate content/hash/version/approval/expiry.'

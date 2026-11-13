@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using SmartParking.OperationService.API;
 using SmartParking.OperationService.Application.Discovery;
 using SmartParking.OperationService.Domain;
@@ -20,7 +21,7 @@ public sealed class ParkingSearchHttpTests
     [Fact]
     public async Task DisabledDiscoveryResolvesProductionDependenciesWithoutFixtureDataProtection()
     {
-        await using var f = await Host.Start(enabled: false, ephemeralProtection: false);
+        await using var f = await Host.Start(enabled: false, ephemeralProtection: false, validateServices: true);
         await f.Error(Path, 503);
     }
     [Theory]
@@ -339,12 +340,17 @@ public sealed class ParkingSearchHttpTests
         public Logs Logs = new();
         public HttpClient Client = null!;
         private WebApplication app = null!;
-        public static async Task<Host> Start(bool enabled = true, string? capacityMode = null, bool ephemeralProtection = true)
+        public static async Task<Host> Start(bool enabled = true, string? capacityMode = null, bool ephemeralProtection = true, bool validateServices = false)
         {
             var f = new Host();
             f.Owners = new(f.Clock);
             f.app = OperationHost.Build([], b =>
             {
+                if (validateServices) b.Host.UseDefaultServiceProvider(options =>
+                {
+                    options.ValidateOnBuild = true;
+                    options.ValidateScopes = true;
+                });
                 b.Configuration.Sources.Clear();
                 b.Configuration.AddInMemoryCollection(new Dictionary<string,string?> {
                     ["Services:Key"] = new('k', 32), ["ConnectionStrings:Reservation"] = "Host=synthetic.invalid;Database=synthetic",

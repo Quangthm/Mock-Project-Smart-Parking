@@ -1,6 +1,6 @@
 # AI Chatbot — Hội thoại đăng nhập và phục hồi yêu cầu
 
-Cập nhật08/11/2026: S05 đã có implementation; S06 owner reads và S08 read UI đã được bổ sung. IoT S02/S05 SQL đã có rollout local, Admin auth và Gemini FAQ có bằng chứng thật trong [lịch sử triển khai](../../../ai/tasks/archive/chatbot-implementation-history.md). Không đồng nghĩa PostgreSQL concurrency/restart/retention và toàn luồng Driver đã nghiệm thu. S07 draft vẫn chưa triển khai. [Ma trận kiểm chứng hiện hành](../../04-testing/assistant-handoff-testing.md).
+Cập nhật08/11/2026: S05 đã có implementation; S06 owner reads và S08 read UI đã được bổ sung. IoT S02/S05 SQL đã có rollout local, Admin auth và Gemini FAQ có bằng chứng thật trong [lịch sử triển khai](../../../ai/tasks/archive/chatbot-implementation-history.md). Không đồng nghĩa PostgreSQL concurrency/restart/retention và toàn luồng Driver đã nghiệm thu. Cập nhật 13/11: FE đã có bản nháp local chưa xác minh; S07 quote/form/create end-to-end chưa triển khai. [Ma trận kiểm chứng hiện hành](../../04-testing/assistant-handoff-testing.md).
 
 Mốc S05 ban đầu05/11: IoT355/355 và build pass; full solution còn4 Facility baseline failures. Đây là [test lịch sử](../../../ai/tasks/archive/chatbot-implementation-history.md#nhat-ky-9), không phải lần chạy mới.
 
@@ -12,7 +12,7 @@ Local context remains bounded to six completed turns and 12,000 UTF-16 character
 
 For existing S05 databases, stop the old Assistant and back up IoT before applying [the current-chat migration](../../../scripts/database/migrations/20261110_iot_assistant_current_chat.sql). It resumes the latest eligible Driver conversation per Account. Other legacy conversations remain outside the current chat and keep their original expiry and holds. Coordinate API and frontend rollout after migration. Restoring the pre-upgrade backup is the rollback path for the old app version. Docker setup applies this migration on a fresh Assistant schema and checks it on existing schemas.
 
-S01 §§4–6 and inherited P0 conversation/ledger wire, B-03 delivery expiry and B-05 limits were approved for code/offline tests. D01 delegation and D05 domain APIs are not consumed. B-02 runtime/key rotation, backup deletion SLA, provider deployment/retention terms and Admin publication remain OPEN. TOKEN stale claims may remain accepted until JWT expiry; there is no live revocation guarantee. G08 `/hubs/access` / `AccessRevoked` still lacks a server counterpart.
+S01 §§4–6 and inherited P0 conversation/ledger wire, B-03 delivery expiry and B-05 limits were approved for code/offline tests. Current S06 reads consume the scoped User/Operations HTTPS APIs via delegated Driver identity; this does not approve or implement quote/create/payment writes. B-02 runtime/key rotation, backup deletion SLA, provider deployment/retention terms and Admin publication remain OPEN. TOKEN stale claims may remain accepted until JWT expiry; there is no live revocation guarantee. G08 `/hubs/access` / `AccessRevoked` still lacks a server counterpart.
 
 ## Implemented HTTP contract
 
@@ -22,7 +22,7 @@ All routes below require a validated RS256 JWT for Driver, Admin or Owner. The s
 
 | Method / route | Payload / result |
 |---|---|
-| GET `/api/assistant/capabilities` | No query/body; version0.4.1; FAQ only when release/global/storage/publication ready; all business flags false |
+| GET `/api/assistant/capabilities` | No query/body; version0.4.1; FAQ only when release/global/storage/publication ready; Driver read flags follow configured adapters, Admin/Owner read flags false; prepareReservation false |
 | POST `/api/assistant/conversations` | `{clientConversationId,locale}`; 201 new, 200 replay, 409 `CONVERSATION_EXISTS` when another create won. |
 | GET `/api/assistant/conversations` | Current conversation for this Account and role, or an empty list. |
 | POST `/api/assistant/conversations/{id}/reset` | JSON object `{}`; 200 with data `{reset:true}` when reset or previously reset. 404 for a foreign or purged conversation. Retries target the same conversation ID. |

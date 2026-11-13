@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 if ($Service -eq 'Parking') { $Service = 'Facility' } # Legacy CLI alias.
 if ($Service -eq 'Reservation') { $Service = 'Operation' }
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
 $envFile = Join-Path $root '.env'
 $composePath = Join-Path $root 'compose.app.yml'
 $project = 'smartpark-app'
@@ -20,6 +21,14 @@ $assistantEnabled = $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
 
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
 $userTlsEnvironment = @{}
+if ($Service -in @('Facility','Operation','Payment','All')) {
+    . (Join-Path $PSScriptRoot 'discovery-docker.ps1')
+    $discoveryEnvironment = Get-DiscoveryDockerEnvironment $settings $root
+    if ($discoveryEnvironment.Count -gt 0) {
+        $composeArgs += @('-f', (Join-Path $root 'compose.discovery.yml'))
+        foreach ($name in $discoveryEnvironment.Keys) { $userTlsEnvironment[$name] = $discoveryEnvironment[$name] }
+    }
+}
 $userTlsEnabled = ''
 if ($Service -in @('User', 'All')) { $userTlsEnabled = [string]$settings['SMARTPARK_USER_DOCKER_TLS_ENABLED'] }
 if ($userTlsEnabled -cnotin @('', 'false', 'true')) {
@@ -27,6 +36,7 @@ if ($userTlsEnabled -cnotin @('', 'false', 'true')) {
 }
 if ($userTlsEnabled -ceq 'true') {
     $userTlsPath = [string]$settings['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH']
+    if ($userTlsPath -and ![IO.Path]::IsPathRooted($userTlsPath)) { $userTlsPath = Join-Path $root $userTlsPath }
     $userTlsPassword = [string]$settings['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD']
     $userTlsAbsolute = [IO.Path]::IsPathRooted($userTlsPath)
     if ([IO.Path]::DirectorySeparatorChar -eq '\') {
@@ -175,13 +185,7 @@ try {
         $signingKeyFile = $env:SMARTPARK_JWT_PRIVATE_KEY_FILE
         if (!$signingKeyFile) { $signingKeyFile = $settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] }
         if ($signingKeyFile) {
-            $absolute = $signingKeyFile -match '^[A-Za-z]:[\\/]' -or $signingKeyFile -match '^\\\\[^\\/]+[\\/][^\\/]+'
-            if (!$absolute -or !(Test-Path -LiteralPath $signingKeyFile -PathType Leaf)) {
-                throw 'User signing-key file must exist and be absolute.'
-            }
-            $signingKey = [IO.File]::ReadAllText($signingKeyFile)
-            if ([string]::IsNullOrWhiteSpace($signingKey)) { throw 'User signing-key file is empty.' }
-            $env:SMARTPARK_JWT_PRIVATE_KEY_PEM = $signingKey
+            $env:SMARTPARK_JWT_PRIVATE_KEY_PEM = Read-JwtPrivateKeyFile $signingKeyFile $root
         }
     }
     $upExit = Invoke-Docker -Arguments ($composeArgs + $upArgs)

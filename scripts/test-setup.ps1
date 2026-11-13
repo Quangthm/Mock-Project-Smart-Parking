@@ -26,7 +26,7 @@ function dotnet {
         foreach ($entry in [Environment]::GetEnvironmentVariables('Process').GetEnumerator()) { $global:runnerEnvironment[$entry.Key] = $entry.Value }
         if (($args -join ' ') -notmatch 'UserService.API') {
             $childScript = '@([Environment]::GetEnvironmentVariables().Keys | Where-Object { $_ -match "(?i)JWT.*(PRIVATE|SIGNING|SECRET)" }).Count'
-            $childCount = & 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe' -NoProfile -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript)))
+            $childCount = & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -NoProfile -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript)))
             Assert-Setup ($childCount -eq 0) 'A real consumer child inherited signing variables.'
         }
         $global:LASTEXITCODE = 0
@@ -202,6 +202,7 @@ Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -
 & {
     $runner = Join-Path $assistantFixture 'scripts/run-app-service.ps1'
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/run-app-service.ps1') -Destination $runner
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/discovery-docker.ps1') -Destination (Join-Path $assistantFixture 'scripts/discovery-docker.ps1')
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'compose.app.yml') -Destination $assistantFixture
     $global:setupTestAssistantSteps = @()
     $global:setupTestFrontendUrl = ''

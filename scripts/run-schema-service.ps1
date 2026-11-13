@@ -155,6 +155,9 @@ if ($Service -eq 'User') {
         if (!(Test-JwtConfiguredValue $value)) { $value = ' ' }
         [Environment]::SetEnvironmentVariable('Jwt__' + $field, $value, 'Process')
     }
+    if ($env:SMARTPARK_JWT_PRIVATE_KEY_FILE) {
+        $env:Jwt__PrivateKeyPem = Read-JwtPrivateKeyFile $env:SMARTPARK_JWT_PRIVATE_KEY_FILE $taskRoot
+    }
 } else {
     $env:JwtValidation__Issuer = $jwtIssuer
     $env:JwtValidation__Audience = $jwtAudience
@@ -195,6 +198,18 @@ $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }
 $apiPort = $apiPortByService[$Service]
 $launchUrl = "http://localhost:$apiPort"
+$listenerName = "SMARTPARK_SERVICE_$($Service.ToUpperInvariant())_LISTEN_URLS"
+$listeners = [string]$settings[$listenerName]
+if ($Service -in @('User','Parking','Reservation','Payment') -and $listeners) {
+    foreach ($address in ($listeners -split ';')) {
+        $uri = $null
+        if ($address -notmatch '^https?://(?:localhost|127\.0\.0\.1|\[::1\]):[0-9]+$' -or
+            ![Uri]::TryCreate($address, [UriKind]::Absolute, [ref]$uri) -or $uri.Port -lt 1) {
+            throw "Invalid local listener in $listenerName. Use loopback HTTP(S) addresses with explicit ports."
+        }
+    }
+    $launchUrl = $listeners
+}
 if ($Service -eq 'Assistant' -and $settings['SMARTPARK_ASSISTANT_URL']) {
     $assistantUri = $null
     $configuredAssistantUrl = [string]$settings['SMARTPARK_ASSISTANT_URL']

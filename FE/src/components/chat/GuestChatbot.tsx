@@ -4,7 +4,17 @@ import type { Role } from "../../lib/types"
 import { FloatingChatbot, type GuestChatTransport } from "./FloatingChatbot"
 
 async function sendGuest(message: string, signal: AbortSignal, signedIn: boolean): ReturnType<GuestChatTransport["send"]> {
-  const data = await assistantApi.guest(message, "auto", signal)
+  let data
+  try {
+    data = await assistantApi.guest(message, "auto", signal)
+  } catch (error) {
+    if (signal.aborted) throw error
+    if (error instanceof DOMException && error.name === "TimeoutError")
+      throw new Error("SmartParking took too long to respond. Please try again.")
+    if (error instanceof Error && "status" in error && error.status === 429)
+      throw new Error("Too many questions. Wait a moment before trying again.")
+    throw new Error("SmartParking couldn't respond right now. Please try again.")
+  }
   if (typeof data.content !== "string" || !data.content || data.content.length > 8000) {
     throw new Error("SmartParking couldn't return guidance right now.")
   }

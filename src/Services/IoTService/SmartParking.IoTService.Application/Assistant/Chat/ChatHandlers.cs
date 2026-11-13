@@ -117,6 +117,8 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
             }
         }
         catch (ChatFailure ex) { cancel = ex.Code == "ASSISTANT_DISABLED"; error = cancel ? null : "RETRIEVAL_UNAVAILABLE"; }
+        catch (AssistantMaintenanceException) { cancel = true; }
+        catch (ManagementUnavailableException) { error = "RETRIEVAL_UNAVAILABLE"; }
         catch (DemoGroundedUnavailableException ex) { error = ex.Failure is DemoGroundedFailure.InvalidResponse or DemoGroundedFailure.ResponseTooLarge ? "INVALID_MODEL_OUTPUT" : ex.Failure == DemoGroundedFailure.Timeout ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE"; }
         catch (OperationCanceledException) { error = stopping.IsCancellationRequested ? "REQUEST_INTERRUPTED" : "MODEL_TIMEOUT"; }
         catch { error = "INTERNAL_ERROR"; }

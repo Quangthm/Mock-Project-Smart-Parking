@@ -100,16 +100,23 @@ public sealed class OwnReadErrors : IExceptionHandler
 }
 public static class OwnReservationHosting
 {
-    public static void AddOwnReservationReads(this WebApplicationBuilder builder)
+    // The application assembly registers these handlers even when the legacy
+    // own-read endpoints are not mapped. Keep their DI graph valid without
+    // enabling an authentication scheme or changing the reservation routes.
+    public static void AddOwnReservationReadDependencies(this WebApplicationBuilder builder)
     {
         builder.Services.TryAddSingleton(TimeProvider.System);
-        builder.Services.TryAddSingleton(new OwnReadJwt(builder.Configuration["OwnReservationReads:Issuer"] ?? "",
-            builder.Configuration["OwnReservationReads:Audience"] ?? "", builder.Configuration["OwnReservationReads:PublicKeyPem"] ?? ""));
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddScoped<IReservationReader, HttpReservationReader>();
+        builder.Services.TryAddScoped<IReservationReader, HttpReservationReader>();
         builder.Services.TryAddScoped<IOwnReservationStore, OwnReservationStore>();
         builder.Services.AddDataProtection();
         builder.Services.TryAddSingleton<IReservationReadCursors, ReservationReadCursors>();
+    }
+    public static void AddOwnReservationReads(this WebApplicationBuilder builder)
+    {
+        builder.AddOwnReservationReadDependencies();
+        builder.Services.TryAddSingleton(new OwnReadJwt(builder.Configuration["OwnReservationReads:Issuer"] ?? "",
+            builder.Configuration["OwnReservationReads:Audience"] ?? "", builder.Configuration["OwnReservationReads:PublicKeyPem"] ?? ""));
         builder.Services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, OwnReadAuthentication>("OwnRead", _ => { });
         builder.Services.AddAuthorization(o => o.AddPolicy("OwnReservationDriver", p => p.AddAuthenticationSchemes("OwnRead").RequireAuthenticatedUser().RequireRole("driver")));
         builder.Services.AddExceptionHandler<OwnReadErrors>();

@@ -1,4 +1,4 @@
-# Disposable Docker projects and locally signed test JWTs.
+﻿# Disposable Docker projects and locally signed test JWTs.
 # Compatible with Windows PowerShell 5.1 and PowerShell 7+.
 param([switch]$NoBuild, [switch]$PreflightOnly)
 $ErrorActionPreference = 'Stop'
@@ -93,8 +93,8 @@ function Invoke-Assistant([string]$Path, [hashtable]$Headers, [hashtable]$Body) 
     if ($Headers) { $http.Headers = $Headers }
     if ($null -ne $Body) {
         $http.Method = 'Post'
-        $http.ContentType = 'application/json'
-        $http.Body = $Body | ConvertTo-Json -Depth 8
+        $http.ContentType = 'application/json; charset=utf-8'
+        $http.Body = [Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 8))
     }
     return (Invoke-RestMethod @http).data
 }
@@ -148,7 +148,7 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $scratch $directory) -Force | Out-Null
     }
     foreach ($file in @('compose.assistant.yml','compose.schema-integration.yml','scripts/setup-assistant-docker.ps1',
-        'scripts/apply-workflow-migrations.ps1','scripts/load-env.ps1','scripts/jwt-environment.ps1',
+        'scripts/apply-workflow-migrations.ps1','scripts/load-env.ps1','scripts/jwt-environment.ps1','scripts/discovery-docker.ps1',
         'scripts/database/microservices/06-iot-recognition-service-db.sql',
         'scripts/database/migrations/20261103_iot_assistant_management.sql','scripts/database/migrations/20261105_iot_assistant_s02.sql',
         'scripts/database/migrations/20261105_iot_assistant_s05.sql','scripts/database/migrations/20261110_iot_assistant_current_chat.sql')) {
@@ -183,9 +183,10 @@ Từ khóa: smartpark; giới thiệu
 
 Hướng dẫn giả lập cho Docker.
 '@)
-    @{ sha256=(Get-FileHash -LiteralPath $md).Hash; version='docker-fixture-v1'; approvedBy='synthetic-test-only';
+    $publicationJson = @{ sha256=(Get-FileHash -LiteralPath $md).Hash; version='docker-fixture-v1'; approvedBy='synthetic-test-only';
         role='admin'; publishedAt=[DateTimeOffset]::UtcNow.AddMinutes(-2).ToString('O') } |
-        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $scratch 'knowledge/publication.json') -Encoding utf8
+        ConvertTo-Json -Compress
+    [IO.File]::WriteAllText((Join-Path $scratch 'knowledge/publication.json'), $publicationJson, [Text.UTF8Encoding]::new($false))
 
     $port = Get-FreePort
     do { $dbPort = Get-FreePort } while ($dbPort -eq $port)
